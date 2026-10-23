@@ -1,1 +1,2 @@
 hyperdata-terminal
+psycopg[binary]>=3.2,<4
