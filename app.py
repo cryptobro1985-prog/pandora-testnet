@@ -1,4 +1,4 @@
-import os,json,time,threading,urllib.request,urllib.parse,sqlite3,datetime,xml.etree.ElementTree as ET,re,hashlib
+import os,json,time,threading,urllib.request,urllib.parse,sqlite3,datetime,xml.etree.ElementTree as ET,re,hashlib,subprocess
 import sqlite3,math
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
 def choose(db_path,current=(-0.10,0.20)):
@@ -93,6 +93,10 @@ def detect(title,prices):
   else:return None,0
  score=sum(w in title.lower() for w in POS)-sum(w in title.lower() for w in NEG)
  return (mentions[0] if mentions else None),(1 if score>0 else -1 if score<0 else 0)
+def hyperdata(path):
+ try:return json.loads(get("http://127.0.0.1:8420"+path))
+ except Exception:return None
+
 def deep_context(sym,prices):
  out={"symbol":sym,"price":prices.get(sym),"open_interest":None,"oi_delta":None,"funding":None,"premium":None,"day_volume":None,"orderbook_imbalance":None,"spread_bps":None,"market_momentum":None,"market_regime":None,"breadth":None,"liquidation_map":"unavailable","whale_onchain":"unavailable","tokenomics":"unlock" if False else "unknown"}
  try:
@@ -108,6 +112,10 @@ def deep_context(sym,prices):
  except Exception:pass
  hist=S.get("_hist",{}).get(sym,[])
  if len(hist)>=3:out["market_momentum"]=hist[-1]/hist[max(0,len(hist)-3)]-1
+ try:
+  of=hyperdata("/v1/orderflow/"+urllib.parse.quote(sym));fr=hyperdata("/v1/funding-rates/"+urllib.parse.quote(sym));ob=hyperdata("/v1/orderbook/"+urllib.parse.quote(sym));ls=hyperdata("/v1/long-short-ratio");liq=hyperdata("/v1/liquidations/stats?include_estimated=false")
+  out["cross_exchange_orderflow"]=of;out["cross_exchange_funding"]=fr;out["cross_exchange_orderbook"]=ob;out["long_short_ratio"]=ls;out["confirmed_liquidations"]=liq
+ except Exception:pass
  return out
 
 def decide(title,sym,base_side,prices):
@@ -223,6 +231,8 @@ class Handler(BaseHTTPRequestHandler):
   body=json.dumps(data,ensure_ascii=False).encode()
   self.send_response(200);self.send_header("Content-Type","application/json; charset=utf-8");self.send_header("Content-Length",str(len(body)));self.end_headers();self.wfile.write(body)
 if __name__=="__main__":
+ try:subprocess.Popen(["hyperdata","api","--port","8420"],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+ except Exception as e:S["sources"]["HyperData"]={"ok":False,"error":str(e)[:120]}
  init()
  threading.Thread(target=market,daemon=True).start()
  threading.Thread(target=news,daemon=True).start()
