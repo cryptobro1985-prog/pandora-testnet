@@ -201,8 +201,10 @@ def record_event(ident,source,title,sym,base_side,prices):
  return side
 
 def open_signal(sym,side,title,prices):
- if sym in prices and side and sym not in S["positions"] and len(S["positions"])<5 and S["equity"]>10:
-  price=prices[sym];notional=S["equity"]*MARGIN_FRACTION*LEV
+ if sym in prices and side and sym not in S["positions"] and S["equity"]>10:
+  price=prices[sym];margin=S["equity"]*MARGIN_FRACTION;used_margin=sum(x["notional"]/LEV for x in S["positions"].values());free_margin=max(0.0,S["equity"]-used_margin)
+  if free_margin+1e-9<margin:return
+  notional=margin*LEV
   S["positions"][sym]={"entry":price,"side":side,"notional":notional,"opened":now(),"t":time.time(),"headline":title,"locked":False,"stop":None,"peak":price};save_pos(sym)
 
 def xnews():
