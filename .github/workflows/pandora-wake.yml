@@ -1,0 +1,23 @@
+name: Pandora Wakekeeper
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Wake and health-check PANDORA
+        run: |
+          set -e
+          URL="https://pandora-testnet-monitor.onrender.com/health"
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS --max-time 25 "$URL"; then
+              echo
+              echo "PANDORA awake"
+              exit 0
+            fi
+            sleep 15
+          done
+          exit 1
