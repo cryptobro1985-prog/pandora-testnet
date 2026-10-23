@@ -15,11 +15,23 @@ def choose(db_path,current=(-0.10,0.20)):
 WATCH=["elonmusk","realDonaldTrump","federalreserve","SECGov","USTreasury","WhiteHouse","coinbase","binance","saylor","cz_binance","VitalikButerin"]
 def recent():
  token=os.getenv("X_BEARER_TOKEN","").strip()
- if not token:return []
- q="("+" OR ".join("from:"+x for x in WATCH)+") -is:retweet"
- url="https://api.x.com/2/tweets/search/recent?"+urllib.parse.urlencode({"query":q,"max_results":100,"tweet.fields":"created_at,author_id"})
- req=urllib.request.Request(url,headers={"Authorization":"Bearer "+token,"User-Agent":"PANDORA-paper/1"})
- with urllib.request.urlopen(req,timeout=15) as r:return json.load(r).get("data",[])
+ if token:
+  try:
+   q="("+" OR ".join("from:"+x for x in WATCH)+") -is:retweet";url="https://api.x.com/2/tweets/search/recent?"+urllib.parse.urlencode({"query":q,"max_results":100,"tweet.fields":"created_at,author_id"})
+   req=urllib.request.Request(url,headers={"Authorization":"Bearer "+token,"User-Agent":"PANDORA-paper/1"})
+   with urllib.request.urlopen(req,timeout=15) as r:return json.load(r).get("data",[])
+  except Exception:pass
+ # credential-free public fallback: Google News indexes public x.com posts
+ out=[]
+ for h in WATCH:
+  try:
+   u="https://news.google.com/rss/search?"+urllib.parse.urlencode({"q":"site:x.com/"+h,"hl":"en-US","gl":"US","ceid":"US:en"})
+   root=ET.fromstring(get(u))
+   for it in root.findall(".//item")[:8]:
+    title=(it.findtext("title") or "").strip();link=(it.findtext("link") or "")
+    if title:out.append({"id":hashlib.sha256((h+title).encode()).hexdigest(),"text":title,"source":"XPublicIndex","url":link})
+  except Exception:pass
+ return out[:100]
 
 BASE="https://truthsocial.com/api/v1"
 def _get(path):
@@ -145,7 +157,7 @@ def xnews():
  while True:
   try:
    posts=recent()
-   with LOCK:S["sources"]["XOfficial"]={"ok":bool(os.getenv("X_BEARER_TOKEN","")),"last_check":now(),"posts":len(posts)}
+   with LOCK:S["sources"]["XMonitor"]={"ok":True,"last_check":now(),"posts":len(posts),"mode":"official_api" if os.getenv("X_BEARER_TOKEN","").strip() else "public_index_fallback"}
    for p in posts:
     title=(p.get("text") or "").strip()
     if not title:continue
@@ -157,7 +169,7 @@ def xnews():
       c.execute("insert into news values(?,?,?,?,?,?)",(ident,now(),"XOfficial",title,sym,side))
      S["news_seen"]+=1;record_event(ident,"XOfficial",title,sym,side,prices)
   except Exception as e:
-   with LOCK:S["sources"]["XOfficial"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
+   with LOCK:S["sources"]["XMonitor"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
   time.sleep(60)
 def truthnews():
  while True:
