@@ -54,7 +54,7 @@ DB="/tmp/pandora.sqlite3"
 START=time.time()
 S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0}
 LOCK=threading.RLock()
-FEEDS={"FedOfficial":"https://www.federalreserve.gov/feeds/press_all.xml","SECOfficial":"https://www.sec.gov/news/pressreleases.rss","GoogleNewsCrypto":"https://news.google.com/rss/search?q=cryptocurrency+OR+bitcoin+OR+altcoin&hl=en-US&gl=US&ceid=US:en","GoogleNewsMarkets":"https://news.google.com/rss/search?q=crypto+SEC+OR+Federal+Reserve+OR+token+listing&hl=en-US&gl=US&ceid=US:en","Cointelegraph":"https://cointelegraph.com/rss","Decrypt":"https://decrypt.co/feed","CoinDesk":"https://www.coindesk.com/arc/outboundfeeds/rss/","CFTCOfficial":"https://www.cftc.gov/RSS/RSSGP/rssgp.xml","DOJNews":"https://www.justice.gov/feeds/opa/justice-news.xml","TruthSocialSearch":"https://news.google.com/rss/search?q=site%3Atruthsocial.com+crypto&hl=en-US&gl=US&ceid=US:en","XSearch":"https://news.google.com/rss/search?q=site%3Ax.com+cryptocurrency&hl=en-US&gl=US&ceid=US:en"}
+FEEDS={"FedOfficial":"https://www.federalreserve.gov/feeds/press_all.xml","SECOfficial":"https://www.sec.gov/news/pressreleases.rss","GoogleNewsCrypto":"https://news.google.com/rss/search?q=cryptocurrency+OR+bitcoin+OR+altcoin&hl=en-US&gl=US&ceid=US:en","GoogleNewsMarkets":"https://news.google.com/rss/search?q=crypto+SEC+OR+Federal+Reserve+OR+token+listing&hl=en-US&gl=US&ceid=US:en","Cointelegraph":"https://cointelegraph.com/rss","Decrypt":"https://decrypt.co/feed","CoinDesk":"https://www.coindesk.com/arc/outboundfeeds/rss/","CFTCOfficial":"https://www.cftc.gov/RSS/RSSGP/rssgp.xml","DOJNews":"https://www.justice.gov/feeds/opa/justice-news.xml","TruthSocialSearch":"https://news.google.com/rss/search?q=site%3Atruthsocial.com+crypto&hl=en-US&gl=US&ceid=US:en"}
 POS=("surge","approve","approval","partnership","listing","adoption","buyback","breakout","bullish","launch","etf approved")
 NEG=("hack","exploit","lawsuit","delist","ban","liquidation","fraud","selloff","bearish","crash","stolen")
 STOP_ROE=-999.0;TAKE_ROE=0.20;LEV=10.0;MARGIN_FRACTION=0.25;FEE=0.00045;LOCK_TRIGGER_ROE=0.15;LOCK_ROE=0.075;PAPER_RESET=100.0
@@ -96,7 +96,7 @@ def market():
     with sqlite3.connect(DB) as c:c.execute("insert into snapshots values(?,?,?,?)",(now(),len(valid),S["equity"],len(S["positions"])))
   except Exception as e:
    with LOCK:S["errors"]+=1;S["last_error"]="market: "+str(e)[:180]
-  time.sleep(30)
+  time.sleep(2)
 def detect(title,prices):
  upper=title.upper()
  mentions=[k for k in prices if len(k)>=3 and re.search(r"(?<![A-Z0-9])"+re.escape(k)+r"(?![A-Z0-9])",upper)]
@@ -241,12 +241,30 @@ def dashboard():
 
 def html_dashboard(data):
  esc=lambda x:str(x).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
- cards=f'<div class="grid"><b>MODE<br>{esc(data["mode"])}</b><b>EQUITY<br>$ {data["total_equity"]}</b><b>REALIZED<br>$ {data["realized_pnl"]}</b><b>UNREALIZED<br>$ {data["unrealized_pnl"]}</b><b>POSITIONS<br>{len(data["positions"])}</b><b>NEWS<br>{data["news_seen"]}</b></div>'
+ cards=f'<div class="grid"><b>MODE<br>{esc(data["mode"])}</b><b>EQUITY<br><span id="live-equity">$ {data["total_equity"]}</span></b><b>REALIZED<br><span id="live-realized">$ {data["realized_pnl"]}</span></b><b>UNREALIZED<br><span id="live-unrealized">$ {data["unrealized_pnl"]}</span></b><b>POSITIONS<br>{len(data["positions"])}</b><b>NEWS<br>{data["news_seen"]}</b></div>'
  pos="".join(f'<tr><td>{esc(x["symbol"])}</td><td>{x["side"]}</td><td>${x.get("margin_usd",0)}</td><td>${x.get("notional_usd",0)}</td><td>{x.get("leverage",LEV)}x</td><td>{x["entry"]}</td><td>{x["mark"]}</td><td>{x.get("roe_pct",0)}%</td><td>${x["unrealized_pnl"]}</td><td>{esc(x["headline"])}</td></tr>' for x in data["positions"]) or '<tr><td colspan=6>No open positions</td></tr>'
  trs="".join(f'<tr><td>{esc(x["closed"])}</td><td>{esc(x["symbol"])}</td><td>{"LONG" if x["side"]>0 else "SHORT"}</td><td>{round(x["pnl"],4)}</td><td>{esc(x["reason"])}</td></tr>' for x in data["trades"]) or '<tr><td colspan=5>No closed trades</td></tr>'
  src="".join(f'<tr><td>{esc(k)}</td><td>{"OK" if v.get("ok") else "ERROR"}</td><td>{esc(v.get("last_check",""))}</td><td>{esc(v.get("error",""))}</td></tr>' for k,v in data["sources"].items())
  news="".join(f'<tr><td>{esc(x["ts"])}</td><td>{esc(x["source"])}</td><td>{esc(x["symbol"])}</td><td>{esc(x["signal"])}</td><td>{esc(x["title"])}</td></tr>' for x in data["news"][:12])
- return f'''<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="20"><meta name="viewport" content="width=device-width"><title>PANDORA LIVE</title><style>body{{font-family:system-ui;background:#080b10;color:#e8edf5;margin:24px}}h1{{margin:0}}.muted{{color:#8b98aa}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:18px 0}}.grid b{{background:#111722;padding:16px;border-radius:12px}}table{{width:100%;border-collapse:collapse;background:#0e141e;margin-bottom:22px}}td,th{{padding:9px;border-bottom:1px solid #202938;text-align:left;font-size:13px}}th{{color:#91a2b8}}a{{color:#8bc4ff}}</style></head><body><h1>PANDORA LIVE</h1><div class="muted">Paper engine · refresh 20s · last market poll {esc(data["last_poll"])}</div>{cards}<h2>Open positions</h2><table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROE%</th><th>uPnL</th><th>Trigger</th></tr>{pos}</table><h2>Closed trades</h2><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>PnL</th><th>Reason</th></tr>{trs}</table><h2>Sources</h2><table><tr><th>Source</th><th>Status</th><th>Checked</th><th>Error</th></tr>{src}</table><h2>Latest news</h2><table><tr><th>Time</th><th>Source</th><th>Token</th><th>Raw signal</th><th>Headline</th></tr>{news}</table><p>Errors: {data["errors"]} · Last error: {esc(data["last_error"])}</p><p><a href="/api/dashboard">JSON dashboard</a> · <a href="/features">Features</a> · <a href="/trades">Trades</a> · <a href="/news">News</a></p></body></html>'''
+ return f'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>PANDORA LIVE</title><style>body{{font-family:system-ui;background:#080b10;color:#e8edf5;margin:24px}}h1{{margin:0}}.muted{{color:#8b98aa}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:18px 0}}.grid b{{background:#111722;padding:16px;border-radius:12px}}table{{width:100%;border-collapse:collapse;background:#0e141e;margin-bottom:22px}}td,th{{padding:9px;border-bottom:1px solid #202938;text-align:left;font-size:13px}}th{{color:#91a2b8}}.posv{{color:#49d17d;font-weight:700}}.negv{{color:#ff6262;font-weight:700}}a{{color:#8bc4ff}}</style></head><body><h1>PANDORA LIVE</h1><div class="muted">Paper engine · live refresh 2s · last market poll {esc(data["last_poll"])}</div>{cards}<h2>Open positions</h2><table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROE%</th><th>uPnL</th><th>Trigger</th></tr><tbody id="positions-body">{pos}</tbody></table><h2>Closed trades</h2><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>PnL</th><th>Reason</th></tr>{trs}</table><h2>Sources</h2><table><tr><th>Source</th><th>Status</th><th>Checked</th><th>Error</th></tr>{src}</table><h2>Latest news</h2><table><tr><th>Time</th><th>Source</th><th>Token</th><th>Raw signal</th><th>Headline</th></tr>{news}</table><p>Errors: {data["errors"]} · Last error: {esc(data["last_error"])}</p><p><a href="/api/dashboard">JSON dashboard</a> · <a href="/features">Features</a> · <a href="/trades">Trades</a> · <a href="/news">News</a></p><script>
+async function live(){
+ try{
+  const d=await fetch('/api/dashboard?ts='+Date.now(),{cache:'no-store'}).then(r=>r.json());
+  const rows=d.positions.map(x=>'<tr><td>'+x.symbol+'</td><td>'+x.side+'</td><td>'''
+
++(x.margin_usd||0)+'</td><td>'''
+
++(x.notional_usd||0)+'</td><td>'+(x.leverage||10)+'x</td><td>'+x.entry+'</td><td>'+x.mark+'</td><td class="'+(x.roe_pct>=0?'posv':'negv')+'">'+x.roe_pct+'%</td><td class="'+(x.unrealized_pnl>=0?'posv':'negv')+'">'''
+
++x.unrealized_pnl+'</td><td>'+x.headline+'</td></tr>').join('');
+  const t=document.querySelector('#positions-body');if(t)t.innerHTML=rows||'<tr><td colspan="10">No open positions</td></tr>';
+  document.querySelector('#live-equity').textContent='$ '+d.total_equity;
+  document.querySelector('#live-realized').textContent='$ '+d.realized_pnl;
+  document.querySelector('#live-unrealized').textContent='$ '+d.unrealized_pnl;
+ }catch(e){}
+}
+setInterval(live,2000);live();
+</script></body></html>'''
 
 class Handler(BaseHTTPRequestHandler):
  def do_HEAD(self):
