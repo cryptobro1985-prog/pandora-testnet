@@ -247,9 +247,9 @@ def html_dashboard(data):
  src="".join(f'<tr><td>{esc(k)}</td><td>{"OK" if v.get("ok") else "ERROR"}</td><td>{esc(v.get("last_check",""))}</td><td>{esc(v.get("error",""))}</td></tr>' for k,v in data["sources"].items())
  news="".join(f'<tr><td>{esc(x["ts"])}</td><td>{esc(x["source"])}</td><td>{esc(x["symbol"])}</td><td>{esc(x["signal"])}</td><td>{esc(x["title"])}</td></tr>' for x in data["news"][:12])
  return f'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>PANDORA LIVE</title><style>body{{font-family:system-ui;background:#080b10;color:#e8edf5;margin:24px}}h1{{margin:0}}.muted{{color:#8b98aa}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:18px 0}}.grid b{{background:#111722;padding:16px;border-radius:12px}}table{{width:100%;border-collapse:collapse;background:#0e141e;margin-bottom:22px}}td,th{{padding:9px;border-bottom:1px solid #202938;text-align:left;font-size:13px}}th{{color:#91a2b8}}.posv{{color:#49d17d;font-weight:700}}.negv{{color:#ff6262;font-weight:700}}a{{color:#8bc4ff}}</style></head><body><h1>PANDORA LIVE</h1><div class="muted">Paper engine · live refresh 2s · last market poll {esc(data["last_poll"])}</div>{cards}<h2>Open positions</h2><table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROE%</th><th>uPnL</th><th>Trigger</th></tr><tbody id="positions-body">{pos}</tbody></table><h2>Closed trades</h2><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>PnL</th><th>Reason</th></tr>{trs}</table><h2>Sources</h2><table><tr><th>Source</th><th>Status</th><th>Checked</th><th>Error</th></tr>{src}</table><h2>Latest news</h2><table><tr><th>Time</th><th>Source</th><th>Token</th><th>Raw signal</th><th>Headline</th></tr>{news}</table><p>Errors: {data["errors"]} · Last error: {esc(data["last_error"])}</p><p><a href="/api/dashboard">JSON dashboard</a> · <a href="/features">Features</a> · <a href="/trades">Trades</a> · <a href="/news">News</a></p><script>
-async function live(){
- try{
-  const d=await fetch('/api/dashboard?ts='+Date.now(),{cache:'no-store'}).then(r=>r.json());
+async function live(){{
+ try{{
+  const d=await fetch('/api/dashboard?ts='+Date.now(),{{cache:'no-store'}}).then(r=>r.json());
   const rows=d.positions.map(x=>'<tr><td>'+x.symbol+'</td><td>'+x.side+'</td><td>'''
 
 +(x.margin_usd||0)+'</td><td>'''
@@ -261,8 +261,8 @@ async function live(){
   document.querySelector('#live-equity').textContent='$ '+d.total_equity;
   document.querySelector('#live-realized').textContent='$ '+d.realized_pnl;
   document.querySelector('#live-unrealized').textContent='$ '+d.unrealized_pnl;
- }catch(e){}
-}
+ }}catch(e){{}}
+}}
 setInterval(live,2000);live();
 </script></body></html>'''
 
