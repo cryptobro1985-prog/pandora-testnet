@@ -67,7 +67,7 @@ def pinit():
  with pg() as c:
   c.execute("create table if not exists account_state (id integer primary key, equity double precision not null, realized_pnl double precision not null, updated_at text not null)")
   c.execute("create table if not exists open_positions (symbol text primary key, side integer not null, entry double precision not null, notional double precision not null, opened text not null, opened_epoch double precision not null, headline text, locked boolean not null default false, stop double precision)")
-  c.execute("create table if not exists trade_history (id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision, pnl double precision, reason text, headline text)")\n  c.execute("alter table trade_history add column if not exists notional double precision")\n  c.execute("alter table trade_history add column if not exists margin double precision")\n  c.execute("alter table trade_history add column if not exists roi_pct double precision")
+  c.execute("create table if not exists trade_history (id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision, pnl double precision, reason text, headline text)")
   row=c.execute("select equity,realized_pnl from account_state where id=1").fetchone()
   if row:
    S["equity"]=float(row["equity"]);S["realized_pnl"]=float(row["realized_pnl"])
@@ -82,7 +82,7 @@ def save_pos(sym):
 def close_persistent(sym,pos,px,pnl,reason):
  with pg() as c:
   with c.transaction():
-   margin=pos["notional"]/LEV;roi=(pnl/margin*100) if margin>0 else 0.0\n   c.execute("insert into trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,headline,notional,margin,roi_pct) values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",(pos["opened"],now(),sym,pos["side"],pos["entry"],px,pnl,reason,pos["headline"],pos["notional"],margin,roi))
+   margin=pos["notional"]/LEV;roi=(pnl/margin*100) if margin>0 else 0.0\n   c.execute("insert into trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,headline) values(%s,%s,%s,%s,%s,%s,%s,%s,%s)",(pos["opened"],now(),sym,pos["side"],pos["entry"],px,pnl,reason,pos["headline"]))
    c.execute("delete from open_positions where symbol=%s",(sym,))
    c.execute("insert into account_state(id,equity,realized_pnl,updated_at) values(1,%s,%s,%s) on conflict(id) do update set equity=excluded.equity,realized_pnl=excluded.realized_pnl,updated_at=excluded.updated_at",(S["equity"],S["realized_pnl"],now()))
 def persistent_trades(limit=100):
