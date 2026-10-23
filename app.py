@@ -284,11 +284,11 @@ def dashboard():
  trades=[dict(x) for x in persistent_trades(100)]
  newsrows=[dict(x) for x in persistent_news(20)]
  feats=[dict(x) for x in persistent_features(10)]
- prices=S.get("_prices",{});positions=[];unreal=0.0
+ prices=S.get("_prices",{});positions=[];unreal=0.0;gross_unreal=0.0;exit_fees=0.0
  for sym,p in S["positions"].items():
-  px=prices.get(sym,p["entry"]);move=(px/p["entry"]-1)*p["side"];pnl=p["notional"]*move;unreal+=pnl
-  positions.append({"symbol":sym,"side":"LONG" if p["side"]>0 else "SHORT","entry":p["entry"],"mark":px,"notional_usd":round(p["notional"],2),"margin_usd":round(p["notional"]/LEV,2),"leverage":LEV,"roe_pct":round(move*LEV*100,3),"unrealized_pnl":round(pnl,4),"headline":p["headline"]})
- payload={"mode":S["mode"],"equity":round(S["equity"],4),"unrealized_pnl":round(unreal,4),"total_equity":round(S["equity"]+unreal,4),"realized_pnl":round(S["realized_pnl"],4),"positions":positions,"trades":trades,"news":newsrows,"features":feats,"sources":S["sources"],"errors":S["errors"],"last_error":S["last_error"],"news_seen":S["news_seen"],"market_count":S["market_count"],"last_poll":S["last_poll"],"uptime_seconds":int(time.time()-START)}
+  px=prices.get(sym,p["entry"]);move=(px/p["entry"]-1)*p["side"];pnl=p["notional"]*move;fee=p["notional"]*FEE;gross_unreal+=pnl;exit_fees+=fee;pnl-=fee;unreal+=pnl
+  positions.append({"symbol":sym,"side":"LONG" if p["side"]>0 else "SHORT","entry":p["entry"],"mark":px,"notional_usd":round(p["notional"],2),"margin_usd":round(p["notional"]/LEV,2),"leverage":LEV,"roe_pct":round(move*LEV*100,3),"gross_unrealized_pnl":round(pnl+fee,4),"estimated_exit_fee":round(fee,4),"unrealized_pnl":round(pnl,4),"headline":p["headline"]})
+ payload={"mode":S["mode"],"balance":round(S["equity"],4),"equity":round(S["equity"],4),"gross_unrealized_pnl":round(gross_unreal,4),"estimated_exit_fees":round(exit_fees,4),"unrealized_pnl":round(unreal,4),"total_equity":round(S["equity"]+unreal,4),"realized_pnl":round(S["realized_pnl"],4),"positions":positions,"trades":trades,"news":newsrows,"features":feats,"sources":S["sources"],"errors":S["errors"],"last_error":S["last_error"],"news_seen":S["news_seen"],"market_count":S["market_count"],"last_poll":S["last_poll"],"uptime_seconds":int(time.time()-START)}
  return payload
 
 def html_dashboard(data):
