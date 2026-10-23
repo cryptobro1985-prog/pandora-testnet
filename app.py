@@ -1,4 +1,4 @@
-import os,json,time,threading,urllib.request,urllib.parse,sqlite3,datetime,xml.etree.ElementTree as ET,re,hashlib\nfrom adaptive import choose\nfrom x_source import recent
+import os,json,time,threading,urllib.request,urllib.parse,sqlite3,datetime,xml.etree.ElementTree as ET,re,hashlib\nfrom adaptive import choose\nfrom x_source import recent\nfrom truth_source import user_statuses
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 API="https://api.hyperliquid-testnet.xyz/info"
 DB="/tmp/pandora.sqlite3"
@@ -68,6 +68,24 @@ def xnews():
   except Exception as e:
    with LOCK:S["sources"]["XOfficial"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
   time.sleep(60)
+def truthnews():
+ while True:
+  try:
+   posts=user_statuses("realDonaldTrump",30)
+   with LOCK:S["sources"]["TruthSocialPublic"]={"ok":True,"last_check":now(),"posts":len(posts)}
+   for p in reversed(posts):
+    title=re.sub("<[^>]+>"," ",p.get("content",""));title=re.sub(r"\\s+"," ",title).strip()
+    if not title:continue
+    ident=hashlib.sha256(("TruthSocialPublic"+str(p.get("id",title))).encode()).hexdigest()
+    with LOCK:
+     prices=S.get("_prices",{});sym,side=detect(title,prices)
+     with sqlite3.connect(DB) as c:
+      if c.execute("select 1 from news where id=?",(ident,)).fetchone():continue
+      c.execute("insert into news values(?,?,?,?,?,?)",(ident,now(),"TruthSocialPublic",title,sym,side))
+     S["news_seen"]+=1
+  except Exception as e:
+   with LOCK:S["sources"]["TruthSocialPublic"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
+  time.sleep(20)
 def adapt():
  global STOP_ROE,TAKE_ROE
  while True:
@@ -123,5 +141,5 @@ class Handler(BaseHTTPRequestHandler):
 if __name__=="__main__":
  init()
  threading.Thread(target=market,daemon=True).start()
- threading.Thread(target=news,daemon=True).start()\n threading.Thread(target=xnews,daemon=True).start()\n threading.Thread(target=adapt,daemon=True).start()
+ threading.Thread(target=news,daemon=True).start()\n threading.Thread(target=xnews,daemon=True).start()\n threading.Thread(target=adapt,daemon=True).start()\n threading.Thread(target=truthnews,daemon=True).start()
  ThreadingHTTPServer(("0.0.0.0",int(os.getenv("PORT","10000"))),Handler).serve_forever()
