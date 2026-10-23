@@ -56,6 +56,7 @@ def init():
   c.execute("create table if not exists news (id text primary key,ts text,source text,title text,symbol text,signal integer)")
   c.execute("create table if not exists trades (id integer primary key autoincrement,opened text,closed text,symbol text,side integer,entry real,exit real,pnl real,reason text,headline text)")
   c.execute("create table if not exists snapshots (ts text,markets integer,equity real,positions integer)")
+  c.execute("create table if not exists event_features (id text primary key,ts text,source text,title text,symbol text,decision integer,confidence real,features text)")
 def market():
  while True:
   try:
@@ -76,6 +77,10 @@ def market():
        with sqlite3.connect(DB) as c:c.execute("insert into trades(opened,closed,symbol,side,entry,exit,pnl,reason,headline) values(?,?,?,?,?,?,?,?,?)",(pos["opened"],now(),sym,pos["side"],pos["entry"],p,pnl,reason,pos["headline"]))
        del S["positions"][sym]
     S["_prices"]=valid
+    hist=S.setdefault("_hist",{})
+    for hs,hp in valid.items():
+     q=hist.setdefault(hs,[]);q.append(hp)
+     if len(q)>120:del q[:-120]
     with sqlite3.connect(DB) as c:c.execute("insert into snapshots values(?,?,?,?)",(now(),len(valid),S["equity"],len(S["positions"])))
   except Exception as e:
    with LOCK:S["errors"]+=1;S["last_error"]="market: "+str(e)[:180]
@@ -88,6 +93,41 @@ def detect(title,prices):
   else:return None,0
  score=sum(w in title.lower() for w in POS)-sum(w in title.lower() for w in NEG)
  return (mentions[0] if mentions else None),(1 if score>0 else -1 if score<0 else 0)
+def deep_context(sym,prices):
+ out={"symbol":sym,"price":prices.get(sym),"open_interest":None,"funding":None,"orderbook_imbalance":None,"market_momentum":None,"liquidation_map":"unavailable","whale_onchain":"unavailable","tokenomics":"unlock" if False else "unknown"}
+ try:
+  raw=json.loads(get(API,{"type":"metaAndAssetCtxs"}));meta,ctxs=raw[0],raw[1]
+  names=[x.get("name") for x in meta.get("universe",[])]
+  if sym in names:
+   z=ctxs[names.index(sym)];out["open_interest"]=float(z.get("openInterest",0) or 0);out["funding"]=float(z.get("funding",0) or 0)
+ except Exception:pass
+ try:
+  book=json.loads(get(API,{"type":"l2Book","coin":sym}));levels=book.get("levels",[])
+  if len(levels)>=2:
+   b=sum(float(x.get("sz",0)) for x in levels[0][:10]);a=sum(float(x.get("sz",0)) for x in levels[1][:10]);out["orderbook_imbalance"]=(b-a)/(b+a) if b+a else 0
+ except Exception:pass
+ hist=S.get("_hist",{}).get(sym,[])
+ if len(hist)>=3:out["market_momentum"]=hist[-1]/hist[max(0,len(hist)-3)]-1
+ return out
+
+def decide(title,sym,base_side,prices):
+ f=deep_context(sym,prices);lo=title.lower();f["tokenomics"]="unlock_event" if any(x in lo for x in ("unlock","vesting","token release")) else "normal"
+ score=float(base_side)*1.5
+ m=f.get("market_momentum");obi=f.get("orderbook_imbalance");fund=f.get("funding")
+ if m is not None:score+=max(-1,min(1,m*200))
+ if obi is not None:score+=max(-1,min(1,obi*2))
+ if fund is not None:score+=max(-0.5,min(0.5,-fund*1000))
+ if f["tokenomics"]=="unlock_event":score*=0.6
+ side=1 if score>=0.75 else -1 if score<=-0.75 else 0
+ return side,min(1.0,abs(score)/3.0),f
+
+def record_event(ident,source,title,sym,base_side,prices):
+ if not sym or sym not in prices:return 0
+ side,conf,features=decide(title,sym,base_side,prices)
+ with sqlite3.connect(DB) as c:c.execute("insert or replace into event_features values(?,?,?,?,?,?,?,?)",(ident,now(),source,title,sym,side,conf,json.dumps(features)))
+ if side:open_signal(sym,side,title,prices)
+ return side
+
 def open_signal(sym,side,title,prices):
  if sym in prices and side and sym not in S["positions"] and len(S["positions"])<5 and S["equity"]>10:
   price=prices[sym];notional=S["equity"]*MARGIN_FRACTION*LEV
@@ -107,7 +147,7 @@ def xnews():
      with sqlite3.connect(DB) as c:
       if c.execute("select 1 from news where id=?",(ident,)).fetchone():continue
       c.execute("insert into news values(?,?,?,?,?,?)",(ident,now(),"XOfficial",title,sym,side))
-     S["news_seen"]+=1
+     S["news_seen"]+=1;record_event(ident,"XOfficial",title,sym,side,prices)
   except Exception as e:
    with LOCK:S["sources"]["XOfficial"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
   time.sleep(60)
@@ -125,7 +165,7 @@ def truthnews():
      with sqlite3.connect(DB) as c:
       if c.execute("select 1 from news where id=?",(ident,)).fetchone():continue
       c.execute("insert into news values(?,?,?,?,?,?)",(ident,now(),"TruthSocialPublic",title,sym,side))
-     S["news_seen"]+=1
+     S["news_seen"]+=1;record_event(ident,"TruthSocialPublic",title,sym,side,prices)
   except Exception as e:
    with LOCK:S["sources"]["TruthSocialPublic"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
   time.sleep(20)
@@ -158,9 +198,7 @@ def news():
        if c.execute("select 1 from news where id=?",(ident,)).fetchone():continue
        c.execute("insert into news values(?,?,?,?,?,?)",(ident,now(),source,title,sym,side))
       S["news_seen"]+=1;count+=1
-      if sym in prices and side and sym not in S["positions"] and len(S["positions"])<5 and S["equity"]>10:
-       price=prices[sym];notional=S["equity"]*MARGIN_FRACTION*LEV
-       S["positions"][sym]={"entry":price,"side":side,"notional":notional,"opened":now(),"t":time.time(),"headline":title,"locked":False,"stop":None}
+      record_event(ident,source,title,sym,side,prices)
     with LOCK:S["sources"][source]={"ok":True,"last_check":now(),"new":count,"feed_items":len(items)}
    except Exception as e:
     with LOCK:
@@ -169,12 +207,15 @@ def news():
   time.sleep(60)
 class Handler(BaseHTTPRequestHandler):
  def do_GET(self):
-  if self.path not in ("/","/health","/status","/trades","/news"):
+  if self.path not in ("/","/health","/status","/trades","/news","/features"):
    self.send_error(404);return
   with LOCK:
    if self.path=="/trades":
     with sqlite3.connect(DB) as c:
      c.row_factory=sqlite3.Row;data={"trades":[dict(x) for x in c.execute("select * from trades order by id desc limit 100")]}
+   elif self.path=="/features":
+    with sqlite3.connect(DB) as c:
+     c.row_factory=sqlite3.Row;data={"features":[dict(x) for x in c.execute("select * from event_features order by ts desc limit 100")]}
    elif self.path=="/news":
     with sqlite3.connect(DB) as c:
      c.row_factory=sqlite3.Row;data={"news":[dict(x) for x in c.execute("select ts,source,title,symbol,signal from news order by ts desc limit 50")]}
