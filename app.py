@@ -213,9 +213,7 @@ def xnews():
     ident=hashlib.sha256(("XOfficial"+str(p.get("id",title))).encode()).hexdigest()
     with LOCK:
      prices=S.get("_prices",{});sym,side=detect(title,prices)
-     with sqlite3.connect(DB) as c:
-      if c.execute("select 1 from news where id=?",(ident,)).fetchone():continue
-      c.execute("insert into news values(?,?,?,?,?,?)",(ident,now(),"XOfficial",title,sym,side))
+     if not save_news_event(ident,now(),"XOfficial",title,sym,side):continue
      S["news_seen"]+=1;record_event(ident,"XOfficial",title,sym,side,prices)
   except Exception as e:
    with LOCK:S["sources"]["XMonitor"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
@@ -232,9 +230,7 @@ def truthnews():
     ident=hashlib.sha256(("TruthSocialPublic"+str(p.get("id",title))).encode()).hexdigest()
     with LOCK:
      prices=S.get("_prices",{});sym,side=detect(title,prices)
-     with sqlite3.connect(DB) as c:
-      if c.execute("select 1 from news where id=?",(ident,)).fetchone():continue
-      c.execute("insert into news values(?,?,?,?,?,?)",(ident,now(),"TruthSocialPublic",title,sym,side))
+     if not save_news_event(ident,now(),"TruthSocialPublic",title,sym,side):continue
      S["news_seen"]+=1;record_event(ident,"TruthSocialPublic",title,sym,side,prices)
   except Exception as e:
    with LOCK:S["sources"]["TruthSocialPublic"]={"ok":True,"last_check":now(),"mode":"fallback_active","direct_ok":False,"direct_error":str(e)[:140],"fallback":"TruthSocialSearch"};delay=min(300,max(20,delay*2))
@@ -264,9 +260,7 @@ def news():
      with LOCK:
       prices=S.get("_prices",{})
       sym,side=detect(title,prices)
-      with sqlite3.connect(DB) as c:
-       if c.execute("select 1 from news where id=?",(ident,)).fetchone():continue
-       c.execute("insert into news values(?,?,?,?,?,?)",(ident,now(),source,title,sym,side))
+      if not save_news_event(ident,now(),source,title,sym,side):continue
       S["news_seen"]+=1;count+=1
       record_event(ident,source,title,sym,side,prices)
     with LOCK:S["sources"][source]={"ok":True,"last_check":now(),"new":count,"feed_items":len(items)}
