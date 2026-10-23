@@ -1,7 +1,41 @@
 import os,json,time,threading,urllib.request,urllib.parse,sqlite3,datetime,xml.etree.ElementTree as ET,re,hashlib
-from adaptive import choose
-from x_source import recent
-from truth_source import user_statuses
+import sqlite3,math
+CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
+def choose(db_path,current=(-0.10,0.20)):
+ with sqlite3.connect(db_path) as c: rows=c.execute("select pnl from trades order by id desc limit 120").fetchall()
+ xs=[float(x[0]) for x in reversed(rows)]
+ if len(xs)<30:return {"stop":current[0],"take":current[1],"samples":len(xs),"changed":False}
+ cut=max(20,int(len(xs)*0.7));train=xs[:cut];valid=xs[cut:]
+ # conservative proxy: only permit a bounded change when validation PnL is positive
+ if sum(valid)<=0:return {"stop":current[0],"take":current[1],"samples":len(xs),"validation_pnl":sum(valid),"changed":False}
+ # no leverage/margin mutation: adaptation is deliberately bounded to exits
+ avg=sum(train)/len(train); cand=CANDIDATES[3] if avg>0 else CANDIDATES[1]
+ return {"stop":cand[0],"take":cand[1],"samples":len(xs),"validation_pnl":sum(valid),"changed":cand!=current}
+
+WATCH=["elonmusk","realDonaldTrump","federalreserve","SECGov","USTreasury","WhiteHouse","coinbase","binance","saylor","cz_binance","VitalikButerin"]
+def recent():
+ token=os.getenv("X_BEARER_TOKEN","").strip()
+ if not token:return []
+ q="("+" OR ".join("from:"+x for x in WATCH)+") -is:retweet"
+ url="https://api.x.com/2/tweets/search/recent?"+urllib.parse.urlencode({"query":q,"max_results":100,"tweet.fields":"created_at,author_id"})
+ req=urllib.request.Request(url,headers={"Authorization":"Bearer "+token,"User-Agent":"PANDORA-paper/1"})
+ with urllib.request.urlopen(req,timeout=15) as r:return json.load(r).get("data",[])
+
+BASE="https://truthsocial.com/api/v1"
+def _get(path):
+ req=urllib.request.Request(BASE+path,headers={"User-Agent":"PANDORA-public-monitor/1.0","Accept":"application/json"})
+ with urllib.request.urlopen(req,timeout=12) as r:return json.load(r)
+def user_statuses(handle="realDonaldTrump",limit=20):
+ q=urllib.parse.quote(handle)
+ found=_get("/accounts/search?q="+q+"&limit=5")
+ acct=next((x for x in found if str(x.get("acct","")).lower()==handle.lower()),found[0] if found else None)
+ if not acct:return []
+ rows=_get("/accounts/"+str(acct["id"])+"/statuses?limit="+str(limit)+"&exclude_replies=true")
+ out=[]
+ for x in rows:
+  out.append({"id":x.get("id"),"created_at":x.get("created_at"),"content":x.get("content","")})
+ return out
+
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 API="https://api.hyperliquid-testnet.xyz/info"
 DB="/tmp/pandora.sqlite3"
