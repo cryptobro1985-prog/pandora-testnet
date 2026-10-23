@@ -94,12 +94,12 @@ def detect(title,prices):
  score=sum(w in title.lower() for w in POS)-sum(w in title.lower() for w in NEG)
  return (mentions[0] if mentions else None),(1 if score>0 else -1 if score<0 else 0)
 def deep_context(sym,prices):
- out={"symbol":sym,"price":prices.get(sym),"open_interest":None,"funding":None,"orderbook_imbalance":None,"market_momentum":None,"liquidation_map":"unavailable","whale_onchain":"unavailable","tokenomics":"unlock" if False else "unknown"}
+ out={"symbol":sym,"price":prices.get(sym),"open_interest":None,"oi_delta":None,"funding":None,"premium":None,"day_volume":None,"orderbook_imbalance":None,"spread_bps":None,"market_momentum":None,"market_regime":None,"breadth":None,"liquidation_map":"unavailable","whale_onchain":"unavailable","tokenomics":"unlock" if False else "unknown"}
  try:
   raw=json.loads(get(API,{"type":"metaAndAssetCtxs"}));meta,ctxs=raw[0],raw[1]
   names=[x.get("name") for x in meta.get("universe",[])]
   if sym in names:
-   z=ctxs[names.index(sym)];out["open_interest"]=float(z.get("openInterest",0) or 0);out["funding"]=float(z.get("funding",0) or 0)
+   z=ctxs[names.index(sym)];out["open_interest"]=float(z.get("openInterest",0) or 0);out["funding"]=float(z.get("funding",0) or 0);out["premium"]=float(z.get("premium",0) or 0);out["day_volume"]=float(z.get("dayNtlVlm",0) or 0)
  except Exception:pass
  try:
   book=json.loads(get(API,{"type":"l2Book","coin":sym}));levels=book.get("levels",[])
