@@ -1,5 +1,5 @@
 import os,json,time,threading,urllib.request,urllib.parse,sqlite3,datetime,xml.etree.ElementTree as ET,re,hashlib,subprocess
-import sqlite3,math
+import sqlite3,math\ntry: import psycopg\nexcept Exception: psycopg=None
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
 def choose(db_path,current=(-0.10,0.20)):
  with sqlite3.connect(db_path) as c: rows=c.execute("select pnl from trades order by id desc limit 120").fetchall()
@@ -50,7 +50,7 @@ def user_statuses(handle="realDonaldTrump",limit=20):
 
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 API="https://api.hyperliquid-testnet.xyz/info"
-DB="/tmp/pandora.sqlite3"
+DB="/tmp/pandora.sqlite3"\nDATABASE_URL=os.getenv("DATABASE_URL","").strip()
 START=time.time()
 S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0}
 LOCK=threading.RLock()
@@ -69,6 +69,35 @@ def init():
   c.execute("create table if not exists trades (id integer primary key autoincrement,opened text,closed text,symbol text,side integer,entry real,exit real,pnl real,reason text,headline text)")
   c.execute("create table if not exists snapshots (ts text,markets integer,equity real,positions integer)")
   c.execute("create table if not exists event_features (id text primary key,ts text,source text,title text,symbol text,decision integer,confidence real,features text)")
+def pg_conn():
+ if not DATABASE_URL or psycopg is None:return None
+ return psycopg.connect(DATABASE_URL)
+def persist_init():
+ if not DATABASE_URL:return
+ with pg_conn() as c:
+  c.execute("create table if not exists pandora_state (k text primary key,v jsonb not null,updated timestamptz default now())")
+  c.execute("create table if not exists pandora_trades (id bigserial primary key,opened timestamptz,closed timestamptz,symbol text,side integer,entry double precision,exit double precision,pnl double precision,reason text,headline text)")
+  c.execute("create table if not exists pandora_news (id text primary key,ts timestamptz,source text,title text,symbol text,signal integer)")
+  c.execute("create table if not exists pandora_features (id text primary key,ts timestamptz,source text,title text,symbol text,decision integer,confidence double precision,features jsonb)")
+  row=c.execute("select v from pandora_state where k='account'").fetchone()
+  if row:
+   z=row[0];S["equity"]=float(z.get("equity",100));S["realized_pnl"]=float(z.get("realized_pnl",0));S["trades"]=int(z.get("trades",0));S["positions"]=z.get("positions",{}) or {}
+   for p in S["positions"].values():p["t"]=time.time()-max(0,(datetime.datetime.now(datetime.timezone.utc)-datetime.datetime.fromisoformat(p["opened"])).total_seconds())
+  else:persist_state()
+def persist_state():
+ if not DATABASE_URL:return
+ z={"equity":S["equity"],"realized_pnl":S["realized_pnl"],"trades":S["trades"],"positions":S["positions"],"adaptive":S.get("adaptive",{})}
+ with pg_conn() as c:c.execute("insert into pandora_state(k,v) values('account',%s::jsonb) on conflict(k) do update set v=excluded.v,updated=now()",(json.dumps(z),))
+def persist_trade(pos,sym,exitp,pnl,reason):
+ if not DATABASE_URL:return
+ with pg_conn() as c:c.execute("insert into pandora_trades(opened,closed,symbol,side,entry,exit,pnl,reason,headline) values(%s,%s,%s,%s,%s,%s,%s,%s,%s)",(pos["opened"],now(),sym,pos["side"],pos["entry"],exitp,pnl,reason,pos["headline"]))
+def persist_position():
+ try:persist_state()
+ except Exception as e:S["last_error"]="persist: "+str(e)[:160]
+def pg_rows(sql,params=()):
+ if not DATABASE_URL:return []
+ with pg_conn() as c:
+  cur=c.execute(sql,params);cols=[x.name for x in cur.description];return [dict(zip(cols,r)) for r in cur.fetchall()]
 def market():
  while True:
   try:
@@ -80,7 +109,7 @@ def market():
      if sym in S["positions"]:
       pos=S["positions"][sym];move=(p/pos["entry"]-1)*pos["side"];roe=move*LEV
       if roe>=LOCK_TRIGGER_ROE and not pos["locked"]:
-       pos["locked"]=True;pos["stop"]=pos["entry"]*(1+pos["side"]*LOCK_ROE/LEV)
+       pos["locked"]=True;pos["stop"]=pos["entry"]*(1+pos["side"]*LOCK_ROE/LEV);persist_position()
       if S["equity"]+pos["notional"]*move<=0 or (pos["locked"] and (p-pos["stop"])*pos["side"]<=0) or time.time()-pos["t"]>3600:
        reason="liquidation" if S["equity"]+pos["notional"]*move<=0 else "locked" if pos["locked"] and (p-pos["stop"])*pos["side"]<=0 else "timeout"
        pnl=pos["notional"]*move-pos["notional"]*FEE*2
@@ -151,7 +180,7 @@ def record_event(ident,source,title,sym,base_side,prices):
 def open_signal(sym,side,title,prices):
  if sym in prices and side and sym not in S["positions"] and len(S["positions"])<5 and S["equity"]>10:
   price=prices[sym];notional=S["equity"]*MARGIN_FRACTION*LEV
-  S["positions"][sym]={"entry":price,"side":side,"notional":notional,"opened":now(),"t":time.time(),"headline":title,"locked":False,"stop":None}
+  S["positions"][sym]={"entry":price,"side":side,"notional":notional,"opened":now(),"t":time.time(),"headline":title,"locked":False,"stop":None};persist_position()
 
 def xnews():
  while True:
