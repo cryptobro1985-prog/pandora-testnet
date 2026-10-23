@@ -270,11 +270,9 @@ def news():
      S["sources"][source]={"ok":False,"last_check":now(),"error":str(e)[:150]}
   time.sleep(60)
 def dashboard():
- with sqlite3.connect(DB) as c:
-  c.row_factory=sqlite3.Row
-  trades=[dict(x) for x in persistent_trades(100)]
-  newsrows=[dict(x) for x in c.execute("select ts,source,title,symbol,signal from news order by ts desc limit 20")]
-  feats=[dict(x) for x in c.execute("select ts,source,title,symbol,decision,confidence,features from event_features order by ts desc limit 10")]
+ trades=[dict(x) for x in persistent_trades(100)]
+ newsrows=[dict(x) for x in persistent_news(20)]
+ feats=[dict(x) for x in persistent_features(10)]
  prices=S.get("_prices",{});positions=[];unreal=0.0
  for sym,p in S["positions"].items():
   px=prices.get(sym,p["entry"]);move=(px/p["entry"]-1)*p["side"];pnl=p["notional"]*move;unreal+=pnl
@@ -308,10 +306,10 @@ class Handler(BaseHTTPRequestHandler):
     data={"trades":[dict(x) for x in persistent_trades(1000)]}
     body=json.dumps(data,ensure_ascii=False).encode();ctype="application/json; charset=utf-8"
    elif path=="/features":
-    with sqlite3.connect(DB) as c:c.row_factory=sqlite3.Row;data={"features":[dict(x) for x in c.execute("select * from event_features order by ts desc limit 100")]}
+    data={"features":[dict(x) for x in persistent_features(100)]}
     body=json.dumps(data,ensure_ascii=False).encode();ctype="application/json; charset=utf-8"
    else:
-    with sqlite3.connect(DB) as c:c.row_factory=sqlite3.Row;data={"news":[dict(x) for x in c.execute("select ts,source,title,symbol,signal from news order by ts desc limit 50")]}
+    data={"news":[dict(x) for x in persistent_news(50)]}
     body=json.dumps(data,ensure_ascii=False).encode();ctype="application/json; charset=utf-8"
   self.send_response(200);self.send_header("Content-Type",ctype);self.send_header("Cache-Control","no-store");self.send_header("Access-Control-Allow-Origin","*");self.send_header("Content-Length",str(len(body)));self.end_headers();self.wfile.write(body)
 if __name__=="__main__":
