@@ -284,12 +284,16 @@ def dashboard():
  trades=[dict(x) for x in persistent_trades(100)]
  newsrows=[dict(x) for x in persistent_news(20)]
  feats=[dict(x) for x in persistent_features(10)]
- prices=S.get("_prices",{});positions=[];unreal=0.0;gross_unreal=0.0;exit_fees=0.0
+ prices=S.get("_prices",{});positions=[];unreal=0.0
  for sym,p in S["positions"].items():
-  px=prices.get(sym,p["entry"]);move=(px/p["entry"]-1)*p["side"];gross_pnl=p["notional"]*move;entry_fee=p["notional"]*FEE;close_notional=p["notional"]*(px/p["entry"]);exit_fee=close_notional*FEE;fees=entry_fee+exit_fee;net_pnl=gross_pnl-fees;margin=p["notional"]/LEV;net_roe=(net_pnl/margin*100) if margin>0 else 0.0;gross_unreal+=gross_pnl;exit_fees+=fees;pnl=net_pnl;unreal+=pnl
-  positions.append({"symbol":sym,"side":"LONG" if p["side"]>0 else "SHORT","entry":p["entry"],"mark":px,"notional_usd":round(p["notional"],2),"margin_usd":round(p["notional"]/LEV,2),"leverage":LEV,"roe_pct":round(net_roe,3),"gross_roe_pct":round(move*LEV*100,3),"gross_unrealized_pnl":round(gross_pnl,4),"estimated_fees":round(fees,4),"estimated_exit_fee":round(fees,4),"unrealized_pnl":round(pnl,4),"headline":p["headline"]})
- start_candidates=[x.get("opened") for x in trades if x.get("opened")]+[x.get("opened") for x in positions if x.get("opened")]\n account_started=min(start_candidates) if start_candidates else now()\n try: account_age_seconds=max(0,int((datetime.datetime.now(datetime.timezone.utc)-datetime.datetime.fromisoformat(account_started.replace("Z","+00:00"))).total_seconds()))\n except Exception: account_age_seconds=0\n account_roi=((S["equity"]+unreal)/PAPER_RESET-1)*100\n payload={"mode":S["mode"],"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"balance":round(S["equity"],4),"equity":round(S["equity"],4),"gross_unrealized_pnl":round(gross_unreal,4),"estimated_exit_fees":round(exit_fees,4),"unrealized_pnl":round(unreal,4),"total_equity":round(S["equity"]+unreal,4),"realized_pnl":round(S["realized_pnl"],4),"positions":positions,"trades":trades,"news":newsrows,"features":feats,"sources":S["sources"],"errors":S["errors"],"last_error":S["last_error"],"news_seen":S["news_seen"],"market_count":S["market_count"],"last_poll":S["last_poll"],"uptime_seconds":int(time.time()-START)}
- return payload
+  px=prices.get(sym,p["entry"]);move=(px/p["entry"]-1)*p["side"];gross=p["notional"]*move;fees=p["notional"]*FEE+p["notional"]*(px/p["entry"])*FEE;pnl=gross-fees;margin=p["notional"]/LEV;roi=(pnl/margin*100) if margin>0 else 0.0;unreal+=pnl
+  positions.append({"symbol":sym,"side":"LONG" if p["side"]>0 else "SHORT","entry":p["entry"],"mark":px,"notional_usd":round(p["notional"],2),"margin_usd":round(margin,2),"leverage":LEV,"roe_pct":round(roi,3),"unrealized_pnl":round(pnl,4),"opened":p["opened"],"headline":p["headline"]})
+ starts=[x.get("opened") for x in trades if x.get("opened")]+[x.get("opened") for x in positions if x.get("opened")]
+ account_started=min(starts) if starts else now()
+ try: account_age_seconds=max(0,int((datetime.datetime.now(datetime.timezone.utc)-datetime.datetime.fromisoformat(account_started.replace("Z","+00:00"))).total_seconds()))
+ except Exception: account_age_seconds=0
+ total=S["equity"]+unreal;account_roi=(total/PAPER_RESET-1)*100
+ return {"mode":S["mode"],"balance":round(S["equity"],4),"unrealized_pnl":round(unreal,4),"total_equity":round(total,4),"realized_pnl":round(S["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"positions":positions,"trades":trades,"news":newsrows,"features":feats,"sources":S["sources"],"errors":S["errors"],"last_error":S["last_error"],"news_seen":S["news_seen"],"market_count":S["market_count"],"last_poll":S["last_poll"],"uptime_seconds":int(time.time()-START)}
 
 def html_dashboard(data):
  esc=lambda x:str(x).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
