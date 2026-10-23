@@ -82,7 +82,7 @@ def save_pos(sym):
 def close_persistent(sym,pos,px,pnl,reason):
  with pg() as c:
   with c.transaction():
-   margin=pos["notional"]/LEV;roi=(pnl/margin*100) if margin>0 else 0.0\n   c.execute("insert into trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,headline) values(%s,%s,%s,%s,%s,%s,%s,%s,%s)",(pos["opened"],now(),sym,pos["side"],pos["entry"],px,pnl,reason,pos["headline"]))
+   c.execute("insert into trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,headline) values(%s,%s,%s,%s,%s,%s,%s,%s,%s)",(pos["opened"],now(),sym,pos["side"],pos["entry"],px,pnl,reason,pos["headline"]))
    c.execute("delete from open_positions where symbol=%s",(sym,))
    c.execute("insert into account_state(id,equity,realized_pnl,updated_at) values(1,%s,%s,%s) on conflict(id) do update set equity=excluded.equity,realized_pnl=excluded.realized_pnl,updated_at=excluded.updated_at",(S["equity"],S["realized_pnl"],now()))
 def persistent_trades(limit=100):
