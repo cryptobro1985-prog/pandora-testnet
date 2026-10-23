@@ -1,5 +1,5 @@
 import os,json,time,threading,urllib.request,urllib.parse,sqlite3,datetime,xml.etree.ElementTree as ET,re,hashlib,subprocess
-import sqlite3,math,email.utils
+import sqlite3,math,email.utils,secrets
 import psycopg
 from psycopg.rows import dict_row
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
@@ -122,6 +122,16 @@ def save_market_snapshot(ts,markets,equity,positions):
  with pg() as c:c.execute("insert into market_snapshots(ts,markets,equity,positions) values(%s,%s,%s,%s)",(ts,markets,equity,positions))
 def save_market_context(ts,symbol,price,context):
  with pg() as c:c.execute("insert into market_context_snapshots(ts,symbol,price,context) values(%s,%s,%s,%s::jsonb)",(ts,symbol,price,json.dumps(context)))
+def export_rows(kind,after,limit):
+ columns={"journal":("audit_journal","id"),"news":("news_events","id"),
+          "features":("event_features","id"),"trades":("trade_history","id"),
+          "positions":("open_positions","symbol")}
+ if kind not in columns:raise ValueError("Unsupported export kind")
+ table,key=columns[kind]
+ cursor=int(after) if kind in ("journal","trades") else after
+ with pg() as c:
+  rows=c.execute(f"select * from {table} where {key}>%s order by {key} limit %s",(cursor,limit+1)).fetchall()
+ return {"kind":kind,"rows":rows[:limit],"next_after":str(rows[limit-1][key]) if len(rows)>limit else None,"has_more":len(rows)>limit}
 def persistent_news(limit=50):
  with pg() as c:return c.execute("select ts,source,title,symbol,signal from news_events order by ts desc limit %s",(limit,)).fetchall()
 def persistent_features(limit=100):
@@ -360,6 +370,24 @@ class Handler(BaseHTTPRequestHandler):
   self.send_response(200);self.end_headers()
  def do_GET(self):
   path=self.path.split("?")[0]
+  if path=="/api/journal/export":
+   token=os.getenv("JOURNAL_EXPORT_TOKEN","")
+   auth=self.headers.get("Authorization","")
+   if not token or not secrets.compare_digest(auth,"Bearer "+token):
+    self.send_error(401);return
+   try:
+    args=urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+    kind=args.get("kind",["journal"])[0]
+    after=args.get("after",["0" if kind in ("journal","trades") else ""])[0]
+    limit=min(500,max(1,int(args.get("limit",["200"])[0])))
+    body=json.dumps(export_rows(kind,after,limit),ensure_ascii=False,default=str).encode()
+   except (ValueError,OverflowError):
+    self.send_error(400);return
+   except Exception:
+    self.send_error(500);return
+   self.send_response(200);self.send_header("Content-Type","application/json; charset=utf-8")
+   self.send_header("Cache-Control","no-store");self.send_header("X-Content-Type-Options","nosniff")
+   self.send_header("Content-Length",str(len(body)));self.end_headers();self.wfile.write(body);return
   if path not in ("/","/health","/status","/api/dashboard","/trades","/news","/features"):
    self.send_error(404);return
   with LOCK:
