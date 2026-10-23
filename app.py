@@ -45,7 +45,7 @@ LOCK=threading.RLock()
 FEEDS={"FedOfficial":"https://www.federalreserve.gov/feeds/press_all.xml","SECOfficial":"https://www.sec.gov/news/pressreleases.rss","GoogleNewsCrypto":"https://news.google.com/rss/search?q=cryptocurrency+OR+bitcoin+OR+altcoin&hl=en-US&gl=US&ceid=US:en","GoogleNewsMarkets":"https://news.google.com/rss/search?q=crypto+SEC+OR+Federal+Reserve+OR+token+listing&hl=en-US&gl=US&ceid=US:en","Cointelegraph":"https://cointelegraph.com/rss","Decrypt":"https://decrypt.co/feed","CoinDesk":"https://www.coindesk.com/arc/outboundfeeds/rss/","CFTCOfficial":"https://www.cftc.gov/RSS/RSSGP/rssgp.xml","DOJNews":"https://www.justice.gov/feeds/opa/justice-news.xml","TruthSocialSearch":"https://news.google.com/rss/search?q=site%3Atruthsocial.com+crypto&hl=en-US&gl=US&ceid=US:en","XSearch":"https://news.google.com/rss/search?q=site%3Ax.com+cryptocurrency&hl=en-US&gl=US&ceid=US:en"}
 POS=("surge","approve","approval","partnership","listing","adoption","buyback","breakout","bullish","launch","etf approved")
 NEG=("hack","exploit","lawsuit","delist","ban","liquidation","fraud","selloff","bearish","crash","stolen")
-STOP_ROE=-0.10;TAKE_ROE=0.20;LEV=10.0;MARGIN_FRACTION=0.25;FEE=0.00045;LOCK_TRIGGER_ROE=0.15;LOCK_ROE=0.075
+STOP_ROE=-999.0;TAKE_ROE=0.20;LEV=10.0;MARGIN_FRACTION=0.25;FEE=0.00045;LOCK_TRIGGER_ROE=0.15;LOCK_ROE=0.075;PAPER_RESET=100.0
 def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
 def get(url,body=None):
  data=None if body is None else json.dumps(body).encode()
@@ -66,12 +66,12 @@ def market():
     for sym,p in valid.items():
      if sym in S["positions"]:
       pos=S["positions"][sym];move=(p/pos["entry"]-1)*pos["side"];roe=move*LEV
-      if roe>=TAKE_ROE and not pos["locked"]:
-       pos["locked"]=True;pos["stop"]=pos["entry"]*(1+pos["side"]*0.10/LEV)
-      if roe<=STOP_ROE or (pos["locked"] and (p-pos["stop"])*pos["side"]<=0) or time.time()-pos["t"]>3600:
-       reason="stop" if roe<=STOP_ROE else "locked" if pos["locked"] and (p-pos["stop"])*pos["side"]<=0 else "timeout"
+      if roe>=LOCK_TRIGGER_ROE and not pos["locked"]:
+       pos["locked"]=True;pos["stop"]=pos["entry"]*(1+pos["side"]*LOCK_ROE/LEV)
+      if S["equity"]+pos["notional"]*move<=0 or (pos["locked"] and (p-pos["stop"])*pos["side"]<=0) or time.time()-pos["t"]>3600:
+       reason="liquidation" if S["equity"]+pos["notional"]*move<=0 else "locked" if pos["locked"] and (p-pos["stop"])*pos["side"]<=0 else "timeout"
        pnl=pos["notional"]*move-pos["notional"]*FEE*2
-       S["equity"]+=pnl;S["realized_pnl"]+=pnl;S["trades"]+=1
+       S["equity"]+=pnl;S["realized_pnl"]+=pnl;S["trades"]+=1\n       if S["equity"]<=0:S["equity"]=PAPER_RESET
        with sqlite3.connect(DB) as c:c.execute("insert into trades(opened,closed,symbol,side,entry,exit,pnl,reason,headline) values(?,?,?,?,?,?,?,?,?)",(pos["opened"],now(),sym,pos["side"],pos["entry"],p,pnl,reason,pos["headline"]))
        del S["positions"][sym]
     S["_prices"]=valid
@@ -87,7 +87,7 @@ def detect(title,prices):
   else:return None,0
  score=sum(w in title.lower() for w in POS)-sum(w in title.lower() for w in NEG)
  return (mentions[0] if mentions else None),(1 if score>0 else -1 if score<0 else 0)
-def xnews():
+def open_signal(sym,side,title,prices):\n if sym in prices and side and sym not in S["positions"] and len(S["positions"])<5 and S["equity"]>10:\n  price=prices[sym];notional=S["equity"]*MARGIN_FRACTION*LEV\n  S["positions"][sym]={"entry":price,"side":side,"notional":notional,"opened":now(),"t":time.time(),"headline":title,"locked":False,"stop":None}\n\ndef xnews():
  while True:
   try:
    posts=recent()
@@ -127,9 +127,9 @@ def adapt():
  global STOP_ROE,TAKE_ROE
  while True:
   try:
-   z=choose(DB,(STOP_ROE,TAKE_ROE))
+   z=choose(DB,(-0.10,TAKE_ROE))
    with LOCK:
-    if z.get("changed"):STOP_ROE=float(z["stop"]);TAKE_ROE=float(z["take"])
+    if z.get("changed"):TAKE_ROE=float(z["take"])
     S["adaptive"]=z
   except Exception as e:
    with LOCK:S["last_error"]="adaptive: "+str(e)[:160]
