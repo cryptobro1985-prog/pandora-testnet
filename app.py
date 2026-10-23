@@ -59,7 +59,7 @@ LOCK=threading.RLock()
 FEEDS={"FedOfficial":"https://www.federalreserve.gov/feeds/press_all.xml","SECOfficial":"https://www.sec.gov/news/pressreleases.rss","GoogleNewsCrypto":"https://news.google.com/rss/search?q=cryptocurrency+OR+bitcoin+OR+altcoin&hl=en-US&gl=US&ceid=US:en","GoogleNewsMarkets":"https://news.google.com/rss/search?q=crypto+SEC+OR+Federal+Reserve+OR+token+listing&hl=en-US&gl=US&ceid=US:en","Cointelegraph":"https://cointelegraph.com/rss","Decrypt":"https://decrypt.co/feed","CoinDesk":"https://www.coindesk.com/arc/outboundfeeds/rss/","CFTCOfficial":"https://www.cftc.gov/RSS/RSSGP/rssgp.xml","DOJNews":"https://www.justice.gov/feeds/opa/justice-news.xml","TruthSocialSearch":"https://news.google.com/rss/search?q=site%3Atruthsocial.com+crypto&hl=en-US&gl=US&ceid=US:en"}
 POS=("surge","approve","approval","partnership","listing","adoption","buyback","breakout","bullish","launch","etf approved")
 NEG=("hack","exploit","lawsuit","delist","ban","liquidation","fraud","selloff","bearish","crash","stolen")
-STOP_ROE=-999.0;TAKE_ROE=0.20;LEV=10.0;MARGIN_FRACTION=0.25;FEE=0.00045;LOCK_TRIGGER_ROE=0.10;LOCK_ROE=0.075;PAPER_RESET=100.0;MIN_EXIT_ROE=0.075
+STOP_ROE=-999.0;TAKE_ROE=0.20;LEV=10.0;MARGIN_FRACTION=0.25;FEE=0.00045;LOCK_TRIGGER_ROE=0.10;LOCK_ROE=0.075;PAPER_RESET=100.0;MIN_EXIT_ROE=0.075;TRAIL_ARM_ROE=0.12
 def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
 def pg():
  return psycopg.connect(os.environ["DATABASE_URL"],autocommit=True,row_factory=dict_row)
@@ -130,7 +130,7 @@ def market():
       pos=S["positions"][sym];move=(p/pos["entry"]-1)*pos["side"];roe=move*LEV
       if roe>=LOCK_TRIGGER_ROE and not pos["locked"]:
        pos["locked"]=True;pos["stop"]=pos["entry"]*(1+pos["side"]*LOCK_ROE/LEV);save_pos(sym)
-      hist0=S.get("_hist",{}).get(sym,[]);pos["peak"]=max(pos.get("peak",p),p) if pos["side"]>0 else min(pos.get("peak",p),p);peakmove=(pos["peak"]/pos["entry"]-1)*pos["side"];peakroe=peakmove*LEV;weak=(len(hist0)>=6 and ((pos["side"]>0 and p<max(hist0[-6:]) and hist0[-1]<hist0[-3]) or (pos["side"]<0 and p>min(hist0[-6:]) and hist0[-1]>hist0[-3])));giveback=max(0.0,peakroe-roe);allowed=0.025 if peakroe>=0.50 else 0.035 if peakroe>=0.30 else 0.045 if peakroe>=0.20 else 0.055;profit_floor=max(MIN_EXIT_ROE,peakroe-allowed);adaptive_exit=peakroe>=LOCK_TRIGGER_ROE and roe<=profit_floor and weak
+      hist0=S.get("_hist",{}).get(sym,[]);pos["peak"]=max(pos.get("peak",p),p) if pos["side"]>0 else min(pos.get("peak",p),p);peakmove=(pos["peak"]/pos["entry"]-1)*pos["side"];peakroe=peakmove*LEV;weak=(len(hist0)>=6 and ((pos["side"]>0 and p<max(hist0[-6:]) and hist0[-1]<hist0[-3]) or (pos["side"]<0 and p>min(hist0[-6:]) and hist0[-1]>hist0[-3])));giveback=max(0.0,peakroe-roe);rets=[abs(hist0[i]/hist0[i-1]-1)*LEV for i in range(max(1,len(hist0)-20),len(hist0)) if hist0[i-1]>0];noise=(sum(rets)/len(rets)) if rets else 0.01;trail_gap=max(0.025,min(0.08,noise*3.0));profit_floor=max(MIN_EXIT_ROE,peakroe-trail_gap);trail_armed=peakroe>=TRAIL_ARM_ROE;adaptive_exit=trail_armed and roe<=profit_floor and weak
       if S["equity"]+pos["notional"]*move<=0 or adaptive_exit:
        reason="liquidation" if S["equity"]+pos["notional"]*move<=0 else "local_extreme_weakening"
        pnl=pos["notional"]*move-pos["notional"]*FEE*2
