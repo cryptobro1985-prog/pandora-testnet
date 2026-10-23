@@ -1,5 +1,7 @@
 import os,json,time,threading,urllib.request,urllib.parse,sqlite3,datetime,xml.etree.ElementTree as ET,re,hashlib,subprocess
 import sqlite3,math
+import psycopg
+from psycopg.rows import dict_row
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
 def choose(db_path,current=(-0.10,0.20)):
  with sqlite3.connect(db_path) as c: rows=c.execute("select pnl from trades order by id desc limit 120").fetchall()
@@ -59,6 +61,39 @@ POS=("surge","approve","approval","partnership","listing","adoption","buyback","
 NEG=("hack","exploit","lawsuit","delist","ban","liquidation","fraud","selloff","bearish","crash","stolen")
 STOP_ROE=-999.0;TAKE_ROE=0.20;LEV=10.0;MARGIN_FRACTION=0.25;FEE=0.00045;LOCK_TRIGGER_ROE=0.15;LOCK_ROE=0.075;PAPER_RESET=100.0
 def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
+def pg():
+ return psycopg.connect(os.environ["DATABASE_URL"],autocommit=True,row_factory=dict_row)
+def pinit():
+ with pg() as c:
+  c.execute("create table if not exists account_state (id integer primary key, equity double precision not null, realized_pnl double precision not null, updated_at text not null)")
+  c.execute("create table if not exists open_positions (symbol text primary key, side integer not null, entry double precision not null, notional double precision not null, opened text not null, opened_epoch double precision not null, headline text, locked boolean not null default false, stop double precision)")
+  c.execute("create table if not exists trade_history (id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision, pnl double precision, reason text, headline text)")
+  row=c.execute("select equity,realized_pnl from account_state where id=1").fetchone()
+  if row:
+   S["equity"]=float(row["equity"]);S["realized_pnl"]=float(row["realized_pnl"])
+  else:c.execute("insert into account_state(id,equity,realized_pnl,updated_at) values(1,%s,%s,%s)",(S["equity"],S["realized_pnl"],now()))
+  for r in c.execute("select * from open_positions").fetchall():
+   S["positions"][r["symbol"]]={"entry":float(r["entry"]),"side":int(r["side"]),"notional":float(r["notional"]),"opened":r["opened"],"t":float(r["opened_epoch"]),"headline":r["headline"] or "","locked":bool(r["locked"]),"stop":r["stop"]}
+def save_account():
+ with pg() as c:c.execute("insert into account_state(id,equity,realized_pnl,updated_at) values(1,%s,%s,%s) on conflict(id) do update set equity=excluded.equity,realized_pnl=excluded.realized_pnl,updated_at=excluded.updated_at",(S["equity"],S["realized_pnl"],now()))
+def save_pos(sym):
+ p=S["positions"][sym]
+ with pg() as c:c.execute("insert into open_positions(symbol,side,entry,notional,opened,opened_epoch,headline,locked,stop) values(%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict(symbol) do update set side=excluded.side,entry=excluded.entry,notional=excluded.notional,opened=excluded.opened,opened_epoch=excluded.opened_epoch,headline=excluded.headline,locked=excluded.locked,stop=excluded.stop",(sym,p["side"],p["entry"],p["notional"],p["opened"],p["t"],p["headline"],p["locked"],p["stop"]))
+def close_persistent(sym,pos,px,pnl,reason):
+ with pg() as c:
+  with c.transaction():
+   c.execute("insert into trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,headline) values(%s,%s,%s,%s,%s,%s,%s,%s,%s)",(pos["opened"],now(),sym,pos["side"],pos["entry"],px,pnl,reason,pos["headline"]))
+   c.execute("delete from open_positions where symbol=%s",(sym,))
+   c.execute("insert into account_state(id,equity,realized_pnl,updated_at) values(1,%s,%s,%s) on conflict(id) do update set equity=excluded.equity,realized_pnl=excluded.realized_pnl,updated_at=excluded.updated_at",(S["equity"],S["realized_pnl"],now()))
+def persistent_trades(limit=100):
+ with pg() as c:return c.execute("select * from trade_history order by id desc limit %s",(limit,)).fetchall()
+def choose_persistent(current=(-0.10,0.20)):
+ rows=persistent_trades(120);xs=[float(x["pnl"]) for x in reversed(rows)]
+ if len(xs)<30:return {"stop":current[0],"take":current[1],"samples":len(xs),"changed":False}
+ cut=max(20,int(len(xs)*0.7));train=xs[:cut];valid=xs[cut:]
+ if sum(valid)<=0:return {"stop":current[0],"take":current[1],"samples":len(xs),"validation_pnl":sum(valid),"changed":False}
+ cand=CANDIDATES[3] if sum(train)/len(train)>0 else CANDIDATES[1]
+ return {"stop":cand[0],"take":cand[1],"samples":len(xs),"validation_pnl":sum(valid),"changed":cand!=current}
 def get(url,body=None):
  data=None if body is None else json.dumps(body).encode()
  req=urllib.request.Request(url,data=data,headers={"User-Agent":"Mozilla/5.0 PANDORA-research/1.0","Content-Type":"application/json"})
@@ -80,13 +115,13 @@ def market():
      if sym in S["positions"]:
       pos=S["positions"][sym];move=(p/pos["entry"]-1)*pos["side"];roe=move*LEV
       if roe>=LOCK_TRIGGER_ROE and not pos["locked"]:
-       pos["locked"]=True;pos["stop"]=pos["entry"]*(1+pos["side"]*LOCK_ROE/LEV)
+       pos["locked"]=True;pos["stop"]=pos["entry"]*(1+pos["side"]*LOCK_ROE/LEV);save_pos(sym)
       if S["equity"]+pos["notional"]*move<=0 or (pos["locked"] and (p-pos["stop"])*pos["side"]<=0) or time.time()-pos["t"]>3600:
        reason="liquidation" if S["equity"]+pos["notional"]*move<=0 else "locked" if pos["locked"] and (p-pos["stop"])*pos["side"]<=0 else "timeout"
        pnl=pos["notional"]*move-pos["notional"]*FEE*2
        S["equity"]+=pnl;S["realized_pnl"]+=pnl;S["trades"]+=1
        if S["equity"]<=0:S["equity"]=PAPER_RESET
-       with sqlite3.connect(DB) as c:c.execute("insert into trades(opened,closed,symbol,side,entry,exit,pnl,reason,headline) values(?,?,?,?,?,?,?,?,?)",(pos["opened"],now(),sym,pos["side"],pos["entry"],p,pnl,reason,pos["headline"]))
+       close_persistent(sym,pos,p,pnl,reason)
        del S["positions"][sym]
     S["_prices"]=valid
     hist=S.setdefault("_hist",{})
@@ -151,7 +186,7 @@ def record_event(ident,source,title,sym,base_side,prices):
 def open_signal(sym,side,title,prices):
  if sym in prices and side and sym not in S["positions"] and len(S["positions"])<5 and S["equity"]>10:
   price=prices[sym];notional=S["equity"]*MARGIN_FRACTION*LEV
-  S["positions"][sym]={"entry":price,"side":side,"notional":notional,"opened":now(),"t":time.time(),"headline":title,"locked":False,"stop":None}
+  S["positions"][sym]={"entry":price,"side":side,"notional":notional,"opened":now(),"t":time.time(),"headline":title,"locked":False,"stop":None};save_pos(sym)
 
 def xnews():
  while True:
@@ -194,7 +229,7 @@ def adapt():
  global STOP_ROE,TAKE_ROE
  while True:
   try:
-   z=choose(DB,(-0.10,TAKE_ROE))
+   z=choose_persistent((-0.10,TAKE_ROE))
    with LOCK:
     if z.get("changed"):TAKE_ROE=float(z["take"])
     S["adaptive"]=z
@@ -229,7 +264,7 @@ def news():
 def dashboard():
  with sqlite3.connect(DB) as c:
   c.row_factory=sqlite3.Row
-  trades=[dict(x) for x in c.execute("select * from trades order by id desc limit 20")]
+  trades=[dict(x) for x in persistent_trades(100)]
   newsrows=[dict(x) for x in c.execute("select ts,source,title,symbol,signal from news order by ts desc limit 20")]
   feats=[dict(x) for x in c.execute("select ts,source,title,symbol,decision,confidence,features from event_features order by ts desc limit 10")]
  prices=S.get("_prices",{});positions=[];unreal=0.0
@@ -262,7 +297,7 @@ class Handler(BaseHTTPRequestHandler):
    elif path in ("/health","/status","/api/dashboard"):
     body=json.dumps(dashboard(),ensure_ascii=False).encode();ctype="application/json; charset=utf-8"
    elif path=="/trades":
-    with sqlite3.connect(DB) as c:c.row_factory=sqlite3.Row;data={"trades":[dict(x) for x in c.execute("select * from trades order by id desc limit 100")]}
+    data={"trades":[dict(x) for x in persistent_trades(1000)]}
     body=json.dumps(data,ensure_ascii=False).encode();ctype="application/json; charset=utf-8"
    elif path=="/features":
     with sqlite3.connect(DB) as c:c.row_factory=sqlite3.Row;data={"features":[dict(x) for x in c.execute("select * from event_features order by ts desc limit 100")]}
@@ -275,6 +310,8 @@ if __name__=="__main__":
  try:subprocess.Popen(["hyperdata","api","--port","8420"],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
  except Exception as e:S["sources"]["HyperData"]={"ok":False,"error":str(e)[:120]}
  init()
+ pinit()
+ S["sources"]["PersistentPostgres"]={"ok":True,"last_check":now(),"mode":"primary_state_and_trade_history"}
  threading.Thread(target=market,daemon=True).start()
  threading.Thread(target=news,daemon=True).start()
  threading.Thread(target=xnews,daemon=True).start()
