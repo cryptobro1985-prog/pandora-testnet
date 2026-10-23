@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: pandora-testnet-monitor-v2
+    runtime: docker
+    plan: free
+    region: frankfurt
+    repo: https://github.com/cryptobro1985-prog/pandora-testnet
+    branch: pandora-persistent-blueprint
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pandora-persistent-v2
+          property: connectionString
+      - key: PANDORA_PERSISTENT
+        value: "1"
+databases:
+  - name: pandora-persistent-v2
+    plan: free
+    region: frankfurt
