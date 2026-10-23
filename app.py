@@ -130,8 +130,8 @@ def market():
       pos=S["positions"][sym];move=(p/pos["entry"]-1)*pos["side"];roe=move*LEV
       if roe>=LOCK_TRIGGER_ROE and not pos["locked"]:
        pos["locked"]=True;pos["stop"]=pos["entry"]*(1+pos["side"]*LOCK_ROE/LEV);save_pos(sym)
-      if S["equity"]+pos["notional"]*move<=0 or (pos["locked"] and (p-pos["stop"])*pos["side"]<=0) or time.time()-pos["t"]>3600:
-       reason="liquidation" if S["equity"]+pos["notional"]*move<=0 else "locked" if pos["locked"] and (p-pos["stop"])*pos["side"]<=0 else "timeout"
+      hist0=S.get("_hist",{}).get(sym,[]);pos["peak"]=max(pos.get("peak",p),p) if pos["side"]>0 else min(pos.get("peak",p),p);peakmove=(pos["peak"]/pos["entry"]-1)*pos["side"];peakroe=peakmove*LEV;weak=(len(hist0)>=6 and ((pos["side"]>0 and p<max(hist0[-6:]) and hist0[-1]<hist0[-3]) or (pos["side"]<0 and p>min(hist0[-6:]) and hist0[-1]>hist0[-3])));giveback=(peakroe-roe)/max(peakroe,0.0001) if peakroe>0 else 0;adaptive_exit=roe>=MIN_EXIT_ROE and peakroe>=LOCK_TRIGGER_ROE and weak and giveback>=PEAK_GIVEBACK\n      if S["equity"]+pos["notional"]*move<=0 or adaptive_exit:
+       reason="liquidation" if S["equity"]+pos["notional"]*move<=0 else "local_extreme_weakening"
        pnl=pos["notional"]*move-pos["notional"]*FEE*2
        S["equity"]+=pnl;S["realized_pnl"]+=pnl;S["trades"]+=1
        if S["equity"]<=0:S["equity"]=PAPER_RESET
