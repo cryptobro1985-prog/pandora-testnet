@@ -66,19 +66,19 @@ def pg():
 def pinit():
  with pg() as c:
   c.execute("create table if not exists account_state (id integer primary key, equity double precision not null, realized_pnl double precision not null, updated_at text not null)")
-  c.execute("create table if not exists open_positions (symbol text primary key, side integer not null, entry double precision not null, notional double precision not null, opened text not null, opened_epoch double precision not null, headline text, locked boolean not null default false, stop double precision)")
+  c.execute("create table if not exists open_positions (symbol text primary key, side integer not null, entry double precision not null, notional double precision not null, opened text not null, opened_epoch double precision not null, headline text, locked boolean not null default false, stop double precision)")\n  c.execute("alter table open_positions add column if not exists leverage double precision")\n  c.execute("alter table open_positions add column if not exists margin double precision")
   c.execute("create table if not exists trade_history (id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision, pnl double precision, reason text, headline text)")
   row=c.execute("select equity,realized_pnl from account_state where id=1").fetchone()
   if row:
    S["equity"]=float(row["equity"]);S["realized_pnl"]=float(row["realized_pnl"])
   else:c.execute("insert into account_state(id,equity,realized_pnl,updated_at) values(1,%s,%s,%s)",(S["equity"],S["realized_pnl"],now()))
   for r in c.execute("select * from open_positions").fetchall():
-   S["positions"][r["symbol"]]={"entry":float(r["entry"]),"side":int(r["side"]),"notional":float(r["notional"]),"opened":r["opened"],"t":float(r["opened_epoch"]),"headline":r["headline"] or "","locked":bool(r["locked"]),"stop":r["stop"]}
+   S["positions"][r["symbol"]]={"entry":float(r["entry"]),"side":int(r["side"]),"notional":float(r["notional"]),"opened":r["opened"],"t":float(r["opened_epoch"]),"headline":r["headline"] or "","locked":bool(r["locked"]),"stop":r["stop"],"leverage":float(r["leverage"] or LEV),"margin":float(r["margin"] or (float(r["notional"])/float(r["leverage"] or LEV)))}
 def save_account():
  with pg() as c:c.execute("insert into account_state(id,equity,realized_pnl,updated_at) values(1,%s,%s,%s) on conflict(id) do update set equity=excluded.equity,realized_pnl=excluded.realized_pnl,updated_at=excluded.updated_at",(S["equity"],S["realized_pnl"],now()))
 def save_pos(sym):
- p=S["positions"][sym]
- with pg() as c:c.execute("insert into open_positions(symbol,side,entry,notional,opened,opened_epoch,headline,locked,stop) values(%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict(symbol) do update set side=excluded.side,entry=excluded.entry,notional=excluded.notional,opened=excluded.opened,opened_epoch=excluded.opened_epoch,headline=excluded.headline,locked=excluded.locked,stop=excluded.stop",(sym,p["side"],p["entry"],p["notional"],p["opened"],p["t"],p["headline"],p["locked"],p["stop"]))
+ p=S["positions"][sym];lev=float(p.get("leverage",LEV));margin=float(p.get("margin",p["notional"]/lev))
+ with pg() as c:c.execute("insert into open_positions(symbol,side,entry,notional,opened,opened_epoch,headline,locked,stop,leverage,margin) values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict(symbol) do update set side=excluded.side,entry=excluded.entry,notional=excluded.notional,opened=excluded.opened,opened_epoch=excluded.opened_epoch,headline=excluded.headline,locked=excluded.locked,stop=excluded.stop,leverage=excluded.leverage,margin=excluded.margin",(sym,p["side"],p["entry"],p["notional"],p["opened"],p["t"],p["headline"],p["locked"],p["stop"],lev,margin))
 def close_persistent(sym,pos,px,pnl,reason):
  with pg() as c:
   with c.transaction():
@@ -127,10 +127,10 @@ def market():
     S["last_poll"]=now();S["market_count"]=len(valid)
     for sym,p in valid.items():
      if sym in S["positions"]:
-      pos=S["positions"][sym];move=(p/pos["entry"]-1)*pos["side"];roe=move*LEV
+      pos=S["positions"][sym];lev=float(pos.get("leverage",LEV));move=(p/pos["entry"]-1)*pos["side"];roe=move*lev
       if roe>=LOCK_TRIGGER_ROE and not pos["locked"]:
-       pos["locked"]=True;pos["stop"]=pos["entry"]*(1+pos["side"]*LOCK_ROE/LEV);save_pos(sym)
-      hist0=S.get("_hist",{}).get(sym,[]);pos["peak"]=max(pos.get("peak",p),p) if pos["side"]>0 else min(pos.get("peak",p),p);peakmove=(pos["peak"]/pos["entry"]-1)*pos["side"];peakroe=peakmove*LEV;weak=(len(hist0)>=6 and ((pos["side"]>0 and p<max(hist0[-6:]) and hist0[-1]<hist0[-3]) or (pos["side"]<0 and p>min(hist0[-6:]) and hist0[-1]>hist0[-3])));giveback=max(0.0,peakroe-roe);rets=[abs(hist0[i]/hist0[i-1]-1)*LEV for i in range(max(1,len(hist0)-20),len(hist0)) if hist0[i-1]>0];noise=(sum(rets)/len(rets)) if rets else 0.01;trail_gap=max(0.025,min(0.08,noise*3.0));profit_floor=max(MIN_EXIT_ROE,peakroe-trail_gap);trail_armed=peakroe>=TRAIL_ARM_ROE;adaptive_exit=trail_armed and roe<=profit_floor and weak
+       pos["locked"]=True;pos["stop"]=pos["entry"]*(1+pos["side"]*LOCK_ROE/lev);save_pos(sym)
+      hist0=S.get("_hist",{}).get(sym,[]);pos["peak"]=max(pos.get("peak",p),p) if pos["side"]>0 else min(pos.get("peak",p),p);peakmove=(pos["peak"]/pos["entry"]-1)*pos["side"];peakroe=peakmove*lev;weak=(len(hist0)>=6 and ((pos["side"]>0 and p<max(hist0[-6:]) and hist0[-1]<hist0[-3]) or (pos["side"]<0 and p>min(hist0[-6:]) and hist0[-1]>hist0[-3])));giveback=max(0.0,peakroe-roe);rets=[abs(hist0[i]/hist0[i-1]-1)*lev for i in range(max(1,len(hist0)-20),len(hist0)) if hist0[i-1]>0];noise=(sum(rets)/len(rets)) if rets else 0.01;trail_gap=max(0.025,min(0.08,noise*3.0));profit_floor=max(MIN_EXIT_ROE,peakroe-trail_gap);trail_armed=peakroe>=TRAIL_ARM_ROE;adaptive_exit=trail_armed and roe<=profit_floor and weak
       if S["equity"]+pos["notional"]*move<=0 or adaptive_exit:
        reason="liquidation" if S["equity"]+pos["notional"]*move<=0 else "local_extreme_weakening"
        pnl=pos["notional"]*move-pos["notional"]*FEE*2
@@ -208,10 +208,10 @@ def record_event(ident,source,title,sym,base_side,prices):
 
 def open_signal(sym,side,title,prices):
  if sym in prices and side and sym not in S["positions"] and S["equity"]>10:
-  price=prices[sym];margin=S["equity"]*MARGIN_FRACTION;used_margin=sum(x["notional"]/LEV for x in S["positions"].values());free_margin=max(0.0,S["equity"]-used_margin)
+  price=prices[sym];margin=S["equity"]*MARGIN_FRACTION;used_margin=sum(float(x.get("margin",x["notional"]/float(x.get("leverage",LEV)))) for x in S["positions"].values());free_margin=max(0.0,S["equity"]-used_margin)
   if free_margin+1e-9<margin:return
   notional=margin*LEV
-  S["positions"][sym]={"entry":price,"side":side,"notional":notional,"opened":now(),"t":time.time(),"headline":title,"locked":False,"stop":None,"peak":price};save_pos(sym)
+  S["positions"][sym]={"entry":price,"side":side,"notional":notional,"opened":now(),"t":time.time(),"headline":title,"locked":False,"stop":None,"peak":price,"leverage":LEV,"margin":margin};save_pos(sym)
 
 def xnews():
  while True:
@@ -286,8 +286,8 @@ def dashboard():
  feats=[dict(x) for x in persistent_features(10)]
  prices=S.get("_prices",{});positions=[];unreal=0.0
  for sym,p in S["positions"].items():
-  px=prices.get(sym,p["entry"]);move=(px/p["entry"]-1)*p["side"];gross=p["notional"]*move;fees=p["notional"]*FEE+p["notional"]*(px/p["entry"])*FEE;pnl=gross-fees;margin=p["notional"]/LEV;roi=(pnl/margin*100) if margin>0 else 0.0;unreal+=pnl
-  positions.append({"symbol":sym,"side":"LONG" if p["side"]>0 else "SHORT","entry":p["entry"],"mark":px,"notional_usd":round(p["notional"],2),"margin_usd":round(margin,2),"leverage":LEV,"roe_pct":round(roi,3),"unrealized_pnl":round(pnl,4),"opened":p["opened"],"headline":p["headline"]})
+  px=prices.get(sym,p["entry"]);move=(px/p["entry"]-1)*p["side"];gross=p["notional"]*move;fees=p["notional"]*FEE+p["notional"]*(px/p["entry"])*FEE;pnl=gross-fees;lev=float(p.get("leverage",LEV));margin=float(p.get("margin",p["notional"]/lev));roi=(pnl/margin*100) if margin>0 else 0.0;unreal+=pnl
+  positions.append({"symbol":sym,"side":"LONG" if p["side"]>0 else "SHORT","entry":p["entry"],"mark":px,"notional_usd":round(p["notional"],2),"margin_usd":round(margin,2),"leverage":lev,"roe_pct":round(roi,3),"unrealized_pnl":round(pnl,4),"opened":p["opened"],"headline":p["headline"]})
  starts=[x.get("opened") for x in trades if x.get("opened")]+[x.get("opened") for x in positions if x.get("opened")]
  account_started=min(starts) if starts else now()
  try: account_age_seconds=max(0,int((datetime.datetime.now(datetime.timezone.utc)-datetime.datetime.fromisoformat(account_started.replace("Z","+00:00"))).total_seconds()))
