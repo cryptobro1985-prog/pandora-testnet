@@ -190,7 +190,13 @@ def decide(title,sym,base_side,prices):
  if obi is not None:score+=max(-1,min(1,obi*2))
  if fund is not None:score+=max(-0.5,min(0.5,-fund*1000))
  if f["tokenomics"]=="unlock_event":score*=0.6
- side=1 if score>=0.75 else -1 if score<=-0.75 else 0
+ if base_side>0:
+  side=1 if score>=0.75 else 0
+ elif base_side<0:
+  side=-1 if score<=-0.75 else 0
+ else:
+  side=0
+ f["news_direction"]=base_side;f["direction_guard"]=True
  return side,min(1.0,abs(score)/3.0),f
 
 def record_event(ident,source,title,sym,base_side,prices):
