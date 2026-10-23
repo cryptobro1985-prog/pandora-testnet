@@ -1,4 +1,7 @@
-import os,json,time,threading,urllib.request,urllib.parse,sqlite3,datetime,xml.etree.ElementTree as ET,re,hashlib\nfrom adaptive import choose\nfrom x_source import recent\nfrom truth_source import user_statuses
+import os,json,time,threading,urllib.request,urllib.parse,sqlite3,datetime,xml.etree.ElementTree as ET,re,hashlib
+from adaptive import choose
+from x_source import recent
+from truth_source import user_statuses
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 API="https://api.hyperliquid-testnet.xyz/info"
 DB="/tmp/pandora.sqlite3"
@@ -141,5 +144,8 @@ class Handler(BaseHTTPRequestHandler):
 if __name__=="__main__":
  init()
  threading.Thread(target=market,daemon=True).start()
- threading.Thread(target=news,daemon=True).start()\n threading.Thread(target=xnews,daemon=True).start()\n threading.Thread(target=adapt,daemon=True).start()\n threading.Thread(target=truthnews,daemon=True).start()
+ threading.Thread(target=news,daemon=True).start()
+ threading.Thread(target=xnews,daemon=True).start()
+ threading.Thread(target=adapt,daemon=True).start()
+ threading.Thread(target=truthnews,daemon=True).start()
  ThreadingHTTPServer(("0.0.0.0",int(os.getenv("PORT","10000"))),Handler).serve_forever()
