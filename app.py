@@ -213,23 +213,50 @@ def news():
      S["errors"]+=1;S["last_error"]=source+": "+str(e)[:180]
      S["sources"][source]={"ok":False,"last_check":now(),"error":str(e)[:150]}
   time.sleep(60)
+def dashboard():
+ with sqlite3.connect(DB) as c:
+  c.row_factory=sqlite3.Row
+  trades=[dict(x) for x in c.execute("select * from trades order by id desc limit 20")]
+  newsrows=[dict(x) for x in c.execute("select ts,source,title,symbol,signal from news order by ts desc limit 20")]
+  feats=[dict(x) for x in c.execute("select ts,source,title,symbol,decision,confidence,features from event_features order by ts desc limit 10")]
+ prices=S.get("_prices",{});positions=[];unreal=0.0
+ for sym,p in S["positions"].items():
+  px=prices.get(sym,p["entry"]);pnl=p["notional"]*(px/p["entry"]-1)*p["side"];unreal+=pnl
+  positions.append({"symbol":sym,"side":"LONG" if p["side"]>0 else "SHORT","entry":p["entry"],"mark":px,"unrealized_pnl":round(pnl,4),"headline":p["headline"]})
+ payload={"mode":S["mode"],"equity":round(S["equity"],4),"unrealized_pnl":round(unreal,4),"total_equity":round(S["equity"]+unreal,4),"realized_pnl":round(S["realized_pnl"],4),"positions":positions,"trades":trades,"news":newsrows,"features":feats,"sources":S["sources"],"errors":S["errors"],"last_error":S["last_error"],"news_seen":S["news_seen"],"market_count":S["market_count"],"last_poll":S["last_poll"],"uptime_seconds":int(time.time()-START)}
+ return payload
+
+def html_dashboard(data):
+ esc=lambda x:str(x).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+ cards=f'<div class="grid"><b>MODE<br>{esc(data["mode"])}</b><b>EQUITY<br>$ {data["total_equity"]}</b><b>REALIZED<br>$ {data["realized_pnl"]}</b><b>UNREALIZED<br>$ {data["unrealized_pnl"]}</b><b>POSITIONS<br>{len(data["positions"])}</b><b>NEWS<br>{data["news_seen"]}</b></div>'
+ pos="".join(f'<tr><td>{esc(x["symbol"])}</td><td>{x["side"]}</td><td>{x["entry"]}</td><td>{x["mark"]}</td><td>{x["unrealized_pnl"]}</td><td>{esc(x["headline"])}</td></tr>' for x in data["positions"]) or '<tr><td colspan=6>No open positions</td></tr>'
+ trs="".join(f'<tr><td>{esc(x["closed"])}</td><td>{esc(x["symbol"])}</td><td>{"LONG" if x["side"]>0 else "SHORT"}</td><td>{round(x["pnl"],4)}</td><td>{esc(x["reason"])}</td></tr>' for x in data["trades"]) or '<tr><td colspan=5>No closed trades</td></tr>'
+ src="".join(f'<tr><td>{esc(k)}</td><td>{"OK" if v.get("ok") else "ERROR"}</td><td>{esc(v.get("last_check",""))}</td><td>{esc(v.get("error",""))}</td></tr>' for k,v in data["sources"].items())
+ news="".join(f'<tr><td>{esc(x["ts"])}</td><td>{esc(x["source"])}</td><td>{esc(x["symbol"])}</td><td>{esc(x["signal"])}</td><td>{esc(x["title"])}</td></tr>' for x in data["news"][:12])
+ return f'''<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="20"><meta name="viewport" content="width=device-width"><title>PANDORA LIVE</title><style>body{{font-family:system-ui;background:#080b10;color:#e8edf5;margin:24px}}h1{{margin:0}}.muted{{color:#8b98aa}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:18px 0}}.grid b{{background:#111722;padding:16px;border-radius:12px}}table{{width:100%;border-collapse:collapse;background:#0e141e;margin-bottom:22px}}td,th{{padding:9px;border-bottom:1px solid #202938;text-align:left;font-size:13px}}th{{color:#91a2b8}}a{{color:#8bc4ff}}</style></head><body><h1>PANDORA LIVE</h1><div class="muted">Paper engine · refresh 20s · last market poll {esc(data["last_poll"])}</div>{cards}<h2>Open positions</h2><table><tr><th>Token</th><th>Side</th><th>Entry</th><th>Mark</th><th>uPnL</th><th>Trigger</th></tr>{pos}</table><h2>Closed trades</h2><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>PnL</th><th>Reason</th></tr>{trs}</table><h2>Sources</h2><table><tr><th>Source</th><th>Status</th><th>Checked</th><th>Error</th></tr>{src}</table><h2>Latest news</h2><table><tr><th>Time</th><th>Source</th><th>Token</th><th>Raw signal</th><th>Headline</th></tr>{news}</table><p>Errors: {data["errors"]} · Last error: {esc(data["last_error"])}</p><p><a href="/api/dashboard">JSON dashboard</a> · <a href="/features">Features</a> · <a href="/trades">Trades</a> · <a href="/news">News</a></p></body></html>'''
+
 class Handler(BaseHTTPRequestHandler):
+ def do_HEAD(self):
+  self.send_response(200);self.end_headers()
  def do_GET(self):
-  if self.path not in ("/","/health","/status","/trades","/news","/features"):
+  path=self.path.split("?")[0]
+  if path not in ("/","/health","/status","/api/dashboard","/trades","/news","/features"):
    self.send_error(404);return
   with LOCK:
-   if self.path=="/trades":
-    with sqlite3.connect(DB) as c:
-     c.row_factory=sqlite3.Row;data={"trades":[dict(x) for x in c.execute("select * from trades order by id desc limit 100")]}
-   elif self.path=="/features":
-    with sqlite3.connect(DB) as c:
-     c.row_factory=sqlite3.Row;data={"features":[dict(x) for x in c.execute("select * from event_features order by ts desc limit 100")]}
-   elif self.path=="/news":
-    with sqlite3.connect(DB) as c:
-     c.row_factory=sqlite3.Row;data={"news":[dict(x) for x in c.execute("select ts,source,title,symbol,signal from news order by ts desc limit 50")]}
-   else:data={k:v for k,v in S.items() if k!="_prices"};data["uptime_seconds"]=int(time.time()-START);data["warning"]="Free Render may sleep; /tmp SQLite data is ephemeral; feeds are not direct X/Truth Social streams; news timestamps are collection time; this is a simulation, not validated execution."
-  body=json.dumps(data,ensure_ascii=False).encode()
-  self.send_response(200);self.send_header("Content-Type","application/json; charset=utf-8");self.send_header("Content-Length",str(len(body)));self.end_headers();self.wfile.write(body)
+   if path=="/":
+    body=html_dashboard(dashboard()).encode();ctype="text/html; charset=utf-8"
+   elif path in ("/health","/status","/api/dashboard"):
+    body=json.dumps(dashboard(),ensure_ascii=False).encode();ctype="application/json; charset=utf-8"
+   elif path=="/trades":
+    with sqlite3.connect(DB) as c:c.row_factory=sqlite3.Row;data={"trades":[dict(x) for x in c.execute("select * from trades order by id desc limit 100")]}
+    body=json.dumps(data,ensure_ascii=False).encode();ctype="application/json; charset=utf-8"
+   elif path=="/features":
+    with sqlite3.connect(DB) as c:c.row_factory=sqlite3.Row;data={"features":[dict(x) for x in c.execute("select * from event_features order by ts desc limit 100")]}
+    body=json.dumps(data,ensure_ascii=False).encode();ctype="application/json; charset=utf-8"
+   else:
+    with sqlite3.connect(DB) as c:c.row_factory=sqlite3.Row;data={"news":[dict(x) for x in c.execute("select ts,source,title,symbol,signal from news order by ts desc limit 50")]}
+    body=json.dumps(data,ensure_ascii=False).encode();ctype="application/json; charset=utf-8"
+  self.send_response(200);self.send_header("Content-Type",ctype);self.send_header("Cache-Control","no-store");self.send_header("Access-Control-Allow-Origin","*");self.send_header("Content-Length",str(len(body)));self.end_headers();self.wfile.write(body)
 if __name__=="__main__":
  try:subprocess.Popen(["hyperdata","api","--port","8420"],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
  except Exception as e:S["sources"]["HyperData"]={"ok":False,"error":str(e)[:120]}
