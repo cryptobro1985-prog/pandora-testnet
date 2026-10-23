@@ -157,7 +157,7 @@ def xnews():
  while True:
   try:
    posts=recent()
-   with LOCK:S["sources"]["XMonitor"]={"ok":True,"last_check":now(),"posts":len(posts),"mode":"official_api" if os.getenv("X_BEARER_TOKEN","").strip() else "public_index_fallback"}
+   with LOCK:S["sources"]["XMonitor"]={"ok":True,"last_check":now(),"posts":len(posts),"mode":"official_api" if os.getenv("X_BEARER_TOKEN","").strip() else "multi_source_public_fallback","watch_accounts":len(WATCH)}
    for p in posts:
     title=(p.get("text") or "").strip()
     if not title:continue
@@ -172,10 +172,11 @@ def xnews():
    with LOCK:S["sources"]["XMonitor"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
   time.sleep(60)
 def truthnews():
+ delay=20
  while True:
   try:
    posts=user_statuses("realDonaldTrump",30)
-   with LOCK:S["sources"]["TruthSocialPublic"]={"ok":True,"last_check":now(),"posts":len(posts)}
+   with LOCK:S["sources"]["TruthSocialPublic"]={"ok":True,"last_check":now(),"posts":len(posts),"mode":"direct_public_api"};delay=20
    for p in reversed(posts):
     title=re.sub("<[^>]+>"," ",p.get("content",""));title=re.sub(r"\\s+"," ",title).strip()
     if not title:continue
@@ -187,8 +188,8 @@ def truthnews():
       c.execute("insert into news values(?,?,?,?,?,?)",(ident,now(),"TruthSocialPublic",title,sym,side))
      S["news_seen"]+=1;record_event(ident,"TruthSocialPublic",title,sym,side,prices)
   except Exception as e:
-   with LOCK:S["sources"]["TruthSocialPublic"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
-  time.sleep(20)
+   with LOCK:S["sources"]["TruthSocialPublic"]={"ok":False,"last_check":now(),"error":str(e)[:140],"fallback":"TruthSocialSearch"};delay=min(300,max(20,delay*2))
+  time.sleep(delay)
 def adapt():
  global STOP_ROE,TAKE_ROE
  while True:
