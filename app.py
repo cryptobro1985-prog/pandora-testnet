@@ -71,7 +71,8 @@ def market():
       if S["equity"]+pos["notional"]*move<=0 or (pos["locked"] and (p-pos["stop"])*pos["side"]<=0) or time.time()-pos["t"]>3600:
        reason="liquidation" if S["equity"]+pos["notional"]*move<=0 else "locked" if pos["locked"] and (p-pos["stop"])*pos["side"]<=0 else "timeout"
        pnl=pos["notional"]*move-pos["notional"]*FEE*2
-       S["equity"]+=pnl;S["realized_pnl"]+=pnl;S["trades"]+=1\n       if S["equity"]<=0:S["equity"]=PAPER_RESET
+       S["equity"]+=pnl;S["realized_pnl"]+=pnl;S["trades"]+=1
+       if S["equity"]<=0:S["equity"]=PAPER_RESET
        with sqlite3.connect(DB) as c:c.execute("insert into trades(opened,closed,symbol,side,entry,exit,pnl,reason,headline) values(?,?,?,?,?,?,?,?,?)",(pos["opened"],now(),sym,pos["side"],pos["entry"],p,pnl,reason,pos["headline"]))
        del S["positions"][sym]
     S["_prices"]=valid
@@ -87,7 +88,12 @@ def detect(title,prices):
   else:return None,0
  score=sum(w in title.lower() for w in POS)-sum(w in title.lower() for w in NEG)
  return (mentions[0] if mentions else None),(1 if score>0 else -1 if score<0 else 0)
-def open_signal(sym,side,title,prices):\n if sym in prices and side and sym not in S["positions"] and len(S["positions"])<5 and S["equity"]>10:\n  price=prices[sym];notional=S["equity"]*MARGIN_FRACTION*LEV\n  S["positions"][sym]={"entry":price,"side":side,"notional":notional,"opened":now(),"t":time.time(),"headline":title,"locked":False,"stop":None}\n\ndef xnews():
+def open_signal(sym,side,title,prices):
+ if sym in prices and side and sym not in S["positions"] and len(S["positions"])<5 and S["equity"]>10:
+  price=prices[sym];notional=S["equity"]*MARGIN_FRACTION*LEV
+  S["positions"][sym]={"entry":price,"side":side,"notional":notional,"opened":now(),"t":time.time(),"headline":title,"locked":False,"stop":None}
+
+def xnews():
  while True:
   try:
    posts=recent()
