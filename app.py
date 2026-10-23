@@ -1,5 +1,5 @@
 import os,json,time,threading,urllib.request,urllib.parse,sqlite3,datetime,xml.etree.ElementTree as ET,re,hashlib,subprocess
-import sqlite3,math
+import sqlite3,math,email.utils
 import psycopg
 from psycopg.rows import dict_row
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
@@ -70,21 +70,34 @@ def pinit():
   c.execute("alter table open_positions add column if not exists leverage double precision")
   c.execute("alter table open_positions add column if not exists margin double precision")
   c.execute("create table if not exists trade_history (id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision, pnl double precision, reason text, headline text)")
+  c.execute("create table if not exists news_events (id text primary key, ts text, source text, title text, symbol text, signal integer)")
+  c.execute("create table if not exists event_features (id text primary key, ts text, source text, title text, symbol text, decision integer, confidence double precision, features jsonb)")
+  c.execute("create table if not exists market_snapshots (ts text, markets integer, equity double precision, positions integer)")
+  c.execute("create table if not exists market_context_snapshots (ts text, symbol text, price double precision, context jsonb)")
+  c.execute("alter table news_events add column if not exists published_at text")
+  c.execute("alter table news_events add column if not exists source_url text")
+  c.execute("alter table open_positions add column if not exists event_id text")
+  c.execute("alter table trade_history add column if not exists event_id text")
+  c.execute("create table if not exists audit_journal (id bigserial primary key, recorded_at text not null, event_id text, kind text not null, payload jsonb not null)")
+  c.execute("create index if not exists audit_journal_event_idx on audit_journal(event_id,id)")
   row=c.execute("select equity,realized_pnl from account_state where id=1").fetchone()
   if row:
    S["equity"]=float(row["equity"]);S["realized_pnl"]=float(row["realized_pnl"])
   else:c.execute("insert into account_state(id,equity,realized_pnl,updated_at) values(1,%s,%s,%s)",(S["equity"],S["realized_pnl"],now()))
   for r in c.execute("select * from open_positions").fetchall():
-   S["positions"][r["symbol"]]={"entry":float(r["entry"]),"side":int(r["side"]),"notional":float(r["notional"]),"opened":r["opened"],"t":float(r["opened_epoch"]),"headline":r["headline"] or "","locked":bool(r["locked"]),"stop":r["stop"],"leverage":float(r["leverage"] or LEV),"margin":float(r["margin"] or (float(r["notional"])/float(r["leverage"] or LEV)))}
+   S["positions"][r["symbol"]]={"entry":float(r["entry"]),"side":int(r["side"]),"notional":float(r["notional"]),"opened":r["opened"],"t":float(r["opened_epoch"]),"headline":r["headline"] or "","locked":bool(r["locked"]),"stop":r["stop"],"leverage":float(r["leverage"] or LEV),"margin":float(r["margin"] or (float(r["notional"])/float(r["leverage"] or LEV))),"event_id":r.get("event_id")}
+def journal(kind,event_id,payload):
+ with pg() as c:c.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,%s,%s,%s::jsonb)",(now(),event_id,kind,json.dumps(payload,default=str)))
 def save_account():
  with pg() as c:c.execute("insert into account_state(id,equity,realized_pnl,updated_at) values(1,%s,%s,%s) on conflict(id) do update set equity=excluded.equity,realized_pnl=excluded.realized_pnl,updated_at=excluded.updated_at",(S["equity"],S["realized_pnl"],now()))
 def save_pos(sym):
  p=S["positions"][sym];lev=float(p.get("leverage",LEV));margin=float(p.get("margin",p["notional"]/lev))
- with pg() as c:c.execute("insert into open_positions(symbol,side,entry,notional,opened,opened_epoch,headline,locked,stop,leverage,margin) values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict(symbol) do update set side=excluded.side,entry=excluded.entry,notional=excluded.notional,opened=excluded.opened,opened_epoch=excluded.opened_epoch,headline=excluded.headline,locked=excluded.locked,stop=excluded.stop,leverage=excluded.leverage,margin=excluded.margin",(sym,p["side"],p["entry"],p["notional"],p["opened"],p["t"],p["headline"],p["locked"],p["stop"],lev,margin))
+ with pg() as c:c.execute("insert into open_positions(symbol,side,entry,notional,opened,opened_epoch,headline,locked,stop,leverage,margin,event_id) values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict(symbol) do update set side=excluded.side,entry=excluded.entry,notional=excluded.notional,opened=excluded.opened,opened_epoch=excluded.opened_epoch,headline=excluded.headline,locked=excluded.locked,stop=excluded.stop,leverage=excluded.leverage,margin=excluded.margin,event_id=excluded.event_id",(sym,p["side"],p["entry"],p["notional"],p["opened"],p["t"],p["headline"],p["locked"],p["stop"],lev,margin,p.get("event_id")))
 def close_persistent(sym,pos,px,pnl,reason):
  with pg() as c:
   with c.transaction():
-   c.execute("insert into trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,headline) values(%s,%s,%s,%s,%s,%s,%s,%s,%s)",(pos["opened"],now(),sym,pos["side"],pos["entry"],px,pnl,reason,pos["headline"]))
+   c.execute("insert into trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,headline,event_id) values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",(pos["opened"],now(),sym,pos["side"],pos["entry"],px,pnl,reason,pos["headline"],pos.get("event_id")))
+   c.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,%s,%s,%s::jsonb)",(now(),pos.get("event_id"),"trade_closed",json.dumps({"symbol":sym,"side":pos["side"],"entry":pos["entry"],"exit":px,"notional":pos["notional"],"pnl":pnl,"reason":reason,"opened":pos["opened"]})))
    c.execute("delete from open_positions where symbol=%s",(sym,))
    c.execute("insert into account_state(id,equity,realized_pnl,updated_at) values(1,%s,%s,%s) on conflict(id) do update set equity=excluded.equity,realized_pnl=excluded.realized_pnl,updated_at=excluded.updated_at",(S["equity"],S["realized_pnl"],now()))
 def persistent_trades(limit=100):
@@ -96,10 +109,13 @@ def choose_persistent(current=(-0.10,0.20)):
  if sum(valid)<=0:return {"stop":current[0],"take":current[1],"samples":len(xs),"validation_pnl":sum(valid),"changed":False}
  cand=CANDIDATES[3] if sum(train)/len(train)>0 else CANDIDATES[1]
  return {"stop":cand[0],"take":cand[1],"samples":len(xs),"validation_pnl":sum(valid),"changed":cand!=current}
-def save_news_event(ident,ts,source,title,symbol,signal):
+def save_news_event(ident,ts,source,title,symbol,signal,published_at=None,source_url=None):
  with pg() as c:
-  if c.execute("select 1 from news_events where id=%s",(ident,)).fetchone():return False
-  c.execute("insert into news_events(id,ts,source,title,symbol,signal) values(%s,%s,%s,%s,%s,%s)",(ident,ts,source,title,symbol,signal));return True
+  with c.transaction():
+   if c.execute("select 1 from news_events where id=%s",(ident,)).fetchone():return False
+   c.execute("insert into news_events(id,ts,source,title,symbol,signal,published_at,source_url) values(%s,%s,%s,%s,%s,%s,%s,%s)",(ident,ts,source,title,symbol,signal,published_at,source_url))
+   c.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,%s,%s,%s::jsonb)",(now(),ident,"news_received",json.dumps({"source":source,"title":title,"symbol":symbol,"raw_signal":signal,"published_at":published_at,"received_at":ts,"source_url":source_url})))
+   return True
 def save_event_feature(ident,ts,source,title,symbol,decision,confidence,features):
  with pg() as c:c.execute("insert into event_features(id,ts,source,title,symbol,decision,confidence,features) values(%s,%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(id) do update set ts=excluded.ts,decision=excluded.decision,confidence=excluded.confidence,features=excluded.features",(ident,ts,source,title,symbol,decision,confidence,json.dumps(features)))
 def save_market_snapshot(ts,markets,equity,positions):
@@ -141,6 +157,11 @@ def market():
        close_persistent(sym,pos,p,pnl,reason)
        del S["positions"][sym]
     S["_prices"]=valid
+    timeline=S.setdefault("_timeline",{})
+    stamp=time.time()
+    for tsym,tprice in valid.items():
+     track=timeline.setdefault(tsym,[]);track.append((stamp,tprice))
+     if len(track)>600:del track[:-600]
     hist=S.setdefault("_hist",{})
     for hs,hp in valid.items():
      q=hist.setdefault(hs,[]);q.append(hp)
@@ -201,19 +222,45 @@ def decide(title,sym,base_side,prices):
  f["news_direction"]=base_side;f["direction_guard"]=True
  return side,min(1.0,abs(score)/3.0),f
 
-def record_event(ident,source,title,sym,base_side,prices):
- if not sym or sym not in prices:return 0
+def publication_epoch(value):
+ if not value:return None
+ try:
+  dt=datetime.datetime.fromisoformat(value.replace("Z","+00:00")) if "T" in value else email.utils.parsedate_to_datetime(value)
+  return dt.timestamp() if dt.tzinfo else None
+ except (ValueError,TypeError,OverflowError):return None
+def reaction_shadow(sym,side,published_at,price,limit_bps=150.0):
+ t=publication_epoch(published_at)
+ if not t or not side or price is None:return {"available":False,"reason":"missing_timestamp_direction_or_price"}
+ candidates=[(ts,px) for ts,px in S.get("_timeline",{}).get(sym,[]) if ts<=t and t-ts<=600]
+ if not candidates:return {"available":False,"reason":"no_pre_publication_price"}
+ ts,anchor=max(candidates)
+ move=side*(price/anchor-1)*10000
+ return {"available":True,"anchor_price":anchor,"anchor_epoch":ts,"move_bps":move,"threshold_bps":limit_bps,"would_skip":move>limit_bps}
+def record_event(ident,source,title,sym,base_side,prices,published_at=None):
+ if not sym or sym not in prices:
+  journal("decision",ident,{"symbol":sym,"raw_side":base_side,"side":0,"reason":"no_tradable_market"})
+  return 0
  side,conf,features=decide(title,sym,base_side,prices)
  save_event_feature(ident,now(),source,title,sym,side,conf,features)
- if side:open_signal(sym,side,title,prices)
+ shadow=reaction_shadow(sym,side,published_at,prices.get(sym))
+ journal("decision",ident,{"symbol":sym,"raw_side":base_side,"side":side,"confidence":conf,"price":prices.get(sym),"features":features,"reaction_shadow":shadow,"reaction_filter_active":False,"reason":"direction_guard" if not side else "eligible"})
+ if side:open_signal(sym,side,title,prices,ident)
  return side
 
-def open_signal(sym,side,title,prices):
- if sym in prices and side and sym not in S["positions"] and S["equity"]>10:
-  price=prices[sym];margin=S["equity"]*MARGIN_FRACTION;used_margin=sum(float(x.get("margin",x["notional"]/float(x.get("leverage",LEV)))) for x in S["positions"].values());free_margin=max(0.0,S["equity"]-used_margin)
-  if free_margin+1e-9<margin:return
-  notional=margin*LEV
-  S["positions"][sym]={"entry":price,"side":side,"notional":notional,"opened":now(),"t":time.time(),"headline":title,"locked":False,"stop":None,"peak":price,"leverage":LEV,"margin":margin};save_pos(sym)
+def open_signal(sym,side,title,prices,event_id=None):
+ if sym not in prices or not side:
+  journal("entry_skipped",event_id,{"symbol":sym,"reason":"no_price_or_direction"});return
+ if sym in S["positions"]:
+  journal("entry_skipped",event_id,{"symbol":sym,"reason":"position_already_open"});return
+ if S["equity"]<=10:
+  journal("entry_skipped",event_id,{"symbol":sym,"reason":"equity_limit"});return
+ price=prices[sym];margin=S["equity"]*MARGIN_FRACTION;used_margin=sum(float(x.get("margin",x["notional"]/float(x.get("leverage",LEV)))) for x in S["positions"].values());free_margin=max(0.0,S["equity"]-used_margin)
+ if free_margin+1e-9<margin:
+  journal("entry_skipped",event_id,{"symbol":sym,"reason":"free_margin","free_margin":free_margin,"required_margin":margin});return
+ notional=margin*LEV
+ S["positions"][sym]={"entry":price,"side":side,"notional":notional,"opened":now(),"t":time.time(),"headline":title,"locked":False,"stop":None,"peak":price,"leverage":LEV,"margin":margin,"event_id":event_id}
+ save_pos(sym)
+ journal("trade_opened",event_id,{"symbol":sym,"side":side,"entry":price,"notional":notional,"margin":margin,"leverage":LEV,"headline":title})
 
 def xnews():
  while True:
@@ -226,8 +273,8 @@ def xnews():
     ident=hashlib.sha256(("XOfficial"+str(p.get("id",title))).encode()).hexdigest()
     with LOCK:
      prices=S.get("_prices",{});sym,side=detect(title,prices)
-     if not save_news_event(ident,now(),"XOfficial",title,sym,side):continue
-     S["news_seen"]+=1;record_event(ident,"XOfficial",title,sym,side,prices)
+     if not save_news_event(ident,now(),"XOfficial",title,sym,side,p.get("created_at"),p.get("url")):continue
+     S["news_seen"]+=1;record_event(ident,"XOfficial",title,sym,side,prices,p.get("created_at"))
   except Exception as e:
    with LOCK:S["sources"]["XMonitor"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
   time.sleep(10)
@@ -243,8 +290,8 @@ def truthnews():
     ident=hashlib.sha256(("TruthSocialPublic"+str(p.get("id",title))).encode()).hexdigest()
     with LOCK:
      prices=S.get("_prices",{});sym,side=detect(title,prices)
-     if not save_news_event(ident,now(),"TruthSocialPublic",title,sym,side):continue
-     S["news_seen"]+=1;record_event(ident,"TruthSocialPublic",title,sym,side,prices)
+     if not save_news_event(ident,now(),"TruthSocialPublic",title,sym,side,p.get("created_at"),p.get("url")):continue
+     S["news_seen"]+=1;record_event(ident,"TruthSocialPublic",title,sym,side,prices,p.get("created_at"))
   except Exception as e:
    with LOCK:S["sources"]["TruthSocialPublic"]={"ok":True,"last_check":now(),"mode":"fallback_active","direct_ok":False,"direct_error":str(e)[:140],"fallback":"TruthSocialSearch"};delay=min(300,max(10,delay*2))
   time.sleep(delay)
@@ -273,9 +320,9 @@ def news():
      with LOCK:
       prices=S.get("_prices",{})
       sym,side=detect(title,prices)
-      if not save_news_event(ident,now(),source,title,sym,side):continue
+      if not save_news_event(ident,now(),source,title,sym,side,item.findtext("pubDate"),item.findtext("link")):continue
       S["news_seen"]+=1;count+=1
-      record_event(ident,source,title,sym,side,prices)
+      record_event(ident,source,title,sym,side,prices,item.findtext("pubDate"))
     with LOCK:S["sources"][source]={"ok":True,"last_check":now(),"new":count,"feed_items":len(items)}
    except Exception as e:
     with LOCK:
