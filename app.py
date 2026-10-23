@@ -228,13 +228,13 @@ def xnews():
      S["news_seen"]+=1;record_event(ident,"XOfficial",title,sym,side,prices)
   except Exception as e:
    with LOCK:S["sources"]["XMonitor"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
-  time.sleep(60)
+  time.sleep(10)
 def truthnews():
- delay=20
+ delay=10
  while True:
   try:
    posts=user_statuses("realDonaldTrump",30)
-   with LOCK:S["sources"]["TruthSocialPublic"]={"ok":True,"last_check":now(),"posts":len(posts),"mode":"direct_public_api"};delay=20
+   with LOCK:S["sources"]["TruthSocialPublic"]={"ok":True,"last_check":now(),"posts":len(posts),"mode":"direct_public_api"};delay=10
    for p in reversed(posts):
     title=re.sub("<[^>]+>"," ",p.get("content",""));title=re.sub(r"\\s+"," ",title).strip()
     if not title:continue
@@ -244,7 +244,7 @@ def truthnews():
      if not save_news_event(ident,now(),"TruthSocialPublic",title,sym,side):continue
      S["news_seen"]+=1;record_event(ident,"TruthSocialPublic",title,sym,side,prices)
   except Exception as e:
-   with LOCK:S["sources"]["TruthSocialPublic"]={"ok":True,"last_check":now(),"mode":"fallback_active","direct_ok":False,"direct_error":str(e)[:140],"fallback":"TruthSocialSearch"};delay=min(300,max(20,delay*2))
+   with LOCK:S["sources"]["TruthSocialPublic"]={"ok":True,"last_check":now(),"mode":"fallback_active","direct_ok":False,"direct_error":str(e)[:140],"fallback":"TruthSocialSearch"};delay=min(300,max(10,delay*2))
   time.sleep(delay)
 def adapt():
  global STOP_ROE,TAKE_ROE
