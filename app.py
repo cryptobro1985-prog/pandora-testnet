@@ -130,7 +130,8 @@ def market():
       pos=S["positions"][sym];move=(p/pos["entry"]-1)*pos["side"];roe=move*LEV
       if roe>=LOCK_TRIGGER_ROE and not pos["locked"]:
        pos["locked"]=True;pos["stop"]=pos["entry"]*(1+pos["side"]*LOCK_ROE/LEV);save_pos(sym)
-      hist0=S.get("_hist",{}).get(sym,[]);pos["peak"]=max(pos.get("peak",p),p) if pos["side"]>0 else min(pos.get("peak",p),p);peakmove=(pos["peak"]/pos["entry"]-1)*pos["side"];peakroe=peakmove*LEV;weak=(len(hist0)>=6 and ((pos["side"]>0 and p<max(hist0[-6:]) and hist0[-1]<hist0[-3]) or (pos["side"]<0 and p>min(hist0[-6:]) and hist0[-1]>hist0[-3])));giveback=(peakroe-roe)/max(peakroe,0.0001) if peakroe>0 else 0;adaptive_exit=roe>=MIN_EXIT_ROE and peakroe>=LOCK_TRIGGER_ROE and weak and giveback>=PEAK_GIVEBACK\n      if S["equity"]+pos["notional"]*move<=0 or adaptive_exit:
+      hist0=S.get("_hist",{}).get(sym,[]);pos["peak"]=max(pos.get("peak",p),p) if pos["side"]>0 else min(pos.get("peak",p),p);peakmove=(pos["peak"]/pos["entry"]-1)*pos["side"];peakroe=peakmove*LEV;weak=(len(hist0)>=6 and ((pos["side"]>0 and p<max(hist0[-6:]) and hist0[-1]<hist0[-3]) or (pos["side"]<0 and p>min(hist0[-6:]) and hist0[-1]>hist0[-3])));giveback=(peakroe-roe)/max(peakroe,0.0001) if peakroe>0 else 0;adaptive_exit=roe>=MIN_EXIT_ROE and peakroe>=LOCK_TRIGGER_ROE and weak and giveback>=PEAK_GIVEBACK
+      if S["equity"]+pos["notional"]*move<=0 or adaptive_exit:
        reason="liquidation" if S["equity"]+pos["notional"]*move<=0 else "local_extreme_weakening"
        pnl=pos["notional"]*move-pos["notional"]*FEE*2
        S["equity"]+=pnl;S["realized_pnl"]+=pnl;S["trades"]+=1
@@ -142,7 +143,9 @@ def market():
     for hs,hp in valid.items():
      q=hist.setdefault(hs,[]);q.append(hp)
      if len(q)>120:del q[:-120]
-    save_market_snapshot(now(),len(valid),S["equity"],len(S["positions"]))\n    for csym in list(S["positions"].keys()):\n     if csym in valid:save_market_context(now(),csym,valid[csym],deep_context(csym,valid))
+    save_market_snapshot(now(),len(valid),S["equity"],len(S["positions"]))
+    for csym in list(S["positions"].keys()):
+     if csym in valid:save_market_context(now(),csym,valid[csym],deep_context(csym,valid))
   except Exception as e:
    with LOCK:S["errors"]+=1;S["last_error"]="market: "+str(e)[:180]
   time.sleep(2)
