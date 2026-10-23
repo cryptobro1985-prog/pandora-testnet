@@ -94,6 +94,20 @@ def choose_persistent(current=(-0.10,0.20)):
  if sum(valid)<=0:return {"stop":current[0],"take":current[1],"samples":len(xs),"validation_pnl":sum(valid),"changed":False}
  cand=CANDIDATES[3] if sum(train)/len(train)>0 else CANDIDATES[1]
  return {"stop":cand[0],"take":cand[1],"samples":len(xs),"validation_pnl":sum(valid),"changed":cand!=current}
+def save_news_event(ident,ts,source,title,symbol,signal):
+ with pg() as c:
+  if c.execute("select 1 from news_events where id=%s",(ident,)).fetchone():return False
+  c.execute("insert into news_events(id,ts,source,title,symbol,signal) values(%s,%s,%s,%s,%s,%s)",(ident,ts,source,title,symbol,signal));return True
+def save_event_feature(ident,ts,source,title,symbol,decision,confidence,features):
+ with pg() as c:c.execute("insert into event_features(id,ts,source,title,symbol,decision,confidence,features) values(%s,%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(id) do update set ts=excluded.ts,decision=excluded.decision,confidence=excluded.confidence,features=excluded.features",(ident,ts,source,title,symbol,decision,confidence,json.dumps(features)))
+def save_market_snapshot(ts,markets,equity,positions):
+ with pg() as c:c.execute("insert into market_snapshots(ts,markets,equity,positions) values(%s,%s,%s,%s)",(ts,markets,equity,positions))
+def save_market_context(ts,symbol,price,context):
+ with pg() as c:c.execute("insert into market_context_snapshots(ts,symbol,price,context) values(%s,%s,%s,%s::jsonb)",(ts,symbol,price,json.dumps(context)))
+def persistent_news(limit=50):
+ with pg() as c:return c.execute("select ts,source,title,symbol,signal from news_events order by ts desc limit %s",(limit,)).fetchall()
+def persistent_features(limit=100):
+ with pg() as c:return c.execute("select ts,source,title,symbol,decision,confidence,features from event_features order by ts desc limit %s",(limit,)).fetchall()
 def get(url,body=None):
  data=None if body is None else json.dumps(body).encode()
  req=urllib.request.Request(url,data=data,headers={"User-Agent":"Mozilla/5.0 PANDORA-research/1.0","Content-Type":"application/json"})
