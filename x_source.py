@@ -1,5 +1,5 @@
 import os,json,urllib.request,urllib.parse
-WATCH=["elonmusk","realDonaldTrump","federalreserve","secgov","coinbase","binance","saylor","cz_binance","VitalikButerin"]
+WATCH=["elonmusk","realDonaldTrump","federalreserve","SECGov","USTreasury","WhiteHouse","coinbase","binance","saylor","cz_binance","VitalikButerin"]
 def recent():
  token=os.getenv("X_BEARER_TOKEN","").strip()
  if not token:return []
