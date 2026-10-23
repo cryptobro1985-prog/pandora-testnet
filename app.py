@@ -66,7 +66,9 @@ def pg():
 def pinit():
  with pg() as c:
   c.execute("create table if not exists account_state (id integer primary key, equity double precision not null, realized_pnl double precision not null, updated_at text not null)")
-  c.execute("create table if not exists open_positions (symbol text primary key, side integer not null, entry double precision not null, notional double precision not null, opened text not null, opened_epoch double precision not null, headline text, locked boolean not null default false, stop double precision)")\n  c.execute("alter table open_positions add column if not exists leverage double precision")\n  c.execute("alter table open_positions add column if not exists margin double precision")
+  c.execute("create table if not exists open_positions (symbol text primary key, side integer not null, entry double precision not null, notional double precision not null, opened text not null, opened_epoch double precision not null, headline text, locked boolean not null default false, stop double precision)")
+  c.execute("alter table open_positions add column if not exists leverage double precision")
+  c.execute("alter table open_positions add column if not exists margin double precision")
   c.execute("create table if not exists trade_history (id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision, pnl double precision, reason text, headline text)")
   row=c.execute("select equity,realized_pnl from account_state where id=1").fetchone()
   if row:
