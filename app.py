@@ -1,9 +1,9 @@
-import os,json,time,threading,urllib.request,urllib.parse,sqlite3,datetime,xml.etree.ElementTree as ET,re,hashlib
+import os,json,time,threading,urllib.request,urllib.parse,sqlite3,datetime,xml.etree.ElementTree as ET,re,hashlib\nfrom adaptive import choose\nfrom x_source import recent
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 API="https://api.hyperliquid-testnet.xyz/info"
 DB="/tmp/pandora.sqlite3"
 START=time.time()
-S={"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0}
+S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0}
 LOCK=threading.RLock()
 FEEDS={"FedOfficial":"https://www.federalreserve.gov/feeds/press_all.xml","SECOfficial":"https://www.sec.gov/news/pressreleases.rss","GoogleNewsCrypto":"https://news.google.com/rss/search?q=cryptocurrency+OR+bitcoin+OR+altcoin&hl=en-US&gl=US&ceid=US:en","GoogleNewsMarkets":"https://news.google.com/rss/search?q=crypto+SEC+OR+Federal+Reserve+OR+token+listing&hl=en-US&gl=US&ceid=US:en","Cointelegraph":"https://cointelegraph.com/rss","Decrypt":"https://decrypt.co/feed","TruthSocialSearch":"https://news.google.com/rss/search?q=site%3Atruthsocial.com+crypto&hl=en-US&gl=US&ceid=US:en","XSearch":"https://news.google.com/rss/search?q=site%3Ax.com+cryptocurrency&hl=en-US&gl=US&ceid=US:en"}
 POS=("surge","approve","approval","partnership","listing","adoption","buyback","breakout","bullish","launch","etf approved")
@@ -50,6 +50,35 @@ def detect(title,prices):
   else:return None,0
  score=sum(w in title.lower() for w in POS)-sum(w in title.lower() for w in NEG)
  return (mentions[0] if mentions else None),(1 if score>0 else -1 if score<0 else 0)
+def xnews():
+ while True:
+  try:
+   posts=recent()
+   with LOCK:S["sources"]["XOfficial"]={"ok":bool(os.getenv("X_BEARER_TOKEN","")),"last_check":now(),"posts":len(posts)}
+   for p in posts:
+    title=(p.get("text") or "").strip()
+    if not title:continue
+    ident=hashlib.sha256(("XOfficial"+str(p.get("id",title))).encode()).hexdigest()
+    with LOCK:
+     prices=S.get("_prices",{});sym,side=detect(title,prices)
+     with sqlite3.connect(DB) as c:
+      if c.execute("select 1 from news where id=?",(ident,)).fetchone():continue
+      c.execute("insert into news values(?,?,?,?,?,?)",(ident,now(),"XOfficial",title,sym,side))
+     S["news_seen"]+=1
+  except Exception as e:
+   with LOCK:S["sources"]["XOfficial"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
+  time.sleep(60)
+def adapt():
+ global STOP_ROE,TAKE_ROE
+ while True:
+  try:
+   z=choose(DB,(STOP_ROE,TAKE_ROE))
+   with LOCK:
+    if z.get("changed"):STOP_ROE=float(z["stop"]);TAKE_ROE=float(z["take"])
+    S["adaptive"]=z
+  except Exception as e:
+   with LOCK:S["last_error"]="adaptive: "+str(e)[:160]
+  time.sleep(900)
 def news():
  while True:
   for source,url in FEEDS.items():
@@ -94,5 +123,5 @@ class Handler(BaseHTTPRequestHandler):
 if __name__=="__main__":
  init()
  threading.Thread(target=market,daemon=True).start()
- threading.Thread(target=news,daemon=True).start()
+ threading.Thread(target=news,daemon=True).start()\n threading.Thread(target=xnews,daemon=True).start()\n threading.Thread(target=adapt,daemon=True).start()
  ThreadingHTTPServer(("0.0.0.0",int(os.getenv("PORT","10000"))),Handler).serve_forever()
