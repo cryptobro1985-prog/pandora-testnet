@@ -142,7 +142,7 @@ def market():
     for hs,hp in valid.items():
      q=hist.setdefault(hs,[]);q.append(hp)
      if len(q)>120:del q[:-120]
-    with sqlite3.connect(DB) as c:c.execute("insert into snapshots values(?,?,?,?)",(now(),len(valid),S["equity"],len(S["positions"])))
+    save_market_snapshot(now(),len(valid),S["equity"],len(S["positions"]))\n    for csym in list(S["positions"].keys()):\n     if csym in valid:save_market_context(now(),csym,valid[csym],deep_context(csym,valid))
   except Exception as e:
    with LOCK:S["errors"]+=1;S["last_error"]="market: "+str(e)[:180]
   time.sleep(2)
@@ -193,7 +193,7 @@ def decide(title,sym,base_side,prices):
 def record_event(ident,source,title,sym,base_side,prices):
  if not sym or sym not in prices:return 0
  side,conf,features=decide(title,sym,base_side,prices)
- with sqlite3.connect(DB) as c:c.execute("insert or replace into event_features values(?,?,?,?,?,?,?,?)",(ident,now(),source,title,sym,side,conf,json.dumps(features)))
+ save_event_feature(ident,now(),source,title,sym,side,conf,features)
  if side:open_signal(sym,side,title,prices)
  return side
 
