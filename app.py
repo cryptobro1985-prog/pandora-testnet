@@ -193,10 +193,12 @@ def classify_event(title,base_side):
   if any(t in lo for t in terms):return event,side
  return ("DIRECTIONAL_NEWS" if base_side else "UNCLASSIFIED"),base_side
 def source_weight(source):
- if source.startswith("XIndex:"):return 0.40
- if source.startswith("XOfficial:"):return 0.90
- if source.startswith("TruthSocialPublic"):return 0.95
- return float(SOURCE_WEIGHTS.get(source,0.50))
+ if source.startswith("XIndex:"):base=0.40
+ elif source.startswith("XOfficial:"):base=0.90
+ elif source.startswith("TruthSocialPublic"):base=0.95
+ else:base=float(SOURCE_WEIGHTS.get(source,0.50))
+ learned=S.get("adaptive",{}).get("source_multipliers",{}) if S.get("mode")=="PAPER_ONLY" else {}
+ return max(0.20,min(1.00,base*float(learned.get(source,1.0))))
 STOP_ROE=-999.0;TAKE_ROE=0.20;LEV=25.0;MARGIN_FRACTION=0.10;FEE=0.00045;LOCK_TRIGGER_ROE=0.10;LOCK_ROE=0.075;PAPER_RESET=100.0;MIN_EXIT_ROE=0.075;TRAIL_ARM_ROE=0.12
 PUMP_LEV=10.0;PUMP_MARGIN_FRACTION=0.05;PUMP_MAX_POSITIONS=10;PUMP_STOP_ROE=-0.06;PUMP_TAKE_ROE=0.14;PUMP_TRAIL_ARM_ROE=0.09;PUMP_TRAIL_GAP_ROE=0.035;PUMP_MAX_HOLD_SECONDS=900
 def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -226,6 +228,7 @@ def pinit():
   c.execute("create table if not exists pump_account_state (id integer primary key, equity double precision not null, realized_pnl double precision not null, updated_at text not null)")
   c.execute("create table if not exists pump_positions (symbol text primary key, side integer not null, entry double precision not null, notional double precision not null, margin double precision not null, leverage double precision not null, opened text not null, opened_epoch double precision not null, peak_roe double precision not null default 0, score double precision not null default 0, features jsonb not null default '{}'::jsonb)")
   c.execute("create table if not exists pump_trade_history (id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision, pnl double precision, reason text, score double precision, features jsonb)")
+  c.execute("create table if not exists learning_snapshots (id bigserial primary key, recorded_at text not null, samples integer not null, payload jsonb not null)")
 
   c.execute("create index if not exists audit_journal_event_idx on audit_journal(event_id,id)")
   row=c.execute("select equity,realized_pnl from account_state where id=1").fetchone()
@@ -250,13 +253,57 @@ def journal(kind,event_id,payload):
  with pg() as c:c.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,%s,%s,%s::jsonb)",(now(),event_id,kind,json.dumps(payload,default=str)))
 def persistent_trades(limit=100):
  with pg() as c:return c.execute("select * from trade_history order by id desc limit %s",(limit,)).fetchall()
-def choose_persistent(current=(-0.10,0.20)):
- rows=persistent_trades(120);xs=[float(x["pnl"]) for x in reversed(rows)]
- if len(xs)<30:return {"stop":current[0],"take":current[1],"samples":len(xs),"changed":False}
- cut=max(20,int(len(xs)*0.7));train=xs[:cut];valid=xs[cut:]
- if sum(valid)<=0:return {"stop":current[0],"take":current[1],"samples":len(xs),"validation_pnl":sum(valid),"changed":False}
- cand=CANDIDATES[3] if sum(train)/len(train)>0 else CANDIDATES[1]
- return {"stop":cand[0],"take":cand[1],"samples":len(xs),"validation_pnl":sum(valid),"changed":cand!=current}
+def build_learning_snapshot():
+ # PAPER_ONLY learning: use realized historical outcomes to reweight source confidence.
+ # It never changes news direction and never enables real orders.
+ with pg() as c:
+  rows=c.execute("""select n.source,count(*) as n,
+      sum(case when t.pnl>0 then 1 else 0 end) as wins,
+      avg(t.pnl) as avg_pnl,sum(t.pnl) as total_pnl
+    from trade_history t join news_events n on n.id=t.event_id
+    where t.event_id is not null group by n.source order by count(*) desc""").fetchall()
+  pump=c.execute("""select case when score<60 then '55-60' when score<70 then '60-70'
+      when score<80 then '70-80' else '80+' end as bucket,count(*) as n,
+      sum(case when pnl>0 then 1 else 0 end) as wins,avg(pnl) as avg_pnl,sum(pnl) as total_pnl
+    from pump_trade_history group by 1 order by 1""").fetchall()
+ multipliers={}
+ source_stats={}
+ total_samples=0
+ for r in rows:
+  n=int(r["n"] or 0);wins=int(r["wins"] or 0);avg=float(r["avg_pnl"] or 0);total=float(r["total_pnl"] or 0)
+  total_samples+=n;wr=(wins/n) if n else 0.0
+  # Small bounded adjustment only after enough observations.
+  mult=1.0
+  if n>=5:
+   edge=(wr-0.5)*0.30
+   if avg>0:edge+=0.03
+   elif avg<0:edge-=0.03
+   mult=max(0.85,min(1.15,1.0+edge))
+  multipliers[str(r["source"])]=round(mult,4)
+  source_stats[str(r["source"])]={"samples":n,"wins":wins,"win_rate":round(wr,4),"avg_pnl":avg,"total_pnl":total,"multiplier":round(mult,4)}
+ payload={"mode":"PAPER_ONLY","source_multipliers":multipliers,"source_stats":source_stats,
+          "pump_score_buckets":[dict(x) for x in pump],"generated_at":now(),
+          "policy":"confidence_reweight_only_direction_unchanged"}
+ return total_samples,payload
+
+def save_learning_snapshot():
+ samples,payload=build_learning_snapshot()
+ with pg() as c:
+  c.execute("insert into learning_snapshots(recorded_at,samples,payload) values(%s,%s,%s::jsonb)",
+            (now(),samples,json.dumps(payload,default=str)))
+ with LOCK:S["adaptive"]={"samples":samples,"changed":True,**payload}
+ journal("learning_snapshot",None,{"samples":samples,"source_count":len(payload["source_stats"]),
+         "pump_buckets":len(payload["pump_score_buckets"]),"policy":payload["policy"]})
+ return payload
+
+def load_latest_learning():
+ try:
+  with pg() as c:
+   row=c.execute("select samples,payload from learning_snapshots order by id desc limit 1").fetchone()
+  if row:
+   with LOCK:S["adaptive"]={"samples":int(row["samples"]),**(row["payload"] or {})}
+ except Exception:pass
+
 def save_news_event(ident,ts,source,title,symbol,signal,published_at=None,source_url=None):
  with pg() as c:
   with c.transaction():
@@ -273,10 +320,11 @@ def save_market_context(ts,symbol,price,context):
 def export_rows(kind,after,limit):
  columns={"journal":("audit_journal","id"),"news":("news_events","id"),
           "features":("event_features","id"),"trades":("trade_history","id"),
-          "positions":("open_positions","symbol")}
+          "positions":("open_positions","symbol"),"pump_signals":("pump_signal_journal","id"),
+          "pump_trades":("pump_trade_history","id"),"learning":("learning_snapshots","id")}
  if kind not in columns:raise ValueError("Unsupported export kind")
  table,key=columns[kind]
- cursor=int(after) if kind in ("journal","trades") else after
+ cursor=int(after) if kind in ("journal","trades","pump_trades","learning") else after
  with pg() as c:
   rows=c.execute(f"select * from {table} where {key}>%s order by {key} limit %s",(cursor,limit+1)).fetchall()
  return {"kind":kind,"rows":rows[:limit],"next_after":str(rows[limit-1][key]) if len(rows)>limit else None,"has_more":len(rows)>limit}
@@ -1371,13 +1419,14 @@ def truth_watch():
   SHUTDOWN.wait(20)
 
 def adapt():
- global STOP_ROE,TAKE_ROE
+ load_latest_learning()
+ last_day=None
  while not SHUTDOWN.is_set():
   try:
-   z=choose_persistent((-0.10,TAKE_ROE))
-   with LOCK:
-    if z.get("changed"):TAKE_ROE=float(z["take"])
-    S["adaptive"]=z
+   day=datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+   # Refresh on startup and then once per UTC day; persist every learning state.
+   if last_day!=day:
+    save_learning_snapshot();last_day=day
   except Exception as e:
    with LOCK:S["last_error"]="adaptive: "+str(e)[:160]
   SHUTDOWN.wait(900)
@@ -1507,7 +1556,7 @@ def build_dashboard_snapshot():
  except Exception: account_age_seconds=0
  total=state["equity"]+unreal;account_roi=(total/PAPER_RESET-1)*100
  visible_sources={k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and not k.startswith("XFree:") and k not in SEARCH_INDEX_FEEDS and not v.get("disabled") and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")}
- return {"mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"positions":positions,"pump_positions":pump_positions,"pump_balance":round(state.get("pump_equity",100.0),4),"pump_unrealized_pnl":round(pump_unreal,4),"pump_total_equity":round(state.get("pump_equity",100.0)+pump_unreal,4),"pump_realized_pnl":round(state.get("pump_realized_pnl",0.0),4),"pump_trades":state.get("pump_trades",0),"trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
+ return {"mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"positions":positions,"pump_positions":pump_positions,"pump_balance":round(state.get("pump_equity",100.0),4),"pump_unrealized_pnl":round(pump_unreal,4),"pump_total_equity":round(state.get("pump_equity",100.0)+pump_unreal,4),"pump_realized_pnl":round(state.get("pump_realized_pnl",0.0),4),"pump_trades":state.get("pump_trades",0),"trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
 def dashboard():
  with LOCK:
@@ -1571,6 +1620,7 @@ def operations_diagnostics():
      "pump_positions":len(S.get("pump_positions",{})),"pump_equity":S.get("pump_equity"),"pump_trades":S.get("pump_trades"),
      "entry_rejections":dict(S.get("_entry_rejections",{})),
      "daily_audit":daily_audit_stats(),
+     "learning":{"samples":S.get("adaptive",{}).get("samples",0),"generated_at":S.get("adaptive",{}).get("generated_at"),"policy":S.get("adaptive",{}).get("policy")},
      "risk_ready":health["risk_ready"]}
    print(json.dumps(report,ensure_ascii=False,default=str),flush=True)
   except Exception as e:print("diagnostics_error: "+str(e)[:180],flush=True)
