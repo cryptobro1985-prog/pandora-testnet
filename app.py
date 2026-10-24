@@ -90,7 +90,7 @@ S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled"
 LOCK=threading.RLock()
 SHUTDOWN=threading.Event()
 NEWS_MAX_AGE_SECONDS=float(os.getenv("NEWS_MAX_AGE_SECONDS","120"))
-NEWS_POLL_SECONDS=float(os.getenv("NEWS_POLL_SECONDS","5"))
+NEWS_POLL_SECONDS=float(os.getenv("NEWS_POLL_SECONDS","15"))
 if not math.isfinite(NEWS_MAX_AGE_SECONDS) or NEWS_MAX_AGE_SECONDS<=0:raise ValueError("invalid news freshness window")
 if not math.isfinite(NEWS_POLL_SECONDS) or NEWS_POLL_SECONDS<1:raise ValueError("invalid news poll interval")
 S.update({"engine_active":False,"engine_error":None,"last_checkpoint":None,"last_market_error":None})
@@ -801,7 +801,7 @@ def free_x_realtime():
   "financialjuice","FirstSquawk","TreeNewsFeed","tier10k","WSJ","CoinDesk","TheBlockCo","WuBlockchain",
   "Lookonchain","whale_alert","arkham","binance","hyperliquidX","saylor","cz_binance"
  ))
- poll=max(4.0,float(os.getenv("X_ALL_POLL_SECONDS","4")))
+ poll=max(8.0,float(os.getenv("X_ALL_POLL_SECONDS","10")))
  seen={};primed=set();state_lock=threading.Lock()
  backoff_until={};failures={};last_success={};x_error_log_at={};backend_idx={};disabled_until={}
  backends=("fx","xlookup")
@@ -896,8 +896,8 @@ def free_x_realtime():
     initialized=sum(bool(v) for v in states);good=sum(bool(v.get("ok")) for v in active_states)
     realtime=sum(bool(v.get("realtime_verified")) for v in active_states)
     active_count=len(active_states);disabled_count=sum(bool(v.get("disabled")) for v in states)
-    recent_success=bool(last_success and time.time()-max(last_success.values())<=12)
-    recent_accounts=sum(1 for h in handles if last_success.get(h) and time.time()-last_success[h]<=12)
+    recent_success=bool(last_success and time.time()-max(last_success.values())<=30)
+    recent_accounts=sum(1 for h in handles if last_success.get(h) and time.time()-last_success[h]<=30)
     healthy=bool(recent_accounts>=20 and recent_success)
     S["sources"]["XMonitor"]={"ok":healthy,
      "all_accounts_ok":active_count>0 and good==active_count,
@@ -922,7 +922,7 @@ def free_x_realtime():
 def x_list_realtime():
  auth=os.getenv("X_AUTH_TOKEN","").strip();ct0=os.getenv("X_CT0","").strip();list_id=os.getenv("X_LIST_ID","").strip()
  if not (auth and ct0 and list_id):return
- poll=max(4.0,float(os.getenv("X_LIST_POLL_SECONDS","4")))
+ poll=max(8.0,float(os.getenv("X_LIST_POLL_SECONDS","10")))
  watched={h.lower():h for h in WATCH};seen=set();primed=False;backoff=poll
  ingest_pool=concurrent.futures.ThreadPoolExecutor(max_workers=8,thread_name_prefix="x-list-ingest")
  try:
@@ -1026,7 +1026,7 @@ def free_truth_realtime():
  # Public Truth Social scanner: no account/token required. Each account has its own
  # 4-second cadence and falls back from public REST to ActivityPub independently.
  handles=[h.strip() for h in os.getenv("TRUTH_WATCH_HANDLES","realDonaldTrump,WhiteHouse,DanScavino,Kash,MelaniaTrump,SecWar,SpeakerJohnson,seckennedy").split(",") if h.strip()]
- poll=max(4.0,float(os.getenv("TRUTH_FREE_POLL_SECONDS","4")))
+ poll=max(8.0,float(os.getenv("TRUTH_FREE_POLL_SECONDS","10")))
  seen={};ids_cache={};next_due={h:time.monotonic() for h in handles};inflight={}
  backoff_until={};last_success={};error_log_at={}
  pool=concurrent.futures.ThreadPoolExecutor(max_workers=max(1,len(handles)),thread_name_prefix="truth-public")
@@ -1393,7 +1393,7 @@ def news_feed(source,url):
  # Every news source is isolated. Search feeds have an independent Bing RSS
  # fallback; direct publishers have browser-TLS fallback when urllib is blocked.
  candidates=_news_candidates(url)
- base_poll=max(30,NEWS_POLL_SECONDS) if candidates[0][0]=="direct_rss" else max(60,NEWS_POLL_SECONDS)
+ base_poll=max(15,NEWS_POLL_SECONDS) if candidates[0][0]=="direct_rss" else max(20,NEWS_POLL_SECONDS)
  delay=base_poll;error_log_at=0
  while not SHUTDOWN.is_set():
   errors=[];success=None
@@ -1458,7 +1458,7 @@ def build_dashboard_snapshot():
  try: account_age_seconds=max(0,int((datetime.datetime.now(datetime.timezone.utc)-datetime.datetime.fromisoformat(account_started.replace("Z","+00:00"))).total_seconds()))
  except Exception: account_age_seconds=0
  total=state["equity"]+unreal;account_roi=(total/PAPER_RESET-1)*100
- visible_sources={k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and k not in SEARCH_INDEX_FEEDS and not v.get("disabled") and not (k.startswith("XFree:") and not v.get("ok")) and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")}
+ visible_sources={k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and not v.get("disabled") and not (k.startswith("XFree:") and not v.get("ok")) and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")}
  return {"mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"positions":positions,"pump_positions":pump_positions,"pump_balance":round(state.get("pump_equity",100.0),4),"pump_unrealized_pnl":round(pump_unreal,4),"pump_total_equity":round(state.get("pump_equity",100.0)+pump_unreal,4),"pump_realized_pnl":round(state.get("pump_realized_pnl",0.0),4),"pump_trades":state.get("pump_trades",0),"trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
 def dashboard():
@@ -1482,7 +1482,7 @@ def dashboard():
  return {"mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),
   "total_equity":round(state["equity"]+unreal,4),"realized_pnl":round(state["realized_pnl"],4),
   "account_age_seconds":0,"account_roi_pct":round(((state["equity"]+unreal)/PAPER_RESET-1)*100,3),
-  "positions":positions,"pump_positions":[],"pump_balance":round(state.get("pump_equity",100.0),4),"pump_unrealized_pnl":0.0,"pump_total_equity":round(state.get("pump_equity",100.0),4),"pump_realized_pnl":round(state.get("pump_realized_pnl",0.0),4),"pump_trades":state.get("pump_trades",0),"trades":[],"news":[],"features":[],"sources":{k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and k not in SEARCH_INDEX_FEEDS and not v.get("disabled") and not (k.startswith("XFree:") and not v.get("ok")) and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")},
+  "positions":positions,"pump_positions":[],"pump_balance":round(state.get("pump_equity",100.0),4),"pump_unrealized_pnl":0.0,"pump_total_equity":round(state.get("pump_equity",100.0),4),"pump_realized_pnl":round(state.get("pump_realized_pnl",0.0),4),"pump_trades":state.get("pump_trades",0),"trades":[],"news":[],"features":[],"sources":{k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and not v.get("disabled") and not (k.startswith("XFree:") and not v.get("ok")) and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")},
   "errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],
   "market_count":state["market_count"],"last_poll":state["last_poll"],
   "uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],
@@ -1517,7 +1517,7 @@ def operations_diagnostics():
      "sources_ok":sum(bool(x.get("ok")) for x in S["sources"].values()),
      "sources_failed":[k for k,v in S["sources"].items() if not v.get("ok") and not v.get("disabled") and not k.startswith("XFree:") and not k.startswith("XIndex:") and k!="XIndexMonitor" and k not in SEARCH_INDEX_FEEDS and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")],
      "sources_degraded_noncritical":[k for k,v in S["sources"].items() if not v.get("ok") and (k.startswith("XIndex:") or k=="XIndexMonitor")],
-     "news_failures":{k:str(v.get("error") or "")[:160] for k,v in S["sources"].items() if not v.get("ok") and ((k in FEEDS and k not in SEARCH_INDEX_FEEDS and not k.startswith("XIndex:")) or k in RESEARCH_PAGES)},
+     "news_failures":{k:str(v.get("error") or "")[:160] for k,v in S["sources"].items() if not v.get("ok") and ((k in FEEDS and not k.startswith("XIndex:")) or k in RESEARCH_PAGES)},
      "social_channels":{k:{"ok":v.get("ok"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds"),"delivery_latency_seconds":v.get("delivery_latency_seconds"),"accounts_ok":v.get("accounts_ok"),"accounts_initialized":v.get("accounts_initialized"),"accounts_total":v.get("accounts_total"),"all_accounts_ok":v.get("all_accounts_ok"),"fx_primary":v.get("fx_primary"),"xlookup_primary":v.get("xlookup_primary")} for k,v in S["sources"].items() if k.startswith(("XFree:","XFilteredStream","XListMonitor","XMonitor","XIndexMonitor","TruthAuth","TruthStream","TruthDirect:","TruthSocialPublic","TruthMonitor"))},
      "pump_engine":copy.deepcopy(S["sources"].get("PumpDumpScanner",{})),
      "pump_positions":len(S.get("pump_positions",{})),"pump_equity":S.get("pump_equity"),"pump_trades":S.get("pump_trades"),
@@ -1711,7 +1711,7 @@ if __name__=="__main__":
  if os.getenv("X_SESSION_COOKIES","").strip():worker_specs.append(("x_session_scraper",lambda:social_reader("x")))
  if os.getenv("TRUTHSOCIAL_TOKEN","").strip():worker_specs.append(("truth_auth_reader",lambda:social_reader("truth")))
  for name,url in FEEDS.items():
-  if not name.startswith("XIndex:") and name not in SEARCH_INDEX_FEEDS:
+  if not name.startswith("XIndex:"):
    worker_specs.append(("feed:"+name,lambda n=name,u=url:news_feed(n,u)))
  for name,url in RESEARCH_PAGES.items():worker_specs.append(("research:"+name,lambda n=name,u=url:research_page_monitor(n,u)))
  if os.getenv("ENABLE_PUBLIC_X_HTML","0")=="1":
