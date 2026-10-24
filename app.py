@@ -672,8 +672,15 @@ def free_x_realtime():
     SHUTDOWN.wait(0.5);continue
    now_m=time.monotonic()
    active={meta[0] for meta in inflight.values()}
-   for handle in handles:
-    if handle in active or now_m<next_due[handle] or now_m<backoff_until.get(handle,0) or now_m<disabled_until.get(handle,0):continue
+   due=[h for h in handles if h not in active and now_m>=next_due[h] and now_m>=backoff_until.get(h,0) and now_m>=disabled_until.get(h,0)]
+   available=max(0,pool._max_workers-len(inflight))
+   priority=[h for h in due if h.lower() in high_priority]
+   normal=[h for h in due if h.lower() not in high_priority]
+   priority.sort(key=lambda h:next_due[h]);normal.sort(key=lambda h:next_due[h])
+   priority_slots=min(len(priority),max(0,available-math.ceil(available/3))) if normal else min(len(priority),available)
+   selected=priority[:priority_slots]+normal[:available-priority_slots]
+   if len(selected)<available:selected+=priority[priority_slots:priority_slots+available-len(selected)]
+   for handle in selected:
     try:
      fut=pool.submit(fetch_one,handle);inflight[fut]=(handle,now_m)
     except Exception as exc:
@@ -752,7 +759,7 @@ def free_x_realtime():
      "active_accounts":active_count,"disabled_retry_accounts":disabled_count,
      "priority_accounts":sum(h.lower() in high_priority for h in handles),
      "priority_poll_seconds":fast_poll,"normal_poll_seconds":normal_poll,
-     "ingest_queue":len(ingest_futures),"inflight_accounts":len(inflight),
+     "ingest_queue":len(ingest_futures),"inflight_accounts":len(inflight),"queued_due_accounts":max(0,len(due)-len(selected)),
      "scan_workers":pool._max_workers,"realtime_accounts_seen":realtime,
      "realtime_verified":realtime>0,
      "rate_limited_accounts":sum(1 for h in handles if S["sources"].get("XFree:"+h,{}).get("rate_limited")),
