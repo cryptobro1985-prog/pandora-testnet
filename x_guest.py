@@ -7,6 +7,7 @@ QUERY_USERS=["1VOOyvKkiI3FMmkeDNxM9A","2qvSHpkWTMS9i0zJAwDNiA"]
 QUERY_TWEETS_IDS=["q6xj5bs0hapm9309hexA_g","hr4gzZONlq23okjU8fIe_A"]
 _token=None
 _expires=0
+_user_ids={}
 
 def request(url,headers,post=False):
  req=urllib.request.Request(url,headers=headers,method="POST" if post else "GET")
@@ -32,19 +33,22 @@ def graphql(qid,op,params):
 
 def read(handle):
  features={"responsive_web_graphql_exclude_directive_enabled":True,"verified_phone_label_enabled":False,"responsive_web_graphql_timeline_navigation_enabled":True,"rweb_tipjar_consumption_enabled":True,"creator_subscriptions_tweet_preview_api_enabled":True,"responsive_web_graphql_skip_user_profile_image_extensions_enabled":False}
- user=None;last=None
- for qid in QUERY_USERS:
-  try:
-   candidate=graphql(qid,"UserByScreenName",{"variables":{"screen_name":handle,"withSafetyModeUserFields":True},"features":features})
-   result=candidate.get("data",{}).get("user",{}).get("result") or {}
-   if result.get("rest_id"):
-    user=candidate;break
-  except Exception as exc:last=exc
- if user is None:
-  if last:raise last
-  raise ValueError("guest_user_not_available")
- result=user.get("data",{}).get("user",{}).get("result") or {}
- ident=result.get("rest_id")
+ ident=_user_ids.get(handle.lower())
+ if not ident:
+  user=None;last=None
+  for qid in QUERY_USERS:
+   try:
+    candidate=graphql(qid,"UserByScreenName",{"variables":{"screen_name":handle,"withSafetyModeUserFields":True},"features":features})
+    result=candidate.get("data",{}).get("user",{}).get("result") or {}
+    if result.get("rest_id"):
+     user=candidate;break
+   except Exception as exc:last=exc
+  if user is None:
+   if last:raise last
+   raise ValueError("guest_user_not_available")
+  result=user.get("data",{}).get("user",{}).get("result") or {}
+  ident=result.get("rest_id")
+  _user_ids[handle.lower()]=ident
  variables={"userId":ident,"count":20,"includePromotedContent":False,"withQuickPromoteEligibilityTweetFields":False,"withVoice":True,"withV2Timeline":True}
  data=None;last=None
  for qid in QUERY_TWEETS_IDS:
