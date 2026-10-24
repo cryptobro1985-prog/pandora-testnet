@@ -542,9 +542,12 @@ def free_x_realtime():
     return secondary[1](handle),secondary[0],True,str(first)[:100]
    except Exception as second:
     try:
-     return free_x_syndication_fetch(handle),"syndication",True,(primary[0]+":"+str(first)[:55]+" | "+secondary[0]+":"+str(second)[:55])
-    except Exception as third:
-     raise RuntimeError(primary[0]+":"+str(first)[:55]+" | "+secondary[0]+":"+str(second)[:55]+" | syndication:"+str(third)[:55])
+     return guest_x_read(handle),"guest_graphql",True,(primary[0]+":"+str(first)[:45]+" | "+secondary[0]+":"+str(second)[:45])
+    except Exception as guest_exc:
+     try:
+      return free_x_syndication_fetch(handle),"syndication",True,(primary[0]+":"+str(first)[:35]+" | "+secondary[0]+":"+str(second)[:35]+" | guest:"+str(guest_exc)[:35])
+     except Exception as third:
+      raise RuntimeError(primary[0]+":"+str(first)[:35]+" | "+secondary[0]+":"+str(second)[:35]+" | guest:"+str(guest_exc)[:35]+" | syndication:"+str(third)[:35])
  try:
   while not SHUTDOWN.is_set():
    if not S["engine_active"]:
@@ -1037,7 +1040,7 @@ def operations_diagnostics():
      "trades":S.get("trades"),"news_seen":S.get("news_seen"),
      "sources_ok":sum(bool(x.get("ok")) for x in S["sources"].values()),
      "sources_failed":[k for k,v in S["sources"].items() if not v.get("ok")],
-     "social_channels":{k:{"ok":v.get("ok"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds"),"delivery_latency_seconds":v.get("delivery_latency_seconds")} for k,v in S["sources"].items() if k.startswith(("XFree:","XFilteredStream","XMonitor","XIndexMonitor","TruthAuth","TruthStream","TruthDirect:","TruthSocialPublic"))},
+     "social_channels":{k:{"ok":v.get("ok"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds"),"delivery_latency_seconds":v.get("delivery_latency_seconds"),"accounts_ok":v.get("accounts_ok"),"accounts_initialized":v.get("accounts_initialized"),"accounts_total":v.get("accounts_total"),"all_accounts_ok":v.get("all_accounts_ok"),"fx_primary":v.get("fx_primary"),"xlookup_primary":v.get("xlookup_primary")} for k,v in S["sources"].items() if k.startswith(("XFree:","XFilteredStream","XMonitor","XIndexMonitor","TruthAuth","TruthStream","TruthDirect:","TruthSocialPublic"))},
      "entry_rejections":dict(S.get("_entry_rejections",{})),
      "risk_ready":health["risk_ready"]}
    print(json.dumps(report,ensure_ascii=False,default=str),flush=True)
