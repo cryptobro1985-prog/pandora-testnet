@@ -140,6 +140,18 @@ SOURCE_WEIGHTS={
  "CoinDesk":0.84,"Decrypt":0.78,"Cointelegraph":0.74,
  "GoogleNewsMarkets":0.60,"GoogleNewsCrypto":0.55,"TruthSocialSearch":0.55
 }
+NON_MARKET_PATTERNS=(
+ r"\\b(?:giveaway|sweepstakes|contest|competition)\\b",
+ r"\\b(?:winner|winners|won|prize|award|awards)\\b",
+ r"\\b(?:congratulations|congrats)\\b",
+ r"\\b(?:tickets?|merch|merchandise)\\b",
+ r"\\b(?:podcast|webinar|meetup)\\b",
+)
+def is_non_market_news(title):
+ lo=title.lower()
+ # Promotional/community posts are journalled but can never open/reverse a trade.
+ return any(re.search(p,lo,re.I) for p in NON_MARKET_PATTERNS)
+
 EVENT_RULES=[
  ("ETF_APPROVAL",1,("etf approved","approves spot","approval of spot","approved spot")),
  ("LISTING",1,("will list","listing of","lists ","listed on")),
@@ -520,8 +532,13 @@ def ingest_event(ident,source,title,published_at=None,source_url=None):
  if not S["engine_active"] or SHUTDOWN.is_set():return False
  with LOCK:prices=dict(S.get("_prices",{}))
  sym,side=detect(title,prices)
+ non_market=is_non_market_news(title)
+ if non_market:side=0
  if not save_news_event(ident,now(),source,title,sym,side,published_at,source_url):return False
  with LOCK:S["news_seen"]+=1
+ if non_market:
+  journal("ignored_non_market_news",ident,{"source":source,"title":title,"symbol":sym,"reason":"promotional_or_non_market_event"})
+  return True
  record_event(ident,source,title,sym,side,prices,published_at)
  return True
 
@@ -531,7 +548,7 @@ def free_x_realtime():
  handles=list(WATCH);poll=max(4.0,float(os.getenv("X_FREE_POLL_SECONDS","4")))
  fx_primary=set(handles[:min(58,len(handles))])
  seen={};primed=set();state_lock=threading.Lock()
- backoff_until={};rate_limit_hits={};last_success={}
+ backoff_until={};rate_limit_hits={};last_success={};x_error_log_at={}
  next_due={h:time.monotonic() for h in handles}  # synchronized initial scan
  inflight={};ingest_futures=set()
  pool=concurrent.futures.ThreadPoolExecutor(max_workers=min(128,max(48,len(handles))),thread_name_prefix="x-realtime")
@@ -619,6 +636,10 @@ def free_x_realtime():
        "consecutive_failures":failures,"last_success_epoch":last_success_epoch or None,
        "rate_limited":limited,"retry_after_seconds":round(max(0,backoff_until.get(handle,0)-time.monotonic()),1),
        "last_request_seconds":round(time.monotonic()-started,2)}
+     if time.time()-x_error_log_at.get(handle,0)>=60:
+      x_error_log_at[handle]=time.time()
+      try:journal("source_error",None,{"source":"X","handle":handle,"error":err,"rate_limited":limited,"retry_after_seconds":round(max(0,backoff_until.get(handle,0)-time.monotonic()),1)})
+      except Exception:pass
    ingest_futures={future for future in ingest_futures if not future.done()}
    with LOCK:
     states=[S["sources"].get("XFree:"+h,{}) for h in handles]
@@ -691,7 +712,7 @@ def truth_stream_realtime():
     with LOCK:S["sources"]["TruthAuth"]={"ok":False,"mode":"user_password_to_oauth_token_in_memory","last_check":now(),"error":type(exc).__name__}
     return
   else:
-   with LOCK:S["sources"]["TruthAuth"]={"ok":False,"mode":"user_oauth_required","last_check":now(),"error":"set_TRUTHSOCIAL_USERNAME_and_PASSWORD_or_TRUTH_STREAM_TOKEN"}
+   # Authenticated websocket is optional; public 4s scanner remains primary.
    return
  handles={h.strip().lower() for h in os.getenv("TRUTH_WATCH_HANDLES","realDonaldTrump,WhiteHouse,DanScavino,Kash,MelaniaTrump,SecWar,SpeakerJohnson,seckennedy").split(",") if h.strip()}
  url="wss://truthsocial.com/api/v1/streaming?stream=public:local"
@@ -733,60 +754,70 @@ def truth_stream_realtime():
    except Exception:pass
 
 def free_truth_realtime():
- if (os.getenv("TRUTH_STREAM_TOKEN","").strip() or os.getenv("TRUTHSOCIAL_TOKEN","").strip()):return
+ # Public Truth Social scanner: no account/token required. Each account has its own
+ # 4-second cadence and falls back from public REST to ActivityPub independently.
  handles=[h.strip() for h in os.getenv("TRUTH_WATCH_HANDLES","realDonaldTrump,WhiteHouse,DanScavino,Kash,MelaniaTrump,SecWar,SpeakerJohnson,seckennedy").split(",") if h.strip()]
- poll=max(5.0,float(os.getenv("TRUTH_FREE_POLL_SECONDS","10")))
- seen={};ids_cache={}
- pool=concurrent.futures.ThreadPoolExecutor(max_workers=min(8,max(1,len(handles))),thread_name_prefix="truth-free")
+ poll=max(4.0,float(os.getenv("TRUTH_FREE_POLL_SECONDS","4")))
+ seen={};ids_cache={};next_due={h:time.monotonic() for h in handles};inflight={}
+ backoff_until={};last_success={};error_log_at={}
+ pool=concurrent.futures.ThreadPoolExecutor(max_workers=max(1,len(handles)),thread_name_prefix="truth-public")
+ def fetch_one(handle):
+  errors=[]
+  try:
+   account_id,posts,headers=free_truth_fetch(handle,ids_cache.get(handle))
+   return account_id,posts,headers,"public_rest",False,None
+  except Exception as exc:errors.append("rest:"+str(exc)[:100])
+  try:
+   posts=free_truth_ap_fetch(handle)
+   return ids_cache.get(handle),posts,{},"activitypub",True," | ".join(errors)
+  except Exception as exc:errors.append("activitypub:"+str(exc)[:100])
+  raise RuntimeError(" | ".join(errors))
  try:
   while not SHUTDOWN.is_set():
    if not S["engine_active"]:
-    SHUTDOWN.wait(2);continue
-   started=time.monotonic()
-   futures={pool.submit(free_truth_fetch,h,ids_cache.get(h)):h for h in handles}
-   for future in concurrent.futures.as_completed(futures):
-    h=futures[future];name="TruthDirect:"+h
+    SHUTDOWN.wait(0.5);continue
+   now_m=time.monotonic();active={meta[0] for meta in inflight.values()}
+   for h in handles:
+    if h in active or now_m<next_due[h] or now_m<backoff_until.get(h,0):continue
+    fut=pool.submit(fetch_one,h);inflight[fut]=(h,now_m);next_due[h]=now_m+poll
+   done=[f for f in list(inflight) if f.done()]
+   for future in done:
+    h,started=inflight.pop(future);name="TruthDirect:"+h
     try:
-     account_id,posts,headers=future.result();ids_cache[h]=account_id
+     account_id,posts,headers,backend,fallback,primary_error=future.result()
+     if account_id:ids_cache[h]=account_id
+     backoff_until.pop(h,None);last_success[h]=time.time()
      stamps=[publication_epoch(p.get("created_at")) for p in posts];stamps=[x for x in stamps if x is not None]
-     latest_age=(time.time()-max(stamps)) if stamps else None
-     with LOCK:S["sources"][name]={"ok":True,"mode":"truth_rest_chrome_impersonation","last_check":now(),"posts":len(posts),"poll_seconds":poll,"latest_post_age_seconds":round(latest_age,1) if latest_age is not None else None,"realtime_verified":False,"ratelimit_remaining":headers.get("x-ratelimit-remaining")}
+     latest_age=time.time()-max(stamps) if stamps else None
+     with LOCK:S["sources"][name]={"ok":True,"degraded":fallback,"mode":backend+"_4s_poll","backend":backend,"fallback_used":fallback,"primary_error":primary_error,"last_check":now(),"posts":len(posts),"poll_seconds":poll,"last_request_seconds":round(time.monotonic()-started,2),"latest_post_age_seconds":round(latest_age,1) if latest_age is not None else None,"realtime_verified":False,"last_success_epoch":time.time()}
      ids=[str(p["id"]) for p in posts]
      if h not in seen:
-      seen[h]=set(ids);continue
-     old=seen[h];fresh=[p for p in posts if str(p["id"]) not in old];old.update(ids)
-     if len(old)>200:seen[h]=set(ids[:100])
+      seen[h]=set(ids);fresh=[]
+     else:
+      old=seen[h];fresh=[p for p in posts if str(p["id"]) not in old];old.update(ids)
+      if len(old)>300:seen[h]=set(ids[:150])
      for p in sorted(fresh,key=lambda q:publication_epoch(q.get("created_at")) or 0):
       age=time.time()-(publication_epoch(p.get("created_at")) or 0)
       if 0<=age<=10:
        with LOCK:S["sources"][name]["realtime_verified"]=True;S["sources"][name]["delivery_latency_seconds"]=round(age,2)
-      ident=hashlib.sha256(("TruthDirect:"+h+":"+str(p["id"])).encode()).hexdigest()
-      ingest_event(ident,"TruthSocialPublic",p["text"],p.get("created_at"),p.get("url"))
+      ident=hashlib.sha256(("TruthPublic:"+h+":"+str(p["id"])).encode()).hexdigest()
+      ingest_event(ident,"TruthSocialPublic:"+h,p["text"],p.get("created_at"),p.get("url"))
     except Exception as exc:
-     rest_err=str(exc)[:100] if str(exc) else type(exc).__name__
-     try:
-      posts=free_truth_ap_fetch(h)
-      stamps=[publication_epoch(p.get("created_at")) for p in posts];stamps=[x for x in stamps if x is not None]
-      latest_age=(time.time()-max(stamps)) if stamps else None
-      with LOCK:S["sources"][name]={"ok":True,"mode":"truth_activitypub_outbox","last_check":now(),"posts":len(posts),"poll_seconds":poll,"latest_post_age_seconds":round(latest_age,1) if latest_age is not None else None,"realtime_verified":False,"rest_error":rest_err}
-      ids=[str(p["id"]) for p in posts]
-      if h not in seen:seen[h]=set(ids);continue
-      old=seen[h];fresh=[p for p in posts if str(p["id"]) not in old];old.update(ids)
-      if len(old)>200:seen[h]=set(ids[:100])
-      for p in sorted(fresh,key=lambda q:publication_epoch(q.get("created_at")) or 0):
-       age=time.time()-(publication_epoch(p.get("created_at")) or 0)
-       if 0<=age<=10:
-        with LOCK:S["sources"][name]["realtime_verified"]=True;S["sources"][name]["delivery_latency_seconds"]=round(age,2)
-       ident=hashlib.sha256(("TruthAP:"+h+":"+str(p["id"])).encode()).hexdigest()
-       ingest_event(ident,"TruthSocialPublic",p["text"],p.get("created_at"),p.get("url"))
-     except Exception as ap_exc:
-      ap_err=str(ap_exc)[:100] if str(ap_exc) else type(ap_exc).__name__
-      with LOCK:S["sources"][name]={"ok":False,"mode":"truth_rest_then_activitypub","last_check":now(),"error":rest_err+" | "+ap_err}
+     err=str(exc)[:220] if str(exc) else type(exc).__name__;lo=err.lower()
+     limited=any(x in lo for x in ("429","rate.limit","too many requests"))
+     backoff=60 if limited else 8
+     backoff_until[h]=time.monotonic()+backoff
+     with LOCK:S["sources"][name]={"ok":False,"degraded":True,"mode":"public_rest_activitypub_4s","last_check":now(),"error":err,"rate_limited":limited,"retry_after_seconds":backoff,"last_request_seconds":round(time.monotonic()-started,2)}
+     # Persist source failures without flooding Postgres every 4 seconds.
+     if time.time()-error_log_at.get(h,0)>=60:
+      error_log_at[h]=time.time()
+      try:journal("source_error",None,{"source":"TruthSocialPublic","handle":h,"error":err,"rate_limited":limited,"retry_after_seconds":backoff})
+      except Exception:pass
    with LOCK:
-    states=[v for k,v in S["sources"].items() if k.startswith("TruthDirect:")]
-    good=sum(bool(v.get("ok")) for v in states)
-    S["sources"]["TruthSocialPublic"]={"ok":good>=max(1,int(len(handles)*0.75)),"mode":"direct_parallel_rest","last_check":now(),"accounts_ok":good,"accounts_total":len(handles),"poll_seconds":poll,"realtime_verified":any(v.get("realtime_verified") for v in states)}
-   SHUTDOWN.wait(max(0.1,poll-(time.monotonic()-started)))
+    states=[S["sources"].get("TruthDirect:"+h,{}) for h in handles]
+    initialized=sum(bool(v) for v in states);good=sum(bool(v.get("ok")) for v in states);rt=sum(bool(v.get("realtime_verified")) for v in states)
+    S["sources"]["TruthMonitor"]={"ok":initialized==len(handles) and good>=max(1,math.ceil(len(handles)*0.75)),"all_accounts_ok":initialized==len(handles) and good==len(handles),"mode":"public_parallel_4s_poll","last_check":now(),"accounts_ok":good,"accounts_initialized":initialized,"accounts_total":len(handles),"poll_seconds":poll,"scan_workers":pool._max_workers,"inflight_accounts":len(inflight),"backoff_accounts":sum(1 for h in handles if time.monotonic()<backoff_until.get(h,0)),"realtime_accounts_seen":rt,"realtime_verified":rt>0,"last_successful_poll_epoch":max(last_success.values()) if last_success else None}
+   SHUTDOWN.wait(0.05)
  finally:
   pool.shutdown(wait=False,cancel_futures=True)
 
