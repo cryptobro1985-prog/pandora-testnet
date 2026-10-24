@@ -116,7 +116,6 @@ FEEDS.update({
  "GoogleNewsTokenEvents":"https://news.google.com/rss/search?q=cryptocurrency+token+listing+unlock+delisting&hl=en-US&gl=US&ceid=US:en",
  "FTCrypto":"https://www.ft.com/crypto?format=rss",
  "TheBlockRSS":"https://www.theblock.co/rss.xml",
- "CryptoSlate":"https://cryptoslate.com/feed/",
  "BitcoinMagazineRSS":"https://bitcoinmagazine.com/feed",
  "TheDefiant":"https://thedefiant.io/feed/",
  "Protos":"https://protos.com/feed",
@@ -156,7 +155,7 @@ SOURCE_WEIGHTS={
  "FedOfficial":1.00,"SECOfficial":1.00,"CFTCOfficial":1.00,"DOJNews":0.95,
  "TruthSocialPublic":0.95,"XOfficial":0.90,"TruthArchive":0.80,
  "CoinSharesResearch":0.90,"BitwiseResearch":0.88,"ARKResearch":0.86,"GrayscaleResearch":0.88,
- "CoinDesk":0.84,"Decrypt":0.78,"Cointelegraph":0.74,"FTCrypto":0.88,"TheBlockRSS":0.84,"CryptoSlate":0.76,"BitcoinMagazineRSS":0.76,"TheDefiant":0.74,"Protos":0.72,
+ "CoinDesk":0.84,"Decrypt":0.78,"Cointelegraph":0.74,"FTCrypto":0.88,"TheBlockRSS":0.84,"BitcoinMagazineRSS":0.76,"TheDefiant":0.74,"Protos":0.72,
  "GoogleNewsMarkets":0.60,"GoogleNewsCrypto":0.55,"TruthSocialSearch":0.55
 }
 NON_MARKET_PATTERNS=(
@@ -1463,7 +1462,7 @@ def build_dashboard_snapshot():
  try: account_age_seconds=max(0,int((datetime.datetime.now(datetime.timezone.utc)-datetime.datetime.fromisoformat(account_started.replace("Z","+00:00"))).total_seconds()))
  except Exception: account_age_seconds=0
  total=state["equity"]+unreal;account_roi=(total/PAPER_RESET-1)*100
- visible_sources={k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and not v.get("disabled") and not (k.startswith("XFree:") and not v.get("ok")) and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")}
+ visible_sources={k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and not k.startswith("XFree:") and k not in SEARCH_INDEX_FEEDS and not v.get("disabled") and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")}
  return {"mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"positions":positions,"pump_positions":pump_positions,"pump_balance":round(state.get("pump_equity",100.0),4),"pump_unrealized_pnl":round(pump_unreal,4),"pump_total_equity":round(state.get("pump_equity",100.0)+pump_unreal,4),"pump_realized_pnl":round(state.get("pump_realized_pnl",0.0),4),"pump_trades":state.get("pump_trades",0),"trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
 def dashboard():
@@ -1487,7 +1486,7 @@ def dashboard():
  return {"mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),
   "total_equity":round(state["equity"]+unreal,4),"realized_pnl":round(state["realized_pnl"],4),
   "account_age_seconds":0,"account_roi_pct":round(((state["equity"]+unreal)/PAPER_RESET-1)*100,3),
-  "positions":positions,"pump_positions":[],"pump_balance":round(state.get("pump_equity",100.0),4),"pump_unrealized_pnl":0.0,"pump_total_equity":round(state.get("pump_equity",100.0),4),"pump_realized_pnl":round(state.get("pump_realized_pnl",0.0),4),"pump_trades":state.get("pump_trades",0),"trades":[],"news":[],"features":[],"sources":{k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and not v.get("disabled") and not (k.startswith("XFree:") and not v.get("ok")) and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")},
+  "positions":positions,"pump_positions":[],"pump_balance":round(state.get("pump_equity",100.0),4),"pump_unrealized_pnl":0.0,"pump_total_equity":round(state.get("pump_equity",100.0),4),"pump_realized_pnl":round(state.get("pump_realized_pnl",0.0),4),"pump_trades":state.get("pump_trades",0),"trades":[],"news":[],"features":[],"sources":{k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and not k.startswith("XFree:") and k not in SEARCH_INDEX_FEEDS and not v.get("disabled") and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")},
   "errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],
   "market_count":state["market_count"],"last_poll":state["last_poll"],
   "uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],
@@ -1522,8 +1521,8 @@ def operations_diagnostics():
      "sources_ok":sum(bool(x.get("ok")) for x in S["sources"].values()),
      "sources_failed":[k for k,v in S["sources"].items() if not v.get("ok") and not v.get("disabled") and not k.startswith("XFree:") and not k.startswith("XIndex:") and k!="XIndexMonitor" and k not in SEARCH_INDEX_FEEDS and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")],
      "sources_degraded_noncritical":[k for k,v in S["sources"].items() if not v.get("ok") and (k.startswith("XIndex:") or k=="XIndexMonitor")],
-     "news_failures":{k:str(v.get("error") or "")[:160] for k,v in S["sources"].items() if not v.get("ok") and ((k in FEEDS and not k.startswith("XIndex:")) or k in RESEARCH_PAGES)},
-     "social_channels":{k:{"ok":v.get("ok"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds"),"delivery_latency_seconds":v.get("delivery_latency_seconds"),"accounts_ok":v.get("accounts_ok"),"accounts_initialized":v.get("accounts_initialized"),"accounts_total":v.get("accounts_total"),"all_accounts_ok":v.get("all_accounts_ok"),"fx_primary":v.get("fx_primary"),"xlookup_primary":v.get("xlookup_primary")} for k,v in S["sources"].items() if k.startswith(("XFree:","XFilteredStream","XListMonitor","XMonitor","XIndexMonitor","TruthAuth","TruthStream","TruthDirect:","TruthSocialPublic","TruthMonitor"))},
+     "news_failures":{k:str(v.get("error") or "")[:160] for k,v in S["sources"].items() if not v.get("ok") and ((k in FEEDS and k not in SEARCH_INDEX_FEEDS and not k.startswith("XIndex:")) or k in RESEARCH_PAGES)},
+     "social_channels":{k:{"ok":v.get("ok"),"degraded":v.get("degraded"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds"),"delivery_latency_seconds":v.get("delivery_latency_seconds"),"accounts_ok":v.get("accounts_ok"),"accounts_initialized":v.get("accounts_initialized"),"accounts_total":v.get("accounts_total"),"active_accounts":v.get("active_accounts"),"disabled_retry_accounts":v.get("disabled_retry_accounts"),"recently_polled_accounts":v.get("recently_polled_accounts"),"target_poll_seconds":v.get("target_poll_seconds"),"backend_accounts":v.get("backend_accounts"),"rate_limited_accounts":v.get("rate_limited_accounts"),"backoff_accounts":v.get("backoff_accounts"),"scan_workers":v.get("scan_workers")} for k,v in S["sources"].items() if k in ("XMonitor","XFilteredStream","XListMonitor","TruthMonitor","TruthStream","TruthDirect:realDonaldTrump","TruthSocialPublic")},
      "pump_engine":copy.deepcopy(S["sources"].get("PumpDumpScanner",{})),
      "pump_positions":len(S.get("pump_positions",{})),"pump_equity":S.get("pump_equity"),"pump_trades":S.get("pump_trades"),
      "entry_rejections":dict(S.get("_entry_rejections",{})),
@@ -1673,9 +1672,9 @@ def health_state():
  healthy=not SHUTDOWN.is_set() and heartbeat<45 and coordinator_age<45
  ready=healthy and S["engine_active"] and age is not None and age<10 and checkpoint_age is not None and checkpoint_age<15
  sources=dict(S.get("sources",{}))
- social={k:v for k,v in sources.items() if k.startswith(("XFree:","XFilteredStream","XMonitor","TruthStream","TruthDirect:","TruthSocialPublic","TruthMonitor"))}
- unavailable=[k for k,v in social.items() if not v.get("ok")]
- return {"healthy":healthy,"risk_ready":ready,"news_sources_total":len(sources),"news_sources_failed":sum(not v.get("ok",False) for v in sources.values()),"social_sources_failed":unavailable,"guest_x_realtime_verified":False,"news_24h_guaranteed":False,"engine_active":S["engine_active"],
+ social={k:v for k,v in sources.items() if k in ("XMonitor","XFilteredStream","XListMonitor","TruthMonitor","TruthStream","TruthDirect:realDonaldTrump","TruthSocialPublic")}
+ unavailable=[k for k,v in social.items() if not v.get("ok") and k not in ("XFilteredStream","XListMonitor","TruthStream","TruthSocialPublic")]
+ return {"healthy":healthy,"risk_ready":ready,"news_sources_total":len(sources),"news_sources_failed":sum((not v.get("ok",False)) and not k.startswith(("XFree:","XIndex:")) and k!="XIndexMonitor" and k not in SEARCH_INDEX_FEEDS for k,v in sources.items()),"social_sources_failed":unavailable,"guest_x_realtime_verified":False,"news_24h_guaranteed":False,"engine_active":S["engine_active"],
          "market_age_seconds":age,"checkpoint_age_seconds":checkpoint_age,
          "engine_error":S["engine_error"],"last_market_error":S["last_market_error"],
          "news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"market_structure_filter_active":False,
@@ -1716,7 +1715,7 @@ if __name__=="__main__":
  if os.getenv("X_SESSION_COOKIES","").strip():worker_specs.append(("x_session_scraper",lambda:social_reader("x")))
  if os.getenv("TRUTHSOCIAL_TOKEN","").strip():worker_specs.append(("truth_auth_reader",lambda:social_reader("truth")))
  for name,url in FEEDS.items():
-  if not name.startswith("XIndex:"):
+  if not name.startswith("XIndex:") and name not in SEARCH_INDEX_FEEDS:
    worker_specs.append(("feed:"+name,lambda n=name,u=url:news_feed(n,u)))
  for name,url in RESEARCH_PAGES.items():worker_specs.append(("research:"+name,lambda n=name,u=url:research_page_monitor(n,u)))
  if os.getenv("ENABLE_PUBLIC_X_HTML","0")=="1":
