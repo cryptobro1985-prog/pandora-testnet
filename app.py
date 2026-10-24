@@ -620,7 +620,57 @@ def html_dashboard(data):
  return '''<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="2"><meta name="viewport" content="width=device-width"><title>PANDORA LIVE</title><style>body{font-family:system-ui;background:#080b10;color:#e8edf5;margin:24px}h1{margin:0}.muted{color:#8b98aa}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:18px 0}.grid b{background:#111722;padding:16px;border-radius:12px}table{width:100%%;border-collapse:collapse;background:#0e141e;margin-bottom:22px}td,th{padding:9px;border-bottom:1px solid #202938;text-align:left;font-size:13px}th{color:#91a2b8}.posv{color:#49d17d;font-weight:700}.negv{color:#ff6262;font-weight:700}a{color:#8bc4ff}</style></head><body><h1>PANDORA LIVE</h1><div class="muted">Paper engine · live refresh 2s · last market poll %s</div>%s<h2>Open positions</h2><table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Trigger</th></tr>%s</table><h2>Closed trades</h2><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>PnL</th><th>Reason</th></tr>%s</table><h2>Sources</h2><table><tr><th>Source</th><th>Status</th><th>Checked</th><th>Error</th></tr>%s</table><h2>Latest news</h2><table><tr><th>Time</th><th>Source</th><th>Token</th><th>Raw signal</th><th>Headline</th></tr>%s</table><p>Errors: %s · Last error: %s</p><p><a href="/api/dashboard">JSON dashboard</a> · <a href="/features">Features</a> · <a href="/trades">Trades</a> · <a href="/news">News</a></p></body></html>'''%(esc(data["last_poll"]),cards,pos,trs,src,news,data["errors"],esc(data["last_error"]))
 
 
+def manual_close(symbol=None):
+ with LOCK:
+  if not S["engine_active"] or SHUTDOWN.is_set():return {"ok":False,"error":"engine_not_active"}
+  if time.time()-S.get("_last_poll_epoch",0)>10:return {"ok":False,"error":"stale_market_price"}
+  targets=list(S["positions"]) if symbol is None else [symbol]
+  results=[]
+  for sym in targets:
+   pos=S["positions"].get(sym)
+   if not pos:
+    results.append({"symbol":sym,"ok":False,"error":"position_not_found"});continue
+   price=S.get("_prices",{}).get(sym)
+   if not price:
+    results.append({"symbol":sym,"ok":False,"error":"price_unavailable"});continue
+   result=STORE.close(sym,pos,price,"manual_close_all" if symbol is None else "manual_close")
+   if result is None:
+    results.append({"symbol":sym,"ok":False,"error":"close_not_committed"});continue
+   S["equity"]=float(result["equity"]);S["realized_pnl"]=float(result["realized_pnl"])
+   S["trades"]+=1
+   del S["positions"][sym]
+   results.append({"symbol":sym,"ok":True,"price":price,"pnl":result["pnl"]})
+  return {"ok":all(x["ok"] for x in results),"results":results}
+
 class Handler(BaseHTTPRequestHandler):
+ def do_POST(self):
+  path=self.path.split("?")[0]
+  if path!="/api/positions/close":
+   self.send_error(404);return
+  secret=os.getenv("PANDORA_CONTROL_TOKEN","").strip()
+  auth=self.headers.get("Authorization","")
+  if not secret or not secrets.compare_digest(auth,"Bearer "+secret):
+   self.send_error(401);return
+  try:
+   length=int(self.headers.get("Content-Length","0"))
+   if length<1 or length>1024:raise ValueError("invalid body")
+   payload=json.loads(self.rfile.read(length))
+   symbol=payload.get("symbol")
+   if symbol is not None and (not isinstance(symbol,str) or not re.fullmatch(r"[A-Z0-9]{2,15}",symbol)):raise ValueError("invalid symbol")
+   if symbol is None and payload.get("all") is not True:raise ValueError("explicit all required")
+   result=manual_close(symbol)
+   body=json.dumps(result).encode()
+   self.send_response(200 if result["ok"] else 409)
+  except (ValueError,TypeError):
+   body=b'{"ok":false,"error":"bad_request"}'
+   self.send_response(400)
+  except Exception:
+   body=b'{"ok":false,"error":"close_failed"}'
+   self.send_response(500)
+  self.send_header("Content-Type","application/json")
+  self.send_header("Cache-Control","no-store")
+  self.send_header("Content-Length",str(len(body)))
+  self.end_headers();self.wfile.write(body)
  def do_HEAD(self):
   self.send_response(200);self.end_headers()
  def do_GET(self):
