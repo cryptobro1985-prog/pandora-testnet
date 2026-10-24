@@ -530,6 +530,7 @@ def free_x_realtime():
  handles=list(WATCH);poll=max(4.0,float(os.getenv("X_FREE_POLL_SECONDS","4")))
  fx_primary=set(handles[:min(58,len(handles))])
  seen={};primed=set();state_lock=threading.Lock()
+ backoff_until={};rate_limit_hits={};last_success={}
  next_due={h:time.monotonic()+i*poll/max(1,len(handles)) for i,h in enumerate(handles)}
  inflight={};ingest_futures=set()
  pool=concurrent.futures.ThreadPoolExecutor(max_workers=48,thread_name_prefix="x-realtime")
@@ -555,7 +556,7 @@ def free_x_realtime():
    now_m=time.monotonic()
    active={meta[0] for meta in inflight.values()}
    for handle in handles:
-    if handle in active or now_m<next_due[handle]:continue
+    if handle in active or now_m<next_due[handle] or now_m<backoff_until.get(handle,0):continue
     fut=pool.submit(fetch_one,handle);inflight[fut]=(handle,now_m)
     next_due[handle]+=poll
     if next_due[handle]<now_m:next_due[handle]=now_m+poll
@@ -564,6 +565,7 @@ def free_x_realtime():
     handle,started=inflight.pop(future);name="XFree:"+handle
     try:
      posts,backend,fallback,primary_error=future.result()
+     backoff_until.pop(handle,None);rate_limit_hits[handle]=0;last_success[handle]=time.time()
      stamps=[publication_epoch(p.get("created_at")) for p in posts];stamps=[x for x in stamps if x is not None]
      latest_age=(time.time()-max(stamps)) if stamps else None
      with LOCK:
@@ -571,6 +573,7 @@ def free_x_realtime():
        "fallback_used":bool(fallback),"primary_error":primary_error,"category":WATCH_CATEGORY.get(handle),
        "last_check":now(),"posts":len(posts),"poll_seconds":poll,
        "latest_post_age_seconds":round(latest_age,1) if latest_age is not None else None,
+       "last_request_seconds":round(time.monotonic()-started,2),
        "realtime_verified":False,"consecutive_failures":0,"last_success_epoch":time.time()}
      ids=[str(p["id"]) for p in posts]
      with state_lock:
@@ -590,6 +593,12 @@ def free_x_realtime():
        ingest_futures.add(ingest_pool.submit(ingest_event,ident,"XOfficial:"+handle,p["text"],p.get("created_at"),p.get("url")))
     except Exception as exc:
      err=str(exc)[:220] if str(exc) else type(exc).__name__
+     limited=any(x in err.lower() for x in ("429","rate.limit","too many requests"))
+     if limited:
+      rate_limit_hits[handle]=min(8,rate_limit_hits.get(handle,0)+1)
+      backoff_until[handle]=time.monotonic()+min(900,60*2**(rate_limit_hits[handle]-1))
+     else:
+      backoff_until[handle]=time.monotonic()+min(60,4*2**min(4,rate_limit_hits.get(handle,0)))
      with LOCK:
       prev=S["sources"].get(name,{})
       failures=int(prev.get("consecutive_failures",0))+1
@@ -597,7 +606,9 @@ def free_x_realtime():
       within_grace=bool(last_success_epoch and time.time()-last_success_epoch<=30 and failures<4)
       S["sources"][name]={"ok":within_grace,"degraded":True,"mode":"fx_xlookup_guest_syndication_4s",
        "category":WATCH_CATEGORY.get(handle),"last_check":now(),"error":err,
-       "consecutive_failures":failures,"last_success_epoch":last_success_epoch or None}
+       "consecutive_failures":failures,"last_success_epoch":last_success_epoch or None,
+       "rate_limited":limited,"retry_after_seconds":round(max(0,backoff_until.get(handle,0)-time.monotonic()),1),
+       "last_request_seconds":round(time.monotonic()-started,2)}
    ingest_futures={future for future in ingest_futures if not future.done()}
    with LOCK:
     states=[S["sources"].get("XFree:"+h,{}) for h in handles]
@@ -610,7 +621,10 @@ def free_x_realtime():
      "accounts_initialized":initialized,"accounts_total":len(handles),
      "fx_primary":len(fx_primary),"xlookup_primary":len(handles)-len(fx_primary),
      "backend_live":backend_live,"poll_seconds":poll,"realtime_accounts_seen":realtime,
-     "ingest_queue":len(ingest_futures),"realtime_verified":realtime>0}
+     "ingest_queue":len(ingest_futures),"realtime_verified":realtime>0,
+     "rate_limited_accounts":sum(1 for h in handles if rate_limit_hits.get(h,0)>0),
+     "backoff_accounts":sum(1 for h in handles if time.monotonic()<backoff_until.get(h,0)),
+     "last_successful_poll_epoch":max(last_success.values()) if last_success else None}
    SHUTDOWN.wait(0.05)
  finally:
   pool.shutdown(wait=False,cancel_futures=True)
