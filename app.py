@@ -10,7 +10,7 @@ from social_scrapers import poll as social_poll, SourceUnavailable
 from truthbrush import Api as TruthApi
 from public_social import read as public_social_read
 from x_guest import read as guest_x_read
-from realtime_free import fetch_x as free_x_fetch, fetch_x_vx as free_x_vx_fetch, fetch_truth as free_truth_fetch, fetch_truth_activitypub as free_truth_ap_fetch
+from realtime_free import fetch_x as free_x_fetch, fetch_x_lookup as free_x_lookup_fetch, fetch_x_syndication as free_x_syndication_fetch, fetch_truth as free_truth_fetch, fetch_truth_activitypub as free_truth_ap_fetch
 from momentum_scanner import candidates as momentum_candidates
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
 def choose(db_path,current=(-0.10,0.20)):
@@ -533,15 +533,18 @@ def free_x_realtime():
  inflight={}
  pool=concurrent.futures.ThreadPoolExecutor(max_workers=48,thread_name_prefix="x-realtime")
  def fetch_one(handle):
-  primary=("fx",free_x_fetch) if handle in fx_primary else ("vx",free_x_vx_fetch)
-  secondary=("vx",free_x_vx_fetch) if primary[0]=="fx" else ("fx",free_x_fetch)
+  primary=("fx",free_x_fetch) if handle in fx_primary else ("xlookup",free_x_lookup_fetch)
+  secondary=("xlookup",free_x_lookup_fetch) if primary[0]=="fx" else ("fx",free_x_fetch)
   try:
    return primary[1](handle),primary[0],False,None
   except Exception as first:
    try:
     return secondary[1](handle),secondary[0],True,str(first)[:100]
    except Exception as second:
-    raise RuntimeError(primary[0]+":"+str(first)[:70]+" | "+secondary[0]+":"+str(second)[:70])
+    try:
+     return free_x_syndication_fetch(handle),"syndication",True,(primary[0]+":"+str(first)[:55]+" | "+secondary[0]+":"+str(second)[:55])
+    except Exception as third:
+     raise RuntimeError(primary[0]+":"+str(first)[:55]+" | "+secondary[0]+":"+str(second)[:55]+" | syndication:"+str(third)[:55])
  try:
   while not SHUTDOWN.is_set():
    if not S["engine_active"]:
@@ -589,7 +592,7 @@ def free_x_realtime():
       failures=int(prev.get("consecutive_failures",0))+1
       last_success_epoch=float(prev.get("last_success_epoch",0) or 0)
       within_grace=bool(last_success_epoch and time.time()-last_success_epoch<=20 and failures<3)
-      S["sources"][name]={"ok":within_grace,"degraded":True,"mode":"dual_backend_4s_poll",
+      S["sources"][name]={"ok":within_grace,"degraded":True,"mode":"fx_xlookup_syndication_fallback",
        "category":WATCH_CATEGORY.get(handle),"last_check":now(),"error":err,
        "consecutive_failures":failures,"last_success_epoch":last_success_epoch or None}
    with LOCK:
@@ -600,9 +603,9 @@ def free_x_realtime():
     fx_count=sum(1 for h in handles if h in fx_primary);vx_count=len(handles)-fx_count
     S["sources"]["XMonitor"]={"ok":initialized==len(handles) and good>=math.ceil(len(handles)*0.90),
      "all_accounts_ok":initialized==len(handles) and good==len(handles),
-     "mode":"dual_backend_parallel_4s_poll","last_check":now(),"accounts_ok":good,
+     "mode":"fx_xlookup_parallel_4s_poll","last_check":now(),"accounts_ok":good,
      "accounts_initialized":initialized,"accounts_total":len(handles),"fx_primary":fx_count,
-     "vx_primary":vx_count,"poll_seconds":poll,"realtime_accounts_seen":realtime,
+     "xlookup_primary":vx_count,"poll_seconds":poll,"realtime_accounts_seen":realtime,
      "realtime_verified":realtime>0}
    SHUTDOWN.wait(0.05)
  finally:
