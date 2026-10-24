@@ -203,6 +203,7 @@ def pinit():
   c.execute("alter table open_positions add column if not exists event_id text")
   c.execute("alter table trade_history add column if not exists event_id text")
   c.execute("create table if not exists audit_journal (id bigserial primary key, recorded_at text not null, event_id text, kind text not null, payload jsonb not null)")
+  c.execute("create table if not exists pump_signal_journal (id text primary key, ts text not null, symbol text, side integer, score double precision, action text, features jsonb)")
   c.execute("create index if not exists audit_journal_event_idx on audit_journal(event_id,id)")
   row=c.execute("select equity,realized_pnl from account_state where id=1").fetchone()
   if row:
@@ -338,26 +339,55 @@ def market():
   SHUTDOWN.wait(2)
 
 def impulse_scan():
- # Independent price-impulse scanner; never blocks exit protection.
+ # Independent PUMP_DUMP shadow/PAPER scanner. It never calls ingest_event()
+ # and therefore cannot alter NEWS_ENGINE entries, exits, cooldowns or sizing.
+ last_signal={}
  while not SHUTDOWN.is_set():
   try:
    with LOCK:
-    prices=dict(S.get("_prices",{}))
-    history={k:list(v) for k,v in S.get("_timeline",{}).items()}
-    volumes=dict(S.get("_day_volumes",{}))
+    prices=dict(S.get("_prices",{}));history={k:list(v) for k,v in S.get("_timeline",{}).items()}
+    volumes=dict(S.get("_day_volumes",{}));contexts=copy.deepcopy(S.get("_pump_ctx",{}))
    stamp=time.time()
-   found=momentum_candidates(prices,history,volumes,stamp)
-   with LOCK:
-    S["sources"]["ImpulseScanner"]={"ok":bool(prices and volumes),"last_check":now(),"markets":len(prices),"liquid_markets":sum(v>=1000000 for v in volumes.values()),"candidates":len(found),"mode":"all_markets_2s_poll","error":None if prices and volumes else "missing_market_prices_or_24h_volumes"}
-   for candidate in found[:12]:
+   found=momentum_candidates(prices,history,volumes,stamp,contexts=contexts)
+   enriched=[]
+   for candidate in found[:10]:
     sym=candidate["symbol"]
-    window=candidate["window"]
-    bucket=int(stamp//max(30,window))
-    ident=hashlib.sha256(("IMPULSE:"+sym+":"+str(candidate["side"])+":"+str(window)+":"+str(bucket)).encode()).hexdigest()
-    title=("Market pump " if candidate["side"]>0 else "Market dump ")+sym+" "+str(candidate["change_pct"])+"% / "+str(window)+"s"
-    ingest_event(ident,"ImpulseScanner",title,now(),None)
-  except Exception as e:
-   with LOCK:S["sources"]["ImpulseScanner"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
+    try:
+     book=json.loads(get(API,{"type":"l2Book","coin":sym}));levels=book.get("levels",[])
+     if len(levels)>=2:
+      bids,asks=levels[0][:10],levels[1][:10]
+      bd=sum(float(x.get("sz",0) or 0) for x in bids);ad=sum(float(x.get("sz",0) or 0) for x in asks)
+      imb=(bd-ad)/(bd+ad) if bd+ad else 0.0
+      bp=float(bids[0]["px"]) if bids else 0.0;ap=float(asks[0]["px"]) if asks else 0.0
+      mid=(bp+ap)/2 if bp and ap else 0.0
+      spread=(ap-bp)/mid*10000 if mid else 9999.0
+      candidate["orderbook_imbalance"]=round(imb,4);candidate["spread_bps"]=round(spread,2)
+      if candidate["side"]*imb>=0.12:candidate["score"]=min(100,candidate["score"]+8)
+      elif candidate["side"]*imb<=-0.18:candidate["score"]=max(0,candidate["score"]-12)
+      if spread<=10:candidate["score"]=min(100,candidate["score"]+4)
+      elif spread>35:candidate["score"]=max(0,candidate["score"]-20)
+      candidate["exhaustion"]=bool(candidate.get("exhaustion") or (candidate["side"]*imb<0.03))
+    except Exception as exc:
+     candidate["book_error"]=str(exc)[:100]
+    enriched.append(candidate)
+   confirmed=[x for x in enriched if x["score"]>=68]
+   for candidate in confirmed[:8]:
+    sym=candidate["symbol"];side=candidate["side"]
+    bucket=int(stamp//15);ident=hashlib.sha256(("PUMP_SHADOW:"+sym+":"+str(side)+":"+str(bucket)).encode()).hexdigest()
+    if stamp-last_signal.get((sym,side),0)<20:continue
+    last_signal[(sym,side)]=stamp
+    action="EXHAUSTION_WARNING" if candidate.get("exhaustion") else "ENTRY_CANDIDATE"
+    with pg() as c:
+     c.execute("""insert into pump_signal_journal(id,ts,symbol,side,score,action,features)
+       values(%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(id) do nothing""",
+       (ident,now(),sym,side,float(candidate["score"]),action,json.dumps(candidate)))
+   with LOCK:
+    S["sources"]["PumpDumpScanner"]={"ok":bool(prices and volumes),"last_check":now(),"markets":len(prices),
+      "liquid_markets":sum(v>=2000000 for v in volumes.values()),"raw_candidates":len(found),"confirmed_candidates":len(confirmed),
+      "top_candidates":confirmed[:5],"mode":"isolated_shadow_2s_all_markets","news_engine_shared_parameters":False,
+      "error":None if prices and volumes else "missing_market_prices_or_metadata"}
+  except Exception as exc:
+   with LOCK:S["sources"]["PumpDumpScanner"]={"ok":False,"last_check":now(),"mode":"isolated_shadow_2s_all_markets","error":str(exc)[:180],"news_engine_shared_parameters":False}
   SHUTDOWN.wait(2)
 
 def market_metadata():
@@ -365,14 +395,27 @@ def market_metadata():
   try:
    raw=json.loads(get(API,{"type":"metaAndAssetCtxs"}))
    universe=raw[0].get("universe",[]);ctxs=raw[1]
-   volumes={}
+   volumes={};pump_ctx={};stamp=time.time()
+   with LOCK:prev_ctx=copy.deepcopy(S.get("_pump_ctx",{}))
    for asset,ctx in zip(universe,ctxs):
     try:
-     v=float(ctx.get("dayNtlVlm",0))
-     if math.isfinite(v) and v>=0:volumes[asset["name"]]=v
-    except (TypeError,ValueError,KeyError):continue
+     name=asset["name"];v=float(ctx.get("dayNtlVlm",0) or 0);oi=float(ctx.get("openInterest",0) or 0)
+     funding=float(ctx.get("funding",0) or 0);premium=float(ctx.get("premium",0) or 0)
+     if math.isfinite(v) and v>=0:volumes[name]=v
+     old=prev_ctx.get(name,{})
+     dt=max(1.0,stamp-float(old.get("epoch",stamp)))
+     oi_old=float(old.get("open_interest",oi) or oi)
+     vol_old=float(old.get("day_volume",v) or v)
+     oi_delta=(oi/oi_old-1) if oi_old>0 else 0.0
+     vol_delta=max(0.0,v-vol_old)
+     # Normalize recent notional activity against a 60-second pace of current 24h volume.
+     expected=max(1.0,v/86400.0*dt)
+     burst=vol_delta/expected if expected>0 else 0.0
+     pump_ctx[name]={"epoch":stamp,"open_interest":oi,"day_volume":v,"funding":funding,"premium":premium,
+                     "oi_delta_60s":oi_delta*(60.0/dt),"volume_burst_ratio":burst}
+    except (TypeError,ValueError,KeyError,ZeroDivisionError):continue
    with LOCK:
-    S["_day_volumes"]=volumes
+    S["_day_volumes"]=volumes;S["_pump_ctx"]=pump_ctx
     S["sources"]["MarketMetadata"]={"ok":True,"last_check":now(),"markets":len(volumes)}
   except Exception as e:
    with LOCK:S["sources"]["MarketMetadata"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
@@ -723,7 +766,7 @@ def truth_stream_realtime():
   else:
    # Authenticated websocket is optional; public 4s scanner remains primary.
    return
- handles={h.strip().lower() for h in os.getenv("TRUTH_WATCH_HANDLES","realDonaldTrump,WhiteHouse,DanScavino,Kash,MelaniaTrump,SecWar,SpeakerJohnson,seckennedy").split(",") if h.strip()}
+ handles={h.strip().lower() for h in os.getenv("TRUTH_WATCH_HANDLES","realDonaldTrump,WhiteHouse,DanScavino,Kash,MelaniaTrump,SecWar,SpeakerJohnson,seckennedy,TulsiGabbard").split(",") if h.strip()}
  url="wss://truthsocial.com/api/v1/streaming?stream=public:local"
  backoff=3
  while not SHUTDOWN.is_set():
@@ -1349,7 +1392,7 @@ if __name__=="__main__":
   SHUTDOWN.set()
   threading.Thread(target=server.shutdown,daemon=True).start()
  signal.signal(signal.SIGTERM,shutdown);signal.signal(signal.SIGINT,shutdown)
- targets=[engine_coordinator,market,market_metadata,telemetry,xnews,adapt,free_x_realtime,x_list_realtime,free_truth_realtime,truth_stream_realtime,x_filtered_stream,dashboard_cache_loop,operations_diagnostics]
+ targets=[engine_coordinator,market,market_metadata,telemetry,impulse_scan,xnews,adapt,free_x_realtime,x_list_realtime,free_truth_realtime,truth_stream_realtime,x_filtered_stream,dashboard_cache_loop,operations_diagnostics]
  targets += ([lambda:social_reader("x")] if os.getenv("X_SESSION_COOKIES","").strip() else [])
  targets += [lambda:social_reader("truth")] if os.getenv("TRUTHSOCIAL_TOKEN","").strip() else []
  workers=[threading.Thread(target=t,daemon=True,name=t.__name__) for t in targets]
