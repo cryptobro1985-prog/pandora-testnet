@@ -589,7 +589,9 @@ def impulse_scan():
       "market_regime":regime,"error":None if prices and volumes else "missing_market_prices_or_metadata"}
   except Exception as exc:
    with LOCK:S["sources"]["PumpDumpScanner"]={"ok":False,"last_check":now(),"mode":"isolated_paper_realtime_all_markets","scan_seconds":PUMP_SCAN_SECONDS,"error":str(exc)[:180],"news_engine_shared_parameters":False}
-  SHUTDOWN.wait(PUMP_SCAN_SECONDS)\n\ndef market_metadata():
+  SHUTDOWN.wait(PUMP_SCAN_SECONDS)
+
+def market_metadata():
  while not SHUTDOWN.is_set():
   try:
    raw=json.loads(get(API,{"type":"metaAndAssetCtxs"}))
@@ -618,7 +620,9 @@ def impulse_scan():
     S["sources"]["MarketMetadata"]={"ok":True,"last_check":now(),"markets":len(volumes)}
   except Exception as e:
    with LOCK:S["sources"]["MarketMetadata"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
-  SHUTDOWN.wait(MARKET_METADATA_SECONDS)\n\ndef telemetry():
+  SHUTDOWN.wait(MARKET_METADATA_SECONDS)
+
+def telemetry():
  # External context calls are slow and optional. They must never hold LOCK or
  # stall the price/exit loop, even if a source hangs or returns an error.
  while not SHUTDOWN.is_set():
