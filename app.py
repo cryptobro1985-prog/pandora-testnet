@@ -300,7 +300,7 @@ def impulse_scan():
    stamp=time.time()
    found=momentum_candidates(prices,history,volumes,stamp)
    with LOCK:
-    S["sources"]["ImpulseScanner"]={"ok":True,"last_check":now(),"markets":len(prices),"liquid_markets":sum(v>=1000000 for v in volumes.values()),"candidates":len(found),"mode":"all_markets_2s_poll"}
+    S["sources"]["ImpulseScanner"]={"ok":bool(prices and volumes),"last_check":now(),"markets":len(prices),"liquid_markets":sum(v>=1000000 for v in volumes.values()),"candidates":len(found),"mode":"all_markets_2s_poll","error":None if prices and volumes else "missing_market_prices_or_24h_volumes"}
    for candidate in found[:12]:
     sym=candidate["symbol"]
     window=candidate["window"]
@@ -689,7 +689,7 @@ def build_dashboard_snapshot():
  try: account_age_seconds=max(0,int((datetime.datetime.now(datetime.timezone.utc)-datetime.datetime.fromisoformat(account_started.replace("Z","+00:00"))).total_seconds()))
  except Exception: account_age_seconds=0
  total=state["equity"]+unreal;account_roi=(total/PAPER_RESET-1)*100
- return {"mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"positions":positions,"trades":trades,"news":newsrows,"features":feats,"sources":state["sources"],"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"market_structure_filter_active":False,"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
+ return {"mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"positions":positions,"trades":trades,"news":newsrows,"features":feats,"sources":state["sources"],"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
 def dashboard():
  with LOCK:
@@ -719,6 +719,23 @@ def dashboard():
   "engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],
   "last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,
   "market_structure_filter_active":False,"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
+
+def operations_diagnostics():
+ while not SHUTDOWN.is_set():
+  try:
+   health=health_state()
+   with LOCK:
+    report={"kind":"pandora_diagnostics","time":now(),"engine_active":S["engine_active"],
+     "engine_error":S.get("engine_error"),"market_count":S.get("market_count"),
+     "market_error":S.get("last_market_error"),"positions":len(S["positions"]),
+     "trades":S.get("trades"),"news_seen":S.get("news_seen"),
+     "sources_ok":sum(bool(x.get("ok")) for x in S["sources"].values()),
+     "sources_failed":[k for k,v in S["sources"].items() if not v.get("ok")],
+     "entry_rejections":dict(S.get("_entry_rejections",{})),
+     "risk_ready":health["risk_ready"]}
+   print(json.dumps(report,ensure_ascii=False,default=str),flush=True)
+  except Exception as e:print("diagnostics_error: "+str(e)[:180],flush=True)
+  SHUTDOWN.wait(30)
 
 def dashboard_cache_loop():
  while not SHUTDOWN.is_set():
@@ -876,7 +893,7 @@ if __name__=="__main__":
   SHUTDOWN.set()
   threading.Thread(target=server.shutdown,daemon=True).start()
  signal.signal(signal.SIGTERM,shutdown);signal.signal(signal.SIGINT,shutdown)
- targets=[engine_coordinator,market,market_metadata,impulse_scan,telemetry,xnews,adapt,truthnews,truth_watch,dashboard_cache_loop]
+ targets=[engine_coordinator,market,market_metadata,impulse_scan,telemetry,xnews,adapt,truthnews,truth_watch,dashboard_cache_loop,operations_diagnostics]
  targets += [lambda:social_reader("x"),lambda:social_reader("truth")]
  workers=[threading.Thread(target=t,daemon=True,name=t.__name__) for t in targets]
  workers += [threading.Thread(target=news_feed,args=(name,url),daemon=True,name="feed:"+name) for name,url in FEEDS.items()]
