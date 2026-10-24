@@ -173,7 +173,7 @@ MARKET_WIDE_TERMS=("war","airstrike","missile","invasion","sanctions","tariff","
 EVENT_RULES=[
  ("RISK_ON_DEESCALATION",1,("ceasefire","truce","peace deal","peace agreement","de-escalation","sanctions lifted","tariffs reduced","tariff relief")),
  ("MONETARY_EASING",1,("rate cut","cuts rates","dovish pivot","quantitative easing")),
- ("RISK_OFF_GEOPOLITICS",-1,("airstrike","missile strike","military strike","invasion","war escalates","blockade","sanctions announced","tariffs imposed","tariff hike","government shutdown","sovereign default")),
+ ("RISK_OFF_GEOPOLITICS",-1,("airstrike","missile strike","military strike","major operations","military operations","resuming operations","resume operations","attack","attacks","strikes","invasion","war escalates","escalation","escalates","blockade","sanctions announced","sanctions tightened","tariffs imposed","tariff hike","government shutdown","sovereign default")),
  ("MONETARY_TIGHTENING",-1,("rate hike","raises rates","hawkish pivot","higher for longer")),
  ("ETF_APPROVAL",1,("etf approved","approves spot","approval of spot","approved spot")),
  ("LISTING",1,("will list","listing of","lists ","listed on")),
