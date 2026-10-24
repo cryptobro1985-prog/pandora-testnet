@@ -355,6 +355,108 @@ def operator_one_shot_actions():
    S["last_error"]="operator_action: "+str(exc)[:160]
    SHUTDOWN.wait(2)
 
+def pump_open(symbol,side,price,score,features):
+ if side not in (-1,1) or not price:return False
+ with LOCK:
+  if not S["engine_active"] or symbol in S["pump_positions"] or len(S["pump_positions"])>=PUMP_MAX_POSITIONS:return False
+  equity=float(S["pump_equity"])
+ margin=max(0.01,equity*PUMP_MARGIN_FRACTION);notional=margin*PUMP_LEV;opened=now();epoch=time.time()
+ pos={"side":side,"entry":float(price),"notional":notional,"margin":margin,"leverage":PUMP_LEV,"opened":opened,"t":epoch,"peak_roe":0.0,"score":float(score),"features":features}
+ with pg() as c:
+  with c.transaction():
+   STORE.fence(c)
+   row=c.execute("""insert into pump_positions(symbol,side,entry,notional,margin,leverage,opened,opened_epoch,peak_roe,score,features)
+    values(%s,%s,%s,%s,%s,%s,%s,%s,0,%s,%s::jsonb) on conflict(symbol) do nothing returning symbol""",
+    (symbol,side,price,notional,margin,PUMP_LEV,opened,epoch,float(score),json.dumps(features,default=str))).fetchone()
+   if not row:return False
+   c.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'pump_trade_opened',%s::jsonb)",
+    (now(),json.dumps({"symbol":symbol,"side":side,"entry":price,"score":score,"margin":margin,"notional":notional},default=str)))
+ with LOCK:S["pump_positions"][symbol]=pos
+ return True
+
+def pump_close(symbol,price,reason):
+ with LOCK:pos=copy.deepcopy(S["pump_positions"].get(symbol))
+ if not pos or not price:return None
+ pnl=pos["notional"]*(float(price)/pos["entry"]-1)*pos["side"]-pos["notional"]*FEE*2
+ with pg() as c:
+  with c.transaction():
+   STORE.fence(c)
+   row=c.execute("delete from pump_positions where symbol=%s and opened=%s returning symbol",(symbol,pos["opened"])).fetchone()
+   if not row:return None
+   account=c.execute("""update pump_account_state set equity=case when equity+%s<=0 then 100 else equity+%s end,
+    realized_pnl=realized_pnl+%s,updated_at=%s where id=1 returning equity,realized_pnl""",(pnl,pnl,pnl,now())).fetchone()
+   c.execute("""insert into pump_trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,score,features)
+    values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
+    (pos["opened"],now(),symbol,pos["side"],pos["entry"],price,pnl,reason,pos.get("score",0),json.dumps(pos.get("features",{}),default=str)))
+   c.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'pump_trade_closed',%s::jsonb)",
+    (now(),json.dumps({"symbol":symbol,"side":pos["side"],"entry":pos["entry"],"exit":price,"pnl":pnl,"reason":reason},default=str)))
+ with LOCK:
+  S["pump_positions"].pop(symbol,None);S["pump_equity"]=float(account["equity"]);S["pump_realized_pnl"]=float(account["realized_pnl"]);S["pump_trades"]+=1
+ return {"pnl":pnl,"equity":float(account["equity"])}
+
+def pump_mark_positions(prices):
+ with LOCK:positions=copy.deepcopy(S["pump_positions"])
+ for sym,pos in positions.items():
+  px=prices.get(sym)
+  if not px:continue
+  roe=(px/pos["entry"]-1)*pos["side"]*pos["leverage"]
+  peak=max(float(pos.get("peak_roe",0)),roe);reason=None
+  if roe<=PUMP_STOP_ROE:reason="pump_stop"
+  elif roe>=PUMP_TAKE_ROE:reason="pump_take"
+  elif peak>=PUMP_TRAIL_ARM_ROE and roe<=peak-PUMP_TRAIL_GAP_ROE:reason="pump_trailing"
+  elif time.time()-float(pos["t"])>=PUMP_MAX_HOLD_SECONDS:reason="pump_max_hold"
+  if reason:
+   pump_close(sym,px,reason);continue
+  if peak!=float(pos.get("peak_roe",0)):
+   with pg() as c:
+    with c.transaction():
+     STORE.fence(c);c.execute("update pump_positions set peak_roe=%s where symbol=%s and opened=%s",(peak,sym,pos["opened"]))
+   with LOCK:
+    if sym in S["pump_positions"]:S["pump_positions"][sym]["peak_roe"]=peak
+
+def flatten_news_for_regime(reason,prices):
+ with LOCK:items=[(sym,copy.deepcopy(pos)) for sym,pos in S["positions"].items()]
+ closed=[]
+ for sym,pos in items:
+  px=prices.get(sym) or pos.get("last_price")
+  if not px:continue
+  result=STORE.close(sym,pos,px,reason)
+  if result:
+   with LOCK:
+    S["equity"]=float(result["equity"]);S["realized_pnl"]=float(result["realized_pnl"]);S["trades"]+=1;S["positions"].pop(sym,None)
+   closed.append(sym)
+ if closed:journal("market_regime_flatten",None,{"reason":reason,"symbols":closed})
+ return closed
+
+def _timeline_return(rows,stamp,age,current):
+ candidates=[r for r in rows if len(r)>=2 and age-20<=stamp-float(r[0])<=age+25]
+ if not candidates:return None
+ t,p=min(candidates,key=lambda r:abs((stamp-float(r[0]))-age))
+ try:return float(current)/float(p)-1
+ except Exception:return None
+
+def market_regime(prices,history,volumes,stamp):
+ rows=[]
+ for sym,px in prices.items():
+  if volumes.get(sym,0)<5_000_000:continue
+  r60=_timeline_return(history.get(sym,[]),stamp,60,px);r180=_timeline_return(history.get(sym,[]),stamp,180,px)
+  if r60 is None:continue
+  rows.append({"symbol":sym,"r60":r60,"r180":r180 if r180 is not None else r60})
+ if len(rows)<20:return {"mode":"NORMAL","count":len(rows),"candidates":[]}
+ avg60=sum(x["r60"] for x in rows)/len(rows);avg180=sum(x["r180"] for x in rows)/len(rows)
+ down60=sum(x["r60"]<=-0.0025 for x in rows)/len(rows);up60=sum(x["r60"]>=0.0025 for x in rows)/len(rows)
+ down180=sum(x["r180"]<=-0.005 for x in rows)/len(rows);up180=sum(x["r180"]>=0.005 for x in rows)/len(rows)
+ mode="NORMAL";side=0
+ if (down60>=0.60 and avg60<=-0.0022) or (down180>=0.65 and avg180<=-0.0055):mode="MARKET_DUMP";side=-1
+ elif (up60>=0.60 and avg60>=0.0022) or (up180>=0.65 and avg180>=0.0055):mode="MARKET_PUMP";side=1
+ candidates=[]
+ if side:
+  ranked=sorted((x for x in rows if side*x["r60"]>0),key=lambda x:side*x["r60"],reverse=True)
+  for x in ranked[:PUMP_MAX_POSITIONS]:
+   score=min(100,60+abs(x["r60"])*4000+abs(x["r180"])*1200)
+   candidates.append({"symbol":x["symbol"],"side":side,"score":round(score,2),"r60_pct":round(x["r60"]*100,3),"r180_pct":round(x["r180"]*100,3),"regime":mode,"exhaustion":False})
+ return {"mode":mode,"side":side,"count":len(rows),"avg60":avg60,"avg180":avg180,"down60":down60,"up60":up60,"down180":down180,"up180":up180,"candidates":candidates}
+
 def market():
  while not SHUTDOWN.is_set():
   S["_market_heartbeat"]=time.time()
