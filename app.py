@@ -673,7 +673,7 @@ def news_feed(source,url):
     S["sources"][source]={"ok":False,"last_check":now(),"error":str(e)[:150]}
    delay=min(300,max(base_poll,delay*2))
   SHUTDOWN.wait(delay)
-def dashboard():
+def build_dashboard_snapshot():
  with LOCK:
   state={k:copy.deepcopy(v) for k,v in S.items() if not k.startswith("_")}
   state["_prices"]=dict(S.get("_prices",{}))
@@ -690,6 +690,44 @@ def dashboard():
  except Exception: account_age_seconds=0
  total=state["equity"]+unreal;account_roi=(total/PAPER_RESET-1)*100
  return {"mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"positions":positions,"trades":trades,"news":newsrows,"features":feats,"sources":state["sources"],"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"market_structure_filter_active":False,"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
+
+def dashboard():
+ with LOCK:
+  cached=S.get("_dashboard_cache")
+  if cached:return copy.deepcopy(cached)
+  state={k:copy.deepcopy(v) for k,v in S.items() if not k.startswith("_")}
+  prices=dict(S.get("_prices",{}))
+ positions=[]
+ unreal=0.0
+ for sym,p in state["positions"].items():
+  price=prices.get(sym,p["entry"])
+  pnl=p["notional"]*(price/p["entry"]-1)*p["side"]-p["notional"]*FEE*2
+  margin=float(p.get("margin",p["notional"]/max(1,float(p.get("leverage",LEV)))))
+  unreal+=pnl
+  positions.append({"symbol":sym,"side":"LONG" if p["side"]>0 else "SHORT",
+   "entry":p["entry"],"mark":price,"notional_usd":round(p["notional"],2),
+   "margin_usd":round(margin,2),"leverage":p.get("leverage",LEV),
+   "roe_pct":round(pnl/margin*100,3) if margin else 0,"unrealized_pnl":round(pnl,4),
+   "opened":p["opened"],"headline":p.get("headline","")})
+ return {"mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),
+  "total_equity":round(state["equity"]+unreal,4),"realized_pnl":round(state["realized_pnl"],4),
+  "account_age_seconds":0,"account_roi_pct":round(((state["equity"]+unreal)/PAPER_RESET-1)*100,3),
+  "positions":positions,"trades":[],"news":[],"features":[],"sources":state["sources"],
+  "errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],
+  "market_count":state["market_count"],"last_poll":state["last_poll"],
+  "uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],
+  "engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],
+  "last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,
+  "market_structure_filter_active":False,"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
+
+def dashboard_cache_loop():
+ while not SHUTDOWN.is_set():
+  try:
+   value=build_dashboard_snapshot()
+   with LOCK:S["_dashboard_cache"]=value
+  except Exception as exc:
+   with LOCK:S["last_error"]="dashboard_cache: "+str(exc)[:150]
+  SHUTDOWN.wait(5)
 
 def html_dashboard(data):
  esc=lambda x:str(x).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
@@ -806,7 +844,9 @@ class Handler(BaseHTTPRequestHandler):
    body=json.dumps({"features":[dict(x) for x in persistent_features(100)]},ensure_ascii=False).encode();ctype="application/json; charset=utf-8"
   else:
    body=json.dumps({"news":[dict(x) for x in persistent_news(50)]},ensure_ascii=False).encode();ctype="application/json; charset=utf-8"
-  self.send_response(200);self.send_header("Content-Type",ctype);self.send_header("Cache-Control","no-store");self.send_header("Access-Control-Allow-Origin","*");self.send_header("Content-Length",str(len(body)));self.end_headers();self.wfile.write(body)
+  self.send_response(200);self.send_header("Content-Type",ctype);self.send_header("Cache-Control","no-store");self.send_header("Access-Control-Allow-Origin","*");self.send_header("Content-Length",str(len(body)));self.end_headers()
+   try:self.wfile.write(body)
+   except (BrokenPipeError,ConnectionResetError):pass
 
 def health_state():
  stamp=time.time()
@@ -836,7 +876,7 @@ if __name__=="__main__":
   SHUTDOWN.set()
   threading.Thread(target=server.shutdown,daemon=True).start()
  signal.signal(signal.SIGTERM,shutdown);signal.signal(signal.SIGINT,shutdown)
- targets=[engine_coordinator,market,market_metadata,impulse_scan,telemetry,xnews,adapt,truthnews,truth_watch]
+ targets=[engine_coordinator,market,market_metadata,impulse_scan,telemetry,xnews,adapt,truthnews,truth_watch,dashboard_cache_loop]
  targets += [lambda:social_reader("x"),lambda:social_reader("truth")]
  workers=[threading.Thread(target=t,daemon=True,name=t.__name__) for t in targets]
  workers += [threading.Thread(target=news_feed,args=(name,url),daemon=True,name="feed:"+name) for name,url in FEEDS.items()]
