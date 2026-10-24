@@ -774,6 +774,10 @@ def free_truth_realtime():
    posts=free_truth_ap_fetch(handle)
    return ids_cache.get(handle),posts,{},"activitypub",True," | ".join(errors)
   except Exception as exc:errors.append("activitypub:"+str(exc)[:100])
+  try:
+   posts=free_truth_rss_fetch(handle)
+   return ids_cache.get(handle),posts,{},"profile_rss",True," | ".join(errors)
+  except Exception as exc:errors.append("rss:"+str(exc)[:100])
   raise RuntimeError(" | ".join(errors))
  try:
   while not SHUTDOWN.is_set():
@@ -1128,6 +1132,20 @@ def dashboard():
   "last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,
   "market_structure_filter_active":False,"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
+def daily_audit_stats():
+ try:
+  with pg() as c:
+   trades_closed=c.execute("select count(*) as n from trade_history where closed::timestamptz >= date_trunc('day', now())").fetchone()["n"]
+   trades_opened=c.execute("select count(*) as n from trade_history where opened::timestamptz >= date_trunc('day', now())").fetchone()["n"]
+   news=c.execute("select count(*) as n from news_events where ts::timestamptz >= date_trunc('day', now())").fetchone()["n"]
+   decisions=c.execute("select coalesce(payload->>'reason','unknown') as reason,count(*) as n from audit_journal where recorded_at::timestamptz >= date_trunc('day', now()) and kind='decision' group by 1 order by n desc limit 20").fetchall()
+   skipped=c.execute("select coalesce(payload->>'reason','unknown') as reason,count(*) as n from audit_journal where recorded_at::timestamptz >= date_trunc('day', now()) and kind='entry_skipped' group by 1 order by n desc limit 20").fetchall()
+   ignored=c.execute("select count(*) as n from audit_journal where recorded_at::timestamptz >= date_trunc('day', now()) and kind='ignored_non_market_news'").fetchone()["n"]
+   reversals=c.execute("select count(*) as n from audit_journal where recorded_at::timestamptz >= date_trunc('day', now()) and kind='news_reversal'").fetchone()["n"]
+  return {"trades_closed_today_utc":int(trades_closed),"trades_opened_today_utc":int(trades_opened),"news_today_utc":int(news),"ignored_non_market_today_utc":int(ignored),"news_reversals_today_utc":int(reversals),"decision_reasons_today_utc":{str(x["reason"]):int(x["n"]) for x in decisions},"entry_skips_today_utc":{str(x["reason"]):int(x["n"]) for x in skipped}}
+ except Exception as exc:
+  return {"error":str(exc)[:180]}
+
 def operations_diagnostics():
  while not SHUTDOWN.is_set():
   try:
@@ -1141,6 +1159,7 @@ def operations_diagnostics():
      "sources_failed":[k for k,v in S["sources"].items() if not v.get("ok")],
      "social_channels":{k:{"ok":v.get("ok"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds"),"delivery_latency_seconds":v.get("delivery_latency_seconds"),"accounts_ok":v.get("accounts_ok"),"accounts_initialized":v.get("accounts_initialized"),"accounts_total":v.get("accounts_total"),"all_accounts_ok":v.get("all_accounts_ok"),"fx_primary":v.get("fx_primary"),"xlookup_primary":v.get("xlookup_primary")} for k,v in S["sources"].items() if k.startswith(("XFree:","XFilteredStream","XListMonitor","XMonitor","XIndexMonitor","TruthAuth","TruthStream","TruthDirect:","TruthSocialPublic","TruthMonitor"))},
      "entry_rejections":dict(S.get("_entry_rejections",{})),
+     "daily_audit":daily_audit_stats(),
      "risk_ready":health["risk_ready"]}
    print(json.dumps(report,ensure_ascii=False,default=str),flush=True)
   except Exception as e:print("diagnostics_error: "+str(e)[:180],flush=True)
