@@ -796,64 +796,77 @@ def ingest_event(ident,source,title,published_at=None,source_url=None):
 
 def free_x_realtime():
  handles=list(WATCH)
- high_priority=set(h.lower() for h in (
-  "elonmusk","realDonaldTrump","POTUS","WhiteHouse","PressSec","federalreserve","SECGov",
-  "SecScottBessent","Reuters","ReutersBiz","AP","BBCWorld","business","BNODesk","KobeissiLetter",
-  "financialjuice","FirstSquawk","TreeNewsFeed","tier10k","WSJ","CoinDesk","TheBlockCo","WuBlockchain",
-  "Lookonchain","whale_alert","arkham","binance","hyperliquidX","saylor","cz_binance"
- ))
- poll=max(8.0,float(os.getenv("X_ALL_POLL_SECONDS","10")))
+ poll=max(4.0,float(os.getenv("X_ALL_POLL_SECONDS","4")))
+ probe_poll=max(60.0,float(os.getenv("X_PROBE_POLL_SECONDS","120")))
  seen={};primed=set();state_lock=threading.Lock()
- backoff_until={};failures={};last_success={};x_error_log_at={};disabled_until={}
+ failures={h:0 for h in handles};last_success={};x_error_log_at={}
+ disabled={h:False for h in handles};probe_due={}
  backends=("fx","xlookup","fixupx","vx")
  backend_idx={h:(sum(ord(ch) for ch in h)%len(backends)) for h in handles}
- # Spread first requests over the window instead of a 128-request burst.
+
+ # Bootstrap gradually instead of firing 128 requests in one burst. Once an
+ # account proves readable it joins the 4-second active pool.
  base=time.monotonic()
- next_due={h:base+((sum(ord(ch) for ch in h)%400)/100.0) for h in handles}
+ next_due={h:base+((sum(ord(ch) for ch in h)%2000)/100.0) for h in handles}
  inflight={};ingest_futures=set()
  pool=concurrent.futures.ThreadPoolExecutor(max_workers=min(48,len(handles)),thread_name_prefix="x-realtime")
- ingest_pool=concurrent.futures.ThreadPoolExecutor(max_workers=6,thread_name_prefix="x-ingest")
- with LOCK:S["sources"]["XMonitor"]={"ok":True,"degraded":True,"mode":"adaptive_direct_poll_starting","last_check":now(),"accounts_ok":0,"accounts_initialized":0,"accounts_total":len(handles),"poll_seconds":poll,"scan_workers":pool._max_workers,"error":None}
+ ingest_pool=concurrent.futures.ThreadPoolExecutor(max_workers=8,thread_name_prefix="x-ingest")
+ with LOCK:
+  S["sources"]["XMonitor"]={"ok":True,"degraded":True,"mode":"active_4s_probe_pool_starting",
+   "last_check":now(),"accounts_ok":0,"accounts_initialized":0,"accounts_total":len(handles),
+   "target_poll_seconds":poll,"probe_poll_seconds":probe_poll,"scan_workers":pool._max_workers,"error":None}
+
  def fetch_one(handle):
-  idx=backend_idx.get(handle,0)%len(backends)
-  backend=backends[idx]
-  if backend=="fx":posts=free_x_fetch(handle,timeout=2.8,attempts=1)
-  elif backend=="xlookup":posts=free_x_lookup_fetch(handle,timeout=2.8)
-  elif backend=="fixupx":posts=free_x_fixupx_fetch(handle,timeout=2.8)
-  else:posts=free_x_vx_fetch(handle,timeout=2.8)
+  idx=backend_idx.get(handle,0)%len(backends);backend=backends[idx]
+  if backend=="fx":posts=free_x_fetch(handle,timeout=2.6,attempts=1)
+  elif backend=="xlookup":posts=free_x_lookup_fetch(handle,timeout=2.6)
+  elif backend=="fixupx":posts=free_x_fixupx_fetch(handle,timeout=2.6)
+  else:posts=free_x_vx_fetch(handle,timeout=2.6)
   return posts,backend
+
  try:
   while not SHUTDOWN.is_set():
    if not S["engine_active"]:
-    SHUTDOWN.wait(0.5);continue
-   now_m=time.monotonic()
-   active={meta[0] for meta in inflight.values()}
-   due=[h for h in handles if h not in active and now_m>=next_due[h] and now_m>=backoff_until.get(h,0) and now_m>=disabled_until.get(h,0)]
+    SHUTDOWN.wait(0.25);continue
+   now_m=time.monotonic();active_inflight={meta[0] for meta in inflight.values()}
+   active_due=[h for h in handles if not disabled[h] and h not in active_inflight and now_m>=next_due[h]]
+   probe_due_now=[h for h in handles if disabled[h] and h not in active_inflight and now_m>=probe_due.get(h,now_m+probe_poll)]
+   active_due.sort(key=lambda h:next_due[h]);probe_due_now.sort(key=lambda h:probe_due.get(h,0))
    available=max(0,pool._max_workers-len(inflight))
-   due.sort(key=lambda h:next_due[h])
-   selected=due[:available]
-   for handle in selected:
+
+   # Protect the 4-second working pool. Probes get at most four slots and never
+   # starve active accounts.
+   probe_slots=min(4,len(probe_due_now),available)
+   active_slots=max(0,available-probe_slots)
+   selected=[(h,False) for h in active_due[:active_slots]]
+   selected += [(h,True) for h in probe_due_now[:probe_slots]]
+   if len(selected)<available:
+    selected += [(h,False) for h in active_due[active_slots:active_slots+available-len(selected)]]
+
+   for handle,is_probe in selected:
     try:
-     fut=pool.submit(fetch_one,handle);inflight[fut]=(handle,now_m)
+     fut=pool.submit(fetch_one,handle);inflight[fut]=(handle,now_m,is_probe)
+     if is_probe:probe_due[handle]=now_m+probe_poll
+     else:next_due[handle]=now_m+poll
     except Exception as exc:
-     with LOCK:S["sources"]["XMonitor"]={"ok":False,"degraded":True,"mode":"adaptive_direct_poll","last_check":now(),"accounts_total":len(handles),"error":"submit:"+str(exc)[:160]}
-     SHUTDOWN.wait(1);continue
-    next_due[handle]=now_m+poll
+     with LOCK:S["sources"]["XMonitor"]={"ok":False,"degraded":True,"mode":"active_4s_probe_pool",
+      "last_check":now(),"accounts_total":len(handles),"error":"submit:"+str(exc)[:160]}
+
    done=[future for future in list(inflight) if future.done()]
    for future in done:
-    handle,started=inflight.pop(future);name="XFree:"+handle
+    handle,started,is_probe=inflight.pop(future);name="XFree:"+handle
     try:
      posts,backend=future.result()
-     failures[handle]=0;backoff_until.pop(handle,None);disabled_until.pop(handle,None);last_success[handle]=time.time()
+     failures[handle]=0;disabled[handle]=False;last_success[handle]=time.time()
+     next_due[handle]=time.monotonic()+poll
      stamps=[publication_epoch(p.get("created_at")) for p in posts];stamps=[x for x in stamps if x is not None]
      latest_age=(time.time()-max(stamps)) if stamps else None
      with LOCK:
-      S["sources"][name]={"ok":True,"degraded":False,"mode":backend+"_adaptive_poll","backend":backend,
-       "category":WATCH_CATEGORY.get(handle),"last_check":now(),"posts":len(posts),
-       "poll_seconds":poll,
-       "latest_post_age_seconds":round(latest_age,1) if latest_age is not None else None,
-       "last_request_seconds":round(time.monotonic()-started,2),"realtime_verified":False,
-       "consecutive_failures":0,"last_success_epoch":time.time()}
+      S["sources"][name]={"ok":True,"degraded":False,"disabled":False,"mode":backend+"_4s_poll",
+       "backend":backend,"category":WATCH_CATEGORY.get(handle),"last_check":now(),"posts":len(posts),
+       "poll_seconds":poll,"latest_post_age_seconds":round(latest_age,1) if latest_age is not None else None,
+       "last_request_seconds":round(time.monotonic()-started,2),"consecutive_failures":0,
+       "last_success_epoch":time.time(),"rate_limited":False}
      ids=[str(p["id"]) for p in posts]
      with state_lock:
       if handle not in primed:
@@ -863,65 +876,69 @@ def free_x_realtime():
        if len(old)>200:seen[handle]=set(ids[:100])
      for p in sorted(fresh,key=lambda q:publication_epoch(q.get("created_at")) or 0):
       stamp=publication_epoch(p.get("created_at"));age=time.time()-stamp if stamp is not None else None
-      if age is not None and 0<=age<=10:
-       with LOCK:
-        S["sources"][name]["realtime_verified"]=True
-        S["sources"][name]["delivery_latency_seconds"]=round(age,2)
       ident=hashlib.sha256(("XFree:"+handle+":"+str(p["id"])).encode()).hexdigest()
-      if len(ingest_futures)<300:
+      if len(ingest_futures)<400:
        ingest_futures.add(ingest_pool.submit(ingest_event,ident,"XOfficial:"+handle,p["text"],p.get("created_at"),p.get("url")))
+      if age is not None and 0<=age<=15:
+       with LOCK:
+        if name in S["sources"]:
+         S["sources"][name]["delivery_latency_seconds"]=round(age,2)
     except Exception as exc:
      err=str(exc)[:220] if str(exc) else type(exc).__name__
      failures[handle]=failures.get(handle,0)+1
      backend_idx[handle]=(backend_idx.get(handle,0)+1)%len(backends)
      limited=any(x in err.lower() for x in ("429","rate.limit","too many requests"))
-     backoff=30 if limited else min(16,4*2**min(2,failures[handle]-1))
-     backoff_until[handle]=time.monotonic()+backoff
+     prev_success=last_success.get(handle,0)
+     # One transient failure gets another backend on the next 4s turn. A second
+     # failure, or any rate-limit, moves the account to the low-rate probe pool.
+     should_probe=limited or failures[handle]>=2
+     if should_probe:
+      disabled[handle]=True
+      probe_due[handle]=time.monotonic()+(180 if limited else probe_poll)
+     else:
+      next_due[handle]=time.monotonic()+poll
      with LOCK:
-      prev=S["sources"].get(name,{})
-      last_success_epoch=float(prev.get("last_success_epoch",0) or 0)
-      within_grace=bool(last_success_epoch and time.time()-last_success_epoch<=180)
-      disabled=bool(failures[handle]>=4 and not within_grace)
-      if disabled:
-       disabled_until[handle]=time.monotonic()+300
-      S["sources"][name]={"ok":within_grace,"degraded":True,"disabled":disabled,"mode":"adaptive_direct_poll",
+      S["sources"][name]={"ok":bool(prev_success and time.time()-prev_success<=60),"degraded":True,
+       "disabled":disabled[handle],"mode":"probe_pool" if disabled[handle] else "backend_rotate",
        "category":WATCH_CATEGORY.get(handle),"last_check":now(),"error":err,
-       "consecutive_failures":failures[handle],"last_success_epoch":last_success_epoch or None,
-       "rate_limited":limited,"retry_after_seconds":300 if disabled else backoff,
+       "consecutive_failures":failures[handle],"last_success_epoch":prev_success or None,
+       "rate_limited":limited,"retry_after_seconds":(180 if limited else probe_poll) if disabled[handle] else poll,
        "last_request_seconds":round(time.monotonic()-started,2)}
-     if time.time()-x_error_log_at.get(handle,0)>=60:
+     if time.time()-x_error_log_at.get(handle,0)>=120:
       x_error_log_at[handle]=time.time()
-      try:journal("source_error",None,{"source":"X","handle":handle,"error":err,"rate_limited":limited,"retry_after_seconds":backoff})
+      try:journal("source_error",None,{"source":"X","handle":handle,"error":err,"rate_limited":limited,
+       "pool":"probe" if disabled[handle] else "active"})
       except Exception:pass
+
    ingest_futures={future for future in ingest_futures if not future.done()}
    with LOCK:
-    states=[S["sources"].get("XFree:"+h,{}) for h in handles]
-    active_states=[v for v in states if v and not v.get("disabled")]
-    initialized=sum(bool(v) for v in states);good=sum(bool(v.get("ok")) for v in active_states)
-    realtime=sum(bool(v.get("realtime_verified")) for v in active_states)
-    active_count=len(active_states);disabled_count=sum(bool(v.get("disabled")) for v in states)
-    recent_success=bool(last_success and time.time()-max(last_success.values())<=30)
-    recent_accounts=sum(1 for h in handles if last_success.get(h) and time.time()-last_success[h]<=30)
-    healthy=bool(recent_accounts>=20 and recent_success)
-    S["sources"]["XMonitor"]={"ok":healthy,
-     "all_accounts_ok":active_count>0 and good==active_count,
-     "degraded":healthy and (good<len(handles) or active_count<len(handles)),
-     "mode":"adaptive_active_retry_pool","last_check":now(),"accounts_ok":good,
-     "accounts_initialized":initialized,"accounts_total":len(handles),
-     "active_accounts":active_count,"disabled_retry_accounts":disabled_count,"recently_polled_accounts":recent_accounts,
-     "target_poll_seconds":poll,"backend_accounts":{b:sum(1 for h in handles if backends[backend_idx.get(h,0)%len(backends)]==b) for b in backends},
-     "ingest_queue":len(ingest_futures),"inflight_accounts":len(inflight),"queued_due_accounts":max(0,len(due)-len(selected)),
-     "scan_workers":pool._max_workers,"realtime_accounts_seen":realtime,
-     "realtime_verified":healthy and recent_success,
-     "rate_limited_accounts":sum(1 for h in handles if S["sources"].get("XFree:"+h,{}).get("rate_limited")),
-     "backoff_accounts":sum(1 for h in handles if time.monotonic()<backoff_until.get(h,0)),
-     "last_successful_poll_epoch":max(last_success.values()) if last_success else None}
-   SHUTDOWN.wait(0.05)
+    now_wall=time.time()
+    initialized=sum(bool(S["sources"].get("XFree:"+h)) for h in handles)
+    working=[h for h in handles if last_success.get(h) and now_wall-last_success[h]<=120]
+    active_handles=[h for h in working if not disabled[h]]
+    recent=[h for h in active_handles if now_wall-last_success[h]<=max(12,poll*3)]
+    disabled_count=sum(disabled.values())
+    rate_limited=sum(bool(S["sources"].get("XFree:"+h,{}).get("rate_limited")) for h in handles)
+    # Health means the active working pool is being serviced now. Unavailable
+    # accounts are reported as probe-pool, not as a total X outage.
+    required=max(3,math.ceil(max(1,len(active_handles))*0.35))
+    healthy=bool(recent and len(recent)>=required)
+    S["sources"]["XMonitor"]={"ok":healthy,"degraded":bool(disabled_count or len(active_handles)<len(handles)),
+     "mode":"active_4s_probe_pool","last_check":now(),"accounts_ok":len(active_handles),
+     "accounts_initialized":initialized,"accounts_total":len(handles),"active_accounts":len(active_handles),
+     "disabled_retry_accounts":disabled_count,"recently_polled_accounts":len(recent),
+     "target_poll_seconds":poll,"probe_poll_seconds":probe_poll,
+     "backend_accounts":{b:sum(1 for h in active_handles if backends[backend_idx.get(h,0)%len(backends)]==b) for b in backends},
+     "ingest_queue":len(ingest_futures),"inflight_accounts":len(inflight),
+     "queued_active_accounts":len(active_due),"queued_probe_accounts":len(probe_due_now),
+     "scan_workers":pool._max_workers,"realtime_verified":healthy,
+     "rate_limited_accounts":rate_limited,"last_successful_poll_epoch":max(last_success.values()) if last_success else None}
+   SHUTDOWN.wait(0.03)
  except Exception as exc:
-  with LOCK:S["sources"]["XMonitor"]={"ok":False,"degraded":True,"mode":"adaptive_direct_poll","last_check":now(),"accounts_total":len(handles),"error":"worker_crash:"+str(exc)[:180]}
+  with LOCK:S["sources"]["XMonitor"]={"ok":False,"degraded":True,"mode":"active_4s_probe_pool",
+   "last_check":now(),"accounts_total":len(handles),"error":"worker_crash:"+str(exc)[:180]}
  finally:
-  pool.shutdown(wait=False,cancel_futures=True)
-  ingest_pool.shutdown(wait=False,cancel_futures=True)
+  pool.shutdown(wait=False,cancel_futures=True);ingest_pool.shutdown(wait=False,cancel_futures=True)
 
 def x_list_realtime():
  auth=os.getenv("X_AUTH_TOKEN","").strip();ct0=os.getenv("X_CT0","").strip();list_id=os.getenv("X_LIST_ID","").strip()
