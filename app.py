@@ -622,15 +622,13 @@ def html_dashboard(data):
 
 def manual_close(symbol=None):
  with LOCK:
-  if not S["engine_active"] or SHUTDOWN.is_set():return {"ok":False,"error":"engine_not_active"}
-  if time.time()-S.get("_last_poll_epoch",0)>10:return {"ok":False,"error":"stale_market_price"}
   targets=list(S["positions"]) if symbol is None else [symbol]
   results=[]
   for sym in targets:
    pos=S["positions"].get(sym)
    if not pos:
     results.append({"symbol":sym,"ok":False,"error":"position_not_found"});continue
-   price=S.get("_prices",{}).get(sym)
+   price=S.get("_prices",{}).get(sym) or pos.get("last_price") or pos.get("entry")
    if not price:
     results.append({"symbol":sym,"ok":False,"error":"price_unavailable"});continue
    result=STORE.close(sym,pos,price,"manual_close_all" if symbol is None else "manual_close")
