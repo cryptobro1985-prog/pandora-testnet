@@ -12,7 +12,7 @@ from public_social import read as public_social_read
 from x_guest import read as guest_x_read
 from x_list import fetch_list as x_list_fetch
 from x_page import fetch as free_x_page_fetch
-from realtime_free import fetch_x as free_x_fetch, fetch_x_fixupx as free_x_fixupx_fetch, fetch_x_lookup as free_x_lookup_fetch, fetch_x_nitter as free_x_nitter_fetch, fetch_x_syndication as free_x_syndication_fetch, fetch_x_syndication as free_x_syn_fetch, fetch_x_vx as free_x_vx_fetch, fetch_truth as free_truth_fetch, fetch_truth_activitypub as free_truth_ap_fetch
+from realtime_free import fetch_x as free_x_fetch, fetch_x_search as free_x_search_fetch, fetch_x_fixupx as free_x_fixupx_fetch, fetch_x_lookup as free_x_lookup_fetch, fetch_x_nitter as free_x_nitter_fetch, fetch_x_syndication as free_x_syndication_fetch, fetch_x_syndication as free_x_syn_fetch, fetch_x_vx as free_x_vx_fetch, fetch_truth as free_truth_fetch, fetch_truth_activitypub as free_truth_ap_fetch
 from momentum_scanner import candidates as momentum_candidates
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
 def choose(db_path,current=(-0.10,0.20)):
@@ -543,6 +543,8 @@ def free_x_realtime():
   for backend,fn in (primary,secondary):
    try:return fn(handle),backend,backend!=primary[0],(" | ".join(errors) if errors else None)
    except Exception as exc:errors.append(backend+":"+str(exc)[:70])
+  try:return free_x_search_fetch(handle),"fxsearch",True," | ".join(errors)
+  except Exception as exc:errors.append("fxsearch:"+str(exc)[:70])
   try:return free_x_fixupx_fetch(handle),"fixupx",True," | ".join(errors)
   except Exception as exc:errors.append("fixupx:"+str(exc)[:70])
   try:return guest_x_read(handle),"guest_graphql",True," | ".join(errors)
