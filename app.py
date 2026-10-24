@@ -11,7 +11,7 @@ from truthbrush import Api as TruthApi
 from public_social import read as public_social_read
 from x_guest import read as guest_x_read
 from x_list import fetch_list as x_list_fetch
-from realtime_free import fetch_x as free_x_fetch, fetch_x_lookup as free_x_lookup_fetch, fetch_x_nitter as free_x_nitter_fetch, fetch_x_syndication as free_x_syndication_fetch, fetch_x_syndication as free_x_syn_fetch, fetch_x_vx as free_x_vx_fetch, fetch_truth as free_truth_fetch, fetch_truth_activitypub as free_truth_ap_fetch
+from realtime_free import fetch_x as free_x_fetch, fetch_x_fixupx as free_x_fixupx_fetch, fetch_x_lookup as free_x_lookup_fetch, fetch_x_nitter as free_x_nitter_fetch, fetch_x_syndication as free_x_syndication_fetch, fetch_x_syndication as free_x_syn_fetch, fetch_x_vx as free_x_vx_fetch, fetch_truth as free_truth_fetch, fetch_truth_activitypub as free_truth_ap_fetch
 from momentum_scanner import candidates as momentum_candidates
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
 def choose(db_path,current=(-0.10,0.20)):
@@ -30,7 +30,7 @@ WATCH_GROUPS={
  "news":["CNBC","zerohedge","unusual_whales","FirstSquawk","TreeNewsFeed","tier10k","WSJ","FT","ForbesCrypto"],
  "asset_managers":["BlackRock","iShares","Fidelity","DigitalAssets","ARKInvest","CathieDWood","Grayscale","Bitwise","vaneck_us","21Shares","CoinSharesCo","Hashdex","InvescoUS","WisdomTreeFunds","ProShares"],
  "crypto_funds":["galaxyhq","PanteraCapital","a16zcrypto","paradigm","multicoin","dragonfly_xyz","ElectricCapital","blockchaincap","PlaceholderVC","HaunVentures"],
- "market_makers":["wintermute_t","GSR_io","CumberlandSays","jumpcryptohq","JaneStreetGroup","FlowTraders","DRWTrading","FalconXNetwork","B2C2Group","keyrock","Citadel","citsecurities"],
+ "market_makers":["wintermute_t","GSR_io","CumberlandSays","jumpcryptohq","JaneStreetGroup","FlowTraders","DRWTrading","FalconXGlobal","B2C2Group","keyrock","Citadel","citsecurities"],
  "exchanges":["CoinbaseAssets","OKX","krakenfx","Gemini","bitget","gate_io","MEXC","HTX_Global","DeribitOfficial","cryptocom"],
  "security":["zachxbt","SlowMist_Team","CyversAlerts","chainalysis","TRMLabs"],
  "influencers":["brian_armstrong","CryptoHayes","APompliano","RaoulGMI","cobie","jack","paoloardoino","davidsacks","NayibBukele"],
@@ -542,6 +542,8 @@ def free_x_realtime():
   for backend,fn in (primary,secondary):
    try:return fn(handle),backend,backend!=primary[0],(" | ".join(errors) if errors else None)
    except Exception as exc:errors.append(backend+":"+str(exc)[:70])
+  try:return free_x_fixupx_fetch(handle),"fixupx",True," | ".join(errors)
+  except Exception as exc:errors.append("fixupx:"+str(exc)[:70])
   try:return guest_x_read(handle),"guest_graphql",True," | ".join(errors)
   except Exception as exc:errors.append("guest:"+str(exc)[:70])
   try:return free_x_nitter_fetch(handle),"nitter_rss",True," | ".join(errors)
