@@ -5,6 +5,9 @@ from realtime_free import fetch_truth,fetch_truth_activitypub,fetch_truth_rss
 TOKEN=os.getenv("RELAY_TOKEN","").strip()
 
 class H(BaseHTTPRequestHandler):
+ def do_HEAD(self):
+  self.send_response(200)
+  self.end_headers()
  def do_GET(self):
   q=urllib.parse.urlsplit(self.path)
   if q.path=="/health":
