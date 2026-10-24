@@ -37,19 +37,24 @@ def candidates(prices,history,volumes,epoch,minimum_day_volume=2_000_000.0,conte
         imbalance=float(ctx.get("orderbook_imbalance") or 0)
         spread=float(ctx.get("spread_bps") or 9999)
         score=0.0
-        score+=min(28,abs(r15)*5000)
-        score+=min(22,abs(r60)*1800)
+        # Responsive intraminute detector: price itself can trigger a candidate;
+        # OI/volume/book improve confidence instead of being mandatory.
+        score+=min(30,abs(r15)*7000)
+        score+=min(28,abs(r60)*2600)
+        score+=min(14,abs(r180)*900)
         if r15*r60>0:score+=8
-        if side*accel>0.0008:score+=10
-        if oi_delta>0.004:score+=min(12,4+oi_delta*500)
-        if vol_burst>1.5:score+=min(10,(vol_burst-1)*5)
-        if side*imbalance>=0.12:score+=8
-        elif side*imbalance<=-0.18:score-=12
-        if spread<=10:score+=4
-        elif spread>35:score-=20
-        # Exhaustion warning used by exits: price extends but book no longer confirms.
-        exhaustion=(abs(r15)>=0.012 and side*imbalance<0.03) or (abs(r60)>=0.025 and side*accel<0)
-        if score>=58:
+        if r60*r180>0:score+=5
+        if side*accel>0.00045:score+=8
+        if oi_delta>0.002:score+=min(10,3+oi_delta*700)
+        if vol_burst>1.2:score+=min(10,(vol_burst-1)*6)
+        if side*imbalance>=0.10:score+=7
+        elif side*imbalance<=-0.20:score-=10
+        if spread<=12:score+=3
+        elif spread>40:score-=15
+        # A meaningful 60s move must exist; prevents micro-noise from opening trades.
+        if abs(r60)<0.0018 and abs(r15)<0.0012:continue
+        exhaustion=(abs(r15)>=0.009 and side*imbalance<0.02) or (abs(r60)>=0.018 and side*accel<0)
+        if score>=48:
             out.append({"symbol":symbol,"side":side,"score":round(max(0,min(100,score)),2),
                         "r15_pct":round(r15*100,3),"r60_pct":round(r60*100,3),"r180_pct":round(r180*100,3),
                         "accel":round(accel,6),"oi_delta_60s":round(oi_delta,6),
