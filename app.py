@@ -632,8 +632,9 @@ def free_x_realtime():
  backoff_until={};rate_limit_hits={};last_success={};x_error_log_at={}
  next_due={h:time.monotonic() for h in handles}  # synchronized initial scan
  inflight={};ingest_futures=set()
- pool=concurrent.futures.ThreadPoolExecutor(max_workers=min(128,max(48,len(handles))),thread_name_prefix="x-realtime")
+ pool=concurrent.futures.ThreadPoolExecutor(max_workers=min(40,len(handles)),thread_name_prefix="x-realtime")
  ingest_pool=concurrent.futures.ThreadPoolExecutor(max_workers=8,thread_name_prefix="x-ingest")
+ with LOCK:S["sources"]["XMonitor"]={"ok":False,"degraded":True,"mode":"direct_parallel_fast_poll_starting","last_check":now(),"accounts_ok":0,"accounts_initialized":0,"accounts_total":len(handles),"poll_seconds":poll,"scan_workers":pool._max_workers,"error":None}
  def fetch_one(handle):
   # Realtime path must finish quickly. Slow browser/guest/Nitter fallbacks are
   # intentionally excluded here because a single stuck fallback starved the
@@ -707,7 +708,7 @@ def free_x_realtime():
       failures=int(prev.get("consecutive_failures",0))+1
       last_success_epoch=float(prev.get("last_success_epoch",0) or 0)
       within_grace=bool(last_success_epoch and time.time()-last_success_epoch<=30 and failures<4)
-      S["sources"][name]={"ok":within_grace,"degraded":True,"mode":"fx_xlookup_guest_syndication_4s",
+      S["sources"][name]={"ok":within_grace,"degraded":True,"mode":"direct_fast_fallback_poll",
        "category":WATCH_CATEGORY.get(handle),"last_check":now(),"error":err,
        "consecutive_failures":failures,"last_success_epoch":last_success_epoch or None,
        "rate_limited":limited,"retry_after_seconds":round(max(0,backoff_until.get(handle,0)-time.monotonic()),1),
@@ -724,7 +725,7 @@ def free_x_realtime():
     backend_live={b:sum(1 for v in states if v.get("ok") and v.get("backend")==b) for b in ("fx","xlookup","fxsearch","fixupx","guest_graphql","publish_embed","logged_out_page","nitter_rss","syndication","vx")}
     S["sources"]["XMonitor"]={"ok":initialized==len(handles) and good>=math.ceil(len(handles)*0.90),
      "all_accounts_ok":initialized==len(handles) and good==len(handles),
-     "mode":"fx_xlookup_guest_parallel_4s_poll","last_check":now(),"accounts_ok":good,
+     "mode":"direct_fast_parallel_poll","last_check":now(),"accounts_ok":good,
      "accounts_initialized":initialized,"accounts_total":len(handles),
      "fx_primary":len(fx_primary),"xlookup_primary":len(handles)-len(fx_primary),
      "backend_live":backend_live,"poll_seconds":poll,"realtime_accounts_seen":realtime,
@@ -734,6 +735,8 @@ def free_x_realtime():
      "backoff_accounts":sum(1 for h in handles if time.monotonic()<backoff_until.get(h,0)),
      "last_successful_poll_epoch":max(last_success.values()) if last_success else None}
    SHUTDOWN.wait(0.05)
+ except Exception as exc:
+  with LOCK:S["sources"]["XMonitor"]={"ok":False,"degraded":True,"mode":"direct_fast_parallel_poll","last_check":now(),"accounts_total":len(handles),"error":"worker_crash:"+str(exc)[:180]}
  finally:
   pool.shutdown(wait=False,cancel_futures=True)
   ingest_pool.shutdown(wait=False,cancel_futures=True)
@@ -1196,7 +1199,7 @@ def build_dashboard_snapshot():
  try: account_age_seconds=max(0,int((datetime.datetime.now(datetime.timezone.utc)-datetime.datetime.fromisoformat(account_started.replace("Z","+00:00"))).total_seconds()))
  except Exception: account_age_seconds=0
  total=state["equity"]+unreal;account_roi=(total/PAPER_RESET-1)*100
- visible_sources={k:v for k,v in state["sources"].items() if not k.startswith("XIndex:")}
+ visible_sources={k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor"}
  return {"mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"positions":positions,"trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
 def dashboard():
@@ -1220,7 +1223,7 @@ def dashboard():
  return {"mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),
   "total_equity":round(state["equity"]+unreal,4),"realized_pnl":round(state["realized_pnl"],4),
   "account_age_seconds":0,"account_roi_pct":round(((state["equity"]+unreal)/PAPER_RESET-1)*100,3),
-  "positions":positions,"trades":[],"news":[],"features":[],"sources":{k:v for k,v in state["sources"].items() if not k.startswith("XIndex:")},
+  "positions":positions,"trades":[],"news":[],"features":[],"sources":{k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor"},
   "errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],
   "market_count":state["market_count"],"last_poll":state["last_poll"],
   "uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],
@@ -1420,11 +1423,11 @@ if __name__=="__main__":
   SHUTDOWN.set()
   threading.Thread(target=server.shutdown,daemon=True).start()
  signal.signal(signal.SIGTERM,shutdown);signal.signal(signal.SIGINT,shutdown)
- targets=[engine_coordinator,market,market_metadata,telemetry,operator_one_shot_actions,impulse_scan,xnews,adapt,free_x_realtime,x_list_realtime,free_truth_realtime,truth_stream_realtime,x_filtered_stream,dashboard_cache_loop,operations_diagnostics]
+ targets=[engine_coordinator,market,market_metadata,telemetry,operator_one_shot_actions,impulse_scan,adapt,free_x_realtime,x_list_realtime,free_truth_realtime,truth_stream_realtime,x_filtered_stream,dashboard_cache_loop,operations_diagnostics]
  targets += ([lambda:social_reader("x")] if os.getenv("X_SESSION_COOKIES","").strip() else [])
  targets += [lambda:social_reader("truth")] if os.getenv("TRUTHSOCIAL_TOKEN","").strip() else []
  workers=[threading.Thread(target=t,daemon=True,name=t.__name__) for t in targets]
- workers += [threading.Thread(target=news_feed,args=(name,url),daemon=True,name="feed:"+name) for name,url in FEEDS.items()]
+ workers += [threading.Thread(target=news_feed,args=(name,url),daemon=True,name="feed:"+name) for name,url in FEEDS.items() if not name.startswith("XIndex:")]
  workers += [threading.Thread(target=public_social_reader,args=("x",handle),daemon=True,name="public-x:"+handle) for handle in WATCH] if os.getenv("ENABLE_PUBLIC_X_HTML","0")=="1" else []
 
  for worker in workers:worker.start()
