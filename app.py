@@ -531,9 +531,9 @@ def free_x_realtime():
  fx_primary=set(handles[:min(58,len(handles))])
  seen={};primed=set();state_lock=threading.Lock()
  backoff_until={};rate_limit_hits={};last_success={}
- next_due={h:time.monotonic()+i*poll/max(1,len(handles)) for i,h in enumerate(handles)}
+ next_due={h:time.monotonic() for h in handles}  # synchronized first round
  inflight={};ingest_futures=set()
- pool=concurrent.futures.ThreadPoolExecutor(max_workers=48,thread_name_prefix="x-realtime")
+ pool=concurrent.futures.ThreadPoolExecutor(max_workers=min(128,max(48,len(handles))),thread_name_prefix="x-realtime")
  ingest_pool=concurrent.futures.ThreadPoolExecutor(max_workers=8,thread_name_prefix="x-ingest")
  def fetch_one(handle):
   primary=("fx",free_x_fetch) if handle in fx_primary else ("xlookup",free_x_lookup_fetch)
@@ -562,8 +562,8 @@ def free_x_realtime():
    for handle in handles:
     if handle in active or now_m<next_due[handle] or now_m<backoff_until.get(handle,0):continue
     fut=pool.submit(fetch_one,handle);inflight[fut]=(handle,now_m)
-    next_due[handle]+=poll
-    if next_due[handle]<now_m:next_due[handle]=now_m+poll
+    # Fixed four-second cadence without accumulating overdue catch-up requests.
+    next_due[handle]=now_m+poll
    done=[future for future in list(inflight) if future.done()]
    for future in done:
     handle,started=inflight.pop(future);name="XFree:"+handle
@@ -625,7 +625,8 @@ def free_x_realtime():
      "accounts_initialized":initialized,"accounts_total":len(handles),
      "fx_primary":len(fx_primary),"xlookup_primary":len(handles)-len(fx_primary),
      "backend_live":backend_live,"poll_seconds":poll,"realtime_accounts_seen":realtime,
-     "ingest_queue":len(ingest_futures),"realtime_verified":realtime>0,
+     "ingest_queue":len(ingest_futures),"inflight_accounts":len(inflight),
+     "scan_workers":pool._max_workers,"scan_schedule":"synchronized_4s", "realtime_verified":realtime>0,
      "rate_limited_accounts":sum(1 for h in handles if rate_limit_hits.get(h,0)>0),
      "backoff_accounts":sum(1 for h in handles if time.monotonic()<backoff_until.get(h,0)),
      "last_successful_poll_epoch":max(last_success.values()) if last_success else None}
