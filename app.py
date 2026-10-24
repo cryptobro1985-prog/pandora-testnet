@@ -331,6 +331,8 @@ def engine_coordinator():
 def operator_one_shot_actions():
  action_id=os.getenv("PANDORA_ONE_SHOT_ACTION_ID","").strip()
  symbol=os.getenv("PANDORA_ONE_SHOT_CLOSE_SYMBOL","").strip().upper()
+ close_reason=os.getenv("PANDORA_ONE_SHOT_CLOSE_REASON","operator_one_shot_close").strip() or "operator_one_shot_close"
+ feedback_reason=os.getenv("PANDORA_ONE_SHOT_FEEDBACK_REASON","").strip()
  if not action_id or not symbol:return
  while not SHUTDOWN.is_set():
   try:
@@ -341,19 +343,21 @@ def operator_one_shot_actions():
    if not active or not pos or not price:
     SHUTDOWN.wait(1);continue
    feedback={"action_id":action_id,"symbol":symbol,"headline":pos.get("headline"),"event_id":pos.get("event_id"),
-             "entry":pos.get("entry"),"side":pos.get("side"),"mark":price,"reason":"user_marked_invalid_news_signal"}
-   with pg() as c:
-    c.execute("insert into bad_signal_feedback(recorded_at,event_id,symbol,headline,reason,payload) values(%s,%s,%s,%s,%s,%s::jsonb)",
-      (now(),pos.get("event_id"),symbol,pos.get("headline"),"user_marked_invalid_news_signal",json.dumps(feedback)))
-   result=manual_close(symbol)
+             "entry":pos.get("entry"),"side":pos.get("side"),"mark":price,"reason":close_reason}
+   if feedback_reason:
+    with pg() as c:
+     c.execute("insert into bad_signal_feedback(recorded_at,event_id,symbol,headline,reason,payload) values(%s,%s,%s,%s,%s,%s::jsonb)",
+      (now(),pos.get("event_id"),symbol,pos.get("headline"),feedback_reason,json.dumps(feedback)))
+   result=manual_close(symbol,close_reason)
    with pg() as c:
     c.execute("insert into operator_actions(action_id,completed_at,payload) values(%s,%s,%s::jsonb) on conflict(action_id) do nothing",
       (action_id,now(),json.dumps({"feedback":feedback,"close_result":result})))
-   journal("operator_bad_signal_closed",pos.get("event_id"),{"feedback":feedback,"close_result":result})
+   journal("operator_position_closed",pos.get("event_id"),{"feedback":feedback,"close_result":result})
    return
   except Exception as exc:
    S["last_error"]="operator_action: "+str(exc)[:160]
    SHUTDOWN.wait(2)
+
 
 def pump_open(symbol,side,price,score,features):
  if side not in (-1,1) or not price:return False
@@ -1545,7 +1549,7 @@ def html_dashboard(data):
  return '''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>PANDORA LIVE</title><style>body{font-family:system-ui;background:#080b10;color:#e8edf5;margin:24px}h1{margin:0}.muted{color:#8b98aa}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:18px 0}.grid b{background:#111722;padding:16px;border-radius:12px}table{width:100%%;border-collapse:collapse;background:#0e141e;margin-bottom:22px}td,th{padding:9px;border-bottom:1px solid #202938;text-align:left;font-size:13px}th{color:#91a2b8}.posv{color:#49d17d;font-weight:700}.negv{color:#ff6262;font-weight:700}a{color:#8bc4ff}</style></head><body><h1>PANDORA LIVE</h1><div class="muted">Paper engine · dashboard refresh 5s · last market poll %s</div>%s<h2>Open positions</h2><button onclick="closePos(null)">Close Everything</button><button onclick="location.reload()">Refresh</button><p id="actionResult"></p><table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Trigger</th><th>Action</th></tr>%s</table><h2>Closed trades</h2><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>PnL</th><th>Reason</th></tr>%s</table><h2>Sources</h2><table><tr><th>Source</th><th>Status</th><th>Checked</th><th>Error</th></tr>%s</table><h2>Latest news</h2><table><tr><th>Time</th><th>Source</th><th>Token</th><th>Raw signal</th><th>Headline</th></tr>%s</table><p>Errors: %s · Last error: %s</p><p><a href="/api/dashboard">JSON dashboard</a> · <a href="/features">Features</a> · <a href="/trades">Trades</a> · <a href="/news">News</a></p><script>let closing=false;setInterval(()=>{if(!closing&&document.visibilityState==="visible")location.reload()},5000);async function closePos(sym){if(closing||!confirm(sym?"Close "+sym+"?":"Close ALL positions?"))return;closing=true;const status=document.getElementById("actionResult");status.textContent="Processing close request...";try{const r=await fetch("/api/positions/close",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(sym?{symbol:sym}:{all:true})});const result=await r.json();status.textContent=r.ok?"Close confirmed: "+JSON.stringify(result):(r.status===401?"Controls locked: open the control-access link once, then retry.":"Close failed ("+r.status+"): "+JSON.stringify(result));if(r.ok){location.reload();return}}catch(e){status.textContent="Close request failed: "+String(e)}finally{closing=false}}</script></body></html>'''%(esc(data["last_poll"]),cards,pos,trs,src,news,data["errors"],esc(data["last_error"]))
 
 
-def manual_close(symbol=None):
+def manual_close(symbol=None,reason_override=None):
  with LOCK:
   targets=list(S["positions"]) if symbol is None else [symbol]
   results=[]
@@ -1556,7 +1560,7 @@ def manual_close(symbol=None):
    price=S.get("_prices",{}).get(sym) or pos.get("last_price")
    if not price:
     results.append({"symbol":sym,"ok":False,"error":"price_unavailable"});continue
-   result=STORE.close(sym,pos,price,"manual_close_all" if symbol is None else "manual_close")
+   result=STORE.close(sym,pos,price,reason_override or ("manual_close_all" if symbol is None else "manual_close"))
    if result is None:
     results.append({"symbol":sym,"ok":False,"error":"close_not_committed"});continue
    S["equity"]=float(result["equity"]);S["realized_pnl"]=float(result["realized_pnl"])
