@@ -107,7 +107,8 @@ def source_weight(source):return float(SOURCE_WEIGHTS.get(source,0.50))
 STOP_ROE=-999.0;TAKE_ROE=0.20;LEV=25.0;MARGIN_FRACTION=0.10;FEE=0.00045;LOCK_TRIGGER_ROE=0.10;LOCK_ROE=0.075;PAPER_RESET=100.0;MIN_EXIT_ROE=0.075;TRAIL_ARM_ROE=0.12
 def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
 def pg():
- return psycopg.connect(os.environ["DATABASE_URL"],autocommit=True,row_factory=dict_row,connect_timeout=5,options="-c statement_timeout=5000")
+ # Neon transaction pooling rejects statement_timeout in startup options.
+ return psycopg.connect(os.environ["DATABASE_URL"],autocommit=True,row_factory=dict_row,connect_timeout=5)
 STORE=EngineStore(pg,FEE,PAPER_RESET)
 def pinit():
  with pg() as c:
@@ -186,9 +187,20 @@ def init():
 def engine_coordinator():
  # On the first rollout the previous release has no lease support. Its Render
  # drain lasts 60s; wait 120s after starting the web listener before taking over.
- grace=120 if not STORE.has_lease_record() else 0
- if SHUTDOWN.wait(grace):return
  while not SHUTDOWN.is_set():
+  S["_coordinator_heartbeat"]=time.time()
+  try:
+   grace=120 if not STORE.has_lease_record() else 0
+   break
+  except Exception as e:
+   S["engine_error"]=str(e)[:180];SHUTDOWN.wait(5)
+ else:return
+ deadline=time.monotonic()+grace
+ while not SHUTDOWN.is_set() and time.monotonic()<deadline:
+  S["_coordinator_heartbeat"]=time.time()
+  SHUTDOWN.wait(min(5,max(0,deadline-time.monotonic())))
+ while not SHUTDOWN.is_set():
+  S["_coordinator_heartbeat"]=time.time()
   try:
    if STORE.claim():
     if not S["engine_active"]:
@@ -373,6 +385,7 @@ def open_signal(sym,side,title,prices,event_id=None,published_at=None):
   reason=None
   if not fresh["allowed"]:reason=fresh["reason"]
   elif not S["engine_active"] or SHUTDOWN.is_set():reason="engine_not_active"
+  elif not S.get("last_checkpoint") or time.time()-datetime.datetime.fromisoformat(S["last_checkpoint"]).timestamp()>15:reason="risk_checkpoint_stale"
   elif time.time()-S.get("_last_poll_epoch",0)>10:reason="stale_market_price"
   elif sym not in S.get("_prices",{}) or not side:reason="no_price_or_direction"
   elif sym in S["positions"]:reason="position_already_open"
@@ -554,7 +567,8 @@ def health_state():
  heartbeat=stamp-S.get("_market_heartbeat",stamp)
  checkpoint=S.get("last_checkpoint")
  checkpoint_age=stamp-datetime.datetime.fromisoformat(checkpoint).timestamp() if checkpoint else None
- healthy=not SHUTDOWN.is_set() and heartbeat<45
+ coordinator_age=stamp-S.get("_coordinator_heartbeat",stamp)
+ healthy=not SHUTDOWN.is_set() and heartbeat<45 and coordinator_age<45
  ready=healthy and S["engine_active"] and age is not None and age<10 and checkpoint_age is not None and checkpoint_age<15
  return {"healthy":healthy,"risk_ready":ready,"engine_active":S["engine_active"],
          "market_age_seconds":age,"checkpoint_age_seconds":checkpoint_age,
