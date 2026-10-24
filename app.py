@@ -64,7 +64,7 @@ S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled"
 LOCK=threading.RLock()
 SHUTDOWN=threading.Event()
 NEWS_MAX_AGE_SECONDS=float(os.getenv("NEWS_MAX_AGE_SECONDS","120"))
-NEWS_POLL_SECONDS=float(os.getenv("NEWS_POLL_SECONDS","10"))
+NEWS_POLL_SECONDS=float(os.getenv("NEWS_POLL_SECONDS","5"))
 if not math.isfinite(NEWS_MAX_AGE_SECONDS) or NEWS_MAX_AGE_SECONDS<=0:raise ValueError("invalid news freshness window")
 if not math.isfinite(NEWS_POLL_SECONDS) or NEWS_POLL_SECONDS<1:raise ValueError("invalid news poll interval")
 S.update({"engine_active":False,"engine_error":None,"last_checkpoint":None,"last_market_error":None})
@@ -547,7 +547,7 @@ def social_reader(kind):
  source="XScrape" if kind=="x" else "Truthbrush"
  canonical="XOfficial" if kind=="x" else "TruthSocialPublic"
  handles=WATCH if kind=="x" else ["realDonaldTrump"]
- interval=5 if kind=="x" else 10
+ interval=5
  delay=interval
  while not SHUTDOWN.is_set():
   if not S["engine_active"]:
@@ -580,7 +580,7 @@ def social_reader(kind):
 def public_social_reader(kind,handle):
  source="XPublic:"+handle if kind=="x" else "TruthArchive"
  canonical="XOfficial" if kind=="x" else "TruthArchive"
- interval=5 if kind=="x" else 30
+ interval=5
  delay=interval
  while not SHUTDOWN.is_set():
   if not S["engine_active"]:
@@ -654,7 +654,7 @@ def news_feed(source,url):
   query=urllib.parse.parse_qs(parsed.query)
   query["q"]=[query.get("q",[""])[0]+" when:1h"]
   url=urllib.parse.urlunsplit(parsed._replace(query=urllib.parse.urlencode(query,doseq=True)))
- base_poll=max(NEWS_POLL_SECONDS,60 if "news.google.com" in url else 20)
+ base_poll=max(5,NEWS_POLL_SECONDS) if "news.google.com" not in url else max(60,NEWS_POLL_SECONDS)
  delay=base_poll
  while not SHUTDOWN.is_set():
   try:
@@ -893,7 +893,7 @@ if __name__=="__main__":
   SHUTDOWN.set()
   threading.Thread(target=server.shutdown,daemon=True).start()
  signal.signal(signal.SIGTERM,shutdown);signal.signal(signal.SIGINT,shutdown)
- targets=[engine_coordinator,market,market_metadata,impulse_scan,telemetry,xnews,adapt,truthnews,truth_watch,dashboard_cache_loop,operations_diagnostics]
+ targets=[engine_coordinator,market,market_metadata,telemetry,xnews,adapt,truthnews,truth_watch,dashboard_cache_loop,operations_diagnostics]
  targets += [lambda:social_reader("x"),lambda:social_reader("truth")]
  workers=[threading.Thread(target=t,daemon=True,name=t.__name__) for t in targets]
  workers += [threading.Thread(target=news_feed,args=(name,url),daemon=True,name="feed:"+name) for name,url in FEEDS.items()]
