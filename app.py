@@ -68,6 +68,24 @@ if not math.isfinite(NEWS_MAX_AGE_SECONDS) or NEWS_MAX_AGE_SECONDS<=0:raise Valu
 if not math.isfinite(NEWS_POLL_SECONDS) or NEWS_POLL_SECONDS<1:raise ValueError("invalid news poll interval")
 S.update({"engine_active":False,"engine_error":None,"last_checkpoint":None,"last_market_error":None})
 FEEDS={"FedOfficial":"https://www.federalreserve.gov/feeds/press_all.xml","SECOfficial":"https://www.sec.gov/news/pressreleases.rss","GoogleNewsCrypto":"https://news.google.com/rss/search?q=cryptocurrency+OR+bitcoin+OR+altcoin&hl=en-US&gl=US&ceid=US:en","GoogleNewsMarkets":"https://news.google.com/rss/search?q=crypto+SEC+OR+Federal+Reserve+OR+token+listing&hl=en-US&gl=US&ceid=US:en","Cointelegraph":"https://cointelegraph.com/rss","Decrypt":"https://decrypt.co/feed","CoinDesk":"https://www.coindesk.com/arc/outboundfeeds/rss/","CFTCOfficial":"https://www.cftc.gov/RSS/RSSGP/rssgp.xml","DOJNews":"https://www.justice.gov/feeds/justice-news.xml?type=All&component%5B436%5D=436&organization=All","TruthSocialSearch":"https://news.google.com/rss/search?q=site%3Atruthsocial.com+crypto&hl=en-US&gl=US&ceid=US:en","CoinSharesResearch":"https://news.google.com/rss/search?q=site%3Acoinshares.com%2Finsights%2Fresearch-data+crypto&hl=en-US&gl=US&ceid=US:en","BitwiseResearch":"https://news.google.com/rss/search?q=site%3Abitwiseinvestments.com%2Fcrypto-market-insights+crypto&hl=en-US&gl=US&ceid=US:en","ARKResearch":"https://news.google.com/rss/search?q=site%3Aark-invest.com+bitcoin+OR+crypto&hl=en-US&gl=US&ceid=US:en","GrayscaleResearch":"https://news.google.com/rss/search?q=site%3Aresearch.grayscale.com+crypto&hl=en-US&gl=US&ceid=US:en"}
+# Fast public news sources and topical feeds; Google-indexed posts can be delayed.
+FEEDS.update({
+ "BBCWorld":"https://feeds.bbci.co.uk/news/world/rss.xml",
+ "GuardianWorld":"https://www.theguardian.com/world/rss",
+ "NPRWorld":"https://feeds.npr.org/1004/rss.xml",
+ "AlJazeera":"https://www.aljazeera.com/xml/rss/all.xml",
+ "WSJWorld":"https://feeds.a.dj.com/rss/RSSWorldNews.xml",
+ "CNBCMarkets":"https://www.cnbc.com/id/100003114/device/rss/rss.html",
+ "ECBOfficial":"https://www.ecb.europa.eu/rss/press.html",
+ "GoogleNewsBreaking":"https://news.google.com/rss/search?q=breaking+world+news+markets&hl=en-US&gl=US&ceid=US:en",
+ "GoogleNewsGeopolitics":"https://news.google.com/rss/search?q=conflict+sanctions+tariffs+war+blockade&hl=en-US&gl=US&ceid=US:en",
+ "GoogleNewsOil":"https://news.google.com/rss/search?q=OPEC+oil+shipping+Hormuz+Suez&hl=en-US&gl=US&ceid=US:en",
+ "GoogleNewsChina":"https://news.google.com/rss/search?q=China+Taiwan+trade+tariffs+markets&hl=en-US&gl=US&ceid=US:en",
+ "GoogleNewsMacro":"https://news.google.com/rss/search?q=FOMC+Fed+CPI+inflation+rates&hl=en-US&gl=US&ceid=US:en",
+ "GoogleNewsCryptoHack":"https://news.google.com/rss/search?q=crypto+exchange+hack+exploit+liquidation&hl=en-US&gl=US&ceid=US:en",
+ "GoogleNewsCryptoPolicy":"https://news.google.com/rss/search?q=SEC+CFTC+crypto+regulation+ETF&hl=en-US&gl=US&ceid=US:en",
+ "GoogleNewsTokenEvents":"https://news.google.com/rss/search?q=cryptocurrency+token+listing+unlock+delisting&hl=en-US&gl=US&ceid=US:en",
+})
 POS=("surge","surges","approve","approved","approval","partnership","listing","adoption","buyback","breakout","bullish","launch","etf approved","rally","rallies","rebound","rebounds","record high","inflows","net inflow","gains","jumps","soars","upside")
 NEG=("hack","hacked","exploit","lawsuit","delist","delisted","ban","banned","liquidation","liquidations","fraud","selloff","sell-off","bearish","crash","crashes","stolen","outflows","net outflow","falls","drops","slips","plunges","tumbles","declines")
 # Symbols that are also ordinary English words/acronyms. Never map them from a bare word.
