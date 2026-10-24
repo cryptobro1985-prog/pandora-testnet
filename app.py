@@ -90,7 +90,7 @@ S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled"
 LOCK=threading.RLock()
 SHUTDOWN=threading.Event()
 NEWS_MAX_AGE_SECONDS=float(os.getenv("NEWS_MAX_AGE_SECONDS","120"))
-NEWS_POLL_SECONDS=float(os.getenv("NEWS_POLL_SECONDS","15"))
+NEWS_POLL_SECONDS=float(os.getenv("NEWS_POLL_SECONDS","15"))\nPUMP_SCAN_SECONDS=max(1.0,float(os.getenv("PUMP_SCAN_SECONDS","2")))\nMARKET_METADATA_SECONDS=max(3.0,float(os.getenv("MARKET_METADATA_SECONDS","5")))
 if not math.isfinite(NEWS_MAX_AGE_SECONDS) or NEWS_MAX_AGE_SECONDS<=0:raise ValueError("invalid news freshness window")
 if not math.isfinite(NEWS_POLL_SECONDS) or NEWS_POLL_SECONDS<1:raise ValueError("invalid news poll interval")
 S.update({"engine_active":False,"engine_error":None,"last_checkpoint":None,"last_market_error":None})
@@ -582,14 +582,12 @@ def impulse_scan():
    with LOCK:
     S["sources"]["PumpDumpScanner"]={"ok":bool(prices and volumes),"last_check":now(),"markets":len(prices),
       "liquid_markets":sum(v>=1_000_000 for v in volumes.values()),"raw_candidates":len(found),"confirmed_candidates":len(confirmed),
-      "top_candidates":confirmed[:5],"mode":"isolated_paper_2s_all_markets","news_engine_shared_parameters":False,
+      "top_candidates":confirmed[:5],"mode":"isolated_paper_realtime_all_markets","scan_seconds":PUMP_SCAN_SECONDS,"news_engine_shared_parameters":False,
       "paper_positions":len(S["pump_positions"]),"paper_equity":round(S["pump_equity"],4),"paper_trades":S["pump_trades"],
       "market_regime":regime,"error":None if prices and volumes else "missing_market_prices_or_metadata"}
   except Exception as exc:
-   with LOCK:S["sources"]["PumpDumpScanner"]={"ok":False,"last_check":now(),"mode":"isolated_paper_2s_all_markets","error":str(exc)[:180],"news_engine_shared_parameters":False}
-  SHUTDOWN.wait(2)
-
-def market_metadata():
+   with LOCK:S["sources"]["PumpDumpScanner"]={"ok":False,"last_check":now(),"mode":"isolated_paper_realtime_all_markets","scan_seconds":PUMP_SCAN_SECONDS,"error":str(exc)[:180],"news_engine_shared_parameters":False}
+  SHUTDOWN.wait(PUMP_SCAN_SECONDS)\n\ndef market_metadata():
  while not SHUTDOWN.is_set():
   try:
    raw=json.loads(get(API,{"type":"metaAndAssetCtxs"}))
@@ -618,9 +616,7 @@ def market_metadata():
     S["sources"]["MarketMetadata"]={"ok":True,"last_check":now(),"markets":len(volumes)}
   except Exception as e:
    with LOCK:S["sources"]["MarketMetadata"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
-  SHUTDOWN.wait(25)
-
-def telemetry():
+  SHUTDOWN.wait(MARKET_METADATA_SECONDS)\n\ndef telemetry():
  # External context calls are slow and optional. They must never hold LOCK or
  # stall the price/exit loop, even if a source hangs or returns an error.
  while not SHUTDOWN.is_set():
@@ -1075,7 +1071,7 @@ def free_truth_realtime():
      backoff_until.pop(h,None);last_success[h]=time.time()
      stamps=[publication_epoch(p.get("created_at")) for p in posts];stamps=[x for x in stamps if x is not None]
      latest_age=time.time()-max(stamps) if stamps else None
-     with LOCK:S["sources"][name]={"ok":True,"degraded":fallback,"mode":backend+"_4s_poll","backend":backend,"fallback_used":fallback,"primary_error":primary_error,"last_check":now(),"posts":len(posts),"poll_seconds":poll,"last_request_seconds":round(time.monotonic()-started,2),"latest_post_age_seconds":round(latest_age,1) if latest_age is not None else None,"realtime_verified":False,"last_success_epoch":time.time()}
+     with LOCK:S["sources"][name]={"ok":True,"degraded":fallback,"mode":backend+"_adaptive_poll","backend":backend,"fallback_used":fallback,"primary_error":primary_error,"last_check":now(),"posts":len(posts),"poll_seconds":poll,"last_request_seconds":round(time.monotonic()-started,2),"latest_post_age_seconds":round(latest_age,1) if latest_age is not None else None,"realtime_verified":False,"last_success_epoch":time.time()}
      ids=[str(p["id"]) for p in posts]
      if h not in seen:
       seen[h]=set(ids);fresh=[]
@@ -1102,7 +1098,7 @@ def free_truth_realtime():
    with LOCK:
     states=[S["sources"].get("TruthDirect:"+h,{}) for h in handles]
     initialized=sum(bool(v) for v in states);good=sum(bool(v.get("ok")) for v in states);rt=sum(bool(v.get("realtime_verified")) for v in states)
-    S["sources"]["TruthMonitor"]={"ok":initialized==len(handles) and good>=max(1,math.ceil(len(handles)*0.75)),"all_accounts_ok":initialized==len(handles) and good==len(handles),"mode":"public_parallel_4s_poll","last_check":now(),"accounts_ok":good,"accounts_initialized":initialized,"accounts_total":len(handles),"poll_seconds":poll,"scan_workers":pool._max_workers,"inflight_accounts":len(inflight),"backoff_accounts":sum(1 for h in handles if time.monotonic()<backoff_until.get(h,0)),"realtime_accounts_seen":rt,"realtime_verified":rt>0,"last_successful_poll_epoch":max(last_success.values()) if last_success else None}
+    S["sources"]["TruthMonitor"]={"ok":initialized==len(handles) and good>=max(1,math.ceil(len(handles)*0.75)),"all_accounts_ok":initialized==len(handles) and good==len(handles),"mode":"public_parallel_adaptive_poll","last_check":now(),"accounts_ok":good,"accounts_initialized":initialized,"accounts_total":len(handles),"poll_seconds":poll,"scan_workers":pool._max_workers,"inflight_accounts":len(inflight),"backoff_accounts":sum(1 for h in handles if time.monotonic()<backoff_until.get(h,0)),"realtime_accounts_seen":rt,"realtime_verified":rt>0,"last_successful_poll_epoch":max(last_success.values()) if last_success else None}
    SHUTDOWN.wait(0.05)
  finally:
   pool.shutdown(wait=False,cancel_futures=True)
