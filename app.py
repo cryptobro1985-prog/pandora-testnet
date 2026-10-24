@@ -27,10 +27,10 @@ def choose(db_path,current=(-0.10,0.20)):
  return {"stop":cand[0],"take":cand[1],"samples":len(xs),"validation_pnl":sum(valid),"changed":cand!=current}
 
 WATCH_GROUPS={
- "core":["elonmusk","realDonaldTrump","POTUS","WhiteHouse","JDVance","PressSec","Scavino47","federalreserve","SECGov","USTreasury","CFTC","DHSgov","SecScottBessent","Reuters","ReutersBiz","AP","APBusiness","BBCWorld","business","BNODesk","DeItaone","KobeissiLetter","financialjuice","LiveSquawk","CoinDesk","Cointelegraph","DecryptMedia","TheBlockCo","blockworks_","BitcoinMagazine","WuBlockchain","Lookonchain","PeckShieldAlert","CertiKAlert","whale_alert","arkham","DefiLlama","CoinGlass","coinbase","binance","Bybit_Official","hyperliquidX","saylor","cz_binance","VitalikButerin"],
+ "core":["elonmusk","realDonaldTrump","POTUS","WhiteHouse","JDVance","PressSec","Scavino47","federalreserve","SECGov","USTreasury","CFTC","DHSgov","SecScottBessent","Reuters","ReutersBiz","AP","APBusiness","BBCWorld","business","BNODesk","DeItaone","KobeissiLetter","financialjuice","LiveSquawk","CoinDesk","Cointelegraph","DecryptMedia","TheBlockCo","Blockworks","BitcoinMagazine","WuBlockchain","Lookonchain","PeckShieldAlert","CertiKAlert","whale_alert","arkham","DefiLlama","CoinGlass","coinbase","binance","Bybit_Official","hyperliquidX","saylor","cz_binance","VitalikButerin"],
  "news":["CNBC","zerohedge","unusual_whales","FirstSquawk","TreeNewsFeed","tier10k","WSJ","FT","ForbesCrypto"],
  "asset_managers":["BlackRock","iShares","Fidelity","DigitalAssets","ARKInvest","CathieDWood","Grayscale","Bitwise","vaneck_us","21Shares","CoinSharesCo","Hashdex","InvescoUS","WisdomTreeFunds","ProShares"],
- "crypto_funds":["galaxyhq","PanteraCapital","a16zcrypto","paradigm","multicoin","dragonfly_xyz","ElectricCapital","blockchaincap","PlaceholderVC","HaunVentures"],
+ "crypto_funds":["galaxyhq","PanteraCapital","a16zcrypto","cdixon","alive_eth","eddylazzarin","guywuolletjr","paradigm","multicoin","dragonfly_xyz","hosseeb","HadickM","ElectricCapital","bcap","_kinjalbshah","CremeDeLaCrypto","pbartstephens","PlaceholderVC","HaunVentures"],
  "market_makers":["wintermute_t","GSR_io","CumberlandSays","jumpcryptohq","JaneStreetGroup","FlowTraders","DRWTrading","FalconXGlobal","B2C2Group","keyrock","Citadel","citsecurities"],
  "exchanges":["CoinbaseAssets","OKX","krakenfx","Gemini","bitget","gate_io","MEXC","HTX_Global","DeribitOfficial","cryptocom"],
  "security":["zachxbt","SlowMist_Team","CyversAlerts","chainalysis","TRMLabs"],
