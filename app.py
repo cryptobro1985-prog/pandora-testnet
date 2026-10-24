@@ -657,7 +657,7 @@ def free_x_realtime():
  base=time.monotonic()
  next_due={h:base+((sum(ord(ch) for ch in h)%400)/100.0) for h in handles}
  inflight={};ingest_futures=set()
- pool=concurrent.futures.ThreadPoolExecutor(max_workers=min(12,len(handles)),thread_name_prefix="x-realtime")
+ pool=concurrent.futures.ThreadPoolExecutor(max_workers=min(32,len(handles)),thread_name_prefix="x-realtime")
  ingest_pool=concurrent.futures.ThreadPoolExecutor(max_workers=6,thread_name_prefix="x-ingest")
  with LOCK:S["sources"]["XMonitor"]={"ok":False,"degraded":True,"mode":"adaptive_direct_poll_starting","last_check":now(),"accounts_ok":0,"accounts_initialized":0,"accounts_total":len(handles),"priority_poll_seconds":fast_poll,"normal_poll_seconds":normal_poll,"scan_workers":pool._max_workers,"error":None}
  def fetch_one(handle):
