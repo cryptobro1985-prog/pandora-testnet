@@ -526,41 +526,25 @@ def ingest_event(ident,source,title,published_at=None,source_url=None):
 
 def free_x_realtime():
  if os.getenv("X_STREAM_BEARER_TOKEN","").strip():return
+ if os.getenv("X_AUTH_TOKEN","").strip() and os.getenv("X_CT0","").strip() and os.getenv("X_LIST_ID","").strip():return
  handles=list(WATCH);poll=max(4.0,float(os.getenv("X_FREE_POLL_SECONDS","4")))
- # Shard across three independent public read surfaces.
- fx_primary=set(handles[:min(55,len(handles))])
- syn_primary=set(handles[min(55,len(handles)):min(110,len(handles))])
- vx_primary=set(handles[min(110,len(handles)):])
+ fx_primary=set(handles[:min(58,len(handles))])
  seen={};primed=set();state_lock=threading.Lock()
  next_due={h:time.monotonic()+i*poll/max(1,len(handles)) for i,h in enumerate(handles)}
- inflight={}
- pool=concurrent.futures.ThreadPoolExecutor(max_workers=64,thread_name_prefix="x-realtime")
- backend_lock=threading.Lock()
- backend_cooldown={"fx":0.0,"syn":0.0,"vx":0.0}
- backend_429={"fx":0,"syn":0,"vx":0}
- funcs={"fx":free_x_fetch,"syn":free_x_syn_fetch,"vx":free_x_vx_fetch}
- def primary_for(handle):
-  if handle in fx_primary:return "fx"
-  if handle in syn_primary:return "syn"
-  return "vx"
+ inflight={};ingest_futures=set()
+ pool=concurrent.futures.ThreadPoolExecutor(max_workers=48,thread_name_prefix="x-realtime")
+ ingest_pool=concurrent.futures.ThreadPoolExecutor(max_workers=8,thread_name_prefix="x-ingest")
  def fetch_one(handle):
-  primary=primary_for(handle)
-  order={"fx":["fx","syn","vx"],"syn":["syn","fx","vx"],"vx":["vx","syn","fx"]}[primary]
+  primary=("fx",free_x_fetch) if handle in fx_primary else ("xlookup",free_x_lookup_fetch)
+  secondary=("xlookup",free_x_lookup_fetch) if primary[0]=="fx" else ("fx",free_x_fetch)
   errors=[]
-  for backend in order:
-   with backend_lock:
-    if time.monotonic()<backend_cooldown[backend]:
-     errors.append(backend+":cooldown");continue
-   try:
-    posts=funcs[backend](handle)
-    return posts,backend,backend!=primary,(errors[0] if errors else None)
-   except Exception as exc:
-    msg=str(exc)[:100] if str(exc) else type(exc).__name__
-    errors.append(backend+":"+msg)
-    if "429" in msg:
-     with backend_lock:
-      backend_429[backend]+=1
-      backend_cooldown[backend]=max(backend_cooldown[backend],time.monotonic()+20)
+  for backend,fn in (primary,secondary):
+   try:return fn(handle),backend,backend!=primary[0],(" | ".join(errors) if errors else None)
+   except Exception as exc:errors.append(backend+":"+str(exc)[:70])
+  try:return guest_x_read(handle),"guest_graphql",True," | ".join(errors)
+  except Exception as exc:errors.append("guest:"+str(exc)[:70])
+  try:return free_x_syndication_fetch(handle),"syndication",True," | ".join(errors)
+  except Exception as exc:errors.append("syndication:"+str(exc)[:70])
   raise RuntimeError(" | ".join(errors))
  try:
   while not SHUTDOWN.is_set():
@@ -573,7 +557,7 @@ def free_x_realtime():
     fut=pool.submit(fetch_one,handle);inflight[fut]=(handle,now_m)
     next_due[handle]+=poll
     if next_due[handle]<now_m:next_due[handle]=now_m+poll
-   done=[f for f in list(inflight) if f.done()]
+   done=[future for future in list(inflight) if future.done()]
    for future in done:
     handle,started=inflight.pop(future);name="XFree:"+handle
     try:
@@ -600,7 +584,8 @@ def free_x_realtime():
         S["sources"][name]["realtime_verified"]=True
         S["sources"][name]["delivery_latency_seconds"]=round(age,2)
       ident=hashlib.sha256(("XFree:"+handle+":"+str(p["id"])).encode()).hexdigest()
-      ingest_event(ident,"XOfficial:"+handle,p["text"],p.get("created_at"),p.get("url"))
+      if len(ingest_futures)<500:
+       ingest_futures.add(ingest_pool.submit(ingest_event,ident,"XOfficial:"+handle,p["text"],p.get("created_at"),p.get("url")))
     except Exception as exc:
      err=str(exc)[:220] if str(exc) else type(exc).__name__
      with LOCK:
@@ -608,26 +593,64 @@ def free_x_realtime():
       failures=int(prev.get("consecutive_failures",0))+1
       last_success_epoch=float(prev.get("last_success_epoch",0) or 0)
       within_grace=bool(last_success_epoch and time.time()-last_success_epoch<=30 and failures<4)
-      S["sources"][name]={"ok":within_grace,"degraded":True,"mode":"tri_backend_4s_poll",
+      S["sources"][name]={"ok":within_grace,"degraded":True,"mode":"fx_xlookup_guest_syndication_4s",
        "category":WATCH_CATEGORY.get(handle),"last_check":now(),"error":err,
        "consecutive_failures":failures,"last_success_epoch":last_success_epoch or None}
+   ingest_futures={future for future in ingest_futures if not future.done()}
    with LOCK:
     states=[S["sources"].get("XFree:"+h,{}) for h in handles]
-    initialized=sum(bool(v) for v in states)
-    good=sum(bool(v.get("ok")) for v in states)
+    initialized=sum(bool(v) for v in states);good=sum(bool(v.get("ok")) for v in states)
     realtime=sum(bool(v.get("realtime_verified")) for v in states)
-    backend_live={b:sum(1 for v in states if v.get("ok") and v.get("backend")==b) for b in ("fx","syn","vx")}
+    backend_live={b:sum(1 for v in states if v.get("ok") and v.get("backend")==b) for b in ("fx","xlookup","guest_graphql","syndication")}
     S["sources"]["XMonitor"]={"ok":initialized==len(handles) and good>=math.ceil(len(handles)*0.90),
      "all_accounts_ok":initialized==len(handles) and good==len(handles),
-     "mode":"tri_backend_parallel_4s_poll","last_check":now(),"accounts_ok":good,
+     "mode":"fx_xlookup_guest_parallel_4s_poll","last_check":now(),"accounts_ok":good,
      "accounts_initialized":initialized,"accounts_total":len(handles),
-     "fx_primary":len(fx_primary),"syn_primary":len(syn_primary),"vx_primary":len(vx_primary),
-     "backend_live":backend_live,"backend_429":dict(backend_429),
-     "poll_seconds":poll,"realtime_accounts_seen":realtime,
-     "realtime_verified":realtime>0}
+     "fx_primary":len(fx_primary),"xlookup_primary":len(handles)-len(fx_primary),
+     "backend_live":backend_live,"poll_seconds":poll,"realtime_accounts_seen":realtime,
+     "ingest_queue":len(ingest_futures),"realtime_verified":realtime>0}
    SHUTDOWN.wait(0.05)
  finally:
   pool.shutdown(wait=False,cancel_futures=True)
+  ingest_pool.shutdown(wait=False,cancel_futures=True)
+
+def x_list_realtime():
+ auth=os.getenv("X_AUTH_TOKEN","").strip();ct0=os.getenv("X_CT0","").strip();list_id=os.getenv("X_LIST_ID","").strip()
+ if not (auth and ct0 and list_id):return
+ poll=max(4.0,float(os.getenv("X_LIST_POLL_SECONDS","4")))
+ watched={h.lower():h for h in WATCH};seen=set();primed=False;backoff=poll
+ ingest_pool=concurrent.futures.ThreadPoolExecutor(max_workers=8,thread_name_prefix="x-list-ingest")
+ try:
+  while not SHUTDOWN.is_set():
+   if not S["engine_active"]:
+    SHUTDOWN.wait(0.5);continue
+   started=time.monotonic()
+   try:
+    posts=x_list_fetch(list_id,auth,ct0,count=100)
+    current={str(p["id"]) for p in posts if str(p.get("handle","")).lower() in watched}
+    if not primed:
+     seen=set(current);primed=True;fresh=[]
+    else:
+     fresh=[p for p in posts if str(p.get("handle","")).lower() in watched and str(p["id"]) not in seen]
+     seen.update(current)
+     if len(seen)>2000:seen=set(list(current)[:1000])
+    latencies=[]
+    for p in sorted(fresh,key=lambda q:publication_epoch(q.get("created_at")) or 0):
+     stamp=publication_epoch(p.get("created_at"));age=time.time()-stamp if stamp is not None else None
+     if age is not None and age>=0:latencies.append(age)
+     handle=watched.get(str(p.get("handle","")).lower(),str(p.get("handle") or "unknown"))
+     ident=hashlib.sha256(("XList:"+str(p["id"])).encode()).hexdigest()
+     ingest_pool.submit(ingest_event,ident,"XOfficial:"+handle,p["text"],p.get("created_at"),p.get("url"))
+    latency=min(latencies) if latencies else None
+    with LOCK:S["sources"]["XListMonitor"]={"ok":True,"mode":"authenticated_x_list_4s_poll","last_check":now(),"accounts_total":len(WATCH),"posts":len(posts),"poll_seconds":poll,"realtime_verified":bool(latency is not None and 0<=latency<=10),"delivery_latency_seconds":round(latency,2) if latency is not None else None}
+    backoff=poll
+   except Exception as exc:
+    err=str(exc)[:180] if str(exc) else type(exc).__name__
+    with LOCK:S["sources"]["XListMonitor"]={"ok":False,"mode":"authenticated_x_list_4s_poll","last_check":now(),"accounts_total":len(WATCH),"error":err,"realtime_verified":False}
+    backoff=min(60,max(poll,backoff*1.8))
+   SHUTDOWN.wait(max(0.05,backoff-(time.monotonic()-started)))
+ finally:
+  ingest_pool.shutdown(wait=False,cancel_futures=True)
 
 def truth_stream_realtime():
  token=(os.getenv("TRUTH_STREAM_TOKEN","").strip() or os.getenv("TRUTHSOCIAL_TOKEN","").strip())
@@ -1218,7 +1241,7 @@ if __name__=="__main__":
   SHUTDOWN.set()
   threading.Thread(target=server.shutdown,daemon=True).start()
  signal.signal(signal.SIGTERM,shutdown);signal.signal(signal.SIGINT,shutdown)
- targets=[engine_coordinator,market,market_metadata,telemetry,xnews,adapt,free_x_realtime,free_truth_realtime,truth_stream_realtime,x_filtered_stream,dashboard_cache_loop,operations_diagnostics]
+ targets=[engine_coordinator,market,market_metadata,telemetry,xnews,adapt,free_x_realtime,x_list_realtime,free_truth_realtime,truth_stream_realtime,x_filtered_stream,dashboard_cache_loop,operations_diagnostics]
  targets += ([lambda:social_reader("x")] if os.getenv("X_SESSION_COOKIES","").strip() else [])
  targets += [lambda:social_reader("truth")] if os.getenv("TRUTHSOCIAL_TOKEN","").strip() else []
  workers=[threading.Thread(target=t,daemon=True,name=t.__name__) for t in targets]
