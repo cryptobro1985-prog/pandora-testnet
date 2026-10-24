@@ -6,6 +6,7 @@ from risk import evaluate_exit, risk_state
 from engine_store import EngineStore, LeaseLost
 from entry_guards import freshness, publication_epoch
 from social_scrapers import poll as social_poll, SourceUnavailable
+from public_social import read as public_social_read
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
 def choose(db_path,current=(-0.10,0.20)):
  with sqlite3.connect(db_path) as c: rows=c.execute("select pnl from trades order by id desc limit 120").fetchall()
@@ -82,7 +83,7 @@ EXPLICIT_TOKEN_PATTERNS={
 # They are logged and gently affect confidence/eligibility, but can never reverse news direction.
 SOURCE_WEIGHTS={
  "FedOfficial":1.00,"SECOfficial":1.00,"CFTCOfficial":1.00,"DOJNews":0.95,
- "TruthSocialPublic":0.95,"XOfficial":0.90,
+ "TruthSocialPublic":0.95,"XOfficial":0.90,"TruthArchive":0.80,
  "CoinSharesResearch":0.90,"BitwiseResearch":0.88,"ARKResearch":0.86,"GrayscaleResearch":0.88,
  "CoinDesk":0.84,"Decrypt":0.78,"Cointelegraph":0.74,
  "GoogleNewsMarkets":0.60,"GoogleNewsCrypto":0.55,"TruthSocialSearch":0.55
@@ -484,6 +485,34 @@ def social_reader(kind):
   SHUTDOWN.wait(delay)
 
 
+def public_social_reader(kind,handle):
+ source="XPublic:"+handle if kind=="x" else "TruthArchive"
+ canonical="XOfficial" if kind=="x" else "TruthArchive"
+ interval=10 if kind=="x" else 30
+ delay=interval
+ while not SHUTDOWN.is_set():
+  if not S["engine_active"]:
+   SHUTDOWN.wait(2);continue
+  started=time.time()
+  try:
+   posts=public_social_read(kind,handle)
+   stamps=[publication_epoch(p.get("created_at")) for p in posts]
+   stamps=[p for p in stamps if p is not None]
+   with LOCK:S["sources"][source]={"ok":True,"last_check":now(),"mode":"public_page_polling" if kind=="x" else "archive_polling_delay_unknown",
+    "posts":len(posts),"poll_seconds":interval,"request_seconds":round(time.time()-started,3),
+    "latest_post_age_seconds":round(time.time()-max(stamps),1) if stamps else None,"realtime_verified":False}
+   for p in posts:
+    if SHUTDOWN.is_set():break
+    ident=hashlib.sha256((canonical+str(p["id"])).encode()).hexdigest()
+    ingest_event(ident,canonical,p["text"],p.get("created_at"),p.get("url"))
+   delay=interval
+  except Exception as exc:
+   code=getattr(exc,"code",None)
+   with LOCK:S["sources"][source]={"ok":False,"last_check":now(),"error":"http_"+str(code) if code else type(exc).__name__}
+   delay=min(300,max(60 if code==429 else interval,delay*2))
+  SHUTDOWN.wait(delay)
+
+
 def adapt():
  global STOP_ROE,TAKE_ROE
  while not SHUTDOWN.is_set():
@@ -625,6 +654,8 @@ if __name__=="__main__":
  targets += [lambda:social_reader("x"),lambda:social_reader("truth")]
  workers=[threading.Thread(target=t,daemon=True,name=t.__name__) for t in targets]
  workers += [threading.Thread(target=news_feed,args=(name,url),daemon=True,name="feed:"+name) for name,url in FEEDS.items()]
+ workers += [threading.Thread(target=public_social_reader,args=("x",handle),daemon=True,name="public-x:"+handle) for handle in WATCH]
+ workers += [threading.Thread(target=public_social_reader,args=("truth","realDonaldTrump"),daemon=True,name="truth-archive")]
  for worker in workers:worker.start()
  try:server.serve_forever()
  finally:
