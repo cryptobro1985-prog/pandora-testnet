@@ -2,6 +2,7 @@ import os,json,time,threading,urllib.request,urllib.parse,sqlite3,datetime,xml.e
 import sqlite3,math,email.utils,secrets,signal,copy,concurrent.futures
 import websocket
 import psycopg
+from curl_cffi import requests as curl_requests
 from psycopg.rows import dict_row
 from risk import evaluate_exit, risk_state
 from engine_store import EngineStore, LeaseLost
@@ -1157,32 +1158,81 @@ def adapt():
    with LOCK:S["last_error"]="adaptive: "+str(e)[:160]
   SHUTDOWN.wait(900)
 
-def news_feed(source,url):
- # Independent workers avoid head-of-line blocking by slow RSS publishers.
- # Search indexes are discovery fallbacks, not claimed realtime firehoses.
+def _news_candidates(url):
  parsed=urllib.parse.urlsplit(url)
  if parsed.hostname=="news.google.com":
   query=urllib.parse.parse_qs(parsed.query)
-  query["q"]=[query.get("q",[""])[0]+" when:1h"]
-  url=urllib.parse.urlunsplit(parsed._replace(query=urllib.parse.urlencode(query,doseq=True)))
- base_poll=max(5,NEWS_POLL_SECONDS) if "news.google.com" not in url else max(60,NEWS_POLL_SECONDS)
- delay=base_poll
+  q=(query.get("q") or [""])[0].strip()
+  if "when:" not in q:q=(q+" when:1h").strip()
+  g=urllib.parse.urlunsplit(parsed._replace(query=urllib.parse.urlencode({"q":q,"hl":"en-US","gl":"US","ceid":"US:en"})))
+  # Independent search-RSS fallback so Google outages/rate limits do not blind PANDORA.
+  b="https://www.bing.com/news/search?"+urllib.parse.urlencode({"q":q.replace(" when:1h",""),"format":"rss","setlang":"en-us"})
+  return [("google_news",g),("bing_news",b)]
+ return [("direct_rss",url)]
+
+def _fetch_news_xml(url,timeout=7):
+ errors=[]
+ try:
+  req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 (compatible; PANDORA/1.0)","Accept":"application/rss+xml,application/xml,text/xml,*/*","Cache-Control":"no-cache"})
+  with urllib.request.urlopen(req,timeout=timeout) as r:return r.read(2_500_000),"urllib"
+ except Exception as exc:errors.append("urllib:"+str(exc)[:100])
+ try:
+  r=curl_requests.get(url,headers={"User-Agent":"Mozilla/5.0","Accept":"application/rss+xml,application/xml,text/xml,*/*","Cache-Control":"no-cache"},impersonate="chrome",timeout=timeout)
+  if int(r.status_code)!=200:raise RuntimeError("http_"+str(r.status_code))
+  body=bytes(r.content)
+  if not body:raise RuntimeError("empty")
+  return body,"browser_tls"
+ except Exception as exc:errors.append("browser:"+str(exc)[:100])
+ raise RuntimeError(" | ".join(errors))
+
+def news_feed(source,url):
+ # Every news source is isolated. Search feeds have an independent Bing RSS
+ # fallback; direct publishers have browser-TLS fallback when urllib is blocked.
+ candidates=_news_candidates(url)
+ base_poll=max(5,NEWS_POLL_SECONDS) if candidates[0][0]=="direct_rss" else max(45,NEWS_POLL_SECONDS)
+ delay=base_poll;error_log_at=0
  while not SHUTDOWN.is_set():
-  try:
-   root=ET.fromstring(get(url));items=root.findall(".//item")[:30];count=0
-   for item in reversed(items):
-    if SHUTDOWN.is_set():break
-    title=(item.findtext("title") or "").strip()
-    if not title:continue
-    ident=hashlib.sha256((source+title).encode()).hexdigest()
-    count+=bool(ingest_event(ident,source,title,item.findtext("pubDate"),item.findtext("link")))
-   with LOCK:S["sources"][source]={"ok":True,"last_check":now(),"new":count,"feed_items":len(items),"poll_seconds":base_poll,"mode":"indexed_delayed" if "news.google.com" in url else "rss_direct","realtime_verified":False}
-   delay=base_poll
-  except Exception as e:
+  errors=[];success=None
+  for backend,candidate_url in candidates:
+   try:
+    raw,transport=_fetch_news_xml(candidate_url)
+    root=ET.fromstring(raw);items=root.findall(".//item")[:40]
+    if not items:
+     # Atom fallback for publishers using <entry>.
+     items=root.findall(".//{*}entry")[:40]
+    if not items:raise RuntimeError("feed_empty")
+    success=(backend,transport,items);break
+   except Exception as exc:errors.append(backend+":"+str(exc)[:130])
+  if success:
+   backend,transport,items=success;count=0
+   try:
+    for item in reversed(items):
+     if SHUTDOWN.is_set():break
+     title=(item.findtext("title") or item.findtext("{*}title") or "").strip()
+     if not title:continue
+     pub=item.findtext("pubDate") or item.findtext("{*}published") or item.findtext("{*}updated")
+     link=item.findtext("link")
+     if not link:
+      node=item.find("{*}link")
+      if node is not None:link=node.get("href")
+     ident=hashlib.sha256((source+title).encode()).hexdigest()
+     count+=bool(ingest_event(ident,source,title,pub,link))
+    with LOCK:S["sources"][source]={"ok":True,"last_check":now(),"new":count,"feed_items":len(items),
+      "poll_seconds":base_poll,"mode":backend,"transport":transport,"fallback_used":backend!=candidates[0][0],
+      "realtime_verified":False,"error":None}
+    delay=base_poll
+   except Exception as exc:
+    errors.append("parse:"+str(exc)[:130]);success=None
+  if not success:
+   err=" | ".join(errors)[:350] or "feed_unavailable"
    with LOCK:
-    S["errors"]+=1;S["last_error"]=source+": "+str(e)[:180]
-    S["sources"][source]={"ok":False,"last_check":now(),"error":str(e)[:150]}
-   delay=min(300,max(base_poll,delay*2))
+    S["errors"]+=1;S["last_error"]=source+": "+err[:180]
+    S["sources"][source]={"ok":False,"last_check":now(),"error":err,"mode":"rss_with_fallbacks"}
+   if time.time()-error_log_at>=120:
+    error_log_at=time.time()
+    try:journal("source_error",None,{"source":source,"kind":"news_feed","error":err})
+    except Exception:pass
+   delay=min(300,max(base_poll,delay*1.7))
   SHUTDOWN.wait(delay)
 def build_dashboard_snapshot():
  with LOCK:
@@ -1259,6 +1309,7 @@ def operations_diagnostics():
      "sources_ok":sum(bool(x.get("ok")) for x in S["sources"].values()),
      "sources_failed":[k for k,v in S["sources"].items() if not v.get("ok") and not k.startswith("XIndex:") and k!="XIndexMonitor"],
      "sources_degraded_noncritical":[k for k,v in S["sources"].items() if not v.get("ok") and (k.startswith("XIndex:") or k=="XIndexMonitor")],
+     "news_failures":{k:str(v.get("error") or "")[:160] for k,v in S["sources"].items() if not v.get("ok") and (k in FEEDS and not k.startswith("XIndex:"))},
      "social_channels":{k:{"ok":v.get("ok"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds"),"delivery_latency_seconds":v.get("delivery_latency_seconds"),"accounts_ok":v.get("accounts_ok"),"accounts_initialized":v.get("accounts_initialized"),"accounts_total":v.get("accounts_total"),"all_accounts_ok":v.get("all_accounts_ok"),"fx_primary":v.get("fx_primary"),"xlookup_primary":v.get("xlookup_primary")} for k,v in S["sources"].items() if k.startswith(("XFree:","XFilteredStream","XListMonitor","XMonitor","XIndexMonitor","TruthAuth","TruthStream","TruthDirect:","TruthSocialPublic","TruthMonitor"))},
      "entry_rejections":dict(S.get("_entry_rejections",{})),
      "daily_audit":daily_audit_stats(),
