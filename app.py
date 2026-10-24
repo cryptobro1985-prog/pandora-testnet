@@ -1231,7 +1231,7 @@ def news_feed(source,url):
  # Every news source is isolated. Search feeds have an independent Bing RSS
  # fallback; direct publishers have browser-TLS fallback when urllib is blocked.
  candidates=_news_candidates(url)
- base_poll=max(5,NEWS_POLL_SECONDS) if candidates[0][0]=="direct_rss" else max(45,NEWS_POLL_SECONDS)
+ base_poll=max(30,NEWS_POLL_SECONDS) if candidates[0][0]=="direct_rss" else max(60,NEWS_POLL_SECONDS)
  delay=base_poll;error_log_at=0
  while not SHUTDOWN.is_set():
   errors=[];success=None
