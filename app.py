@@ -1,4 +1,4 @@
-import os,json,time,threading,urllib.request,urllib.parse,sqlite3,datetime,xml.etree.ElementTree as ET,re,hashlib,subprocess
+import os,json,time,threading,urllib.request,urllib.parse,sqlite3,datetime,xml.etree.ElementTree as ET,re,hashlib,subprocess,html as htmlmod
 import sqlite3,math,email.utils,secrets,signal,copy,concurrent.futures
 import websocket
 import psycopg
@@ -112,8 +112,24 @@ FEEDS.update({
  "GoogleNewsCryptoHack":"https://news.google.com/rss/search?q=crypto+exchange+hack+exploit+liquidation&hl=en-US&gl=US&ceid=US:en",
  "GoogleNewsCryptoPolicy":"https://news.google.com/rss/search?q=SEC+CFTC+crypto+regulation+ETF&hl=en-US&gl=US&ceid=US:en",
  "GoogleNewsTokenEvents":"https://news.google.com/rss/search?q=cryptocurrency+token+listing+unlock+delisting&hl=en-US&gl=US&ceid=US:en",
- "DefiLlamaResearch":"https://investors.defillama.com/research/feed",
+ "BloombergCrypto":"https://feeds.bloomberg.com/crypto/news.rss",
+ "FTCrypto":"https://www.ft.com/crypto?format=rss",
+ "TheBlockRSS":"https://www.theblock.co/rss.xml",
+ "CryptoSlate":"https://cryptoslate.com/feed/",
+ "BitcoinMagazineRSS":"https://bitcoinmagazine.com/feed",
+ "TheDefiant":"https://thedefiant.io/feed/",
+ "Protos":"https://protos.com/feed",
 })
+SEARCH_INDEX_FEEDS={
+ "GoogleNewsCrypto","GoogleNewsMarkets","TruthSocialSearch","CoinSharesResearch","BitwiseResearch","ARKResearch","GrayscaleResearch",
+ "GoogleNewsBreaking","GoogleNewsGeopolitics","GoogleNewsOil","GoogleNewsChina","GoogleNewsMacro","GoogleNewsCryptoHack","GoogleNewsCryptoPolicy","GoogleNewsTokenEvents"
+}
+RESEARCH_PAGES={
+ "CoinSharesResearch":"https://coinshares.com/insights/research-data/",
+ "BitwiseResearch":"https://bitwiseinvestments.com/crypto-market-insights",
+ "ARKResearch":"https://www.ark-invest.com/research-center",
+ "GrayscaleResearch":"https://research.grayscale.com/"
+}
 # Credential-free coverage of public X account mentions, with indexer delay.
 # These are not authenticated X timelines; source status reports that distinction.
 for _i in range(0,len(WATCH),4):
@@ -141,7 +157,7 @@ SOURCE_WEIGHTS={
  "FedOfficial":1.00,"SECOfficial":1.00,"CFTCOfficial":1.00,"DOJNews":0.95,
  "TruthSocialPublic":0.95,"XOfficial":0.90,"TruthArchive":0.80,
  "CoinSharesResearch":0.90,"BitwiseResearch":0.88,"ARKResearch":0.86,"GrayscaleResearch":0.88,
- "CoinDesk":0.84,"Decrypt":0.78,"Cointelegraph":0.74,"DefiLlamaResearch":0.82,
+ "CoinDesk":0.84,"Decrypt":0.78,"Cointelegraph":0.74,"BloombergCrypto":0.90,"FTCrypto":0.88,"TheBlockRSS":0.84,"CryptoSlate":0.76,"BitcoinMagazineRSS":0.76,"TheDefiant":0.74,"Protos":0.72,
  "GoogleNewsMarkets":0.60,"GoogleNewsCrypto":0.55,"TruthSocialSearch":0.55
 }
 NON_MARKET_PATTERNS=(
@@ -1159,6 +1175,32 @@ def adapt():
    with LOCK:S["last_error"]="adaptive: "+str(e)[:160]
   SHUTDOWN.wait(900)
 
+def research_page_monitor(source,url):
+ delay=60
+ while not SHUTDOWN.is_set():
+  try:
+   raw,transport=_fetch_news_xml(url,timeout=8)
+   text=raw.decode("utf-8","replace")
+   # Direct publisher page health. Trading content from these firms is also
+   # covered by their X accounts; this avoids turning stale research archives
+   # into fresh trade signals on restart.
+   links=re.findall(r'<a[^>]+href=["\\\']([^"\\\']+)["\\\'][^>]*>(.*?)</a>',text,re.I|re.S)
+   titles=[]
+   for href,label in links:
+    clean=htmlmod.unescape(re.sub(r"<[^>]+>"," ",label))
+    clean=re.sub(r"\\s+"," ",clean).strip()
+    if len(clean)>=24 and len(clean)<=220:titles.append(clean)
+   with LOCK:S["sources"][source]={"ok":True,"last_check":now(),"mode":"direct_research_page","transport":transport,
+      "items_detected":len(set(titles)),"realtime_verified":False,"error":None}
+   delay=120
+  except Exception as exc:
+   err=str(exc)[:220]
+   with LOCK:S["sources"][source]={"ok":False,"last_check":now(),"mode":"direct_research_page","error":err}
+   try:journal("source_error",None,{"source":source,"kind":"research_page","error":err})
+   except Exception:pass
+   delay=min(600,max(120,delay*1.7))
+  SHUTDOWN.wait(delay)
+
 def _news_candidates(url):
  parsed=urllib.parse.urlsplit(url)
  if parsed.hostname=="news.google.com":
@@ -1253,7 +1295,7 @@ def build_dashboard_snapshot():
  try: account_age_seconds=max(0,int((datetime.datetime.now(datetime.timezone.utc)-datetime.datetime.fromisoformat(account_started.replace("Z","+00:00"))).total_seconds()))
  except Exception: account_age_seconds=0
  total=state["equity"]+unreal;account_roi=(total/PAPER_RESET-1)*100
- visible_sources={k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor"}
+ visible_sources={k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and k not in SEARCH_INDEX_FEEDS}
  return {"mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"positions":positions,"trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
 def dashboard():
@@ -1277,7 +1319,7 @@ def dashboard():
  return {"mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),
   "total_equity":round(state["equity"]+unreal,4),"realized_pnl":round(state["realized_pnl"],4),
   "account_age_seconds":0,"account_roi_pct":round(((state["equity"]+unreal)/PAPER_RESET-1)*100,3),
-  "positions":positions,"trades":[],"news":[],"features":[],"sources":{k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor"},
+  "positions":positions,"trades":[],"news":[],"features":[],"sources":{k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and k not in SEARCH_INDEX_FEEDS},
   "errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],
   "market_count":state["market_count"],"last_poll":state["last_poll"],
   "uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],
@@ -1310,9 +1352,9 @@ def operations_diagnostics():
      "market_error":S.get("last_market_error"),"positions":len(S["positions"]),
      "trades":S.get("trades"),"news_seen":S.get("news_seen"),
      "sources_ok":sum(bool(x.get("ok")) for x in S["sources"].values()),
-     "sources_failed":[k for k,v in S["sources"].items() if not v.get("ok") and not k.startswith("XIndex:") and k!="XIndexMonitor"],
+     "sources_failed":[k for k,v in S["sources"].items() if not v.get("ok") and not k.startswith("XIndex:") and k!="XIndexMonitor" and k not in SEARCH_INDEX_FEEDS],
      "sources_degraded_noncritical":[k for k,v in S["sources"].items() if not v.get("ok") and (k.startswith("XIndex:") or k=="XIndexMonitor")],
-     "news_failures":{k:str(v.get("error") or "")[:160] for k,v in S["sources"].items() if not v.get("ok") and (k in FEEDS and not k.startswith("XIndex:"))},
+     "news_failures":{k:str(v.get("error") or "")[:160] for k,v in S["sources"].items() if not v.get("ok") and ((k in FEEDS and k not in SEARCH_INDEX_FEEDS and not k.startswith("XIndex:")) or k in RESEARCH_PAGES)},
      "social_channels":{k:{"ok":v.get("ok"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds"),"delivery_latency_seconds":v.get("delivery_latency_seconds"),"accounts_ok":v.get("accounts_ok"),"accounts_initialized":v.get("accounts_initialized"),"accounts_total":v.get("accounts_total"),"all_accounts_ok":v.get("all_accounts_ok"),"fx_primary":v.get("fx_primary"),"xlookup_primary":v.get("xlookup_primary")} for k,v in S["sources"].items() if k.startswith(("XFree:","XFilteredStream","XListMonitor","XMonitor","XIndexMonitor","TruthAuth","TruthStream","TruthDirect:","TruthSocialPublic","TruthMonitor"))},
      "entry_rejections":dict(S.get("_entry_rejections",{})),
      "daily_audit":daily_audit_stats(),
@@ -1482,7 +1524,8 @@ if __name__=="__main__":
  targets += ([lambda:social_reader("x")] if os.getenv("X_SESSION_COOKIES","").strip() else [])
  targets += [lambda:social_reader("truth")] if os.getenv("TRUTHSOCIAL_TOKEN","").strip() else []
  workers=[threading.Thread(target=t,daemon=True,name=t.__name__) for t in targets]
- workers += [threading.Thread(target=news_feed,args=(name,url),daemon=True,name="feed:"+name) for name,url in FEEDS.items() if not name.startswith("XIndex:")]
+ workers += [threading.Thread(target=news_feed,args=(name,url),daemon=True,name="feed:"+name) for name,url in FEEDS.items() if not name.startswith("XIndex:") and name not in SEARCH_INDEX_FEEDS]
+ workers += [threading.Thread(target=research_page_monitor,args=(name,url),daemon=True,name="research:"+name) for name,url in RESEARCH_PAGES.items()]
  workers += [threading.Thread(target=public_social_reader,args=("x",handle),daemon=True,name="public-x:"+handle) for handle in WATCH] if os.getenv("ENABLE_PUBLIC_X_HTML","0")=="1" else []
 
  for worker in workers:worker.start()
