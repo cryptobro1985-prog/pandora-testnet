@@ -99,3 +99,27 @@ No passwords, automatic account creation, purchased accounts or paid APIs needed
 If credentials are absent or the platform returns 403, the dashboard reports
 `ok:false` with a reason rather than claiming the source is scanning.
 No claim of working live X ingestion until an authorized session returns posts.
+
+### Public readers without X sessions (October 24 follow-up)
+
+`public_social.py` parses public X profile HTML and decodes embedded JSON as data,
+never JavaScript execution. It preserves the post ID, author and original timestamp,
+rejects sign-in/changed-schema pages and excludes nested quotes as new signals.
+Each watched account has an independent worker: 12-second HTTP timeout, 10-second
+wait after completion, bounded exponential backoff (at least 60 seconds on 429).
+This is best-effort polling, NOT verified instant delivery or complete X coverage.
+`XPublic:<handle>` reports page retrieval and newest visible post age separately.
+The actual publication-age guard still blocks old posts at entry.
+
+`TruthArchive` reads https://www.trumpstruth.org/feed?limit=20 without credentials,
+with original RSS publication timestamps and a 30-second wait after completion.
+It covers Trump's archived text posts only; image-only entries are excluded.
+Archive indexing latency is unknown; `realtime_verified` remains false.
+
+Live research probes: X public HTML yielded authored posts with original timestamps;
+X guest GraphQL returned HTTP 200 but mostly old/popular posts, so it is NOT wired
+as a live signal source. Public embed timeline returned 429. Direct Truth statuses
+and streaming-health returned 403; public profile is an HTML app shell, not posts.
+Do not confuse HTTP 200 or an old latest post with measured delivery latency.
+Research: https://github.com/DevamShah/pravaha,
+https://github.com/tamnd/x-cli, https://github.com/ythx-101/x-tweet-fetcher.
