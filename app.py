@@ -7,6 +7,7 @@ from engine_store import EngineStore, LeaseLost
 from entry_guards import freshness, publication_epoch
 from social_scrapers import poll as social_poll, SourceUnavailable
 from public_social import read as public_social_read
+from momentum_scanner import candidates as momentum_candidates
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
 def choose(db_path,current=(-0.10,0.20)):
  with sqlite3.connect(db_path) as c: rows=c.execute("select pnl from trades order by id desc limit 120").fetchall()
