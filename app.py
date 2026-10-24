@@ -25,7 +25,7 @@ def recent():
  if token:
   try:
    q="("+" OR ".join("from:"+x for x in WATCH)+") -is:retweet";url="https://api.x.com/2/tweets/search/recent?"+urllib.parse.urlencode({"query":q,"max_results":100,"tweet.fields":"created_at,author_id"})
-   req=urllib.request.Request(url,headers={"User-Agent":"PANDORA-paper/1"})
+   req=urllib.request.Request(url,headers={"User-Agent":"PANDORA-paper/1","Authorization":"Bearer "+token})
    with urllib.request.urlopen(req,timeout=15) as r:return json.load(r).get("data",[])
   except Exception:pass
  # credential-free public fallback: Google News indexes public x.com posts
