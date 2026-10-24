@@ -817,7 +817,10 @@ def health_state():
  coordinator_age=stamp-S.get("_coordinator_heartbeat",stamp)
  healthy=not SHUTDOWN.is_set() and heartbeat<45 and coordinator_age<45
  ready=healthy and S["engine_active"] and age is not None and age<10 and checkpoint_age is not None and checkpoint_age<15
- return {"healthy":healthy,"risk_ready":ready,"engine_active":S["engine_active"],
+ sources=dict(S.get("sources",{}))
+ social={k:v for k,v in sources.items() if k.startswith(("XPublic:","XMonitor","XScrape","TruthSocial","TruthWatch:","TruthArchive"))}
+ unavailable=[k for k,v in social.items() if not v.get("ok")]
+ return {"healthy":healthy,"risk_ready":ready,"news_sources_total":len(sources),"news_sources_failed":sum(not v.get("ok",False) for v in sources.values()),"social_sources_failed":unavailable,"guest_x_realtime_verified":False,"news_24h_guaranteed":False,"engine_active":S["engine_active"],
          "market_age_seconds":age,"checkpoint_age_seconds":checkpoint_age,
          "engine_error":S["engine_error"],"last_market_error":S["last_market_error"],
          "news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"market_structure_filter_active":False,
