@@ -57,8 +57,17 @@ START=time.time()
 S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0}
 LOCK=threading.RLock()
 FEEDS={"FedOfficial":"https://www.federalreserve.gov/feeds/press_all.xml","SECOfficial":"https://www.sec.gov/news/pressreleases.rss","GoogleNewsCrypto":"https://news.google.com/rss/search?q=cryptocurrency+OR+bitcoin+OR+altcoin&hl=en-US&gl=US&ceid=US:en","GoogleNewsMarkets":"https://news.google.com/rss/search?q=crypto+SEC+OR+Federal+Reserve+OR+token+listing&hl=en-US&gl=US&ceid=US:en","Cointelegraph":"https://cointelegraph.com/rss","Decrypt":"https://decrypt.co/feed","CoinDesk":"https://www.coindesk.com/arc/outboundfeeds/rss/","CFTCOfficial":"https://www.cftc.gov/RSS/RSSGP/rssgp.xml","DOJNews":"https://www.justice.gov/feeds/justice-news.xml?type=All&component%5B436%5D=436&organization=All","TruthSocialSearch":"https://news.google.com/rss/search?q=site%3Atruthsocial.com+crypto&hl=en-US&gl=US&ceid=US:en"}
-POS=("surge","approve","approval","partnership","listing","adoption","buyback","breakout","bullish","launch","etf approved")
-NEG=("hack","exploit","lawsuit","delist","ban","liquidation","fraud","selloff","bearish","crash","stolen")
+POS=("surge","surges","approve","approved","approval","partnership","listing","adoption","buyback","breakout","bullish","launch","etf approved","rally","rallies","rebound","rebounds","record high","inflows","net inflow","gains","jumps","soars","upside")
+NEG=("hack","hacked","exploit","lawsuit","delist","delisted","ban","banned","liquidation","liquidations","fraud","selloff","sell-off","bearish","crash","crashes","stolen","outflows","net outflow","falls","drops","slips","plunges","tumbles","declines")
+# Symbols that are also ordinary English words/acronyms. Never map them from a bare word.
+# They require an explicit crypto form/name so headlines like "not", "people", "move", "etc" cannot create trades.
+AMBIGUOUS_SYMBOLS={"NOT","PEOPLE","MOVE","ETC"}
+EXPLICIT_TOKEN_PATTERNS={
+ "NOT":(r"\\$NOT\\b",r"\\bNOTUSDT\\b",r"\\bNOTCOIN\\b",r"\\bNOT TOKEN\\b"),
+ "PEOPLE":(r"\\$PEOPLE\\b",r"\\bPEOPLEUSDT\\b",r"\\bCONSTITUTIONDAO\\b",r"\\bPEOPLE TOKEN\\b"),
+ "MOVE":(r"\\$MOVE\\b",r"\\bMOVEUSDT\\b",r"\\bMOVEMENT(?: NETWORK)?\\b",r"\\bMOVE TOKEN\\b"),
+ "ETC":(r"\\$ETC\\b",r"\\bETCUSDT\\b",r"\\bETHEREUM CLASSIC\\b",r"\\bETC TOKEN\\b")
+}
 STOP_ROE=-999.0;TAKE_ROE=0.20;LEV=25.0;MARGIN_FRACTION=0.10;FEE=0.00045;LOCK_TRIGGER_ROE=0.10;LOCK_ROE=0.075;PAPER_RESET=100.0;MIN_EXIT_ROE=0.075;TRAIL_ARM_ROE=0.12
 def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
 def pg():
@@ -183,12 +192,19 @@ def market():
    with LOCK:S["errors"]+=1;S["last_error"]="market: "+str(e)[:180]
   time.sleep(2)
 def detect(title,prices):
- upper=title.upper()
- mentions=[k for k in prices if len(k)>=3 and re.search(r"(?<![A-Z0-9])"+re.escape(k)+r"(?![A-Z0-9])",upper)]
+ upper=title.upper();lo=title.lower()
+ mentions=[]
+ for k in prices:
+  if len(k)<3:continue
+  if k in AMBIGUOUS_SYMBOLS:
+   if any(re.search(p,upper) for p in EXPLICIT_TOKEN_PATTERNS.get(k,())):mentions.append(k)
+  elif re.search(r"(?<![A-Z0-9])"+re.escape(k)+r"(?![A-Z0-9])",upper):
+   mentions.append(k)
+ # Macro/regulatory crypto headlines default only to BTC/ETH; never to an accidental word-like ticker.
  if not mentions:
-  if any(w in title.lower() for w in ("federal reserve","interest rates","inflation","bitcoin","crypto market","sec")):mentions=["BTC","ETH"]
+  if any(w in lo for w in ("federal reserve","interest rates","inflation","bitcoin","crypto market","cryptocurrency market","sec")):mentions=["BTC","ETH"]
   else:return None,0
- score=sum(w in title.lower() for w in POS)-sum(w in title.lower() for w in NEG)
+ score=sum(w in lo for w in POS)-sum(w in lo for w in NEG)
  return (mentions[0] if mentions else None),(1 if score>0 else -1 if score<0 else 0)
 def hyperdata(path):
  try:return json.loads(get("http://127.0.0.1:8420"+path))
