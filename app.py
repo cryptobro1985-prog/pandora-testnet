@@ -635,29 +635,24 @@ def free_x_realtime():
  pool=concurrent.futures.ThreadPoolExecutor(max_workers=min(128,max(48,len(handles))),thread_name_prefix="x-realtime")
  ingest_pool=concurrent.futures.ThreadPoolExecutor(max_workers=8,thread_name_prefix="x-ingest")
  def fetch_one(handle):
+  # Realtime path must finish quickly. Slow browser/guest/Nitter fallbacks are
+  # intentionally excluded here because a single stuck fallback starved the
+  # 128-account worker pool and left XMonitor at ~50/128 initialized.
   primary=("fx",free_x_fetch) if handle in fx_primary else ("xlookup",free_x_lookup_fetch)
   secondary=("xlookup",free_x_lookup_fetch) if primary[0]=="fx" else ("fx",free_x_fetch)
   errors=[]
   for backend,fn in (primary,secondary):
-   try:return fn(handle),backend,backend!=primary[0],(" | ".join(errors) if errors else None)
+   try:
+    if backend=="fx":posts=fn(handle,timeout=2.2,attempts=1)
+    else:posts=fn(handle,timeout=2.2)
+    return posts,backend,backend!=primary[0],(" | ".join(errors) if errors else None)
    except Exception as exc:errors.append(backend+":"+str(exc)[:70])
-  try:return free_x_search_fetch(handle),"fxsearch",True," | ".join(errors)
-  except Exception as exc:errors.append("fxsearch:"+str(exc)[:70])
-  try:return free_x_fixupx_fetch(handle),"fixupx",True," | ".join(errors)
+  try:return free_x_fixupx_fetch(handle,timeout=2.2),"fixupx",True," | ".join(errors)
   except Exception as exc:errors.append("fixupx:"+str(exc)[:70])
-  try:return guest_x_read(handle),"guest_graphql",True," | ".join(errors)
-  except Exception as exc:errors.append("guest:"+str(exc)[:70])
-  try:return free_x_embed_fetch(handle),"publish_embed",True," | ".join(errors)
-  except Exception as exc:errors.append("embed:"+str(exc)[:70])
-  try:return free_x_page_fetch(handle),"logged_out_page",True," | ".join(errors)
-  except Exception as exc:errors.append("page:"+str(exc)[:70])
-  try:return free_x_nitter_fetch(handle),"nitter_rss",True," | ".join(errors)
-  except Exception as exc:errors.append("nitter:"+str(exc)[:70])
-  try:return free_x_syndication_fetch(handle),"syndication",True," | ".join(errors)
-  except Exception as exc:errors.append("syndication:"+str(exc)[:70])
-  try:return free_x_vx_fetch(handle),"vx",True," | ".join(errors)
+  try:return free_x_vx_fetch(handle,timeout=2.2),"vx",True," | ".join(errors)
   except Exception as exc:errors.append("vx:"+str(exc)[:70])
   raise RuntimeError(" | ".join(errors))
+
  try:
   while not SHUTDOWN.is_set():
    if not S["engine_active"]:
@@ -706,7 +701,7 @@ def free_x_realtime():
       rate_limit_hits[handle]=min(8,rate_limit_hits.get(handle,0)+1)
       backoff_until[handle]=time.monotonic()+min(900,60*2**(rate_limit_hits[handle]-1))
      else:
-      backoff_until[handle]=time.monotonic()+min(60,4*2**min(4,rate_limit_hits.get(handle,0)))
+      backoff_until[handle]=time.monotonic()+min(20,4*2**min(3,rate_limit_hits.get(handle,0)))
      with LOCK:
       prev=S["sources"].get(name,{})
       failures=int(prev.get("consecutive_failures",0))+1
@@ -1201,7 +1196,8 @@ def build_dashboard_snapshot():
  try: account_age_seconds=max(0,int((datetime.datetime.now(datetime.timezone.utc)-datetime.datetime.fromisoformat(account_started.replace("Z","+00:00"))).total_seconds()))
  except Exception: account_age_seconds=0
  total=state["equity"]+unreal;account_roi=(total/PAPER_RESET-1)*100
- return {"mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"positions":positions,"trades":trades,"news":newsrows,"features":feats,"sources":state["sources"],"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
+ visible_sources={k:v for k,v in state["sources"].items() if not k.startswith("XIndex:")}
+ return {"mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"positions":positions,"trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
 def dashboard():
  with LOCK:
@@ -1224,7 +1220,7 @@ def dashboard():
  return {"mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),
   "total_equity":round(state["equity"]+unreal,4),"realized_pnl":round(state["realized_pnl"],4),
   "account_age_seconds":0,"account_roi_pct":round(((state["equity"]+unreal)/PAPER_RESET-1)*100,3),
-  "positions":positions,"trades":[],"news":[],"features":[],"sources":state["sources"],
+  "positions":positions,"trades":[],"news":[],"features":[],"sources":{k:v for k,v in state["sources"].items() if not k.startswith("XIndex:")},
   "errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],
   "market_count":state["market_count"],"last_poll":state["last_poll"],
   "uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],
@@ -1257,7 +1253,8 @@ def operations_diagnostics():
      "market_error":S.get("last_market_error"),"positions":len(S["positions"]),
      "trades":S.get("trades"),"news_seen":S.get("news_seen"),
      "sources_ok":sum(bool(x.get("ok")) for x in S["sources"].values()),
-     "sources_failed":[k for k,v in S["sources"].items() if not v.get("ok")],
+     "sources_failed":[k for k,v in S["sources"].items() if not v.get("ok") and not k.startswith("XIndex:") and k!="XIndexMonitor"],
+     "sources_degraded_noncritical":[k for k,v in S["sources"].items() if not v.get("ok") and (k.startswith("XIndex:") or k=="XIndexMonitor")],
      "social_channels":{k:{"ok":v.get("ok"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds"),"delivery_latency_seconds":v.get("delivery_latency_seconds"),"accounts_ok":v.get("accounts_ok"),"accounts_initialized":v.get("accounts_initialized"),"accounts_total":v.get("accounts_total"),"all_accounts_ok":v.get("all_accounts_ok"),"fx_primary":v.get("fx_primary"),"xlookup_primary":v.get("xlookup_primary")} for k,v in S["sources"].items() if k.startswith(("XFree:","XFilteredStream","XListMonitor","XMonitor","XIndexMonitor","TruthAuth","TruthStream","TruthDirect:","TruthSocialPublic","TruthMonitor"))},
      "entry_rejections":dict(S.get("_entry_rejections",{})),
      "daily_audit":daily_audit_stats(),
