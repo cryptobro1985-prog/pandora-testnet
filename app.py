@@ -289,6 +289,47 @@ def market():
   S["_market_heartbeat"]=time.time()
   SHUTDOWN.wait(2)
 
+def impulse_scan():
+ # Independent price-impulse scanner; never blocks exit protection.
+ while not SHUTDOWN.is_set():
+  try:
+   with LOCK:
+    prices=dict(S.get("_prices",{}))
+    history={k:list(v) for k,v in S.get("_timeline",{}).items()}
+    volumes=dict(S.get("_day_volumes",{}))
+   stamp=time.time()
+   found=momentum_candidates(prices,history,volumes,stamp)
+   with LOCK:
+    S["sources"]["ImpulseScanner"]={"ok":True,"last_check":now(),"markets":len(prices),"liquid_markets":sum(v>=1000000 for v in volumes.values()),"candidates":len(found),"mode":"all_markets_2s_poll"}
+   for candidate in found[:12]:
+    sym=candidate["symbol"]
+    window=candidate["window"]
+    bucket=int(stamp//max(30,window))
+    ident=hashlib.sha256(("IMPULSE:"+sym+":"+str(candidate["side"])+":"+str(window)+":"+str(bucket)).encode()).hexdigest()
+    title=("Market pump " if candidate["side"]>0 else "Market dump ")+sym+" "+str(candidate["change_pct"])+"% / "+str(window)+"s"
+    ingest_event(ident,"ImpulseScanner",title,now(),None)
+  except Exception as e:
+   with LOCK:S["sources"]["ImpulseScanner"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
+  SHUTDOWN.wait(2)
+
+def market_metadata():
+ while not SHUTDOWN.is_set():
+  try:
+   raw=json.loads(get(API,{"type":"metaAndAssetCtxs"}))
+   universe=raw[0].get("universe",[]);ctxs=raw[1]
+   volumes={}
+   for asset,ctx in zip(universe,ctxs):
+    try:
+     v=float(ctx.get("dayNtlVlm",0))
+     if math.isfinite(v) and v>=0:volumes[asset["name"]]=v
+    except (TypeError,ValueError,KeyError):continue
+   with LOCK:
+    S["_day_volumes"]=volumes
+    S["sources"]["MarketMetadata"]={"ok":True,"last_check":now(),"markets":len(volumes)}
+  except Exception as e:
+   with LOCK:S["sources"]["MarketMetadata"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
+  SHUTDOWN.wait(25)
+
 def telemetry():
  # External context calls are slow and optional. They must never hold LOCK or
  # stall the price/exit loop, even if a source hangs or returns an error.
@@ -339,6 +380,7 @@ def deep_context(sym,prices):
   book=json.loads(get(API,{"type":"l2Book","coin":sym}));levels=book.get("levels",[])
   if len(levels)>=2:
    b=sum(float(x.get("sz",0)) for x in levels[0][:10]);a=sum(float(x.get("sz",0)) for x in levels[1][:10]);out["orderbook_imbalance"]=(b-a)/(b+a) if b+a else 0
+    out["liquidation_map"]={"type":"estimated_pressure_not_confirmed_liquidations","bid_depth_top10":b,"ask_depth_top10":a,"imbalance":out["orderbook_imbalance"],"data_source":"hyperliquid_l2_book"}
  except Exception:pass
  hist=S.get("_hist",{}).get(sym,[])
  if len(hist)>=3:out["market_momentum"]=hist[-1]/hist[max(0,len(hist)-3)]-1
@@ -791,7 +833,7 @@ if __name__=="__main__":
   SHUTDOWN.set()
   threading.Thread(target=server.shutdown,daemon=True).start()
  signal.signal(signal.SIGTERM,shutdown);signal.signal(signal.SIGINT,shutdown)
- targets=[engine_coordinator,market,telemetry,xnews,adapt,truthnews,truth_watch]
+ targets=[engine_coordinator,market,market_metadata,impulse_scan,telemetry,xnews,adapt,truthnews,truth_watch]
  targets += [lambda:social_reader("x"),lambda:social_reader("truth")]
  workers=[threading.Thread(target=t,daemon=True,name=t.__name__) for t in targets]
  workers += [threading.Thread(target=news_feed,args=(name,url),daemon=True,name="feed:"+name) for name,url in FEEDS.items()]
