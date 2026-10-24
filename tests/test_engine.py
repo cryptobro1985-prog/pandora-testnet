@@ -116,7 +116,7 @@ class EntryTests(unittest.TestCase):
         save.assert_not_called()
 
     def test_stale_market_price_blocks_fresh_news(self):
-        app.S.update(engine_active=True,_last_poll_epoch=0,_prices={"BTC":80000})
+        app.S.update(engine_active=True,_last_poll_epoch=0,_prices={"BTC":80000},last_checkpoint=app.now())
         with patch.object(app,"journal") as log,patch.object(app.STORE,"save") as save:
             self.assertFalse(app.open_signal("BTC",1,"fresh",{"BTC":80000},"id",app.now()))
         self.assertEqual(log.call_args.args[2]["reason"],"stale_market_price");save.assert_not_called()
@@ -126,6 +126,25 @@ class EntryTests(unittest.TestCase):
             self.assertFalse(app.LOCK._is_owned());return []
         with patch.object(app,"persistent_trades",side_effect=check),patch.object(app,"persistent_news",side_effect=check),patch.object(app,"persistent_features",side_effect=check):
             app.dashboard()
+
+    def test_connection_compatible_with_neon_transaction_pooler(self):
+        with patch.dict(app.os.environ,{"DATABASE_URL":"postgresql://fixture"}),patch.object(app.psycopg,"connect") as connect:
+            app.pg()
+        self.assertNotIn("options",connect.call_args.kwargs)
+        self.assertEqual(connect.call_args.kwargs["connect_timeout"],5)
+
+    def test_failed_risk_checkpoint_blocks_new_entry(self):
+        app.S.update(engine_active=True,_last_poll_epoch=app.time.time(),_prices={"BTC":80000},last_checkpoint=None)
+        with patch.object(app,"journal") as log,patch.object(app.STORE,"save") as save:
+            self.assertFalse(app.open_signal("BTC",1,"fresh",{"BTC":80000},"id",app.now()))
+        self.assertEqual(log.call_args.args[2]["reason"],"risk_checkpoint_stale");save.assert_not_called()
+
+    def test_coordinator_database_failure_is_retried(self):
+        stop=unittest.mock.Mock()
+        stop.is_set.side_effect=[False,True]
+        with patch.object(app,"SHUTDOWN",stop),patch.object(app.STORE,"has_lease_record",side_effect=RuntimeError("temporary")):
+            app.engine_coordinator()
+        stop.wait.assert_called_once_with(5)
 
 
 if __name__=="__main__":unittest.main()
