@@ -14,6 +14,7 @@ import time
 from curl_cffi import requests as curl_requests
 
 FX_BASE="https://api.fxtwitter.com"
+VX_BASE="https://api.vxtwitter.com"
 TRUTH_BASE="https://truthsocial.com/api"
 FX_UA="PANDORA-market-news/1.0 (+https://pandora-testnet-monitor.onrender.com)"
 try:
@@ -78,6 +79,39 @@ def fetch_x(handle,timeout=4):
         if reposter and author_handle.lower()!=handle.lower():
             text="[repost by @"+handle+"] "+text
         out.append({"id":ident,"text":text,"created_at":created,"url":row.get("url") or ("https://x.com/"+handle+"/status/"+ident)})
+    return out
+
+def fetch_x_vx(handle,timeout=4):
+    """Independent no-key fallback: vxTwitter user endpoint with recent tweets."""
+    url=VX_BASE+"/"+urllib.parse.quote(handle,safe="")+"?with_tweets=true"
+    req=urllib.request.Request(url,headers={"User-Agent":FX_UA,"Accept":"application/json","Cache-Control":"no-cache"})
+    with urllib.request.urlopen(req,timeout=timeout) as response:
+        payload=json.load(response)
+    if not isinstance(payload,dict):
+        raise RuntimeError("vxtwitter_invalid_profile")
+    if payload.get("error"):
+        raise RuntimeError("vxtwitter_"+str(payload.get("error"))[:80])
+    rows=payload.get("latest_tweets")
+    if not isinstance(rows,list):
+        raise RuntimeError("vxtwitter_invalid_results")
+    out=[]
+    for row in rows:
+        if not isinstance(row,dict):
+            continue
+        ident=str(row.get("tweetID") or row.get("id") or "")
+        text=(row.get("text") or "").strip()
+        if not ident or not text:
+            continue
+        screen=str(row.get("user_screen_name") or payload.get("screen_name") or handle)
+        if screen.lower()!=handle.lower():
+            continue
+        epoch=row.get("date_epoch")
+        if isinstance(epoch,(int,float)):
+            created=dt.datetime.fromtimestamp(float(epoch),dt.timezone.utc).isoformat()
+        else:
+            created=row.get("created_at") or row.get("date")
+        out.append({"id":ident,"text":text,"created_at":created,
+                    "url":row.get("tweetURL") or ("https://x.com/"+handle+"/status/"+ident)})
     return out
 
 def _truth_get(path,params=None,timeout=6):
