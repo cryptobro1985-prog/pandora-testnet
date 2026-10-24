@@ -545,6 +545,8 @@ def free_x_realtime():
   except Exception as exc:errors.append("guest:"+str(exc)[:70])
   try:return free_x_syndication_fetch(handle),"syndication",True," | ".join(errors)
   except Exception as exc:errors.append("syndication:"+str(exc)[:70])
+  try:return free_x_vx_fetch(handle),"vx",True," | ".join(errors)
+  except Exception as exc:errors.append("vx:"+str(exc)[:70])
   raise RuntimeError(" | ".join(errors))
  try:
   while not SHUTDOWN.is_set():
@@ -601,7 +603,7 @@ def free_x_realtime():
     states=[S["sources"].get("XFree:"+h,{}) for h in handles]
     initialized=sum(bool(v) for v in states);good=sum(bool(v.get("ok")) for v in states)
     realtime=sum(bool(v.get("realtime_verified")) for v in states)
-    backend_live={b:sum(1 for v in states if v.get("ok") and v.get("backend")==b) for b in ("fx","xlookup","guest_graphql","syndication")}
+    backend_live={b:sum(1 for v in states if v.get("ok") and v.get("backend")==b) for b in ("fx","xlookup","guest_graphql","syndication","vx")}
     S["sources"]["XMonitor"]={"ok":initialized==len(handles) and good>=math.ceil(len(handles)*0.90),
      "all_accounts_ok":initialized==len(handles) and good==len(handles),
      "mode":"fx_xlookup_guest_parallel_4s_poll","last_check":now(),"accounts_ok":good,
