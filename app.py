@@ -112,6 +112,7 @@ FEEDS.update({
  "GoogleNewsCryptoHack":"https://news.google.com/rss/search?q=crypto+exchange+hack+exploit+liquidation&hl=en-US&gl=US&ceid=US:en",
  "GoogleNewsCryptoPolicy":"https://news.google.com/rss/search?q=SEC+CFTC+crypto+regulation+ETF&hl=en-US&gl=US&ceid=US:en",
  "GoogleNewsTokenEvents":"https://news.google.com/rss/search?q=cryptocurrency+token+listing+unlock+delisting&hl=en-US&gl=US&ceid=US:en",
+ "DefiLlamaResearch":"https://investors.defillama.com/research/feed",
 })
 # Credential-free coverage of public X account mentions, with indexer delay.
 # These are not authenticated X timelines; source status reports that distinction.
@@ -140,7 +141,7 @@ SOURCE_WEIGHTS={
  "FedOfficial":1.00,"SECOfficial":1.00,"CFTCOfficial":1.00,"DOJNews":0.95,
  "TruthSocialPublic":0.95,"XOfficial":0.90,"TruthArchive":0.80,
  "CoinSharesResearch":0.90,"BitwiseResearch":0.88,"ARKResearch":0.86,"GrayscaleResearch":0.88,
- "CoinDesk":0.84,"Decrypt":0.78,"Cointelegraph":0.74,
+ "CoinDesk":0.84,"Decrypt":0.78,"Cointelegraph":0.74,"DefiLlamaResearch":0.82,
  "GoogleNewsMarkets":0.60,"GoogleNewsCrypto":0.55,"TruthSocialSearch":0.55
 }
 NON_MARKET_PATTERNS=(
@@ -647,7 +648,7 @@ def free_x_realtime():
  ingest_pool=concurrent.futures.ThreadPoolExecutor(max_workers=6,thread_name_prefix="x-ingest")
  with LOCK:S["sources"]["XMonitor"]={"ok":False,"degraded":True,"mode":"adaptive_direct_poll_starting","last_check":now(),"accounts_ok":0,"accounts_initialized":0,"accounts_total":len(handles),"priority_poll_seconds":fast_poll,"normal_poll_seconds":normal_poll,"scan_workers":pool._max_workers,"error":None}
  def fetch_one(handle):
-  idx=backend_idx.get(handle,(sum(ord(ch) for ch in handle)&1))%len(backends)
+  idx=backend_idx.get(handle,0)%len(backends)
   backend=backends[idx]
   if backend=="fx":posts=free_x_fetch(handle,timeout=3.2,attempts=1)
   else:posts=free_x_lookup_fetch(handle,timeout=3.2)
@@ -701,7 +702,7 @@ def free_x_realtime():
     except Exception as exc:
      err=str(exc)[:220] if str(exc) else type(exc).__name__
      failures[handle]=failures.get(handle,0)+1
-     backend_idx[handle]=(backend_idx.get(handle,(sum(ord(ch) for ch in handle)&1))+1)%len(backends)
+     backend_idx[handle]=(backend_idx.get(handle,0)+1)%len(backends)
      limited=any(x in err.lower() for x in ("429","rate.limit","too many requests"))
      backoff=30 if limited else min(20,4*2**min(2,failures[handle]-1))
      backoff_until[handle]=time.monotonic()+backoff
@@ -1166,8 +1167,10 @@ def _news_candidates(url):
   if "when:" not in q:q=(q+" when:1h").strip()
   g=urllib.parse.urlunsplit(parsed._replace(query=urllib.parse.urlencode({"q":q,"hl":"en-US","gl":"US","ceid":"US:en"})))
   # Independent search-RSS fallback so Google outages/rate limits do not blind PANDORA.
-  b="https://www.bing.com/news/search?"+urllib.parse.urlencode({"q":q.replace(" when:1h",""),"format":"rss","setlang":"en-us"})
-  return [("google_news",g),("bing_news",b)]
+  clean_q=q.replace(" when:1h","")
+  b="https://www.bing.com/news/search?"+urllib.parse.urlencode({"q":clean_q,"format":"rss","setlang":"en-us"})
+  y="https://news.search.yahoo.com/rss?"+urllib.parse.urlencode({"p":clean_q})
+  return [("google_news",g),("bing_news",b),("yahoo_news",y)]
  return [("direct_rss",url)]
 
 def _fetch_news_xml(url,timeout=7):
