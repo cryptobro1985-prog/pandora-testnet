@@ -3,8 +3,8 @@ import datetime,email.utils,json,time,urllib.parse,urllib.request,urllib.error
 
 BEARER="AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs=1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA"
 BASE="https://x.com/i/api/graphql/"
-QUERY_USER="2qvSHpkWTMS9i0zJAwDNiA"
-QUERY_TWEETS="hr4gzZONlq23okjU8fIe_A"
+QUERY_USERS=["1VOOyvKkiI3FMmkeDNxM9A","2qvSHpkWTMS9i0zJAwDNiA"]
+QUERY_TWEETS_IDS=["q6xj5bs0hapm9309hexA_g","hr4gzZONlq23okjU8fIe_A"]
 _token=None
 _expires=0
 
@@ -32,12 +32,30 @@ def graphql(qid,op,params):
 
 def read(handle):
  features={"responsive_web_graphql_exclude_directive_enabled":True,"verified_phone_label_enabled":False,"responsive_web_graphql_timeline_navigation_enabled":True,"rweb_tipjar_consumption_enabled":True,"creator_subscriptions_tweet_preview_api_enabled":True,"responsive_web_graphql_skip_user_profile_image_extensions_enabled":False}
- user=graphql(QUERY_USER,"UserByScreenName",{"variables":{"screen_name":handle,"withSafetyModeUserFields":True},"features":features})
+ user=None;last=None
+ for qid in QUERY_USERS:
+  try:
+   candidate=graphql(qid,"UserByScreenName",{"variables":{"screen_name":handle,"withSafetyModeUserFields":True},"features":features})
+   result=candidate.get("data",{}).get("user",{}).get("result") or {}
+   if result.get("rest_id"):
+    user=candidate;break
+  except Exception as exc:last=exc
+ if user is None:
+  if last:raise last
+  raise ValueError("guest_user_not_available")
  result=user.get("data",{}).get("user",{}).get("result") or {}
  ident=result.get("rest_id")
- if not ident:raise ValueError("guest_user_not_available")
  variables={"userId":ident,"count":20,"includePromotedContent":False,"withQuickPromoteEligibilityTweetFields":False,"withVoice":True,"withV2Timeline":True}
- data=graphql(QUERY_TWEETS,"UserTweets",{"variables":variables,"features":features,"fieldToggles":{"withArticlePlainText":False}})
+ data=None;last=None
+ for qid in QUERY_TWEETS_IDS:
+  try:
+   candidate=graphql(qid,"UserTweets",{"variables":variables,"features":features,"fieldToggles":{"withArticlePlainText":False}})
+   if candidate.get("data"):
+    data=candidate;break
+  except Exception as exc:last=exc
+ if data is None:
+  if last:raise last
+  raise ValueError("guest_timeline_unavailable")
  found={}
  def walk(node):
   if isinstance(node,list):
