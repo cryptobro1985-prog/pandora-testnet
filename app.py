@@ -1700,7 +1700,7 @@ if __name__=="__main__":
 
  worker_specs=[
   ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),
-  ("telemetry",telemetry),("operator_actions",operator_one_shot_actions),("pump_dump",impulse_scan),
+  ("telemetry",telemetry),("pump_dump",impulse_scan),
   ("adapt",adapt),("x_public_4s",free_x_realtime),("truth_public",free_truth_realtime),
   ("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)
  ]
@@ -1717,6 +1717,8 @@ if __name__=="__main__":
  if os.getenv("ENABLE_PUBLIC_X_HTML","0")=="1":
   for handle in WATCH:worker_specs.append(("public-x:"+handle,lambda h=handle:public_social_reader("x",h)))
  workers=[threading.Thread(target=supervised_worker,args=(label,fn),daemon=True,name=label) for label,fn in worker_specs]
+ # Operator action is intentionally one-shot; normal completion is not a health failure.
+ workers.append(threading.Thread(target=operator_one_shot_actions,daemon=True,name="operator_actions"))
  for worker in workers:worker.start()
  try:server.serve_forever()
  finally:
