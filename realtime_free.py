@@ -83,6 +83,37 @@ def fetch_x(handle,timeout=4):
         out.append({"id":ident,"text":text,"created_at":created,"url":row.get("url") or ("https://x.com/"+handle+"/status/"+ident)})
     return out
 
+def fetch_x_search(handle,timeout=4):
+    """Low-volume fallback: FxTwitter latest search for posts authored by handle."""
+    params=urllib.parse.urlencode({"q":"from:"+handle,"feed":"latest","count":20})
+    url=FX_BASE+"/2/search?"+params
+    req=urllib.request.Request(url,headers={"User-Agent":FX_UA,"Accept":"application/json","Cache-Control":"no-cache"})
+    with urllib.request.urlopen(req,timeout=timeout) as response:
+        payload=json.load(response)
+    code=int(payload.get("code",200) or 0) if isinstance(payload,dict) else 0
+    if code!=200:
+        raise RuntimeError("fxsearch_code_"+str(code))
+    rows=payload.get("results")
+    if not isinstance(rows,list):
+        raise RuntimeError("fxsearch_invalid_results")
+    out=[]
+    for row in rows:
+        if not isinstance(row,dict) or row.get("type") not in (None,"status"):
+            continue
+        ident=str(row.get("id") or "")
+        text=(row.get("text") or "").strip()
+        author=row.get("author") or {}
+        screen=str(author.get("screen_name") or "")
+        if not ident or not text or screen.lower()!=handle.lower():
+            continue
+        ts=row.get("created_timestamp")
+        created=dt.datetime.fromtimestamp(float(ts),dt.timezone.utc).isoformat() if isinstance(ts,(int,float)) else row.get("created_at")
+        out.append({"id":ident,"text":text,"created_at":created,
+                    "url":row.get("url") or ("https://x.com/"+handle+"/status/"+ident)})
+    if not out:
+        raise RuntimeError("fxsearch_empty")
+    return out
+
 def fetch_x_fixupx(handle,timeout=4):
     """FxEmbed official mirror used only as a fallback for failed profile reads."""
     url="https://api.fixupx.com/2/profile/"+urllib.parse.quote(handle,safe="")+"/statuses"
