@@ -513,6 +513,35 @@ def public_social_reader(kind,handle):
   SHUTDOWN.wait(delay)
 
 
+def truth_watch():
+ # Candidate handles are probed individually; nonexistent profiles are never counted as live.
+ # A 403/429 pauses the whole pass to avoid hammering a blocked service.
+ handles=list(dict.fromkeys(WATCH+["FoxNews","FoxBusiness","Newsmax","OANN","DanScavino"]))
+ while not SHUTDOWN.is_set():
+  for handle in handles:
+   if SHUTDOWN.is_set():return
+   if not S["engine_active"]:
+    SHUTDOWN.wait(3);continue
+   source="TruthWatch:"+handle
+   try:
+    posts=social_poll("truth",[handle])
+    with LOCK:S["sources"][source]={"ok":True,"last_check":now(),"posts":len(posts),"mode":"direct_truth_reader","realtime_verified":False}
+    for p in posts:
+     title=p.get("text","").strip()
+     if not title:continue
+     ident=hashlib.sha256(("TruthSocialPublic"+str(p["id"])).encode()).hexdigest()
+     ingest_event(ident,"TruthSocialPublic",title,p.get("created_at"),p.get("url"))
+   except SourceUnavailable as exc:
+    error=str(exc)
+    with LOCK:S["sources"][source]={"ok":False,"last_check":now(),"error":error,"mode":"unavailable"}
+    if error in ("truth_http_403","truth_http_429"):
+     SHUTDOWN.wait(300)
+     break
+   except Exception as exc:
+    with LOCK:S["sources"][source]={"ok":False,"last_check":now(),"error":type(exc).__name__}
+   SHUTDOWN.wait(1)
+  SHUTDOWN.wait(20)
+
 def adapt():
  global STOP_ROE,TAKE_ROE
  while not SHUTDOWN.is_set():
@@ -650,7 +679,7 @@ if __name__=="__main__":
   SHUTDOWN.set()
   threading.Thread(target=server.shutdown,daemon=True).start()
  signal.signal(signal.SIGTERM,shutdown);signal.signal(signal.SIGINT,shutdown)
- targets=[engine_coordinator,market,telemetry,xnews,adapt,truthnews]
+ targets=[engine_coordinator,market,telemetry,xnews,adapt,truthnews,truth_watch]
  targets += [lambda:social_reader("x"),lambda:social_reader("truth")]
  workers=[threading.Thread(target=t,daemon=True,name=t.__name__) for t in targets]
  workers += [threading.Thread(target=news_feed,args=(name,url),daemon=True,name="feed:"+name) for name,url in FEEDS.items()]
