@@ -9,6 +9,7 @@ import re
 import threading
 import urllib.parse
 import urllib.request
+import time
 
 from curl_cffi import requests as curl_requests
 
@@ -36,12 +37,22 @@ def _clean(value):
 
 def fetch_x(handle,timeout=4):
     url=FX_BASE+"/2/profile/"+urllib.parse.quote(handle,safe="")+"/statuses"
-    req=urllib.request.Request(url,headers={"User-Agent":FX_UA,"Accept":"application/json"})
-    with urllib.request.urlopen(req,timeout=timeout) as response:
-        payload=json.load(response)
-    code=int(payload.get("code",200) or 0)
-    if code!=200:
-        raise RuntimeError("fxtwitter_code_"+str(code))
+    last=None
+    for attempt in range(3):
+        try:
+            req=urllib.request.Request(url,headers={"User-Agent":FX_UA,"Accept":"application/json","Cache-Control":"no-cache"})
+            with urllib.request.urlopen(req,timeout=timeout) as response:
+                payload=json.load(response)
+            code=int(payload.get("code",200) or 0)
+            if code!=200:
+                raise RuntimeError("fxtwitter_code_"+str(code))
+            break
+        except Exception as exc:
+            last=exc
+            if attempt<2:
+                time.sleep(0.18*(attempt+1))
+    else:
+        raise last
     rows=payload.get("results")
     if not isinstance(rows,list):
         raise RuntimeError("fxtwitter_invalid_results")
@@ -108,3 +119,53 @@ def fetch_truth(handle,account_id=None,timeout=6):
         out.append({"id":str(row["id"]),"text":text,"created_at":row.get("created_at"),
                     "url":row.get("url") or ("https://truthsocial.com/@"+handle+"/"+str(row["id"]))})
     return str(account_id),out,headers
+
+def fetch_truth_activitypub(handle,timeout=6):
+    """Read a public Truth Social actor outbox through ActivityPub/WebFinger."""
+    sess=_truth_session()
+    common={"User-Agent":TRUTH_UA,"Accept":"application/activity+json, application/ld+json"}
+    wf=sess.get("https://truthsocial.com/.well-known/webfinger",
+                params={"resource":"acct:"+handle+"@truthsocial.com"},
+                headers={"User-Agent":TRUTH_UA,"Accept":"application/jrd+json"},
+                impersonate=IMPERSONATE_TARGET,timeout=timeout)
+    if wf.status_code!=200:
+        raise RuntimeError("truth_ap_webfinger_"+str(wf.status_code))
+    data=wf.json()
+    actor_url=next((x.get("href") for x in data.get("links",[]) if x.get("rel")=="self" and x.get("href")),None)
+    if not actor_url:
+        raise RuntimeError("truth_ap_no_actor")
+    actor=sess.get(actor_url,headers=common,impersonate=IMPERSONATE_TARGET,timeout=timeout)
+    if actor.status_code!=200:
+        raise RuntimeError("truth_ap_actor_"+str(actor.status_code))
+    actor_data=actor.json()
+    outbox=actor_data.get("outbox")
+    if not outbox:
+        raise RuntimeError("truth_ap_no_outbox")
+    page=sess.get(outbox,params={"page":"true"},headers=common,impersonate=IMPERSONATE_TARGET,timeout=timeout)
+    if page.status_code!=200:
+        raise RuntimeError("truth_ap_outbox_"+str(page.status_code))
+    payload=page.json()
+    if isinstance(payload.get("first"),str) and not payload.get("orderedItems"):
+        page=sess.get(payload["first"],headers=common,impersonate=IMPERSONATE_TARGET,timeout=timeout)
+        if page.status_code!=200:
+            raise RuntimeError("truth_ap_first_"+str(page.status_code))
+        payload=page.json()
+    items=payload.get("orderedItems") or payload.get("items") or []
+    out=[]
+    for activity in items[:20]:
+        if not isinstance(activity,dict):
+            continue
+        obj=activity.get("object")
+        if isinstance(obj,str):
+            continue
+        if not isinstance(obj,dict):
+            obj=activity
+        ident=str(obj.get("id") or activity.get("id") or "")
+        text=_clean(obj.get("content") or obj.get("summary") or "")
+        created=obj.get("published") or activity.get("published")
+        url=obj.get("url") or ident
+        if ident and text and created:
+            out.append({"id":ident.rsplit("/",1)[-1],"text":text,"created_at":created,"url":url})
+    if not out:
+        raise RuntimeError("truth_ap_empty")
+    return out
