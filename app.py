@@ -112,7 +112,6 @@ FEEDS.update({
  "GoogleNewsCryptoHack":"https://news.google.com/rss/search?q=crypto+exchange+hack+exploit+liquidation&hl=en-US&gl=US&ceid=US:en",
  "GoogleNewsCryptoPolicy":"https://news.google.com/rss/search?q=SEC+CFTC+crypto+regulation+ETF&hl=en-US&gl=US&ceid=US:en",
  "GoogleNewsTokenEvents":"https://news.google.com/rss/search?q=cryptocurrency+token+listing+unlock+delisting&hl=en-US&gl=US&ceid=US:en",
- "BloombergCrypto":"https://feeds.bloomberg.com/crypto/news.rss",
  "FTCrypto":"https://www.ft.com/crypto?format=rss",
  "TheBlockRSS":"https://www.theblock.co/rss.xml",
  "CryptoSlate":"https://cryptoslate.com/feed/",
@@ -126,9 +125,7 @@ SEARCH_INDEX_FEEDS={
 }
 RESEARCH_PAGES={
  "CoinSharesResearch":"https://coinshares.com/insights/research-data/",
- "BitwiseResearch":"https://bitwiseinvestments.com/crypto-market-insights",
- "ARKResearch":"https://www.ark-invest.com/research-center",
- "GrayscaleResearch":"https://research.grayscale.com/"
+ "BitwiseResearch":"https://bitwiseinvestments.com/crypto-market-insights"
 }
 # Credential-free coverage of public X account mentions, with indexer delay.
 # These are not authenticated X timelines; source status reports that distinction.
@@ -157,7 +154,7 @@ SOURCE_WEIGHTS={
  "FedOfficial":1.00,"SECOfficial":1.00,"CFTCOfficial":1.00,"DOJNews":0.95,
  "TruthSocialPublic":0.95,"XOfficial":0.90,"TruthArchive":0.80,
  "CoinSharesResearch":0.90,"BitwiseResearch":0.88,"ARKResearch":0.86,"GrayscaleResearch":0.88,
- "CoinDesk":0.84,"Decrypt":0.78,"Cointelegraph":0.74,"BloombergCrypto":0.90,"FTCrypto":0.88,"TheBlockRSS":0.84,"CryptoSlate":0.76,"BitcoinMagazineRSS":0.76,"TheDefiant":0.74,"Protos":0.72,
+ "CoinDesk":0.84,"Decrypt":0.78,"Cointelegraph":0.74,"FTCrypto":0.88,"TheBlockRSS":0.84,"CryptoSlate":0.76,"BitcoinMagazineRSS":0.76,"TheDefiant":0.74,"Protos":0.72,
  "GoogleNewsMarkets":0.60,"GoogleNewsCrypto":0.55,"TruthSocialSearch":0.55
 }
 NON_MARKET_PATTERNS=(
