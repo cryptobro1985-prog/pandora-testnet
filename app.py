@@ -905,10 +905,10 @@ def free_x_realtime():
     realtime=sum(bool(v.get("realtime_verified")) for v in active_states)
     active_count=len(active_states);disabled_count=sum(bool(v.get("disabled")) for v in states)
     recent_success=bool(last_success and time.time()-max(last_success.values())<=60)
-    healthy=bool(active_count>=20 and good>=max(12,math.ceil(active_count*0.60)) and recent_success)
+    healthy=bool(good>=50 and recent_success)
     S["sources"]["XMonitor"]={"ok":healthy,
      "all_accounts_ok":active_count>0 and good==active_count,
-     "degraded":healthy and good<active_count,
+     "degraded":healthy and (good<len(handles) or active_count<len(handles)),
      "mode":"adaptive_active_retry_pool","last_check":now(),"accounts_ok":good,
      "accounts_initialized":initialized,"accounts_total":len(handles),
      "active_accounts":active_count,"disabled_retry_accounts":disabled_count,
@@ -1527,6 +1527,8 @@ def operations_diagnostics():
      "sources_degraded_noncritical":[k for k,v in S["sources"].items() if not v.get("ok") and (k.startswith("XIndex:") or k=="XIndexMonitor")],
      "news_failures":{k:str(v.get("error") or "")[:160] for k,v in S["sources"].items() if not v.get("ok") and ((k in FEEDS and k not in SEARCH_INDEX_FEEDS and not k.startswith("XIndex:")) or k in RESEARCH_PAGES)},
      "social_channels":{k:{"ok":v.get("ok"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds"),"delivery_latency_seconds":v.get("delivery_latency_seconds"),"accounts_ok":v.get("accounts_ok"),"accounts_initialized":v.get("accounts_initialized"),"accounts_total":v.get("accounts_total"),"all_accounts_ok":v.get("all_accounts_ok"),"fx_primary":v.get("fx_primary"),"xlookup_primary":v.get("xlookup_primary")} for k,v in S["sources"].items() if k.startswith(("XFree:","XFilteredStream","XListMonitor","XMonitor","XIndexMonitor","TruthAuth","TruthStream","TruthDirect:","TruthSocialPublic","TruthMonitor"))},
+     "pump_engine":copy.deepcopy(S["sources"].get("PumpDumpScanner",{})),
+     "pump_positions":len(S.get("pump_positions",{})),"pump_equity":S.get("pump_equity"),"pump_trades":S.get("pump_trades"),
      "entry_rejections":dict(S.get("_entry_rejections",{})),
      "daily_audit":daily_audit_stats(),
      "risk_ready":health["risk_ready"]}
@@ -1693,6 +1695,7 @@ if __name__=="__main__":
   threading.Thread(target=server.shutdown,daemon=True).start()
  signal.signal(signal.SIGTERM,shutdown);signal.signal(signal.SIGINT,shutdown)
  targets=[engine_coordinator,market,market_metadata,telemetry,operator_one_shot_actions,impulse_scan,adapt,free_x_realtime,x_list_realtime,free_truth_realtime,truth_stream_realtime,x_filtered_stream,dashboard_cache_loop,operations_diagnostics]
+ targets += [xnews] if os.getenv("X_BEARER_TOKEN","").strip() else []
  targets += ([lambda:social_reader("x")] if os.getenv("X_SESSION_COOKIES","").strip() else [])
  targets += [lambda:social_reader("truth")] if os.getenv("TRUTHSOCIAL_TOKEN","").strip() else []
  workers=[threading.Thread(target=t,daemon=True,name=t.__name__) for t in targets]
