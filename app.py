@@ -1,7 +1,10 @@
 import os,json,time,threading,urllib.request,urllib.parse,sqlite3,datetime,xml.etree.ElementTree as ET,re,hashlib,subprocess
-import sqlite3,math,email.utils,secrets
+import sqlite3,math,email.utils,secrets,signal,copy
 import psycopg
 from psycopg.rows import dict_row
+from risk import evaluate_exit, risk_state
+from engine_store import EngineStore, LeaseLost
+from entry_guards import freshness, publication_epoch
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
 def choose(db_path,current=(-0.10,0.20)):
  with sqlite3.connect(db_path) as c: rows=c.execute("select pnl from trades order by id desc limit 120").fetchall()
@@ -31,7 +34,7 @@ def recent():
    root=ET.fromstring(get(u))
    for it in root.findall(".//item")[:8]:
     title=(it.findtext("title") or "").strip();link=(it.findtext("link") or "")
-    if title:out.append({"id":hashlib.sha256((h+title).encode()).hexdigest(),"text":title,"source":"XPublicIndex","url":link})
+    if title:out.append({"id":hashlib.sha256((h+title).encode()).hexdigest(),"text":title,"source":"XPublicIndex","url":link,"created_at":it.findtext("pubDate")})
   except Exception:pass
  return out[:100]
 
@@ -56,6 +59,12 @@ DB="/tmp/pandora.sqlite3"
 START=time.time()
 S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0}
 LOCK=threading.RLock()
+SHUTDOWN=threading.Event()
+NEWS_MAX_AGE_SECONDS=float(os.getenv("NEWS_MAX_AGE_SECONDS","120"))
+NEWS_POLL_SECONDS=float(os.getenv("NEWS_POLL_SECONDS","10"))
+if not math.isfinite(NEWS_MAX_AGE_SECONDS) or NEWS_MAX_AGE_SECONDS<=0:raise ValueError("invalid news freshness window")
+if not math.isfinite(NEWS_POLL_SECONDS) or NEWS_POLL_SECONDS<1:raise ValueError("invalid news poll interval")
+S.update({"engine_active":False,"engine_error":None,"last_checkpoint":None,"last_market_error":None})
 FEEDS={"FedOfficial":"https://www.federalreserve.gov/feeds/press_all.xml","SECOfficial":"https://www.sec.gov/news/pressreleases.rss","GoogleNewsCrypto":"https://news.google.com/rss/search?q=cryptocurrency+OR+bitcoin+OR+altcoin&hl=en-US&gl=US&ceid=US:en","GoogleNewsMarkets":"https://news.google.com/rss/search?q=crypto+SEC+OR+Federal+Reserve+OR+token+listing&hl=en-US&gl=US&ceid=US:en","Cointelegraph":"https://cointelegraph.com/rss","Decrypt":"https://decrypt.co/feed","CoinDesk":"https://www.coindesk.com/arc/outboundfeeds/rss/","CFTCOfficial":"https://www.cftc.gov/RSS/RSSGP/rssgp.xml","DOJNews":"https://www.justice.gov/feeds/justice-news.xml?type=All&component%5B436%5D=436&organization=All","TruthSocialSearch":"https://news.google.com/rss/search?q=site%3Atruthsocial.com+crypto&hl=en-US&gl=US&ceid=US:en","CoinSharesResearch":"https://news.google.com/rss/search?q=site%3Acoinshares.com%2Finsights%2Fresearch-data+crypto&hl=en-US&gl=US&ceid=US:en","BitwiseResearch":"https://news.google.com/rss/search?q=site%3Abitwiseinvestments.com%2Fcrypto-market-insights+crypto&hl=en-US&gl=US&ceid=US:en","ARKResearch":"https://news.google.com/rss/search?q=site%3Aark-invest.com+bitcoin+OR+crypto&hl=en-US&gl=US&ceid=US:en","GrayscaleResearch":"https://news.google.com/rss/search?q=site%3Aresearch.grayscale.com+crypto&hl=en-US&gl=US&ceid=US:en"}
 POS=("surge","surges","approve","approved","approval","partnership","listing","adoption","buyback","breakout","bullish","launch","etf approved","rally","rallies","rebound","rebounds","record high","inflows","net inflow","gains","jumps","soars","upside")
 NEG=("hack","hacked","exploit","lawsuit","delist","delisted","ban","banned","liquidation","liquidations","fraud","selloff","sell-off","bearish","crash","crashes","stolen","outflows","net outflow","falls","drops","slips","plunges","tumbles","declines")
@@ -63,10 +72,10 @@ NEG=("hack","hacked","exploit","lawsuit","delist","delisted","ban","banned","liq
 # They require an explicit crypto form/name so headlines like "not", "people", "move", "etc" cannot create trades.
 AMBIGUOUS_SYMBOLS={"NOT","PEOPLE","MOVE","ETC"}
 EXPLICIT_TOKEN_PATTERNS={
- "NOT":(r"\\$NOT\\b",r"\\bNOTUSDT\\b",r"\\bNOTCOIN\\b",r"\\bNOT TOKEN\\b"),
- "PEOPLE":(r"\\$PEOPLE\\b",r"\\bPEOPLEUSDT\\b",r"\\bCONSTITUTIONDAO\\b",r"\\bPEOPLE TOKEN\\b"),
- "MOVE":(r"\\$MOVE\\b",r"\\bMOVEUSDT\\b",r"\\bMOVEMENT(?: NETWORK)?\\b",r"\\bMOVE TOKEN\\b"),
- "ETC":(r"\\$ETC\\b",r"\\bETCUSDT\\b",r"\\bETHEREUM CLASSIC\\b",r"\\bETC TOKEN\\b")
+ "NOT":(r"\$NOT\b",r"\bNOTUSDT\b",r"\bNOTCOIN\b",r"\bNOT TOKEN\b"),
+ "PEOPLE":(r"\$PEOPLE\b",r"\bPEOPLEUSDT\b",r"\bCONSTITUTIONDAO\b",r"\bPEOPLE TOKEN\b"),
+ "MOVE":(r"\$MOVE\b",r"\bMOVEUSDT\b",r"\bMOVEMENT(?: NETWORK)?\b",r"\bMOVE TOKEN\b"),
+ "ETC":(r"\$ETC\b",r"\bETCUSDT\b",r"\bETHEREUM CLASSIC\b",r"\bETC TOKEN\b")
 }
 # Source priors are experimental metadata for the one-week PAPER_ONLY study.
 # They are logged and gently affect confidence/eligibility, but can never reverse news direction.
@@ -98,7 +107,8 @@ def source_weight(source):return float(SOURCE_WEIGHTS.get(source,0.50))
 STOP_ROE=-999.0;TAKE_ROE=0.20;LEV=25.0;MARGIN_FRACTION=0.10;FEE=0.00045;LOCK_TRIGGER_ROE=0.10;LOCK_ROE=0.075;PAPER_RESET=100.0;MIN_EXIT_ROE=0.075;TRAIL_ARM_ROE=0.12
 def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
 def pg():
- return psycopg.connect(os.environ["DATABASE_URL"],autocommit=True,row_factory=dict_row)
+ return psycopg.connect(os.environ["DATABASE_URL"],autocommit=True,row_factory=dict_row,connect_timeout=5,options="-c statement_timeout=5000")
+STORE=EngineStore(pg,FEE,PAPER_RESET)
 def pinit():
  with pg() as c:
   c.execute("create table if not exists account_state (id integer primary key, equity double precision not null, realized_pnl double precision not null, updated_at text not null)")
@@ -120,22 +130,13 @@ def pinit():
   if row:
    S["equity"]=float(row["equity"]);S["realized_pnl"]=float(row["realized_pnl"])
   else:c.execute("insert into account_state(id,equity,realized_pnl,updated_at) values(1,%s,%s,%s)",(S["equity"],S["realized_pnl"],now()))
-  for r in c.execute("select * from open_positions").fetchall():
-   S["positions"][r["symbol"]]={"entry":float(r["entry"]),"side":int(r["side"]),"notional":float(r["notional"]),"opened":r["opened"],"t":float(r["opened_epoch"]),"headline":r["headline"] or "","locked":bool(r["locked"]),"stop":r["stop"],"leverage":float(r["leverage"] or LEV),"margin":float(r["margin"] or (float(r["notional"])/float(r["leverage"] or LEV))),"event_id":r.get("event_id")}
+  S["news_seen"]=c.execute("select count(*) as n from news_events").fetchone()["n"]
+  S["trades"]=c.execute("select count(*) as n from trade_history").fetchone()["n"]
+ STORE.migrate()
+ _,positions=STORE.load(recover_legacy=False)
+ S["positions"]=positions
 def journal(kind,event_id,payload):
  with pg() as c:c.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,%s,%s,%s::jsonb)",(now(),event_id,kind,json.dumps(payload,default=str)))
-def save_account():
- with pg() as c:c.execute("insert into account_state(id,equity,realized_pnl,updated_at) values(1,%s,%s,%s) on conflict(id) do update set equity=excluded.equity,realized_pnl=excluded.realized_pnl,updated_at=excluded.updated_at",(S["equity"],S["realized_pnl"],now()))
-def save_pos(sym):
- p=S["positions"][sym];lev=float(p.get("leverage",LEV));margin=float(p.get("margin",p["notional"]/lev))
- with pg() as c:c.execute("insert into open_positions(symbol,side,entry,notional,opened,opened_epoch,headline,locked,stop,leverage,margin,event_id) values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict(symbol) do update set side=excluded.side,entry=excluded.entry,notional=excluded.notional,opened=excluded.opened,opened_epoch=excluded.opened_epoch,headline=excluded.headline,locked=excluded.locked,stop=excluded.stop,leverage=excluded.leverage,margin=excluded.margin,event_id=excluded.event_id",(sym,p["side"],p["entry"],p["notional"],p["opened"],p["t"],p["headline"],p["locked"],p["stop"],lev,margin,p.get("event_id")))
-def close_persistent(sym,pos,px,pnl,reason):
- with pg() as c:
-  with c.transaction():
-   c.execute("insert into trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,headline,event_id) values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",(pos["opened"],now(),sym,pos["side"],pos["entry"],px,pnl,reason,pos["headline"],pos.get("event_id")))
-   c.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,%s,%s,%s::jsonb)",(now(),pos.get("event_id"),"trade_closed",json.dumps({"symbol":sym,"side":pos["side"],"entry":pos["entry"],"exit":px,"notional":pos["notional"],"pnl":pnl,"reason":reason,"opened":pos["opened"]})))
-   c.execute("delete from open_positions where symbol=%s",(sym,))
-   c.execute("insert into account_state(id,equity,realized_pnl,updated_at) values(1,%s,%s,%s) on conflict(id) do update set equity=excluded.equity,realized_pnl=excluded.realized_pnl,updated_at=excluded.updated_at",(S["equity"],S["realized_pnl"],now()))
 def persistent_trades(limit=100):
  with pg() as c:return c.execute("select * from trade_history order by id desc limit %s",(limit,)).fetchall()
 def choose_persistent(current=(-0.10,0.20)):
@@ -182,42 +183,90 @@ def init():
   c.execute("create table if not exists trades (id integer primary key autoincrement,opened text,closed text,symbol text,side integer,entry real,exit real,pnl real,reason text,headline text)")
   c.execute("create table if not exists snapshots (ts text,markets integer,equity real,positions integer)")
   c.execute("create table if not exists event_features (id text primary key,ts text,source text,title text,symbol text,decision integer,confidence real,features text)")
+def engine_coordinator():
+ # On the first rollout the previous release has no lease support. Its Render
+ # drain lasts 60s; wait 120s after starting the web listener before taking over.
+ grace=120 if not STORE.has_lease_record() else 0
+ if SHUTDOWN.wait(grace):return
+ while not SHUTDOWN.is_set():
+  try:
+   if STORE.claim():
+    if not S["engine_active"]:
+     account,positions=STORE.load()
+     for sym,pos in positions.items():STORE.save(sym,pos)
+     with LOCK:
+      S["positions"]=positions;S["equity"]=float(account["equity"]);S["realized_pnl"]=float(account["realized_pnl"])
+      S["last_checkpoint"]=now()
+     journal("engine_restored",None,{"positions":list(positions),"risk_checkpoints":True})
+    S["engine_active"]=True;S["engine_error"]=None
+   else:
+    S["engine_active"]=False;S["engine_error"]="standby: another engine owns the lease"
+  except Exception as e:
+   S["engine_active"]=False;S["engine_error"]=str(e)[:180]
+  SHUTDOWN.wait(5)
+ S["engine_active"]=False
+ try:STORE.release()
+ except Exception:pass
+
 def market():
- while True:
+ while not SHUTDOWN.is_set():
+  S["_market_heartbeat"]=time.time()
   try:
    mids=json.loads(get(API,{"type":"allMids"}))
-   valid={k:float(v) for k,v in mids.items() if re.match(r"^[A-Z0-9]{2,15}$",k) and float(v)>0}
+   valid={k:float(v) for k,v in mids.items() if re.match(r"^[A-Z0-9]{2,15}$",k) and math.isfinite(float(v)) and float(v)>0}
+   if not valid:raise ValueError("empty market response")
    with LOCK:
-    S["last_poll"]=now();S["market_count"]=len(valid)
-    for sym,p in valid.items():
-     if sym in S["positions"]:
-      pos=S["positions"][sym];lev=float(pos.get("leverage",LEV));move=(p/pos["entry"]-1)*pos["side"];roe=move*lev
-      if roe>=LOCK_TRIGGER_ROE and not pos["locked"]:
-       pos["locked"]=True;pos["stop"]=pos["entry"]*(1+pos["side"]*LOCK_ROE/lev);save_pos(sym)
-      hist0=S.get("_hist",{}).get(sym,[]);pos["peak"]=max(pos.get("peak",p),p) if pos["side"]>0 else min(pos.get("peak",p),p);peakmove=(pos["peak"]/pos["entry"]-1)*pos["side"];peakroe=peakmove*lev;weak=(len(hist0)>=6 and ((pos["side"]>0 and p<max(hist0[-6:]) and hist0[-1]<hist0[-3]) or (pos["side"]<0 and p>min(hist0[-6:]) and hist0[-1]>hist0[-3])));giveback=max(0.0,peakroe-roe);rets=[abs(hist0[i]/hist0[i-1]-1)*lev for i in range(max(1,len(hist0)-20),len(hist0)) if hist0[i-1]>0];noise=(sum(rets)/len(rets)) if rets else 0.01;trail_gap=max(0.025,min(0.08,noise*3.0));profit_floor=max(MIN_EXIT_ROE,peakroe-trail_gap);trail_armed=peakroe>=TRAIL_ARM_ROE;adaptive_exit=trail_armed and roe<=profit_floor and weak
-      if S["equity"]+pos["notional"]*move<=0 or adaptive_exit:
-       reason="liquidation" if S["equity"]+pos["notional"]*move<=0 else "local_extreme_weakening"
-       pnl=pos["notional"]*move-pos["notional"]*FEE*2
-       S["equity"]+=pnl;S["realized_pnl"]+=pnl;S["trades"]+=1
-       if S["equity"]<=0:S["equity"]=PAPER_RESET
-       close_persistent(sym,pos,p,pnl,reason)
-       del S["positions"][sym]
-    S["_prices"]=valid
-    timeline=S.setdefault("_timeline",{})
+    S["last_poll"]=now();S["_last_poll_epoch"]=time.time();S["market_count"]=len(valid);S["_prices"]=valid
+    if S["engine_active"] and not SHUTDOWN.is_set():
+     for sym,px in valid.items():
+      if sym not in S["positions"]:continue
+      pos,reason=evaluate_exit(S["positions"][sym],px,now())
+      move=(px/pos["entry"]-1)*pos["side"]
+      if S["equity"]+pos["notional"]*move<=0:reason="liquidation"
+      # Retain an unsaved new extreme in memory if the database is temporarily
+      # unavailable. Never delete a position or change equity before commit.
+      S["positions"][sym]=pos
+      if reason:
+       result=STORE.close(sym,pos,px,reason)
+       if result:
+        S["equity"]=float(result["equity"]);S["realized_pnl"]=float(result["realized_pnl"]);S["trades"]+=1
+       S["positions"].pop(sym,None)
+      elif not STORE.save(sym,pos):
+       S["positions"].pop(sym,None)
+     S["last_checkpoint"]=now()
     stamp=time.time()
-    for tsym,tprice in valid.items():
-     track=timeline.setdefault(tsym,[]);track.append((stamp,tprice))
+    for sym,px in valid.items():
+     track=S.setdefault("_timeline",{}).setdefault(sym,[]);track.append((stamp,px))
      if len(track)>600:del track[:-600]
-    hist=S.setdefault("_hist",{})
-    for hs,hp in valid.items():
-     q=hist.setdefault(hs,[]);q.append(hp)
-     if len(q)>120:del q[:-120]
-    save_market_snapshot(now(),len(valid),S["equity"],len(S["positions"]))
-    for csym in list(S["positions"].keys()):
-     if csym in valid:save_market_context(now(),csym,valid[csym],deep_context(csym,valid))
+     hist=S.setdefault("_hist",{}).setdefault(sym,[]);hist.append(px)
+     if len(hist)>120:del hist[:-120]
+    S["last_market_error"]=None
+  except LeaseLost as e:
+   S["engine_active"]=False;S["engine_error"]=str(e)
   except Exception as e:
-   with LOCK:S["errors"]+=1;S["last_error"]="market: "+str(e)[:180]
-  time.sleep(2)
+   S["errors"]+=1;S["last_market_error"]=str(e)[:180];S["last_error"]="market: "+str(e)[:180]
+  S["_market_heartbeat"]=time.time()
+  SHUTDOWN.wait(2)
+
+def telemetry():
+ # External context calls are slow and optional. They must never hold LOCK or
+ # stall the price/exit loop, even if a source hangs or returns an error.
+ while not SHUTDOWN.is_set():
+  try:
+   with LOCK:
+    active=S["engine_active"];prices=dict(S.get("_prices",{}));symbols=list(S["positions"])
+    count=S["market_count"];equity=S["equity"]
+   if active:
+    save_market_snapshot(now(),count,equity,len(symbols))
+    for sym in symbols:
+     if SHUTDOWN.is_set():break
+     if sym in prices:
+      sampled_at=now()
+      context=deep_context(sym,prices)
+      with LOCK:S.setdefault("_context_cache",{})[sym]={"epoch":time.time(),"context":context}
+      save_market_context(sampled_at,sym,prices[sym],context)
+  except Exception as e:S["last_error"]="telemetry: "+str(e)[:160]
+  SHUTDOWN.wait(30)
 def detect(title,prices):
  upper=title.upper();lo=title.lower()
  mentions=[]
@@ -259,12 +308,22 @@ def deep_context(sym,prices):
  return out
 
 def decide(title,sym,base_side,prices):
- f=deep_context(sym,prices);lo=title.lower();f["tokenomics"]="unlock_event" if any(x in lo for x in ("unlock","vesting","token release")) else "normal"
+ # Entry decisions use news and already cached optional features. No network
+ # calls or market-structure confirmation may delay a fresh event.
+ with LOCK:
+  cached=S.get("_context_cache",{}).get(sym,{})
+  hist=list(S.get("_hist",{}).get(sym,[]))
+ age=time.time()-cached.get("epoch",0)
+ context=cached.get("context",{}) if age<=60 else {}
+ f={k:context.get(k) for k in ("orderbook_imbalance","funding","open_interest","day_volume")}
+ f["cached_context_age_seconds"]=age if cached else None
+ f["market_momentum"]=(hist[-1]/hist[-3]-1) if len(hist)>=3 else None
+ f["market_structure_filter_active"]=False
+ lo=title.lower();f["tokenomics"]="unlock_event" if any(x in lo for x in ("unlock","vesting","token release")) else "normal"
  score=float(base_side)*1.5
- m=f.get("market_momentum");obi=f.get("orderbook_imbalance");fund=f.get("funding")
- if m is not None:score+=max(-1,min(1,m*200))
- if obi is not None:score+=max(-1,min(1,obi*2))
- if fund is not None:score+=max(-0.5,min(0.5,-fund*1000))
+ # Market observations remain in the research journal, but cannot veto or
+ # reverse a directional news event. Fresh news may break an existing trend.
+ f["market_features_advisory_only"]=True
  if f["tokenomics"]=="unlock_event":score*=0.6
  if base_side>0:
   side=1 if score>=0.75 else 0
@@ -275,12 +334,6 @@ def decide(title,sym,base_side,prices):
  f["news_direction"]=base_side;f["direction_guard"]=True
  return side,min(1.0,abs(score)/3.0),f
 
-def publication_epoch(value):
- if not value:return None
- try:
-  dt=datetime.datetime.fromisoformat(value.replace("Z","+00:00")) if "T" in value else email.utils.parsedate_to_datetime(value)
-  return dt.timestamp() if dt.tzinfo else None
- except (ValueError,TypeError,OverflowError):return None
 def reaction_shadow(sym,side,published_at,price,limit_bps=150.0):
  t=publication_epoch(published_at)
  if not t or not side or price is None:return {"available":False,"reason":"missing_timestamp_direction_or_price"}
@@ -290,6 +343,11 @@ def reaction_shadow(sym,side,published_at,price,limit_bps=150.0):
  move=side*(price/anchor-1)*10000
  return {"available":True,"anchor_price":anchor,"anchor_epoch":ts,"move_bps":move,"threshold_bps":limit_bps,"would_skip":move>limit_bps}
 def record_event(ident,source,title,sym,base_side,prices,published_at=None):
+ fresh=freshness(published_at,time.time(),NEWS_MAX_AGE_SECONDS)
+ if not fresh["allowed"]:
+  save_event_feature(ident,now(),source,title,sym,0,0.0,{"freshness":fresh,"market_structure_filter_active":False})
+  journal("decision",ident,{"symbol":sym,"side":0,"reason":fresh["reason"],"freshness":fresh,"published_at":published_at})
+  return 0
  event_type,event_side=classify_event(title,base_side)
  weight=source_weight(source)
  # Explicit event classification may supply direction when the simple keyword score missed it.
@@ -299,67 +357,88 @@ def record_event(ident,source,title,sym,base_side,prices,published_at=None):
   journal("decision",ident,{"symbol":sym,"raw_side":base_side,"event_side":event_side,"event_type":event_type,"source_weight":weight,"side":0,"reason":"no_tradable_market"})
   return 0
  side,conf,features=decide(title,sym,effective_side,prices)
- features["event_type"]=event_type;features["source_weight"]=weight
+ features["event_type"]=event_type;features["source_weight"]=weight;features["freshness"]=fresh
  # PAPER experiment: source prior changes confidence, not direction. Very weak sources need a clearer decision.
  conf=min(1.0,conf*weight)
  if side and weight<0.50:side=0
  save_event_feature(ident,now(),source,title,sym,side,conf,features)
  shadow=reaction_shadow(sym,side,published_at,prices.get(sym))
  journal("decision",ident,{"symbol":sym,"raw_side":base_side,"event_side":event_side,"effective_side":effective_side,"event_type":event_type,"source_weight":weight,"side":side,"confidence":conf,"price":prices.get(sym),"features":features,"reaction_shadow":shadow,"reaction_filter_active":False,"reason":"direction_guard_or_low_source_weight" if not side else "eligible"})
- if side:open_signal(sym,side,title,prices,ident)
+ if side:open_signal(sym,side,title,prices,ident,published_at)
  return side
 
-def open_signal(sym,side,title,prices,event_id=None):
- if sym not in prices or not side:
-  journal("entry_skipped",event_id,{"symbol":sym,"reason":"no_price_or_direction"});return
- if sym in S["positions"]:
-  journal("entry_skipped",event_id,{"symbol":sym,"reason":"position_already_open"});return
- if S["equity"]<=10:
-  journal("entry_skipped",event_id,{"symbol":sym,"reason":"equity_limit"});return
- price=prices[sym];margin=S["equity"]*MARGIN_FRACTION;used_margin=sum(float(x.get("margin",x["notional"]/float(x.get("leverage",LEV)))) for x in S["positions"].values());free_margin=max(0.0,S["equity"]-used_margin)
- if free_margin+1e-9<margin:
-  journal("entry_skipped",event_id,{"symbol":sym,"reason":"free_margin","free_margin":free_margin,"required_margin":margin});return
- notional=margin*LEV
- S["positions"][sym]={"entry":price,"side":side,"notional":notional,"opened":now(),"t":time.time(),"headline":title,"locked":False,"stop":None,"peak":price,"leverage":LEV,"margin":margin,"event_id":event_id}
- save_pos(sym)
- journal("trade_opened",event_id,{"symbol":sym,"side":side,"entry":price,"notional":notional,"margin":margin,"leverage":LEV,"headline":title})
+def open_signal(sym,side,title,prices,event_id=None,published_at=None):
+ with LOCK:
+  fresh=freshness(published_at,time.time(),NEWS_MAX_AGE_SECONDS)
+  reason=None
+  if not fresh["allowed"]:reason=fresh["reason"]
+  elif not S["engine_active"] or SHUTDOWN.is_set():reason="engine_not_active"
+  elif time.time()-S.get("_last_poll_epoch",0)>10:reason="stale_market_price"
+  elif sym not in S.get("_prices",{}) or not side:reason="no_price_or_direction"
+  elif sym in S["positions"]:reason="position_already_open"
+  elif S["equity"]<=10:reason="equity_limit"
+  if reason:
+   journal("entry_skipped",event_id,{"symbol":sym,"reason":reason,"freshness":fresh});return False
+  price=S["_prices"][sym];margin=S["equity"]*MARGIN_FRACTION
+  used_margin=sum(float(x.get("margin",x["notional"]/float(x.get("leverage",LEV)))) for x in S["positions"].values())
+  free_margin=max(0.0,S["equity"]-used_margin)
+  if free_margin+1e-9<margin:
+   journal("entry_skipped",event_id,{"symbol":sym,"reason":"free_margin","free_margin":free_margin,"required_margin":margin});return False
+  notional=margin*LEV
+  pos={"entry":price,"side":side,"notional":notional,"opened":now(),"t":time.time(),"headline":title,
+       "locked":False,"stop":None,"peak":price,"trail_armed":False,"trail_stop":None,"history":[],
+       "leverage":LEV,"margin":margin,"event_id":event_id}
+  if not STORE.save(sym,pos,create=True):return False
+  S["positions"][sym]=pos
+  return True
+
+def ingest_event(ident,source,title,published_at=None,source_url=None):
+ # No long-running source or analysis code owns the risk loop's lock.
+ if not S["engine_active"] or SHUTDOWN.is_set():return False
+ with LOCK:prices=dict(S.get("_prices",{}))
+ sym,side=detect(title,prices)
+ if not save_news_event(ident,now(),source,title,sym,side,published_at,source_url):return False
+ with LOCK:S["news_seen"]+=1
+ record_event(ident,source,title,sym,side,prices,published_at)
+ return True
 
 def xnews():
- while True:
+ while not SHUTDOWN.is_set():
   try:
    posts=recent()
-   with LOCK:S["sources"]["XMonitor"]={"ok":True,"last_check":now(),"posts":len(posts),"mode":"official_api" if os.getenv("X_BEARER_TOKEN","").strip() else "multi_source_public_fallback","watch_accounts":len(WATCH)}
+   direct=bool(os.getenv("X_BEARER_TOKEN","").strip()) and not any(p.get("source")=="XPublicIndex" for p in posts)
+   with LOCK:S["sources"]["XMonitor"]={"ok":True,"last_check":now(),"posts":len(posts),"mode":"official_api" if direct else "public_index_delayed","watch_accounts":len(WATCH)}
    for p in posts:
+    if SHUTDOWN.is_set():break
     title=(p.get("text") or "").strip()
     if not title:continue
-    ident=hashlib.sha256(("XOfficial"+str(p.get("id",title))).encode()).hexdigest()
-    with LOCK:
-     prices=S.get("_prices",{});sym,side=detect(title,prices)
-     if not save_news_event(ident,now(),"XOfficial",title,sym,side,p.get("created_at"),p.get("url")):continue
-     S["news_seen"]+=1;record_event(ident,"XOfficial",title,sym,side,prices,p.get("created_at"))
+    source=p.get("source","XOfficial")
+    ident=hashlib.sha256((source+str(p.get("id",title))).encode()).hexdigest()
+    ingest_event(ident,source,title,p.get("created_at"),p.get("url"))
   except Exception as e:
    with LOCK:S["sources"]["XMonitor"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
-  time.sleep(10)
+  SHUTDOWN.wait(10)
+
 def truthnews():
  delay=10
- while True:
+ while not SHUTDOWN.is_set():
   try:
    posts=user_statuses("realDonaldTrump",30)
    with LOCK:S["sources"]["TruthSocialPublic"]={"ok":True,"last_check":now(),"posts":len(posts),"mode":"direct_public_api"};delay=10
    for p in reversed(posts):
-    title=re.sub("<[^>]+>"," ",p.get("content",""));title=re.sub(r"\\s+"," ",title).strip()
+    if SHUTDOWN.is_set():break
+    title=re.sub("<[^>]+>"," ",p.get("content",""));title=re.sub(r"\s+"," ",title).strip()
     if not title:continue
     ident=hashlib.sha256(("TruthSocialPublic"+str(p.get("id",title))).encode()).hexdigest()
-    with LOCK:
-     prices=S.get("_prices",{});sym,side=detect(title,prices)
-     if not save_news_event(ident,now(),"TruthSocialPublic",title,sym,side,p.get("created_at"),p.get("url")):continue
-     S["news_seen"]+=1;record_event(ident,"TruthSocialPublic",title,sym,side,prices,p.get("created_at"))
+    ingest_event(ident,"TruthSocialPublic",title,p.get("created_at"),p.get("url"))
   except Exception as e:
-   with LOCK:S["sources"]["TruthSocialPublic"]={"ok":True,"last_check":now(),"mode":"fallback_active","direct_ok":False,"direct_error":str(e)[:140],"fallback":"TruthSocialSearch"};delay=min(300,max(10,delay*2))
-  time.sleep(delay)
+   with LOCK:S["sources"]["TruthSocialPublic"]={"ok":False,"last_check":now(),"mode":"fallback_active","direct_ok":False,"direct_error":str(e)[:140],"fallback":"TruthSocialSearch"}
+   delay=min(300,max(10,delay*2))
+  SHUTDOWN.wait(delay)
+
 def adapt():
  global STOP_ROE,TAKE_ROE
- while True:
+ while not SHUTDOWN.is_set():
   try:
    z=choose_persistent((-0.10,TAKE_ROE))
    with LOCK:
@@ -367,44 +446,51 @@ def adapt():
     S["adaptive"]=z
   except Exception as e:
    with LOCK:S["last_error"]="adaptive: "+str(e)[:160]
-  time.sleep(900)
-def news():
- while True:
-  for source,url in FEEDS.items():
-   try:
-    root=ET.fromstring(get(url))
-    items=root.findall(".//item")[:30]
-    count=0
-    for item in reversed(items):
-     title=(item.findtext("title") or "").strip()
-     ident=hashlib.sha256((source+title).encode()).hexdigest()
-     if not title:continue
-     with LOCK:
-      prices=S.get("_prices",{})
-      sym,side=detect(title,prices)
-      if not save_news_event(ident,now(),source,title,sym,side,item.findtext("pubDate"),item.findtext("link")):continue
-      S["news_seen"]+=1;count+=1
-      record_event(ident,source,title,sym,side,prices,item.findtext("pubDate"))
-    with LOCK:S["sources"][source]={"ok":True,"last_check":now(),"new":count,"feed_items":len(items)}
-   except Exception as e:
-    with LOCK:
-     S["errors"]+=1;S["last_error"]=source+": "+str(e)[:180]
-     S["sources"][source]={"ok":False,"last_check":now(),"error":str(e)[:150]}
-  time.sleep(60)
+  SHUTDOWN.wait(900)
+
+def news_feed(source,url):
+ # Independent workers avoid head-of-line blocking by slow RSS publishers.
+ # Search indexes are discovery fallbacks, not claimed realtime firehoses.
+ parsed=urllib.parse.urlsplit(url)
+ if parsed.hostname=="news.google.com":
+  query=urllib.parse.parse_qs(parsed.query)
+  query["q"]=[query.get("q",[""])[0]+" when:1h"]
+  url=urllib.parse.urlunsplit(parsed._replace(query=urllib.parse.urlencode(query,doseq=True)))
+ delay=NEWS_POLL_SECONDS
+ while not SHUTDOWN.is_set():
+  try:
+   root=ET.fromstring(get(url));items=root.findall(".//item")[:30];count=0
+   for item in reversed(items):
+    if SHUTDOWN.is_set():break
+    title=(item.findtext("title") or "").strip()
+    if not title:continue
+    ident=hashlib.sha256((source+title).encode()).hexdigest()
+    count+=bool(ingest_event(ident,source,title,item.findtext("pubDate"),item.findtext("link")))
+   with LOCK:S["sources"][source]={"ok":True,"last_check":now(),"new":count,"feed_items":len(items),"poll_seconds":NEWS_POLL_SECONDS}
+   delay=NEWS_POLL_SECONDS
+  except Exception as e:
+   with LOCK:
+    S["errors"]+=1;S["last_error"]=source+": "+str(e)[:180]
+    S["sources"][source]={"ok":False,"last_check":now(),"error":str(e)[:150]}
+   delay=min(300,max(NEWS_POLL_SECONDS,delay*2))
+  SHUTDOWN.wait(delay)
 def dashboard():
+ with LOCK:
+  state={k:copy.deepcopy(v) for k,v in S.items() if not k.startswith("_")}
+  state["_prices"]=dict(S.get("_prices",{}))
  trades=[dict(x) for x in persistent_trades(100)]
  newsrows=[dict(x) for x in persistent_news(20)]
  feats=[dict(x) for x in persistent_features(10)]
- prices=S.get("_prices",{});positions=[];unreal=0.0
- for sym,p in S["positions"].items():
+ prices=state.get("_prices",{});positions=[];unreal=0.0
+ for sym,p in state["positions"].items():
   px=prices.get(sym,p["entry"]);move=(px/p["entry"]-1)*p["side"];gross=p["notional"]*move;fees=p["notional"]*FEE+p["notional"]*(px/p["entry"])*FEE;pnl=gross-fees;lev=float(p.get("leverage",LEV));margin=float(p.get("margin",p["notional"]/lev));roi=(pnl/margin*100) if margin>0 else 0.0;unreal+=pnl
-  positions.append({"symbol":sym,"side":"LONG" if p["side"]>0 else "SHORT","entry":p["entry"],"mark":px,"notional_usd":round(p["notional"],2),"margin_usd":round(margin,2),"leverage":lev,"roe_pct":round(roi,3),"unrealized_pnl":round(pnl,4),"opened":p["opened"],"headline":p["headline"]})
+  positions.append({"symbol":sym,"side":"LONG" if p["side"]>0 else "SHORT","entry":p["entry"],"mark":px,"notional_usd":round(p["notional"],2),"margin_usd":round(margin,2),"leverage":lev,"roe_pct":round(roi,3),"unrealized_pnl":round(pnl,4),"opened":p["opened"],"headline":p["headline"],"protection_stop":p.get("stop"),"trailing_stop":p.get("trail_stop"),"peak":p.get("peak"),"trailing_armed":p.get("trail_armed",False),"last_evaluated_at":p.get("last_evaluated_at")})
  starts=[x.get("opened") for x in trades if x.get("opened")]+[x.get("opened") for x in positions if x.get("opened")]
  account_started=min(starts) if starts else now()
  try: account_age_seconds=max(0,int((datetime.datetime.now(datetime.timezone.utc)-datetime.datetime.fromisoformat(account_started.replace("Z","+00:00"))).total_seconds()))
  except Exception: account_age_seconds=0
- total=S["equity"]+unreal;account_roi=(total/PAPER_RESET-1)*100
- return {"mode":S["mode"],"balance":round(S["equity"],4),"unrealized_pnl":round(unreal,4),"total_equity":round(total,4),"realized_pnl":round(S["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"positions":positions,"trades":trades,"news":newsrows,"features":feats,"sources":S["sources"],"errors":S["errors"],"last_error":S["last_error"],"news_seen":S["news_seen"],"market_count":S["market_count"],"last_poll":S["last_poll"],"uptime_seconds":int(time.time()-START)}
+ total=state["equity"]+unreal;account_roi=(total/PAPER_RESET-1)*100
+ return {"mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"positions":positions,"trades":trades,"news":newsrows,"features":feats,"sources":state["sources"],"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"market_structure_filter_active":False,"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
 def html_dashboard(data):
  esc=lambda x:str(x).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
@@ -440,32 +526,59 @@ class Handler(BaseHTTPRequestHandler):
    self.send_response(200);self.send_header("Content-Type","application/json; charset=utf-8")
    self.send_header("Cache-Control","no-store");self.send_header("X-Content-Type-Options","nosniff")
    self.send_header("Content-Length",str(len(body)));self.end_headers();self.wfile.write(body);return
-  if path not in ("/","/health","/status","/api/dashboard","/trades","/news","/features"):
+  if path in ("/health","/health/risk"):
+   data=health_state()
+   code=200 if (data["healthy"] if path=="/health" else data["risk_ready"]) else 503
+   body=json.dumps(data).encode()
+   self.send_response(code);self.send_header("Content-Type","application/json; charset=utf-8")
+   self.send_header("Cache-Control","no-store");self.send_header("Content-Length",str(len(body)))
+   self.end_headers();self.wfile.write(body);return
+  if path not in ("/","/status","/api/dashboard","/trades","/news","/features"):
    self.send_error(404);return
-  with LOCK:
-   if path=="/":
-    body=html_dashboard(dashboard()).encode();ctype="text/html; charset=utf-8"
-   elif path in ("/health","/status","/api/dashboard"):
-    body=json.dumps(dashboard(),ensure_ascii=False).encode();ctype="application/json; charset=utf-8"
-   elif path=="/trades":
-    data={"trades":[dict(x) for x in persistent_trades(1000)]}
-    body=json.dumps(data,ensure_ascii=False).encode();ctype="application/json; charset=utf-8"
-   elif path=="/features":
-    data={"features":[dict(x) for x in persistent_features(100)]}
-    body=json.dumps(data,ensure_ascii=False).encode();ctype="application/json; charset=utf-8"
-   else:
-    data={"news":[dict(x) for x in persistent_news(50)]}
-    body=json.dumps(data,ensure_ascii=False).encode();ctype="application/json; charset=utf-8"
+  # Dashboard database reads are deliberately outside the engine lock.
+  if path=="/":
+   body=html_dashboard(dashboard()).encode();ctype="text/html; charset=utf-8"
+  elif path in ("/status","/api/dashboard"):
+   body=json.dumps(dashboard(),ensure_ascii=False).encode();ctype="application/json; charset=utf-8"
+  elif path=="/trades":
+   body=json.dumps({"trades":[dict(x) for x in persistent_trades(1000)]},ensure_ascii=False).encode();ctype="application/json; charset=utf-8"
+  elif path=="/features":
+   body=json.dumps({"features":[dict(x) for x in persistent_features(100)]},ensure_ascii=False).encode();ctype="application/json; charset=utf-8"
+  else:
+   body=json.dumps({"news":[dict(x) for x in persistent_news(50)]},ensure_ascii=False).encode();ctype="application/json; charset=utf-8"
   self.send_response(200);self.send_header("Content-Type",ctype);self.send_header("Cache-Control","no-store");self.send_header("Access-Control-Allow-Origin","*");self.send_header("Content-Length",str(len(body)));self.end_headers();self.wfile.write(body)
+
+def health_state():
+ stamp=time.time()
+ age=stamp-S.get("_last_poll_epoch",0) if S.get("_last_poll_epoch") else None
+ heartbeat=stamp-S.get("_market_heartbeat",stamp)
+ checkpoint=S.get("last_checkpoint")
+ checkpoint_age=stamp-datetime.datetime.fromisoformat(checkpoint).timestamp() if checkpoint else None
+ healthy=not SHUTDOWN.is_set() and heartbeat<45
+ ready=healthy and S["engine_active"] and age is not None and age<10 and checkpoint_age is not None and checkpoint_age<15
+ return {"healthy":healthy,"risk_ready":ready,"engine_active":S["engine_active"],
+         "market_age_seconds":age,"checkpoint_age_seconds":checkpoint_age,
+         "engine_error":S["engine_error"],"last_market_error":S["last_market_error"],
+         "news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"market_structure_filter_active":False,
+         "mode":S["mode"],"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
+
 if __name__=="__main__":
  try:subprocess.Popen(["hyperdata","api","--port","8420"],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
  except Exception as e:S["sources"]["HyperData"]={"ok":False,"error":str(e)[:120]}
- init()
- pinit()
+ init();pinit()
  S["sources"]["PersistentPostgres"]={"ok":True,"last_check":now(),"mode":"primary_state_and_trade_history"}
- threading.Thread(target=market,daemon=True).start()
- threading.Thread(target=news,daemon=True).start()
- threading.Thread(target=xnews,daemon=True).start()
- threading.Thread(target=adapt,daemon=True).start()
- threading.Thread(target=truthnews,daemon=True).start()
- ThreadingHTTPServer(("0.0.0.0",int(os.getenv("PORT","10000"))),Handler).serve_forever()
+ server=ThreadingHTTPServer(("0.0.0.0",int(os.getenv("PORT","10000"))),Handler)
+ def shutdown(signum,frame):
+  SHUTDOWN.set()
+  threading.Thread(target=server.shutdown,daemon=True).start()
+ signal.signal(signal.SIGTERM,shutdown);signal.signal(signal.SIGINT,shutdown)
+ targets=[engine_coordinator,market,telemetry,xnews,adapt,truthnews]
+ workers=[threading.Thread(target=t,daemon=True,name=t.__name__) for t in targets]
+ workers += [threading.Thread(target=news_feed,args=(name,url),daemon=True,name="feed:"+name) for name,url in FEEDS.items()]
+ for worker in workers:worker.start()
+ try:server.serve_forever()
+ finally:
+  SHUTDOWN.set();server.server_close()
+  for worker in workers:worker.join(timeout=0.5)
+  try:STORE.release()
+  except Exception:pass

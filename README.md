@@ -1,1 +1,79 @@
-# pandora-testnet
+# Pandora paper news engine
+
+The engine remains PAPER_ONLY and reads Hyperliquid testnet prices. This is a
+paper execution study, not an exchange account or a claim of trading returns.
+
+## Entry decisions
+
+- Direction comes from a fresh news/post event. There is no market-structure
+  alignment gate and no wait for a new candle or trend confirmation.
+- `NEWS_MAX_AGE_SECONDS` defaults to **120 seconds from publication**, not from
+  receipt by an index/RSS reader. Missing, malformed, naive or future timestamps
+  are rejected and journalled. Freshness is rechecked immediately before entry.
+- Market features are cached, advisory research metadata, not entry vetoes.
+  Optional external context requests never run in the entry or exit path.
+- Each configured RSS source has its own worker; the default poll interval is
+  10 seconds (`NEWS_POLL_SECONDS`). One failed source cannot delay the others.
+- Official X access requires `X_BEARER_TOKEN`. Google indexes and RSS discovery
+  fallbacks have publisher/indexing delays and are explicitly labelled as such;
+  polling them faster cannot guarantee instant or complete social coverage.
+- A fresh event still may be skipped for no directional signal, no tradable
+  symbol, stale prices, an existing position, unavailable engine lease or margin.
+
+## Durable exits
+
+Every successful market cycle commits the position's peak, trailing activation,
+monotonic trailing stop, last quote/evaluation and recent price history to Neon.
+Legacy positions recover their observed extreme/history from stored snapshots
+on takeover. Their existing leverage and margin are preserved.
+
+Profit protection arms at 10% gross ROE and protects 7.5%; trailing arms at 12%
+gross ROE with the existing bounded volatility gap. An armed stop executes when
+crossed, without an additional weakening gate. Stops never loosen. After a
+quote gap, paper exits use the **current observed price**, not a fictitious fill
+at yesterday's stop/minimum. Gross ROE thresholds are not net profit guarantees.
+
+Closing the position, crediting the paper account and writing the trade/audit
+record are one transaction. Retried closes cannot credit twice; a checkpoint
+UPDATE cannot resurrect a closed position. In-memory account state changes only
+after the transaction commits.
+
+A renewable 30-second database lease fences every position write. Rolling
+deploys therefore have one writer. The first migration from the old lease-less
+release waits 120 seconds for Render's legacy process drain; subsequent takeovers
+wait only for lease release/expiry. SIGTERM stops new work and releases ownership.
+
+## Health and hosting
+
+- `/health`: fast liveness endpoint, no database or external API calls.
+- `/health/risk`: returns 200 only with an active writer, fresh prices and a
+  recent committed checkpoint; otherwise 503. Standby is not trading-ready.
+- `/api/dashboard`: includes engine state, checkpoints, peak and active stops.
+  Dashboard database reads and optional telemetry do not hold the risk lock.
+- Entry and exit processing are independent of whether a user views the monitor.
+
+**Render Free still sleeps.** The code cannot turn a sleeping free web service
+into guaranteed 24/7 compute. Use the existing service's paid always-on compute
+plan to remove idle sleeping. The existing GitHub wake schedule is best-effort,
+not an uptime guarantee. Changing hosting plans can add charges and is a separate
+deployment configuration action; code deployment does not silently upgrade it.
+
+Keep the existing Neon `DATABASE_URL`; do not import an old blueprint to create
+a second database. Additive schema migrations run at application startup and
+leave account/trade/news history intact. Do not roll back to the old unfenced
+writer while this version owns the database lease.
+
+## Validation
+
+```bash
+python -m pip install "psycopg[binary]>=3.2,<4"
+python -m unittest discover -s tests -v
+```
+
+Unit tests cover the NOT minimum/restart, protection without history, monotonic
+long/short trailing, old CoinShares news and fresh counter-trend news. Database
+tests additionally run when `PANDORA_TEST_DATABASE_URL_FILE` names a file holding
+the URL of an **isolated** database. Never point these tests at the live account.
+The GitHub workflow provisions disposable PostgreSQL for all integration tests.
+`tests/storage_contract.sql` separately validates the SQL contract on an isolated
+Neon branch. No test should modify the live trading study's history or balance.
