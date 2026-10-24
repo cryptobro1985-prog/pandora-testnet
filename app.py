@@ -893,11 +893,12 @@ if __name__=="__main__":
   SHUTDOWN.set()
   threading.Thread(target=server.shutdown,daemon=True).start()
  signal.signal(signal.SIGTERM,shutdown);signal.signal(signal.SIGINT,shutdown)
- targets=[engine_coordinator,market,market_metadata,telemetry,xnews,adapt,truthnews,truth_watch,dashboard_cache_loop,operations_diagnostics]
- targets += [lambda:social_reader("x"),lambda:social_reader("truth")]
+ targets=[engine_coordinator,market,market_metadata,telemetry,xnews,adapt,truthnews,dashboard_cache_loop,operations_diagnostics]
+ targets += ([lambda:social_reader("x")] if os.getenv("X_SESSION_COOKIES","").strip() else [])
+ targets += [lambda:social_reader("truth")] if os.getenv("TRUTHSOCIAL_TOKEN","").strip() else []
  workers=[threading.Thread(target=t,daemon=True,name=t.__name__) for t in targets]
  workers += [threading.Thread(target=news_feed,args=(name,url),daemon=True,name="feed:"+name) for name,url in FEEDS.items()]
- workers += [threading.Thread(target=public_social_reader,args=("x",handle),daemon=True,name="public-x:"+handle) for handle in WATCH]
+ workers += [threading.Thread(target=public_social_reader,args=("x",handle),daemon=True,name="public-x:"+handle) for handle in WATCH] if os.getenv("ENABLE_PUBLIC_X_HTML","0")=="1" else []
  workers += [threading.Thread(target=public_social_reader,args=("truth","realDonaldTrump"),daemon=True,name="truth-archive")]
  for worker in workers:worker.start()
  try:server.serve_forever()
