@@ -2,3 +2,4 @@ hyperdata-terminal
 psycopg[binary]>=3.2,<4
 twscrape==0.20.1
 truthbrush==0.3.0
+curl-cffi>=0.15,<1
