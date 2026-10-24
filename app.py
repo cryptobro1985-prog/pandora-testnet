@@ -1,5 +1,6 @@
 import os,json,time,threading,urllib.request,urllib.parse,sqlite3,datetime,xml.etree.ElementTree as ET,re,hashlib,subprocess
 import sqlite3,math,email.utils,secrets,signal,copy,concurrent.futures
+import websocket
 import psycopg
 from psycopg.rows import dict_row
 from risk import evaluate_exit, risk_state
@@ -549,7 +550,50 @@ def free_x_realtime():
  finally:
   pool.shutdown(wait=False,cancel_futures=True)
 
+def truth_stream_realtime():
+ token=(os.getenv("TRUTH_STREAM_TOKEN","").strip() or os.getenv("TRUTHSOCIAL_TOKEN","").strip())
+ if not token:return
+ handles={h.strip().lower() for h in os.getenv("TRUTH_WATCH_HANDLES","realDonaldTrump,WhiteHouse,DanScavino,Kash,MelaniaTrump,SecWar,SpeakerJohnson,seckennedy").split(",") if h.strip()}
+ url="wss://truthsocial.com/api/v1/streaming?stream=public:local"
+ backoff=3
+ while not SHUTDOWN.is_set():
+  if not S["engine_active"]:
+   SHUTDOWN.wait(2);continue
+  ws=None
+  try:
+   ws=websocket.create_connection(url,header=["Authorization: Bearer "+token,"User-Agent: PANDORA-news-stream/1"],timeout=35)
+   with LOCK:S["sources"]["TruthStream"]={"ok":True,"mode":"mastodon_websocket_public_local","last_check":now(),"accounts":len(handles),"realtime_verified":False}
+   backoff=3
+   while not SHUTDOWN.is_set():
+    raw=ws.recv()
+    if raw is None:raise RuntimeError("truth_stream_closed")
+    if not raw:continue
+    packet=json.loads(raw)
+    if packet.get("event")!="update":continue
+    payload=packet.get("payload")
+    status=json.loads(payload) if isinstance(payload,str) else payload
+    if not isinstance(status,dict):continue
+    account=status.get("account") or {}
+    handle=str(account.get("acct") or account.get("username") or "").split("@")[0]
+    if handle.lower() not in handles:continue
+    title=re.sub("<[^>]+>"," ",status.get("content") or "");title=re.sub(r"\s+"," ",title).strip()
+    if not title:continue
+    pub=status.get("created_at")
+    stamp=publication_epoch(pub);age=time.time()-stamp if stamp is not None else None
+    with LOCK:S["sources"]["TruthStream"]={"ok":True,"mode":"mastodon_websocket_public_local","last_check":now(),"accounts":len(handles),"last_handle":handle,"latest_post_age_seconds":round(age,2) if age is not None else None,"delivery_latency_seconds":round(age,2) if age is not None and age>=0 else None,"realtime_verified":bool(age is not None and 0<=age<=10)}
+    ident=hashlib.sha256(("TruthStream:"+str(status.get("id") or status.get("url") or title)).encode()).hexdigest()
+    ingest_event(ident,"TruthSocialPublic",title,pub,status.get("url"))
+  except Exception as exc:
+   err=str(exc)[:140] if str(exc) else type(exc).__name__
+   with LOCK:S["sources"]["TruthStream"]={"ok":False,"mode":"mastodon_websocket_public_local","last_check":now(),"error":err,"realtime_verified":False}
+   SHUTDOWN.wait(backoff);backoff=min(120,backoff*2)
+  finally:
+   try:
+    if ws:ws.close()
+   except Exception:pass
+
 def free_truth_realtime():
+ if (os.getenv("TRUTH_STREAM_TOKEN","").strip() or os.getenv("TRUTHSOCIAL_TOKEN","").strip()):return
  handles=[h.strip() for h in os.getenv("TRUTH_WATCH_HANDLES","realDonaldTrump,WhiteHouse,DanScavino,Kash,MelaniaTrump,SecWar,SpeakerJohnson,seckennedy").split(",") if h.strip()]
  poll=max(5.0,float(os.getenv("TRUTH_FREE_POLL_SECONDS","10")))
  seen={};ids_cache={}
@@ -686,7 +730,7 @@ def xnews():
   while not SHUTDOWN.is_set():
    with LOCK:
     valid=[(k,v) for k,v in S["sources"].items() if k.startswith("XIndex:") and v.get("ok")]
-    S["sources"]["XMonitor"]={"ok":bool(valid),"last_check":now(),
+    S["sources"]["XIndexMonitor"]={"ok":bool(valid),"last_check":now(),
      "mode":"guest_public_index_delayed","watch_accounts":len(WATCH),
      "responsive_feeds":len(valid),"total_feeds":sum(k.startswith("XIndex:") for k in FEEDS),
      "realtime_verified":False}
@@ -695,7 +739,7 @@ def xnews():
  while not SHUTDOWN.is_set():
   try:
    posts=recent()
-   with LOCK:S["sources"]["XMonitor"]={"ok":True,"last_check":now(),
+   with LOCK:S["sources"]["XIndexMonitor"]={"ok":True,"last_check":now(),
     "posts":len(posts),"mode":"official_api","watch_accounts":len(WATCH)}
    for p in posts:
     if SHUTDOWN.is_set():break
@@ -705,7 +749,7 @@ def xnews():
     ident=hashlib.sha256((source+str(p.get("id",title))).encode()).hexdigest()
     ingest_event(ident,source,title,p.get("created_at"),p.get("url"))
   except Exception as e:
-   with LOCK:S["sources"]["XMonitor"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
+   with LOCK:S["sources"]["XIndexMonitor"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
   SHUTDOWN.wait(20)
 
 def truthnews():
@@ -921,7 +965,7 @@ def operations_diagnostics():
      "trades":S.get("trades"),"news_seen":S.get("news_seen"),
      "sources_ok":sum(bool(x.get("ok")) for x in S["sources"].values()),
      "sources_failed":[k for k,v in S["sources"].items() if not v.get("ok")],
-     "social_channels":{k:{"ok":v.get("ok"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds"),"delivery_latency_seconds":v.get("delivery_latency_seconds")} for k,v in S["sources"].items() if k.startswith(("XFree:","XFilteredStream","XMonitor","TruthDirect:","TruthSocialPublic"))},
+     "social_channels":{k:{"ok":v.get("ok"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds"),"delivery_latency_seconds":v.get("delivery_latency_seconds")} for k,v in S["sources"].items() if k.startswith(("XFree:","XFilteredStream","XMonitor","XIndexMonitor","TruthStream","TruthDirect:","TruthSocialPublic"))},
      "entry_rejections":dict(S.get("_entry_rejections",{})),
      "risk_ready":health["risk_ready"]}
    print(json.dumps(report,ensure_ascii=False,default=str),flush=True)
@@ -1066,7 +1110,7 @@ def health_state():
  healthy=not SHUTDOWN.is_set() and heartbeat<45 and coordinator_age<45
  ready=healthy and S["engine_active"] and age is not None and age<10 and checkpoint_age is not None and checkpoint_age<15
  sources=dict(S.get("sources",{}))
- social={k:v for k,v in sources.items() if k.startswith(("XFree:","XFilteredStream","XMonitor","TruthDirect:","TruthSocialPublic"))}
+ social={k:v for k,v in sources.items() if k.startswith(("XFree:","XFilteredStream","XMonitor","TruthStream","TruthDirect:","TruthSocialPublic"))}
  unavailable=[k for k,v in social.items() if not v.get("ok")]
  return {"healthy":healthy,"risk_ready":ready,"news_sources_total":len(sources),"news_sources_failed":sum(not v.get("ok",False) for v in sources.values()),"social_sources_failed":unavailable,"guest_x_realtime_verified":False,"news_24h_guaranteed":False,"engine_active":S["engine_active"],
          "market_age_seconds":age,"checkpoint_age_seconds":checkpoint_age,
@@ -1084,7 +1128,7 @@ if __name__=="__main__":
   SHUTDOWN.set()
   threading.Thread(target=server.shutdown,daemon=True).start()
  signal.signal(signal.SIGTERM,shutdown);signal.signal(signal.SIGINT,shutdown)
- targets=[engine_coordinator,market,market_metadata,telemetry,xnews,adapt,free_x_realtime,free_truth_realtime,x_filtered_stream,dashboard_cache_loop,operations_diagnostics]
+ targets=[engine_coordinator,market,market_metadata,telemetry,xnews,adapt,free_x_realtime,free_truth_realtime,truth_stream_realtime,x_filtered_stream,dashboard_cache_loop,operations_diagnostics]
  targets += ([lambda:social_reader("x")] if os.getenv("X_SESSION_COOKIES","").strip() else [])
  targets += [lambda:social_reader("truth")] if os.getenv("TRUTHSOCIAL_TOKEN","").strip() else []
  workers=[threading.Thread(target=t,daemon=True,name=t.__name__) for t in targets]
