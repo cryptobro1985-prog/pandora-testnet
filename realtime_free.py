@@ -415,3 +415,27 @@ def fetch_truth_activitypub(handle,timeout=6):
     if not out:
         raise RuntimeError("truth_ap_empty")
     return out
+
+
+def fetch_truth_rss(handle,timeout=6):
+    """Public per-profile RSS endpoint. This can remain reachable when API/ActivityPub is challenged."""
+    url="https://truthsocial.com/@"+urllib.parse.quote(handle,safe="")+".rss"
+    sess=_truth_session()
+    response=sess.get(url,headers={"User-Agent":TRUTH_UA,"Accept":"application/rss+xml,application/xml,text/xml"},impersonate=IMPERSONATE_TARGET,timeout=timeout)
+    if response.status_code!=200:
+        raise RuntimeError("truth_rss_http_"+str(response.status_code))
+    try:
+        root=ET.fromstring(response.content)
+    except Exception as exc:
+        raise RuntimeError("truth_rss_invalid_xml") from exc
+    out=[]
+    for item in root.findall(".//item")[:20]:
+        link=(item.findtext("link") or "").strip()
+        ident=(item.findtext("guid") or link).strip()
+        title=_clean(item.findtext("description") or item.findtext("title") or "")
+        created=(item.findtext("pubDate") or "").strip() or None
+        if ident and title:
+            out.append({"id":ident.rsplit("/",1)[-1],"text":title,"created_at":created,"url":link or ("https://truthsocial.com/@"+handle)})
+    if not out:
+        raise RuntimeError("truth_rss_empty")
+    return out
