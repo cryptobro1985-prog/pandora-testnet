@@ -19,7 +19,7 @@ def choose(db_path,current=(-0.10,0.20)):
  avg=sum(train)/len(train); cand=CANDIDATES[3] if avg>0 else CANDIDATES[1]
  return {"stop":cand[0],"take":cand[1],"samples":len(xs),"validation_pnl":sum(valid),"changed":cand!=current}
 
-WATCH=["elonmusk","realDonaldTrump","federalreserve","SECGov","USTreasury","WhiteHouse","coinbase","binance","saylor","cz_binance","VitalikButerin"]
+WATCH=["elonmusk","realDonaldTrump","federalreserve","SECGov","USTreasury","WhiteHouse","coinbase","binance","saylor","cz_binance","VitalikButerin","Reuters","AP","CoinDesk","Cointelegraph","BNODesk","DeItaone","KobeissiLetter","WuBlockchain","Lookonchain","PeckShieldAlert"]
 def recent():
  token=os.getenv("X_BEARER_TOKEN","").strip()
  if token:
