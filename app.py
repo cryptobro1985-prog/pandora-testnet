@@ -794,8 +794,6 @@ def ingest_event(ident,source,title,published_at=None,source_url=None):
  return True
 
 def free_x_realtime():
- if os.getenv("X_STREAM_BEARER_TOKEN","").strip():return
- if os.getenv("X_AUTH_TOKEN","").strip() and os.getenv("X_CT0","").strip() and os.getenv("X_LIST_ID","").strip():return
  handles=list(WATCH)
  high_priority=set(h.lower() for h in (
   "elonmusk","realDonaldTrump","POTUS","WhiteHouse","PressSec","federalreserve","SECGov",
@@ -803,8 +801,7 @@ def free_x_realtime():
   "financialjuice","FirstSquawk","TreeNewsFeed","tier10k","WSJ","CoinDesk","TheBlockCo","WuBlockchain",
   "Lookonchain","whale_alert","arkham","binance","hyperliquidX","saylor","cz_binance"
  ))
- fast_poll=max(4.0,float(os.getenv("X_PRIORITY_POLL_SECONDS","4")))
- normal_poll=max(12.0,float(os.getenv("X_NORMAL_POLL_SECONDS","12")))
+ poll=max(4.0,float(os.getenv("X_ALL_POLL_SECONDS","4")))
  seen={};primed=set();state_lock=threading.Lock()
  backoff_until={};failures={};last_success={};x_error_log_at={};backend_idx={};disabled_until={}
  backends=("fx","xlookup")
@@ -812,14 +809,14 @@ def free_x_realtime():
  base=time.monotonic()
  next_due={h:base+((sum(ord(ch) for ch in h)%400)/100.0) for h in handles}
  inflight={};ingest_futures=set()
- pool=concurrent.futures.ThreadPoolExecutor(max_workers=min(32,len(handles)),thread_name_prefix="x-realtime")
+ pool=concurrent.futures.ThreadPoolExecutor(max_workers=min(48,len(handles)),thread_name_prefix="x-realtime")
  ingest_pool=concurrent.futures.ThreadPoolExecutor(max_workers=6,thread_name_prefix="x-ingest")
- with LOCK:S["sources"]["XMonitor"]={"ok":True,"degraded":True,"mode":"adaptive_direct_poll_starting","last_check":now(),"accounts_ok":0,"accounts_initialized":0,"accounts_total":len(handles),"priority_poll_seconds":fast_poll,"normal_poll_seconds":normal_poll,"scan_workers":pool._max_workers,"error":None}
+ with LOCK:S["sources"]["XMonitor"]={"ok":True,"degraded":True,"mode":"adaptive_direct_poll_starting","last_check":now(),"accounts_ok":0,"accounts_initialized":0,"accounts_total":len(handles),"poll_seconds":poll,"scan_workers":pool._max_workers,"error":None}
  def fetch_one(handle):
   idx=backend_idx.get(handle,0)%len(backends)
   backend=backends[idx]
-  if backend=="fx":posts=free_x_fetch(handle,timeout=3.2,attempts=1)
-  else:posts=free_x_lookup_fetch(handle,timeout=3.2)
+  if backend=="fx":posts=free_x_fetch(handle,timeout=2.8,attempts=1)
+  else:posts=free_x_lookup_fetch(handle,timeout=2.8)
   return posts,backend
  try:
   while not SHUTDOWN.is_set():
@@ -829,20 +826,15 @@ def free_x_realtime():
    active={meta[0] for meta in inflight.values()}
    due=[h for h in handles if h not in active and now_m>=next_due[h] and now_m>=backoff_until.get(h,0) and now_m>=disabled_until.get(h,0)]
    available=max(0,pool._max_workers-len(inflight))
-   priority=[h for h in due if h.lower() in high_priority]
-   normal=[h for h in due if h.lower() not in high_priority]
-   priority.sort(key=lambda h:next_due[h]);normal.sort(key=lambda h:next_due[h])
-   priority_slots=min(len(priority),max(0,available-math.ceil(available/3))) if normal else min(len(priority),available)
-   selected=priority[:priority_slots]+normal[:available-priority_slots]
-   if len(selected)<available:selected+=priority[priority_slots:priority_slots+available-len(selected)]
+   due.sort(key=lambda h:next_due[h])
+   selected=due[:available]
    for handle in selected:
     try:
      fut=pool.submit(fetch_one,handle);inflight[fut]=(handle,now_m)
     except Exception as exc:
      with LOCK:S["sources"]["XMonitor"]={"ok":False,"degraded":True,"mode":"adaptive_direct_poll","last_check":now(),"accounts_total":len(handles),"error":"submit:"+str(exc)[:160]}
      SHUTDOWN.wait(1);continue
-    interval=fast_poll if handle.lower() in high_priority else normal_poll
-    next_due[handle]=now_m+interval
+    next_due[handle]=now_m+poll
    done=[future for future in list(inflight) if future.done()]
    for future in done:
     handle,started=inflight.pop(future);name="XFree:"+handle
@@ -854,7 +846,7 @@ def free_x_realtime():
      with LOCK:
       S["sources"][name]={"ok":True,"degraded":False,"mode":backend+"_adaptive_poll","backend":backend,
        "category":WATCH_CATEGORY.get(handle),"last_check":now(),"posts":len(posts),
-       "poll_seconds":fast_poll if handle.lower() in high_priority else normal_poll,
+       "poll_seconds":poll,
        "latest_post_age_seconds":round(latest_age,1) if latest_age is not None else None,
        "last_request_seconds":round(time.monotonic()-started,2),"realtime_verified":False,
        "consecutive_failures":0,"last_success_epoch":time.time()}
@@ -879,7 +871,7 @@ def free_x_realtime():
      failures[handle]=failures.get(handle,0)+1
      backend_idx[handle]=(backend_idx.get(handle,0)+1)%len(backends)
      limited=any(x in err.lower() for x in ("429","rate.limit","too many requests"))
-     backoff=30 if limited else min(20,4*2**min(2,failures[handle]-1))
+     backoff=30 if limited else min(16,4*2**min(2,failures[handle]-1))
      backoff_until[handle]=time.monotonic()+backoff
      with LOCK:
       prev=S["sources"].get(name,{})
@@ -887,11 +879,11 @@ def free_x_realtime():
       within_grace=bool(last_success_epoch and time.time()-last_success_epoch<=180)
       disabled=bool(failures[handle]>=4 and not within_grace)
       if disabled:
-       disabled_until[handle]=time.monotonic()+600
+       disabled_until[handle]=time.monotonic()+300
       S["sources"][name]={"ok":within_grace,"degraded":True,"disabled":disabled,"mode":"adaptive_direct_poll",
        "category":WATCH_CATEGORY.get(handle),"last_check":now(),"error":err,
        "consecutive_failures":failures[handle],"last_success_epoch":last_success_epoch or None,
-       "rate_limited":limited,"retry_after_seconds":600 if disabled else backoff,
+       "rate_limited":limited,"retry_after_seconds":300 if disabled else backoff,
        "last_request_seconds":round(time.monotonic()-started,2)}
      if time.time()-x_error_log_at.get(handle,0)>=60:
       x_error_log_at[handle]=time.time()
@@ -904,16 +896,16 @@ def free_x_realtime():
     initialized=sum(bool(v) for v in states);good=sum(bool(v.get("ok")) for v in active_states)
     realtime=sum(bool(v.get("realtime_verified")) for v in active_states)
     active_count=len(active_states);disabled_count=sum(bool(v.get("disabled")) for v in states)
-    recent_success=bool(last_success and time.time()-max(last_success.values())<=60)
-    healthy=bool(good>=50 and recent_success)
+    recent_success=bool(last_success and time.time()-max(last_success.values())<=12)
+    recent_accounts=sum(1 for h in handles if last_success.get(h) and time.time()-last_success[h]<=12)
+    healthy=bool(recent_accounts>=20 and recent_success)
     S["sources"]["XMonitor"]={"ok":healthy,
      "all_accounts_ok":active_count>0 and good==active_count,
      "degraded":healthy and (good<len(handles) or active_count<len(handles)),
      "mode":"adaptive_active_retry_pool","last_check":now(),"accounts_ok":good,
      "accounts_initialized":initialized,"accounts_total":len(handles),
-     "active_accounts":active_count,"disabled_retry_accounts":disabled_count,
-     "priority_accounts":sum(h.lower() in high_priority for h in handles),
-     "priority_poll_seconds":fast_poll,"normal_poll_seconds":normal_poll,
+     "active_accounts":active_count,"disabled_retry_accounts":disabled_count,"recently_polled_accounts":recent_accounts,
+     "target_poll_seconds":poll,
      "ingest_queue":len(ingest_futures),"inflight_accounts":len(inflight),"queued_due_accounts":max(0,len(due)-len(selected)),
      "scan_workers":pool._max_workers,"realtime_accounts_seen":realtime,
      "realtime_verified":healthy and recent_success,
@@ -1694,15 +1686,37 @@ if __name__=="__main__":
   SHUTDOWN.set()
   threading.Thread(target=server.shutdown,daemon=True).start()
  signal.signal(signal.SIGTERM,shutdown);signal.signal(signal.SIGINT,shutdown)
- targets=[engine_coordinator,market,market_metadata,telemetry,operator_one_shot_actions,impulse_scan,adapt,free_x_realtime,x_list_realtime,free_truth_realtime,truth_stream_realtime,x_filtered_stream,dashboard_cache_loop,operations_diagnostics]
- targets += [xnews] if os.getenv("X_BEARER_TOKEN","").strip() else []
- targets += ([lambda:social_reader("x")] if os.getenv("X_SESSION_COOKIES","").strip() else [])
- targets += [lambda:social_reader("truth")] if os.getenv("TRUTHSOCIAL_TOKEN","").strip() else []
- workers=[threading.Thread(target=t,daemon=True,name=t.__name__) for t in targets]
- workers += [threading.Thread(target=news_feed,args=(name,url),daemon=True,name="feed:"+name) for name,url in FEEDS.items() if not name.startswith("XIndex:") and name not in SEARCH_INDEX_FEEDS]
- workers += [threading.Thread(target=research_page_monitor,args=(name,url),daemon=True,name="research:"+name) for name,url in RESEARCH_PAGES.items()]
- workers += [threading.Thread(target=public_social_reader,args=("x",handle),daemon=True,name="public-x:"+handle) for handle in WATCH] if os.getenv("ENABLE_PUBLIC_X_HTML","0")=="1" else []
+ def supervised_worker(label,fn):
+  while not SHUTDOWN.is_set():
+   try:
+    fn()
+    if SHUTDOWN.is_set():return
+    with LOCK:S["sources"]["Worker:"+label]={"ok":False,"degraded":True,"last_check":now(),"error":"worker_returned_restart"}
+   except Exception as exc:
+    with LOCK:S["sources"]["Worker:"+label]={"ok":False,"degraded":True,"last_check":now(),"error":type(exc).__name__+":"+str(exc)[:140]}
+    try:journal("worker_restart",None,{"worker":label,"error":type(exc).__name__+":"+str(exc)[:180]})
+    except Exception:pass
+   SHUTDOWN.wait(2)
 
+ worker_specs=[
+  ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),
+  ("telemetry",telemetry),("operator_actions",operator_one_shot_actions),("pump_dump",impulse_scan),
+  ("adapt",adapt),("x_public_4s",free_x_realtime),("truth_public",free_truth_realtime),
+  ("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)
+ ]
+ if os.getenv("X_AUTH_TOKEN","").strip() and os.getenv("X_CT0","").strip() and os.getenv("X_LIST_ID","").strip():worker_specs.append(("x_list_official",x_list_realtime))
+ if os.getenv("TRUTH_STREAM_TOKEN","").strip() or os.getenv("TRUTHSOCIAL_TOKEN","").strip() or (os.getenv("TRUTHSOCIAL_USERNAME","").strip() and os.getenv("TRUTHSOCIAL_PASSWORD","")):worker_specs.append(("truth_stream",truth_stream_realtime))
+ if os.getenv("X_STREAM_BEARER_TOKEN","").strip():worker_specs.append(("x_filtered_stream",x_filtered_stream))
+ if os.getenv("X_BEARER_TOKEN","").strip():worker_specs.append(("x_recent_search",xnews))
+ if os.getenv("X_SESSION_COOKIES","").strip():worker_specs.append(("x_session_scraper",lambda:social_reader("x")))
+ if os.getenv("TRUTHSOCIAL_TOKEN","").strip():worker_specs.append(("truth_auth_reader",lambda:social_reader("truth")))
+ for name,url in FEEDS.items():
+  if not name.startswith("XIndex:") and name not in SEARCH_INDEX_FEEDS:
+   worker_specs.append(("feed:"+name,lambda n=name,u=url:news_feed(n,u)))
+ for name,url in RESEARCH_PAGES.items():worker_specs.append(("research:"+name,lambda n=name,u=url:research_page_monitor(n,u)))
+ if os.getenv("ENABLE_PUBLIC_X_HTML","0")=="1":
+  for handle in WATCH:worker_specs.append(("public-x:"+handle,lambda h=handle:public_social_reader("x",h)))
+ workers=[threading.Thread(target=supervised_worker,args=(label,fn),daemon=True,name=label) for label,fn in worker_specs]
  for worker in workers:worker.start()
  try:server.serve_forever()
  finally:
