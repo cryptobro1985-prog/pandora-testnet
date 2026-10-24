@@ -1,5 +1,5 @@
 import os,json,time,threading,urllib.request,urllib.parse,sqlite3,datetime,xml.etree.ElementTree as ET,re,hashlib,subprocess
-import sqlite3,math,email.utils,secrets,signal,copy
+import sqlite3,math,email.utils,secrets,signal,copy,concurrent.futures
 import psycopg
 from psycopg.rows import dict_row
 from risk import evaluate_exit, risk_state
@@ -8,6 +8,7 @@ from entry_guards import freshness, publication_epoch
 from social_scrapers import poll as social_poll, SourceUnavailable
 from public_social import read as public_social_read
 from x_guest import read as guest_x_read
+from realtime_free import fetch_x as free_x_fetch, fetch_truth as free_truth_fetch
 from momentum_scanner import candidates as momentum_candidates
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
 def choose(db_path,current=(-0.10,0.20)):
@@ -498,6 +499,96 @@ def ingest_event(ident,source,title,published_at=None,source_url=None):
  record_event(ident,source,title,sym,side,prices,published_at)
  return True
 
+def free_x_realtime():
+ if os.getenv("X_STREAM_BEARER_TOKEN","").strip():return
+ handles=list(WATCH)
+ seen={};primed=set();batch_size=15
+ poll=max(3.0,float(os.getenv("X_FREE_POLL_SECONDS","4")))
+ pool=concurrent.futures.ThreadPoolExecutor(max_workers=batch_size,thread_name_prefix="x-free")
+ cursor=0
+ try:
+  while not SHUTDOWN.is_set():
+   if not S["engine_active"]:
+    SHUTDOWN.wait(2);continue
+   batch=handles[cursor:cursor+batch_size]
+   if not batch:
+    cursor=0;continue
+   cursor=(cursor+len(batch))%len(handles)
+   started=time.monotonic()
+   futures={pool.submit(free_x_fetch,h):h for h in batch}
+   for future in concurrent.futures.as_completed(futures):
+    h=futures[future];name="XFree:"+h
+    try:
+     posts=future.result()
+     stamps=[publication_epoch(p.get("created_at")) for p in posts]
+     stamps=[x for x in stamps if x is not None]
+     latest_age=(time.time()-max(stamps)) if stamps else None
+     with LOCK:S["sources"][name]={"ok":True,"mode":"fxtwitter_v2_poll","last_check":now(),"posts":len(posts),"poll_seconds":poll,"latest_post_age_seconds":round(latest_age,1) if latest_age is not None else None,"realtime_verified":False}
+     ids=[str(p["id"]) for p in posts]
+     if h not in primed:
+      seen[h]=set(ids);primed.add(h);continue
+     old=seen.setdefault(h,set())
+     fresh=[p for p in posts if str(p["id"]) not in old]
+     old.update(ids)
+     if len(old)>200:seen[h]=set(ids[:100])
+     for p in sorted(fresh,key=lambda q:publication_epoch(q.get("created_at")) or 0):
+      age=time.time()-(publication_epoch(p.get("created_at")) or 0)
+      if 0<=age<=10:
+       with LOCK:S["sources"][name]["realtime_verified"]=True;S["sources"][name]["delivery_latency_seconds"]=round(age,2)
+      ident=hashlib.sha256(("XFree:"+h+":"+str(p["id"])).encode()).hexdigest()
+      ingest_event(ident,"XOfficial",p["text"],p.get("created_at"),p.get("url"))
+    except Exception as exc:
+     err=str(exc)[:100] if str(exc) else type(exc).__name__
+     with LOCK:S["sources"][name]={"ok":False,"mode":"fxtwitter_v2_poll","last_check":now(),"error":err}
+   with LOCK:
+    states=[v for k,v in S["sources"].items() if k.startswith("XFree:")]
+    good=sum(bool(v.get("ok")) for v in states)
+    S["sources"]["XMonitor"]={"ok":good>=max(1,int(len(handles)*0.8)),"mode":"fxtwitter_v2_parallel_poll","last_check":now(),"accounts_ok":good,"accounts_total":len(handles),"poll_seconds":poll,"realtime_verified":any(v.get("realtime_verified") for v in states)}
+   waves=max(1,math.ceil(len(handles)/batch_size))
+   SHUTDOWN.wait(max(0.05,poll/waves-(time.monotonic()-started)))
+ finally:
+  pool.shutdown(wait=False,cancel_futures=True)
+
+def free_truth_realtime():
+ handles=[h.strip() for h in os.getenv("TRUTH_WATCH_HANDLES","realDonaldTrump,WhiteHouse,DanScavino,Kash,MelaniaTrump,SecWar,SpeakerJohnson,seckennedy").split(",") if h.strip()]
+ poll=max(5.0,float(os.getenv("TRUTH_FREE_POLL_SECONDS","10")))
+ seen={};ids_cache={}
+ pool=concurrent.futures.ThreadPoolExecutor(max_workers=min(8,max(1,len(handles))),thread_name_prefix="truth-free")
+ try:
+  while not SHUTDOWN.is_set():
+   if not S["engine_active"]:
+    SHUTDOWN.wait(2);continue
+   started=time.monotonic()
+   futures={pool.submit(free_truth_fetch,h,ids_cache.get(h)):h for h in handles}
+   for future in concurrent.futures.as_completed(futures):
+    h=futures[future];name="TruthDirect:"+h
+    try:
+     account_id,posts,headers=future.result();ids_cache[h]=account_id
+     stamps=[publication_epoch(p.get("created_at")) for p in posts];stamps=[x for x in stamps if x is not None]
+     latest_age=(time.time()-max(stamps)) if stamps else None
+     with LOCK:S["sources"][name]={"ok":True,"mode":"truth_rest_chrome_impersonation","last_check":now(),"posts":len(posts),"poll_seconds":poll,"latest_post_age_seconds":round(latest_age,1) if latest_age is not None else None,"realtime_verified":False,"ratelimit_remaining":headers.get("x-ratelimit-remaining")}
+     ids=[str(p["id"]) for p in posts]
+     if h not in seen:
+      seen[h]=set(ids);continue
+     old=seen[h];fresh=[p for p in posts if str(p["id"]) not in old];old.update(ids)
+     if len(old)>200:seen[h]=set(ids[:100])
+     for p in sorted(fresh,key=lambda q:publication_epoch(q.get("created_at")) or 0):
+      age=time.time()-(publication_epoch(p.get("created_at")) or 0)
+      if 0<=age<=10:
+       with LOCK:S["sources"][name]["realtime_verified"]=True;S["sources"][name]["delivery_latency_seconds"]=round(age,2)
+      ident=hashlib.sha256(("TruthDirect:"+h+":"+str(p["id"])).encode()).hexdigest()
+      ingest_event(ident,"TruthSocialPublic",p["text"],p.get("created_at"),p.get("url"))
+    except Exception as exc:
+     err=str(exc)[:120] if str(exc) else type(exc).__name__
+     with LOCK:S["sources"][name]={"ok":False,"mode":"truth_rest_chrome_impersonation","last_check":now(),"error":err}
+   with LOCK:
+    states=[v for k,v in S["sources"].items() if k.startswith("TruthDirect:")]
+    good=sum(bool(v.get("ok")) for v in states)
+    S["sources"]["TruthSocialPublic"]={"ok":good>=max(1,int(len(handles)*0.75)),"mode":"direct_parallel_rest","last_check":now(),"accounts_ok":good,"accounts_total":len(handles),"poll_seconds":poll,"realtime_verified":any(v.get("realtime_verified") for v in states)}
+   SHUTDOWN.wait(max(0.1,poll-(time.monotonic()-started)))
+ finally:
+  pool.shutdown(wait=False,cancel_futures=True)
+
 def x_filtered_stream():
  # Official X stream, 1 connection for all watched accounts. Requires authorized token.
  token=os.getenv("X_STREAM_BEARER_TOKEN","").strip()
@@ -813,7 +904,7 @@ def operations_diagnostics():
      "trades":S.get("trades"),"news_seen":S.get("news_seen"),
      "sources_ok":sum(bool(x.get("ok")) for x in S["sources"].values()),
      "sources_failed":[k for k,v in S["sources"].items() if not v.get("ok")],
-     "social_channels":{k:{"ok":v.get("ok"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds")} for k,v in S["sources"].items() if k.startswith(("XGuest:","XMonitor","TruthSocialPublic","TruthArchive"))},
+     "social_channels":{k:{"ok":v.get("ok"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds"),"delivery_latency_seconds":v.get("delivery_latency_seconds")} for k,v in S["sources"].items() if k.startswith(("XFree:","XFilteredStream","XMonitor","TruthDirect:","TruthSocialPublic"))},
      "entry_rejections":dict(S.get("_entry_rejections",{})),
      "risk_ready":health["risk_ready"]}
    print(json.dumps(report,ensure_ascii=False,default=str),flush=True)
@@ -958,7 +1049,7 @@ def health_state():
  healthy=not SHUTDOWN.is_set() and heartbeat<45 and coordinator_age<45
  ready=healthy and S["engine_active"] and age is not None and age<10 and checkpoint_age is not None and checkpoint_age<15
  sources=dict(S.get("sources",{}))
- social={k:v for k,v in sources.items() if k.startswith(("XPublic:","XMonitor","XScrape","TruthSocial","TruthWatch:","TruthArchive"))}
+ social={k:v for k,v in sources.items() if k.startswith(("XFree:","XFilteredStream","XMonitor","TruthDirect:","TruthSocialPublic"))}
  unavailable=[k for k,v in social.items() if not v.get("ok")]
  return {"healthy":healthy,"risk_ready":ready,"news_sources_total":len(sources),"news_sources_failed":sum(not v.get("ok",False) for v in sources.values()),"social_sources_failed":unavailable,"guest_x_realtime_verified":False,"news_24h_guaranteed":False,"engine_active":S["engine_active"],
          "market_age_seconds":age,"checkpoint_age_seconds":checkpoint_age,
@@ -976,13 +1067,13 @@ if __name__=="__main__":
   SHUTDOWN.set()
   threading.Thread(target=server.shutdown,daemon=True).start()
  signal.signal(signal.SIGTERM,shutdown);signal.signal(signal.SIGINT,shutdown)
- targets=[engine_coordinator,market,market_metadata,telemetry,xnews,adapt,truthnews,guest_x_worker,x_filtered_stream,dashboard_cache_loop,operations_diagnostics]
+ targets=[engine_coordinator,market,market_metadata,telemetry,xnews,adapt,free_x_realtime,free_truth_realtime,x_filtered_stream,dashboard_cache_loop,operations_diagnostics]
  targets += ([lambda:social_reader("x")] if os.getenv("X_SESSION_COOKIES","").strip() else [])
  targets += [lambda:social_reader("truth")] if os.getenv("TRUTHSOCIAL_TOKEN","").strip() else []
  workers=[threading.Thread(target=t,daemon=True,name=t.__name__) for t in targets]
  workers += [threading.Thread(target=news_feed,args=(name,url),daemon=True,name="feed:"+name) for name,url in FEEDS.items()]
  workers += [threading.Thread(target=public_social_reader,args=("x",handle),daemon=True,name="public-x:"+handle) for handle in WATCH] if os.getenv("ENABLE_PUBLIC_X_HTML","0")=="1" else []
- workers += [threading.Thread(target=public_social_reader,args=("truth","realDonaldTrump"),daemon=True,name="truth-archive")]
+
  for worker in workers:worker.start()
  try:server.serve_forever()
  finally:
