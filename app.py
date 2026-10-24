@@ -490,6 +490,7 @@ def market():
      hist=S.setdefault("_hist",{}).setdefault(sym,[]);hist.append(px)
      if len(hist)>120:del hist[:-120]
     S["last_market_error"]=None
+   if S["engine_active"]:pump_mark_positions(valid)
   except LeaseLost as e:
    S["engine_active"]=False;S["engine_error"]=str(e)
   except Exception as e:
@@ -498,18 +499,28 @@ def market():
   SHUTDOWN.wait(2)
 
 def impulse_scan():
- # Independent PUMP_DUMP shadow/PAPER scanner. It never calls ingest_event()
- # and therefore cannot alter NEWS_ENGINE entries, exits, cooldowns or sizing.
- last_signal={}
+ # Independent PUMP_DUMP PAPER engine. It has its own account/positions/exits.
+ # A strong opposite impulse may act as an emergency risk overlay for NEWS positions.
+ last_signal={};last_regime_action=0.0
  while not SHUTDOWN.is_set():
   try:
    with LOCK:
-    prices=dict(S.get("_prices",{}));history={k:list(v) for k,v in S.get("_timeline",{}).items()}
+    active=S["engine_active"];prices=dict(S.get("_prices",{}));history={k:list(v) for k,v in S.get("_timeline",{}).items()}
     volumes=dict(S.get("_day_volumes",{}));contexts=copy.deepcopy(S.get("_pump_ctx",{}))
-   stamp=time.time()
-   found=momentum_candidates(prices,history,volumes,stamp,contexts=contexts)
+   if not active:
+    SHUTDOWN.wait(0.5);continue
+   stamp=time.time();regime=market_regime(prices,history,volumes,stamp)
+   if regime.get("mode")!="NORMAL" and stamp-last_regime_action>=120:
+    reason="market_wide_dump_flatten" if regime.get("side")==-1 else "market_wide_pump_flatten"
+    flatten_news_for_regime(reason,prices)
+    with LOCK:opposite=[sym for sym,p in S["pump_positions"].items() if p["side"]!=regime.get("side")]
+    for sym in opposite:
+     if prices.get(sym):pump_close(sym,prices[sym],"market_regime_flip")
+    last_regime_action=stamp
+
+   found=momentum_candidates(prices,history,volumes,stamp,minimum_day_volume=1_000_000.0,contexts=contexts)
    enriched=[]
-   for candidate in found[:10]:
+   for candidate in found[:15]:
     sym=candidate["symbol"]
     try:
      book=json.loads(get(API,{"type":"l2Book","coin":sym}));levels=book.get("levels",[])
@@ -518,35 +529,59 @@ def impulse_scan():
       bd=sum(float(x.get("sz",0) or 0) for x in bids);ad=sum(float(x.get("sz",0) or 0) for x in asks)
       imb=(bd-ad)/(bd+ad) if bd+ad else 0.0
       bp=float(bids[0]["px"]) if bids else 0.0;ap=float(asks[0]["px"]) if asks else 0.0
-      mid=(bp+ap)/2 if bp and ap else 0.0
-      spread=(ap-bp)/mid*10000 if mid else 9999.0
+      mid=(bp+ap)/2 if bp and ap else 0.0;spread=(ap-bp)/mid*10000 if mid else 9999.0
       candidate["orderbook_imbalance"]=round(imb,4);candidate["spread_bps"]=round(spread,2)
-      if candidate["side"]*imb>=0.12:candidate["score"]=min(100,candidate["score"]+8)
-      elif candidate["side"]*imb<=-0.18:candidate["score"]=max(0,candidate["score"]-12)
-      if spread<=10:candidate["score"]=min(100,candidate["score"]+4)
-      elif spread>35:candidate["score"]=max(0,candidate["score"]-20)
-      candidate["exhaustion"]=bool(candidate.get("exhaustion") or (candidate["side"]*imb<0.03))
-    except Exception as exc:
-     candidate["book_error"]=str(exc)[:100]
+      if candidate["side"]*imb>=0.10:candidate["score"]=min(100,candidate["score"]+7)
+      elif candidate["side"]*imb<=-0.20:candidate["score"]=max(0,candidate["score"]-10)
+      if spread<=12:candidate["score"]=min(100,candidate["score"]+3)
+      elif spread>40:candidate["score"]=max(0,candidate["score"]-15)
+      candidate["exhaustion"]=bool(candidate.get("exhaustion") or (candidate["side"]*imb<0.02))
+    except Exception as exc:candidate["book_error"]=str(exc)[:100]
     enriched.append(candidate)
-   confirmed=[x for x in enriched if x["score"]>=68]
-   for candidate in confirmed[:8]:
-    sym=candidate["symbol"];side=candidate["side"]
-    bucket=int(stamp//15);ident=hashlib.sha256(("PUMP_SHADOW:"+sym+":"+str(side)+":"+str(bucket)).encode()).hexdigest()
-    if stamp-last_signal.get((sym,side),0)<20:continue
-    last_signal[(sym,side)]=stamp
-    action="EXHAUSTION_WARNING" if candidate.get("exhaustion") else "ENTRY_CANDIDATE"
+
+   confirmed=[x for x in enriched if x["score"]>=55]
+   if regime.get("side"):
+    known={(x["symbol"],x["side"]) for x in confirmed}
+    for x in regime.get("candidates",[]):
+     if (x["symbol"],x["side"]) not in known:confirmed.append(x)
+   confirmed=sorted(confirmed,key=lambda x:x["score"],reverse=True)
+
+   for candidate in confirmed[:max(12,PUMP_MAX_POSITIONS)]:
+    sym=candidate["symbol"];side=int(candidate["side"])
+    # Emergency overlay: a strong opposite impulse closes a conflicting NEWS position.
+    with LOCK:news_pos=copy.deepcopy(S["positions"].get(sym))
+    if news_pos and news_pos["side"]!=side and float(candidate["score"])>=62 and prices.get(sym):
+     result=STORE.close(sym,news_pos,prices[sym],"pump_dump_opposite_impulse")
+     if result:
+      with LOCK:
+       S["equity"]=float(result["equity"]);S["realized_pnl"]=float(result["realized_pnl"]);S["trades"]+=1;S["positions"].pop(sym,None)
+      journal("pump_dump_news_protection",None,{"symbol":sym,"news_side":news_pos["side"],"impulse_side":side,"score":candidate["score"]})
+
+    with LOCK:pump_pos=copy.deepcopy(S["pump_positions"].get(sym))
+    if candidate.get("exhaustion") and pump_pos and pump_pos["side"]==side and prices.get(sym):
+     pump_close(sym,prices[sym],"pump_exhaustion")
+     action="EXHAUSTION_CLOSE"
+    else:
+     opened=False
+     if not candidate.get("exhaustion") and prices.get(sym):
+      opened=pump_open(sym,side,prices[sym],candidate["score"],candidate)
+     action="OPENED" if opened else ("EXHAUSTION_WARNING" if candidate.get("exhaustion") else "ENTRY_CANDIDATE")
+    bucket=int(stamp//15);ident=hashlib.sha256(("PUMP:"+sym+":"+str(side)+":"+str(bucket)+":"+action).encode()).hexdigest()
+    if stamp-last_signal.get((sym,side,action),0)<15:continue
+    last_signal[(sym,side,action)]=stamp
     with pg() as c:
      c.execute("""insert into pump_signal_journal(id,ts,symbol,side,score,action,features)
        values(%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(id) do nothing""",
-       (ident,now(),sym,side,float(candidate["score"]),action,json.dumps(candidate)))
+       (ident,now(),sym,side,float(candidate["score"]),action,json.dumps(candidate,default=str)))
+
    with LOCK:
     S["sources"]["PumpDumpScanner"]={"ok":bool(prices and volumes),"last_check":now(),"markets":len(prices),
-      "liquid_markets":sum(v>=2000000 for v in volumes.values()),"raw_candidates":len(found),"confirmed_candidates":len(confirmed),
-      "top_candidates":confirmed[:5],"mode":"isolated_shadow_2s_all_markets","news_engine_shared_parameters":False,
-      "error":None if prices and volumes else "missing_market_prices_or_metadata"}
+      "liquid_markets":sum(v>=1_000_000 for v in volumes.values()),"raw_candidates":len(found),"confirmed_candidates":len(confirmed),
+      "top_candidates":confirmed[:5],"mode":"isolated_paper_2s_all_markets","news_engine_shared_parameters":False,
+      "paper_positions":len(S["pump_positions"]),"paper_equity":round(S["pump_equity"],4),"paper_trades":S["pump_trades"],
+      "market_regime":regime,"error":None if prices and volumes else "missing_market_prices_or_metadata"}
   except Exception as exc:
-   with LOCK:S["sources"]["PumpDumpScanner"]={"ok":False,"last_check":now(),"mode":"isolated_shadow_2s_all_markets","error":str(exc)[:180],"news_engine_shared_parameters":False}
+   with LOCK:S["sources"]["PumpDumpScanner"]={"ok":False,"last_check":now(),"mode":"isolated_paper_2s_all_markets","error":str(exc)[:180],"news_engine_shared_parameters":False}
   SHUTDOWN.wait(2)
 
 def market_metadata():
