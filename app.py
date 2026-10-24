@@ -124,12 +124,14 @@ POS=("pump","pumping","surge","surges","approve","approved","approval","partners
 NEG=("dump","dumping","hack","hacked","exploit","lawsuit","delist","delisted","ban","banned","liquidation","liquidations","fraud","selloff","sell-off","bearish","crash","crashes","stolen","outflows","net outflow","falls","drops","slips","plunges","tumbles","declines")
 # Symbols that are also ordinary English words/acronyms. Never map them from a bare word.
 # They require an explicit crypto form/name so headlines like "not", "people", "move", "etc" cannot create trades.
-AMBIGUOUS_SYMBOLS={"NOT","PEOPLE","MOVE","ETC"}
+AMBIGUOUS_SYMBOLS={"NOT","PEOPLE","MOVE","ETC","TRUMP","MELANIA"}
 EXPLICIT_TOKEN_PATTERNS={
  "NOT":(r"\$NOT\b",r"\bNOTUSDT\b",r"\bNOTCOIN\b",r"\bNOT TOKEN\b"),
  "PEOPLE":(r"\$PEOPLE\b",r"\bPEOPLEUSDT\b",r"\bCONSTITUTIONDAO\b",r"\bPEOPLE TOKEN\b"),
  "MOVE":(r"\$MOVE\b",r"\bMOVEUSDT\b",r"\bMOVEMENT(?: NETWORK)?\b",r"\bMOVE TOKEN\b"),
- "ETC":(r"\$ETC\b",r"\bETCUSDT\b",r"\bETHEREUM CLASSIC\b",r"\bETC TOKEN\b")
+ "ETC":(r"\$ETC\b",r"\bETCUSDT\b",r"\bETHEREUM CLASSIC\b",r"\bETC TOKEN\b"),
+ "TRUMP":(r"\$TRUMP\b",r"\bTRUMPUSDT\b",r"\bTRUMP TOKEN\b",r"\bTRUMP MEMECOIN\b",r"\bOFFICIAL TRUMP\b.{0,20}\bTOKEN\b"),
+ "MELANIA":(r"\$MELANIA\b",r"\bMELANIAUSDT\b",r"\bMELANIA TOKEN\b",r"\bMELANIA MEMECOIN\b")
 }
 # Source priors are experimental metadata for the one-week PAPER_ONLY study.
 # They are logged and gently affect confidence/eligibility, but can never reverse news direction.
