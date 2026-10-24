@@ -172,6 +172,7 @@ def classify_event(title,base_side):
 def source_weight(source):
  if source.startswith("XIndex:"):return 0.40
  if source.startswith("XOfficial:"):return 0.90
+ if source.startswith("TruthSocialPublic"):return 0.95
  return float(SOURCE_WEIGHTS.get(source,0.50))
 STOP_ROE=-999.0;TAKE_ROE=0.20;LEV=25.0;MARGIN_FRACTION=0.10;FEE=0.00045;LOCK_TRIGGER_ROE=0.10;LOCK_ROE=0.075;PAPER_RESET=100.0;MIN_EXIT_ROE=0.075;TRAIL_ARM_ROE=0.12
 def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -1136,7 +1137,7 @@ def operations_diagnostics():
      "trades":S.get("trades"),"news_seen":S.get("news_seen"),
      "sources_ok":sum(bool(x.get("ok")) for x in S["sources"].values()),
      "sources_failed":[k for k,v in S["sources"].items() if not v.get("ok")],
-     "social_channels":{k:{"ok":v.get("ok"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds"),"delivery_latency_seconds":v.get("delivery_latency_seconds"),"accounts_ok":v.get("accounts_ok"),"accounts_initialized":v.get("accounts_initialized"),"accounts_total":v.get("accounts_total"),"all_accounts_ok":v.get("all_accounts_ok"),"fx_primary":v.get("fx_primary"),"xlookup_primary":v.get("xlookup_primary")} for k,v in S["sources"].items() if k.startswith(("XFree:","XFilteredStream","XListMonitor","XMonitor","XIndexMonitor","TruthAuth","TruthStream","TruthDirect:","TruthSocialPublic"))},
+     "social_channels":{k:{"ok":v.get("ok"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds"),"delivery_latency_seconds":v.get("delivery_latency_seconds"),"accounts_ok":v.get("accounts_ok"),"accounts_initialized":v.get("accounts_initialized"),"accounts_total":v.get("accounts_total"),"all_accounts_ok":v.get("all_accounts_ok"),"fx_primary":v.get("fx_primary"),"xlookup_primary":v.get("xlookup_primary")} for k,v in S["sources"].items() if k.startswith(("XFree:","XFilteredStream","XListMonitor","XMonitor","XIndexMonitor","TruthAuth","TruthStream","TruthDirect:","TruthSocialPublic","TruthMonitor"))},
      "entry_rejections":dict(S.get("_entry_rejections",{})),
      "risk_ready":health["risk_ready"]}
    print(json.dumps(report,ensure_ascii=False,default=str),flush=True)
@@ -1281,7 +1282,7 @@ def health_state():
  healthy=not SHUTDOWN.is_set() and heartbeat<45 and coordinator_age<45
  ready=healthy and S["engine_active"] and age is not None and age<10 and checkpoint_age is not None and checkpoint_age<15
  sources=dict(S.get("sources",{}))
- social={k:v for k,v in sources.items() if k.startswith(("XFree:","XFilteredStream","XMonitor","TruthStream","TruthDirect:","TruthSocialPublic"))}
+ social={k:v for k,v in sources.items() if k.startswith(("XFree:","XFilteredStream","XMonitor","TruthStream","TruthDirect:","TruthSocialPublic","TruthMonitor"))}
  unavailable=[k for k,v in social.items() if not v.get("ok")]
  return {"healthy":healthy,"risk_ready":ready,"news_sources_total":len(sources),"news_sources_failed":sum(not v.get("ok",False) for v in sources.values()),"social_sources_failed":unavailable,"guest_x_realtime_verified":False,"news_24h_guaranteed":False,"engine_active":S["engine_active"],
          "market_age_seconds":age,"checkpoint_age_seconds":checkpoint_age,
