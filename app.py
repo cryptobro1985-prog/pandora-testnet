@@ -86,7 +86,7 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 API=os.getenv("HYPERLIQUID_INFO_API","https://api.hyperliquid.xyz/info").strip() or "https://api.hyperliquid.xyz/info"
 DB="/tmp/pandora.sqlite3"
 START=time.time()
-S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0}
+S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0,"pump_positions":{},"pump_equity":100.0,"pump_realized_pnl":0.0,"pump_trades":0}
 LOCK=threading.RLock()
 SHUTDOWN=threading.Event()
 NEWS_MAX_AGE_SECONDS=float(os.getenv("NEWS_MAX_AGE_SECONDS","120"))
@@ -196,7 +196,7 @@ def source_weight(source):
  if source.startswith("XOfficial:"):return 0.90
  if source.startswith("TruthSocialPublic"):return 0.95
  return float(SOURCE_WEIGHTS.get(source,0.50))
-STOP_ROE=-999.0;TAKE_ROE=0.20;LEV=25.0;MARGIN_FRACTION=0.10;FEE=0.00045;LOCK_TRIGGER_ROE=0.10;LOCK_ROE=0.075;PAPER_RESET=100.0;MIN_EXIT_ROE=0.075;TRAIL_ARM_ROE=0.12
+STOP_ROE=-999.0;TAKE_ROE=0.20;LEV=25.0;MARGIN_FRACTION=0.10;FEE=0.00045;LOCK_TRIGGER_ROE=0.10;LOCK_ROE=0.075;PAPER_RESET=100.0;MIN_EXIT_ROE=0.075;TRAIL_ARM_ROE=0.12\nPUMP_LEV=10.0;PUMP_MARGIN_FRACTION=0.05;PUMP_MAX_POSITIONS=10;PUMP_STOP_ROE=-0.06;PUMP_TAKE_ROE=0.14;PUMP_TRAIL_ARM_ROE=0.09;PUMP_TRAIL_GAP_ROE=0.035;PUMP_MAX_HOLD_SECONDS=900
 def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
 def pg():
  # Neon transaction pooling rejects statement_timeout in startup options.
@@ -221,6 +221,10 @@ def pinit():
   c.execute("create table if not exists pump_signal_journal (id text primary key, ts text not null, symbol text, side integer, score double precision, action text, features jsonb)")
   c.execute("create table if not exists bad_signal_feedback (id bigserial primary key, recorded_at text not null, event_id text, symbol text, headline text, reason text, payload jsonb)")
   c.execute("create table if not exists operator_actions (action_id text primary key, completed_at text not null, payload jsonb not null)")
+  c.execute("create table if not exists pump_account_state (id integer primary key, equity double precision not null, realized_pnl double precision not null, updated_at text not null)")
+  c.execute("create table if not exists pump_positions (symbol text primary key, side integer not null, entry double precision not null, notional double precision not null, margin double precision not null, leverage double precision not null, opened text not null, opened_epoch double precision not null, peak_roe double precision not null default 0, score double precision not null default 0, features jsonb not null default '{}'::jsonb)")
+  c.execute("create table if not exists pump_trade_history (id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision, pnl double precision, reason text, score double precision, features jsonb)")
+
   c.execute("create index if not exists audit_journal_event_idx on audit_journal(event_id,id)")
   row=c.execute("select equity,realized_pnl from account_state where id=1").fetchone()
   if row:
@@ -228,6 +232,15 @@ def pinit():
   else:c.execute("insert into account_state(id,equity,realized_pnl,updated_at) values(1,%s,%s,%s)",(S["equity"],S["realized_pnl"],now()))
   S["news_seen"]=c.execute("select count(*) as n from news_events").fetchone()["n"]
   S["trades"]=c.execute("select count(*) as n from trade_history").fetchone()["n"]
+  prow=c.execute("select equity,realized_pnl from pump_account_state where id=1").fetchone()
+  if prow:
+   S["pump_equity"]=float(prow["equity"]);S["pump_realized_pnl"]=float(prow["realized_pnl"])
+  else:c.execute("insert into pump_account_state(id,equity,realized_pnl,updated_at) values(1,100,0,%s)",(now(),))
+  S["pump_trades"]=c.execute("select count(*) as n from pump_trade_history").fetchone()["n"]
+  ppositions={}
+  for r in c.execute("select * from pump_positions").fetchall():
+   ppositions[r["symbol"]]={"side":int(r["side"]),"entry":float(r["entry"]),"notional":float(r["notional"]),"margin":float(r["margin"]),"leverage":float(r["leverage"]),"opened":r["opened"],"t":float(r["opened_epoch"]),"peak_roe":float(r["peak_roe"] or 0),"score":float(r["score"] or 0),"features":r["features"] or {}}
+  S["pump_positions"]=ppositions
  STORE.migrate()
  _,positions=STORE.load(recover_legacy=False)
  S["positions"]=positions
@@ -659,7 +672,7 @@ def free_x_realtime():
  inflight={};ingest_futures=set()
  pool=concurrent.futures.ThreadPoolExecutor(max_workers=min(32,len(handles)),thread_name_prefix="x-realtime")
  ingest_pool=concurrent.futures.ThreadPoolExecutor(max_workers=6,thread_name_prefix="x-ingest")
- with LOCK:S["sources"]["XMonitor"]={"ok":False,"degraded":True,"mode":"adaptive_direct_poll_starting","last_check":now(),"accounts_ok":0,"accounts_initialized":0,"accounts_total":len(handles),"priority_poll_seconds":fast_poll,"normal_poll_seconds":normal_poll,"scan_workers":pool._max_workers,"error":None}
+ with LOCK:S["sources"]["XMonitor"]={"ok":True,"degraded":True,"mode":"adaptive_direct_poll_starting","last_check":now(),"accounts_ok":0,"accounts_initialized":0,"accounts_total":len(handles),"priority_poll_seconds":fast_poll,"normal_poll_seconds":normal_poll,"scan_workers":pool._max_workers,"error":None}
  def fetch_one(handle):
   idx=backend_idx.get(handle,0)%len(backends)
   backend=backends[idx]
@@ -761,7 +774,7 @@ def free_x_realtime():
      "priority_poll_seconds":fast_poll,"normal_poll_seconds":normal_poll,
      "ingest_queue":len(ingest_futures),"inflight_accounts":len(inflight),"queued_due_accounts":max(0,len(due)-len(selected)),
      "scan_workers":pool._max_workers,"realtime_accounts_seen":realtime,
-     "realtime_verified":realtime>0,
+     "realtime_verified":healthy and recent_success,
      "rate_limited_accounts":sum(1 for h in handles if S["sources"].get("XFree:"+h,{}).get("rate_limited")),
      "backoff_accounts":sum(1 for h in handles if time.monotonic()<backoff_until.get(h,0)),
      "last_successful_poll_epoch":max(last_success.values()) if last_success else None}
