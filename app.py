@@ -8,7 +8,7 @@ from entry_guards import freshness, publication_epoch
 from social_scrapers import poll as social_poll, SourceUnavailable
 from public_social import read as public_social_read
 from x_guest import read as guest_x_read
-from realtime_free import fetch_x as free_x_fetch, fetch_truth as free_truth_fetch
+from realtime_free import fetch_x as free_x_fetch, fetch_truth as free_truth_fetch, fetch_truth_activitypub as free_truth_ap_fetch
 from momentum_scanner import candidates as momentum_candidates
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
 def choose(db_path,current=(-0.10,0.20)):
@@ -579,8 +579,25 @@ def free_truth_realtime():
       ident=hashlib.sha256(("TruthDirect:"+h+":"+str(p["id"])).encode()).hexdigest()
       ingest_event(ident,"TruthSocialPublic",p["text"],p.get("created_at"),p.get("url"))
     except Exception as exc:
-     err=str(exc)[:120] if str(exc) else type(exc).__name__
-     with LOCK:S["sources"][name]={"ok":False,"mode":"truth_rest_chrome_impersonation","last_check":now(),"error":err}
+     rest_err=str(exc)[:100] if str(exc) else type(exc).__name__
+     try:
+      posts=free_truth_ap_fetch(h)
+      stamps=[publication_epoch(p.get("created_at")) for p in posts];stamps=[x for x in stamps if x is not None]
+      latest_age=(time.time()-max(stamps)) if stamps else None
+      with LOCK:S["sources"][name]={"ok":True,"mode":"truth_activitypub_outbox","last_check":now(),"posts":len(posts),"poll_seconds":poll,"latest_post_age_seconds":round(latest_age,1) if latest_age is not None else None,"realtime_verified":False,"rest_error":rest_err}
+      ids=[str(p["id"]) for p in posts]
+      if h not in seen:seen[h]=set(ids);continue
+      old=seen[h];fresh=[p for p in posts if str(p["id"]) not in old];old.update(ids)
+      if len(old)>200:seen[h]=set(ids[:100])
+      for p in sorted(fresh,key=lambda q:publication_epoch(q.get("created_at")) or 0):
+       age=time.time()-(publication_epoch(p.get("created_at")) or 0)
+       if 0<=age<=10:
+        with LOCK:S["sources"][name]["realtime_verified"]=True;S["sources"][name]["delivery_latency_seconds"]=round(age,2)
+       ident=hashlib.sha256(("TruthAP:"+h+":"+str(p["id"])).encode()).hexdigest()
+       ingest_event(ident,"TruthSocialPublic",p["text"],p.get("created_at"),p.get("url"))
+     except Exception as ap_exc:
+      ap_err=str(ap_exc)[:100] if str(ap_exc) else type(ap_exc).__name__
+      with LOCK:S["sources"][name]={"ok":False,"mode":"truth_rest_then_activitypub","last_check":now(),"error":rest_err+" | "+ap_err}
    with LOCK:
     states=[v for k,v in S["sources"].items() if k.startswith("TruthDirect:")]
     good=sum(bool(v.get("ok")) for v in states)
