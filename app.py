@@ -651,7 +651,7 @@ def free_x_realtime():
  fast_poll=max(4.0,float(os.getenv("X_PRIORITY_POLL_SECONDS","4")))
  normal_poll=max(12.0,float(os.getenv("X_NORMAL_POLL_SECONDS","12")))
  seen={};primed=set();state_lock=threading.Lock()
- backoff_until={};failures={};last_success={};x_error_log_at={};backend_idx={}
+ backoff_until={};failures={};last_success={};x_error_log_at={};backend_idx={};disabled_until={}
  backends=("fx","xlookup")
  # Spread first requests over the window instead of a 128-request burst.
  base=time.monotonic()
@@ -673,7 +673,7 @@ def free_x_realtime():
    now_m=time.monotonic()
    active={meta[0] for meta in inflight.values()}
    for handle in handles:
-    if handle in active or now_m<next_due[handle] or now_m<backoff_until.get(handle,0):continue
+    if handle in active or now_m<next_due[handle] or now_m<backoff_until.get(handle,0) or now_m<disabled_until.get(handle,0):continue
     try:
      fut=pool.submit(fetch_one,handle);inflight[fut]=(handle,now_m)
     except Exception as exc:
@@ -686,7 +686,7 @@ def free_x_realtime():
     handle,started=inflight.pop(future);name="XFree:"+handle
     try:
      posts,backend=future.result()
-     failures[handle]=0;backoff_until.pop(handle,None);last_success[handle]=time.time()
+     failures[handle]=0;backoff_until.pop(handle,None);disabled_until.pop(handle,None);last_success[handle]=time.time()
      stamps=[publication_epoch(p.get("created_at")) for p in posts];stamps=[x for x in stamps if x is not None]
      latest_age=(time.time()-max(stamps)) if stamps else None
      with LOCK:
@@ -723,10 +723,13 @@ def free_x_realtime():
       prev=S["sources"].get(name,{})
       last_success_epoch=float(prev.get("last_success_epoch",0) or 0)
       within_grace=bool(last_success_epoch and time.time()-last_success_epoch<=180)
-      S["sources"][name]={"ok":within_grace,"degraded":True,"mode":"adaptive_direct_poll",
+      disabled=bool(failures[handle]>=4 and not within_grace)
+      if disabled:
+       disabled_until[handle]=time.monotonic()+600
+      S["sources"][name]={"ok":within_grace,"degraded":True,"disabled":disabled,"mode":"adaptive_direct_poll",
        "category":WATCH_CATEGORY.get(handle),"last_check":now(),"error":err,
        "consecutive_failures":failures[handle],"last_success_epoch":last_success_epoch or None,
-       "rate_limited":limited,"retry_after_seconds":backoff,
+       "rate_limited":limited,"retry_after_seconds":600 if disabled else backoff,
        "last_request_seconds":round(time.monotonic()-started,2)}
      if time.time()-x_error_log_at.get(handle,0)>=60:
       x_error_log_at[handle]=time.time()
@@ -735,13 +738,18 @@ def free_x_realtime():
    ingest_futures={future for future in ingest_futures if not future.done()}
    with LOCK:
     states=[S["sources"].get("XFree:"+h,{}) for h in handles]
-    initialized=sum(bool(v) for v in states);good=sum(bool(v.get("ok")) for v in states)
-    realtime=sum(bool(v.get("realtime_verified")) for v in states)
-    S["sources"]["XMonitor"]={"ok":initialized>=math.ceil(len(handles)*0.90) and good>=math.ceil(len(handles)*0.80),
-     "all_accounts_ok":initialized==len(handles) and good==len(handles),
-     "degraded":not (initialized==len(handles) and good==len(handles)),
-     "mode":"adaptive_direct_poll","last_check":now(),"accounts_ok":good,
+    active_states=[v for v in states if v and not v.get("disabled")]
+    initialized=sum(bool(v) for v in states);good=sum(bool(v.get("ok")) for v in active_states)
+    realtime=sum(bool(v.get("realtime_verified")) for v in active_states)
+    active_count=len(active_states);disabled_count=sum(bool(v.get("disabled")) for v in states)
+    recent_success=bool(last_success and time.time()-max(last_success.values())<=60)
+    healthy=bool(active_count>=20 and good>=max(12,math.ceil(active_count*0.65)) and recent_success)
+    S["sources"]["XMonitor"]={"ok":healthy,
+     "all_accounts_ok":active_count>0 and good==active_count,
+     "degraded":healthy and good<active_count,
+     "mode":"adaptive_active_retry_pool","last_check":now(),"accounts_ok":good,
      "accounts_initialized":initialized,"accounts_total":len(handles),
+     "active_accounts":active_count,"disabled_retry_accounts":disabled_count,
      "priority_accounts":sum(h.lower() in high_priority for h in handles),
      "priority_poll_seconds":fast_poll,"normal_poll_seconds":normal_poll,
      "ingest_queue":len(ingest_futures),"inflight_accounts":len(inflight),
@@ -1292,7 +1300,7 @@ def build_dashboard_snapshot():
  try: account_age_seconds=max(0,int((datetime.datetime.now(datetime.timezone.utc)-datetime.datetime.fromisoformat(account_started.replace("Z","+00:00"))).total_seconds()))
  except Exception: account_age_seconds=0
  total=state["equity"]+unreal;account_roi=(total/PAPER_RESET-1)*100
- visible_sources={k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and k not in SEARCH_INDEX_FEEDS}
+ visible_sources={k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and k not in SEARCH_INDEX_FEEDS and not v.get("disabled") and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")}
  return {"mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"positions":positions,"trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
 def dashboard():
@@ -1316,7 +1324,7 @@ def dashboard():
  return {"mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),
   "total_equity":round(state["equity"]+unreal,4),"realized_pnl":round(state["realized_pnl"],4),
   "account_age_seconds":0,"account_roi_pct":round(((state["equity"]+unreal)/PAPER_RESET-1)*100,3),
-  "positions":positions,"trades":[],"news":[],"features":[],"sources":{k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and k not in SEARCH_INDEX_FEEDS},
+  "positions":positions,"trades":[],"news":[],"features":[],"sources":{k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and k not in SEARCH_INDEX_FEEDS and not v.get("disabled") and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")},
   "errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],
   "market_count":state["market_count"],"last_poll":state["last_poll"],
   "uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],
@@ -1349,7 +1357,7 @@ def operations_diagnostics():
      "market_error":S.get("last_market_error"),"positions":len(S["positions"]),
      "trades":S.get("trades"),"news_seen":S.get("news_seen"),
      "sources_ok":sum(bool(x.get("ok")) for x in S["sources"].values()),
-     "sources_failed":[k for k,v in S["sources"].items() if not v.get("ok") and not k.startswith("XIndex:") and k!="XIndexMonitor" and k not in SEARCH_INDEX_FEEDS],
+     "sources_failed":[k for k,v in S["sources"].items() if not v.get("ok") and not v.get("disabled") and not k.startswith("XIndex:") and k!="XIndexMonitor" and k not in SEARCH_INDEX_FEEDS and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")],
      "sources_degraded_noncritical":[k for k,v in S["sources"].items() if not v.get("ok") and (k.startswith("XIndex:") or k=="XIndexMonitor")],
      "news_failures":{k:str(v.get("error") or "")[:160] for k,v in S["sources"].items() if not v.get("ok") and ((k in FEEDS and k not in SEARCH_INDEX_FEEDS and not k.startswith("XIndex:")) or k in RESEARCH_PAGES)},
      "social_channels":{k:{"ok":v.get("ok"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds"),"delivery_latency_seconds":v.get("delivery_latency_seconds"),"accounts_ok":v.get("accounts_ok"),"accounts_initialized":v.get("accounts_initialized"),"accounts_total":v.get("accounts_total"),"all_accounts_ok":v.get("all_accounts_ok"),"fx_primary":v.get("fx_primary"),"xlookup_primary":v.get("xlookup_primary")} for k,v in S["sources"].items() if k.startswith(("XFree:","XFilteredStream","XListMonitor","XMonitor","XIndexMonitor","TruthAuth","TruthStream","TruthDirect:","TruthSocialPublic","TruthMonitor"))},
