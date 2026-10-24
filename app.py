@@ -803,8 +803,9 @@ def free_x_realtime():
  ))
  poll=max(8.0,float(os.getenv("X_ALL_POLL_SECONDS","10")))
  seen={};primed=set();state_lock=threading.Lock()
- backoff_until={};failures={};last_success={};x_error_log_at={};backend_idx={};disabled_until={}
- backends=("fx","xlookup")
+ backoff_until={};failures={};last_success={};x_error_log_at={};disabled_until={}
+ backends=("fx","xlookup","fixupx","vx")
+ backend_idx={h:(sum(ord(ch) for ch in h)%len(backends)) for h in handles}
  # Spread first requests over the window instead of a 128-request burst.
  base=time.monotonic()
  next_due={h:base+((sum(ord(ch) for ch in h)%400)/100.0) for h in handles}
@@ -816,7 +817,9 @@ def free_x_realtime():
   idx=backend_idx.get(handle,0)%len(backends)
   backend=backends[idx]
   if backend=="fx":posts=free_x_fetch(handle,timeout=2.8,attempts=1)
-  else:posts=free_x_lookup_fetch(handle,timeout=2.8)
+  elif backend=="xlookup":posts=free_x_lookup_fetch(handle,timeout=2.8)
+  elif backend=="fixupx":posts=free_x_fixupx_fetch(handle,timeout=2.8)
+  else:posts=free_x_vx_fetch(handle,timeout=2.8)
   return posts,backend
  try:
   while not SHUTDOWN.is_set():
@@ -905,7 +908,7 @@ def free_x_realtime():
      "mode":"adaptive_active_retry_pool","last_check":now(),"accounts_ok":good,
      "accounts_initialized":initialized,"accounts_total":len(handles),
      "active_accounts":active_count,"disabled_retry_accounts":disabled_count,"recently_polled_accounts":recent_accounts,
-     "target_poll_seconds":poll,
+     "target_poll_seconds":poll,"backend_accounts":{b:sum(1 for h in handles if backends[backend_idx.get(h,0)%len(backends)]==b) for b in backends},
      "ingest_queue":len(ingest_futures),"inflight_accounts":len(inflight),"queued_due_accounts":max(0,len(due)-len(selected)),
      "scan_workers":pool._max_workers,"realtime_accounts_seen":realtime,
      "realtime_verified":healthy and recent_success,
