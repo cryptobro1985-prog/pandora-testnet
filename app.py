@@ -649,7 +649,9 @@ class Handler(BaseHTTPRequestHandler):
    self.send_error(404);return
   secret=os.getenv("PANDORA_CONTROL_TOKEN","").strip()
   auth=self.headers.get("Authorization","")
-  if not secret or not secrets.compare_digest(auth,"Bearer "+secret):
+  cookie=self.headers.get("Cookie","")
+  cookie_token=next((part.strip().split("=",1)[1] for part in cookie.split(";") if part.strip().startswith("pandora_access=")),"")
+  if not secret or not (secrets.compare_digest(auth,"Bearer "+secret) or secrets.compare_digest(cookie_token,secret)):
    self.send_error(401);return
   try:
    length=int(self.headers.get("Content-Length","0"))
