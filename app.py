@@ -19,7 +19,7 @@ def choose(db_path,current=(-0.10,0.20)):
  avg=sum(train)/len(train); cand=CANDIDATES[3] if avg>0 else CANDIDATES[1]
  return {"stop":cand[0],"take":cand[1],"samples":len(xs),"validation_pnl":sum(valid),"changed":cand!=current}
 
-WATCH=["elonmusk","realDonaldTrump","federalreserve","SECGov","USTreasury","WhiteHouse","coinbase","binance","saylor","cz_binance","VitalikButerin","Reuters","AP","CoinDesk","Cointelegraph","BNODesk","DeItaone","KobeissiLetter","WuBlockchain","Lookonchain","PeckShieldAlert"]
+WATCH=["elonmusk","realDonaldTrump","POTUS","WhiteHouse","JDVance","PressSec","Scavino47","federalreserve","SECGov","USTreasury","CFTC","DHSgov","SecScottBessent","Reuters","ReutersBiz","AP","APBusiness","BBCWorld","business","BNODesk","DeItaone","KobeissiLetter","financialjuice","LiveSquawk","CoinDesk","Cointelegraph","DecryptMedia","TheBlock__","blockworks_","BitcoinMagazine","WuBlockchain","Lookonchain","PeckShieldAlert","CertiKAlert","whale_alert","ArkhamIntel","DefiLlama","CoinGlass","coinbase","binance","Bybit_Official","hyperliquidX","saylor","cz_binance","VitalikButerin"]
 def recent():
  token=os.getenv("X_BEARER_TOKEN","").strip()
  if token:
@@ -86,6 +86,14 @@ FEEDS.update({
  "GoogleNewsCryptoPolicy":"https://news.google.com/rss/search?q=SEC+CFTC+crypto+regulation+ETF&hl=en-US&gl=US&ceid=US:en",
  "GoogleNewsTokenEvents":"https://news.google.com/rss/search?q=cryptocurrency+token+listing+unlock+delisting&hl=en-US&gl=US&ceid=US:en",
 })
+# Credential-free coverage of public X account mentions, with indexer delay.
+# These are not authenticated X timelines; source status reports that distinction.
+for _i in range(0,len(WATCH),4):
+ _group=WATCH[_i:_i+4]
+ FEEDS["XIndex:"+",".join(_group)]="https://news.google.com/rss/search?"+urllib.parse.urlencode({
+  "q":"("+" OR ".join("site:x.com/"+h for h in _group)+")",
+  "hl":"en-US","gl":"US","ceid":"US:en"
+ })
 POS=("surge","surges","approve","approved","approval","partnership","listing","adoption","buyback","breakout","bullish","launch","etf approved","rally","rallies","rebound","rebounds","record high","inflows","net inflow","gains","jumps","soars","upside")
 NEG=("hack","hacked","exploit","lawsuit","delist","delisted","ban","banned","liquidation","liquidations","fraud","selloff","sell-off","bearish","crash","crashes","stolen","outflows","net outflow","falls","drops","slips","plunges","tumbles","declines")
 # Symbols that are also ordinary English words/acronyms. Never map them from a bare word.
@@ -123,7 +131,7 @@ def classify_event(title,base_side):
  for event,side,terms in EVENT_RULES:
   if any(t in lo for t in terms):return event,side
  return ("DIRECTIONAL_NEWS" if base_side else "UNCLASSIFIED"),base_side
-def source_weight(source):return float(SOURCE_WEIGHTS.get(source,0.50))
+def source_weight(source):return 0.40 if source.startswith("XIndex:") else float(SOURCE_WEIGHTS.get(source,0.50))
 STOP_ROE=-999.0;TAKE_ROE=0.20;LEV=25.0;MARGIN_FRACTION=0.10;FEE=0.00045;LOCK_TRIGGER_ROE=0.10;LOCK_ROE=0.075;PAPER_RESET=100.0;MIN_EXIT_ROE=0.075;TRAIL_ARM_ROE=0.12
 def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
 def pg():
