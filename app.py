@@ -498,7 +498,57 @@ def ingest_event(ident,source,title,published_at=None,source_url=None):
  record_event(ident,source,title,sym,side,prices,published_at)
  return True
 
+def x_filtered_stream():
+ # Official X stream, 1 connection for all watched accounts. Requires authorized token.
+ token=os.getenv("X_STREAM_BEARER_TOKEN","").strip()
+ if not token:return
+ headers={"Authorization":"Bearer "+token,"User-Agent":"Pandora-news-stream/1","Accept":"application/json"}
+ rules_url="https://api.x.com/2/tweets/search/stream/rules"
+ stream_url="https://api.x.com/2/tweets/search/stream?tweet.fields=created_at,author_id"
+ backoff=5
+ while not SHUTDOWN.is_set():
+  if not S["engine_active"]:
+   SHUTDOWN.wait(3);continue
+  try:
+   req=urllib.request.Request(rules_url,headers=headers)
+   with urllib.request.urlopen(req,timeout=12) as response:rules=json.load(response).get("data",[])
+   own={r.get("tag"):r for r in rules if str(r.get("tag","")).startswith("pandora:")}
+   existing={tag.split(":",1)[1] for tag in own}
+   if set(WATCH)!=existing:
+    if own:
+     payload=json.dumps({"delete":{"ids":[r["id"] for r in own.values()]}}).encode()
+     req=urllib.request.Request(rules_url,data=payload,headers={**headers,"Content-Type":"application/json"},method="POST")
+     with urllib.request.urlopen(req,timeout=12) as response:response.read()
+    for start in range(0,len(WATCH),20):
+     chunk=WATCH[start:start+20]
+     payload=json.dumps({"add":[{"value":"from:"+h+" -is:retweet","tag":"pandora:"+h} for h in chunk]}).encode()
+     req=urllib.request.Request(rules_url,data=payload,headers={**headers,"Content-Type":"application/json"},method="POST")
+     with urllib.request.urlopen(req,timeout=12) as response:response.read()
+   req=urllib.request.Request(stream_url,headers=headers)
+   with urllib.request.urlopen(req,timeout=90) as response:
+    with LOCK:S["sources"]["XFilteredStream"]={"ok":True,"mode":"official_continuous_stream","last_check":now(),"accounts":len(WATCH),"realtime_verified":False}
+    backoff=5
+    for line in response:
+     if SHUTDOWN.is_set():break
+     if not line.strip():continue
+     packet=json.loads(line)
+     item=packet.get("data")
+     if not isinstance(item,dict) or not item.get("id"):continue
+     title=(item.get("text") or "").strip()
+     if not title:continue
+     pub=item.get("created_at")
+     age=time.time()-publication_epoch(pub) if publication_epoch(pub) is not None else None
+     with LOCK:S["sources"]["XFilteredStream"]={"ok":True,"mode":"official_continuous_stream","last_check":now(),"accounts":len(WATCH),"posts":S["sources"].get("XFilteredStream",{}).get("posts",0)+1,"latest_post_age_seconds":round(age,1) if age is not None else None,"realtime_verified":bool(age is not None and 0<=age<=10)}
+     ident=hashlib.sha256(("XStream:"+str(item["id"])).encode()).hexdigest()
+     ingest_event(ident,"XOfficial",title,pub,"https://x.com/i/status/"+str(item["id"]))
+  except Exception as exc:
+   error="http_"+str(exc.code) if hasattr(exc,"code") else type(exc).__name__
+   with LOCK:S["sources"]["XFilteredStream"]={"ok":False,"mode":"official_continuous_stream","last_check":now(),"error":error,"realtime_verified":False}
+   SHUTDOWN.wait(backoff)
+   backoff=min(300,backoff*2)
+
 def guest_x_worker():
+ if os.getenv("X_STREAM_BEARER_TOKEN","").strip():return
  index=0
  while not SHUTDOWN.is_set():
   if not S["engine_active"]:
@@ -926,7 +976,7 @@ if __name__=="__main__":
   SHUTDOWN.set()
   threading.Thread(target=server.shutdown,daemon=True).start()
  signal.signal(signal.SIGTERM,shutdown);signal.signal(signal.SIGINT,shutdown)
- targets=[engine_coordinator,market,market_metadata,telemetry,xnews,adapt,truthnews,guest_x_worker,dashboard_cache_loop,operations_diagnostics]
+ targets=[engine_coordinator,market,market_metadata,telemetry,xnews,adapt,truthnews,guest_x_worker,x_filtered_stream,dashboard_cache_loop,operations_diagnostics]
  targets += ([lambda:social_reader("x")] if os.getenv("X_SESSION_COOKIES","").strip() else [])
  targets += [lambda:social_reader("truth")] if os.getenv("TRUTHSOCIAL_TOKEN","").strip() else []
  workers=[threading.Thread(target=t,daemon=True,name=t.__name__) for t in targets]
