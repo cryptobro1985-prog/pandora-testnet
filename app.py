@@ -628,7 +628,7 @@ def manual_close(symbol=None):
    pos=S["positions"].get(sym)
    if not pos:
     results.append({"symbol":sym,"ok":False,"error":"position_not_found"});continue
-   price=S.get("_prices",{}).get(sym) or pos.get("last_price") or pos.get("entry")
+   price=S.get("_prices",{}).get(sym) or pos.get("last_price")
    if not price:
     results.append({"symbol":sym,"ok":False,"error":"price_unavailable"});continue
    result=STORE.close(sym,pos,price,"manual_close_all" if symbol is None else "manual_close")
