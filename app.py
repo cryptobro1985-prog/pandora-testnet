@@ -455,11 +455,23 @@ def ingest_event(ident,source,title,published_at=None,source_url=None):
  return True
 
 def xnews():
+ # An anonymous X news index is NOT a direct real-time X feed.
+ # Report it as usable only if at least one indexed RSS feed responded.
+ if not os.getenv("X_BEARER_TOKEN","").strip():
+  while not SHUTDOWN.is_set():
+   with LOCK:
+    valid=[(k,v) for k,v in S["sources"].items() if k.startswith("XIndex:") and v.get("ok")]
+    S["sources"]["XMonitor"]={"ok":bool(valid),"last_check":now(),
+     "mode":"guest_public_index_delayed","watch_accounts":len(WATCH),
+     "responsive_feeds":len(valid),"total_feeds":sum(k.startswith("XIndex:") for k in FEEDS),
+     "realtime_verified":False}
+   SHUTDOWN.wait(30)
+  return
  while not SHUTDOWN.is_set():
   try:
    posts=recent()
-   direct=bool(os.getenv("X_BEARER_TOKEN","").strip()) and not any(p.get("source")=="XPublicIndex" for p in posts)
-   with LOCK:S["sources"]["XMonitor"]={"ok":True,"last_check":now(),"posts":len(posts),"mode":"official_api" if direct else "public_index_delayed","watch_accounts":len(WATCH)}
+   with LOCK:S["sources"]["XMonitor"]={"ok":True,"last_check":now(),
+    "posts":len(posts),"mode":"official_api","watch_accounts":len(WATCH)}
    for p in posts:
     if SHUTDOWN.is_set():break
     title=(p.get("text") or "").strip()
@@ -469,7 +481,7 @@ def xnews():
     ingest_event(ident,source,title,p.get("created_at"),p.get("url"))
   except Exception as e:
    with LOCK:S["sources"]["XMonitor"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
-  SHUTDOWN.wait(10)
+  SHUTDOWN.wait(20)
 
 def truthnews():
  delay=10
@@ -599,7 +611,8 @@ def news_feed(source,url):
   query=urllib.parse.parse_qs(parsed.query)
   query["q"]=[query.get("q",[""])[0]+" when:1h"]
   url=urllib.parse.urlunsplit(parsed._replace(query=urllib.parse.urlencode(query,doseq=True)))
- delay=NEWS_POLL_SECONDS
+ base_poll=max(NEWS_POLL_SECONDS,60 if "news.google.com" in url else 20)
+ delay=base_poll
  while not SHUTDOWN.is_set():
   try:
    root=ET.fromstring(get(url));items=root.findall(".//item")[:30];count=0
@@ -609,13 +622,13 @@ def news_feed(source,url):
     if not title:continue
     ident=hashlib.sha256((source+title).encode()).hexdigest()
     count+=bool(ingest_event(ident,source,title,item.findtext("pubDate"),item.findtext("link")))
-   with LOCK:S["sources"][source]={"ok":True,"last_check":now(),"new":count,"feed_items":len(items),"poll_seconds":NEWS_POLL_SECONDS}
-   delay=NEWS_POLL_SECONDS
+   with LOCK:S["sources"][source]={"ok":True,"last_check":now(),"new":count,"feed_items":len(items),"poll_seconds":base_poll,"mode":"indexed_delayed" if "news.google.com" in url else "rss_direct","realtime_verified":False}
+   delay=base_poll
   except Exception as e:
    with LOCK:
     S["errors"]+=1;S["last_error"]=source+": "+str(e)[:180]
     S["sources"][source]={"ok":False,"last_check":now(),"error":str(e)[:150]}
-   delay=min(300,max(NEWS_POLL_SECONDS,delay*2))
+   delay=min(300,max(base_poll,delay*2))
   SHUTDOWN.wait(delay)
 def dashboard():
  with LOCK:
