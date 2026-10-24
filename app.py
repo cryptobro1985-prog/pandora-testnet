@@ -10,6 +10,7 @@ from social_scrapers import poll as social_poll, SourceUnavailable
 from truthbrush import Api as TruthApi
 from public_social import read as public_social_read
 from x_guest import read as guest_x_read
+from x_list import fetch_list as x_list_fetch
 from realtime_free import fetch_x as free_x_fetch, fetch_x_lookup as free_x_lookup_fetch, fetch_x_syndication as free_x_syndication_fetch, fetch_truth as free_truth_fetch, fetch_truth_activitypub as free_truth_ap_fetch
 from momentum_scanner import candidates as momentum_candidates
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
@@ -25,15 +26,15 @@ def choose(db_path,current=(-0.10,0.20)):
  return {"stop":cand[0],"take":cand[1],"samples":len(xs),"validation_pnl":sum(valid),"changed":cand!=current}
 
 WATCH_GROUPS={
- "core":["elonmusk","realDonaldTrump","POTUS","WhiteHouse","JDVance","PressSec","Scavino47","federalreserve","SECGov","USTreasury","CFTC","DHSgov","SecScottBessent","Reuters","ReutersBiz","AP","APBusiness","BBCWorld","business","BNODesk","DeItaone","KobeissiLetter","financialjuice","LiveSquawk","CoinDesk","Cointelegraph","DecryptMedia","TheBlock__","blockworks_","BitcoinMagazine","WuBlockchain","Lookonchain","PeckShieldAlert","CertiKAlert","whale_alert","ArkhamIntel","DefiLlama","CoinGlass","coinbase","binance","Bybit_Official","hyperliquidX","saylor","cz_binance","VitalikButerin"],
+ "core":["elonmusk","realDonaldTrump","POTUS","WhiteHouse","JDVance","PressSec","Scavino47","federalreserve","SECGov","USTreasury","CFTC","DHSgov","SecScottBessent","Reuters","ReutersBiz","AP","APBusiness","BBCWorld","business","BNODesk","DeItaone","KobeissiLetter","financialjuice","LiveSquawk","CoinDesk","Cointelegraph","DecryptMedia","TheBlockCo","blockworks_","BitcoinMagazine","WuBlockchain","Lookonchain","PeckShieldAlert","CertiKAlert","whale_alert","arkham","DefiLlama","CoinGlass","coinbase","binance","Bybit_Official","hyperliquidX","saylor","cz_binance","VitalikButerin"],
  "news":["CNBC","zerohedge","unusual_whales","FirstSquawk","TreeNewsFeed","tier10k","WSJ","FT","ForbesCrypto"],
- "asset_managers":["BlackRock","iShares","Fidelity","DigitalAssets","ARKInvest","CathieDWood","Grayscale","BitwiseInvest","vaneck_us","21Shares","CoinSharesCo","Hashdex","InvescoUS","WisdomTreeFunds","ProShares"],
- "crypto_funds":["galaxyhq","PanteraCapital","a16zcrypto","paradigm","multicoincap","dragonfly_xyz","ElectricCapital","blockchaincap","PlaceholderVC","HaunVentures"],
- "market_makers":["wintermute_t","GSR_io","CumberlandSays","jumpcryptohq","JaneStreetGroup","FlowTraders","DRWTrading","FalconXNetwork","B2C2Group","KeyrockTrading","Citadel","citsecurities"],
- "exchanges":["CoinbaseAssets","OKX","krakenfx","Gemini","BitgetGlobal","gate_io","MEXC_Official","HTX_Global","DeribitExchange","cryptocom"],
+ "asset_managers":["BlackRock","iShares","Fidelity","DigitalAssets","ARKInvest","CathieDWood","Grayscale","Bitwise","vaneck_us","21Shares","CoinSharesCo","Hashdex","InvescoUS","WisdomTreeFunds","ProShares"],
+ "crypto_funds":["galaxyhq","PanteraCapital","a16zcrypto","paradigm","multicoin","dragonfly_xyz","ElectricCapital","blockchaincap","PlaceholderVC","HaunVentures"],
+ "market_makers":["wintermute_t","GSR_io","CumberlandSays","jumpcryptohq","JaneStreetGroup","FlowTraders","DRWTrading","FalconXNetwork","B2C2Group","keyrock","Citadel","citsecurities"],
+ "exchanges":["CoinbaseAssets","OKX","krakenfx","Gemini","bitget","gate_io","MEXC","HTX_Global","DeribitOfficial","cryptocom"],
  "security":["zachxbt","SlowMist_Team","CyversAlerts","chainalysis","TRMLabs"],
  "influencers":["brian_armstrong","CryptoHayes","APompliano","RaoulGMI","cobie","jack","paoloardoino","davidsacks","NayibBukele"],
- "policy":["SenateBanking","FinancialCmte","TheJusticeDept","paulsatkins","SpeakerJohnson"]
+ "policy":["SenateBanking","FinancialCmte","TheJusticeDept","SpeakerJohnson"]
 }
 WATCH=[];WATCH_CATEGORY={}
 for _category,_handles in WATCH_GROUPS.items():
@@ -525,6 +526,7 @@ def ingest_event(ident,source,title,published_at=None,source_url=None):
 
 def free_x_realtime():
  if os.getenv("X_STREAM_BEARER_TOKEN","").strip():return
+ if os.getenv("X_AUTH_TOKEN","").strip() and os.getenv("X_CT0","").strip() and os.getenv("X_LIST_ID","").strip():return
  handles=list(WATCH);poll=max(4.0,float(os.getenv("X_FREE_POLL_SECONDS","4")))
  # Keep FxTwitter below its published 1000 req/min/IP ceiling: 58*15=870 rpm.
  fx_primary=set(handles[:min(58,len(handles))])
@@ -613,6 +615,40 @@ def free_x_realtime():
    SHUTDOWN.wait(0.05)
  finally:
   pool.shutdown(wait=False,cancel_futures=True)
+
+def x_list_realtime():
+ auth=os.getenv("X_AUTH_TOKEN","").strip();ct0=os.getenv("X_CT0","").strip();list_id=os.getenv("X_LIST_ID","").strip()
+ if not (auth and ct0 and list_id):return
+ poll=max(4.0,float(os.getenv("X_LIST_POLL_SECONDS","4")))
+ watched={h.lower():h for h in WATCH};seen=set();primed=False;backoff=poll
+ while not SHUTDOWN.is_set():
+  if not S["engine_active"]:
+   SHUTDOWN.wait(0.5);continue
+  started=time.monotonic()
+  try:
+   posts=x_list_fetch(list_id,auth,ct0,count=100)
+   current={str(p["id"]) for p in posts if str(p.get("handle","")).lower() in watched}
+   if not primed:
+    seen=set(current);primed=True;fresh=[]
+   else:
+    fresh=[p for p in posts if str(p.get("handle","")).lower() in watched and str(p["id"]) not in seen]
+    seen.update(current)
+    if len(seen)>2000:seen=set(list(current)[:1000])
+   latest=[]
+   for p in sorted(fresh,key=lambda q:publication_epoch(q.get("created_at")) or 0):
+    stamp=publication_epoch(p.get("created_at"));age=time.time()-stamp if stamp is not None else None
+    if age is not None:latest.append(age)
+    handle=watched.get(str(p.get("handle","")).lower(),str(p.get("handle") or "unknown"))
+    ident=hashlib.sha256(("XList:"+str(p["id"])).encode()).hexdigest()
+    ingest_event(ident,"XOfficial:"+handle,p["text"],p.get("created_at"),p.get("url"))
+   latency=min(latest) if latest else None
+   with LOCK:S["sources"]["XListMonitor"]={"ok":True,"mode":"authenticated_x_list_4s_poll","last_check":now(),"accounts_total":len(WATCH),"posts":len(posts),"poll_seconds":poll,"realtime_verified":bool(latency is not None and 0<=latency<=10),"delivery_latency_seconds":round(latency,2) if latency is not None else None}
+   backoff=poll
+  except Exception as exc:
+   err=str(exc)[:160] if str(exc) else type(exc).__name__
+   with LOCK:S["sources"]["XListMonitor"]={"ok":False,"mode":"authenticated_x_list_4s_poll","last_check":now(),"accounts_total":len(WATCH),"error":err,"realtime_verified":False}
+   backoff=min(60,max(poll,backoff*1.8))
+  SHUTDOWN.wait(max(0.05,backoff-(time.monotonic()-started)))
 
 def truth_stream_realtime():
  token=(os.getenv("TRUTH_STREAM_TOKEN","").strip() or os.getenv("TRUTHSOCIAL_TOKEN","").strip())
@@ -1040,7 +1076,7 @@ def operations_diagnostics():
      "trades":S.get("trades"),"news_seen":S.get("news_seen"),
      "sources_ok":sum(bool(x.get("ok")) for x in S["sources"].values()),
      "sources_failed":[k for k,v in S["sources"].items() if not v.get("ok")],
-     "social_channels":{k:{"ok":v.get("ok"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds"),"delivery_latency_seconds":v.get("delivery_latency_seconds"),"accounts_ok":v.get("accounts_ok"),"accounts_initialized":v.get("accounts_initialized"),"accounts_total":v.get("accounts_total"),"all_accounts_ok":v.get("all_accounts_ok"),"fx_primary":v.get("fx_primary"),"xlookup_primary":v.get("xlookup_primary")} for k,v in S["sources"].items() if k.startswith(("XFree:","XFilteredStream","XMonitor","XIndexMonitor","TruthAuth","TruthStream","TruthDirect:","TruthSocialPublic"))},
+     "social_channels":{k:{"ok":v.get("ok"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds"),"delivery_latency_seconds":v.get("delivery_latency_seconds"),"accounts_ok":v.get("accounts_ok"),"accounts_initialized":v.get("accounts_initialized"),"accounts_total":v.get("accounts_total"),"all_accounts_ok":v.get("all_accounts_ok"),"fx_primary":v.get("fx_primary"),"xlookup_primary":v.get("xlookup_primary")} for k,v in S["sources"].items() if k.startswith(("XFree:","XFilteredStream","XListMonitor","XMonitor","XIndexMonitor","TruthAuth","TruthStream","TruthDirect:","TruthSocialPublic"))},
      "entry_rejections":dict(S.get("_entry_rejections",{})),
      "risk_ready":health["risk_ready"]}
    print(json.dumps(report,ensure_ascii=False,default=str),flush=True)
@@ -1203,7 +1239,7 @@ if __name__=="__main__":
   SHUTDOWN.set()
   threading.Thread(target=server.shutdown,daemon=True).start()
  signal.signal(signal.SIGTERM,shutdown);signal.signal(signal.SIGINT,shutdown)
- targets=[engine_coordinator,market,market_metadata,telemetry,xnews,adapt,free_x_realtime,free_truth_realtime,truth_stream_realtime,x_filtered_stream,dashboard_cache_loop,operations_diagnostics]
+ targets=[engine_coordinator,market,market_metadata,telemetry,xnews,adapt,free_x_realtime,x_list_realtime,free_truth_realtime,truth_stream_realtime,x_filtered_stream,dashboard_cache_loop,operations_diagnostics]
  targets += ([lambda:social_reader("x")] if os.getenv("X_SESSION_COOKIES","").strip() else [])
  targets += [lambda:social_reader("truth")] if os.getenv("TRUTHSOCIAL_TOKEN","").strip() else []
  workers=[threading.Thread(target=t,daemon=True,name=t.__name__) for t in targets]
