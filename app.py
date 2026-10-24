@@ -11,7 +11,7 @@ from truthbrush import Api as TruthApi
 from public_social import read as public_social_read
 from x_guest import read as guest_x_read
 from x_list import fetch_list as x_list_fetch
-from realtime_free import fetch_x as free_x_fetch, fetch_x_lookup as free_x_lookup_fetch, fetch_x_syndication as free_x_syn_fetch, fetch_x_vx as free_x_vx_fetch, fetch_truth as free_truth_fetch, fetch_truth_activitypub as free_truth_ap_fetch
+from realtime_free import fetch_x as free_x_fetch, fetch_x_lookup as free_x_lookup_fetch, fetch_x_syndication as free_x_syndication_fetch, fetch_x_syndication as free_x_syn_fetch, fetch_x_vx as free_x_vx_fetch, fetch_truth as free_truth_fetch, fetch_truth_activitypub as free_truth_ap_fetch
 from momentum_scanner import candidates as momentum_candidates
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
 def choose(db_path,current=(-0.10,0.20)):
