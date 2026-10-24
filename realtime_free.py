@@ -9,6 +9,7 @@ import re
 import threading
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 import time
 
 from curl_cffi import requests as curl_requests
@@ -177,6 +178,38 @@ def fetch_x_vx(handle,timeout=4):
         out.append({"id":ident,"text":text,"created_at":created,
                     "url":row.get("tweetURL") or ("https://x.com/"+handle+"/status/"+ident)})
     return out
+
+def fetch_x_nitter(handle,timeout=5):
+    """Last-resort public RSS rotation. Used only after normal X readers fail."""
+    instances=[
+        "https://nitter.kareem.one",
+        "https://nitter.meowing.monster",
+        "https://shitter.thepixora.com",
+        "https://nitter.jaydenha.uk",
+    ]
+    start=sum(ord(ch) for ch in handle)%len(instances)
+    errors=[]
+    for n in range(len(instances)):
+        base=instances[(start+n)%len(instances)]
+        url=base+"/"+urllib.parse.quote(handle,safe="")+"/rss"
+        try:
+            req=urllib.request.Request(url,headers={"User-Agent":FX_UA,"Accept":"application/rss+xml,application/xml,text/xml"})
+            with urllib.request.urlopen(req,timeout=timeout) as response:
+                raw=response.read(1_500_000)
+            root=ET.fromstring(raw)
+            out=[]
+            for item in root.findall(".//item")[:20]:
+                link=(item.findtext("link") or "").strip()
+                ident=(item.findtext("guid") or link).strip()
+                title=_clean(item.findtext("title") or item.findtext("description") or "")
+                created=(item.findtext("pubDate") or "").strip() or None
+                if ident and title:
+                    out.append({"id":ident,"text":title,"created_at":created,"url":link or ("https://x.com/"+handle)})
+            if out:return out
+            errors.append(base+":empty")
+        except Exception as exc:
+            errors.append(base+":"+str(exc)[:55])
+    raise RuntimeError("nitter_all_failed "+" | ".join(errors))
 
 def _truth_get(path,params=None,timeout=6):
     response=_truth_session().get(
