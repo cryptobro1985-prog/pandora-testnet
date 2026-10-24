@@ -527,7 +527,7 @@ def public_social_reader(kind,handle):
 def truth_watch():
  # Candidate handles are probed individually; nonexistent profiles are never counted as live.
  # A 403/429 pauses the whole pass to avoid hammering a blocked service.
- handles=list(dict.fromkeys(WATCH+["FoxNews","FoxBusiness","Newsmax","OANN","DanScavino"]))
+ handles=[h.strip() for h in os.getenv("TRUTH_WATCH_HANDLES","realDonaldTrump").split(",") if h.strip()]
  while not SHUTDOWN.is_set():
   for handle in handles:
    if SHUTDOWN.is_set():return
