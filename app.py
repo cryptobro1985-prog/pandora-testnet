@@ -56,7 +56,7 @@ DB="/tmp/pandora.sqlite3"
 START=time.time()
 S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0}
 LOCK=threading.RLock()
-FEEDS={"FedOfficial":"https://www.federalreserve.gov/feeds/press_all.xml","SECOfficial":"https://www.sec.gov/news/pressreleases.rss","GoogleNewsCrypto":"https://news.google.com/rss/search?q=cryptocurrency+OR+bitcoin+OR+altcoin&hl=en-US&gl=US&ceid=US:en","GoogleNewsMarkets":"https://news.google.com/rss/search?q=crypto+SEC+OR+Federal+Reserve+OR+token+listing&hl=en-US&gl=US&ceid=US:en","Cointelegraph":"https://cointelegraph.com/rss","Decrypt":"https://decrypt.co/feed","CoinDesk":"https://www.coindesk.com/arc/outboundfeeds/rss/","CFTCOfficial":"https://www.cftc.gov/RSS/RSSGP/rssgp.xml","DOJNews":"https://www.justice.gov/feeds/justice-news.xml?type=All&component%5B436%5D=436&organization=All","TruthSocialSearch":"https://news.google.com/rss/search?q=site%3Atruthsocial.com+crypto&hl=en-US&gl=US&ceid=US:en"}
+FEEDS={"FedOfficial":"https://www.federalreserve.gov/feeds/press_all.xml","SECOfficial":"https://www.sec.gov/news/pressreleases.rss","GoogleNewsCrypto":"https://news.google.com/rss/search?q=cryptocurrency+OR+bitcoin+OR+altcoin&hl=en-US&gl=US&ceid=US:en","GoogleNewsMarkets":"https://news.google.com/rss/search?q=crypto+SEC+OR+Federal+Reserve+OR+token+listing&hl=en-US&gl=US&ceid=US:en","Cointelegraph":"https://cointelegraph.com/rss","Decrypt":"https://decrypt.co/feed","CoinDesk":"https://www.coindesk.com/arc/outboundfeeds/rss/","CFTCOfficial":"https://www.cftc.gov/RSS/RSSGP/rssgp.xml","DOJNews":"https://www.justice.gov/feeds/justice-news.xml?type=All&component%5B436%5D=436&organization=All","TruthSocialSearch":"https://news.google.com/rss/search?q=site%3Atruthsocial.com+crypto&hl=en-US&gl=US&ceid=US:en","CoinSharesResearch":"https://news.google.com/rss/search?q=site%3Acoinshares.com%2Finsights%2Fresearch-data+crypto&hl=en-US&gl=US&ceid=US:en","BitwiseResearch":"https://news.google.com/rss/search?q=site%3Abitwiseinvestments.com%2Fcrypto-market-insights+crypto&hl=en-US&gl=US&ceid=US:en","ARKResearch":"https://news.google.com/rss/search?q=site%3Aark-invest.com+bitcoin+OR+crypto&hl=en-US&gl=US&ceid=US:en","GrayscaleResearch":"https://news.google.com/rss/search?q=site%3Aresearch.grayscale.com+crypto&hl=en-US&gl=US&ceid=US:en"}
 POS=("surge","surges","approve","approved","approval","partnership","listing","adoption","buyback","breakout","bullish","launch","etf approved","rally","rallies","rebound","rebounds","record high","inflows","net inflow","gains","jumps","soars","upside")
 NEG=("hack","hacked","exploit","lawsuit","delist","delisted","ban","banned","liquidation","liquidations","fraud","selloff","sell-off","bearish","crash","crashes","stolen","outflows","net outflow","falls","drops","slips","plunges","tumbles","declines")
 # Symbols that are also ordinary English words/acronyms. Never map them from a bare word.
@@ -68,6 +68,33 @@ EXPLICIT_TOKEN_PATTERNS={
  "MOVE":(r"\\$MOVE\\b",r"\\bMOVEUSDT\\b",r"\\bMOVEMENT(?: NETWORK)?\\b",r"\\bMOVE TOKEN\\b"),
  "ETC":(r"\\$ETC\\b",r"\\bETCUSDT\\b",r"\\bETHEREUM CLASSIC\\b",r"\\bETC TOKEN\\b")
 }
+# Source priors are experimental metadata for the one-week PAPER_ONLY study.
+# They are logged and gently affect confidence/eligibility, but can never reverse news direction.
+SOURCE_WEIGHTS={
+ "FedOfficial":1.00,"SECOfficial":1.00,"CFTCOfficial":1.00,"DOJNews":0.95,
+ "TruthSocialPublic":0.95,"XOfficial":0.90,
+ "CoinSharesResearch":0.90,"BitwiseResearch":0.88,"ARKResearch":0.86,"GrayscaleResearch":0.88,
+ "CoinDesk":0.84,"Decrypt":0.78,"Cointelegraph":0.74,
+ "GoogleNewsMarkets":0.60,"GoogleNewsCrypto":0.55,"TruthSocialSearch":0.55
+}
+EVENT_RULES=[
+ ("ETF_APPROVAL",1,("etf approved","approves spot","approval of spot","approved spot")),
+ ("LISTING",1,("will list","listing of","lists ","listed on")),
+ ("BUYBACK",1,("buyback","buy back","repurchase")),
+ ("ADOPTION",1,("adoption","integrates","integration","partnership")),
+ ("HACK",-1,("hack","hacked","exploit","stolen")),
+ ("DELISTING",-1,("delist","delisted","delisting")),
+ ("ENFORCEMENT",-1,("lawsuit","charges ","charged ","enforcement action")),
+ ("SELL_OFF",-1,("selloff","sell-off","plunges","tumbles","crashes")),
+ ("FUND_OUTFLOW",-1,("net outflow","outflows")),
+ ("FUND_INFLOW",1,("net inflow","inflows"))
+]
+def classify_event(title,base_side):
+ lo=title.lower()
+ for event,side,terms in EVENT_RULES:
+  if any(t in lo for t in terms):return event,side
+ return ("DIRECTIONAL_NEWS" if base_side else "UNCLASSIFIED"),base_side
+def source_weight(source):return float(SOURCE_WEIGHTS.get(source,0.50))
 STOP_ROE=-999.0;TAKE_ROE=0.20;LEV=25.0;MARGIN_FRACTION=0.10;FEE=0.00045;LOCK_TRIGGER_ROE=0.10;LOCK_ROE=0.075;PAPER_RESET=100.0;MIN_EXIT_ROE=0.075;TRAIL_ARM_ROE=0.12
 def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
 def pg():
@@ -263,13 +290,22 @@ def reaction_shadow(sym,side,published_at,price,limit_bps=150.0):
  move=side*(price/anchor-1)*10000
  return {"available":True,"anchor_price":anchor,"anchor_epoch":ts,"move_bps":move,"threshold_bps":limit_bps,"would_skip":move>limit_bps}
 def record_event(ident,source,title,sym,base_side,prices,published_at=None):
+ event_type,event_side=classify_event(title,base_side)
+ weight=source_weight(source)
+ # Explicit event classification may supply direction when the simple keyword score missed it.
+ # It may not reverse an already directional headline.
+ effective_side=base_side if base_side else event_side
  if not sym or sym not in prices:
-  journal("decision",ident,{"symbol":sym,"raw_side":base_side,"side":0,"reason":"no_tradable_market"})
+  journal("decision",ident,{"symbol":sym,"raw_side":base_side,"event_side":event_side,"event_type":event_type,"source_weight":weight,"side":0,"reason":"no_tradable_market"})
   return 0
- side,conf,features=decide(title,sym,base_side,prices)
+ side,conf,features=decide(title,sym,effective_side,prices)
+ features["event_type"]=event_type;features["source_weight"]=weight
+ # PAPER experiment: source prior changes confidence, not direction. Very weak sources need a clearer decision.
+ conf=min(1.0,conf*weight)
+ if side and weight<0.50:side=0
  save_event_feature(ident,now(),source,title,sym,side,conf,features)
  shadow=reaction_shadow(sym,side,published_at,prices.get(sym))
- journal("decision",ident,{"symbol":sym,"raw_side":base_side,"side":side,"confidence":conf,"price":prices.get(sym),"features":features,"reaction_shadow":shadow,"reaction_filter_active":False,"reason":"direction_guard" if not side else "eligible"})
+ journal("decision",ident,{"symbol":sym,"raw_side":base_side,"event_side":event_side,"effective_side":effective_side,"event_type":event_type,"source_weight":weight,"side":side,"confidence":conf,"price":prices.get(sym),"features":features,"reaction_shadow":shadow,"reaction_filter_active":False,"reason":"direction_guard_or_low_source_weight" if not side else "eligible"})
  if side:open_signal(sym,side,title,prices,ident)
  return side
 
