@@ -7,6 +7,7 @@ from engine_store import EngineStore, LeaseLost
 from entry_guards import freshness, publication_epoch
 from social_scrapers import poll as social_poll, SourceUnavailable
 from public_social import read as public_social_read
+from x_guest import read as guest_x_read
 from momentum_scanner import candidates as momentum_candidates
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
 def choose(db_path,current=(-0.10,0.20)):
@@ -497,6 +498,29 @@ def ingest_event(ident,source,title,published_at=None,source_url=None):
  record_event(ident,source,title,sym,side,prices,published_at)
  return True
 
+def guest_x_worker():
+ index=0
+ while not SHUTDOWN.is_set():
+  if not S["engine_active"]:
+   SHUTDOWN.wait(3);continue
+  handle=WATCH[index%len(WATCH)];index+=1
+  name="XGuest:"+handle
+  try:
+   posts=guest_x_read(handle)
+   stamps=[publication_epoch(p.get("created_at")) for p in posts]
+   stamps=[t for t in stamps if t is not None]
+   age=time.time()-max(stamps) if stamps else None
+   with LOCK:S["sources"][name]={"ok":True,"last_check":now(),"mode":"guest_graphql","posts":len(posts),"latest_post_age_seconds":round(age,1) if age is not None else None,"realtime_verified":bool(age is not None and age<=120)}
+   for p in posts:
+    ident=hashlib.sha256(("XGuest:"+handle+":"+str(p["id"])).encode()).hexdigest()
+    ingest_event(ident,"XOfficial",p["text"],p.get("created_at"),p.get("url"))
+  except Exception as exc:
+   error=("http_"+str(exc.code)) if hasattr(exc,"code") else type(exc).__name__
+   with LOCK:S["sources"][name]={"ok":False,"last_check":now(),"mode":"guest_graphql","error":error}
+   if error in ("http_429","http_403","http_401"):
+    SHUTDOWN.wait(60)
+  SHUTDOWN.wait(5)
+
 def xnews():
  # An anonymous X news index is NOT a direct real-time X feed.
  # Report it as usable only if at least one indexed RSS feed responded.
@@ -893,7 +917,7 @@ if __name__=="__main__":
   SHUTDOWN.set()
   threading.Thread(target=server.shutdown,daemon=True).start()
  signal.signal(signal.SIGTERM,shutdown);signal.signal(signal.SIGINT,shutdown)
- targets=[engine_coordinator,market,market_metadata,telemetry,xnews,adapt,truthnews,dashboard_cache_loop,operations_diagnostics]
+ targets=[engine_coordinator,market,market_metadata,telemetry,xnews,adapt,truthnews,guest_x_worker,dashboard_cache_loop,operations_diagnostics]
  targets += ([lambda:social_reader("x")] if os.getenv("X_SESSION_COOKIES","").strip() else [])
  targets += [lambda:social_reader("truth")] if os.getenv("TRUTHSOCIAL_TOKEN","").strip() else []
  workers=[threading.Thread(target=t,daemon=True,name=t.__name__) for t in targets]
