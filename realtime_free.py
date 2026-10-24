@@ -247,6 +247,53 @@ def fetch_x_vx(handle,timeout=4):
                     "url":row.get("tweetURL") or ("https://x.com/"+handle+"/status/"+ident)})
     return out
 
+def fetch_x_embed(handle,timeout=6):
+    """X Publish Embed CDN timeline. No auth; JSONP envelope containing timeline HTML."""
+    callback="__twttr.callbacks.tl_i0_profile_"+handle+"_old"
+    params={
+        "callback":callback,"dnt":"true","domain":"example.com","lang":"en",
+        "screen_name":handle,"suppress_response_codes":"true",
+        "t":str(int(time.time())),"tz":"GMT-0100","with_replies":"false",
+    }
+    url="https://cdn.syndication.twimg.com/timeline/profile?"+urllib.parse.urlencode(params)
+    req=urllib.request.Request(url,headers={"User-Agent":FX_UA,"Accept":"application/javascript,text/javascript,*/*","Referer":"https://publish.twitter.com/"})
+    with urllib.request.urlopen(req,timeout=timeout) as response:
+        raw=response.read(2_000_000).decode("utf-8","replace").strip()
+    if not raw:raise RuntimeError("x_embed_empty")
+    left=raw.find("(");right=raw.rfind(")")
+    if left<0 or right<=left:raise RuntimeError("x_embed_invalid_jsonp")
+    try:payload=json.loads(raw[left+1:right])
+    except Exception as exc:raise RuntimeError("x_embed_invalid_json") from exc
+    if not isinstance(payload,dict):raise RuntimeError("x_embed_invalid_payload")
+    body=payload.get("body") or ""
+    if not body:
+        err=payload.get("error") or payload.get("message") or "empty_body"
+        raise RuntimeError("x_embed_"+str(err)[:90])
+    # Timeline embed cards are separated by data-tweet-id. Keep parsing intentionally narrow.
+    starts=list(re.finditer(r'data-tweet-id=["\\\'](\\d+)["\\\']',body,re.I))
+    out=[]
+    for idx,m in enumerate(starts):
+        ident=m.group(1)
+        end=starts[idx+1].start() if idx+1<len(starts) else min(len(body),m.start()+120000)
+        block=body[m.start():end]
+        tm=re.search(r'<time[^>]+datetime=["\\\']([^"\\\']+)["\\\']',block,re.I)
+        textm=re.search(r'<p[^>]*class=["\\\'][^"\\\']*timeline-Tweet-text[^"\\\']*["\\\'][^>]*>(.*?)</p>',block,re.I|re.S)
+        if not textm:
+            textm=re.search(r'<div[^>]*class=["\\\'][^"\\\']*timeline-Tweet-text[^"\\\']*["\\\'][^>]*>(.*?)</div>',block,re.I|re.S)
+        if not textm:continue
+        text=_clean(textm.group(1))
+        if not text:continue
+        created=html.unescape(tm.group(1)) if tm else None
+        out.append({"id":ident,"text":text,"created_at":created,"url":"https://x.com/"+handle+"/status/"+ident})
+    if not out:
+        # Some current embeds expose tweet ids in links even when class names change.
+        for ident,fragment in re.findall(r'href=["\\\']/[^/"\\\']+/status/(\\d+)["\\\'][^>]*>(.*?)</a>',body,re.I|re.S):
+            text=_clean(fragment)
+            if text:out.append({"id":ident,"text":text,"created_at":None,"url":"https://x.com/"+handle+"/status/"+ident})
+    if not out:raise RuntimeError("x_embed_no_tweets")
+    dedup={p["id"]:p for p in out}
+    return list(dedup.values())
+
 def fetch_x_nitter(handle,timeout=5):
     """Last-resort public RSS rotation. Used only after normal X readers fail."""
     instances=[
