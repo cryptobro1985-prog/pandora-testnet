@@ -10,7 +10,7 @@ from social_scrapers import poll as social_poll, SourceUnavailable
 from truthbrush import Api as TruthApi
 from public_social import read as public_social_read
 from x_guest import read as guest_x_read
-from realtime_free import fetch_x as free_x_fetch, fetch_truth as free_truth_fetch, fetch_truth_activitypub as free_truth_ap_fetch
+from realtime_free import fetch_x as free_x_fetch, fetch_x_vx as free_x_vx_fetch, fetch_truth as free_truth_fetch, fetch_truth_activitypub as free_truth_ap_fetch
 from momentum_scanner import candidates as momentum_candidates
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
 def choose(db_path,current=(-0.10,0.20)):
@@ -24,26 +24,45 @@ def choose(db_path,current=(-0.10,0.20)):
  avg=sum(train)/len(train); cand=CANDIDATES[3] if avg>0 else CANDIDATES[1]
  return {"stop":cand[0],"take":cand[1],"samples":len(xs),"validation_pnl":sum(valid),"changed":cand!=current}
 
-WATCH=["elonmusk","realDonaldTrump","POTUS","WhiteHouse","JDVance","PressSec","Scavino47","federalreserve","SECGov","USTreasury","CFTC","DHSgov","SecScottBessent","Reuters","ReutersBiz","AP","APBusiness","BBCWorld","business","BNODesk","DeItaone","KobeissiLetter","financialjuice","LiveSquawk","CoinDesk","Cointelegraph","DecryptMedia","TheBlock__","blockworks_","BitcoinMagazine","WuBlockchain","Lookonchain","PeckShieldAlert","CertiKAlert","whale_alert","ArkhamIntel","DefiLlama","CoinGlass","coinbase","binance","Bybit_Official","hyperliquidX","saylor","cz_binance","VitalikButerin"]
+WATCH_GROUPS={
+ "core":["elonmusk","realDonaldTrump","POTUS","WhiteHouse","JDVance","PressSec","Scavino47","federalreserve","SECGov","USTreasury","CFTC","DHSgov","SecScottBessent","Reuters","ReutersBiz","AP","APBusiness","BBCWorld","business","BNODesk","DeItaone","KobeissiLetter","financialjuice","LiveSquawk","CoinDesk","Cointelegraph","DecryptMedia","TheBlock__","blockworks_","BitcoinMagazine","WuBlockchain","Lookonchain","PeckShieldAlert","CertiKAlert","whale_alert","ArkhamIntel","DefiLlama","CoinGlass","coinbase","binance","Bybit_Official","hyperliquidX","saylor","cz_binance","VitalikButerin"],
+ "news":["CNBC","zerohedge","unusual_whales","FirstSquawk","TreeNewsFeed","tier10k","WSJ","FT","ForbesCrypto"],
+ "asset_managers":["BlackRock","iShares","Fidelity","DigitalAssets","ARKInvest","CathieDWood","Grayscale","BitwiseInvest","vaneck_us","21Shares","CoinSharesCo","Hashdex","InvescoUS","WisdomTreeFunds","ProShares"],
+ "crypto_funds":["galaxyhq","PanteraCapital","a16zcrypto","paradigm","multicoincap","dragonfly_xyz","ElectricCapital","blockchaincap","PlaceholderVC","HaunVentures"],
+ "market_makers":["wintermute_t","GSR_io","CumberlandSays","jumpcryptohq","JaneStreetGroup","FlowTraders","DRWTrading","FalconXNetwork","B2C2Group","KeyrockTrading","Citadel","citsecurities"],
+ "exchanges":["CoinbaseAssets","OKX","krakenfx","Gemini","BitgetGlobal","gate_io","MEXC_Official","HTX_Global","DeribitExchange","cryptocom"],
+ "security":["zachxbt","SlowMist_Team","CyversAlerts","chainalysis","TRMLabs"],
+ "influencers":["brian_armstrong","CryptoHayes","APompliano","RaoulGMI","cobie","jack","paoloardoino","davidsacks","NayibBukele"],
+ "policy":["SenateBanking","FinancialCmte","TheJusticeDept","paulsatkins","SpeakerJohnson"]
+}
+WATCH=[];WATCH_CATEGORY={}
+for _category,_handles in WATCH_GROUPS.items():
+ for _handle in _handles:
+  if _handle not in WATCH:WATCH.append(_handle);WATCH_CATEGORY[_handle]=_category
+
 def recent():
  token=os.getenv("X_BEARER_TOKEN","").strip()
  if token:
-  try:
-   q="("+" OR ".join("from:"+x for x in WATCH)+") -is:retweet";url="https://api.x.com/2/tweets/search/recent?"+urllib.parse.urlencode({"query":q,"max_results":100,"tweet.fields":"created_at,author_id"})
-   req=urllib.request.Request(url,headers={"User-Agent":"PANDORA-paper/1","Authorization":"Bearer "+token})
-   with urllib.request.urlopen(req,timeout=15) as r:return json.load(r).get("data",[])
-  except Exception:pass
- # credential-free public fallback: Google News indexes public x.com posts
+  out=[]
+  for i in range(0,len(WATCH),20):
+   try:
+    batch=WATCH[i:i+20];q="("+" OR ".join("from:"+x for x in batch)+") -is:retweet"
+    url="https://api.x.com/2/tweets/search/recent?"+urllib.parse.urlencode({"query":q,"max_results":100,"tweet.fields":"created_at,author_id"})
+    req=urllib.request.Request(url,headers={"User-Agent":"PANDORA-paper/1","Authorization":"Bearer "+token})
+    with urllib.request.urlopen(req,timeout=15) as r:out.extend(json.load(r).get("data",[]))
+   except Exception:pass
+  if out:return out[:500]
+ # credential-free delayed index fallback
  out=[]
  for h in WATCH:
   try:
    u="https://news.google.com/rss/search?"+urllib.parse.urlencode({"q":"site:x.com/"+h,"hl":"en-US","gl":"US","ceid":"US:en"})
    root=ET.fromstring(get(u))
-   for it in root.findall(".//item")[:8]:
+   for it in root.findall(".//item")[:4]:
     title=(it.findtext("title") or "").strip();link=(it.findtext("link") or "")
     if title:out.append({"id":hashlib.sha256((h+title).encode()).hexdigest(),"text":title,"source":"XPublicIndex","url":link,"created_at":it.findtext("pubDate")})
   except Exception:pass
- return out[:100]
+ return out[:300]
 
 BASE="https://truthsocial.com/api/v1"
 def _get(path):
@@ -136,7 +155,10 @@ def classify_event(title,base_side):
  for event,side,terms in EVENT_RULES:
   if any(t in lo for t in terms):return event,side
  return ("DIRECTIONAL_NEWS" if base_side else "UNCLASSIFIED"),base_side
-def source_weight(source):return 0.40 if source.startswith("XIndex:") else float(SOURCE_WEIGHTS.get(source,0.50))
+def source_weight(source):
+ if source.startswith("XIndex:"):return 0.40
+ if source.startswith("XOfficial:"):return 0.90
+ return float(SOURCE_WEIGHTS.get(source,0.50))
 STOP_ROE=-999.0;TAKE_ROE=0.20;LEV=25.0;MARGIN_FRACTION=0.10;FEE=0.00045;LOCK_TRIGGER_ROE=0.10;LOCK_ROE=0.075;PAPER_RESET=100.0;MIN_EXIT_ROE=0.075;TRAIL_ARM_ROE=0.12
 def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
 def pg():
