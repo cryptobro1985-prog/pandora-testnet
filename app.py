@@ -12,7 +12,7 @@ from public_social import read as public_social_read
 from x_guest import read as guest_x_read
 from x_list import fetch_list as x_list_fetch
 from x_page import fetch as free_x_page_fetch
-from realtime_free import fetch_x as free_x_fetch, fetch_x_search as free_x_search_fetch, fetch_x_fixupx as free_x_fixupx_fetch, fetch_x_lookup as free_x_lookup_fetch, fetch_x_nitter as free_x_nitter_fetch, fetch_x_syndication as free_x_syndication_fetch, fetch_x_syndication as free_x_syn_fetch, fetch_x_vx as free_x_vx_fetch, fetch_truth as free_truth_fetch, fetch_truth_activitypub as free_truth_ap_fetch
+from realtime_free import fetch_x as free_x_fetch, fetch_x_search as free_x_search_fetch, fetch_x_fixupx as free_x_fixupx_fetch, fetch_x_lookup as free_x_lookup_fetch, fetch_x_embed as free_x_embed_fetch, fetch_x_nitter as free_x_nitter_fetch, fetch_x_syndication as free_x_syndication_fetch, fetch_x_syndication as free_x_syn_fetch, fetch_x_vx as free_x_vx_fetch, fetch_truth as free_truth_fetch, fetch_truth_activitypub as free_truth_ap_fetch
 from momentum_scanner import candidates as momentum_candidates
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
 def choose(db_path,current=(-0.10,0.20)):
@@ -549,6 +549,8 @@ def free_x_realtime():
   except Exception as exc:errors.append("fixupx:"+str(exc)[:70])
   try:return guest_x_read(handle),"guest_graphql",True," | ".join(errors)
   except Exception as exc:errors.append("guest:"+str(exc)[:70])
+  try:return free_x_embed_fetch(handle),"publish_embed",True," | ".join(errors)
+  except Exception as exc:errors.append("embed:"+str(exc)[:70])
   try:return free_x_page_fetch(handle),"logged_out_page",True," | ".join(errors)
   except Exception as exc:errors.append("page:"+str(exc)[:70])
   try:return free_x_nitter_fetch(handle),"nitter_rss",True," | ".join(errors)
@@ -622,7 +624,7 @@ def free_x_realtime():
     states=[S["sources"].get("XFree:"+h,{}) for h in handles]
     initialized=sum(bool(v) for v in states);good=sum(bool(v.get("ok")) for v in states)
     realtime=sum(bool(v.get("realtime_verified")) for v in states)
-    backend_live={b:sum(1 for v in states if v.get("ok") and v.get("backend")==b) for b in ("fx","xlookup","guest_graphql","logged_out_page","nitter_rss","syndication","vx")}
+    backend_live={b:sum(1 for v in states if v.get("ok") and v.get("backend")==b) for b in ("fx","xlookup","fxsearch","fixupx","guest_graphql","publish_embed","logged_out_page","nitter_rss","syndication","vx")}
     S["sources"]["XMonitor"]={"ok":initialized==len(handles) and good>=math.ceil(len(handles)*0.90),
      "all_accounts_ok":initialized==len(handles) and good==len(handles),
      "mode":"fx_xlookup_guest_parallel_4s_poll","last_check":now(),"accounts_ok":good,
