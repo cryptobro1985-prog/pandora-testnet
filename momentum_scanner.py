@@ -5,13 +5,10 @@ perpetuals. It does not fabricate a price, volume or real-time social signal.
 """
 import math
 
-CORE=("BTC","ETH","SOL","XRP","BNB","DOGE","ADA","TRX")
-EVENT=("HYPE",)
-ALL=CORE+EVENT
 
 def candidates(prices,history,volumes,epoch,minimum_day_volume=1_000_000.0):
     out=[]
-    for symbol in ALL:
+    for symbol in prices:
         price=prices.get(symbol)
         day_volume=volumes.get(symbol)
         if not isinstance(price,(int,float)) or not math.isfinite(price) or price<=0:
