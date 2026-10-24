@@ -83,6 +83,43 @@ def fetch_x(handle,timeout=4):
         out.append({"id":ident,"text":text,"created_at":created,"url":row.get("url") or ("https://x.com/"+handle+"/status/"+ident)})
     return out
 
+def fetch_x_fixupx(handle,timeout=4):
+    """FxEmbed official mirror used only as a fallback for failed profile reads."""
+    url="https://api.fixupx.com/2/profile/"+urllib.parse.quote(handle,safe="")+"/statuses"
+    req=urllib.request.Request(url,headers={"User-Agent":FX_UA,"Accept":"application/json","Cache-Control":"no-cache"})
+    with urllib.request.urlopen(req,timeout=timeout) as response:
+        payload=json.load(response)
+    code=int(payload.get("code",200) or 0) if isinstance(payload,dict) else 0
+    if code!=200:
+        raise RuntimeError("fixupx_code_"+str(code))
+    rows=payload.get("results")
+    if not isinstance(rows,list):
+        raise RuntimeError("fixupx_invalid_results")
+    out=[]
+    for row in rows:
+        if not isinstance(row,dict) or row.get("type") not in (None,"status"):
+            continue
+        ident=str(row.get("id") or "")
+        text=(row.get("text") or "").strip()
+        if not ident or not text:
+            continue
+        author=row.get("author") or {}
+        author_handle=str(author.get("screen_name") or "")
+        reposted=row.get("reposted_by") or {}
+        reposter=str(reposted.get("screen_name") or "")
+        if author_handle.lower()!=handle.lower() and reposter.lower()!=handle.lower():
+            continue
+        ts=row.get("created_timestamp")
+        if isinstance(ts,(int,float)):
+            created=dt.datetime.fromtimestamp(float(ts),dt.timezone.utc).isoformat()
+        else:
+            created=row.get("created_at")
+        out.append({"id":ident,"text":text,"created_at":created,
+                    "url":row.get("url") or ("https://x.com/"+handle+"/status/"+ident)})
+    if not out:
+        raise RuntimeError("fixupx_empty")
+    return out
+
 def fetch_x_lookup(handle,timeout=5):
     """Independent public Cloudflare x-lookup profile timeline."""
     url=XLOOKUP_BASE+"/"+urllib.parse.quote(handle,safe="")+"?format=json&nocache=true&limit=20"
