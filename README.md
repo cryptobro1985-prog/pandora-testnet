@@ -77,3 +77,25 @@ the URL of an **isolated** database. Never point these tests at the live account
 The GitHub workflow provisions disposable PostgreSQL for all integration tests.
 `tests/storage_contract.sql` separately validates the SQL contract on an isolated
 Neon branch. No test should modify the live trading study's history or balance.
+
+### Free direct social readers
+
+Sources: https://github.com/vladkens/twscrape (0.20.1, MIT) and
+https://github.com/w2rc/truthbrush (PyPI 0.3.0, Apache-2.0).
+Both run in independent subprocesses with 35-second hard deadlines so a blocked
+source cannot stall exits. XScrape polls every 5 seconds after a completed request;
+Truthbrush every 10 seconds, with backoff on errors. These are polling readers,
+not guaranteed sub-second feeds. Existing RSS/search readers remain as fallbacks.
+The same canonical event IDs deduplicate the direct and existing API readers;
+the existing publication-age guard still applies at ingestion and entry.
+
+X needs an authorized account session: set `X_SESSION_COOKIES` as a secret in the
+hosting environment, containing `auth_token` and `ct0` from your own X session.
+Do not send cookies in chat or commit them. twscrape's temporary SQLite session
+store is rebuilt from that secret after restart. Telemetry is disabled.
+Truthbrush tries public endpoints; optional `TRUTHSOCIAL_TOKEN` can be configured
+as a hosting secret. Do not assume a token resolves a network restriction.
+No passwords, automatic account creation, purchased accounts or paid APIs needed.
+If credentials are absent or the platform returns 403, the dashboard reports
+`ok:false` with a reason rather than claiming the source is scanning.
+No claim of working live X ingestion until an authorized session returns posts.

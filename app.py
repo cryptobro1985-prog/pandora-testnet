@@ -5,6 +5,7 @@ from psycopg.rows import dict_row
 from risk import evaluate_exit, risk_state
 from engine_store import EngineStore, LeaseLost
 from entry_guards import freshness, publication_epoch
+from social_scrapers import poll as social_poll, SourceUnavailable
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
 def choose(db_path,current=(-0.10,0.20)):
  with sqlite3.connect(db_path) as c: rows=c.execute("select pnl from trades order by id desc limit 120").fetchall()
@@ -449,6 +450,40 @@ def truthnews():
    delay=min(300,max(10,delay*2))
   SHUTDOWN.wait(delay)
 
+def social_reader(kind):
+ source="XScrape" if kind=="x" else "Truthbrush"
+ canonical="XOfficial" if kind=="x" else "TruthSocialPublic"
+ handles=WATCH if kind=="x" else ["realDonaldTrump"]
+ interval=5 if kind=="x" else 10
+ delay=interval
+ while not SHUTDOWN.is_set():
+  if not S["engine_active"]:
+   SHUTDOWN.wait(2);continue
+  started=time.time()
+  try:
+   posts=social_poll(kind,handles)
+   published=[publication_epoch(p.get("created_at")) for p in posts]
+   published=[p for p in published if p is not None]
+   with LOCK:S["sources"][source]={"ok":True,"last_check":now(),"mode":"direct_scraper_polling",
+    "posts":len(posts),"poll_seconds":interval,"request_seconds":round(time.time()-started,3),
+    "latest_post_age_seconds":round(time.time()-max(published),1) if published else None}
+   for p in reversed(posts):
+    if SHUTDOWN.is_set():break
+    title=p.get("text","").strip()
+    if not title:continue
+    ident=hashlib.sha256((canonical+str(p["id"])).encode()).hexdigest()
+    ingest_event(ident,canonical,title,p.get("created_at"),p.get("url"))
+   delay=interval
+  except SourceUnavailable as exc:
+   with LOCK:S["sources"][source]={"ok":False,"last_check":now(),"mode":"blocked",
+    "error":str(exc),"fallback":"XMonitor" if kind=="x" else "TruthSocialSearch"}
+   delay=60 if str(exc)=="needs_x_session" else min(300,max(interval,delay*2))
+  except Exception:
+   with LOCK:S["sources"][source]={"ok":False,"last_check":now(),"error":"reader_processing_failed"}
+   delay=min(300,max(interval,delay*2))
+  SHUTDOWN.wait(delay)
+
+
 def adapt():
  global STOP_ROE,TAKE_ROE
  while not SHUTDOWN.is_set():
@@ -587,6 +622,7 @@ if __name__=="__main__":
   threading.Thread(target=server.shutdown,daemon=True).start()
  signal.signal(signal.SIGTERM,shutdown);signal.signal(signal.SIGINT,shutdown)
  targets=[engine_coordinator,market,telemetry,xnews,adapt,truthnews]
+ targets += [lambda:social_reader("x"),lambda:social_reader("truth")]
  workers=[threading.Thread(target=t,daemon=True,name=t.__name__) for t in targets]
  workers += [threading.Thread(target=news_feed,args=(name,url),daemon=True,name="feed:"+name) for name,url in FEEDS.items()]
  for worker in workers:worker.start()
