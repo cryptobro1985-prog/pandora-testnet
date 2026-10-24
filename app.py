@@ -83,7 +83,7 @@ def user_statuses(handle="realDonaldTrump",limit=20):
  return out
 
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
-API="https://api.hyperliquid-testnet.xyz/info"
+API=os.getenv("HYPERLIQUID_INFO_API","https://api.hyperliquid.xyz/info").strip() or "https://api.hyperliquid.xyz/info"
 DB="/tmp/pandora.sqlite3"
 START=time.time()
 S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0}
