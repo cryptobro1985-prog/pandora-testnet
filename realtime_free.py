@@ -15,6 +15,7 @@ from curl_cffi import requests as curl_requests
 
 FX_BASE="https://api.fxtwitter.com"
 VX_BASE="https://api.vxtwitter.com"
+XLOOKUP_BASE="https://x-lookup.mynameistito.com"
 TRUTH_BASE="https://truthsocial.com/api"
 FX_UA="PANDORA-market-news/1.0 (+https://pandora-testnet-monitor.onrender.com)"
 try:
@@ -79,6 +80,69 @@ def fetch_x(handle,timeout=4):
         if reposter and author_handle.lower()!=handle.lower():
             text="[repost by @"+handle+"] "+text
         out.append({"id":ident,"text":text,"created_at":created,"url":row.get("url") or ("https://x.com/"+handle+"/status/"+ident)})
+    return out
+
+def fetch_x_lookup(handle,timeout=5):
+    """Independent public Cloudflare x-lookup profile timeline."""
+    url=XLOOKUP_BASE+"/"+urllib.parse.quote(handle,safe="")+"?format=json&nocache=true&limit=20"
+    req=urllib.request.Request(url,headers={"User-Agent":FX_UA,"Accept":"application/json","Cache-Control":"no-cache"})
+    with urllib.request.urlopen(req,timeout=timeout) as response:
+        payload=json.load(response)
+    if not isinstance(payload,dict):
+        raise RuntimeError("xlookup_invalid_payload")
+    if payload.get("error"):
+        raise RuntimeError("xlookup_"+str(payload.get("code") or payload.get("error"))[:80])
+    rows=payload.get("posts")
+    if not isinstance(rows,list):
+        raise RuntimeError("xlookup_invalid_results")
+    out=[]
+    for row in rows:
+        if not isinstance(row,dict):
+            continue
+        ident=str(row.get("id") or "")
+        text=(row.get("text") or "").strip()
+        if not ident or not text:
+            continue
+        author=row.get("author") or {}
+        screen=str(author.get("screen_name") or handle)
+        if screen.lower()!=handle.lower():
+            continue
+        ts=row.get("created_timestamp")
+        if isinstance(ts,(int,float)):
+            created=dt.datetime.fromtimestamp(float(ts),dt.timezone.utc).isoformat()
+        else:
+            created=row.get("created_at")
+        out.append({"id":ident,"text":text,"created_at":created,
+                    "url":row.get("url") or ("https://x.com/"+handle+"/status/"+ident)})
+    return out
+
+def fetch_x_syndication(handle,timeout=5):
+    """Official public embed timeline fallback; browser TLS fingerprint via curl_cffi."""
+    url="https://syndication.twitter.com/srv/timeline-profile/screen-name/"+urllib.parse.quote(handle,safe="")+"?showReplies=false"
+    response=_truth_session().get(url,headers={"User-Agent":TRUTH_UA,"Accept":"text/html"},impersonate=IMPERSONATE_TARGET,timeout=timeout)
+    if response.status_code!=200:
+        raise RuntimeError("x_syndication_http_"+str(response.status_code))
+    body=response.text or ""
+    marker='id="__NEXT_DATA__"'
+    idx=body.find(marker)
+    if idx<0:raise RuntimeError("x_syndication_next_data_missing")
+    start=body.find(">",idx)
+    end=body.find("</script>",start+1)
+    if start<0 or end<0:raise RuntimeError("x_syndication_malformed")
+    doc=json.loads(body[start+1:end].strip())
+    entries=(((doc.get("props") or {}).get("pageProps") or {}).get("timeline") or {}).get("entries") or []
+    out=[]
+    for entry in entries:
+        if not isinstance(entry,dict) or entry.get("type")!="tweet":continue
+        row=((entry.get("content") or {}).get("tweet") or {})
+        ident=str(row.get("id_str") or "")
+        text=(row.get("full_text") or "").strip()
+        user=row.get("user") or {}
+        screen=str(user.get("screen_name") or "")
+        if not ident or not text or screen.lower()!=handle.lower():continue
+        out.append({"id":ident,"text":text,"created_at":row.get("created_at"),
+                    "url":"https://x.com/"+handle+"/status/"+ident})
+    if not out:raise RuntimeError("x_syndication_empty")
     return out
 
 def fetch_x_vx(handle,timeout=4):
