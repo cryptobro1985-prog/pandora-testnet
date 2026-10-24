@@ -7,6 +7,7 @@ from risk import evaluate_exit, risk_state
 from engine_store import EngineStore, LeaseLost
 from entry_guards import freshness, publication_epoch
 from social_scrapers import poll as social_poll, SourceUnavailable
+from truthbrush import Api as TruthApi
 from public_social import read as public_social_read
 from x_guest import read as guest_x_read
 from realtime_free import fetch_x as free_x_fetch, fetch_truth as free_truth_fetch, fetch_truth_activitypub as free_truth_ap_fetch
@@ -514,7 +515,7 @@ def free_x_realtime():
     posts=free_x_fetch(handle)
     stamps=[publication_epoch(p.get("created_at")) for p in posts];stamps=[x for x in stamps if x is not None]
     latest_age=(time.time()-max(stamps)) if stamps else None
-    with LOCK:S["sources"][name]={"ok":True,"mode":"fxtwitter_v2_staggered_poll","last_check":now(),"posts":len(posts),"poll_seconds":poll,"latest_post_age_seconds":round(latest_age,1) if latest_age is not None else None,"realtime_verified":False}
+    with LOCK:S["sources"][name]={"ok":True,"degraded":False,"mode":"fxtwitter_v2_staggered_poll","last_check":now(),"posts":len(posts),"poll_seconds":poll,"latest_post_age_seconds":round(latest_age,1) if latest_age is not None else None,"realtime_verified":False,"consecutive_failures":0,"last_success_epoch":time.time()}
     ids=[str(p["id"]) for p in posts]
     with state_lock:
      first=handle not in primed
@@ -533,7 +534,10 @@ def free_x_realtime():
     err=str(exc)[:100] if str(exc) else type(exc).__name__
     with LOCK:
      prev=S["sources"].get(name,{})
-     S["sources"][name]={"ok":False,"mode":"fxtwitter_v2_staggered_poll","last_check":now(),"error":err,"last_success":prev.get("last_success") or (prev.get("last_check") if prev.get("ok") else None)}
+     failures=int(prev.get("consecutive_failures",0))+1
+     last_success_epoch=float(prev.get("last_success_epoch",0) or 0)
+     within_grace=bool(last_success_epoch and time.time()-last_success_epoch<=20 and failures<3)
+     S["sources"][name]={"ok":within_grace,"degraded":within_grace,"mode":"fxtwitter_v2_staggered_poll","last_check":now(),"error":err,"consecutive_failures":failures,"last_success_epoch":last_success_epoch or None}
    SHUTDOWN.wait(max(0.05,poll-(time.monotonic()-started)))
  workers=[threading.Thread(target=one,args=(h,i*poll/max(1,len(handles))),daemon=True,name="xfree:"+h) for i,h in enumerate(handles)]
  for w in workers:w.start()
@@ -547,7 +551,18 @@ def free_x_realtime():
 
 def truth_stream_realtime():
  token=(os.getenv("TRUTH_STREAM_TOKEN","").strip() or os.getenv("TRUTHSOCIAL_TOKEN","").strip())
- if not token:return
+ if not token:
+  username=os.getenv("TRUTHSOCIAL_USERNAME","").strip();password=os.getenv("TRUTHSOCIAL_PASSWORD","")
+  if username and password:
+   try:
+    token=TruthApi(require_auth=True).get_auth_id(username,password)
+    with LOCK:S["sources"]["TruthAuth"]={"ok":True,"mode":"user_password_to_oauth_token_in_memory","last_check":now(),"error":None}
+   except Exception as exc:
+    with LOCK:S["sources"]["TruthAuth"]={"ok":False,"mode":"user_password_to_oauth_token_in_memory","last_check":now(),"error":type(exc).__name__}
+    return
+  else:
+   with LOCK:S["sources"]["TruthAuth"]={"ok":False,"mode":"user_oauth_required","last_check":now(),"error":"set_TRUTHSOCIAL_USERNAME_and_PASSWORD_or_TRUTH_STREAM_TOKEN"}
+   return
  handles={h.strip().lower() for h in os.getenv("TRUTH_WATCH_HANDLES","realDonaldTrump,WhiteHouse,DanScavino,Kash,MelaniaTrump,SecWar,SpeakerJohnson,seckennedy").split(",") if h.strip()}
  url="wss://truthsocial.com/api/v1/streaming?stream=public:local"
  backoff=3
@@ -960,7 +975,7 @@ def operations_diagnostics():
      "trades":S.get("trades"),"news_seen":S.get("news_seen"),
      "sources_ok":sum(bool(x.get("ok")) for x in S["sources"].values()),
      "sources_failed":[k for k,v in S["sources"].items() if not v.get("ok")],
-     "social_channels":{k:{"ok":v.get("ok"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds"),"delivery_latency_seconds":v.get("delivery_latency_seconds")} for k,v in S["sources"].items() if k.startswith(("XFree:","XFilteredStream","XMonitor","XIndexMonitor","TruthStream","TruthDirect:","TruthSocialPublic"))},
+     "social_channels":{k:{"ok":v.get("ok"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds"),"delivery_latency_seconds":v.get("delivery_latency_seconds")} for k,v in S["sources"].items() if k.startswith(("XFree:","XFilteredStream","XMonitor","XIndexMonitor","TruthAuth","TruthStream","TruthDirect:","TruthSocialPublic"))},
      "entry_rejections":dict(S.get("_entry_rejections",{})),
      "risk_ready":health["risk_ready"]}
    print(json.dumps(report,ensure_ascii=False,default=str),flush=True)
