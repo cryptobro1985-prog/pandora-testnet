@@ -95,8 +95,8 @@ for _i in range(0,len(WATCH),4):
   "q":"("+" OR ".join("site:x.com/"+h for h in _group)+")",
   "hl":"en-US","gl":"US","ceid":"US:en"
  })
-POS=("surge","surges","approve","approved","approval","partnership","listing","adoption","buyback","breakout","bullish","launch","etf approved","rally","rallies","rebound","rebounds","record high","inflows","net inflow","gains","jumps","soars","upside")
-NEG=("hack","hacked","exploit","lawsuit","delist","delisted","ban","banned","liquidation","liquidations","fraud","selloff","sell-off","bearish","crash","crashes","stolen","outflows","net outflow","falls","drops","slips","plunges","tumbles","declines")
+POS=("pump","pumping","surge","surges","approve","approved","approval","partnership","listing","adoption","buyback","breakout","bullish","launch","etf approved","rally","rallies","rebound","rebounds","record high","inflows","net inflow","gains","jumps","soars","upside")
+NEG=("dump","dumping","hack","hacked","exploit","lawsuit","delist","delisted","ban","banned","liquidation","liquidations","fraud","selloff","sell-off","bearish","crash","crashes","stolen","outflows","net outflow","falls","drops","slips","plunges","tumbles","declines")
 # Symbols that are also ordinary English words/acronyms. Never map them from a bare word.
 # They require an explicit crypto form/name so headlines like "not", "people", "move", "etc" cannot create trades.
 AMBIGUOUS_SYMBOLS={"NOT","PEOPLE","MOVE","ETC"}
