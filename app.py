@@ -756,6 +756,18 @@ def truth_stream_realtime():
     if ws:ws.close()
    except Exception:pass
 
+def fetch_truth_relay(handle):
+ base=os.getenv("TRUTH_RELAY_URL","").strip().rstrip("/")
+ token=os.getenv("TRUTH_RELAY_TOKEN","").strip()
+ if not base:raise RuntimeError("truth_relay_not_configured")
+ url=base+"/truth?"+urllib.parse.urlencode({"handle":handle,"token":token})
+ req=urllib.request.Request(url,headers={"User-Agent":"PANDORA-truth-relay-client/1","Accept":"application/json"})
+ with urllib.request.urlopen(req,timeout=6) as r:data=json.load(r)
+ if not data.get("ok"):raise RuntimeError("truth_relay_failed:"+" | ".join(data.get("errors") or []))
+ posts=data.get("posts") or []
+ if not posts:raise RuntimeError("truth_relay_empty")
+ return posts,str(data.get("backend") or "relay")
+
 def free_truth_realtime():
  # Public Truth Social scanner: no account/token required. Each account has its own
  # 4-second cadence and falls back from public REST to ActivityPub independently.
@@ -766,6 +778,11 @@ def free_truth_realtime():
  pool=concurrent.futures.ThreadPoolExecutor(max_workers=max(1,len(handles)),thread_name_prefix="truth-public")
  def fetch_one(handle):
   errors=[]
+  if os.getenv("TRUTH_RELAY_URL","").strip():
+   try:
+    posts,relay_backend=fetch_truth_relay(handle)
+    return ids_cache.get(handle),posts,{},"relay_"+relay_backend,True,None
+   except Exception as exc:errors.append("relay:"+str(exc)[:100])
   try:
    account_id,posts,headers=free_truth_fetch(handle,ids_cache.get(handle))
    return account_id,posts,headers,"public_rest",False,None
