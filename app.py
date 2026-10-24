@@ -525,51 +525,88 @@ def ingest_event(ident,source,title,published_at=None,source_url=None):
 
 def free_x_realtime():
  if os.getenv("X_STREAM_BEARER_TOKEN","").strip():return
- handles=list(WATCH);poll=max(3.0,float(os.getenv("X_FREE_POLL_SECONDS","4")))
+ handles=list(WATCH);poll=max(4.0,float(os.getenv("X_FREE_POLL_SECONDS","4")))
+ # Keep FxTwitter below its published 1000 req/min/IP ceiling: 58*15=870 rpm.
+ fx_primary=set(handles[:min(58,len(handles))])
  seen={};primed=set();state_lock=threading.Lock()
- def one(handle,offset):
-  SHUTDOWN.wait(offset)
+ next_due={h:time.monotonic()+i*poll/max(1,len(handles)) for i,h in enumerate(handles)}
+ inflight={}
+ pool=concurrent.futures.ThreadPoolExecutor(max_workers=48,thread_name_prefix="x-realtime")
+ def fetch_one(handle):
+  primary=("fx",free_x_fetch) if handle in fx_primary else ("vx",free_x_vx_fetch)
+  secondary=("vx",free_x_vx_fetch) if primary[0]=="fx" else ("fx",free_x_fetch)
+  try:
+   return primary[1](handle),primary[0],False,None
+  except Exception as first:
+   try:
+    return secondary[1](handle),secondary[0],True,str(first)[:100]
+   except Exception as second:
+    raise RuntimeError(primary[0]+":"+str(first)[:70]+" | "+secondary[0]+":"+str(second)[:70])
+ try:
   while not SHUTDOWN.is_set():
    if not S["engine_active"]:
-    SHUTDOWN.wait(1);continue
-   started=time.monotonic();name="XFree:"+handle
-   try:
-    posts=free_x_fetch(handle)
-    stamps=[publication_epoch(p.get("created_at")) for p in posts];stamps=[x for x in stamps if x is not None]
-    latest_age=(time.time()-max(stamps)) if stamps else None
-    with LOCK:S["sources"][name]={"ok":True,"degraded":False,"mode":"fxtwitter_v2_staggered_poll","last_check":now(),"posts":len(posts),"poll_seconds":poll,"latest_post_age_seconds":round(latest_age,1) if latest_age is not None else None,"realtime_verified":False,"consecutive_failures":0,"last_success_epoch":time.time()}
-    ids=[str(p["id"]) for p in posts]
-    with state_lock:
-     first=handle not in primed
-     if first:
-      seen[handle]=set(ids);primed.add(handle);fresh=[]
-     else:
-      old=seen.setdefault(handle,set());fresh=[p for p in posts if str(p["id"]) not in old];old.update(ids)
-      if len(old)>200:seen[handle]=set(ids[:100])
-    for p in sorted(fresh,key=lambda q:publication_epoch(q.get("created_at")) or 0):
-     stamp=publication_epoch(p.get("created_at"));age=time.time()-stamp if stamp is not None else None
-     if age is not None and 0<=age<=10:
-      with LOCK:S["sources"][name]["realtime_verified"]=True;S["sources"][name]["delivery_latency_seconds"]=round(age,2)
-     ident=hashlib.sha256(("XFree:"+handle+":"+str(p["id"])).encode()).hexdigest()
-     ingest_event(ident,"XOfficial",p["text"],p.get("created_at"),p.get("url"))
-   except Exception as exc:
-    err=str(exc)[:100] if str(exc) else type(exc).__name__
-    with LOCK:
-     prev=S["sources"].get(name,{})
-     failures=int(prev.get("consecutive_failures",0))+1
-     last_success_epoch=float(prev.get("last_success_epoch",0) or 0)
-     within_grace=bool(last_success_epoch and time.time()-last_success_epoch<=20 and failures<3)
-     S["sources"][name]={"ok":within_grace,"degraded":within_grace,"mode":"fxtwitter_v2_staggered_poll","last_check":now(),"error":err,"consecutive_failures":failures,"last_success_epoch":last_success_epoch or None}
-   SHUTDOWN.wait(max(0.05,poll-(time.monotonic()-started)))
- workers=[threading.Thread(target=one,args=(h,i*poll/max(1,len(handles))),daemon=True,name="xfree:"+h) for i,h in enumerate(handles)]
- for w in workers:w.start()
- while not SHUTDOWN.is_set():
-  with LOCK:
-   states=[v for k,v in S["sources"].items() if k.startswith("XFree:")]
-   good=sum(bool(v.get("ok")) for v in states)
-   S["sources"]["XMonitor"]={"ok":good>=max(1,math.ceil(len(handles)*0.75)),"mode":"fxtwitter_v2_staggered_poll","last_check":now(),"accounts_ok":good,"accounts_total":len(handles),"poll_seconds":poll,"realtime_verified":any(v.get("realtime_verified") for v in states)}
-  SHUTDOWN.wait(1)
- for w in workers:w.join(timeout=0.1)
+    SHUTDOWN.wait(0.5);continue
+   now_m=time.monotonic()
+   active={meta[0] for meta in inflight.values()}
+   for handle in handles:
+    if handle in active or now_m<next_due[handle]:continue
+    fut=pool.submit(fetch_one,handle)
+    inflight[fut]=(handle,now_m)
+    next_due[handle]+=poll
+    if next_due[handle]<now_m:next_due[handle]=now_m+poll
+   done=[f for f in list(inflight) if f.done()]
+   for future in done:
+    handle,started=inflight.pop(future);name="XFree:"+handle
+    try:
+     posts,backend,fallback,primary_error=future.result()
+     stamps=[publication_epoch(p.get("created_at")) for p in posts];stamps=[x for x in stamps if x is not None]
+     latest_age=(time.time()-max(stamps)) if stamps else None
+     with LOCK:
+      S["sources"][name]={"ok":True,"degraded":bool(fallback),"mode":backend+"_4s_poll","backend":backend,
+       "fallback_used":bool(fallback),"primary_error":primary_error,"category":WATCH_CATEGORY.get(handle),
+       "last_check":now(),"posts":len(posts),"poll_seconds":poll,
+       "latest_post_age_seconds":round(latest_age,1) if latest_age is not None else None,
+       "realtime_verified":False,"consecutive_failures":0,"last_success_epoch":time.time()}
+     ids=[str(p["id"]) for p in posts]
+     with state_lock:
+      if handle not in primed:
+       seen[handle]=set(ids);primed.add(handle);fresh=[]
+      else:
+       old=seen.setdefault(handle,set());fresh=[p for p in posts if str(p["id"]) not in old];old.update(ids)
+       if len(old)>200:seen[handle]=set(ids[:100])
+     for p in sorted(fresh,key=lambda q:publication_epoch(q.get("created_at")) or 0):
+      stamp=publication_epoch(p.get("created_at"));age=time.time()-stamp if stamp is not None else None
+      if age is not None and 0<=age<=10:
+       with LOCK:
+        S["sources"][name]["realtime_verified"]=True
+        S["sources"][name]["delivery_latency_seconds"]=round(age,2)
+      ident=hashlib.sha256(("XFree:"+handle+":"+str(p["id"])).encode()).hexdigest()
+      ingest_event(ident,"XOfficial:"+handle,p["text"],p.get("created_at"),p.get("url"))
+    except Exception as exc:
+     err=str(exc)[:180] if str(exc) else type(exc).__name__
+     with LOCK:
+      prev=S["sources"].get(name,{})
+      failures=int(prev.get("consecutive_failures",0))+1
+      last_success_epoch=float(prev.get("last_success_epoch",0) or 0)
+      within_grace=bool(last_success_epoch and time.time()-last_success_epoch<=20 and failures<3)
+      S["sources"][name]={"ok":within_grace,"degraded":True,"mode":"dual_backend_4s_poll",
+       "category":WATCH_CATEGORY.get(handle),"last_check":now(),"error":err,
+       "consecutive_failures":failures,"last_success_epoch":last_success_epoch or None}
+   with LOCK:
+    states=[S["sources"].get("XFree:"+h,{}) for h in handles]
+    initialized=sum(bool(v) for v in states)
+    good=sum(bool(v.get("ok")) for v in states)
+    realtime=sum(bool(v.get("realtime_verified")) for v in states)
+    fx_count=sum(1 for h in handles if h in fx_primary);vx_count=len(handles)-fx_count
+    S["sources"]["XMonitor"]={"ok":initialized==len(handles) and good>=math.ceil(len(handles)*0.90),
+     "all_accounts_ok":initialized==len(handles) and good==len(handles),
+     "mode":"dual_backend_parallel_4s_poll","last_check":now(),"accounts_ok":good,
+     "accounts_initialized":initialized,"accounts_total":len(handles),"fx_primary":fx_count,
+     "vx_primary":vx_count,"poll_seconds":poll,"realtime_accounts_seen":realtime,
+     "realtime_verified":realtime>0}
+   SHUTDOWN.wait(0.05)
+ finally:
+  pool.shutdown(wait=False,cancel_futures=True)
 
 def truth_stream_realtime():
  token=(os.getenv("TRUTH_STREAM_TOKEN","").strip() or os.getenv("TRUTHSOCIAL_TOKEN","").strip())
