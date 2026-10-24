@@ -38,10 +38,10 @@ def _clean(value):
     value=html.unescape(re.sub(r"<[^>]+>"," ",value or ""))
     return re.sub(r"\s+"," ",value).strip()
 
-def fetch_x(handle,timeout=4):
+def fetch_x(handle,timeout=4,attempts=3):
     url=FX_BASE+"/2/profile/"+urllib.parse.quote(handle,safe="")+"/statuses"
     last=None
-    for attempt in range(3):
+    for attempt in range(max(1,int(attempts))):
         try:
             req=urllib.request.Request(url,headers={"User-Agent":FX_UA,"Accept":"application/json","Cache-Control":"no-cache"})
             with urllib.request.urlopen(req,timeout=timeout) as response:
@@ -52,7 +52,7 @@ def fetch_x(handle,timeout=4):
             break
         except Exception as exc:
             last=exc
-            if attempt<2:
+            if attempt<max(1,int(attempts))-1:
                 time.sleep(0.18*(attempt+1))
     else:
         raise last
