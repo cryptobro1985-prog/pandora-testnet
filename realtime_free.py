@@ -439,3 +439,23 @@ def fetch_truth_rss(handle,timeout=6):
     if not out:
         raise RuntimeError("truth_rss_empty")
     return out
+
+
+def fetch_trump_archive(timeout=6):
+    """Independent public archive fallback for @realDonaldTrump when Truth blocks cloud IPs."""
+    urls=["https://www.trumpstruth.org/feed","https://trumpstruth.org/feed"]
+    errors=[]
+    for url in urls:
+        try:
+            req=urllib.request.Request(url,headers={"User-Agent":"PANDORA-public-monitor/1","Accept":"application/rss+xml,application/xml,text/xml"})
+            with urllib.request.urlopen(req,timeout=timeout) as response:raw=response.read(2_000_000)
+            root=ET.fromstring(raw);out=[]
+            for item in root.findall(".//item")[:30]:
+                link=(item.findtext("link") or "").strip();ident=(item.findtext("guid") or link).strip()
+                title=_clean(item.findtext("description") or item.findtext("title") or "")
+                created=(item.findtext("pubDate") or "").strip() or None
+                if ident and title:out.append({"id":ident.rsplit("/",1)[-1],"text":title,"created_at":created,"url":link or "https://www.trumpstruth.org/"})
+            if out:return out
+            errors.append(url+":empty")
+        except Exception as exc:errors.append(url+":"+str(exc)[:70])
+    raise RuntimeError("trump_archive_failed "+" | ".join(errors))
