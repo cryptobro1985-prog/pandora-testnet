@@ -943,7 +943,7 @@ def free_x_realtime():
     # accounts are reported as probe-pool, not as a total X outage.
     required=max(3,math.ceil(max(1,len(active_handles))*0.35))
     healthy=bool(recent and len(recent)>=required)
-    S["sources"]["XMonitor"]={"ok":healthy,"degraded":bool(disabled_count or len(active_handles)<len(handles)),
+    S["sources"]["XMonitor"]={"ok":healthy,"degraded":not healthy,
      "mode":"active_4s_probe_pool","last_check":now(),"accounts_ok":len(active_handles),
      "accounts_initialized":initialized,"accounts_total":len(handles),"active_accounts":len(active_handles),
      "disabled_retry_accounts":disabled_count,"recently_polled_accounts":len(recent),
@@ -1140,7 +1140,8 @@ def free_truth_realtime():
    with LOCK:
     states=[S["sources"].get("TruthDirect:"+h,{}) for h in handles]
     initialized=sum(bool(v) for v in states);good=sum(bool(v.get("ok")) for v in states);rt=sum(bool(v.get("realtime_verified")) for v in states)
-    S["sources"]["TruthMonitor"]={"ok":initialized==len(handles) and good>=max(1,math.ceil(len(handles)*0.75)),"all_accounts_ok":initialized==len(handles) and good==len(handles),"mode":"public_parallel_adaptive_poll","last_check":now(),"accounts_ok":good,"accounts_initialized":initialized,"accounts_total":len(handles),"poll_seconds":poll,"scan_workers":pool._max_workers,"inflight_accounts":len(inflight),"backoff_accounts":sum(1 for h in handles if time.monotonic()<backoff_until.get(h,0)),"realtime_accounts_seen":rt,"realtime_verified":rt>0,"last_successful_poll_epoch":max(last_success.values()) if last_success else None}
+    truth_healthy=initialized==len(handles) and good>=max(1,math.ceil(len(handles)*0.75))
+    S["sources"]["TruthMonitor"]={"ok":truth_healthy,"degraded":not truth_healthy,"all_accounts_ok":initialized==len(handles) and good==len(handles),"mode":"public_parallel_adaptive_poll","last_check":now(),"accounts_ok":good,"accounts_initialized":initialized,"accounts_total":len(handles),"poll_seconds":poll,"scan_workers":pool._max_workers,"inflight_accounts":len(inflight),"backoff_accounts":sum(1 for h in handles if time.monotonic()<backoff_until.get(h,0)),"realtime_accounts_seen":rt,"realtime_verified":rt>0,"last_successful_poll_epoch":max(last_success.values()) if last_success else None}
    SHUTDOWN.wait(0.05)
  finally:
   pool.shutdown(wait=False,cancel_futures=True)
