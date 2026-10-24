@@ -502,53 +502,48 @@ def ingest_event(ident,source,title,published_at=None,source_url=None):
 
 def free_x_realtime():
  if os.getenv("X_STREAM_BEARER_TOKEN","").strip():return
- handles=list(WATCH)
- seen={};primed=set();batch_size=15
- poll=max(3.0,float(os.getenv("X_FREE_POLL_SECONDS","4")))
- pool=concurrent.futures.ThreadPoolExecutor(max_workers=batch_size,thread_name_prefix="x-free")
- cursor=0
- try:
+ handles=list(WATCH);poll=max(3.0,float(os.getenv("X_FREE_POLL_SECONDS","4")))
+ seen={};primed=set();state_lock=threading.Lock()
+ def one(handle,offset):
+  SHUTDOWN.wait(offset)
   while not SHUTDOWN.is_set():
    if not S["engine_active"]:
-    SHUTDOWN.wait(2);continue
-   batch=handles[cursor:cursor+batch_size]
-   if not batch:
-    cursor=0;continue
-   cursor=(cursor+len(batch))%len(handles)
-   started=time.monotonic()
-   futures={pool.submit(free_x_fetch,h):h for h in batch}
-   for future in concurrent.futures.as_completed(futures):
-    h=futures[future];name="XFree:"+h
-    try:
-     posts=future.result()
-     stamps=[publication_epoch(p.get("created_at")) for p in posts]
-     stamps=[x for x in stamps if x is not None]
-     latest_age=(time.time()-max(stamps)) if stamps else None
-     with LOCK:S["sources"][name]={"ok":True,"mode":"fxtwitter_v2_poll","last_check":now(),"posts":len(posts),"poll_seconds":poll,"latest_post_age_seconds":round(latest_age,1) if latest_age is not None else None,"realtime_verified":False}
-     ids=[str(p["id"]) for p in posts]
-     if h not in primed:
-      seen[h]=set(ids);primed.add(h);continue
-     old=seen.setdefault(h,set())
-     fresh=[p for p in posts if str(p["id"]) not in old]
-     old.update(ids)
-     if len(old)>200:seen[h]=set(ids[:100])
-     for p in sorted(fresh,key=lambda q:publication_epoch(q.get("created_at")) or 0):
-      age=time.time()-(publication_epoch(p.get("created_at")) or 0)
-      if 0<=age<=10:
-       with LOCK:S["sources"][name]["realtime_verified"]=True;S["sources"][name]["delivery_latency_seconds"]=round(age,2)
-      ident=hashlib.sha256(("XFree:"+h+":"+str(p["id"])).encode()).hexdigest()
-      ingest_event(ident,"XOfficial",p["text"],p.get("created_at"),p.get("url"))
-    except Exception as exc:
-     err=str(exc)[:100] if str(exc) else type(exc).__name__
-     with LOCK:S["sources"][name]={"ok":False,"mode":"fxtwitter_v2_poll","last_check":now(),"error":err}
-   with LOCK:
-    states=[v for k,v in S["sources"].items() if k.startswith("XFree:")]
-    good=sum(bool(v.get("ok")) for v in states)
-    S["sources"]["XMonitor"]={"ok":good>=max(1,int(len(handles)*0.8)),"mode":"fxtwitter_v2_parallel_poll","last_check":now(),"accounts_ok":good,"accounts_total":len(handles),"poll_seconds":poll,"realtime_verified":any(v.get("realtime_verified") for v in states)}
-   waves=max(1,math.ceil(len(handles)/batch_size))
-   SHUTDOWN.wait(max(0.05,poll/waves-(time.monotonic()-started)))
- finally:
-  pool.shutdown(wait=False,cancel_futures=True)
+    SHUTDOWN.wait(1);continue
+   started=time.monotonic();name="XFree:"+handle
+   try:
+    posts=free_x_fetch(handle)
+    stamps=[publication_epoch(p.get("created_at")) for p in posts];stamps=[x for x in stamps if x is not None]
+    latest_age=(time.time()-max(stamps)) if stamps else None
+    with LOCK:S["sources"][name]={"ok":True,"mode":"fxtwitter_v2_staggered_poll","last_check":now(),"posts":len(posts),"poll_seconds":poll,"latest_post_age_seconds":round(latest_age,1) if latest_age is not None else None,"realtime_verified":False}
+    ids=[str(p["id"]) for p in posts]
+    with state_lock:
+     first=handle not in primed
+     if first:
+      seen[handle]=set(ids);primed.add(handle);fresh=[]
+     else:
+      old=seen.setdefault(handle,set());fresh=[p for p in posts if str(p["id"]) not in old];old.update(ids)
+      if len(old)>200:seen[handle]=set(ids[:100])
+    for p in sorted(fresh,key=lambda q:publication_epoch(q.get("created_at")) or 0):
+     stamp=publication_epoch(p.get("created_at"));age=time.time()-stamp if stamp is not None else None
+     if age is not None and 0<=age<=10:
+      with LOCK:S["sources"][name]["realtime_verified"]=True;S["sources"][name]["delivery_latency_seconds"]=round(age,2)
+     ident=hashlib.sha256(("XFree:"+handle+":"+str(p["id"])).encode()).hexdigest()
+     ingest_event(ident,"XOfficial",p["text"],p.get("created_at"),p.get("url"))
+   except Exception as exc:
+    err=str(exc)[:100] if str(exc) else type(exc).__name__
+    with LOCK:
+     prev=S["sources"].get(name,{})
+     S["sources"][name]={"ok":False,"mode":"fxtwitter_v2_staggered_poll","last_check":now(),"error":err,"last_success":prev.get("last_success") or (prev.get("last_check") if prev.get("ok") else None)}
+   SHUTDOWN.wait(max(0.05,poll-(time.monotonic()-started)))
+ workers=[threading.Thread(target=one,args=(h,i*poll/max(1,len(handles))),daemon=True,name="xfree:"+h) for i,h in enumerate(handles)]
+ for w in workers:w.start()
+ while not SHUTDOWN.is_set():
+  with LOCK:
+   states=[v for k,v in S["sources"].items() if k.startswith("XFree:")]
+   good=sum(bool(v.get("ok")) for v in states)
+   S["sources"]["XMonitor"]={"ok":good>=max(1,math.ceil(len(handles)*0.75)),"mode":"fxtwitter_v2_staggered_poll","last_check":now(),"accounts_ok":good,"accounts_total":len(handles),"poll_seconds":poll,"realtime_verified":any(v.get("realtime_verified") for v in states)}
+  SHUTDOWN.wait(1)
+ for w in workers:w.join(timeout=0.1)
 
 def truth_stream_realtime():
  token=(os.getenv("TRUTH_STREAM_TOKEN","").strip() or os.getenv("TRUTHSOCIAL_TOKEN","").strip())
