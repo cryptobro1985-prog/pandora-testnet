@@ -845,8 +845,8 @@ class Handler(BaseHTTPRequestHandler):
   else:
    body=json.dumps({"news":[dict(x) for x in persistent_news(50)]},ensure_ascii=False).encode();ctype="application/json; charset=utf-8"
   self.send_response(200);self.send_header("Content-Type",ctype);self.send_header("Cache-Control","no-store");self.send_header("Access-Control-Allow-Origin","*");self.send_header("Content-Length",str(len(body)));self.end_headers()
-   try:self.wfile.write(body)
-   except (BrokenPipeError,ConnectionResetError):pass
+  try:self.wfile.write(body)
+  except (BrokenPipeError,ConnectionResetError):pass
 
 def health_state():
  stamp=time.time()
