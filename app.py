@@ -204,6 +204,8 @@ def pinit():
   c.execute("alter table trade_history add column if not exists event_id text")
   c.execute("create table if not exists audit_journal (id bigserial primary key, recorded_at text not null, event_id text, kind text not null, payload jsonb not null)")
   c.execute("create table if not exists pump_signal_journal (id text primary key, ts text not null, symbol text, side integer, score double precision, action text, features jsonb)")
+  c.execute("create table if not exists bad_signal_feedback (id bigserial primary key, recorded_at text not null, event_id text, symbol text, headline text, reason text, payload jsonb)")
+  c.execute("create table if not exists operator_actions (action_id text primary key, completed_at text not null, payload jsonb not null)")
   c.execute("create index if not exists audit_journal_event_idx on audit_journal(event_id,id)")
   row=c.execute("select equity,realized_pnl from account_state where id=1").fetchone()
   if row:
@@ -297,6 +299,33 @@ def engine_coordinator():
  S["engine_active"]=False
  try:STORE.release()
  except Exception:pass
+
+def operator_one_shot_actions():
+ action_id=os.getenv("PANDORA_ONE_SHOT_ACTION_ID","").strip()
+ symbol=os.getenv("PANDORA_ONE_SHOT_CLOSE_SYMBOL","").strip().upper()
+ if not action_id or not symbol:return
+ while not SHUTDOWN.is_set():
+  try:
+   with pg() as c:
+    if c.execute("select 1 from operator_actions where action_id=%s",(action_id,)).fetchone():return
+   with LOCK:
+    active=S["engine_active"];pos=copy.deepcopy(S["positions"].get(symbol));price=S.get("_prices",{}).get(symbol)
+   if not active or not pos or not price:
+    SHUTDOWN.wait(1);continue
+   feedback={"action_id":action_id,"symbol":symbol,"headline":pos.get("headline"),"event_id":pos.get("event_id"),
+             "entry":pos.get("entry"),"side":pos.get("side"),"mark":price,"reason":"user_marked_invalid_news_signal"}
+   with pg() as c:
+    c.execute("insert into bad_signal_feedback(recorded_at,event_id,symbol,headline,reason,payload) values(%s,%s,%s,%s,%s,%s::jsonb)",
+      (now(),pos.get("event_id"),symbol,pos.get("headline"),"user_marked_invalid_news_signal",json.dumps(feedback)))
+   result=manual_close(symbol)
+   with pg() as c:
+    c.execute("insert into operator_actions(action_id,completed_at,payload) values(%s,%s,%s::jsonb) on conflict(action_id) do nothing",
+      (action_id,now(),json.dumps({"feedback":feedback,"close_result":result})))
+   journal("operator_bad_signal_closed",pos.get("event_id"),{"feedback":feedback,"close_result":result})
+   return
+  except Exception as exc:
+   S["last_error"]="operator_action: "+str(exc)[:160]
+   SHUTDOWN.wait(2)
 
 def market():
  while not SHUTDOWN.is_set():
@@ -1212,8 +1241,9 @@ def daily_audit_stats():
    decisions=c.execute("select coalesce(payload->>'reason','unknown') as reason,count(*) as n from audit_journal where recorded_at::timestamptz >= date_trunc('day', now()) and kind='decision' group by 1 order by n desc limit 20").fetchall()
    skipped=c.execute("select coalesce(payload->>'reason','unknown') as reason,count(*) as n from audit_journal where recorded_at::timestamptz >= date_trunc('day', now()) and kind='entry_skipped' group by 1 order by n desc limit 20").fetchall()
    ignored=c.execute("select count(*) as n from audit_journal where recorded_at::timestamptz >= date_trunc('day', now()) and kind='ignored_non_market_news'").fetchone()["n"]
+   bad=c.execute("select count(*) as n from bad_signal_feedback where recorded_at::timestamptz >= date_trunc('day', now())").fetchone()["n"]
    reversals=c.execute("select count(*) as n from audit_journal where recorded_at::timestamptz >= date_trunc('day', now()) and kind='news_reversal'").fetchone()["n"]
-  return {"trades_closed_today_utc":int(trades_closed),"trades_opened_today_utc":int(trades_opened),"news_today_utc":int(news),"ignored_non_market_today_utc":int(ignored),"news_reversals_today_utc":int(reversals),"decision_reasons_today_utc":{str(x["reason"]):int(x["n"]) for x in decisions},"entry_skips_today_utc":{str(x["reason"]):int(x["n"]) for x in skipped}}
+  return {"trades_closed_today_utc":int(trades_closed),"trades_opened_today_utc":int(trades_opened),"news_today_utc":int(news),"ignored_non_market_today_utc":int(ignored),"bad_signal_feedback_today_utc":int(bad),"news_reversals_today_utc":int(reversals),"decision_reasons_today_utc":{str(x["reason"]):int(x["n"]) for x in decisions},"entry_skips_today_utc":{str(x["reason"]):int(x["n"]) for x in skipped}}
  except Exception as exc:
   return {"error":str(exc)[:180]}
 
@@ -1253,7 +1283,7 @@ def html_dashboard(data):
  trs="".join('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'%(esc(x["closed"]),esc(x["symbol"]),"LONG" if x["side"]>0 else "SHORT",round(x["pnl"],4),esc(x["reason"])) for x in data["trades"]) or '<tr><td colspan=5>No closed trades</td></tr>'
  src="".join('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'%(esc(k),"OK" if v.get("ok") else "ERROR",esc(v.get("last_check","")),esc(v.get("error",""))) for k,v in data["sources"].items())
  news="".join('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'%(esc(x["ts"]),esc(x["source"]),esc(x["symbol"]),esc(x["signal"]),esc(x["title"])) for x in data["news"][:12])
- return '''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>PANDORA LIVE</title><style>body{font-family:system-ui;background:#080b10;color:#e8edf5;margin:24px}h1{margin:0}.muted{color:#8b98aa}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:18px 0}.grid b{background:#111722;padding:16px;border-radius:12px}table{width:100%%;border-collapse:collapse;background:#0e141e;margin-bottom:22px}td,th{padding:9px;border-bottom:1px solid #202938;text-align:left;font-size:13px}th{color:#91a2b8}.posv{color:#49d17d;font-weight:700}.negv{color:#ff6262;font-weight:700}a{color:#8bc4ff}</style></head><body><h1>PANDORA LIVE</h1><div class="muted">Paper engine · dashboard refresh 5s · last market poll %s</div>%s<h2>Open positions</h2><button onclick="closePos(null)">Close Everything</button><button onclick="location.reload()">Refresh</button><p id="actionResult"></p><table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Trigger</th><th>Action</th></tr>%s</table><h2>Closed trades</h2><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>PnL</th><th>Reason</th></tr>%s</table><h2>Sources</h2><table><tr><th>Source</th><th>Status</th><th>Checked</th><th>Error</th></tr>%s</table><h2>Latest news</h2><table><tr><th>Time</th><th>Source</th><th>Token</th><th>Raw signal</th><th>Headline</th></tr>%s</table><p>Errors: %s · Last error: %s</p><p><a href="/api/dashboard">JSON dashboard</a> · <a href="/features">Features</a> · <a href="/trades">Trades</a> · <a href="/news">News</a></p><script>let closing=false;setInterval(()=>{if(!closing&&document.visibilityState==="visible")location.reload()},5000);async function closePos(sym){if(closing||!confirm(sym?"Close "+sym+"?":"Close ALL positions?"))return;closing=true;const status=document.getElementById("actionResult");status.textContent="Processing close request...";try{const r=await fetch("/api/positions/close",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(sym?{symbol:sym}:{all:true})});const result=await r.json();status.textContent=r.ok?"Close confirmed: "+JSON.stringify(result):"Close failed ("+r.status+"): "+JSON.stringify(result);if(r.ok){location.reload();return}}catch(e){status.textContent="Close request failed: "+String(e)}finally{closing=false}}</script></body></html>'''%(esc(data["last_poll"]),cards,pos,trs,src,news,data["errors"],esc(data["last_error"]))
+ return '''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>PANDORA LIVE</title><style>body{font-family:system-ui;background:#080b10;color:#e8edf5;margin:24px}h1{margin:0}.muted{color:#8b98aa}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:18px 0}.grid b{background:#111722;padding:16px;border-radius:12px}table{width:100%%;border-collapse:collapse;background:#0e141e;margin-bottom:22px}td,th{padding:9px;border-bottom:1px solid #202938;text-align:left;font-size:13px}th{color:#91a2b8}.posv{color:#49d17d;font-weight:700}.negv{color:#ff6262;font-weight:700}a{color:#8bc4ff}</style></head><body><h1>PANDORA LIVE</h1><div class="muted">Paper engine · dashboard refresh 5s · last market poll %s</div>%s<h2>Open positions</h2><button onclick="closePos(null)">Close Everything</button><button onclick="location.reload()">Refresh</button><p id="actionResult"></p><table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Trigger</th><th>Action</th></tr>%s</table><h2>Closed trades</h2><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>PnL</th><th>Reason</th></tr>%s</table><h2>Sources</h2><table><tr><th>Source</th><th>Status</th><th>Checked</th><th>Error</th></tr>%s</table><h2>Latest news</h2><table><tr><th>Time</th><th>Source</th><th>Token</th><th>Raw signal</th><th>Headline</th></tr>%s</table><p>Errors: %s · Last error: %s</p><p><a href="/api/dashboard">JSON dashboard</a> · <a href="/features">Features</a> · <a href="/trades">Trades</a> · <a href="/news">News</a></p><script>let closing=false;setInterval(()=>{if(!closing&&document.visibilityState==="visible")location.reload()},5000);async function closePos(sym){if(closing||!confirm(sym?"Close "+sym+"?":"Close ALL positions?"))return;closing=true;const status=document.getElementById("actionResult");status.textContent="Processing close request...";try{const r=await fetch("/api/positions/close",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(sym?{symbol:sym}:{all:true})});const result=await r.json();status.textContent=r.ok?"Close confirmed: "+JSON.stringify(result):(r.status===401?"Controls locked: open the control-access link once, then retry.":"Close failed ("+r.status+"): "+JSON.stringify(result));if(r.ok){location.reload();return}}catch(e){status.textContent="Close request failed: "+String(e)}finally{closing=false}}</script></body></html>'''%(esc(data["last_poll"]),cards,pos,trs,src,news,data["errors"],esc(data["last_error"]))
 
 
 def manual_close(symbol=None):
@@ -1286,7 +1316,8 @@ class Handler(BaseHTTPRequestHandler):
   cookie=self.headers.get("Cookie","")
   cookie_token=next((part.strip().split("=",1)[1] for part in cookie.split(";") if part.strip().startswith("pandora_access=")),"")
   if not secret or not (secrets.compare_digest(auth,"Bearer "+secret) or secrets.compare_digest(cookie_token,secret)):
-   self.send_error(401);return
+   body=b'{"ok":false,"error":"control_session_required","hint":"open monitor once with ?access=YOUR_CONTROL_TOKEN"}'
+   self.send_response(401);self.send_header("Content-Type","application/json");self.send_header("Cache-Control","no-store");self.send_header("Content-Length",str(len(body)));self.end_headers();self.wfile.write(body);return
   try:
    length=int(self.headers.get("Content-Length","0"))
    if length<1 or length>1024:raise ValueError("invalid body")
@@ -1392,7 +1423,7 @@ if __name__=="__main__":
   SHUTDOWN.set()
   threading.Thread(target=server.shutdown,daemon=True).start()
  signal.signal(signal.SIGTERM,shutdown);signal.signal(signal.SIGINT,shutdown)
- targets=[engine_coordinator,market,market_metadata,telemetry,impulse_scan,xnews,adapt,free_x_realtime,x_list_realtime,free_truth_realtime,truth_stream_realtime,x_filtered_stream,dashboard_cache_loop,operations_diagnostics]
+ targets=[engine_coordinator,market,market_metadata,telemetry,operator_one_shot_actions,impulse_scan,xnews,adapt,free_x_realtime,x_list_realtime,free_truth_realtime,truth_stream_realtime,x_filtered_stream,dashboard_cache_loop,operations_diagnostics]
  targets += ([lambda:social_reader("x")] if os.getenv("X_SESSION_COOKIES","").strip() else [])
  targets += [lambda:social_reader("truth")] if os.getenv("TRUTHSOCIAL_TOKEN","").strip() else []
  workers=[threading.Thread(target=t,daemon=True,name=t.__name__) for t in targets]
