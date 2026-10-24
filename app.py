@@ -743,7 +743,7 @@ def free_x_realtime():
     realtime=sum(bool(v.get("realtime_verified")) for v in active_states)
     active_count=len(active_states);disabled_count=sum(bool(v.get("disabled")) for v in states)
     recent_success=bool(last_success and time.time()-max(last_success.values())<=60)
-    healthy=bool(active_count>=20 and good>=max(12,math.ceil(active_count*0.65)) and recent_success)
+    healthy=bool(active_count>=20 and good>=max(12,math.ceil(active_count*0.60)) and recent_success)
     S["sources"]["XMonitor"]={"ok":healthy,
      "all_accounts_ok":active_count>0 and good==active_count,
      "degraded":healthy and good<active_count,
