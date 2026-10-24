@@ -17,46 +17,43 @@ def position(side=-1, entry=0.00039):
 
 
 class RiskTests(unittest.TestCase):
-    def test_not_restart_preserves_extreme_and_exits_at_current_quote(self):
-        p, why = evaluate_exit(position(),0.000380,"before-restart")
-        self.assertIsNone(why)
-        restored = position()
-        restored.update(json.loads(json.dumps(risk_state(p))))
-        restored.update(locked=p["locked"],stop=p["stop"])
-        p2, why = evaluate_exit(restored,0.000388,"after-restart")
-        self.assertEqual(p2["peak"],0.000380)
-        self.assertEqual(p2["last_price"],0.000388)
-        self.assertEqual(why,"profit_protection_stop")
-
-    def test_saved_stop_works_without_history_or_armed_trailing(self):
-        p=position();p.update(locked=True,stop=0.000387075)
-        _,why=evaluate_exit(p,0.000388,"now")
-        self.assertEqual(why,"profit_protection_stop")
-
-    def test_long_and_short_trailing_never_loosen(self):
-        for side,prices in [(1,[100,102,104,103.9]),(-1,[100,98,96,96.1])]:
-            p=position(side,100);last=None
-            for price in prices:
-                p,_=evaluate_exit(p,price,"now")
-                stop=p.get("trail_stop")
-                if last is not None:self.assertGreaterEqual(side*(stop-last),0)
-                if stop is not None:last=stop
-
-    def test_trailing_stop_executes_without_weakening_gate(self):
+    def test_long_exits_only_after_local_high_and_weakening(self):
         p=position(1,100)
-        p,_=evaluate_exit(p,102,"peak")
-        p,why=evaluate_exit(p,101.6,"retrace")
-        self.assertEqual(why,"trailing_stop")
+        # Build a favorable move and history.
+        for px in [100.1,100.2,100.3,100.4,100.5,100.6,100.7,100.8]:
+            p,why=evaluate_exit(p,px,"run")
+            self.assertIsNone(why)
+        # Peak well above arm threshold.
+        p,why=evaluate_exit(p,101.0,"peak")
+        self.assertIsNone(why)
+        # A single retrace is not enough without weakening history.
+        p,why=evaluate_exit(p,100.75,"retrace")
+        self.assertIsNone(why)
+        # Falling short-term structure plus giveback closes.
+        p["history"]=[100.9,100.85,100.82,100.80,100.78,100.76]
+        p,why=evaluate_exit(p,100.74,"weak")
+        self.assertEqual(why,"local_extreme_weakening")
 
-    def test_no_protection_before_profit_threshold(self):
-        p,why=evaluate_exit(position(1,100),100.5,"now")
-        self.assertIsNone(why);self.assertFalse(p["locked"])
+    def test_short_exits_only_after_local_low_and_weakening(self):
+        p=position(-1,100)
+        for px in [99.9,99.8,99.7,99.6,99.5,99.4,99.3,99.2]:
+            p,why=evaluate_exit(p,px,"run")
+            self.assertIsNone(why)
+        p,why=evaluate_exit(p,99.0,"low")
+        self.assertIsNone(why)
+        p["history"]=[99.1,99.15,99.18,99.20,99.22,99.24]
+        p,why=evaluate_exit(p,99.26,"weak")
+        self.assertEqual(why,"local_extreme_weakening")
+
+    def test_no_trailing_or_profit_stop(self):
+        p=position(1,100)
+        p["locked"]=True;p["stop"]=100.3;p["trail_armed"]=True;p["trail_stop"]=100.5
+        p["history"]=[100.1,100.2,100.3,100.4,100.5,100.6]
+        p,why=evaluate_exit(p,100.55,"now")
+        self.assertIsNone(why)
         self.assertFalse(p["trail_armed"])
-
-    def test_short_history_volatility_is_not_zeroed(self):
-        p=position(1,100);p["history"]=[100,101]
-        p,_=evaluate_exit(p,102,"now")
-        self.assertAlmostEqual(p["last_exit_check"]["trail_gap"],0.08)
+        self.assertIsNone(p["trail_stop"])
+        self.assertIsNone(p["stop"])
 
     def test_input_not_mutated(self):
         p=position();before=copy.deepcopy(p)
