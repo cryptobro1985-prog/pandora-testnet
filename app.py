@@ -390,7 +390,18 @@ def open_signal(sym,side,title,prices,event_id=None,published_at=None):
   elif not S.get("last_checkpoint") or time.time()-datetime.datetime.fromisoformat(S["last_checkpoint"]).timestamp()>15:reason="risk_checkpoint_stale"
   elif time.time()-S.get("_last_poll_epoch",0)>10:reason="stale_market_price"
   elif sym not in S.get("_prices",{}) or not side:reason="no_price_or_direction"
-  elif sym in S["positions"]:reason="position_already_open"
+  elif sym in S["positions"] and S["positions"][sym]["side"]==side:reason="position_already_open"
+  elif sym in S["positions"]:
+   oldpos=S["positions"][sym]
+   px=S["_prices"][sym]
+   closed=STORE.close(sym,oldpos,px,"news_reversal")
+   if closed is None:
+    journal("entry_skipped",event_id,{"symbol":sym,"reason":"reversal_close_not_committed"})
+    return False
+   S["equity"]=float(closed["equity"]);S["realized_pnl"]=float(closed["realized_pnl"])
+   S["trades"]+=1
+   del S["positions"][sym]
+   journal("news_reversal",event_id,{"symbol":sym,"new_side":side,"closed_side":oldpos["side"],"close_price":px})
   elif S["equity"]<=10:reason="equity_limit"
   if reason:
    journal("entry_skipped",event_id,{"symbol":sym,"reason":reason,"freshness":fresh});return False
