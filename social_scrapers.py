@@ -38,7 +38,7 @@ def read_truth(handle):
     from truthbrush import Api
     from truthbrush.api import API_BASE_URL
     token = os.getenv('TRUTHSOCIAL_TOKEN', '').strip() or None
-    api = Api(username=None, password=None, token=token)
+    api = Api(token=token, require_auth=bool(token)) if token else Api(require_auth=False)
     session = api._make_session()
     try:
         headers = {'Accept': 'application/json', 'User-Agent': 'Pandora-news-reader/1'}
