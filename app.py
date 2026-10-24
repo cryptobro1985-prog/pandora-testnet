@@ -488,7 +488,7 @@ def social_reader(kind):
 def public_social_reader(kind,handle):
  source="XPublic:"+handle if kind=="x" else "TruthArchive"
  canonical="XOfficial" if kind=="x" else "TruthArchive"
- interval=10 if kind=="x" else 30
+ interval=5 if kind=="x" else 30
  delay=interval
  while not SHUTDOWN.is_set():
   if not S["engine_active"]:
