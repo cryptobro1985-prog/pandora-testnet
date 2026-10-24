@@ -563,8 +563,16 @@ def truthnews():
     ident=hashlib.sha256(("TruthSocialPublic"+str(p.get("id",title))).encode()).hexdigest()
     ingest_event(ident,"TruthSocialPublic",title,p.get("created_at"),p.get("url"))
   except Exception as e:
-   with LOCK:S["sources"]["TruthSocialPublic"]={"ok":False,"last_check":now(),"mode":"fallback_active","direct_ok":False,"direct_error":str(e)[:140],"fallback":"TruthSocialSearch"}
-   delay=min(300,max(10,delay*2))
+   try:
+    archive=public_social_read("truth","realDonaldTrump")
+    with LOCK:S["sources"]["TruthSocialPublic"]={"ok":bool(archive),"last_check":now(),"mode":"archive_fallback_not_direct","direct_ok":False,"direct_error":str(e)[:140],"posts":len(archive),"realtime_verified":False}
+    for p in archive:
+     ident=hashlib.sha256(("TruthArchive"+str(p["id"])).encode()).hexdigest()
+     ingest_event(ident,"TruthArchive",p["text"],p.get("created_at"),p.get("url"))
+    delay=10 if archive else 30
+   except Exception as backup_error:
+    with LOCK:S["sources"]["TruthSocialPublic"]={"ok":False,"last_check":now(),"mode":"all_routes_failed","direct_error":str(e)[:140],"archive_error":type(backup_error).__name__}
+    delay=min(300,max(10,delay*2))
   SHUTDOWN.wait(delay)
 
 def social_reader(kind):
