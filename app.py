@@ -401,18 +401,38 @@ def pump_close(symbol,price,reason):
  return {"pnl":pnl,"equity":float(account["equity"])}
 
 def pump_mark_positions(prices):
- with LOCK:positions=copy.deepcopy(S["pump_positions"])
+ # PAPER_ONLY uses the same exit policy as NEWS: favorable local extreme then weakening.
+ with LOCK:
+  positions=copy.deepcopy(S["pump_positions"])
+  timelines={k:list(v) for k,v in S.get("_timeline",{}).items()}
  for sym,pos in positions.items():
   px=prices.get(sym)
   if not px:continue
-  roe=(px/pos["entry"]-1)*pos["side"]*pos["leverage"]
-  peak=max(float(pos.get("peak_roe",0)),roe);reason=None
-  if roe<=PUMP_STOP_ROE:reason="pump_stop"
-  elif roe>=PUMP_TAKE_ROE:reason="pump_take"
-  elif peak>=PUMP_TRAIL_ARM_ROE and roe<=peak-PUMP_TRAIL_GAP_ROE:reason="pump_trailing"
-  elif time.time()-float(pos["t"])>=PUMP_MAX_HOLD_SECONDS:reason="pump_max_hold"
-  if reason:
-   pump_close(sym,px,reason);continue
+  if S.get("mode")=="PAPER_ONLY" and not S.get("orders_enabled"):
+   entry=float(pos["entry"]);side=int(pos["side"]);lev=float(pos["leverage"])
+   prior_peak_roe=float(pos.get("peak_roe",0) or 0)
+   peak_price=entry*(1+(prior_peak_roe/lev)*side)
+   probe=copy.deepcopy(pos)
+   probe["peak"]=peak_price
+   probe["history"]=[float(r[1]) for r in timelines.get(sym,[])[-120:] if len(r)>=2]
+   evaluated,reason=evaluate_exit(probe,float(px),now())
+   peak_price=float(evaluated.get("peak",entry))
+   peak=(peak_price/entry-1)*side*lev
+   with LOCK:
+    if sym in S["pump_positions"]:
+     S["pump_positions"][sym]["last_exit_check"]=evaluated.get("last_exit_check")
+     S["pump_positions"][sym]["last_price"]=float(px)
+   if reason:
+    pump_close(sym,px,"local_extreme_weakening");continue
+  else:
+   roe=(px/pos["entry"]-1)*pos["side"]*pos["leverage"]
+   peak=max(float(pos.get("peak_roe",0)),roe);reason=None
+   if roe<=PUMP_STOP_ROE:reason="pump_stop"
+   elif roe>=PUMP_TAKE_ROE:reason="pump_take"
+   elif peak>=PUMP_TRAIL_ARM_ROE and roe<=peak-PUMP_TRAIL_GAP_ROE:reason="pump_trailing"
+   elif time.time()-float(pos["t"])>=PUMP_MAX_HOLD_SECONDS:reason="pump_max_hold"
+   if reason:
+    pump_close(sym,px,reason);continue
   if peak!=float(pos.get("peak_roe",0)):
    with pg() as c:
     with c.transaction():
@@ -516,7 +536,7 @@ def impulse_scan():
    if not active:
     SHUTDOWN.wait(0.5);continue
    stamp=time.time();regime=market_regime(prices,history,volumes,stamp)
-   if regime.get("mode")!="NORMAL" and stamp-last_regime_action>=120:
+   if S.get("mode")!="PAPER_ONLY" and regime.get("mode")!="NORMAL" and stamp-last_regime_action>=120:
     reason="market_wide_dump_flatten" if regime.get("side")==-1 else "market_wide_pump_flatten"
     flatten_news_for_regime(reason,prices)
     with LOCK:opposite=[sym for sym,p in S["pump_positions"].items() if p["side"]!=regime.get("side")]
@@ -556,7 +576,7 @@ def impulse_scan():
     sym=candidate["symbol"];side=int(candidate["side"])
     # Emergency overlay: a strong opposite impulse closes a conflicting NEWS position.
     with LOCK:news_pos=copy.deepcopy(S["positions"].get(sym))
-    if news_pos and news_pos["side"]!=side and float(candidate["score"])>=62 and prices.get(sym):
+    if S.get("mode")!="PAPER_ONLY" and news_pos and news_pos["side"]!=side and float(candidate["score"])>=62 and prices.get(sym):
      result=STORE.close(sym,news_pos,prices[sym],"pump_dump_opposite_impulse")
      if result:
       with LOCK:
@@ -564,7 +584,7 @@ def impulse_scan():
       journal("pump_dump_news_protection",None,{"symbol":sym,"news_side":news_pos["side"],"impulse_side":side,"score":candidate["score"]})
 
     with LOCK:pump_pos=copy.deepcopy(S["pump_positions"].get(sym))
-    if candidate.get("exhaustion") and pump_pos and pump_pos["side"]==side and prices.get(sym):
+    if S.get("mode")!="PAPER_ONLY" and candidate.get("exhaustion") and pump_pos and pump_pos["side"]==side and prices.get(sym):
      pump_close(sym,prices[sym],"pump_exhaustion")
      action="EXHAUSTION_CLOSE"
     else:
