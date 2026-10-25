@@ -184,7 +184,7 @@ def significance(cluster, book, ctx, floors=None, oi_fraction=0.0025,
         return result
     symbol = cluster.get("symbol")
     size = _finite(cluster.get("size_usd"), positive=True)
-    floor = _finite(floors.get(symbol, DEFAULT_MIN_NOTIONAL_USD), positive=True)
+    floor = _finite(floors.get(symbol, floors.get("__DEFAULT__", DEFAULT_MIN_NOTIONAL_USD)), positive=True)
     stamp = _epoch(cluster.get("evaluated_at"))
     mark = _finite(ctx.get("mark_price"), positive=True)
     ctx_epoch = _epoch(ctx.get("epoch"))
