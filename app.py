@@ -49,18 +49,7 @@ def recent():
     with urllib.request.urlopen(req,timeout=15) as r:out.extend(json.load(r).get("data",[]))
    except Exception:pass
   if out:return out[:500]
- # credential-free delayed index fallback
- out=[]
- for h in WATCH:
-  try:
-   u="https://news.google.com/rss/search?"+urllib.parse.urlencode({"q":"site:x.com/"+h,"hl":"en-US","gl":"US","ceid":"US:en"})
-   root=ET.fromstring(get(u))
-   for it in root.findall(".//item")[:4]:
-    title=(it.findtext("title") or "").strip();link=(it.findtext("link") or "")
-    if title:out.append({"id":hashlib.sha256((h+title).encode()).hexdigest(),"text":title,"source":"XPublicIndex","url":link,"created_at":it.findtext("pubDate")})
-  except Exception:pass
- return out[:300]
-
+ # No delayed Google/X index fallback in the trading path: stale indexed posts can create false entries.\n return []\n
 BASE="https://truthsocial.com/api/v1"
 def _get(path):
  req=urllib.request.Request(BASE+path,headers={"User-Agent":"PANDORA-public-monitor/1.0","Accept":"application/json"})
@@ -209,7 +198,7 @@ def source_freshness_window(source):
   return min(90.0,NEWS_MAX_AGE_SECONDS)
  return NEWS_MAX_AGE_SECONDS
 
-STOP_ROE=STOP_ROE=-999.0;TAKE_ROE=0.20;LEV=25.0;MARGIN_FRACTION=0.10;FEE=0.00045;LOCK_TRIGGER_ROE=0.10;LOCK_ROE=0.075;PAPER_RESET=100.0;MIN_EXIT_ROE=0.075;TRAIL_ARM_ROE=0.12
+STOP_ROE=-999.0;TAKE_ROE=0.20;LEV=25.0;MARGIN_FRACTION=0.10;FEE=0.00045;LOCK_TRIGGER_ROE=0.10;LOCK_ROE=0.075;PAPER_RESET=100.0;MIN_EXIT_ROE=0.075;TRAIL_ARM_ROE=0.12
 PUMP_LEV=TRADE_LEVERAGE;PUMP_MARGIN_FRACTION=TRADE_MARGIN_FRACTION;PUMP_MAX_POSITIONS=10;PUMP_STOP_ROE=-0.06;PUMP_TAKE_ROE=0.14;PUMP_TRAIL_ARM_ROE=0.09;PUMP_TRAIL_GAP_ROE=0.035;PUMP_MAX_HOLD_SECONDS=900
 def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
 def pg():
@@ -2419,12 +2408,9 @@ if __name__=="__main__":
   ("adapt",adapt),("x_critical_4s",x_critical_realtime),("truth_public",free_truth_realtime),("piq_direct",piq_direct_realtime),("whitehouse_official",whitehouse_official_realtime),
   ("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)
  ]
- if os.getenv("X_AUTH_TOKEN","").strip() and os.getenv("X_CT0","").strip() and os.getenv("X_LIST_ID","").strip():worker_specs.append(("x_list_official",x_list_realtime))
- if os.getenv("TRUTH_STREAM_TOKEN","").strip() or os.getenv("TRUTHSOCIAL_TOKEN","").strip() or (os.getenv("TRUTHSOCIAL_USERNAME","").strip() and os.getenv("TRUTHSOCIAL_PASSWORD","")):worker_specs.append(("truth_stream",truth_stream_realtime))
- if os.getenv("X_STREAM_BEARER_TOKEN","").strip():worker_specs.append(("x_filtered_stream",x_filtered_stream))
- if os.getenv("X_BEARER_TOKEN","").strip():worker_specs.append(("x_recent_search",xnews))
- if os.getenv("X_SESSION_COOKIES","").strip():worker_specs.append(("x_session_scraper",lambda:social_reader("x")))
- if os.getenv("TRUTHSOCIAL_TOKEN","").strip():worker_specs.append(("truth_auth_reader",lambda:social_reader("truth")))
+ # Keep exactly one live ingestion path per social network to avoid duplicate posts,
+ # extra request load and conflicting source timestamps. x_critical_realtime has its
+ # own backend fallback chain; free_truth_realtime handles Trump on Truth Social.
  for name,url in FEEDS.items():
   if not name.startswith("XIndex:") and name not in SEARCH_INDEX_FEEDS:
    worker_specs.append(("feed:"+name,lambda n=name,u=url:news_feed(n,u)))
