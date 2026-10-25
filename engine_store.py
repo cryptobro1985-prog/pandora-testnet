@@ -121,9 +121,8 @@ class EngineStore:
                 pnl = row["notional"] * (price/row["entry"]-1)*row["side"] - row["notional"]*self.fee*2
                 closed = utcnow()
                 account = c.execute("""UPDATE account_state SET
-                    equity=CASE WHEN equity+%s<=0 THEN %s ELSE equity+%s END,
-                    realized_pnl=realized_pnl+%s,updated_at=%s WHERE id=1
-                    RETURNING equity,realized_pnl""",(pnl,self.reset,pnl,pnl,closed)).fetchone()
+                    equity=equity+%s,realized_pnl=realized_pnl+%s,updated_at=%s WHERE id=1
+                    RETURNING equity,realized_pnl""",(pnl,pnl,closed)).fetchone()
                 if account is None:
                     raise RuntimeError("missing paper account")
                 c.execute("""INSERT INTO trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,headline,event_id)
