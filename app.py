@@ -509,7 +509,34 @@ def engine_coordinator():
     if not S["engine_active"]:
      with ACCOUNT_LOCK:
       account,positions=STORE.load()
+      # Render keeps the previous instance alive briefly during a deploy. A
+      # pre-start restoration can therefore be overwritten by the draining
+      # instance. Re-arm the restored BTC short only after this instance owns
+      # the fenced paper-engine lease, then persist the fresh local-search state.
+      btc_rearm_payload=None
+      btc=positions.get("BTC")
+      if btc and int(btc.get("side",0))==-1 and abs(float(btc.get("entry",0))-80524.5)<0.01:
+       with pg() as repair_db:
+        repair_action="btc-post-lease-rearm-v1"
+        done=repair_db.execute("select 1 from operator_actions where action_id=%s",(repair_action,)).fetchone()
+       if not done:
+        with LOCK:mark=float(S.get("_prices",{}).get("BTC") or btc.get("last_price") or btc["entry"])
+        btc["peak"]=mark;btc["history"]=[mark];btc["last_price"]=mark
+        btc["local_search_min_samples"]=30
+        btc.pop("last_exit_check",None);btc.pop("last_evaluated_at",None)
+        btc_rearm_payload={"symbol":"BTC","entry":btc["entry"],"mark":mark,
+                           "local_search_min_samples":30,"reason":"post_lease_restore_rearm"}
       for sym,pos in positions.items():STORE.save(sym,pos)
+      if btc_rearm_payload:
+       with pg() as repair_db:
+        with repair_db.transaction():
+         STORE.fence(repair_db)
+         repair_db.execute("""insert into operator_actions(action_id,completed_at,payload)
+           values('btc-post-lease-rearm-v1',%s,%s::jsonb)
+           on conflict(action_id) do nothing""",(now(),json.dumps(btc_rearm_payload,default=str)))
+         repair_db.execute("""insert into audit_journal(recorded_at,event_id,kind,payload)
+           values(%s,%s,'btc_post_lease_rearmed',%s::jsonb)""",
+           (now(),btc.get("event_id"),json.dumps(btc_rearm_payload,default=str)))
       with pg() as db:
        capital=db.execute("select contributed_capital from account_state where id=1").fetchone()
        restored={}
