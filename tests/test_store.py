@@ -38,24 +38,27 @@ class StoreTests(unittest.TestCase):
     def test_migration_is_repeatable(self):
         self.store.migrate();self.store.migrate()
 
-    def test_checkpoint_roundtrip_including_trailing_history(self):
+    def test_checkpoint_roundtrip_including_local_extreme_history(self):
         p=self.pos();self.assertTrue(self.store.save(self.symbol,p,create=True))
         p,_=evaluate_exit(p,.00038,"checkpoint")
         self.assertTrue(self.store.save(self.symbol,p))
         _,rows=EngineStore(self.connect).load()
         restored=rows[self.symbol]
-        for key in ("peak","trail_armed","trail_stop","history","stop"):
+        for key in ("peak","history","last_price","last_evaluated_at","last_exit_check","stop"):
             self.assertEqual(restored.get(key),p.get(key))
 
-    def test_legacy_minimum_is_recovered_from_snapshots(self):
+    def test_legacy_minimum_is_recovered_and_local_extreme_exit_still_works(self):
         p=self.pos();self.store.save(self.symbol,p,create=True)
         with self.connect() as c:
             c.execute("UPDATE open_positions SET risk_state='{}'::jsonb WHERE symbol=%s",(self.symbol,))
             c.execute("INSERT INTO market_context_snapshots(ts,symbol,price,context) VALUES(%s,%s,%s,'{}'::jsonb)",("2026-10-23T22:52:35+00:00",self.symbol,.00038))
         _,rows=self.store.load()
-        self.assertEqual(rows[self.symbol]["peak"],.00038)
-        _,why=evaluate_exit(rows[self.symbol],.000388,"resume")
-        self.assertEqual(why,"profit_protection_stop")
+        restored=rows[self.symbol]
+        self.assertEqual(restored["peak"],.00038)
+        why=None
+        for i,price in enumerate((.000381,.000382,.000384,.000388),1):
+            restored,why=evaluate_exit(restored,price,"resume-"+str(i))
+        self.assertEqual(why,"local_extreme_weakening")
 
     def test_close_retry_cannot_double_credit_or_resurrect(self):
         p=self.pos();self.store.save(self.symbol,p,create=True)
