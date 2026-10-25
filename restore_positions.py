@@ -87,7 +87,7 @@ def restore_whales(c,prices):
     return out
 
 def restore_btc(c,prices):
-    action="restore-btc-short-80524-v5"
+    action="restore-btc-short-80524-v6"
     if c.execute("select 1 from operator_actions where action_id=%s",(action,)).fetchone():
         return None
     cur=c.execute("select * from open_positions where symbol='BTC' for update").fetchone()
