@@ -70,6 +70,7 @@ class EligibilityTracker:
     def observe(self, candidates, scan_id):
         qualified = []
         rejected = {}
+        observed = []
         seen = set()
 
         for raw in candidates:
@@ -176,6 +177,7 @@ class EligibilityTracker:
             x["wl2_book_ok"] = bool(book_ok)
             x["wl2_participation_ok"] = bool(participation_ok)
             x["wl2_reject_reasons"] = reasons
+            observed.append(copy.deepcopy(x))
 
             if reasons:
                 for reason in reasons:
@@ -198,7 +200,7 @@ class EligibilityTracker:
             ),
             reverse=True,
         )
-        return qualified, rejected
+        return qualified, rejected, observed
 
 
 def initial_position_state(candidate, entry_price, opened_at):
