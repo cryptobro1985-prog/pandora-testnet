@@ -168,6 +168,25 @@ class RuntimeAuditTests(unittest.TestCase):
                 self.assertFalse(opener("BTC", 1, 100, 99, {}))
             reserve.assert_not_called()
 
+    def test_portfolio_allocator_defaults_target_five_max_seven(self):
+        self.assertEqual(app.TARGET_OPEN_POSITIONS, 5)
+        self.assertEqual(app.MAX_OPEN_POSITIONS, 7)
+        self.assertEqual(app.PUMP_MAX_POSITIONS, 5)
+        self.assertAlmostEqual(app.PUMP_SECONDARY_MARGIN_FRACTION, 0.05)
+
+    def test_pump_book_can_hold_five_but_blocks_sixth(self):
+        app.S["pump_positions"] = {f"P{i}": position(str(i)) for i in range(app.PUMP_MAX_POSITIONS)}
+        with patch.object(app, "_reserve_shared_entry") as reserve:
+            self.assertFalse(app.pump_open("BTC", 1, 100, 99, {}))
+        reserve.assert_not_called()
+
+    def test_shared_portfolio_cap_blocks_an_eighth_entry(self):
+        app.S["positions"] = {f"N{i}": position(str(i)) for i in range(app.MAX_OPEN_POSITIONS)}
+        ok, margin, reason, free = app._reserve_shared_entry("NEW")
+        self.assertFalse(ok)
+        self.assertEqual(margin, 0.0)
+        self.assertEqual(reason, "portfolio_position_cap")
+
     def test_manual_close_does_not_fabricate_fill_from_old_entry_price(self):
         app.S["positions"] = {"BTC": position()}
         app.S["_prices"] = {}
