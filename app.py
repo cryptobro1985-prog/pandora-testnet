@@ -15,6 +15,7 @@ from x_list import fetch_list as x_list_fetch
 from x_page import fetch as free_x_page_fetch
 from realtime_free import fetch_x as free_x_fetch, fetch_x_search as free_x_search_fetch, fetch_x_fixupx as free_x_fixupx_fetch, fetch_x_lookup as free_x_lookup_fetch, fetch_x_embed as free_x_embed_fetch, fetch_x_nitter as free_x_nitter_fetch, fetch_x_syndication as free_x_syndication_fetch, fetch_x_syndication as free_x_syn_fetch, fetch_x_vx as free_x_vx_fetch, fetch_truth as free_truth_fetch, fetch_truth_activitypub as free_truth_ap_fetch, fetch_truth_rss as free_truth_rss_fetch, fetch_trump_archive as free_trump_archive_fetch
 from momentum_scanner import candidates as momentum_candidates
+from piq_direct import discover as piq_discover, fetch_story as piq_fetch_story, high_signal as piq_high_signal
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
 def choose(db_path,current=(-0.10,0.20)):
  with sqlite3.connect(db_path) as c: rows=c.execute("select pnl from trades order by id desc limit 120").fetchall()
@@ -28,7 +29,8 @@ def choose(db_path,current=(-0.10,0.20)):
  return {"stop":cand[0],"take":cand[1],"samples":len(xs),"validation_pnl":sum(valid),"changed":cand!=current}
 
 WATCH_GROUPS={
- "critical":["elonmusk","realDonaldTrump","POTUS","WhiteHouse","SECGov","federalreserve","BlackRock","Fidelity","ARKInvest","Grayscale","FirstSquawk","PiQMarkets"]
+ # Deliberately small high-signal X core. PiQ is scanned directly from its public site, not X.
+ "critical":["FirstSquawk","realDonaldTrump","federalreserve","SECGov","elonmusk"]
 }
 WATCH=[];WATCH_CATEGORY={}
 for _category,_handles in WATCH_GROUPS.items():
@@ -103,46 +105,20 @@ LIQ_WHALE_SYMBOLS={"BTC","ETH","SOL"}
 if not math.isfinite(NEWS_MAX_AGE_SECONDS) or NEWS_MAX_AGE_SECONDS<=0:raise ValueError("invalid news freshness window")
 if not math.isfinite(NEWS_POLL_SECONDS) or NEWS_POLL_SECONDS<1:raise ValueError("invalid news poll interval")
 S.update({"engine_active":False,"engine_error":None,"last_checkpoint":None,"last_market_error":None})
-FEEDS={"FedOfficial":"https://www.federalreserve.gov/feeds/press_all.xml","SECOfficial":"https://www.sec.gov/news/pressreleases.rss","GoogleNewsCrypto":"https://news.google.com/rss/search?q=cryptocurrency+OR+bitcoin+OR+altcoin&hl=en-US&gl=US&ceid=US:en","GoogleNewsMarkets":"https://news.google.com/rss/search?q=crypto+SEC+OR+Federal+Reserve+OR+token+listing&hl=en-US&gl=US&ceid=US:en","Cointelegraph":"https://cointelegraph.com/rss","Decrypt":"https://decrypt.co/feed","CoinDesk":"https://www.coindesk.com/arc/outboundfeeds/rss/","CFTCOfficial":"https://www.cftc.gov/RSS/RSSGP/rssgp.xml","DOJNews":"https://www.justice.gov/feeds/justice-news.xml?type=All&component%5B436%5D=436&organization=All","TruthSocialSearch":"https://news.google.com/rss/search?q=site%3Atruthsocial.com+crypto&hl=en-US&gl=US&ceid=US:en","CoinSharesResearch":"https://news.google.com/rss/search?q=site%3Acoinshares.com%2Finsights%2Fresearch-data+crypto&hl=en-US&gl=US&ceid=US:en","BitwiseResearch":"https://news.google.com/rss/search?q=site%3Abitwiseinvestments.com%2Fcrypto-market-insights+crypto&hl=en-US&gl=US&ceid=US:en","ARKResearch":"https://news.google.com/rss/search?q=site%3Aark-invest.com+bitcoin+OR+crypto&hl=en-US&gl=US&ceid=US:en","GrayscaleResearch":"https://news.google.com/rss/search?q=site%3Aresearch.grayscale.com+crypto&hl=en-US&gl=US&ceid=US:en"}
-# Fast public news sources and topical feeds; Google-indexed posts can be delayed.
-FEEDS.update({
- "BBCWorld":"https://feeds.bbci.co.uk/news/world/rss.xml",
- "GuardianWorld":"https://www.theguardian.com/world/rss",
- "NPRWorld":"https://feeds.npr.org/1004/rss.xml",
- "AlJazeera":"https://www.aljazeera.com/xml/rss/all.xml",
- "WSJWorld":"https://feeds.a.dj.com/rss/RSSWorldNews.xml",
- "CNBCMarkets":"https://www.cnbc.com/id/100003114/device/rss/rss.html",
+FEEDS={
+ "FedOfficial":"https://www.federalreserve.gov/feeds/press_all.xml",
+ "SECOfficial":"https://www.sec.gov/news/pressreleases.rss",
+ "CFTCOfficial":"https://www.cftc.gov/RSS/RSSGP/rssgp.xml",
  "ECBOfficial":"https://www.ecb.europa.eu/rss/press.html",
- "GoogleNewsBreaking":"https://news.google.com/rss/search?q=breaking+world+news+markets&hl=en-US&gl=US&ceid=US:en",
- "GoogleNewsGeopolitics":"https://news.google.com/rss/search?q=conflict+sanctions+tariffs+war+blockade&hl=en-US&gl=US&ceid=US:en",
- "GoogleNewsOil":"https://news.google.com/rss/search?q=OPEC+oil+shipping+Hormuz+Suez&hl=en-US&gl=US&ceid=US:en",
- "GoogleNewsChina":"https://news.google.com/rss/search?q=China+Taiwan+trade+tariffs+markets&hl=en-US&gl=US&ceid=US:en",
- "GoogleNewsMacro":"https://news.google.com/rss/search?q=FOMC+Fed+CPI+inflation+rates&hl=en-US&gl=US&ceid=US:en",
- "GoogleNewsCryptoHack":"https://news.google.com/rss/search?q=crypto+exchange+hack+exploit+liquidation&hl=en-US&gl=US&ceid=US:en",
- "GoogleNewsCryptoPolicy":"https://news.google.com/rss/search?q=SEC+CFTC+crypto+regulation+ETF&hl=en-US&gl=US&ceid=US:en",
- "GoogleNewsTokenEvents":"https://news.google.com/rss/search?q=cryptocurrency+token+listing+unlock+delisting&hl=en-US&gl=US&ceid=US:en",
- "FTCrypto":"https://www.ft.com/crypto?format=rss",
+ "CoinDesk":"https://www.coindesk.com/arc/outboundfeeds/rss/",
  "TheBlockRSS":"https://www.theblock.co/rss.xml",
- "BitcoinMagazineRSS":"https://bitcoinmagazine.com/feed",
- "TheDefiant":"https://thedefiant.io/feed/",
- "Protos":"https://protos.com/feed",
-})
-SEARCH_INDEX_FEEDS={
- "GoogleNewsCrypto","GoogleNewsMarkets","TruthSocialSearch","CoinSharesResearch","BitwiseResearch","ARKResearch","GrayscaleResearch",
- "GoogleNewsBreaking","GoogleNewsGeopolitics","GoogleNewsOil","GoogleNewsChina","GoogleNewsMacro","GoogleNewsCryptoHack","GoogleNewsCryptoPolicy","GoogleNewsTokenEvents"
 }
-RESEARCH_PAGES={
- "CoinSharesResearch":"https://coinshares.com/insights/research-data/",
- "BitwiseResearch":"https://bitwiseinvestments.com/crypto-market-insights"
-}
-# Credential-free coverage of public X account mentions, with indexer delay.
-# These are not authenticated X timelines; source status reports that distinction.
-for _i in range(0,len(WATCH),4):
- _group=WATCH[_i:_i+4]
- FEEDS["XIndex:"+",".join(_group)]="https://news.google.com/rss/search?"+urllib.parse.urlencode({
-  "q":"("+" OR ".join("site:x.com/"+h for h in _group)+")",
-  "hl":"en-US","gl":"US","ceid":"US:en"
- })
+# Broad Google News, general world-news RSS and research-index feeds are intentionally
+# disabled in the trading path. PiQ Direct + FirstSquawk are the curated fast layer;
+# official regulators remain authoritative secondary sources.
+SEARCH_INDEX_FEEDS=set()
+RESEARCH_PAGES={}
+
 POS=("pump","pumping","surge","surges","approve","approved","approval","partnership","listing","adoption","buyback","breakout","bullish","launch","etf approved","rally","rallies","rebound","rebounds","record high","inflows","net inflow","gains","jumps","soars","upside")
 NEG=("dump","dumping","hack","hacked","exploit","lawsuit","delist","delisted","ban","banned","fraud","selloff","sell-off","bearish","crash","crashes","stolen","outflows","net outflow","falls","drops","slips","plunges","tumbles","declines")
 # Symbols that are also ordinary English words/acronyms. Never map them from a bare word.
@@ -159,11 +135,9 @@ EXPLICIT_TOKEN_PATTERNS={
 # Source priors are experimental metadata for the one-week PAPER_ONLY study.
 # They are logged and gently affect confidence/eligibility, but can never reverse news direction.
 SOURCE_WEIGHTS={
- "FedOfficial":1.00,"SECOfficial":1.00,"CFTCOfficial":1.00,"DOJNews":0.95,"WhiteHouseOfficial":1.00,
- "TruthSocialPublic":0.95,"XOfficial":0.90,"TruthArchive":0.80,
- "CoinSharesResearch":0.90,"BitwiseResearch":0.88,"ARKResearch":0.86,"GrayscaleResearch":0.88,
- "CoinDesk":0.84,"Decrypt":0.78,"Cointelegraph":0.74,"FTCrypto":0.88,"TheBlockRSS":0.84,"BitcoinMagazineRSS":0.76,"TheDefiant":0.74,"Protos":0.72,
- "GoogleNewsMarkets":0.60,"GoogleNewsCrypto":0.55,"TruthSocialSearch":0.55
+ "FedOfficial":1.00,"SECOfficial":1.00,"CFTCOfficial":1.00,"ECBOfficial":0.95,"WhiteHouseOfficial":1.00,
+ "TruthSocialPublic":0.98,"XOfficial":0.92,"PiQDirect":0.96,
+ "CoinDesk":0.86,"TheBlockRSS":0.86
 }
 NON_MARKET_PATTERNS=(
  r"\\b(?:giveaway|sweepstakes|contest|competition)\\b",
@@ -219,21 +193,23 @@ def is_price_action_only_news(title,event_type):
  return event_type not in CAUSAL_EVENT_TYPES and any(term in lo for term in PRICE_ACTION_ONLY_TERMS)
 def source_weight(source):
  if source.startswith("XIndex:"):base=0.40
- elif source=="XOfficial:FirstSquawk":base=0.92
- elif source=="XOfficial:PiQMarkets":base=0.88
- elif source.startswith("XOfficial:"):base=0.90
- elif source.startswith("TruthSocialPublic"):base=0.95
+ elif source=="XOfficial:FirstSquawk":base=0.98
+ elif source=="PiQDirect":base=0.96
+ elif source.startswith("XOfficial:"):base=0.92
+ elif source.startswith("TruthSocialPublic"):base=0.98
  else:base=float(SOURCE_WEIGHTS.get(source,0.50))
  learned=S.get("adaptive",{}).get("source_multipliers",{}) if S.get("mode")=="PAPER_ONLY" else {}
  return max(0.20,min(1.00,base*float(learned.get(source,1.0))))
 def source_freshness_window(source):
  if source.startswith("XOfficial:") or source.startswith("TruthSocialPublic"):
   return min(35.0,NEWS_MAX_AGE_SECONDS)
- if source in ("FedOfficial","SECOfficial","CFTCOfficial","DOJNews"):
+ if source=="PiQDirect":
+  return min(90.0,NEWS_MAX_AGE_SECONDS)
+ if source in ("FedOfficial","SECOfficial","CFTCOfficial","ECBOfficial","WhiteHouseOfficial"):
   return min(90.0,NEWS_MAX_AGE_SECONDS)
  return NEWS_MAX_AGE_SECONDS
 
-STOP_ROE=-999.0;TAKE_ROE=0.20;LEV=25.0;MARGIN_FRACTION=0.10;FEE=0.00045;LOCK_TRIGGER_ROE=0.10;LOCK_ROE=0.075;PAPER_RESET=100.0;MIN_EXIT_ROE=0.075;TRAIL_ARM_ROE=0.12
+STOP_ROE=STOP_ROE=-999.0;TAKE_ROE=0.20;LEV=25.0;MARGIN_FRACTION=0.10;FEE=0.00045;LOCK_TRIGGER_ROE=0.10;LOCK_ROE=0.075;PAPER_RESET=100.0;MIN_EXIT_ROE=0.075;TRAIL_ARM_ROE=0.12
 PUMP_LEV=TRADE_LEVERAGE;PUMP_MARGIN_FRACTION=TRADE_MARGIN_FRACTION;PUMP_MAX_POSITIONS=10;PUMP_STOP_ROE=-0.06;PUMP_TAKE_ROE=0.14;PUMP_TRAIL_ARM_ROE=0.09;PUMP_TRAIL_GAP_ROE=0.035;PUMP_MAX_HOLD_SECONDS=900
 def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
 def pg():
@@ -1551,7 +1527,7 @@ def truth_stream_realtime():
   else:
    # Authenticated websocket is optional; public 4s scanner remains primary.
    return
- handles={h.strip().lower() for h in os.getenv("TRUTH_WATCH_HANDLES","realDonaldTrump,WhiteHouse,DanScavino,Kash,MelaniaTrump,SecWar,SpeakerJohnson,seckennedy,TulsiGabbard").split(",") if h.strip()}
+ handles={h.strip().lower() for h in os.getenv("TRUTH_WATCH_HANDLES","realDonaldTrump").split(",") if h.strip()}
  url="wss://truthsocial.com/api/v1/streaming?stream=public:local"
  backoff=3
  while not SHUTDOWN.is_set():
@@ -1605,7 +1581,7 @@ def fetch_truth_relay(handle):
 def free_truth_realtime():
  # Public Truth Social scanner: no account/token required. Each account has its own
  # 4-second cadence and falls back from public REST to ActivityPub independently.
- handles=[h.strip() for h in os.getenv("TRUTH_WATCH_HANDLES","realDonaldTrump,WhiteHouse,DanScavino,Kash,MelaniaTrump,SecWar,SpeakerJohnson,seckennedy").split(",") if h.strip()]
+ handles=[h.strip() for h in os.getenv("TRUTH_WATCH_HANDLES","realDonaldTrump").split(",") if h.strip()]
  poll=max(8.0,float(os.getenv("TRUTH_FREE_POLL_SECONDS","10")))
  seen={};ids_cache={};next_due={h:time.monotonic() for h in handles};inflight={}
  backoff_until={};last_success={};error_log_at={}
@@ -2044,6 +2020,62 @@ def whitehouse_official_realtime():
     "poll_seconds":WHITEHOUSE_POLL_SECONDS,"error":str(exc)[:180]}
   SHUTDOWN.wait(max(0.1,WHITEHOUSE_POLL_SECONDS-(time.monotonic()-started)))
 
+def piq_direct_realtime():
+ # Direct public PiQ scanner. Prime current headlines without trading them, then
+ # only process stories that newly appear after the worker is live.
+ poll=max(4.0,float(os.getenv("PIQ_POLL_SECONDS","5")))
+ seen=set();primed=False;delay=poll;error_log_at=0
+ while not SHUTDOWN.is_set():
+  if not S["engine_active"]:
+   SHUTDOWN.wait(0.25);continue
+  started=time.monotonic()
+  try:
+   rows=piq_discover(timeout=min(4.0,max(2.0,poll)),limit=40)
+   urls=[r["url"] for r in rows]
+   if not primed:
+    seen=set(urls);primed=True;fresh=[]
+   else:
+    fresh=[r for r in rows if r["url"] not in seen]
+    seen.update(urls)
+    if len(seen)>1000:seen=set(urls)
+   ingested=0;filtered=0;timestamp_errors=0;latencies=[]
+   for item in reversed(fresh):
+    try:
+     story=piq_fetch_story(item["url"],item.get("headline_hint"),timeout=4.0)
+    except Exception as exc:
+     timestamp_errors+=1
+     try:journal("piq_story_rejected",None,{"url":item.get("url"),"reason":str(exc)[:160]})
+     except Exception:pass
+     continue
+    if not piq_high_signal(story["text"]):
+     filtered+=1
+     continue
+    stamp=publication_epoch(story.get("created_at"))
+    age=time.time()-stamp if stamp is not None else None
+    if age is not None and age>=0:latencies.append(age)
+    ident=hashlib.sha256(("PiQDirect:"+story["url"]).encode()).hexdigest()
+    ingested+=bool(ingest_event(ident,"PiQDirect",story["text"],story.get("created_at"),story.get("url")))
+   latency=min(latencies) if latencies else None
+   with LOCK:S["sources"]["PiQDirect"]={"ok":True,"last_check":now(),"mode":"public_site_direct_scan",
+    "poll_seconds":poll,"stories_visible":len(rows),"new_visible":len(fresh),"new_ingested":ingested,
+    "filtered_low_signal":filtered,"timestamp_rejections":timestamp_errors,
+    "request_seconds":round(time.monotonic()-started,2),
+    "delivery_latency_seconds":round(latency,2) if latency is not None else None,
+    "realtime_verified":bool(latency is not None and 0<=latency<=10),"error":None}
+   delay=poll
+  except Exception as exc:
+   err=str(exc)[:260] if str(exc) else type(exc).__name__
+   with LOCK:
+    S["errors"]+=1;S["last_error"]="PiQDirect: "+err[:180]
+    S["sources"]["PiQDirect"]={"ok":False,"last_check":now(),"mode":"public_site_direct_scan",
+     "poll_seconds":poll,"error":err,"realtime_verified":False}
+   if time.time()-error_log_at>=120:
+    error_log_at=time.time()
+    try:journal("source_error",None,{"source":"PiQDirect","kind":"direct_site_scan","error":err})
+    except Exception:pass
+   delay=min(120,max(poll,delay*1.8))
+  SHUTDOWN.wait(max(0.05,delay-(time.monotonic()-started)))
+
 def news_feed(source,url):
  # Every news source is isolated. Search feeds have an independent Bing RSS
  # fallback; direct publishers have browser-TLS fallback when urllib is blocked.
@@ -2384,7 +2416,7 @@ if __name__=="__main__":
  worker_specs=[
   ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),
   ("telemetry",telemetry),("pump_dump",impulse_scan),("whale_liquidations",whale_liquidation_scan),
-  ("adapt",adapt),("x_critical_4s",x_critical_realtime),("truth_public",free_truth_realtime),("whitehouse_official",whitehouse_official_realtime),
+  ("adapt",adapt),("x_critical_4s",x_critical_realtime),("truth_public",free_truth_realtime),("piq_direct",piq_direct_realtime),("whitehouse_official",whitehouse_official_realtime),
   ("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)
  ]
  if os.getenv("X_AUTH_TOKEN","").strip() and os.getenv("X_CT0","").strip() and os.getenv("X_LIST_ID","").strip():worker_specs.append(("x_list_official",x_list_realtime))
