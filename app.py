@@ -505,7 +505,11 @@ def save_whale_v2_learning_snapshot():
   journal("whale_v2_learning_snapshot",None,{"v1_samples":v1["samples"],"v2_samples":v2["samples"],"policy":WL2_POLICY})
   return payload
  except Exception as exc:
-  with LOCK:S["last_error"]="wl2_learning: "+str(exc)[:160]
+  err=type(exc).__name__+":"+str(exc)[:300]
+  with LOCK:S["last_error"]="wl2_learning: "+err
+  try:journal("whale_v2_learning_error",None,{"error":err,"policy":WL2_POLICY})
+  except Exception:pass
+  print(json.dumps({"kind":"whale_v2_learning_error","error":err,"policy":WL2_POLICY},ensure_ascii=False),flush=True)
   return None
 
 def load_latest_learning():
@@ -2611,7 +2615,7 @@ def adapt():
    if last_day!=day:
     save_learning_snapshot();last_day=day
    if last_whale_hour!=whale_hour:
-    save_whale_v2_learning_snapshot();last_whale_hour=whale_hour
+    if save_whale_v2_learning_snapshot() is not None:last_whale_hour=whale_hour
   except Exception as e:
    with LOCK:S["last_error"]="adaptive: "+str(e)[:160]
   SHUTDOWN.wait(300)
@@ -3012,7 +3016,7 @@ def operations_diagnostics():
    health=health_state();daily=daily_audit_stats()
    with LOCK:
     report={"kind":"pandora_diagnostics","time":now(),"engine_active":S["engine_active"],
-     "engine_error":S.get("engine_error"),"market_count":S.get("market_count"),
+     "engine_error":S.get("engine_error"),"last_error":S.get("last_error"),"market_count":S.get("market_count"),
      "market_error":S.get("last_market_error"),"positions":len(S["positions"]),
      "trades":S.get("trades"),"news_seen":S.get("news_seen"),
      "sources_ok":sum(bool(x.get("ok")) for x in S["sources"].values()),
