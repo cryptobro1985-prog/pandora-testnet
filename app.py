@@ -28,7 +28,7 @@ def choose(db_path,current=(-0.10,0.20)):
  return {"stop":cand[0],"take":cand[1],"samples":len(xs),"validation_pnl":sum(valid),"changed":cand!=current}
 
 WATCH_GROUPS={
- "critical":["elonmusk","realDonaldTrump","SECGov","federalreserve","BlackRock","Fidelity","ARKInvest","Grayscale"]
+ "critical":["elonmusk","realDonaldTrump","POTUS","WhiteHouse","SECGov","federalreserve","BlackRock","Fidelity","ARKInvest","Grayscale"]
 }
 WATCH=[];WATCH_CATEGORY={}
 for _category,_handles in WATCH_GROUPS.items():
@@ -86,6 +86,7 @@ TRADE_MARGIN_FRACTION=max(0.01,min(0.25,float(os.getenv("TRADE_MARGIN_FRACTION",
 PAPER_TOPUP_STEP=max(10.0,float(os.getenv("PAPER_TOPUP_STEP","100")))
 NEWS_MAX_AGE_SECONDS=float(os.getenv("NEWS_MAX_AGE_SECONDS","120"))
 NEWS_POLL_SECONDS=float(os.getenv("NEWS_POLL_SECONDS","15"))
+WHITEHOUSE_POLL_SECONDS=max(10.0,float(os.getenv("WHITEHOUSE_POLL_SECONDS","15")))
 PUMP_SCAN_SECONDS=max(1.0,float(os.getenv("PUMP_SCAN_SECONDS","2")))
 MARKET_METADATA_SECONDS=max(3.0,float(os.getenv("MARKET_METADATA_SECONDS","5")))
 MICRO_ANALYSIS_THREADS=max(1,min(10,int(os.getenv("MICRO_ANALYSIS_THREADS","10"))))
@@ -158,7 +159,7 @@ EXPLICIT_TOKEN_PATTERNS={
 # Source priors are experimental metadata for the one-week PAPER_ONLY study.
 # They are logged and gently affect confidence/eligibility, but can never reverse news direction.
 SOURCE_WEIGHTS={
- "FedOfficial":1.00,"SECOfficial":1.00,"CFTCOfficial":1.00,"DOJNews":0.95,
+ "FedOfficial":1.00,"SECOfficial":1.00,"CFTCOfficial":1.00,"DOJNews":0.95,"WhiteHouseOfficial":1.00,
  "TruthSocialPublic":0.95,"XOfficial":0.90,"TruthArchive":0.80,
  "CoinSharesResearch":0.90,"BitwiseResearch":0.88,"ARKResearch":0.86,"GrayscaleResearch":0.88,
  "CoinDesk":0.84,"Decrypt":0.78,"Cointelegraph":0.74,"FTCrypto":0.88,"TheBlockRSS":0.84,"BitcoinMagazineRSS":0.76,"TheDefiant":0.74,"Protos":0.72,
@@ -1626,11 +1627,9 @@ def free_truth_realtime():
    posts=free_truth_rss_fetch(handle)
    return ids_cache.get(handle),posts,{},"profile_rss",True," | ".join(errors)
   except Exception as exc:errors.append("rss:"+str(exc)[:100])
-  if handle.lower()=="realdonaldtrump":
-   try:
-    posts=free_trump_archive_fetch()
-    return ids_cache.get(handle),posts,{},"trump_archive_rss",True," | ".join(errors)
-   except Exception as exc:errors.append("trump_archive:"+str(exc)[:100])
+  # Delayed Trump archives are intentionally NOT part of the trading scanner.
+  # If direct REST/ActivityPub/profile RSS all fail, report the source unavailable
+  # rather than presenting an hour-old archive as realtime.
   raise RuntimeError(" | ".join(errors))
  try:
   while not SHUTDOWN.is_set():
@@ -1967,6 +1966,81 @@ def _fetch_news_xml(url,timeout=7):
   return body,"browser_tls"
  except Exception as exc:errors.append("browser:"+str(exc)[:100])
  raise RuntimeError(" | ".join(errors))
+
+def whitehouse_official_realtime():
+ urls=[
+  "https://www.whitehouse.gov/news/",
+  "https://www.whitehouse.gov/releases/",
+  "https://www.whitehouse.gov/briefings-statements/",
+ ]
+ seen=set();primed=False
+ link_re=re.compile(r'<a[^>]+href=["\\\']([^"\\\']+)["\\\'][^>]*>(.*?)</a>',re.I|re.S)
+ article_path=re.compile(r"/(?:releases|briefings-statements|fact-sheets|presidential-actions|remarks)/20\\d{2}/\\d{2}/[^/?#]+/?$",re.I)
+ def fetch_page(url):
+  req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 (compatible; PANDORA/1.0)","Cache-Control":"no-cache"})
+  with urllib.request.urlopen(req,timeout=6) as r:return r.read(2_500_000).decode("utf-8","replace")
+ def parse_listing(raw,base):
+  out=[]
+  for href,label in link_re.findall(raw):
+   full=urllib.parse.urljoin(base,htmlmod.unescape(href))
+   if not article_path.search(urllib.parse.urlsplit(full).path):continue
+   title=htmlmod.unescape(re.sub(r"<[^>]+>"," ",label))
+   title=re.sub(r"\\s+"," ",title).strip()
+   if 12<=len(title)<=280:out.append((full,title))
+  dedup={}
+  for u,t in out:dedup[u]=t
+  return list(dedup.items())[:80]
+ def article_meta(url,fallback_title):
+  try:
+   raw=fetch_page(url)
+   title=fallback_title
+   m=re.search(r'<meta[^>]+property=["\\\']og:title["\\\'][^>]+content=["\\\']([^"\\\']+)',raw,re.I)
+   if m:title=htmlmod.unescape(m.group(1)).strip()
+   patterns=[
+    r'<meta[^>]+property=["\\\']article:published_time["\\\'][^>]+content=["\\\']([^"\\\']+)',
+    r'<meta[^>]+name=["\\\']date["\\\'][^>]+content=["\\\']([^"\\\']+)',
+    r'<time[^>]+datetime=["\\\']([^"\\\']+)'
+   ]
+   pub=None
+   for p in patterns:
+    q=re.search(p,raw,re.I)
+    if q:pub=htmlmod.unescape(q.group(1)).strip();break
+   return title,pub
+  except Exception:return fallback_title,None
+ pool=concurrent.futures.ThreadPoolExecutor(max_workers=3,thread_name_prefix="whitehouse-official")
+ while not SHUTDOWN.is_set():
+  if not S["engine_active"]:
+   SHUTDOWN.wait(0.5);continue
+  started=time.monotonic()
+  try:
+   futures={pool.submit(fetch_page,u):u for u in urls};items=[];errors=[]
+   for fut,u in futures.items():
+    try:items.extend(parse_listing(fut.result(),u))
+    except Exception as exc:errors.append(type(exc).__name__+":"+str(exc)[:80])
+   current={u for u,_ in items}
+   if not primed:
+    seen=set(current);fresh=[];primed=True
+   else:
+    fresh=[(u,t) for u,t in items if u not in seen];seen.update(current)
+    if len(seen)>1000:seen=set(list(seen)[-700:])
+   ingested=0
+   for u,t in fresh[:20]:
+    title,pub=article_meta(u,t)
+    # Do not invent a publication timestamp: missing metadata means the item is
+    # journalled by source health only and cannot become a trade.
+    if not pub:
+     journal("whitehouse_item_missing_timestamp",None,{"url":u,"title":title})
+     continue
+    ident=hashlib.sha256(("WhiteHouseOfficial:"+u).encode()).hexdigest()
+    ingested+=bool(ingest_event(ident,"WhiteHouseOfficial",title,pub,u))
+   with LOCK:S["sources"]["WhiteHouseOfficial"]={"ok":bool(items),"last_check":now(),
+    "mode":"official_whitehouse_pages","poll_seconds":WHITEHOUSE_POLL_SECONDS,
+    "pages":len(urls),"items":len(items),"new":ingested,"request_seconds":round(time.monotonic()-started,2),
+    "realtime_verified":False,"error":" | ".join(errors)[:180] if errors and not items else None}
+  except Exception as exc:
+   with LOCK:S["sources"]["WhiteHouseOfficial"]={"ok":False,"last_check":now(),"mode":"official_whitehouse_pages",
+    "poll_seconds":WHITEHOUSE_POLL_SECONDS,"error":str(exc)[:180]}
+  SHUTDOWN.wait(max(0.1,WHITEHOUSE_POLL_SECONDS-(time.monotonic()-started)))
 
 def news_feed(source,url):
  # Every news source is isolated. Search feeds have an independent Bing RSS
@@ -2308,7 +2382,7 @@ if __name__=="__main__":
  worker_specs=[
   ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),
   ("telemetry",telemetry),("pump_dump",impulse_scan),("whale_liquidations",whale_liquidation_scan),
-  ("adapt",adapt),("x_critical_4s",x_critical_realtime),("truth_public",free_truth_realtime),
+  ("adapt",adapt),("x_critical_4s",x_critical_realtime),("truth_public",free_truth_realtime),("whitehouse_official",whitehouse_official_realtime),
   ("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)
  ]
  if os.getenv("X_AUTH_TOKEN","").strip() and os.getenv("X_CT0","").strip() and os.getenv("X_LIST_ID","").strip():worker_specs.append(("x_list_official",x_list_realtime))
