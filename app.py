@@ -475,7 +475,7 @@ def save_module_snapshots():
  # Low-frequency durable state for week-long post-test reconstruction.
  # Event journals remain lossless for actual decisions/trades; this captures
  # scanner health, thresholds, candidate counts and source latency over time.
- tracked=("PumpDumpScanner","WhaleLiquidationScanner","XCriticalMonitor","XMonitor",
+ tracked=("PumpDumpScanner","WhaleLiquidationScanner","WhaleLiquidationV2","XCriticalMonitor","XMonitor",
           "PiQDirect","MarketTradeStream","MarketMetadata","PersistentPostgres")
  with LOCK:
   rows=[(now(),name,bool(S.get("sources",{}).get(name,{}).get("ok")),
@@ -497,7 +497,8 @@ def save_position_snapshots(prices):
  with LOCK:
   books=(("news",copy.deepcopy(S.get("positions",{}))),
          ("pump_dump",copy.deepcopy(S.get("pump_positions",{}))),
-         ("whale_liquidation",copy.deepcopy(S.get("whale_positions",{}))))
+         ("whale_liquidation",copy.deepcopy(S.get("whale_positions",{}))),
+         ("whale_liquidation_v2",copy.deepcopy(S.get("whale_v2_positions",{}))))
  rows=[]
  sampled_at=now()
  for strategy,book in books:
@@ -533,11 +534,12 @@ def export_rows(kind,after,limit):
           "positions":("open_positions","symbol"),"pump_signals":("pump_signal_journal","id"),
           "pump_trades":("pump_trade_history","id"),"learning":("learning_snapshots","id"),
           "whale_signals":("whale_liq_signal_journal","id"),"whale_trades":("whale_liq_trade_history","id"),
+          "whale_v2_signals":("whale_liq_v2_signal_journal","id"),"whale_v2_trades":("whale_liq_v2_trade_history","id"),"whale_v2_learning":("whale_liq_v2_learning_snapshots","id"),
           "capacity":("account_capacity_snapshots","id"),"modules":("module_snapshots","id"),
           "position_history":("position_snapshots","id"),"scanner_observations":("scanner_observations","id")}
  if kind not in columns:raise ValueError("Unsupported export kind")
  table,key=columns[kind]
- cursor=int(after) if kind in ("journal","trades","pump_trades","learning","whale_trades","capacity","modules","position_history") else after
+ cursor=int(after) if kind in ("journal","trades","pump_trades","learning","whale_trades","whale_v2_trades","whale_v2_learning","capacity","modules","position_history") else after
  with pg() as c:
   rows=c.execute(f"select * from {table} where {key}>%s order by {key} limit %s",(cursor,limit+1)).fetchall()
  return {"kind":kind,"rows":rows[:limit],"next_after":str(rows[limit-1][key]) if len(rows)>limit else None,"has_more":len(rows)>limit}
@@ -1446,7 +1448,7 @@ def market_trade_stream():
   # order-book work remains candidate-only, so broad trade coverage does not
   # multiply expensive REST book requests.
   with LOCK:
-   volumes=dict(S.get("_day_volumes",{}));prices=set(S.get("_prices",{}));held=set(S["positions"])|set(S["pump_positions"])|set(S["whale_positions"])
+   volumes=dict(S.get("_day_volumes",{}));prices=set(S.get("_prices",{}));held=set(S["positions"])|set(S["pump_positions"])|set(S["whale_positions"])|set(S.get("whale_v2_positions",{}))
   listed=set(volumes)&prices if prices else set(volumes)
   return listed|LIQ_WHALE_SYMBOLS|held
  def report(status):
@@ -1483,7 +1485,7 @@ def telemetry():
   try:
    with LOCK:
     active=S["engine_active"];prices=dict(S.get("_prices",{}))
-    symbols=sorted(set(S.get("positions",{}))|set(S.get("pump_positions",{}))|set(S.get("whale_positions",{})))
+    symbols=sorted(set(S.get("positions",{}))|set(S.get("pump_positions",{}))|set(S.get("whale_positions",{}))|set(S.get("whale_v2_positions",{})))
     count=S["market_count"];equity=S["equity"]
    if active:
     save_market_snapshot(now(),count,equity,len(symbols))
@@ -2410,7 +2412,7 @@ def adapt():
    day=datetime.datetime.now(datetime.timezone.utc).date().isoformat()
    # Refresh on startup and then once per UTC day; persist every learning state.
    if last_day!=day:
-    save_learning_snapshot();last_day=day
+    save_learning_snapshot();save_whale_v2_learning_snapshot();last_day=day
   except Exception as e:
    with LOCK:S["last_error"]="adaptive: "+str(e)[:160]
   SHUTDOWN.wait(900)
