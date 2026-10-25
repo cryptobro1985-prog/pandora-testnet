@@ -329,6 +329,7 @@ def build_learning_snapshot():
    mult=max(0.85,min(1.15,1.0+edge))
   multipliers[str(r["source"])]=round(mult,4)
   source_stats[str(r["source"])]={"samples":n,"wins":wins,"win_rate":round(wr,4),"avg_pnl":avg,"total_pnl":total,"multiplier":round(mult,4)}
+ total_samples=sum(int(x["n"] or 0) for x in strategy)
  payload={"mode":"PAPER_ONLY","source_multipliers":multipliers,"source_stats":source_stats,
           "strategy_stats":[dict(x) for x in strategy],"event_type_stats":[dict(x) for x in event_types],
           "pump_score_buckets":[dict(x) for x in pump],"whale_score_buckets":[dict(x) for x in whale],
@@ -467,6 +468,7 @@ def _shared_used_margin():
   for p in book.values():
    lev=max(1.0,float(p.get("leverage",TRADE_LEVERAGE)))
    total+=float(p.get("margin",float(p.get("notional",0))/lev))
+ total+=sum(float(x or 0) for x in S.get("_entry_reservations",{}).values())
  return total
 
 def _symbol_open_anywhere(symbol):
@@ -474,17 +476,18 @@ def _symbol_open_anywhere(symbol):
 
 def _reserve_shared_entry(symbol):
  with LOCK:
-  reservations=S.setdefault("_entry_reservations",set())
+  reservations=S.setdefault("_entry_reservations",{})
   if _symbol_open_anywhere(symbol) or symbol in reservations:
    return False,0.0,"symbol_already_open_shared_account",0.0
-  reservations.add(symbol)
+  reservations[symbol]=0.0
   try:
    while True:
     equity=float(S["equity"])
-    margin=equity*TRADE_MARGIN_FRACTION
+    margin=max(0.01,max(0.0,equity)*TRADE_MARGIN_FRACTION)
     used=_shared_used_margin()
     free=max(0.0,equity-used)
-    if free+1e-9>=margin:
+    if equity>0 and free+1e-9>=margin:
+     reservations[symbol]=margin
      return True,margin,None,free
     topup=PAPER_TOPUP_STEP
     with pg() as db:
@@ -501,11 +504,11 @@ def _reserve_shared_entry(symbol):
     S["equity"]=float(row["equity"]);S["realized_pnl"]=float(row["realized_pnl"])
     S["contributed_capital"]=float(row["contributed_capital"])
   except Exception:
-   reservations.discard(symbol)
+   reservations.pop(symbol,None)
    raise
 
 def _release_shared_entry(symbol):
- with LOCK:S.setdefault("_entry_reservations",set()).discard(symbol)
+ with LOCK:S.setdefault("_entry_reservations",{}).pop(symbol,None)
 
 def pump_open(symbol,side,price,score,features):
  if side not in (-1,1) or not price:return False
@@ -2078,7 +2081,7 @@ def dashboard_cache_loop():
 def html_dashboard(data):
  esc=lambda x:str(x).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
  age=data.get("account_age_seconds",0);age_txt="%dd %02dh %02dm"%(age//86400,(age%86400)//3600,(age%3600)//60)
- cards='<div class="grid"><b>MODE<br>%s</b><b>NEWS BALANCE<br>$ %s</b><b>NEWS P&L<br>$ %s</b><b>NEWS EQUITY<br>$ %s</b><b>ACCOUNT ROI<br>%s%%</b><b>ACCOUNT AGE<br>%s</b><b>NEWS POSITIONS<br>%s</b><b>PUMP BALANCE<br>$ %s</b><b>PUMP P&L<br>$ %s</b><b>PUMP POSITIONS<br>%s</b></div>'%(esc(data["mode"]),data["balance"],data["unrealized_pnl"],data["total_equity"],data["account_roi_pct"],age_txt,len(data["positions"]),data.get("pump_balance",100),data.get("pump_unrealized_pnl",0),len(data.get("pump_positions",[])))
+ cards='<div class="grid"><b>MODE<br>%s</b><b>ACCOUNT BALANCE<br>$ %s</b><b>CONTRIBUTED<br>$ %s</b><b>UNREALIZED P&L<br>$ %s</b><b>TOTAL EQUITY<br>$ %s</b><b>ACCOUNT ROI<br>%s%%</b><b>ACCOUNT AGE<br>%s</b><b>OPEN POSITIONS<br>%s</b><b>PUMP POSITIONS<br>%s</b><b>WHALE POSITIONS<br>%s</b></div>'%(esc(data["mode"]),data["balance"],data.get("capital_contributed",100),data["unrealized_pnl"],data["total_equity"],data["account_roi_pct"],age_txt,len(data["positions"]),len(data.get("pump_positions",[])),len(data.get("whale_liq_positions",[])))
  pos="".join('<tr><td>%s</td><td>%s</td><td>$%s</td><td>$%s</td><td>%sx</td><td>%s</td><td>%s</td><td class="%s">%s%%</td><td class="%s">$%s</td><td>%s</td><td><button onclick="closePos(this.dataset.sym)" data-sym="%s">Close</button></td></tr>'%(esc(x["symbol"]),x["side"],x.get("margin_usd",0),x.get("notional_usd",0),x.get("leverage",LEV),x["entry"],x["mark"],"posv" if x.get("roe_pct",0)>=0 else "negv",x.get("roe_pct",0),"posv" if x["unrealized_pnl"]>=0 else "negv",x["unrealized_pnl"],esc(x["headline"]),esc(x["symbol"])) for x in data["positions"]) or '<tr><td colspan=11>No open positions</td></tr>'
  trs="".join('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'%(esc(x["closed"]),esc(x["symbol"]),"LONG" if x["side"]>0 else "SHORT",round(x["pnl"],4),esc(x["reason"])) for x in data["trades"]) or '<tr><td colspan=5>No closed trades</td></tr>'
  whale_engine=data.get("whale_liq_engine",{}) or {}
