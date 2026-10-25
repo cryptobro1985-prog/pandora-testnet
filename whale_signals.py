@@ -9,6 +9,7 @@ import math
 
 
 MIN_NOTIONAL_USD = {"BTC": 25_000_000.0, "ETH": 15_000_000.0, "SOL": 5_000_000.0}
+DEFAULT_MIN_NOTIONAL_USD = 25_000.0
 CLUSTER_WIDTH_BPS = 10.0
 MARK_MAX_AGE_SECONDS = 15.0
 MAX_INPUT_ROWS = 10_000
@@ -48,7 +49,7 @@ def cluster_positions(rows, prices, contexts, epoch, max_age=180.0,
         if not isinstance(item, dict):
             continue
         symbol = str(item.get("symbol", "")).upper()
-        if symbol not in MIN_NOTIONAL_USD:
+        if not symbol:
             continue
         price = _finite(prices.get(symbol), positive=True)
         ctx = contexts.get(symbol, {})
@@ -183,7 +184,7 @@ def significance(cluster, book, ctx, floors=None, oi_fraction=0.0025,
         return result
     symbol = cluster.get("symbol")
     size = _finite(cluster.get("size_usd"), positive=True)
-    floor = _finite(floors.get(symbol), positive=True)
+    floor = _finite(floors.get(symbol, DEFAULT_MIN_NOTIONAL_USD), positive=True)
     stamp = _epoch(cluster.get("evaluated_at"))
     mark = _finite(ctx.get("mark_price"), positive=True)
     ctx_epoch = _epoch(ctx.get("epoch"))
