@@ -11,7 +11,7 @@ def _anchor(samples,epoch,age):
     rows=[r for r in samples if age-tolerance <= epoch-r["t"] <= age+tolerance]
     return min(rows,key=lambda r:abs((epoch-r["t"])-age)) if rows else None
 
-def candidates(prices,history,volumes,epoch,minimum_day_volume=5_000_000.0,contexts=None):
+def candidates(prices,history,volumes,epoch,minimum_day_volume=0.0,contexts=None):
     contexts=contexts or {}
     out=[]
     for symbol,price in prices.items():
