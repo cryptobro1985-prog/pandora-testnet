@@ -1203,6 +1203,89 @@ def free_x_realtime():
  finally:
   pool.shutdown(wait=False,cancel_futures=True);ingest_pool.shutdown(wait=False,cancel_futures=True)
 
+
+CRITICAL_X_HANDLES=["elonmusk","realDonaldTrump","SECGov","federalreserve","BlackRock","Fidelity","ARKInvest","Grayscale"]
+
+def x_critical_realtime():
+ handles=list(CRITICAL_X_HANDLES)
+ poll=max(4.0,float(os.getenv("X_CRITICAL_POLL_SECONDS","4")))
+ seen={};primed=set();last_success={};backend_used={};last_error={};inflight={}
+ pool=concurrent.futures.ThreadPoolExecutor(max_workers=len(handles),thread_name_prefix="x-critical")
+ ingest_pool=concurrent.futures.ThreadPoolExecutor(max_workers=4,thread_name_prefix="x-critical-ingest")
+ next_due={h:time.monotonic() for h in handles}
+ def fetch_one(handle):
+  errors=[]
+  chain=[
+   ("syndication",lambda:free_x_syndication_fetch(handle,timeout=2.2)),
+   ("embed",lambda:free_x_embed_fetch(handle,timeout=2.2)),
+   ("fx",lambda:free_x_fetch(handle,timeout=2.2,attempts=1)),
+   ("xlookup",lambda:free_x_lookup_fetch(handle,timeout=2.2)),
+   ("fixupx",lambda:free_x_fixupx_fetch(handle,timeout=2.2)),
+   ("nitter",lambda:free_x_nitter_fetch(handle,timeout=2.2)),
+   ("vx",lambda:free_x_vx_fetch(handle,timeout=2.2)),
+  ]
+  for name,fn in chain:
+   try:
+    posts=fn()
+    if posts:return posts,name
+    errors.append(name+":empty")
+   except Exception as exc:
+    errors.append(name+":"+str(exc)[:70])
+  raise RuntimeError(" | ".join(errors)[:420])
+ with LOCK:
+  S["sources"]["XCriticalMonitor"]={"ok":False,"mode":"dedicated_critical_pool_starting","last_check":now(),
+   "accounts_ok":0,"accounts_total":len(handles),"scan_label":"CRITICAL 0 / %s"%len(handles),
+   "target_poll_seconds":poll,"key_accounts":{h:{"ok":False,"active":False} for h in handles},"error":None}
+ try:
+  while not SHUTDOWN.is_set():
+   if not S["engine_active"]:
+    SHUTDOWN.wait(0.2);continue
+   mono=time.monotonic();active={meta[0] for meta in inflight.values()}
+   for h in handles:
+    if h in active or mono<next_due[h]:continue
+    inflight[pool.submit(fetch_one,h)]=(h,mono);next_due[h]=mono+poll
+   done=[f for f in list(inflight) if f.done()]
+   for fut in done:
+    h,started=inflight.pop(fut);src="XCritical:"+h
+    try:
+     posts,backend=fut.result();last_success[h]=time.time();backend_used[h]=backend;last_error.pop(h,None)
+     ids=[str(p["id"]) for p in posts]
+     if h not in primed:
+      seen[h]=set(ids);primed.add(h);fresh=[]
+     else:
+      old=seen.setdefault(h,set());fresh=[p for p in posts if str(p["id"]) not in old];old.update(ids)
+      if len(old)>250:seen[h]=set(ids[:120])
+     latencies=[]
+     for p in sorted(fresh,key=lambda q:publication_epoch(q.get("created_at")) or 0):
+      stamp=publication_epoch(p.get("created_at"));age=time.time()-stamp if stamp is not None else None
+      if age is not None and age>=0:latencies.append(age)
+      ident=hashlib.sha256(("XFree:"+h+":"+str(p["id"])).encode()).hexdigest()
+      ingest_pool.submit(ingest_event,ident,"XOfficial:"+h,p["text"],p.get("created_at"),p.get("url"))
+     latency=min(latencies) if latencies else None
+     with LOCK:S["sources"][src]={"ok":True,"active":True,"mode":backend+"_critical_4s","backend":backend,
+      "last_check":now(),"posts":len(posts),"poll_seconds":poll,"last_request_seconds":round(time.monotonic()-started,2),
+      "delivery_latency_seconds":round(latency,2) if latency is not None else None,
+      "realtime_verified":bool(latency is not None and 0<=latency<=10),"error":None}
+    except Exception as exc:
+     err=str(exc)[:420];last_error[h]=err
+     with LOCK:S["sources"][src]={"ok":False,"active":False,"mode":"critical_fallback_chain","last_check":now(),
+      "poll_seconds":poll,"last_request_seconds":round(time.monotonic()-started,2),"error":err}
+   with LOCK:
+    wall=time.time()
+    status={h:{"ok":bool(last_success.get(h) and wall-last_success[h]<=max(12,poll*3)),
+               "active":bool(last_success.get(h) and wall-last_success[h]<=max(12,poll*3)),
+               "backend":backend_used.get(h),"last_success_epoch":last_success.get(h),
+               "error":last_error.get(h)} for h in handles}
+    ok_count=sum(v["ok"] for v in status.values())
+    S["sources"]["XCriticalMonitor"]={"ok":ok_count==len(handles),"mode":"dedicated_critical_pool","last_check":now(),
+      "accounts_ok":ok_count,"accounts_total":len(handles),"active_accounts":ok_count,
+      "scan_label":"CRITICAL %s / %s"%(ok_count,len(handles)),"target_poll_seconds":poll,
+      "key_accounts":status,"scan_workers":len(handles),"realtime_verified":ok_count==len(handles),
+      "error":None if ok_count==len(handles) else "partial_critical_coverage"}
+   SHUTDOWN.wait(0.05)
+ finally:
+  pool.shutdown(wait=False,cancel_futures=True);ingest_pool.shutdown(wait=False,cancel_futures=True)
+
 def x_list_realtime():
  auth=os.getenv("X_AUTH_TOKEN","").strip();ct0=os.getenv("X_CT0","").strip();list_id=os.getenv("X_LIST_ID","").strip()
  if not (auth and ct0 and list_id):return
@@ -1808,7 +1891,7 @@ def operations_diagnostics():
      "sources_failed":[k for k,v in S["sources"].items() if not v.get("ok") and not v.get("disabled") and not k.startswith("XFree:") and not k.startswith("XIndex:") and k!="XIndexMonitor" and k not in SEARCH_INDEX_FEEDS and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")],
      "sources_degraded_noncritical":[k for k,v in S["sources"].items() if not v.get("ok") and (k.startswith("XIndex:") or k=="XIndexMonitor")],
      "news_failures":{k:str(v.get("error") or "")[:160] for k,v in S["sources"].items() if not v.get("ok") and ((k in FEEDS and k not in SEARCH_INDEX_FEEDS and not k.startswith("XIndex:")) or k in RESEARCH_PAGES)},
-     "social_channels":{k:{"ok":v.get("ok"),"degraded":v.get("degraded"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds"),"delivery_latency_seconds":v.get("delivery_latency_seconds"),"accounts_ok":v.get("accounts_ok"),"accounts_initialized":v.get("accounts_initialized"),"accounts_total":v.get("accounts_total"),"active_accounts":v.get("active_accounts"),"scan_label":v.get("scan_label"),"key_accounts":v.get("key_accounts"),"disabled_retry_accounts":v.get("disabled_retry_accounts"),"recently_polled_accounts":v.get("recently_polled_accounts"),"target_poll_seconds":v.get("target_poll_seconds"),"backend_accounts":v.get("backend_accounts"),"rate_limited_accounts":v.get("rate_limited_accounts"),"backoff_accounts":v.get("backoff_accounts"),"scan_workers":v.get("scan_workers")} for k,v in S["sources"].items() if k in ("XMonitor","XFilteredStream","XListMonitor","TruthMonitor","TruthStream","TruthDirect:realDonaldTrump","TruthSocialPublic")},
+     "social_channels":{k:{"ok":v.get("ok"),"degraded":v.get("degraded"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds"),"delivery_latency_seconds":v.get("delivery_latency_seconds"),"accounts_ok":v.get("accounts_ok"),"accounts_initialized":v.get("accounts_initialized"),"accounts_total":v.get("accounts_total"),"active_accounts":v.get("active_accounts"),"scan_label":v.get("scan_label"),"key_accounts":v.get("key_accounts"),"disabled_retry_accounts":v.get("disabled_retry_accounts"),"recently_polled_accounts":v.get("recently_polled_accounts"),"target_poll_seconds":v.get("target_poll_seconds"),"backend_accounts":v.get("backend_accounts"),"rate_limited_accounts":v.get("rate_limited_accounts"),"backoff_accounts":v.get("backoff_accounts"),"scan_workers":v.get("scan_workers")} for k,v in S["sources"].items() if k in ("XMonitor","XCriticalMonitor","XFilteredStream","XListMonitor","TruthMonitor","TruthStream","TruthDirect:realDonaldTrump","TruthSocialPublic")},
      "pump_engine":copy.deepcopy(S["sources"].get("PumpDumpScanner",{})),
      "pump_positions":len(S.get("pump_positions",{})),"pump_trades":S.get("pump_trades"),"shared_account_equity":S.get("equity"),
      "whale_liq_engine":copy.deepcopy(S["sources"].get("WhaleLiquidationScanner",{})),
@@ -1961,7 +2044,7 @@ def health_state():
  healthy=not SHUTDOWN.is_set() and heartbeat<45 and coordinator_age<45
  ready=healthy and S["engine_active"] and age is not None and age<10 and checkpoint_age is not None and checkpoint_age<15
  sources=dict(S.get("sources",{}))
- social={k:v for k,v in sources.items() if k in ("XMonitor","XFilteredStream","XListMonitor","TruthMonitor","TruthStream","TruthDirect:realDonaldTrump","TruthSocialPublic")}
+ social={k:v for k,v in sources.items() if k in ("XMonitor","XCriticalMonitor","XFilteredStream","XListMonitor","TruthMonitor","TruthStream","TruthDirect:realDonaldTrump","TruthSocialPublic")}
  unavailable=[k for k,v in social.items() if not v.get("ok") and k not in ("XFilteredStream","XListMonitor","TruthStream","TruthSocialPublic")]
  return {"healthy":healthy,"risk_ready":ready,"news_sources_total":len(sources),"news_sources_failed":sum((not v.get("ok",False)) and not k.startswith(("XFree:","XIndex:")) and k!="XIndexMonitor" and k not in SEARCH_INDEX_FEEDS for k,v in sources.items()),"social_sources_failed":unavailable,"guest_x_realtime_verified":False,"news_24h_guaranteed":False,"engine_active":S["engine_active"],
          "market_age_seconds":age,"checkpoint_age_seconds":checkpoint_age,
@@ -1994,7 +2077,7 @@ if __name__=="__main__":
  worker_specs=[
   ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),
   ("telemetry",telemetry),("pump_dump",impulse_scan),("whale_liquidations",whale_liquidation_scan),
-  ("adapt",adapt),("x_public_4s",free_x_realtime),("truth_public",free_truth_realtime),
+  ("adapt",adapt),("x_critical_4s",x_critical_realtime),("x_public_4s",free_x_realtime),("truth_public",free_truth_realtime),
   ("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)
  ]
  if os.getenv("X_AUTH_TOKEN","").strip() and os.getenv("X_CT0","").strip() and os.getenv("X_LIST_ID","").strip():worker_specs.append(("x_list_official",x_list_realtime))
