@@ -81,15 +81,21 @@ START=time.time()
 S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0,"pump_positions":{},"pump_equity":100.0,"pump_realized_pnl":0.0,"pump_trades":0,"whale_positions":{},"whale_equity":100.0,"whale_realized_pnl":0.0,"whale_trades":0}
 LOCK=threading.RLock()
 SHUTDOWN=threading.Event()
+TRADE_LEVERAGE=25.0
+TRADE_MARGIN_FRACTION=0.10
+PAPER_TOPUP_STEP=100.0
 NEWS_MAX_AGE_SECONDS=float(os.getenv("NEWS_MAX_AGE_SECONDS","120"))
 NEWS_POLL_SECONDS=float(os.getenv("NEWS_POLL_SECONDS","15"))
 PUMP_SCAN_SECONDS=max(1.0,float(os.getenv("PUMP_SCAN_SECONDS","2")))
 MARKET_METADATA_SECONDS=max(3.0,float(os.getenv("MARKET_METADATA_SECONDS","5")))
-LIQ_WHALE_SCAN_SECONDS=max(3.0,float(os.getenv("LIQ_WHALE_SCAN_SECONDS","5")))
-LIQ_WHALE_MAX_DISTANCE_PCT=max(0.25,float(os.getenv("LIQ_WHALE_MAX_DISTANCE_PCT","1.0")))
-LIQ_WHALE_MIN_USD=max(100000.0,float(os.getenv("LIQ_WHALE_MIN_USD","2000000")))
-LIQ_WHALE_SCORE_MIN=max(40.0,float(os.getenv("LIQ_WHALE_SCORE_MIN","68")))
 MICRO_ANALYSIS_THREADS=max(1,min(10,int(os.getenv("MICRO_ANALYSIS_THREADS","10"))))
+LIQ_WHALE_SCAN_SECONDS=max(3.0,float(os.getenv("LIQ_WHALE_SCAN_SECONDS","3")))
+LIQ_WHALE_MAX_DISTANCE_PCT=max(0.5,float(os.getenv("LIQ_WHALE_MAX_DISTANCE_PCT","1.5")))
+LIQ_WHALE_MIN_USD=max(100000.0,float(os.getenv("LIQ_WHALE_MIN_USD","2000000")))
+LIQ_WHALE_SCORE_MIN=max(50.0,float(os.getenv("LIQ_WHALE_SCORE_MIN","76")))
+LIQ_WHALE_MAX_POSITION_AGE_SECONDS=max(30.0,float(os.getenv("LIQ_WHALE_MAX_POSITION_AGE_SECONDS","180")))
+LIQ_WHALE_MIN_BY_SYMBOL={"BTC":5_000_000.0,"ETH":3_000_000.0,"SOL":2_000_000.0}
+LIQ_WHALE_BASE_ENTRY_DISTANCE={"BTC":0.45,"ETH":0.60,"SOL":0.75}
 LIQ_WHALE_LEV=TRADE_LEVERAGE
 LIQ_WHALE_MARGIN_FRACTION=TRADE_MARGIN_FRACTION
 LIQ_WHALE_SYMBOLS={"BTC","ETH","SOL"}
@@ -213,7 +219,6 @@ def source_weight(source):
  learned=S.get("adaptive",{}).get("source_multipliers",{}) if S.get("mode")=="PAPER_ONLY" else {}
  return max(0.20,min(1.00,base*float(learned.get(source,1.0))))
 STOP_ROE=-999.0;TAKE_ROE=0.20;LEV=25.0;MARGIN_FRACTION=0.10;FEE=0.00045;LOCK_TRIGGER_ROE=0.10;LOCK_ROE=0.075;PAPER_RESET=100.0;MIN_EXIT_ROE=0.075;TRAIL_ARM_ROE=0.12
-TRADE_LEVERAGE=25.0;TRADE_MARGIN_FRACTION=0.10;PAPER_TOPUP_STEP=100.0
 PUMP_LEV=TRADE_LEVERAGE;PUMP_MARGIN_FRACTION=TRADE_MARGIN_FRACTION;PUMP_MAX_POSITIONS=10;PUMP_STOP_ROE=-0.06;PUMP_TAKE_ROE=0.14;PUMP_TRAIL_ARM_ROE=0.09;PUMP_TRAIL_GAP_ROE=0.035;PUMP_MAX_HOLD_SECONDS=900
 def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
 def pg():
@@ -647,8 +652,14 @@ def _whale_liq_book(symbol):
   book=json.loads(get(API,{"type":"l2Book","coin":symbol}));levels=book.get("levels",[])
   if len(levels)<2:return None
   bids,asks=levels[0][:10],levels[1][:10]
-  bd=sum(float(x.get("sz",0) or 0) for x in bids);ad=sum(float(x.get("sz",0) or 0) for x in asks)
-  return (bd-ad)/(bd+ad) if bd+ad else 0.0
+  bid_depth=sum(float(x.get("sz",0) or 0)*float(x.get("px",0) or 0) for x in bids)
+  ask_depth=sum(float(x.get("sz",0) or 0)*float(x.get("px",0) or 0) for x in asks)
+  bp=float(bids[0].get("px",0) or 0) if bids else 0.0
+  ap=float(asks[0].get("px",0) or 0) if asks else 0.0
+  mid=(bp+ap)/2 if bp and ap else 0.0
+  return {"imbalance":(bid_depth-ask_depth)/(bid_depth+ask_depth) if bid_depth+ask_depth else 0.0,
+          "bid_depth_usd":bid_depth,"ask_depth_usd":ask_depth,
+          "spread_bps":((ap-bp)/mid*10000) if mid else 9999.0}
  except Exception:return None
 
 def _whale_liq_cvd(symbol):
@@ -665,77 +676,128 @@ def _whale_liq_cvd(symbol):
  except Exception:return 0.0,0.0,None
 
 def whale_liquidation_scan():
- last_signal={}
- while not SHUTDOWN.is_set():
+ last_signal={};streaks={}
+ pool=concurrent.futures.ThreadPoolExecutor(max_workers=MICRO_ANALYSIS_THREADS,thread_name_prefix="whale-micro")
+ def analyze_position(p,prices,history,contexts,stamp):
   try:
-   with LOCK:
-    active=S["engine_active"];prices=dict(S.get("_prices",{}));history={k:list(v) for k,v in S.get("_timeline",{}).items()};contexts=copy.deepcopy(S.get("_pump_ctx",{}))
-   if not active:
-    SHUTDOWN.wait(0.5);continue
-   data=hyperdata("/v1/positions/danger-zone?threshold="+urllib.parse.quote(str(LIQ_WHALE_MAX_DISTANCE_PCT))) or {}
-   rows=data.get("positions",[]) if isinstance(data,dict) else []
-   stamp=time.time();candidates=[]
-   for p in rows:
-    try:
-     sym=str(p.get("symbol","")).upper()
-     if sym not in LIQ_WHALE_SYMBOLS or sym not in prices:continue
-     size=float(p.get("size_usd",0) or 0);dist=float(p.get("distance_pct",999) or 999)
-     scanned=float(p.get("scanned_at",0) or 0)
-     if size<LIQ_WHALE_MIN_USD or dist>LIQ_WHALE_MAX_DISTANCE_PCT or (scanned and stamp-scanned>900):continue
-     victim=str(p.get("side","")).lower()
-     side=-1 if victim=="long" else 1 if victim=="short" else 0
-     if not side:continue
-     px=float(prices[sym]);rows_t=history.get(sym,[])
-     r15=_timeline_return(rows_t,stamp,15,px);r60=_timeline_return(rows_t,stamp,60,px)
-     if r15 is None or r60 is None:continue
-     imb=_whale_liq_book(sym);cvd,flow_imb,coverage=_whale_liq_cvd(sym)
-     ctx=contexts.get(sym,{})
-     score=0.0
-     score+=25 if dist<=0.40 else 19 if dist<=0.70 else 13
-     score+=min(25.0,5.0+max(0.0,math.log10(max(size,1)/LIQ_WHALE_MIN_USD))*12.0)
-     if side*r15>=0.0005:score+=12
-     if side*r60>=0.0010:score+=14
-     if imb is not None and side*imb>=0.08:score+=10
-     if side*flow_imb>=0.08:score+=8
-     burst=float(ctx.get("volume_burst_ratio",0) or 0)
-     if burst>=1.5:score+=6
-     oi_delta=abs(float(ctx.get("oi_delta_60s",0) or 0))
-     if oi_delta>=0.003:score+=5
-     trend_ok=(side*r15>0 and side*r60>0)
-     pressure_ok=((imb is not None and side*imb>=0.02) or side*flow_imb>=0.05)
-     features={"engine":"whale_liquidation_hunt","symbol":sym,"side":side,"victim_side":victim,
-       "whale_address":p.get("address"),"whale_size_usd":size,"liquidation_price":p.get("liq_price"),
-       "distance_pct":dist,"scanned_at":scanned,"r15":r15,"r60":r60,"orderbook_imbalance":imb,
-       "cvd_1m":cvd,"flow_imbalance":flow_imb,"flow_coverage":coverage,"volume_burst_ratio":burst,
-       "oi_delta_60s":ctx.get("oi_delta_60s"),"score":round(score,2),"trend_ok":trend_ok,"pressure_ok":pressure_ok}
-     candidates.append(features)
-    except Exception:continue
-   candidates.sort(key=lambda x:(x["score"],x["whale_size_usd"]),reverse=True)
-   for x in candidates:
-    sym=x["symbol"];side=int(x["side"]);action="WATCH"
-    opened=False
-    if x["score"]>=LIQ_WHALE_SCORE_MIN and x["trend_ok"] and x["pressure_ok"]:
-     opened=whale_liq_open(sym,side,prices[sym],x["score"],x);action="OPENED" if opened else "QUALIFIED"
-    key=(sym,side,action);last=last_signal.get(key,0)
-    if stamp-last<15:continue
-    last_signal[key]=stamp
-    ident=hashlib.sha256(("WHALELIQ:"+sym+":"+str(side)+":"+str(int(stamp//15))+":"+action).encode()).hexdigest()
-    with pg() as c:
-     c.execute("""insert into whale_liq_signal_journal(id,ts,symbol,side,score,action,features)
-      values(%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(id) do nothing""",
-      (ident,now(),sym,side,float(x["score"]),action,json.dumps(x,default=str)))
-    journal("whale_liq_signal",None,{"symbol":sym,"side":side,"score":x["score"],"action":action,
-      "distance_pct":x["distance_pct"],"whale_size_usd":x["whale_size_usd"],"liquidation_price":x["liquidation_price"]})
-   with LOCK:
-    S["sources"]["WhaleLiquidationScanner"]={"ok":True,"last_check":now(),"mode":"paper_pre_liquidation_hunt",
-      "symbols":sorted(LIQ_WHALE_SYMBOLS),"scan_seconds":LIQ_WHALE_SCAN_SECONDS,"threshold_pct":LIQ_WHALE_MAX_DISTANCE_PCT,
-      "min_whale_usd":LIQ_WHALE_MIN_USD,"danger_positions":len(rows),"eligible_candidates":len(candidates),
-      "qualified_candidates":sum(x["score"]>=LIQ_WHALE_SCORE_MIN and x["trend_ok"] and x["pressure_ok"] for x in candidates),
-      "top_candidates":candidates[:5],"paper_positions":len(S["whale_positions"]),"paper_equity":round(S["whale_equity"],4),
-      "paper_trades":S["whale_trades"],"error":None}
-  except Exception as exc:
-   with LOCK:S["sources"]["WhaleLiquidationScanner"]={"ok":False,"last_check":now(),"mode":"paper_pre_liquidation_hunt","error":str(exc)[:180]}
-  SHUTDOWN.wait(LIQ_WHALE_SCAN_SECONDS)
+   sym=str(p.get("symbol","")).upper()
+   if sym not in LIQ_WHALE_SYMBOLS or sym not in prices:return None
+   size=float(p.get("size_usd",0) or 0)
+   if size<max(LIQ_WHALE_MIN_USD,LIQ_WHALE_MIN_BY_SYMBOL.get(sym,LIQ_WHALE_MIN_USD)):return None
+   scanned=float(p.get("scanned_at",0) or 0);position_age=(stamp-scanned) if scanned else 999999.0
+   if position_age>LIQ_WHALE_MAX_POSITION_AGE_SECONDS:return None
+   victim=str(p.get("side","")).lower();side=-1 if victim=="long" else 1 if victim=="short" else 0
+   if not side:return None
+   ctx=contexts.get(sym,{})
+   book_px=float(prices[sym]);mark=float(ctx.get("mark_price",0) or 0) or book_px
+   liq=float(p.get("liq_price",0) or 0)
+   if liq<=0:return None
+   if victim=="long" and liq>=mark:return None
+   if victim=="short" and liq<=mark:return None
+   mark_dist=abs(mark-liq)/mark*100
+   if mark_dist<0.08 or mark_dist>LIQ_WHALE_MAX_DISTANCE_PCT:return None
+   rows_t=history.get(sym,[])
+   r15=_timeline_return(rows_t,stamp,15,book_px);r60=_timeline_return(rows_t,stamp,60,book_px)
+   if r15 is None or r60 is None:return None
+   book=_whale_liq_book(sym);cvd,flow_imb,coverage=_whale_liq_cvd(sym)
+   if not book:return None
+   imb=float(book.get("imbalance",0) or 0);spread=float(book.get("spread_bps",9999) or 9999)
+   forced_flow=size*0.20
+   impact_depth=float(book.get("bid_depth_usd" if victim=="long" else "ask_depth_usd",0) or 0)
+   impact_ratio=forced_flow/max(1.0,impact_depth)
+   base=LIQ_WHALE_BASE_ENTRY_DISTANCE.get(sym,0.60)
+   extra=0.0
+   if impact_ratio>=0.50:extra+=0.15
+   if impact_ratio>=1.00:extra+=0.20
+   if impact_ratio>=2.00:extra+=0.20
+   dynamic_entry=min(LIQ_WHALE_MAX_DISTANCE_PCT,base+extra)
+   if mark_dist>dynamic_entry:return None
+   burst=float(ctx.get("volume_burst_ratio",0) or 0)
+   vol_z=ctx.get("volume_rate_z")
+   oi_raw=float(ctx.get("oi_delta_60s",0) or 0);oi_abs=abs(oi_raw)
+   trend_ok=(side*r15>=0.0004 and side*r60>=0.0008)
+   book_ok=(side*imb>=0.06 and spread<=12)
+   flow_ok=(side*flow_imb>=0.08)
+   participation_ok=(burst>=1.5 or (vol_z is not None and float(vol_z)>=2.5))
+   oi_ok=oi_abs>=0.0025
+   impact_ok=impact_ratio>=0.35
+   confirmations=sum([book_ok,flow_ok,participation_ok,oi_ok,impact_ok])
+   pressure_ok=confirmations>=3
+   score=20.0
+   score+=max(0.0,22.0*(1.0-mark_dist/max(dynamic_entry,0.01)))
+   score+=min(18.0,5.0+max(0.0,math.log10(size/max(1.0,LIQ_WHALE_MIN_BY_SYMBOL.get(sym,LIQ_WHALE_MIN_USD))))*10.0)
+   score+=min(15.0,impact_ratio*7.5)
+   if side*r15>=0.0004:score+=8
+   if side*r60>=0.0008:score+=10
+   if book_ok:score+=8
+   if flow_ok:score+=8
+   if participation_ok:score+=5
+   if oi_ok:score+=4
+   features={"engine":"whale_liquidation_hunt_v2","symbol":sym,"side":side,"victim_side":victim,
+     "whale_address":p.get("address"),"whale_size_usd":size,"forced_flow_first_slice_usd":forced_flow,
+     "liquidation_price":liq,"book_price":book_px,"mark_price":mark,"distance_pct":mark_dist,
+     "reported_distance_pct":p.get("distance_pct"),"dynamic_entry_distance_pct":dynamic_entry,
+     "position_age_seconds":position_age,"r15":r15,"r60":r60,"orderbook_imbalance":imb,
+     "bid_depth_usd":book.get("bid_depth_usd"),"ask_depth_usd":book.get("ask_depth_usd"),
+     "spread_bps":spread,"liquidation_flow_to_depth":impact_ratio,"cvd_1m":cvd,
+     "flow_imbalance":flow_imb,"flow_coverage":coverage,"volume_burst_ratio":burst,
+     "volume_rate_z":vol_z,"oi_delta_60s":oi_raw,"micro_confirmations":confirmations,
+     "score":round(min(100.0,score),2),"trend_ok":trend_ok,"pressure_ok":pressure_ok}
+   return features
+  except Exception:return None
+ try:
+  while not SHUTDOWN.is_set():
+   try:
+    with LOCK:
+     active=S["engine_active"];prices=dict(S.get("_prices",{}));history={k:list(v) for k,v in S.get("_timeline",{}).items()};contexts=copy.deepcopy(S.get("_pump_ctx",{}))
+    if not active:
+     SHUTDOWN.wait(0.5);continue
+    data=hyperdata("/v1/positions/danger-zone?threshold="+urllib.parse.quote(str(LIQ_WHALE_MAX_DISTANCE_PCT))) or {}
+    rows=data.get("positions",[]) if isinstance(data,dict) else []
+    stamp=time.time()
+    futures=[pool.submit(analyze_position,p,prices,history,contexts,stamp) for p in rows]
+    candidates=[]
+    for f in concurrent.futures.as_completed(futures):
+     x=f.result()
+     if x:candidates.append(x)
+    candidates.sort(key=lambda x:(x["score"],x["liquidation_flow_to_depth"],x["whale_size_usd"]),reverse=True)
+    present=set()
+    qualified=[]
+    for x in candidates:
+     key=(x["symbol"],int(x["side"]));present.add(key);streaks[key]=streaks.get(key,0)+1
+     x["confirmation_streak"]=streaks[key]
+     if x["score"]>=LIQ_WHALE_SCORE_MIN and x["trend_ok"] and x["pressure_ok"] and x["confirmation_streak"]>=2:
+      qualified.append(x)
+    for key in list(streaks):
+     if key not in present:streaks.pop(key,None)
+    for x in qualified:
+     sym=x["symbol"];side=int(x["side"])
+     opened=whale_liq_open(sym,side,prices[sym],x["score"],x)
+     action="OPENED" if opened else "QUALIFIED"
+     key=(sym,side,action)
+     if stamp-last_signal.get(key,0)<15:continue
+     last_signal[key]=stamp
+     ident=hashlib.sha256(("WHALELIQ2:"+sym+":"+str(side)+":"+str(int(stamp//15))+":"+action).encode()).hexdigest()
+     with pg() as db:
+      db.execute("""insert into whale_liq_signal_journal(id,ts,symbol,side,score,action,features)
+       values(%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(id) do nothing""",
+       (ident,now(),sym,side,float(x["score"]),action,json.dumps(x,default=str)))
+     journal("whale_liq_signal",None,{"symbol":sym,"side":side,"score":x["score"],"action":action,
+       "distance_pct":x["distance_pct"],"dynamic_entry_distance_pct":x["dynamic_entry_distance_pct"],
+       "whale_size_usd":x["whale_size_usd"],"liquidation_price":x["liquidation_price"],
+       "liquidation_flow_to_depth":x["liquidation_flow_to_depth"]})
+    with LOCK:
+     S["sources"]["WhaleLiquidationScanner"]={"ok":True,"last_check":now(),"mode":"adaptive_mark_price_liquidation_hunt_v2",
+       "symbols":sorted(LIQ_WHALE_SYMBOLS),"scan_seconds":LIQ_WHALE_SCAN_SECONDS,"max_scan_distance_pct":LIQ_WHALE_MAX_DISTANCE_PCT,
+       "base_entry_distance_pct":LIQ_WHALE_BASE_ENTRY_DISTANCE,"min_whale_usd":LIQ_WHALE_MIN_BY_SYMBOL,
+       "max_position_age_seconds":LIQ_WHALE_MAX_POSITION_AGE_SECONDS,"analysis_threads":MICRO_ANALYSIS_THREADS,
+       "danger_positions":len(rows),"eligible_candidates":len(candidates),"qualified_candidates":len(qualified),
+       "top_candidates":candidates[:5],"paper_positions":len(S["whale_positions"]),"shared_account_equity":round(S["equity"],4),
+       "paper_trades":S["whale_trades"],"error":None}
+   except Exception as exc:
+    with LOCK:S["sources"]["WhaleLiquidationScanner"]={"ok":False,"last_check":now(),"mode":"adaptive_mark_price_liquidation_hunt_v2","analysis_threads":MICRO_ANALYSIS_THREADS,"error":str(exc)[:180]}
+   SHUTDOWN.wait(LIQ_WHALE_SCAN_SECONDS)
+ finally:pool.shutdown(wait=False,cancel_futures=True)
 
 def flatten_news_for_regime(reason,prices):
  with LOCK:items=[(sym,copy.deepcopy(pos)) for sym,pos in S["positions"].items()]
@@ -823,95 +885,96 @@ def market():
   SHUTDOWN.wait(2)
 
 def impulse_scan():
- # High-conviction PUMP/DUMP PAPER engine. Ordinary price noise is ignored.
  last_signal={};streaks={}
- while not SHUTDOWN.is_set():
+ pool=concurrent.futures.ThreadPoolExecutor(max_workers=MICRO_ANALYSIS_THREADS,thread_name_prefix="pump-micro")
+ def enrich(candidate):
+  candidate=dict(candidate);sym=candidate["symbol"];side=int(candidate["side"])
   try:
-   with LOCK:
-    active=S["engine_active"];prices=dict(S.get("_prices",{}));history={k:list(v) for k,v in S.get("_timeline",{}).items()}
-    volumes=dict(S.get("_day_volumes",{}));contexts=copy.deepcopy(S.get("_pump_ctx",{}))
-   if not active:
-    SHUTDOWN.wait(0.5);continue
-   stamp=time.time()
-   found=momentum_candidates(prices,history,volumes,stamp,minimum_day_volume=5_000_000.0,contexts=contexts)
-   enriched=[]
-   for candidate in found[:12]:
-    sym=candidate["symbol"];side=int(candidate["side"])
-    try:
-     book=json.loads(get(API,{"type":"l2Book","coin":sym}));levels=book.get("levels",[])
-     if len(levels)>=2:
-      bids,asks=levels[0][:10],levels[1][:10]
-      bd=sum(float(x.get("sz",0) or 0) for x in bids);ad=sum(float(x.get("sz",0) or 0) for x in asks)
-      imb=(bd-ad)/(bd+ad) if bd+ad else 0.0
-      bp=float(bids[0]["px"]) if bids else 0.0;ap=float(asks[0]["px"]) if asks else 0.0
-      mid=(bp+ap)/2 if bp and ap else 0.0;spread=(ap-bp)/mid*10000 if mid else 9999.0
-      candidate["orderbook_imbalance"]=round(imb,4);candidate["spread_bps"]=round(spread,2)
-     else:
-      candidate["orderbook_imbalance"]=0.0;candidate["spread_bps"]=9999.0
-    except Exception as exc:
-     candidate["book_error"]=str(exc)[:100];candidate["orderbook_imbalance"]=0.0;candidate["spread_bps"]=9999.0
-    try:
-     flow=hyperdata("/v1/orderflow/"+urllib.parse.quote(sym)) or {}
-     snaps=flow.get("snapshots") or flow.get("timeframes") or {}
-     one=snaps.get("1m") if isinstance(snaps,dict) else None
-     if isinstance(one,dict):
-      buy=float(one.get("buy_volume",0) or 0);sell=float(one.get("sell_volume",0) or 0);cvd=float(one.get("cvd",0) or 0)
-      candidate["cvd_1m"]=cvd;candidate["flow_imbalance"]=(buy-sell)/(buy+sell) if buy+sell else 0.0
-      candidate["flow_coverage"]=one.get("coverage")
-     else:
-      candidate["cvd_1m"]=float(flow.get("cumulative_cvd",0) or 0);candidate["flow_imbalance"]=0.0;candidate["flow_coverage"]=None
-    except Exception:
-     candidate["cvd_1m"]=0.0;candidate["flow_imbalance"]=0.0;candidate["flow_coverage"]=None
-
-    imb=float(candidate.get("orderbook_imbalance",0) or 0);flow_imb=float(candidate.get("flow_imbalance",0) or 0)
-    spread=float(candidate.get("spread_bps",9999) or 9999);oi=abs(float(candidate.get("oi_delta_60s",0) or 0))
-    book_ok=side*imb>=0.15 and spread<=20
-    flow_ok=side*flow_imb>=0.08
-    oi_ok=oi>=0.003
-    candidate["book_ok"]=book_ok;candidate["flow_ok"]=flow_ok;candidate["oi_ok"]=oi_ok
-    confirmations=sum([book_ok,flow_ok,oi_ok,float(candidate.get("volume_burst_ratio",0) or 0)>=3.0])
-    candidate["micro_confirmations"]=confirmations
-    if book_ok:candidate["score"]=min(100,float(candidate["score"])+8)
-    if flow_ok:candidate["score"]=min(100,float(candidate["score"])+8)
-    if oi_ok:candidate["score"]=min(100,float(candidate["score"])+5)
-    if confirmations>=3 and spread<=20:
-     enriched.append(candidate)
-
-   now_keys=set()
-   qualified=[]
-   for x in enriched:
-    key=(x["symbol"],int(x["side"]));now_keys.add(key)
-    streaks[key]=streaks.get(key,0)+1
-    x["confirmation_streak"]=streaks[key]
-    # Three consecutive 2s scans = persistence, not a one-tick anomaly.
-    if x["score"]>=82 and x["confirmation_streak"]>=3:qualified.append(x)
-   for key in list(streaks):
-    if key not in now_keys:streaks.pop(key,None)
-   qualified.sort(key=lambda x:x["score"],reverse=True)
-
-   for candidate in qualified[:3]:
-    sym=candidate["symbol"];side=int(candidate["side"])
-    opened=False
-    if prices.get(sym):opened=pump_open(sym,side,prices[sym],candidate["score"],candidate)
-    action="OPENED" if opened else "QUALIFIED"
-    bucket=int(stamp//15);ident=hashlib.sha256(("PUMP2:"+sym+":"+str(side)+":"+str(bucket)+":"+action).encode()).hexdigest()
-    if stamp-last_signal.get((sym,side,action),0)<15:continue
-    last_signal[(sym,side,action)]=stamp
-    with pg() as c:
-     c.execute("""insert into pump_signal_journal(id,ts,symbol,side,score,action,features)
-       values(%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(id) do nothing""",
-       (ident,now(),sym,side,float(candidate["score"]),action,json.dumps(candidate,default=str)))
-
-   with LOCK:
-    S["sources"]["PumpDumpScanner"]={"ok":bool(prices and volumes),"last_check":now(),"markets":len(prices),
-      "liquid_markets":sum(v>=5_000_000 for v in volumes.values()),"raw_candidates":len(found),"micro_confirmed":len(enriched),
-      "qualified_candidates":len(qualified),"top_candidates":qualified[:5],"mode":"high_conviction_paper_v2",
-      "scan_seconds":PUMP_SCAN_SECONDS,"min_day_volume":5_000_000,"entry_score_min":82,"confirmation_scans":3,
-      "paper_positions":len(S["pump_positions"]),"shared_account_equity":round(S["equity"],4),
-      "market_regime":{"mode":"ADVISORY_ONLY"},"error":None if prices and volumes else "missing_market_prices_or_metadata"}
+   book=json.loads(get(API,{"type":"l2Book","coin":sym}));levels=book.get("levels",[])
+   if len(levels)<2:return None
+   bids,asks=levels[0][:10],levels[1][:10]
+   bd=sum(float(x.get("sz",0) or 0)*float(x.get("px",0) or 0) for x in bids)
+   ad=sum(float(x.get("sz",0) or 0)*float(x.get("px",0) or 0) for x in asks)
+   imb=(bd-ad)/(bd+ad) if bd+ad else 0.0
+   bp=float(bids[0]["px"]) if bids else 0.0;ap=float(asks[0]["px"]) if asks else 0.0
+   mid=(bp+ap)/2 if bp and ap else 0.0;spread=(ap-bp)/mid*10000 if mid else 9999.0
+   candidate["orderbook_imbalance"]=round(imb,4);candidate["spread_bps"]=round(spread,2)
+   candidate["book_depth_usd"]=round(bd+ad,2)
   except Exception as exc:
-   with LOCK:S["sources"]["PumpDumpScanner"]={"ok":False,"last_check":now(),"mode":"high_conviction_paper_v2","scan_seconds":PUMP_SCAN_SECONDS,"error":str(exc)[:180]}
-  SHUTDOWN.wait(PUMP_SCAN_SECONDS)
+   candidate["book_error"]=str(exc)[:100];return None
+  try:
+   flow=hyperdata("/v1/orderflow/"+urllib.parse.quote(sym)) or {}
+   snaps=flow.get("snapshots") or flow.get("timeframes") or {}
+   one=snaps.get("1m") if isinstance(snaps,dict) else None
+   if isinstance(one,dict):
+    buy=float(one.get("buy_volume",0) or 0);sell=float(one.get("sell_volume",0) or 0);cvd=float(one.get("cvd",0) or 0)
+    candidate["cvd_1m"]=cvd;candidate["flow_imbalance"]=(buy-sell)/(buy+sell) if buy+sell else 0.0
+    candidate["flow_coverage"]=one.get("coverage")
+   else:
+    candidate["cvd_1m"]=float(flow.get("cumulative_cvd",0) or 0);candidate["flow_imbalance"]=0.0;candidate["flow_coverage"]=None
+  except Exception:
+   candidate["cvd_1m"]=0.0;candidate["flow_imbalance"]=0.0;candidate["flow_coverage"]=None
+  imb=float(candidate.get("orderbook_imbalance",0) or 0);flow_imb=float(candidate.get("flow_imbalance",0) or 0)
+  spread=float(candidate.get("spread_bps",9999) or 9999);oi=abs(float(candidate.get("oi_delta_60s",0) or 0))
+  vol_z=candidate.get("volume_rate_z")
+  book_ok=side*imb>=0.15 and spread<=15
+  flow_ok=side*flow_imb>=0.08
+  oi_ok=oi>=0.003
+  abnormal_ok=(vol_z is not None and float(vol_z)>=3.0) or float(candidate.get("volume_burst_ratio",0) or 0)>=3.0
+  confirmations=sum([book_ok,flow_ok,oi_ok,abnormal_ok])
+  candidate["book_ok"]=book_ok;candidate["flow_ok"]=flow_ok;candidate["oi_ok"]=oi_ok;candidate["abnormal_volume_ok"]=abnormal_ok
+  candidate["micro_confirmations"]=confirmations
+  if book_ok:candidate["score"]=min(100,float(candidate["score"])+8)
+  if flow_ok:candidate["score"]=min(100,float(candidate["score"])+8)
+  if oi_ok:candidate["score"]=min(100,float(candidate["score"])+5)
+  if abnormal_ok:candidate["score"]=min(100,float(candidate["score"])+5)
+  return candidate if confirmations>=3 and spread<=15 else None
+ try:
+  while not SHUTDOWN.is_set():
+   try:
+    with LOCK:
+     active=S["engine_active"];prices=dict(S.get("_prices",{}));history={k:list(v) for k,v in S.get("_timeline",{}).items()}
+     volumes=dict(S.get("_day_volumes",{}));contexts=copy.deepcopy(S.get("_pump_ctx",{}))
+    if not active:
+     SHUTDOWN.wait(0.5);continue
+    stamp=time.time()
+    found=momentum_candidates(prices,history,volumes,stamp,minimum_day_volume=5_000_000.0,contexts=contexts)
+    futures=[pool.submit(enrich,x) for x in found[:20]]
+    enriched=[]
+    for f in concurrent.futures.as_completed(futures):
+     x=f.result()
+     if x:enriched.append(x)
+    now_keys=set();qualified=[]
+    for x in enriched:
+     key=(x["symbol"],int(x["side"]));now_keys.add(key);streaks[key]=streaks.get(key,0)+1
+     x["confirmation_streak"]=streaks[key]
+     if x["score"]>=84 and x["confirmation_streak"]>=3:qualified.append(x)
+    for key in list(streaks):
+     if key not in now_keys:streaks.pop(key,None)
+    qualified.sort(key=lambda x:x["score"],reverse=True)
+    for candidate in qualified[:3]:
+     sym=candidate["symbol"];side=int(candidate["side"])
+     opened=bool(prices.get(sym)) and pump_open(sym,side,prices[sym],candidate["score"],candidate)
+     action="OPENED" if opened else "QUALIFIED"
+     bucket=int(stamp//15);ident=hashlib.sha256(("PUMP3:"+sym+":"+str(side)+":"+str(bucket)+":"+action).encode()).hexdigest()
+     if stamp-last_signal.get((sym,side,action),0)<15:continue
+     last_signal[(sym,side,action)]=stamp
+     with pg() as db:
+      db.execute("""insert into pump_signal_journal(id,ts,symbol,side,score,action,features)
+        values(%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(id) do nothing""",
+        (ident,now(),sym,side,float(candidate["score"]),action,json.dumps(candidate,default=str)))
+    with LOCK:
+     S["sources"]["PumpDumpScanner"]={"ok":bool(prices and volumes),"last_check":now(),"markets":len(prices),
+       "liquid_markets":sum(v>=5_000_000 for v in volumes.values()),"raw_candidates":len(found),"micro_confirmed":len(enriched),
+       "qualified_candidates":len(qualified),"top_candidates":qualified[:5],"mode":"high_conviction_paper_v3",
+       "scan_seconds":PUMP_SCAN_SECONDS,"min_day_volume":5_000_000,"entry_score_min":84,"confirmation_scans":3,
+       "analysis_threads":MICRO_ANALYSIS_THREADS,"paper_positions":len(S["pump_positions"]),
+       "shared_account_equity":round(S["equity"],4),"market_regime":{"mode":"ADVISORY_ONLY"},
+       "error":None if prices and volumes else "missing_market_prices_or_metadata"}
+   except Exception as exc:
+    with LOCK:S["sources"]["PumpDumpScanner"]={"ok":False,"last_check":now(),"mode":"high_conviction_paper_v3","analysis_threads":MICRO_ANALYSIS_THREADS,"error":str(exc)[:180]}
+   SHUTDOWN.wait(PUMP_SCAN_SECONDS)
+ finally:pool.shutdown(wait=False,cancel_futures=True)
 
 def market_metadata():
  while not SHUTDOWN.is_set():
@@ -919,26 +982,33 @@ def market_metadata():
    raw=json.loads(get(API,{"type":"metaAndAssetCtxs"}))
    universe=raw[0].get("universe",[]);ctxs=raw[1]
    volumes={};pump_ctx={};stamp=time.time()
-   with LOCK:prev_ctx=copy.deepcopy(S.get("_pump_ctx",{}))
+   with LOCK:
+    prev_ctx=copy.deepcopy(S.get("_pump_ctx",{}));baselines=copy.deepcopy(S.get("_volume_baseline",{}))
+   new_baselines={}
    for asset,ctx in zip(universe,ctxs):
     try:
      name=asset["name"];v=float(ctx.get("dayNtlVlm",0) or 0);oi=float(ctx.get("openInterest",0) or 0)
      funding=float(ctx.get("funding",0) or 0);premium=float(ctx.get("premium",0) or 0)
+     mark=float(ctx.get("markPx",0) or 0);oracle=float(ctx.get("oraclePx",0) or 0)
      if math.isfinite(v) and v>=0:volumes[name]=v
      old=prev_ctx.get(name,{})
      dt=max(1.0,stamp-float(old.get("epoch",stamp)))
-     oi_old=float(old.get("open_interest",oi) or oi)
-     vol_old=float(old.get("day_volume",v) or v)
+     oi_old=float(old.get("open_interest",oi) or oi);vol_old=float(old.get("day_volume",v) or v)
      oi_delta=(oi/oi_old-1) if oi_old>0 else 0.0
-     vol_delta=max(0.0,v-vol_old)
-     # Normalize recent notional activity against a 60-second pace of current 24h volume.
-     expected=max(1.0,v/86400.0*dt)
-     burst=vol_delta/expected if expected>0 else 0.0
+     vol_delta=max(0.0,v-vol_old);rate=vol_delta/dt
+     expected=max(1.0,v/86400.0*dt);burst=vol_delta/expected if expected>0 else 0.0
+     base=baselines.get(name,{});n=int(base.get("n",0));mean=float(base.get("mean",rate) or rate);var=float(base.get("var",0) or 0)
+     z=(rate-mean)/math.sqrt(var) if n>=12 and var>1e-12 else None
+     alpha=2.0/(min(n+1,60)+1.0);delta=rate-mean
+     mean2=mean+alpha*delta;var2=max(0.0,(1-alpha)*(var+alpha*delta*delta))
+     new_baselines[name]={"n":min(10000,n+1),"mean":mean2,"var":var2}
      pump_ctx[name]={"epoch":stamp,"open_interest":oi,"day_volume":v,"funding":funding,"premium":premium,
-                     "oi_delta_60s":oi_delta*(60.0/dt),"volume_burst_ratio":burst}
+       "mark_price":mark,"oracle_price":oracle,"oi_delta_60s":oi_delta*(60.0/dt),
+       "volume_burst_ratio":burst,"volume_rate_usd_per_sec":rate,"volume_rate_z":z,
+       "volume_baseline_samples":n}
     except (TypeError,ValueError,KeyError,ZeroDivisionError):continue
    with LOCK:
-    S["_day_volumes"]=volumes;S["_pump_ctx"]=pump_ctx
+    S["_day_volumes"]=volumes;S["_pump_ctx"]=pump_ctx;S["_volume_baseline"]=new_baselines
     S["sources"]["MarketMetadata"]={"ok":True,"last_check":now(),"markets":len(volumes)}
   except Exception as e:
    with LOCK:S["sources"]["MarketMetadata"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
