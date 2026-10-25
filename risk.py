@@ -80,9 +80,10 @@ def evaluate_exit(position, price, evaluated_at):
     local_exit=(peak_price_move>=MIN_FAVORABLE_PRICE_MOVE and peak_recent and
                 weakening and local_price_giveback>=allowed_giveback)
 
-    # Whale-liquidation PAPER strategy: when a large liquidation target is still
-    # nearby, do not harvest an ordinary local pullback before the target is touched.
-    # Once the liquidation level is reached, the normal local-extreme exit resumes.
+    # Whale-liquidation PAPER strategy: a local pullback must never harvest the
+    # position before the tracked liquidation level has actually been touched.
+    # The mark loop latches liquidation_level_reached_at; after that latch the
+    # ordinary local-extreme logic is allowed to manage the post-liquidation exit.
     features=pos.get("features") or {}
     liq=float(features.get("liquidation_price",0) or 0)
     victim=str(features.get("victim_side","")).lower()
@@ -95,9 +96,8 @@ def evaluate_exit(position, price, evaluated_at):
         reached=(victim=="long" and price<=liq) or (victim=="short" and price>=liq)
         if not reached:
             remaining_liq_pct=((price/liq)-1.0)*100.0 if victim=="long" else ((liq/price)-1.0)*100.0
-            pre_liq_hold=bool(0<=remaining_liq_pct<=hold_limit)
-            if pre_liq_hold:
-                local_exit=False
+            pre_liq_hold=True
+            local_exit=False
 
     pos["locked"]=False
     pos["stop"]=None
