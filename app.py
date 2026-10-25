@@ -250,6 +250,7 @@ def pinit():
   c.execute("create table if not exists account_capacity_snapshots (id bigserial primary key, ts text not null, equity double precision not null, contributed_capital double precision not null, used_margin double precision not null, free_margin double precision not null, margin_utilization_pct double precision not null, news_positions integer not null, pump_positions integer not null, whale_positions integer not null, total_positions integer not null, entry_margin_fraction double precision not null)")
   c.execute("create table if not exists module_snapshots (id bigserial primary key, ts text not null, module text not null, ok boolean, state jsonb not null)")
   c.execute("create table if not exists position_snapshots (id bigserial primary key, ts text not null, strategy text not null, symbol text not null, opened text, side integer, entry double precision, mark double precision, margin double precision, notional double precision, leverage double precision, unrealized_pnl double precision, roe_pct double precision, peak double precision, exit_reason text, exit_check jsonb not null default '{}'::jsonb, features jsonb not null default '{}'::jsonb)")
+  c.execute("create table if not exists scanner_observations (id bigserial primary key, ts text not null, module text not null, payload jsonb not null)")
 
   c.execute("create index if not exists audit_journal_event_idx on audit_journal(event_id,id)")
   c.execute("create index if not exists audit_journal_kind_time_idx on audit_journal(kind,recorded_at)")
@@ -258,6 +259,7 @@ def pinit():
   c.execute("create index if not exists module_snapshots_module_time_idx on module_snapshots(module,ts desc)")
   c.execute("create index if not exists position_snapshots_symbol_time_idx on position_snapshots(symbol,ts desc)")
   c.execute("create index if not exists position_snapshots_strategy_time_idx on position_snapshots(strategy,ts desc)")
+  c.execute("create index if not exists scanner_observations_module_time_idx on scanner_observations(module,ts desc)")
   row=c.execute("select equity,realized_pnl,contributed_capital from account_state where id=1").fetchone()
   if row:
    S["equity"]=float(row["equity"]);S["realized_pnl"]=float(row["realized_pnl"]);S["contributed_capital"]=float(row["contributed_capital"] or PAPER_RESET)
@@ -406,6 +408,9 @@ def save_module_snapshots():
              (ts,name,ok,json.dumps(state,default=str)))
  return len(rows)
 
+def save_scanner_observation(module,payload):
+ with pg() as c:c.execute("insert into scanner_observations(ts,module,payload) values(%s,%s,%s::jsonb)",(now(),module,json.dumps(payload,default=str)))
+
 def save_position_snapshots(prices):
  # Snapshot every open PAPER position so a later audit can reconstruct the
  # full path to the local-extreme exit instead of seeing only entry/exit PnL.
@@ -449,7 +454,7 @@ def export_rows(kind,after,limit):
           "pump_trades":("pump_trade_history","id"),"learning":("learning_snapshots","id"),
           "whale_signals":("whale_liq_signal_journal","id"),"whale_trades":("whale_liq_trade_history","id"),
           "capacity":("account_capacity_snapshots","id"),"modules":("module_snapshots","id"),
-          "position_history":("position_snapshots","id")}
+          "position_history":("position_snapshots","id"),"scanner_observations":("scanner_observations","id")}
  if kind not in columns:raise ValueError("Unsupported export kind")
  table,key=columns[kind]
  cursor=int(after) if kind in ("journal","trades","pump_trades","learning","whale_trades","capacity","modules","position_history") else after
@@ -864,6 +869,10 @@ def whale_liquidation_scan():
      last_signal[key]=stamp
      ident=hashlib.sha256(("WHALELIQ3:"+x["cluster_id"]+":"+str(int(stamp//15))+":"+action).encode()).hexdigest()
      with pg() as db:db.execute("insert into whale_liq_signal_journal(id,ts,symbol,side,score,action,features) values(%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(id) do nothing",(ident,now(),sym,side,x["score"],action,json.dumps(x,default=str)))
+    if clusters or candidates or qualified:
+     try:save_scanner_observation("whale_liquidation",{"danger_positions":len(rows),"clusters":clusters[:20],"candidates":candidates[:20],"qualified":qualified[:20],"rejections":rejections,"scan_epoch":stamp})
+     except Exception as obs_exc:
+      with LOCK:S["last_error"]="whale_observation: "+str(obs_exc)[:160]
     elapsed=time.monotonic()-started
     with LOCK:S["sources"]["WhaleLiquidationScanner"]={"ok":True,"last_check":now(),"mode":"material_liquidation_clusters_v3",
      "symbols":sorted(LIQ_WHALE_SYMBOLS),"scan_seconds":LIQ_WHALE_SCAN_SECONDS,"actual_scan_seconds":round(elapsed,3),
@@ -1042,6 +1051,10 @@ def impulse_scan():
       db.execute("""insert into pump_signal_journal(id,ts,symbol,side,score,action,features)
         values(%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(id) do nothing""",
         (ident,now(),sym,side,float(candidate["score"]),action,json.dumps(candidate,default=str)))
+    if found or qualified:
+     try:save_scanner_observation("pump_dump",{"raw_candidates":found[:20],"micro_confirmed":enriched[:20],"qualified":qualified[:20],"scan_epoch":stamp})
+     except Exception as obs_exc:
+      with LOCK:S["last_error"]="pump_observation: "+str(obs_exc)[:160]
     with LOCK:
      S["sources"]["PumpDumpScanner"]={"ok":bool(prices and volumes),"last_check":now(),"markets":len(prices),
        "liquid_markets":sum(v>=5_000_000 for v in volumes.values()),"raw_candidates":len(found),"micro_confirmed":len(enriched),
