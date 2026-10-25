@@ -35,7 +35,8 @@ BEGIN
   FOR attempt IN 1..2 LOOP
     DELETE FROM open_positions WHERE symbol='TEST_CONTRACT' AND opened='2026-10-23T07:46:35+00:00' RETURNING * INTO victim;
     IF FOUND THEN
-      pnl := victim.notional*(0.000388/victim.entry-1)*victim.side-victim.notional*0.00045*2;
+      pnl := victim.notional*(0.000388/victim.entry-1)*victim.side
+             -victim.notional*0.00045*(1+0.000388/victim.entry);
       UPDATE account_state SET equity=equity+pnl,realized_pnl=realized_pnl+pnl,updated_at=clock_timestamp()::text WHERE id=1;
       INSERT INTO trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,headline)
         VALUES(victim.opened,clock_timestamp()::text,victim.symbol,victim.side,victim.entry,0.000388,pnl,'fixture_close',victim.headline);

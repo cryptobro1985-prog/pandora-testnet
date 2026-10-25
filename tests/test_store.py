@@ -2,6 +2,7 @@
 import contextlib
 import datetime
 import os
+import time
 from pathlib import Path
 import unittest
 import uuid
@@ -10,6 +11,7 @@ import psycopg
 from psycopg.rows import dict_row
 from engine_store import EngineStore,LeaseLost
 from risk import evaluate_exit
+from accounting import paper_pnl
 
 TEST_FILE=os.environ.get("PANDORA_TEST_DATABASE_URL_FILE")
 
@@ -90,6 +92,57 @@ class StoreTests(unittest.TestCase):
             row=c.execute("SELECT symbol FROM open_positions WHERE symbol=%s",(self.symbol,)).fetchone()
             count=c.execute("SELECT count(*) AS n FROM trade_history WHERE symbol=%s",(self.symbol,)).fetchone()["n"]
         self.assertIsNotNone(row);self.assertEqual(count,0)
+
+    def test_closed_news_event_cannot_reopen_on_same_or_different_symbol(self):
+        p=self.pos();p["event_id"]="fixture_event_"+uuid.uuid4().hex
+        self.assertTrue(self.store.save(self.symbol,p,create=True))
+        self.assertIsNotNone(self.store.close(self.symbol,p,.000388,"fixture_close"))
+        self.assertFalse(self.store.save(self.symbol,p,create=True))
+        self.assertFalse(self.store.save(self.symbol+"_OTHER",p,create=True))
+        with self.connect() as c:
+            claim=c.execute("SELECT symbol FROM news_entry_claims WHERE event_id=%s",(p["event_id"],)).fetchone()
+        self.assertEqual(claim["symbol"],self.symbol)
+
+    def test_position_conflict_does_not_claim_an_unopened_event(self):
+        p=self.pos();self.assertTrue(self.store.save(self.symbol,p,create=True))
+        competing=self.pos();competing["event_id"]="fixture_event_"+uuid.uuid4().hex
+        self.assertFalse(self.store.save(self.symbol,competing,create=True))
+        with self.connect() as c:
+            claim=c.execute("SELECT 1 FROM news_entry_claims WHERE event_id=%s",(competing["event_id"],)).fetchone()
+        self.assertIsNone(claim)
+        self.assertTrue(self.store.save(self.symbol+"_OTHER",competing,create=True))
+
+    def test_entry_journal_failure_rolls_back_position_and_event_claim(self):
+        p=self.pos();p["event_id"]="fixture_event_"+uuid.uuid4().hex
+        def fail(*args):raise RuntimeError("injected entry journal failure")
+        self.store._journal=fail
+        with self.assertRaises(RuntimeError):self.store.save(self.symbol,p,create=True)
+        with self.connect() as c:
+            self.assertIsNone(c.execute("SELECT 1 FROM open_positions WHERE symbol=%s",(self.symbol,)).fetchone())
+            self.assertIsNone(c.execute("SELECT 1 FROM news_entry_claims WHERE event_id=%s",(p["event_id"],)).fetchone())
+
+    def test_close_uses_exit_notional_fee(self):
+        p=self.pos();p.update(entry=100.0,side=1,notional=1000.0,peak=100.0)
+        self.assertTrue(self.store.save(self.symbol,p,create=True))
+        result=self.store.close(self.symbol,p,110.0,"fixture_close")
+        self.assertAlmostEqual(result["pnl"],paper_pnl(1000,100,110,1,self.store.fee))
+
+    def test_auxiliary_books_have_durable_risk_state_columns(self):
+        with self.connect() as c:
+            rows=c.execute("SELECT table_name FROM information_schema.columns WHERE column_name='risk_state' AND table_name IN ('pump_positions','whale_liq_positions')").fetchall()
+        self.assertEqual({row["table_name"] for row in rows},{"pump_positions","whale_liq_positions"})
+
+    def test_lease_renewal_lock_wait_is_bounded_and_does_not_change_owner(self):
+        # A second database connection holds the lease row. Renewal must fail
+        # promptly instead of indefinitely blocking the engine coordinator.
+        with self.connect() as blocker:
+            with blocker.transaction():
+                blocker.execute("SELECT owner FROM engine_lease WHERE name='paper' FOR UPDATE")
+                started=time.monotonic()
+                with self.assertRaises(psycopg.errors.LockNotAvailable):
+                    self.store.claim()
+                self.assertLess(time.monotonic()-started,4.5)
+        self.assertTrue(self.store.claim())
 
 
 if __name__=="__main__":unittest.main()

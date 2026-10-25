@@ -1,6 +1,6 @@
-hyperdata-terminal
-psycopg[binary]>=3.2,<4
+hyperdata-terminal==1.0.0
+psycopg[binary]==3.3.6
 twscrape==0.20.1
 truthbrush==0.3.0
-curl-cffi>=0.15,<1
-websocket-client>=1.8,<2
+curl-cffi==0.15.0
+websocket-client==1.9.2

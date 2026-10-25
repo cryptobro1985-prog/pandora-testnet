@@ -7,7 +7,8 @@ Order-book/CVD confirmation is applied by app.py before an entry is allowed.
 import math
 
 def _anchor(samples,epoch,age):
-    rows=[r for r in samples if age-12 <= epoch-r["t"] <= age+18]
+    tolerance=min(5.0,age*0.20)
+    rows=[r for r in samples if age-tolerance <= epoch-r["t"] <= age+tolerance]
     return min(rows,key=lambda r:abs((epoch-r["t"])-age)) if rows else None
 
 def candidates(prices,history,volumes,epoch,minimum_day_volume=5_000_000.0,contexts=None):
@@ -44,6 +45,7 @@ def candidates(prices,history,volumes,epoch,minimum_day_volume=5_000_000.0,conte
         if sum(x>0 for x in steps)<3:continue
 
         ctx=contexts.get(symbol,{})
+        if not ctx.get("trade_data_fresh") or not 0<=epoch-float(ctx.get("epoch",0))<=15:continue
         oi_delta=float(ctx.get("oi_delta_60s") or 0)
         vol_burst=float(ctx.get("volume_burst_ratio") or 0)
         vol_z=ctx.get("volume_rate_z")

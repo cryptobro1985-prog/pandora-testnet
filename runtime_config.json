@@ -1,1 +1,1 @@
-{"mode":"paper","initial_equity_usd":100,"margin_fraction":0.25,"leverage":10,"live_trading":false}
+{"mode":"paper","initial_equity_usd":100,"margin_fraction":0.10,"leverage":25,"live_trading":false,"note":"Runtime environment overrides these documented defaults."}

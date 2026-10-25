@@ -50,16 +50,22 @@ def evaluate_exit(position, price, evaluated_at):
     peak_recent=False
     adverse_steps=0
     slope_flip=False
+    local_peak=None
+    local_price_giveback=0.0
     if len(recent)>=5:
         if side>0:
             local=max(recent)
-            peak_recent=abs(local-peak)/peak <= 0.0015
+            local_peak=local
+            local_price_giveback=max(0.0,(local-price)/local)
+            peak_recent=(local/entry-1)>=MIN_FAVORABLE_PRICE_MOVE
             steps=[recent[i]-recent[i-1] for i in range(1,len(recent))]
             adverse_steps=sum(x<0 for x in steps[-3:])
             slope_flip=(recent[-1]<recent[-3] and recent[-2]<=recent[-3])
         else:
             local=min(recent)
-            peak_recent=abs(local-peak)/peak <= 0.0015
+            local_peak=local
+            local_price_giveback=max(0.0,(price-local)/local)
+            peak_recent=(1-local/entry)>=MIN_FAVORABLE_PRICE_MOVE
             steps=[recent[i]-recent[i-1] for i in range(1,len(recent))]
             adverse_steps=sum(x>0 for x in steps[-3:])
             slope_flip=(recent[-1]>recent[-3] and recent[-2]>=recent[-3])
@@ -68,8 +74,11 @@ def evaluate_exit(position, price, evaluated_at):
     # price-based, not leverage-based, so NEWS/PUMP/WHALE behave identically.
     allowed_giveback=max(MIN_GIVEBACK,min(MAX_GIVEBACK,max(0.0,peak_price_move)*0.15))
     weakening=(adverse_steps>=2 and slope_flip)
+    # Confirm the current observed local extreme. Requiring it to sit within
+    # 15 bps of the all-time peak could permanently disable local exits after
+    # a gap or a later lower high / higher low. Price thresholds are unchanged.
     local_exit=(peak_price_move>=MIN_FAVORABLE_PRICE_MOVE and peak_recent and
-                weakening and price_giveback>=allowed_giveback)
+                weakening and local_price_giveback>=allowed_giveback)
 
     pos["locked"]=False
     pos["stop"]=None
@@ -82,6 +91,8 @@ def evaluate_exit(position, price, evaluated_at):
         "price_move":price_move,
         "peak_price_move":peak_price_move,
         "price_giveback":price_giveback,
+        "local_peak":local_peak,
+        "local_price_giveback":local_price_giveback,
         "allowed_giveback_price":allowed_giveback,
         "roe":roe,
         "peak_roe":peak_roe,
