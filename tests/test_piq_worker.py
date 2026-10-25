@@ -106,6 +106,19 @@ class PiQWorkerTests(unittest.TestCase):
         self.assertEqual(stop.status[-1]["startup_old_filtered"],8)
         self.assertFalse(stop.status[-1]["realtime_verified"])
 
+    def test_late_discovered_prestart_story_is_not_realtime_latency_evidence(self):
+        row={"url":"https://piqmarkets.com/story/late-old","headline_hint":"Bitcoin ETF approved"}
+        def discover(**kwargs):
+            return [] if app.time.monotonic()<5 else [row]
+        stop,_,_,_=self.run_worker(
+            lambda url,*a,**k:self.story(url,995),
+            discover=discover,start=1000,duration=7,
+        )
+        final=stop.status[-1]
+        self.assertEqual(final["delivery"]["samples"],0)
+        self.assertIsNone(final["delivery_latency_seconds"])
+        self.assertFalse(final["realtime_verified"])
+
     def test_pending_completions_do_not_wait_another_poll_per_stage(self):
         times=[]
         def ingest(*args):times.append(app.time.monotonic());return True

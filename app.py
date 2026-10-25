@@ -2156,9 +2156,13 @@ def piq_direct_realtime():
        totals["startup_old_filtered"]+=1;finish(url);continue
       if not piq_high_signal(story["text"]):
        totals["filtered_low_signal"]+=1;finish(url);continue
-      age=time.time()-stamp
-      if age>=0:
-       last_delivery=age;LATENCIES.record("delivery:PiQDirect",age,time.time())
+      observed_at=time.time()
+      age=observed_at-stamp
+      # Delivery latency is evidence only for publications that happened after
+      # this process began observing PiQ. Old pages discovered later are not
+      # realtime samples and must not poison p95/max or realtime verification.
+      if age>=0 and stamp>=START:
+       last_delivery=age;LATENCIES.record("delivery:PiQDirect",age,observed_at)
       record["story"]=story;record["state"]="ready";record["not_before"]=0
      except Exception as exc:
       cycle_errors+=1;retry(url,record,"fetch",exc)
