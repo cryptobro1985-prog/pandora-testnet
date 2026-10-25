@@ -87,6 +87,12 @@ class ClusterTests(unittest.TestCase):
             with self.subTest(row=row):
                 self.assertEqual(self.make([row]), [])
 
+    def test_non_major_symbol_can_form_liquidation_cluster(self):
+        rows=[position(symbol="DOGE",size=200_000,level=99.5)]
+        result=cluster_positions(rows,{"DOGE":100.0},{"DOGE":context()},EPOCH)
+        self.assertEqual(len(result),1)
+        self.assertEqual(result[0]["symbol"],"DOGE")
+
     def test_scanned_at_milliseconds_is_normalized(self):
         result = self.make([position(scanned_at=(EPOCH-5)*1000)])[0]
         self.assertEqual(result["position_age_seconds"], 5)
