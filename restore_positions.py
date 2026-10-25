@@ -87,24 +87,24 @@ def restore_whales(c,prices):
     return out
 
 def restore_btc(c):
-    action="restore-btc-short-80524-v3"
+    action="restore-btc-short-80524-v4"
     if c.execute("select 1 from operator_actions where action_id=%s",(action,)).fetchone():return None
     cur=c.execute("select * from open_positions where symbol='BTC' for update").fetchone()
     if cur:
         if abs(float(cur["entry"])-80524.5)<.01:return {"already_open":True,"entry":float(cur["entry"])}
         return None
-    t=c.execute("""select * from trade_history where symbol='BTC' and side=-1 and abs(entry-80524.5)<.01
+    t=c.execute("""select * from trade_history where strategy='news' and symbol='BTC' and side=-1 and abs(entry-80524.5)<.01
         order by opened::timestamptz desc limit 1 for update""").fetchone()
     if not t:return None
     s=c.execute("select * from position_snapshots where strategy='news' and symbol='BTC' and opened=%s order by ts::timestamptz desc limit 1",(t["opened"],)).fetchone()
     lev=max(1,float((s or {}).get("leverage") or 25));margin=max(.01,float((s or {}).get("margin") or 0));notional=max(.01,float((s or {}).get("notional") or margin*lev));pnl=float(t.get("pnl") or 0)
     payload={"symbol":"BTC","entry":float(t["entry"]),"opened":t["opened"],"margin":margin,"notional":notional,"leverage":lev,
-             "reversed_realized_pnl":pnl,"local_search_min_samples":15}
+             "reversed_realized_pnl":pnl,"local_search_min_samples":30}
     with c.transaction():
         c.execute("""insert into open_positions(symbol,side,entry,notional,opened,opened_epoch,headline,locked,stop,leverage,margin,event_id,risk_state)
             values('BTC',-1,%s,%s,%s,%s,%s,false,null,%s,%s,%s,%s::jsonb)""",
             (float(t["entry"]),notional,t["opened"],epoch(t["opened"]),t.get("headline"),lev,margin,t.get("event_id"),
-             json.dumps({"peak":float(t["entry"]),"history":[],"local_search_min_samples":15},default=str)))
+             json.dumps({"peak":float(t["entry"]),"history":[],"local_search_min_samples":30},default=str)))
         c.execute("update account_state set equity=equity-%s,realized_pnl=realized_pnl-%s,updated_at=%s where id=1",(pnl,pnl,now()))
         c.execute("delete from trade_history where id=%s",(t["id"],))
         c.execute("insert into operator_actions(action_id,completed_at,payload) values(%s,%s,%s::jsonb)",(action,now(),json.dumps(payload,default=str)))
