@@ -36,7 +36,7 @@ def run_trade_stream(observations, stop, symbols_provider, report, url):
                     if time.time()-last_received > 12:
                         raise RuntimeError("exchange_stream_heartbeat_stale")
                 epoch = time.time()
-                if epoch-last_refresh >= 30:
+                if epoch-last_refresh >= 5:
                     desired = set(symbols_provider())
                     for method, symbols in (("unsubscribe", selected-desired), ("subscribe", desired-selected)):
                         for symbol in sorted(symbols):
