@@ -354,7 +354,7 @@ def build_learning_snapshot():
             "max_contributed_capital":float(capacity["max_contributed_capital"] or PAPER_RESET),
             "current_margin_fraction_pct":TRADE_MARGIN_FRACTION*100.0,
             "observed_no_topup_fraction_ceiling_pct":round(90.0/max(1,int(capacity["max_positions"] or 1)),2)},
-          "generated_at":now(),"policy":"conservative_news_source_reweight_n10_other_strategies_observation_only"
+          "generated_at":now(),"policy":"conservative_news_source_reweight_n10_other_strategies_observation_only"}
  return total_samples,payload
 
 def save_learning_snapshot():
