@@ -97,14 +97,11 @@ if not math.isfinite(NEWS_MAX_AGE_SECONDS) or NEWS_MAX_AGE_SECONDS<=0:raise Valu
 if not math.isfinite(NEWS_POLL_SECONDS) or NEWS_POLL_SECONDS<1:raise ValueError("invalid news poll interval")
 S.update({"engine_active":False,"engine_error":None,"last_checkpoint":None,"last_market_error":None})
 FEEDS={
- "SECOfficial":"https://www.sec.gov/news/pressreleases.rss",
- "CFTCOfficial":"https://www.cftc.gov/RSS/RSSGP/rssgp.xml",
- "CoinDesk":"https://www.coindesk.com/arc/outboundfeeds/rss/",
- "TheBlockRSS":"https://www.theblock.co/rss.xml",
+ # Only high-signal official macro feeds remain. Broad media coverage is supplied
+ # by PiQ Direct and FirstSquawk, so duplicate crypto/general-news RSS is removed.
+ "FedMonetary":"https://www.federalreserve.gov/feeds/press_monetary.xml",
+ "ECBOfficial":"https://www.ecb.europa.eu/rss/press.html",
 }
-# Broad Google News, general world-news RSS and research-index feeds are intentionally
-# disabled in the trading path. PiQ Direct + FirstSquawk are the curated fast layer;
-# official regulators remain authoritative secondary sources.
 SEARCH_INDEX_FEEDS=set()
 RESEARCH_PAGES={}
 
@@ -124,9 +121,8 @@ EXPLICIT_TOKEN_PATTERNS={
 # Source priors are experimental metadata for the one-week PAPER_ONLY study.
 # They are logged and gently affect confidence/eligibility, but can never reverse news direction.
 SOURCE_WEIGHTS={
- "FedOfficial":1.00,"SECOfficial":1.00,"CFTCOfficial":1.00,"ECBOfficial":0.95,"WhiteHouseOfficial":1.00,
- "TruthSocialPublic":0.98,"XOfficial":0.92,"PiQDirect":0.96,
- "CoinDesk":0.86,"TheBlockRSS":0.86
+ "FedMonetary":1.00,"ECBOfficial":0.95,"WhiteHouseOfficial":1.00,
+ "TruthSocialPublic":0.98,"XOfficial":0.92,"PiQDirect":0.96
 }
 NON_MARKET_PATTERNS=(
  r"\\b(?:giveaway|sweepstakes|contest|competition)\\b",
@@ -194,7 +190,7 @@ def source_freshness_window(source):
   return min(35.0,NEWS_MAX_AGE_SECONDS)
  if source=="PiQDirect":
   return min(60.0,NEWS_MAX_AGE_SECONDS)
- if source in ("FedOfficial","SECOfficial","CFTCOfficial","ECBOfficial","WhiteHouseOfficial"):
+ if source in ("FedMonetary","ECBOfficial","WhiteHouseOfficial"):
   return min(90.0,NEWS_MAX_AGE_SECONDS)
  return NEWS_MAX_AGE_SECONDS
 
