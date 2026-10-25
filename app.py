@@ -993,7 +993,7 @@ def market():
   SHUTDOWN.wait(2)
 
 def impulse_scan():
- last_signal={};streaks={}
+ last_signal={};streaks={};candidate_queue={}
  pool=concurrent.futures.ThreadPoolExecutor(max_workers=MICRO_ANALYSIS_THREADS,thread_name_prefix="pump-micro")
  def enrich(candidate):
   candidate=dict(candidate);sym=candidate["symbol"];side=int(candidate["side"])
@@ -1025,6 +1025,11 @@ def impulse_scan():
   if oi_ok:candidate["score"]=min(100,float(candidate["score"])+5)
   if abnormal_ok:candidate["score"]=min(100,float(candidate["score"])+5)
   return candidate if confirmations>=3 and book_ok and flow_ok and abnormal_ok and spread<=15 else None
+ def portfolio_counts():
+  with LOCK:
+   news=len(S.get("positions",{}));pump=len(S.get("pump_positions",{}));whale=len(S.get("whale_positions",{}))
+   sides=[int(p.get("side",0)) for book in (S.get("positions",{}),S.get("pump_positions",{}),S.get("whale_positions",{})) for p in book.values()]
+  return news+pump+whale,pump,sides
  try:
   while not SHUTDOWN.is_set():
    started=time.monotonic()
@@ -1039,24 +1044,46 @@ def impulse_scan():
     for sym in contexts:contexts[sym].update(MARKET_OBS.context(sym,stamp))
     found=momentum_candidates(prices,history,volumes,stamp,minimum_day_volume=0.0,contexts=contexts)
     for candidate in found:candidate["observed_at_epoch"]=stamp
-    futures=[pool.submit(enrich,x) for x in found[:20]]
+    futures=[pool.submit(enrich,x) for x in found[:30]]
     enriched=[]
-    for f in concurrent.futures.as_completed(futures):
-     x=f.result()
+    for future in concurrent.futures.as_completed(futures):
+     x=future.result()
      if x:enriched.append(x)
-    now_keys=set();qualified=[]
+    now_keys=set();primary=[];secondary=[]
     for x in enriched:
      key=(x["symbol"],int(x["side"]));now_keys.add(key);streaks[key]=streaks.get(key,0)+1
      x["confirmation_streak"]=streaks[key]
-     if x["score"]>=84 and x["confirmation_streak"]>=3:qualified.append(x)
+     score=float(x["score"])
+     if score>=PUMP_PRIMARY_SCORE and x["confirmation_streak"]>=3:
+      x["allocation_tier"]="PRIMARY";x["allocation_margin_fraction"]=TRADE_MARGIN_FRACTION;primary.append(x)
+     elif score>=PUMP_SECONDARY_SCORE and x["confirmation_streak"]>=2:
+      x["allocation_tier"]="SECONDARY";x["allocation_margin_fraction"]=PUMP_SECONDARY_MARGIN_FRACTION;secondary.append(x)
+     if score>=PUMP_SECONDARY_SCORE and x["confirmation_streak"]>=2:
+      candidate_queue[key]={"candidate":copy.deepcopy(x),"expires":stamp+PUMP_QUEUE_TTL_SECONDS}
     for key in list(streaks):
      if key not in now_keys:streaks.pop(key,None)
-    qualified.sort(key=lambda x:x["score"],reverse=True)
-    for candidate in qualified[:3]:
-     sym=candidate["symbol"];side=int(candidate["side"])
-     opened=bool(prices.get(sym)) and pump_open(sym,side,prices[sym],candidate["score"],candidate)
-     action="OPENED" if opened else "QUALIFIED"
-     bucket=int(stamp//15);ident=hashlib.sha256(("PUMP3:"+sym+":"+str(side)+":"+str(bucket)+":"+action).encode()).hexdigest()
+    for key,row in list(candidate_queue.items()):
+     if row["expires"]<stamp:candidate_queue.pop(key,None)
+    primary.sort(key=lambda x:x["score"],reverse=True);secondary.sort(key=lambda x:x["score"],reverse=True)
+    queued=[row["candidate"] for row in candidate_queue.values()]
+    queued.sort(key=lambda x:(0 if x.get("allocation_tier")=="PRIMARY" else 1,-float(x.get("score",0))))
+    opened_this_scan=[];qualified=primary+secondary
+    for candidate in queued:
+     total_open,pump_open_count,open_sides=portfolio_counts()
+     if total_open>=MAX_OPEN_POSITIONS or pump_open_count>=PUMP_MAX_POSITIONS:break
+     sym=candidate["symbol"];side=int(candidate["side"]);tier=candidate.get("allocation_tier","SECONDARY")
+     if _symbol_open_anywhere(sym):continue
+     if tier=="SECONDARY":
+      if total_open>=TARGET_OPEN_POSITIONS:continue
+      if sum(1 for x in open_sides if x==side)>=PUMP_SECONDARY_SAME_SIDE_CAP:continue
+      margin_fraction=PUMP_SECONDARY_MARGIN_FRACTION
+     else:
+      margin_fraction=TRADE_MARGIN_FRACTION
+     opened=bool(prices.get(sym)) and pump_open(sym,side,prices[sym],candidate["score"],candidate,margin_fraction)
+     action="OPENED_"+tier if opened else "QUALIFIED_"+tier
+     if opened:
+      opened_this_scan.append(sym);candidate_queue.pop((sym,side),None)
+     bucket=int(stamp//15);ident=hashlib.sha256(("PUMP4:"+sym+":"+str(side)+":"+str(bucket)+":"+action).encode()).hexdigest()
      if stamp-last_signal.get((sym,side,action),0)<15:continue
      last_signal[(sym,side,action)]=stamp
      with pg() as db:
@@ -1064,21 +1091,28 @@ def impulse_scan():
         values(%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(id) do nothing""",
         (ident,now(),sym,side,float(candidate["score"]),action,json.dumps(candidate,default=str)))
     if found or qualified:
-     try:save_scanner_observation("pump_dump",{"raw_candidates":found[:20],"micro_confirmed":enriched[:20],"qualified":qualified[:20],"scan_epoch":stamp})
+     try:save_scanner_observation("pump_dump",{"raw_candidates":found[:30],"micro_confirmed":enriched[:30],"primary":primary[:20],"secondary":secondary[:20],"queue":queued[:20],"opened":opened_this_scan,"scan_epoch":stamp})
      except Exception as obs_exc:
       with LOCK:S["last_error"]="pump_observation: "+str(obs_exc)[:160]
+    total_open,pump_open_count,_=portfolio_counts()
     with LOCK:
      S["sources"]["PumpDumpScanner"]={"ok":bool(prices and volumes),"last_check":now(),"markets":len(prices),
        "liquid_markets":sum(v>=5_000_000 for v in volumes.values()),"raw_candidates":len(found),"micro_confirmed":len(enriched),
-       "qualified_candidates":len(qualified),"top_candidates":qualified[:5],"mode":"high_conviction_paper_v3",
-       "scan_seconds":PUMP_SCAN_SECONDS,"actual_scan_seconds":round(time.monotonic()-started,3),"min_day_volume":0,"market_scope":"all_hyperliquid_listed_perps","entry_score_min":84,"confirmation_scans":3,
+       "qualified_candidates":len(qualified),"primary_candidates":len(primary),"secondary_candidates":len(secondary),
+       "candidate_queue":len(candidate_queue),"top_candidates":qualified[:5],"mode":"portfolio_allocator_paper_v4",
+       "scan_seconds":PUMP_SCAN_SECONDS,"actual_scan_seconds":round(time.monotonic()-started,3),"min_day_volume":0,
+       "market_scope":"all_hyperliquid_listed_perps","primary_score_min":PUMP_PRIMARY_SCORE,
+       "secondary_score_min":PUMP_SECONDARY_SCORE,"primary_confirmation_scans":3,"secondary_confirmation_scans":2,
+       "target_open_positions":TARGET_OPEN_POSITIONS,"max_open_positions":MAX_OPEN_POSITIONS,
+       "pump_max_positions":PUMP_MAX_POSITIONS,"secondary_margin_fraction":PUMP_SECONDARY_MARGIN_FRACTION,
+       "queue_ttl_seconds":PUMP_QUEUE_TTL_SECONDS,"open_positions_total":total_open,
        "signal_ready_markets":sum(bool(c.get("trade_data_fresh")) for c in contexts.values()),"flow_source":"hyperliquid_ws_trades",
-       "analysis_threads":MICRO_ANALYSIS_THREADS,"paper_positions":len(S["pump_positions"]),
+       "analysis_threads":MICRO_ANALYSIS_THREADS,"paper_positions":pump_open_count,
        "shared_account_equity":round(S["equity"],4),"market_regime":{"mode":"ADVISORY_ONLY"},
        "error":None if prices and volumes else "missing_market_prices_or_metadata"}
    except Exception as exc:
-    streaks={}
-    with LOCK:S["sources"]["PumpDumpScanner"]={"ok":False,"last_check":now(),"mode":"high_conviction_paper_v3","analysis_threads":MICRO_ANALYSIS_THREADS,"error":str(exc)[:180]}
+    streaks={};candidate_queue={}
+    with LOCK:S["sources"]["PumpDumpScanner"]={"ok":False,"last_check":now(),"mode":"portfolio_allocator_paper_v4","analysis_threads":MICRO_ANALYSIS_THREADS,"error":str(exc)[:180]}
    SHUTDOWN.wait(max(.05,PUMP_SCAN_SECONDS-(time.monotonic()-started)))
  finally:pool.shutdown(wait=False,cancel_futures=True)
 
@@ -2455,7 +2489,7 @@ def operations_diagnostics():
      "pump_positions":len(S.get("pump_positions",{})),"pump_trades":S.get("pump_trades"),"shared_account_equity":S.get("equity"),
      "whale_liq_engine":copy.deepcopy(S["sources"].get("WhaleLiquidationScanner",{})),
      "whale_liq_positions":len(S.get("whale_positions",{})),"whale_liq_trades":S.get("whale_trades"),"account_model":"UNIFIED_PAPER_ACCOUNT",
-     "sizing_policy":{"margin_fraction":TRADE_MARGIN_FRACTION,"leverage":TRADE_LEVERAGE,"auto_topup_step":PAPER_TOPUP_STEP,"contributed_capital":S.get("contributed_capital",PAPER_RESET),"micro_analysis_threads":MICRO_ANALYSIS_THREADS},
+     "sizing_policy":{"margin_fraction":TRADE_MARGIN_FRACTION,"secondary_margin_fraction":PUMP_SECONDARY_MARGIN_FRACTION,"leverage":TRADE_LEVERAGE,"target_open_positions":TARGET_OPEN_POSITIONS,"max_open_positions":MAX_OPEN_POSITIONS,"pump_max_positions":PUMP_MAX_POSITIONS,"auto_topup_step":PAPER_TOPUP_STEP,"contributed_capital":S.get("contributed_capital",PAPER_RESET),"micro_analysis_threads":MICRO_ANALYSIS_THREADS},
      "entry_rejections":dict(S.get("_entry_rejections",{})),
      "daily_audit":daily,
      "learning":{"samples":S.get("adaptive",{}).get("samples",0),"generated_at":S.get("adaptive",{}).get("generated_at"),"policy":S.get("adaptive",{}).get("policy")},
