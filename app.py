@@ -393,6 +393,51 @@ def save_learning_snapshot():
          "strategy_count":len(payload["strategy_stats"]),"policy":payload["policy"]})
  return payload
 
+def save_whale_v2_learning_snapshot():
+ try:
+  with pg() as c:
+   account=c.execute("select equity,realized_pnl,started_at from whale_liq_v2_account_state where id=1").fetchone()
+   rows=c.execute("select pnl,features from whale_liq_v2_trade_history order by id").fetchall()
+   v1=c.execute("""select count(*) as n,
+      sum(case when pnl>0 then 1 else 0 end) as wins,
+      coalesce(sum(pnl),0) as total_pnl,avg(pnl) as avg_pnl
+      from trade_history where strategy='whale_liquidation' and opened::timestamptz >= %s::timestamptz""",
+      (account["started_at"],)).fetchone()
+   buckets=c.execute("""select
+      case when nullif(features->>'wl2_entry_distance_pct','')::double precision < .35 then '<0.35%'
+           when nullif(features->>'wl2_entry_distance_pct','')::double precision < .60 then '0.35-0.60%'
+           else '0.60-0.90%' end as distance_bucket,
+      count(*) as n,sum(case when pnl>0 then 1 else 0 end) as wins,
+      avg(pnl) as avg_pnl,sum(pnl) as total_pnl,
+      avg(nullif(features->>'whale_rank_score','')::double precision) as avg_rank
+      from whale_liq_v2_trade_history group by 1 order by 1""").fetchall()
+   paths=c.execute("""select
+      min(roe_pct) filter(where strategy='whale_liquidation_v2') as worst_observed_roe_pct,
+      max(roe_pct) filter(where strategy='whale_liquidation_v2') as best_observed_roe_pct
+      from position_snapshots where ts::timestamptz >= %s::timestamptz""",
+      (account["started_at"],)).fetchone()
+  summary=wl2_learning_summary([dict(x) for x in rows])
+  payload={"policy":WL2_POLICY,"adaptation_mode":"observe_only_frozen_week1",
+    "experiment_started_at":account["started_at"],
+    "v2_account":{"equity":float(account["equity"]),"realized_pnl":float(account["realized_pnl"])},
+    "v2":summary,"distance_buckets":[dict(x) for x in buckets],
+    "path_stats":dict(paths) if paths else {},
+    "v1_same_period":{"samples":int(v1["n"] or 0),"wins":int(v1["wins"] or 0),
+      "win_rate":(float(v1["wins"] or 0)/int(v1["n"])) if int(v1["n"] or 0) else None,
+      "total_pnl":float(v1["total_pnl"] or 0),
+      "avg_pnl":float(v1["avg_pnl"] or 0) if v1["avg_pnl"] is not None else None},
+    "note":"WL2 policy is frozen during week-one A/B; learning records evidence and does not mutate live thresholds.",
+    "generated_at":now()}
+  with pg() as c:
+   c.execute("insert into whale_liq_v2_learning_snapshots(recorded_at,samples,payload) values(%s,%s,%s::jsonb)",
+     (now(),int(summary["samples"]),json.dumps(payload,default=str)))
+  with LOCK:S["whale_v2_learning"]=payload
+  journal("whale_v2_learning_snapshot",None,{"samples":summary["samples"],"policy":WL2_POLICY})
+  return payload
+ except Exception as exc:
+  with LOCK:S["last_error"]="wl2_learning: "+str(exc)[:160]
+  return None
+
 def load_latest_learning():
  try:
   with pg() as c:
