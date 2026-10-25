@@ -618,29 +618,44 @@ def _reserve_shared_entry(symbol,margin_fraction=None):
 def _release_shared_entry(symbol):
  with LOCK:S.setdefault("_entry_reservations",{}).pop(symbol,None)
 
-def liquidity_margin_fraction(symbol,features,base=None):
- """Paper-test sizing from executable liquidity, never from symbol name alone."""
- base=TRADE_MARGIN_FRACTION if base is None else float(base)
+def liquidity_margin_fraction(symbol,features,base=None,regime=None):
+ """Paper-test sizing: 5%-20% from signal strength, liquidity and market alignment."""
  depth=float(features.get("book_depth_usd",0) or features.get("opposing_depth_usd",0) or 0)
  day=float(features.get("day_volume_usd",0) or 0)
- score=float(features.get("score",0) or 0)
- if depth<=0:
-  frac=max(0.01,min(base,POSITION_MARGIN_MAX))
- elif depth<50_000:frac=0.02
- elif depth<250_000:frac=0.03
- elif depth<1_000_000:frac=0.05
- elif depth<5_000_000:frac=0.08
- elif depth<20_000_000:frac=0.12
- elif depth<50_000_000:frac=0.15
- else:frac=0.18
- if depth>=50_000_000 and day>=500_000_000:frac=0.20
- if score and score<80:frac*=0.80
- elif score>=92:frac*=1.10
- frac=max(0.01,min(POSITION_MARGIN_MAX,frac))
+ score=max(0.0,min(100.0,float(features.get("score",0) or 0)))
+ streak=max(0,float(features.get("confirmation_streak",0) or 0))
+ confirms=max(0,float(features.get("micro_confirmations",0) or 0))
+ burst=max(0.0,float(features.get("volume_burst_ratio",0) or 0))
+ flow=abs(float(features.get("flow_imbalance",0) or 0))
+ whale=max(0.0,float(features.get("whale_size_usd",0) or 0))
+ floor=max(1.0,float(features.get("floor_notional_usd",features.get("minimum_notional_usd",1)) or 1))
+ whale_multiple=whale/floor if whale else 0.0
+ # Signal component dominates; liquidity controls how much of the 20% ceiling is safe to test.
+ strength=0.45*(score/100.0)+0.10*min(1.0,streak/3.0)+0.10*min(1.0,confirms/4.0)+0.10*min(1.0,burst/10.0)+0.10*min(1.0,flow)+0.15*min(1.0,whale_multiple/4.0)
+ if depth<10_000:liq_cap=0.08
+ elif depth<50_000:liq_cap=0.10
+ elif depth<250_000:liq_cap=0.13
+ elif depth<1_000_000:liq_cap=0.15
+ elif depth<5_000_000:liq_cap=0.17
+ else:liq_cap=0.20
+ if day>=500_000_000 and depth>=20_000_000:liq_cap=0.20
+ frac=0.05+0.15*max(0.0,min(1.0,strength))
+ frac=min(frac,liq_cap)
+ side=int(features.get("side",0) or 0)
+ if regime:
+  mode=str(regime.get("mode","NORMAL"))
+  rside=int(regime.get("side",0) or 0)
+  features["market_regime"]=mode
+  features["market_regime_side"]=rside
+  if rside and side and side!=rside:
+   frac=0.05
+   features["market_regime_conflict"]=True
+ frac=max(0.05,min(POSITION_MARGIN_MAX,frac))
  features["sizing_book_depth_usd"]=round(depth,2)
  features["sizing_day_volume_usd"]=round(day,2)
+ features["signal_strength_score"]=round(strength*100,2)
  features["allocation_margin_fraction"]=round(frac,4)
- features["allocation_policy"]="liquidity_ranked_paper_v1"
+ features["allocation_policy"]="signal_liquidity_5_20_paper_v2"
  return frac
 
 def current_entry_price(symbol):
@@ -1075,8 +1090,21 @@ def impulse_scan():
      SHUTDOWN.wait(0.5);continue
     stamp=time.time()
     if stamp-S.get("_last_poll_epoch",0)>10:raise RuntimeError("stale_market_prices")
+    regime=market_regime(prices,history,volumes,stamp)
     for sym in contexts:contexts[sym].update(MARKET_OBS.context(sym,stamp))
     found=momentum_candidates(prices,history,volumes,stamp,minimum_day_volume=0.0,contexts=contexts)
+    if regime.get("side"):
+     aligned=[];counter=[]
+     for cand in found:
+      if int(cand.get("side",0))==int(regime["side"]):aligned.append(cand)
+      else:
+       # Counter-market impulses are observation-only unless extreme relative move.
+       move=max(abs(float(cand.get("r60_pct",0) or 0)),abs(float(cand.get("r180_pct",0) or 0)))
+       if float(cand.get("score",0) or 0)>=96 and move>=1.25:
+        cand["counter_regime_exception"]=True;counter.append(cand)
+       else:
+        cand["market_regime_rejected"]=regime.get("mode")
+     found=aligned+counter
     for candidate in found:candidate["observed_at_epoch"]=stamp
     futures=[pool.submit(enrich,x) for x in found[:30]]
     enriched=[]
@@ -1109,10 +1137,10 @@ def impulse_scan():
      if _symbol_open_anywhere(sym):continue
      if tier=="SECONDARY":
       if sum(1 for x in open_sides if x==side)>=PUMP_SECONDARY_SAME_SIDE_CAP:continue
-      ranked_fraction=liquidity_margin_fraction(sym,candidate,PUMP_SECONDARY_MARGIN_FRACTION)
-      margin_fraction=min(ranked_fraction,max(PUMP_SECONDARY_MARGIN_FRACTION,0.05))
+      ranked_fraction=liquidity_margin_fraction(sym,candidate,PUMP_SECONDARY_MARGIN_FRACTION,regime)
+      margin_fraction=ranked_fraction
      else:
-      margin_fraction=liquidity_margin_fraction(sym,candidate,TRADE_MARGIN_FRACTION)
+      margin_fraction=liquidity_margin_fraction(sym,candidate,TRADE_MARGIN_FRACTION,regime)
      opened=bool(prices.get(sym)) and pump_open(sym,side,prices[sym],candidate["score"],candidate,margin_fraction)
      action="OPENED_"+tier if opened else "QUALIFIED_"+tier
      if opened:
@@ -1142,7 +1170,7 @@ def impulse_scan():
        "queue_ttl_seconds":PUMP_QUEUE_TTL_SECONDS,"open_positions_total":total_open,
        "signal_ready_markets":sum(bool(c.get("trade_data_fresh")) for c in contexts.values()),"flow_source":"hyperliquid_ws_trades",
        "analysis_threads":MICRO_ANALYSIS_THREADS,"paper_positions":pump_open_count,
-       "shared_account_equity":round(S["equity"],4),"market_regime":{"mode":"ADVISORY_ONLY"},
+       "shared_account_equity":round(S["equity"],4),"market_regime":regime,
        "error":None if prices and volumes else "missing_market_prices_or_metadata"}
    except Exception as exc:
     streaks={};candidate_queue={}
