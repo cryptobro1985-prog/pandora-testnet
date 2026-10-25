@@ -178,6 +178,26 @@ class RuntimeAuditTests(unittest.TestCase):
         close.assert_not_called()
         self.assertIn("BTC", app.S["positions"])
 
+    def test_first_receipt_failure_retries_even_if_source_seen_cursor_advanced(self):
+        stop=unittest.mock.Mock()
+        stop.is_set.return_value=False
+        with patch.object(app,"SHUTDOWN",stop), \
+                patch.object(app,"ingest_event",side_effect=[RuntimeError("temporary database failure"),True]) as ingest:
+            result=app.ingest_with_retry("post","XOfficial:FirstSquawk","Bitcoin ETF approved",app.now())
+        self.assertTrue(result)
+        self.assertEqual(ingest.call_count,2)
+        stop.wait.assert_called_once_with(.5)
+
+    def test_first_receipt_failure_cannot_extend_publication_freshness(self):
+        stop=unittest.mock.Mock()
+        stop.is_set.return_value=False
+        with patch.object(app,"SHUTDOWN",stop), \
+                patch.object(app,"ingest_event",side_effect=RuntimeError("database unavailable")) as ingest:
+            with self.assertRaises(RuntimeError):
+                app.ingest_with_retry("post","XOfficial:FirstSquawk","Bitcoin ETF approved","2025-01-01T00:00:00Z")
+        self.assertEqual(ingest.call_count,1)
+        stop.wait.assert_not_called()
+
 
 class DuplicateNewsAuditTests(unittest.TestCase):
     class Cursor:

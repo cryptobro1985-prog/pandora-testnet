@@ -1511,7 +1511,9 @@ def x_critical_realtime():
      latencies=[]
      for p in sorted(fresh,key=lambda q:publication_epoch(q.get("created_at")) or 0):
       stamp=publication_epoch(p.get("created_at"));age=time.time()-stamp if stamp is not None else None
-      if age is not None and age>=0:
+      # A mirror can resurface an old/pinned post after a backend switch.
+      # Its publication age is not a measured delivery delay while watching.
+      if age is not None and age>=0 and stamp>=START:
        latencies.append(age);LATENCIES.record("delivery:XOfficial:"+h,age,time.time())
       if not freshness(p.get("created_at"),time.time(),source_freshness_window("XOfficial:"+h))["allowed"]:continue
       ident=hashlib.sha256(("XFree:"+h+":"+str(p["id"])).encode()).hexdigest()
