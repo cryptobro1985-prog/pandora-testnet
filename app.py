@@ -211,6 +211,11 @@ def classify_event(title,base_side):
  for event,side,terms in EVENT_RULES:
   if any(t in lo for t in terms):return event,side
  return ("DIRECTIONAL_NEWS" if base_side else "UNCLASSIFIED"),base_side
+PRICE_ACTION_ONLY_TERMS=("surge","surges","soars","jumps","rally","rallies","gains","falls","drops","slips","plunges","tumbles","declines","selloff","sell-off","crashes","crash")
+CAUSAL_EVENT_TYPES={"RISK_ON_DEESCALATION","MONETARY_EASING","RISK_OFF_GEOPOLITICS","MONETARY_TIGHTENING","ETF_APPROVAL","LISTING","BUYBACK","ADOPTION","HACK","DELISTING","ENFORCEMENT","FUND_OUTFLOW","FUND_INFLOW"}
+def is_price_action_only_news(title,event_type):
+ lo=title.lower()
+ return event_type not in CAUSAL_EVENT_TYPES and any(term in lo for term in PRICE_ACTION_ONLY_TERMS)
 def source_weight(source):
  if source.startswith("XIndex:"):base=0.40
  elif source.startswith("XOfficial:"):base=0.90
@@ -331,11 +336,11 @@ def build_learning_snapshot():
  for r in rows:
   n=int(r["n"] or 0);wins=int(r["wins"] or 0);avg=float(r["avg_pnl"] or 0);total=float(r["total_pnl"] or 0)
   total_samples+=n;wr=(wins/n) if n else 0.0;mult=1.0
-  if n>=5:
-   edge=(wr-0.5)*0.30
-   if avg>0:edge+=0.03
-   elif avg<0:edge-=0.03
-   mult=max(0.85,min(1.15,1.0+edge))
+  if n>=10:
+   edge=(wr-0.5)*0.20
+   if avg>0:edge+=0.02
+   elif avg<0:edge-=0.02
+   mult=max(0.90,min(1.10,1.0+edge))
   multipliers[str(r["source"])]=round(mult,4)
   source_stats[str(r["source"])]={"samples":n,"wins":wins,"win_rate":round(wr,4),"avg_pnl":avg,"total_pnl":total,"multiplier":round(mult,4)}
  total_samples=sum(int(x["n"] or 0) for x in strategy)
@@ -349,7 +354,7 @@ def build_learning_snapshot():
             "max_contributed_capital":float(capacity["max_contributed_capital"] or PAPER_RESET),
             "current_margin_fraction_pct":TRADE_MARGIN_FRACTION*100.0,
             "observed_no_topup_fraction_ceiling_pct":round(90.0/max(1,int(capacity["max_positions"] or 1)),2)},
-          "generated_at":now(),"policy":"bounded_news_source_reweight_other_strategies_observation_only"
+          "generated_at":now(),"policy":"conservative_news_source_reweight_n10_other_strategies_observation_only"
  return total_samples,payload
 
 def save_learning_snapshot():
@@ -1176,6 +1181,13 @@ def record_event(ident,source,title,sym,base_side,prices,published_at=None):
   journal("decision",ident,{"symbol":sym,"side":0,"reason":fresh["reason"],"freshness":fresh,"freshness_window_seconds":fresh_window,"published_at":published_at})
   return 0
  event_type,event_side=classify_event(title,base_side)
+ if is_price_action_only_news(title,event_type):
+  feature={"delegated_to":"PumpDumpScanner","reason":"price_action_report_not_news_trigger","event_type":event_type,
+           "source":source,"published_at":published_at,"symbol":sym}
+  save_event_feature(ident,now(),source,title,sym,0,0.0,feature)
+  journal("delegated_price_action_news",ident,{"source":source,"title":title,"symbol":sym,
+    "event_type":event_type,"reason":"handled_by_pump_dump_scanner"})
+  return 0
  weight=source_weight(source);effective_side=base_side if base_side else event_side
  if not sym or sym not in prices:
   journal("decision",ident,{"symbol":sym,"raw_side":base_side,"event_side":event_side,"event_type":event_type,"source_weight":weight,"side":0,"reason":"no_tradable_market"})
