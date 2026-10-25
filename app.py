@@ -114,6 +114,7 @@ LIQ_WHALE_SCORE_MIN=max(50.0,float(os.getenv("LIQ_WHALE_SCORE_MIN","76")))
 LIQ_WHALE_MAX_POSITION_AGE_SECONDS=max(30.0,float(os.getenv("LIQ_WHALE_MAX_POSITION_AGE_SECONDS","180")))
 LIQ_WHALE_MIN_BY_SYMBOL=dict(MIN_NOTIONAL_USD)
 LIQ_WHALE_DEFAULT_MIN_USD=max(25_000.0,float(os.getenv("LIQ_WHALE_DEFAULT_MIN_USD","25000")))
+LIQ_WHALE_MIN_BY_SYMBOL["__DEFAULT__"]=LIQ_WHALE_DEFAULT_MIN_USD
 LIQ_WHALE_BASE_ENTRY_DISTANCE={"BTC":0.45,"ETH":0.60,"SOL":0.75}
 LIQ_WHALE_DEFAULT_ENTRY_DISTANCE=max(0.35,min(LIQ_WHALE_MAX_DISTANCE_PCT,float(os.getenv("LIQ_WHALE_DEFAULT_ENTRY_DISTANCE","0.90"))))
 LIQ_WHALE_LEV=TRADE_LEVERAGE
@@ -844,7 +845,7 @@ def _whale_liq_cvd(symbol):
 
 def whale_liquidation_scan():
  last_signal={};streaks={};scan_id=0
- pool=concurrent.futures.ThreadPoolExecutor(max_workers=3,thread_name_prefix="whale-book")
+ pool=concurrent.futures.ThreadPoolExecutor(max_workers=10,thread_name_prefix="whale-book")
  try:
   while not SHUTDOWN.is_set():
    started=time.monotonic()
