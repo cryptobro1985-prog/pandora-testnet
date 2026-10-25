@@ -3,10 +3,14 @@ import datetime
 import json
 import uuid
 from risk import risk_state, better
+from accounting import paper_pnl
 
 MIGRATIONS = (
     "ALTER TABLE open_positions ADD COLUMN IF NOT EXISTS risk_state jsonb NOT NULL DEFAULT '{}'::jsonb",
+    "ALTER TABLE IF EXISTS pump_positions ADD COLUMN IF NOT EXISTS risk_state jsonb NOT NULL DEFAULT '{}'::jsonb",
+    "ALTER TABLE IF EXISTS whale_liq_positions ADD COLUMN IF NOT EXISTS risk_state jsonb NOT NULL DEFAULT '{}'::jsonb",
     "CREATE TABLE IF NOT EXISTS engine_lease (name text PRIMARY KEY, owner text NOT NULL, expires_at timestamptz NOT NULL, heartbeat_at timestamptz NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS news_entry_claims (event_id text PRIMARY KEY, symbol text NOT NULL, opened text NOT NULL, claimed_at timestamptz NOT NULL DEFAULT clock_timestamp())",
 )
 
 
@@ -35,17 +39,27 @@ class EngineStore:
 
     def claim(self):
         with self.connect() as c:
-            row = c.execute("""INSERT INTO engine_lease(name,owner,expires_at,heartbeat_at)
-                VALUES('paper',%s,clock_timestamp()+interval '30 seconds',clock_timestamp())
-                ON CONFLICT(name) DO UPDATE SET owner=excluded.owner,
-                  expires_at=excluded.expires_at,heartbeat_at=excluded.heartbeat_at
-                WHERE engine_lease.owner=excluded.owner OR engine_lease.expires_at<clock_timestamp()
-                RETURNING owner""", (self.owner,)).fetchone()
-            return row is not None
+            with c.transaction():
+                self._transaction_timeouts(c)
+                row = c.execute("""INSERT INTO engine_lease(name,owner,expires_at,heartbeat_at)
+                    VALUES('paper',%s,clock_timestamp()+interval '30 seconds',clock_timestamp())
+                    ON CONFLICT(name) DO UPDATE SET owner=excluded.owner,
+                      expires_at=excluded.expires_at,heartbeat_at=excluded.heartbeat_at
+                    WHERE engine_lease.owner=excluded.owner OR engine_lease.expires_at<clock_timestamp()
+                    RETURNING owner""", (self.owner,)).fetchone()
+                return row is not None
+
+    @staticmethod
+    def _transaction_timeouts(c):
+        # SET LOCAL works with transaction pooling and expires at commit. A
+        # blocked write must not indefinitely stall lease renewal or exits.
+        c.execute("SET LOCAL lock_timeout = '2s'")
+        c.execute("SET LOCAL statement_timeout = '5s'")
 
     def fence(self, c):
         # Transactional row lock prevents ownership changing during a write.
         # Works with Neon pooled connections; no session advisory lock needed.
+        self._transaction_timeouts(c)
         row = c.execute("""SELECT owner FROM engine_lease WHERE name='paper'
             AND owner=%s AND expires_at>clock_timestamp() FOR UPDATE""", (self.owner,)).fetchone()
         if row is None:
@@ -93,6 +107,9 @@ class EngineStore:
             with c.transaction():
                 self.fence(c)
                 if create:
+                    event_id = p.get("event_id")
+                    if event_id and c.execute("SELECT 1 FROM news_entry_claims WHERE event_id=%s", (event_id,)).fetchone():
+                        return False
                     row = c.execute("""INSERT INTO open_positions
                         (symbol,side,entry,notional,opened,opened_epoch,headline,locked,stop,leverage,margin,event_id,risk_state)
                         VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)
@@ -100,6 +117,12 @@ class EngineStore:
                         (symbol,p["side"],p["entry"],p["notional"],p["opened"],p["t"],p["headline"],
                          p["locked"],p.get("stop"),p["leverage"],p["margin"],p.get("event_id"),json.dumps(risk_state(p)))).fetchone()
                     if row:
+                        if event_id:
+                            # Retain this claim after close. Retried ingestion
+                            # may log an event again, but cannot reopen its trade.
+                            # Any conflict rolls back the position insert too.
+                            c.execute("INSERT INTO news_entry_claims(event_id,symbol,opened) VALUES(%s,%s,%s)",
+                                      (event_id, symbol, p["opened"]))
                         self._journal(c, "trade_opened", p.get("event_id"),
                             {"symbol": symbol,"side":p["side"],"entry":p["entry"],"notional":p["notional"],
                              "margin":p["margin"],"leverage":p["leverage"],"headline":p["headline"]})
@@ -118,7 +141,7 @@ class EngineStore:
                                 (symbol,position["opened"])).fetchone()
                 if row is None:
                     return None
-                pnl = row["notional"] * (price/row["entry"]-1)*row["side"] - row["notional"]*self.fee*2
+                pnl = paper_pnl(row["notional"], row["entry"], price, row["side"], self.fee)
                 closed = utcnow()
                 account = c.execute("""UPDATE account_state SET
                     equity=equity+%s,realized_pnl=realized_pnl+%s,updated_at=%s WHERE id=1

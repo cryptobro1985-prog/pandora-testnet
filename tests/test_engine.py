@@ -60,6 +60,24 @@ class RiskTests(unittest.TestCase):
         evaluate_exit(p,0.00038,"now")
         self.assertEqual(p,before)
 
+    def test_later_favorable_local_high_is_not_blocked_by_older_higher_peak(self):
+        p=position(1,100)
+        p.update(peak=102,history=[100.9,100.85,100.8,100.7,100.6,100.5])
+        _,why=evaluate_exit(p,100.4,"later-local-high")
+        self.assertEqual(why,"local_extreme_weakening")
+
+    def test_later_favorable_local_low_is_not_blocked_by_older_lower_peak(self):
+        p=position(-1,100)
+        p.update(peak=98,history=[99.1,99.15,99.2,99.3,99.4,99.5])
+        _,why=evaluate_exit(p,99.6,"later-local-low")
+        self.assertEqual(why,"local_extreme_weakening")
+
+    def test_losing_local_swing_is_not_turned_into_a_new_stop_rule(self):
+        p=position(1,100)
+        p.update(peak=102,history=[99.8,99.75,99.7,99.65,99.6,99.5])
+        _,why=evaluate_exit(p,99.4,"losing-local-swing")
+        self.assertIsNone(why)
+
     def test_invalid_quotes_rejected(self):
         for px in [0,-1,float("nan"),float("inf")]:
             with self.assertRaises(ValueError):evaluate_exit(position(),px,"now")
