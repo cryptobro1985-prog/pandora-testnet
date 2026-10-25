@@ -1,14 +1,14 @@
-"""Restart-safe NEWS_ENGINE exits: local extreme + weakening only.
+"""Universal PAPER exit policy for PANDORA.
 
-No trailing stop and no fixed profit-protection stop. A profitable news position
-exits only after a meaningful favorable extreme has formed, price has given back
-part of that move, and short-term momentum confirms weakening.
+NEWS, PUMP/DUMP and WHALE_LIQUIDATION use exactly the same exit rule:
+track the best favorable price, confirm a local extreme, then exit on the first
+clear loss of impulse. No fixed TP, no trailing stop, no max-hold timer.
 """
 import copy
 import math
 
-LOCK_TRIGGER_ROE = 0.10
-MIN_EXIT_ROE = 0.075
+LOCK_TRIGGER_ROE = 0.08
+MIN_EXIT_ROE = 0.0
 
 def better(side, old, candidate):
     if old is None:
@@ -27,30 +27,54 @@ def evaluate_exit(position, price, evaluated_at):
     if entry<=0 or lev<=0 or side not in (-1,1):
         raise ValueError("invalid position")
 
-    history=[float(p) for p in pos.get("history",[])[-120:]
+    history=[float(p) for p in pos.get("history",[])[-119:]
              if math.isfinite(float(p)) and float(p)>0]
-    pos["peak"]=better(side,float(pos.get("peak",entry)),price)
+    series=(history+[price])[-120:]
+
+    prior_peak=float(pos.get("peak",entry))
+    peak=better(side,prior_peak,price)
+    pos["peak"]=peak
 
     roe=(price/entry-1)*side*lev
-    peak_roe=(float(pos["peak"])/entry-1)*side*lev
-
-    # Original PANDORA local-extreme weakening logic.
-    # Long: current quote has retreated from recent local high and recent slope is down.
-    # Short: current quote has bounced from recent local low and recent slope is up.
-    weak=False
-    if len(history)>=6:
-        recent=history[-6:]
-        if side>0:
-            weak=(price<max(recent) and history[-1]<history[-3])
-        else:
-            weak=(price>min(recent) and history[-1]>history[-3])
-
+    peak_roe=(peak/entry-1)*side*lev
     giveback=max(0.0,peak_roe-roe)
-    allowed=0.025 if peak_roe>=0.50 else 0.035 if peak_roe>=0.30 else 0.045 if peak_roe>=0.20 else 0.055
-    profit_floor=max(MIN_EXIT_ROE,peak_roe-allowed)
-    local_exit=(peak_roe>=LOCK_TRIGGER_ROE and roe<=profit_floor and weak)
 
-    # Legacy trailing/protection state is explicitly disabled for NEWS_ENGINE.
+    # Confirm that the best favorable quote was very recent, then require
+    # two independent signs that momentum has turned away from that extreme.
+    recent=series[-8:]
+    peak_recent=False
+    adverse_steps=0
+    slope_flip=False
+    if len(recent)>=5:
+        if side>0:
+            local=max(recent)
+            peak_recent=abs(local-peak)/peak <= 0.0015
+            steps=[recent[i]-recent[i-1] for i in range(1,len(recent))]
+            adverse_steps=sum(x<0 for x in steps[-3:])
+            slope_flip=(recent[-1]<recent[-3] and recent[-2]<=recent[-3])
+        else:
+            local=min(recent)
+            peak_recent=abs(local-peak)/peak <= 0.0015
+            steps=[recent[i]-recent[i-1] for i in range(1,len(recent))]
+            adverse_steps=sum(x>0 for x in steps[-3:])
+            slope_flip=(recent[-1]>recent[-3] and recent[-2]>=recent[-3])
+
+    # Keep the giveback very tight so exits stay near the confirmed extreme.
+    # Thresholds are ROE-based, therefore automatically scale with leverage.
+    if peak_roe>=0.50:
+        allowed=0.010
+    elif peak_roe>=0.30:
+        allowed=0.0125
+    elif peak_roe>=0.20:
+        allowed=0.015
+    elif peak_roe>=0.12:
+        allowed=0.020
+    else:
+        allowed=0.025
+
+    weakening=(adverse_steps>=2 and slope_flip)
+    local_exit=(peak_roe>=LOCK_TRIGGER_ROE and peak_recent and weakening and giveback>=allowed)
+
     pos["locked"]=False
     pos["stop"]=None
     pos["trail_armed"]=False
@@ -60,10 +84,16 @@ def evaluate_exit(position, price, evaluated_at):
     pos["last_price"]=price
     pos["last_evaluated_at"]=evaluated_at
     pos["last_exit_check"]={
-        "roe":roe,"peak_roe":peak_roe,"giveback":giveback,
-        "allowed_giveback_roe":allowed,"profit_floor_roe":profit_floor,
-        "weakening":weak,"local_extreme_exit":local_exit,
-        "stop":None,"trail_stop":None,"reason":reason
+        "roe":roe,
+        "peak_roe":peak_roe,
+        "giveback":giveback,
+        "allowed_giveback_roe":allowed,
+        "peak_recent":peak_recent,
+        "adverse_steps":adverse_steps,
+        "slope_flip":slope_flip,
+        "weakening":weakening,
+        "local_extreme_exit":local_exit,
+        "reason":reason
     }
-    pos["history"]=(history+[price])[-120:]
+    pos["history"]=series
     return pos,reason
