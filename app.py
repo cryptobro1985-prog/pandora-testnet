@@ -434,18 +434,18 @@ def save_whale_v2_learning_snapshot():
        avg(mfe_roe_pct) as avg_mfe_roe_pct,min(mae_roe_pct) as worst_mae_roe_pct,
        max(mfe_roe_pct) as best_mfe_roe_pct from per_position""",(started,)).fetchone()
    v1_buckets=c.execute("""select
-      case when nullif(features->>'distance_pct','')::double precision < .35 then '<0.35%'
-           when nullif(features->>'distance_pct','')::double precision < .60 then '0.35-0.60%'
-           else '0.60%+' end as distance_bucket,
+      case when nullif(features->>'distance_pct','')::double precision < .35 then '<0.35%%'
+           when nullif(features->>'distance_pct','')::double precision < .60 then '0.35-0.60%%'
+           else '0.60%%+' end as distance_bucket,
       count(*) as n,sum(case when pnl>0 then 1 else 0 end) as wins,
       avg(side*(exit/entry-1)*25*100) as avg_gross_roe_pct_ex_fees,
       avg(pnl) as avg_pnl,sum(pnl) as total_pnl
       from trade_history where strategy='whale_liquidation'
       and opened::timestamptz >= %s::timestamptz group by 1 order by 1""",(started,)).fetchall()
    v2_buckets=c.execute("""select
-      case when nullif(features->>'wl2_entry_distance_pct','')::double precision < .35 then '<0.35%'
-           when nullif(features->>'wl2_entry_distance_pct','')::double precision < .60 then '0.35-0.60%'
-           else '0.60-0.90%' end as distance_bucket,
+      case when nullif(features->>'wl2_entry_distance_pct','')::double precision < .35 then '<0.35%%'
+           when nullif(features->>'wl2_entry_distance_pct','')::double precision < .60 then '0.35-0.60%%'
+           else '0.60-0.90%%' end as distance_bucket,
       count(*) as n,sum(case when pnl>0 then 1 else 0 end) as wins,
       avg(side*(exit/entry-1)*25*100) as avg_gross_roe_pct_ex_fees,
       avg(pnl) as avg_pnl,sum(pnl) as total_pnl,
