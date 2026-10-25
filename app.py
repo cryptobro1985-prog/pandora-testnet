@@ -136,7 +136,7 @@ for _i in range(0,len(WATCH),4):
   "hl":"en-US","gl":"US","ceid":"US:en"
  })
 POS=("pump","pumping","surge","surges","approve","approved","approval","partnership","listing","adoption","buyback","breakout","bullish","launch","etf approved","rally","rallies","rebound","rebounds","record high","inflows","net inflow","gains","jumps","soars","upside")
-NEG=("dump","dumping","hack","hacked","exploit","lawsuit","delist","delisted","ban","banned","liquidation","liquidations","fraud","selloff","sell-off","bearish","crash","crashes","stolen","outflows","net outflow","falls","drops","slips","plunges","tumbles","declines")
+NEG=("dump","dumping","hack","hacked","exploit","lawsuit","delist","delisted","ban","banned","fraud","selloff","sell-off","bearish","crash","crashes","stolen","outflows","net outflow","falls","drops","slips","plunges","tumbles","declines")
 # Symbols that are also ordinary English words/acronyms. Never map them from a bare word.
 # They require an explicit crypto form/name so headlines like "not", "people", "move", "etc" cannot create trades.
 AMBIGUOUS_SYMBOLS={"NOT","PEOPLE","MOVE","ETC","TRUMP","MELANIA"}
@@ -168,6 +168,19 @@ def is_non_market_news(title):
  lo=title.lower()
  # Promotional/community posts are journalled but can never open/reverse a trade.
  return any(re.search(p,lo,re.I) for p in NON_MARKET_PATTERNS)
+
+LIQUIDATION_NEWS_PATTERNS=(
+ r"\bliquidat(?:e|ed|es|ing|ion|ions)\b",
+ r"\bliq(?:uidation)?\s+(?:level|levels|price|prices|cluster|clusters|zone|zones)\b",
+ r"\b(?:longs?|shorts?)\s+(?:could|may|might|set to|at risk to|risk being)?\s*be?\s*liquidat",
+ r"\bforced\s+liquidation\b",
+ r"\bliquidation\s+cascade\b",
+)
+def is_liquidation_news(title):
+ # Liquidation headlines are research evidence only. Trading responsibility
+ # belongs exclusively to WhaleLiquidationScanner, which reads live position,
+ # distance, order-flow and book data rather than reacting to a reposted headline.
+ return any(re.search(p,title,re.I) for p in LIQUIDATION_NEWS_PATTERNS)
 
 MARKET_WIDE_TERMS=("war","airstrike","missile","invasion","sanctions","tariff","trade war","blockade","suez","hormuz","oil","opec","recession","government shutdown","debt ceiling","ceasefire","truce","peace deal","rate cut","rate hike","fomc","cpi","pce","jobs report","nonfarm payrolls","china","taiwan")
 EVENT_RULES=[
@@ -1034,11 +1047,19 @@ def ingest_event(ident,source,title,published_at=None,source_url=None):
  with LOCK:prices=dict(S.get("_prices",{}))
  sym,side=detect(title,prices)
  non_market=is_non_market_news(title)
- if non_market:side=0
+ liquidation_news=is_liquidation_news(title)
+ if non_market or liquidation_news:side=0
  if not save_news_event(ident,now(),source,title,sym,side,published_at,source_url):return False
  with LOCK:S["news_seen"]+=1
  if non_market:
   journal("ignored_non_market_news",ident,{"source":source,"title":title,"symbol":sym,"reason":"promotional_or_non_market_event"})
+  return True
+ if liquidation_news:
+  feature={"delegated_to":"WhaleLiquidationScanner","reason":"liquidation_news_not_tradeable","source":source,
+           "published_at":published_at,"source_url":source_url,"symbol":sym}
+  save_event_feature(ident,now(),source,title,sym,0,0.0,feature)
+  journal("delegated_liquidation_news",ident,{"source":source,"title":title,"symbol":sym,
+    "reason":"handled_by_whale_liquidation_scanner","published_at":published_at,"source_url":source_url})
   return True
  record_event(ident,source,title,sym,side,prices,published_at)
  return True
