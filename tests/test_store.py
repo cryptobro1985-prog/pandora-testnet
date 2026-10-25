@@ -41,12 +41,16 @@ class StoreTests(unittest.TestCase):
         self.store.migrate();self.store.migrate()
 
     def test_checkpoint_roundtrip_including_local_extreme_history(self):
-        p=self.pos();self.assertTrue(self.store.save(self.symbol,p,create=True))
+        p=self.pos()
+        p["local_search_min_samples"]=30
+        p["post_liq_risk_reset_done"]=True
+        self.assertTrue(self.store.save(self.symbol,p,create=True))
         p,_=evaluate_exit(p,.00038,"checkpoint")
         self.assertTrue(self.store.save(self.symbol,p))
         _,rows=EngineStore(self.connect).load()
         restored=rows[self.symbol]
-        for key in ("peak","history","last_price","last_evaluated_at","last_exit_check","stop"):
+        for key in ("peak","history","last_price","last_evaluated_at","last_exit_check","stop",
+                    "local_search_min_samples","post_liq_risk_reset_done"):
             self.assertEqual(restored.get(key),p.get(key))
 
     def test_legacy_minimum_is_recovered_and_local_extreme_exit_still_works(self):
