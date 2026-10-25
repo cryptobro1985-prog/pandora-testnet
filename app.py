@@ -97,7 +97,7 @@ MAX_OPEN_POSITIONS=max(TARGET_OPEN_POSITIONS,min(30,int(os.getenv("MAX_OPEN_POSI
 PUMP_MAX_POSITIONS=max(TARGET_OPEN_POSITIONS,min(MAX_OPEN_POSITIONS,int(os.getenv("PUMP_MAX_POSITIONS","20"))))
 PUMP_PRIMARY_SCORE=max(70.0,min(100.0,float(os.getenv("PUMP_PRIMARY_SCORE","84"))))
 PUMP_SECONDARY_SCORE=max(60.0,min(PUMP_PRIMARY_SCORE,float(os.getenv("PUMP_SECONDARY_SCORE","76"))))
-PUMP_SECONDARY_MARGIN_FRACTION=max(0.01,min(TRADE_MARGIN_FRACTION,float(os.getenv("PUMP_SECONDARY_MARGIN_FRACTION","0.025"))))
+PUMP_SECONDARY_MARGIN_FRACTION=max(0.05,min(POSITION_MARGIN_MAX,float(os.getenv("PUMP_SECONDARY_MARGIN_FRACTION","0.05"))))
 PUMP_QUEUE_TTL_SECONDS=max(15.0,min(180.0,float(os.getenv("PUMP_QUEUE_TTL_SECONDS","60"))))
 PUMP_SECONDARY_SAME_SIDE_CAP=max(1,min(TARGET_OPEN_POSITIONS,int(os.getenv("PUMP_SECONDARY_SAME_SIDE_CAP","4"))))
 PAPER_TOPUP_STEP=max(10.0,float(os.getenv("PAPER_TOPUP_STEP","100")))
@@ -640,7 +640,14 @@ def liquidity_margin_fraction(symbol,features,base=None,regime=None):
  else:liq_cap=0.20
  if day>=500_000_000 and depth>=20_000_000:liq_cap=0.20
  frac=0.05+0.15*max(0.0,min(1.0,strength))
- frac=min(frac,liq_cap)
+ if score<80:score_cap=0.05
+ elif score<85:score_cap=0.08
+ elif score<90:score_cap=0.10
+ elif score<94:score_cap=0.13
+ elif score<97:score_cap=0.16
+ else:score_cap=0.20
+ frac=min(frac,liq_cap,score_cap)
+ features["signal_score_cap_fraction"]=score_cap
  side=int(features.get("side",0) or 0)
  if regime:
   mode=str(regime.get("mode","NORMAL"))
