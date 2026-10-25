@@ -22,6 +22,9 @@ from market_stream import run_trade_stream
 from whale_signals import MIN_NOTIONAL_USD, cluster_positions, summarize_book, significance, update_streaks
 from news_logic import analyze_headline, is_non_market_news as semantic_non_market
 from accounting import paper_pnl
+from whale_v2 import (EligibilityTracker as WL2EligibilityTracker, evaluate_position as evaluate_wl2_position,
+                      initial_position_state as wl2_initial_position_state, learning_summary as wl2_learning_summary,
+                      WL2_MARGIN_FRACTION, WL2_LEVERAGE, WL2_MAX_POSITIONS, WL2_POLICY)
 LATENCIES=LatencyMetrics()
 MARKET_OBS=RollingMarketData(max_symbols=512)
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
@@ -79,7 +82,7 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 API=os.getenv("HYPERLIQUID_INFO_API","https://api.hyperliquid.xyz/info").strip() or "https://api.hyperliquid.xyz/info"
 DB="/tmp/pandora.sqlite3"
 START=time.time()
-S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0,"pump_positions":{},"pump_equity":100.0,"pump_realized_pnl":0.0,"pump_trades":0,"whale_positions":{},"whale_equity":100.0,"whale_realized_pnl":0.0,"whale_trades":0}
+S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0,"pump_positions":{},"pump_equity":100.0,"pump_realized_pnl":0.0,"pump_trades":0,"whale_positions":{},"whale_equity":100.0,"whale_realized_pnl":0.0,"whale_trades":0,"whale_v2_positions":{},"whale_v2_equity":100.0,"whale_v2_realized_pnl":0.0,"whale_v2_trades":0,"whale_v2_learning":{}}
 LOCK=threading.RLock()
 ACCOUNT_LOCK=threading.RLock()
 MARKET_REFRESH_LOCK=threading.Lock()
@@ -262,6 +265,13 @@ def pinit():
   c.execute("create table if not exists whale_liq_positions (symbol text primary key, side integer not null, entry double precision not null, notional double precision not null, margin double precision not null, leverage double precision not null, opened text not null, opened_epoch double precision not null, peak_roe double precision not null default 0, score double precision not null default 0, features jsonb not null default '{}'::jsonb)")
   c.execute("create table if not exists whale_liq_trade_history (id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision, pnl double precision, reason text, score double precision, features jsonb)")
   c.execute("create table if not exists whale_liq_signal_journal (id text primary key, ts text not null, symbol text, side integer, score double precision, action text, features jsonb)")
+  c.execute("create table if not exists whale_liq_v2_account_state (id integer primary key, equity double precision not null, realized_pnl double precision not null, started_at text not null, updated_at text not null)")
+  c.execute("create table if not exists whale_liq_v2_positions (symbol text primary key, side integer not null, entry double precision not null, notional double precision not null, margin double precision not null, leverage double precision not null, opened text not null, opened_epoch double precision not null, score double precision not null default 0, features jsonb not null default '{}'::jsonb)")
+  c.execute("create table if not exists whale_liq_v2_trade_history (id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision, pnl double precision, reason text, score double precision, features jsonb)")
+  c.execute("create table if not exists whale_liq_v2_signal_journal (id text primary key, ts text not null, symbol text, side integer, score double precision, action text, features jsonb)")
+  c.execute("create table if not exists whale_liq_v2_learning_snapshots (id bigserial primary key, recorded_at text not null, samples integer not null, payload jsonb not null)")
+  c.execute("create index if not exists whale_liq_v2_trade_closed_idx on whale_liq_v2_trade_history(closed desc)")
+  c.execute("create index if not exists whale_liq_v2_signal_time_idx on whale_liq_v2_signal_journal(ts desc)")
   c.execute("create table if not exists account_capacity_snapshots (id bigserial primary key, ts text not null, equity double precision not null, contributed_capital double precision not null, used_margin double precision not null, free_margin double precision not null, margin_utilization_pct double precision not null, news_positions integer not null, pump_positions integer not null, whale_positions integer not null, total_positions integer not null, entry_margin_fraction double precision not null)")
   c.execute("create table if not exists module_snapshots (id bigserial primary key, ts text not null, module text not null, ok boolean, state jsonb not null)")
   c.execute("create table if not exists position_snapshots (id bigserial primary key, ts text not null, strategy text not null, symbol text not null, opened text, side integer, entry double precision, mark double precision, margin double precision, notional double precision, leverage double precision, unrealized_pnl double precision, roe_pct double precision, peak double precision, exit_reason text, exit_check jsonb not null default '{}'::jsonb, features jsonb not null default '{}'::jsonb)")
@@ -295,6 +305,14 @@ def pinit():
   for r in c.execute("select * from whale_liq_positions").fetchall():
    wpositions[r["symbol"]]={"side":int(r["side"]),"entry":float(r["entry"]),"notional":float(r["notional"]),"margin":float(r["margin"]),"leverage":float(r["leverage"]),"opened":r["opened"],"t":float(r["opened_epoch"]),"peak_roe":float(r["peak_roe"] or 0),"score":float(r["score"] or 0),"features":r["features"] or {},**risk_state(r.get("risk_state") or {})}
   S["whale_positions"]=wpositions
+  c.execute("insert into whale_liq_v2_account_state(id,equity,realized_pnl,started_at,updated_at) values(1,%s,0,%s,%s) on conflict(id) do nothing",(PAPER_RESET,now(),now()))
+  v2account=c.execute("select equity,realized_pnl,started_at from whale_liq_v2_account_state where id=1").fetchone()
+  S["whale_v2_equity"]=float(v2account["equity"]);S["whale_v2_realized_pnl"]=float(v2account["realized_pnl"]);S["whale_v2_started_at"]=v2account["started_at"]
+  v2positions={}
+  for r in c.execute("select * from whale_liq_v2_positions").fetchall():
+   v2positions[r["symbol"]]={"side":int(r["side"]),"entry":float(r["entry"]),"notional":float(r["notional"]),"margin":float(r["margin"]),"leverage":float(r["leverage"]),"opened":r["opened"],"t":float(r["opened_epoch"]),"score":float(r["score"] or 0),"features":r["features"] or {}}
+  S["whale_v2_positions"]=v2positions
+  S["whale_v2_trades"]=c.execute("select count(*) as n from whale_liq_v2_trade_history").fetchone()["n"]
  STORE.migrate()
  _,positions=STORE.load(recover_legacy=False)
  S["positions"]=positions
@@ -326,6 +344,8 @@ def build_learning_snapshot():
       avg(nullif(features->>'distance_pct','')::double precision) as avg_distance_pct,
       avg(nullif(features->>'liquidation_flow_to_depth','')::double precision) as avg_flow_to_depth
     from trade_history where strategy='whale_liquidation' group by 1 order by 1""").fetchall()
+  whale_v2_rows=c.execute("select pnl,features from whale_liq_v2_trade_history order by id").fetchall()
+  whale_v2_summary=wl2_learning_summary([dict(x) for x in whale_v2_rows])
   funding=c.execute("""select count(*) as topups,
       coalesce(sum((payload->>'amount')::double precision),0) as amount
     from audit_journal where kind='paper_capital_topup'""").fetchone()
@@ -351,13 +371,13 @@ def build_learning_snapshot():
  total_samples=sum(int(x["n"] or 0) for x in strategy)
  payload={"mode":"PAPER_ONLY","source_multipliers":multipliers,"source_stats":source_stats,
           "strategy_stats":[dict(x) for x in strategy],"event_type_stats":[dict(x) for x in event_types],
-          "pump_score_buckets":[dict(x) for x in pump],"whale_score_buckets":[dict(x) for x in whale],
+          "pump_score_buckets":[dict(x) for x in pump],"whale_score_buckets":[dict(x) for x in whale],"whale_v2_summary":whale_v2_summary,
           "funding":{"topups":int(funding["topups"] or 0),"amount":float(funding["amount"] or 0)},
           "capacity":{"samples":int(capacity["samples"] or 0),"max_positions":int(capacity["max_positions"] or 0),
             "max_utilization_pct":float(capacity["max_utilization_pct"] or 0),"avg_utilization_pct":float(capacity["avg_utilization_pct"] or 0),
             "p95_utilization_pct":float(capacity["p95_utilization_pct"] or 0),"peak_used_margin":float(capacity["peak_used_margin"] or 0),
             "max_contributed_capital":float(capacity["max_contributed_capital"] or PAPER_RESET),
-            "current_margin_fraction_pct":fraction*100.0,
+            "current_margin_fraction_pct":TRADE_MARGIN_FRACTION*100.0,
             "observed_no_topup_fraction_ceiling_pct":round(90.0/max(1,int(capacity["max_positions"] or 1)),2)},
           "generated_at":now(),"policy":"conservative_news_source_reweight_n10_other_strategies_observation_only"}
  return total_samples,payload
