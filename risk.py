@@ -21,7 +21,7 @@ def better(side, old, candidate):
     return max(old, candidate) if side > 0 else min(old, candidate)
 
 def risk_state(position):
-    keys=("peak","history","last_price","last_evaluated_at","last_exit_check","local_search_min_samples")
+    keys=("peak","history","last_price","last_evaluated_at","last_exit_check","local_search_min_samples","post_liq_risk_reset_done")
     return {key:position[key] for key in keys if key in position}
 
 def evaluate_exit(position, price, evaluated_at):
@@ -94,6 +94,17 @@ def evaluate_exit(position, price, evaluated_at):
     liq=float(features.get("liquidation_price",0) or 0)
     victim=str(features.get("victim_side","")).lower()
     engine=str(features.get("engine",""))
+    # The first evaluation after the liquidation latch starts a brand-new local
+    # search. Pre-liquidation price history must never be reused to manufacture
+    # an immediate post-liquidation exit.
+    if engine.startswith("whale_liquidation") and features.get("liquidation_level_reached_at") and not pos.get("post_liq_risk_reset_done"):
+        peak=price
+        series=[price]
+        pos["peak"]=price
+        pos["history"]=[price]
+        pos["local_search_min_samples"]=max(15,int(pos.get("local_search_min_samples",0) or 0))
+        pos["post_liq_risk_reset_done"]=True
+        local_exit=False
     pre_liq_hold=False
     remaining_liq_pct=None
     hold_limit=max(0.10,min(1.50,float(features.get("pre_liquidation_hold_limit_pct",
