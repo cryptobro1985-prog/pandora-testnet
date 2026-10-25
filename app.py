@@ -262,6 +262,7 @@ def pinit():
   c.execute("create table if not exists whale_liq_positions (symbol text primary key, side integer not null, entry double precision not null, notional double precision not null, margin double precision not null, leverage double precision not null, opened text not null, opened_epoch double precision not null, peak_roe double precision not null default 0, score double precision not null default 0, features jsonb not null default '{}'::jsonb)")
   c.execute("create table if not exists whale_liq_trade_history (id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision, pnl double precision, reason text, score double precision, features jsonb)")
   c.execute("create table if not exists whale_liq_signal_journal (id text primary key, ts text not null, symbol text, side integer, score double precision, action text, features jsonb)")
+  c.execute("create table if not exists account_capacity_snapshots (id bigserial primary key, ts text not null, equity double precision not null, contributed_capital double precision not null, used_margin double precision not null, free_margin double precision not null, margin_utilization_pct double precision not null, news_positions integer not null, pump_positions integer not null, whale_positions integer not null, total_positions integer not null, entry_margin_fraction double precision not null)")
 
   c.execute("create index if not exists audit_journal_event_idx on audit_journal(event_id,id)")
   row=c.execute("select equity,realized_pnl,contributed_capital from account_state where id=1").fetchone()
@@ -318,6 +319,14 @@ def build_learning_snapshot():
   funding=c.execute("""select count(*) as topups,
       coalesce(sum((payload->>'amount')::double precision),0) as amount
     from audit_journal where kind='paper_capital_topup'""").fetchone()
+  capacity=c.execute("""select count(*) as samples,
+      coalesce(max(total_positions),0) as max_positions,
+      coalesce(max(margin_utilization_pct),0) as max_utilization_pct,
+      coalesce(avg(margin_utilization_pct),0) as avg_utilization_pct,
+      coalesce(percentile_cont(0.95) within group(order by margin_utilization_pct),0) as p95_utilization_pct,
+      coalesce(max(used_margin),0) as peak_used_margin,
+      coalesce(max(contributed_capital),100) as max_contributed_capital
+    from account_capacity_snapshots""").fetchone()
  multipliers={};source_stats={};total_samples=0
  for r in rows:
   n=int(r["n"] or 0);wins=int(r["wins"] or 0);avg=float(r["avg_pnl"] or 0);total=float(r["total_pnl"] or 0)
@@ -334,7 +343,13 @@ def build_learning_snapshot():
           "strategy_stats":[dict(x) for x in strategy],"event_type_stats":[dict(x) for x in event_types],
           "pump_score_buckets":[dict(x) for x in pump],"whale_score_buckets":[dict(x) for x in whale],
           "funding":{"topups":int(funding["topups"] or 0),"amount":float(funding["amount"] or 0)},
-          "generated_at":now(),"policy":"bounded_news_source_reweight_other_strategies_observation_only"}
+          "capacity":{"samples":int(capacity["samples"] or 0),"max_positions":int(capacity["max_positions"] or 0),
+            "max_utilization_pct":float(capacity["max_utilization_pct"] or 0),"avg_utilization_pct":float(capacity["avg_utilization_pct"] or 0),
+            "p95_utilization_pct":float(capacity["p95_utilization_pct"] or 0),"peak_used_margin":float(capacity["peak_used_margin"] or 0),
+            "max_contributed_capital":float(capacity["max_contributed_capital"] or PAPER_RESET),
+            "current_margin_fraction_pct":TRADE_MARGIN_FRACTION*100.0,
+            "observed_no_topup_fraction_ceiling_pct":round(90.0/max(1,int(capacity["max_positions"] or 1)),2)},
+          "generated_at":now(),"policy":"bounded_news_source_reweight_other_strategies_observation_only"
  return total_samples,payload
 
 def save_learning_snapshot():
@@ -367,6 +382,16 @@ def save_event_feature(ident,ts,source,title,symbol,decision,confidence,features
  with pg() as c:c.execute("insert into event_features(id,ts,source,title,symbol,decision,confidence,features) values(%s,%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(id) do update set ts=excluded.ts,decision=excluded.decision,confidence=excluded.confidence,features=excluded.features",(ident,ts,source,title,symbol,decision,confidence,json.dumps(features)))
 def save_market_snapshot(ts,markets,equity,positions):
  with pg() as c:c.execute("insert into market_snapshots(ts,markets,equity,positions) values(%s,%s,%s,%s)",(ts,markets,equity,positions))
+def save_capacity_snapshot():
+ with LOCK:
+  equity=float(S.get("equity",0) or 0);contributed=float(S.get("contributed_capital",PAPER_RESET) or PAPER_RESET)
+  used=float(_shared_used_margin());free=max(0.0,equity-used)
+  news_n=len(S.get("positions",{}));pump_n=len(S.get("pump_positions",{}));whale_n=len(S.get("whale_positions",{}))
+  util=(used/equity*100.0) if equity>0 else 0.0
+ with pg() as c:c.execute("""insert into account_capacity_snapshots
+  (ts,equity,contributed_capital,used_margin,free_margin,margin_utilization_pct,news_positions,pump_positions,whale_positions,total_positions,entry_margin_fraction)
+  values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+  (now(),equity,contributed,used,free,util,news_n,pump_n,whale_n,news_n+pump_n+whale_n,TRADE_MARGIN_FRACTION))
 def save_market_context(ts,symbol,price,context):
  with pg() as c:c.execute("insert into market_context_snapshots(ts,symbol,price,context) values(%s,%s,%s,%s::jsonb)",(ts,symbol,price,json.dumps(context)))
 def export_rows(kind,after,limit):
@@ -374,10 +399,11 @@ def export_rows(kind,after,limit):
           "features":("event_features","id"),"trades":("trade_history","id"),
           "positions":("open_positions","symbol"),"pump_signals":("pump_signal_journal","id"),
           "pump_trades":("pump_trade_history","id"),"learning":("learning_snapshots","id"),
-          "whale_signals":("whale_liq_signal_journal","id"),"whale_trades":("whale_liq_trade_history","id")}
+          "whale_signals":("whale_liq_signal_journal","id"),"whale_trades":("whale_liq_trade_history","id"),
+          "capacity":("account_capacity_snapshots","id")}
  if kind not in columns:raise ValueError("Unsupported export kind")
  table,key=columns[kind]
- cursor=int(after) if kind in ("journal","trades","pump_trades","learning") else after
+ cursor=int(after) if kind in ("journal","trades","pump_trades","learning","whale_trades","capacity") else after
  with pg() as c:
   rows=c.execute(f"select * from {table} where {key}>%s order by {key} limit %s",(cursor,limit+1)).fetchall()
  return {"kind":kind,"rows":rows[:limit],"next_after":str(rows[limit-1][key]) if len(rows)>limit else None,"has_more":len(rows)>limit}
@@ -500,7 +526,9 @@ def _reserve_shared_entry(symbol):
       db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'paper_capital_topup',%s::jsonb)",
         (now(),json.dumps({"amount":topup,"reason":"insufficient_free_margin","symbol":symbol,
           "used_margin_before":used,"free_margin_before":free,"target_margin_before":margin,
-          "equity_after":float(row["equity"]),"contributed_capital_after":float(row["contributed_capital"])},default=str)))
+          "equity_after":float(row["equity"]),"contributed_capital_after":float(row["contributed_capital"]),
+          "current_margin_fraction_pct":TRADE_MARGIN_FRACTION*100.0,
+          "open_positions_total":len(S.get("positions",{}))+len(S.get("pump_positions",{}))+len(S.get("whale_positions",{}))},default=str)))
     S["equity"]=float(row["equity"]);S["realized_pnl"]=float(row["realized_pnl"])
     S["contributed_capital"]=float(row["contributed_capital"])
   except Exception:
@@ -560,44 +588,30 @@ def pump_close(symbol,price,reason):
  return {"pnl":pnl,"equity":float(account["equity"])}
 
 def pump_mark_positions(prices):
- # PAPER_ONLY uses the same exit policy as NEWS: favorable local extreme then weakening.
+ # Universal exit policy: confirmed local extreme + weakening only.
  with LOCK:
   positions=copy.deepcopy(S["pump_positions"])
   timelines={k:list(v) for k,v in S.get("_timeline",{}).items()}
  for sym,pos in positions.items():
   px=prices.get(sym)
   if not px:continue
-  if S.get("mode")=="PAPER_ONLY" and not S.get("orders_enabled"):
-   entry=float(pos["entry"]);side=int(pos["side"]);lev=float(pos["leverage"])
-   prior_peak_roe=float(pos.get("peak_roe",0) or 0)
-   peak_price=entry*(1+(prior_peak_roe/lev)*side)
-   probe=copy.deepcopy(pos)
-   probe["peak"]=peak_price
-   probe["history"]=[float(r[1]) for r in timelines.get(sym,[])[-120:] if len(r)>=2]
-   evaluated,reason=evaluate_exit(probe,float(px),now())
-   peak_price=float(evaluated.get("peak",entry))
-   peak=(peak_price/entry-1)*side*lev
-   with LOCK:
-    if sym in S["pump_positions"]:
-     S["pump_positions"][sym]["last_exit_check"]=evaluated.get("last_exit_check")
-     S["pump_positions"][sym]["last_price"]=float(px)
-   if reason:
-    pump_close(sym,px,"local_extreme_weakening");continue
-  else:
-   roe=(px/pos["entry"]-1)*pos["side"]*pos["leverage"]
-   peak=max(float(pos.get("peak_roe",0)),roe);reason=None
-   if roe<=PUMP_STOP_ROE:reason="pump_stop"
-   elif roe>=PUMP_TAKE_ROE:reason="pump_take"
-   elif peak>=PUMP_TRAIL_ARM_ROE and roe<=peak-PUMP_TRAIL_GAP_ROE:reason="pump_trailing"
-   elif time.time()-float(pos["t"])>=PUMP_MAX_HOLD_SECONDS:reason="pump_max_hold"
-   if reason:
-    pump_close(sym,px,reason);continue
+  entry=float(pos["entry"]);side=int(pos["side"]);lev=float(pos["leverage"])
+  prior_peak_roe=float(pos.get("peak_roe",0) or 0)
+  peak_price=entry*(1+(prior_peak_roe/lev)*side)
+  probe=copy.deepcopy(pos);probe["peak"]=peak_price
+  probe["history"]=[float(r[1]) for r in timelines.get(sym,[])[-120:] if len(r)>=2]
+  evaluated,reason=evaluate_exit(probe,float(px),now())
+  peak_price=float(evaluated.get("peak",entry));peak=(peak_price/entry-1)*side*lev
+  with LOCK:
+   if sym in S["pump_positions"]:
+    S["pump_positions"][sym]["last_exit_check"]=evaluated.get("last_exit_check")
+    S["pump_positions"][sym]["last_price"]=float(px);S["pump_positions"][sym]["peak_roe"]=peak
+  if reason:
+   pump_close(sym,px,"local_extreme_weakening");continue
   if peak!=float(pos.get("peak_roe",0)):
-   with pg() as c:
-    with c.transaction():
-     STORE.fence(c);c.execute("update pump_positions set peak_roe=%s where symbol=%s and opened=%s",(peak,sym,pos["opened"]))
-   with LOCK:
-    if sym in S["pump_positions"]:S["pump_positions"][sym]["peak_roe"]=peak
+   with pg() as db:
+    with db.transaction():
+     STORE.fence(db);db.execute("update pump_positions set peak_roe=%s where symbol=%s and opened=%s",(peak,sym,pos["opened"]))
 
 def whale_liq_open(symbol,side,price,score,features):
  if S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or side not in (-1,1) or not price:return False
@@ -655,6 +669,25 @@ def whale_liq_mark_positions(prices):
   px=prices.get(sym)
   if not px:continue
   entry=float(pos["entry"]);side=int(pos["side"]);lev=float(pos["leverage"])
+  with LOCK:ctx=copy.deepcopy(S.get("_pump_ctx",{}).get(sym,{}))
+  mark=float(ctx.get("mark_price",0) or 0) or float(px)
+  features=copy.deepcopy(pos.get("features",{}));liq=float(features.get("liquidation_price",0) or 0);victim=str(features.get("victim_side","")).lower()
+  reached=bool(liq>0 and ((victim=="long" and mark<=liq) or (victim=="short" and mark>=liq)))
+  features_changed=False
+  if reached and not features.get("liquidation_level_reached_at"):
+   features["liquidation_level_reached_at"]=now();features["liquidation_level_reached_mark"]=mark;features_changed=True
+   journal("whale_liq_level_reached",None,{"symbol":sym,"victim_side":victim,"liquidation_price":liq,"mark_price":mark,"entry":entry})
+  if features.get("liquidation_level_reached_at") and liq>0:
+   post_bps=max(0.0,side*(mark/liq-1.0)*10000.0)
+   if post_bps>float(features.get("post_liq_max_favorable_bps",0) or 0):
+    features["post_liq_max_favorable_bps"]=round(post_bps,2);features_changed=True
+  if features_changed:
+   with LOCK:
+    if sym in S["whale_positions"]:S["whale_positions"][sym]["features"]=features
+   with pg() as db:
+    with db.transaction():
+     STORE.fence(db);db.execute("update whale_liq_positions set features=%s::jsonb where symbol=%s and opened=%s",(json.dumps(features,default=str),sym,pos["opened"]))
+   pos["features"]=features
   roe=(float(px)/entry-1)*side*lev;peak=max(float(pos.get("peak_roe",0) or 0),roe)
   peak_price=entry*(1+(peak/lev)*side)
   probe=copy.deepcopy(pos);probe["peak"]=peak_price;probe["history"]=[float(r[1]) for r in timelines.get(sym,[])[-120:] if len(r)>=2]
@@ -1048,6 +1081,7 @@ def telemetry():
     count=S["market_count"];equity=S["equity"]
    if active:
     save_market_snapshot(now(),count,equity,len(symbols))
+    save_capacity_snapshot()
     for sym in symbols:
      if SHUTDOWN.is_set():break
      if sym in prices:
