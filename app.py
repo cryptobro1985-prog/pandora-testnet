@@ -397,42 +397,112 @@ def save_whale_v2_learning_snapshot():
  try:
   with pg() as c:
    account=c.execute("select equity,realized_pnl,started_at from whale_liq_v2_account_state where id=1").fetchone()
-   rows=c.execute("select pnl,features from whale_liq_v2_trade_history order by id").fetchall()
-   v1=c.execute("""select count(*) as n,
+   started=account["started_at"]
+   v2_rows=c.execute("select pnl,features from whale_liq_v2_trade_history order by id").fetchall()
+   v1_stats=c.execute("""select count(*) as samples,
       sum(case when pnl>0 then 1 else 0 end) as wins,
-      coalesce(sum(pnl),0) as total_pnl,avg(pnl) as avg_pnl
-      from trade_history where strategy='whale_liquidation' and opened::timestamptz >= %s::timestamptz""",
-      (account["started_at"],)).fetchone()
-   buckets=c.execute("""select
+      coalesce(sum(pnl),0) as total_pnl,avg(pnl) as avg_pnl,
+      avg(side*(exit/entry-1)*25*100) as avg_gross_roe_pct_ex_fees,
+      min(side*(exit/entry-1)*25*100) as worst_gross_roe_pct_ex_fees,
+      max(side*(exit/entry-1)*25*100) as best_gross_roe_pct_ex_fees,
+      avg(case when features->>'liquidation_level_reached_at' is not null then 1.0 else 0.0 end) as liquidation_hit_rate
+      from trade_history
+      where strategy='whale_liquidation' and opened::timestamptz >= %s::timestamptz""",(started,)).fetchone()
+   v2_stats=c.execute("""select count(*) as samples,
+      sum(case when pnl>0 then 1 else 0 end) as wins,
+      coalesce(sum(pnl),0) as total_pnl,avg(pnl) as avg_pnl,
+      avg(side*(exit/entry-1)*25*100) as avg_gross_roe_pct_ex_fees,
+      min(side*(exit/entry-1)*25*100) as worst_gross_roe_pct_ex_fees,
+      max(side*(exit/entry-1)*25*100) as best_gross_roe_pct_ex_fees,
+      avg(case when features->>'wl2_liquidation_level_reached_at' is not null then 1.0 else 0.0 end) as liquidation_hit_rate
+      from whale_liq_v2_trade_history
+      where opened::timestamptz >= %s::timestamptz""",(started,)).fetchone()
+   v1_paths=c.execute("""with per_position as (
+      select symbol,opened,min(roe_pct) as mae_roe_pct,max(roe_pct) as mfe_roe_pct
+      from position_snapshots
+      where strategy='whale_liquidation' and opened::timestamptz >= %s::timestamptz
+      group by symbol,opened)
+      select count(*) as positions,avg(mae_roe_pct) as avg_mae_roe_pct,
+       avg(mfe_roe_pct) as avg_mfe_roe_pct,min(mae_roe_pct) as worst_mae_roe_pct,
+       max(mfe_roe_pct) as best_mfe_roe_pct from per_position""",(started,)).fetchone()
+   v2_paths=c.execute("""with per_position as (
+      select symbol,opened,min(roe_pct) as mae_roe_pct,max(roe_pct) as mfe_roe_pct
+      from position_snapshots
+      where strategy='whale_liquidation_v2' and opened::timestamptz >= %s::timestamptz
+      group by symbol,opened)
+      select count(*) as positions,avg(mae_roe_pct) as avg_mae_roe_pct,
+       avg(mfe_roe_pct) as avg_mfe_roe_pct,min(mae_roe_pct) as worst_mae_roe_pct,
+       max(mfe_roe_pct) as best_mfe_roe_pct from per_position""",(started,)).fetchone()
+   v1_buckets=c.execute("""select
+      case when nullif(features->>'distance_pct','')::double precision < .35 then '<0.35%'
+           when nullif(features->>'distance_pct','')::double precision < .60 then '0.35-0.60%'
+           else '0.60%+' end as distance_bucket,
+      count(*) as n,sum(case when pnl>0 then 1 else 0 end) as wins,
+      avg(side*(exit/entry-1)*25*100) as avg_gross_roe_pct_ex_fees,
+      avg(pnl) as avg_pnl,sum(pnl) as total_pnl
+      from trade_history where strategy='whale_liquidation'
+      and opened::timestamptz >= %s::timestamptz group by 1 order by 1""",(started,)).fetchall()
+   v2_buckets=c.execute("""select
       case when nullif(features->>'wl2_entry_distance_pct','')::double precision < .35 then '<0.35%'
            when nullif(features->>'wl2_entry_distance_pct','')::double precision < .60 then '0.35-0.60%'
            else '0.60-0.90%' end as distance_bucket,
       count(*) as n,sum(case when pnl>0 then 1 else 0 end) as wins,
+      avg(side*(exit/entry-1)*25*100) as avg_gross_roe_pct_ex_fees,
       avg(pnl) as avg_pnl,sum(pnl) as total_pnl,
       avg(nullif(features->>'whale_rank_score','')::double precision) as avg_rank
-      from whale_liq_v2_trade_history group by 1 order by 1""").fetchall()
-   paths=c.execute("""select
-      min(roe_pct) filter(where strategy='whale_liquidation_v2') as worst_observed_roe_pct,
-      max(roe_pct) filter(where strategy='whale_liquidation_v2') as best_observed_roe_pct
-      from position_snapshots where ts::timestamptz >= %s::timestamptz""",
-      (account["started_at"],)).fetchone()
-  summary=wl2_learning_summary([dict(x) for x in rows])
+      from whale_liq_v2_trade_history
+      where opened::timestamptz >= %s::timestamptz group by 1 order by 1""",(started,)).fetchall()
+   v1_exits=c.execute("""select reason,count(*) as n from trade_history
+      where strategy='whale_liquidation' and opened::timestamptz >= %s::timestamptz
+      group by reason order by n desc""",(started,)).fetchall()
+   v2_exits=c.execute("""select reason,count(*) as n from whale_liq_v2_trade_history
+      where opened::timestamptz >= %s::timestamptz group by reason order by n desc""",(started,)).fetchall()
+   v1_signals=c.execute("""select action,count(*) as n from whale_liq_signal_journal
+      where ts::timestamptz >= %s::timestamptz group by action order by n desc""",(started,)).fetchall()
+   v2_signals=c.execute("""select action,count(*) as n from whale_liq_v2_signal_journal
+      where ts::timestamptz >= %s::timestamptz group by action order by n desc""",(started,)).fetchall()
+   v1_open=c.execute("select count(*) as n from whale_liq_positions").fetchone()["n"]
+   v2_open=c.execute("select count(*) as n from whale_liq_v2_positions").fetchone()["n"]
+
+  def norm(stats,paths):
+   samples=int(stats["samples"] or 0);wins=int(stats["wins"] or 0)
+   return {"samples":samples,"wins":wins,"win_rate":(wins/samples) if samples else None,
+    "total_pnl":float(stats["total_pnl"] or 0),
+    "avg_pnl":float(stats["avg_pnl"]) if stats["avg_pnl"] is not None else None,
+    "avg_gross_roe_pct_ex_fees":float(stats["avg_gross_roe_pct_ex_fees"]) if stats["avg_gross_roe_pct_ex_fees"] is not None else None,
+    "worst_gross_roe_pct_ex_fees":float(stats["worst_gross_roe_pct_ex_fees"]) if stats["worst_gross_roe_pct_ex_fees"] is not None else None,
+    "best_gross_roe_pct_ex_fees":float(stats["best_gross_roe_pct_ex_fees"]) if stats["best_gross_roe_pct_ex_fees"] is not None else None,
+    "liquidation_hit_rate":float(stats["liquidation_hit_rate"]) if stats["liquidation_hit_rate"] is not None else None,
+    "path":{"positions":int(paths["positions"] or 0),
+      "avg_mae_roe_pct":float(paths["avg_mae_roe_pct"]) if paths["avg_mae_roe_pct"] is not None else None,
+      "avg_mfe_roe_pct":float(paths["avg_mfe_roe_pct"]) if paths["avg_mfe_roe_pct"] is not None else None,
+      "worst_mae_roe_pct":float(paths["worst_mae_roe_pct"]) if paths["worst_mae_roe_pct"] is not None else None,
+      "best_mfe_roe_pct":float(paths["best_mfe_roe_pct"]) if paths["best_mfe_roe_pct"] is not None else None}}
+
+  v1=norm(v1_stats,v1_paths);v2=norm(v2_stats,v2_paths)
+  summary=wl2_learning_summary([dict(x) for x in v2_rows])
+  def delta(a,b):
+   return (b-a) if a is not None and b is not None else None
   payload={"policy":WL2_POLICY,"adaptation_mode":"observe_only_frozen_week1",
-    "experiment_started_at":account["started_at"],
-    "v2_account":{"equity":float(account["equity"]),"realized_pnl":float(account["realized_pnl"])},
-    "v2":summary,"distance_buckets":[dict(x) for x in buckets],
-    "path_stats":dict(paths) if paths else {},
-    "v1_same_period":{"samples":int(v1["n"] or 0),"wins":int(v1["wins"] or 0),
-      "win_rate":(float(v1["wins"] or 0)/int(v1["n"])) if int(v1["n"] or 0) else None,
-      "total_pnl":float(v1["total_pnl"] or 0),
-      "avg_pnl":float(v1["avg_pnl"] or 0) if v1["avg_pnl"] is not None else None},
-    "note":"WL2 policy is frozen during week-one A/B; learning records evidence and does not mutate live thresholds.",
+    "experiment_started_at":started,
+    "comparison_basis":"same wall-clock period; use win_rate/gross_roe/MAE/MFE for fair comparison because v1 shares the main PAPER account while v2 has an isolated $100 sleeve",
+    "v1":{"open_positions":int(v1_open),"metrics":v1,"distance_buckets":[dict(x) for x in v1_buckets],
+      "exit_reasons":[dict(x) for x in v1_exits],"signal_actions":[dict(x) for x in v1_signals]},
+    "v2":{"open_positions":int(v2_open),"virtual_equity":float(account["equity"]),"realized_pnl":float(account["realized_pnl"]),
+      "metrics":v2,"profit_factor":summary.get("profit_factor"),"distance_buckets":[dict(x) for x in v2_buckets],
+      "exit_reasons":[dict(x) for x in v2_exits],"signal_actions":[dict(x) for x in v2_signals]},
+    "delta_v2_minus_v1":{"win_rate":delta(v1["win_rate"],v2["win_rate"]),
+      "avg_gross_roe_pct_ex_fees":delta(v1["avg_gross_roe_pct_ex_fees"],v2["avg_gross_roe_pct_ex_fees"]),
+      "avg_mae_roe_pct":delta(v1["path"]["avg_mae_roe_pct"],v2["path"]["avg_mae_roe_pct"]),
+      "avg_mfe_roe_pct":delta(v1["path"]["avg_mfe_roe_pct"],v2["path"]["avg_mfe_roe_pct"]),
+      "liquidation_hit_rate":delta(v1["liquidation_hit_rate"],v2["liquidation_hit_rate"])},
+    "note":"Week-one thresholds are frozen. Learning is observe-only: all entries, rejections, paths and outcomes are recorded, but the live rules are not auto-mutated mid-experiment.",
     "generated_at":now()}
   with pg() as c:
    c.execute("insert into whale_liq_v2_learning_snapshots(recorded_at,samples,payload) values(%s,%s,%s::jsonb)",
-     (now(),int(summary["samples"]),json.dumps(payload,default=str)))
+     (now(),int(v2["samples"]),json.dumps(payload,default=str)))
   with LOCK:S["whale_v2_learning"]=payload
-  journal("whale_v2_learning_snapshot",None,{"samples":summary["samples"],"policy":WL2_POLICY})
+  journal("whale_v2_learning_snapshot",None,{"v1_samples":v1["samples"],"v2_samples":v2["samples"],"policy":WL2_POLICY})
   return payload
  except Exception as exc:
   with LOCK:S["last_error"]="wl2_learning: "+str(exc)[:160]
@@ -962,6 +1032,7 @@ def whale_liq_close(symbol,price,reason):
 @account_mutation
 def whale_v2_open(symbol,side,price,score,features):
  if S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or side not in (-1,1):return False
+ if features.get("observed_at_epoch") and not 0<=time.time()-float(features["observed_at_epoch"])<=10:return False
  price=current_entry_price(symbol)
  if price is None:return False
  with LOCK:
@@ -2532,16 +2603,18 @@ def truth_watch():
 
 def adapt():
  load_latest_learning()
- last_day=None
+ last_day=None;last_whale_hour=None
  while not SHUTDOWN.is_set():
   try:
-   day=datetime.datetime.now(datetime.timezone.utc).date().isoformat()
-   # Refresh on startup and then once per UTC day; persist every learning state.
+   dt=datetime.datetime.now(datetime.timezone.utc)
+   day=dt.date().isoformat();whale_hour=dt.strftime("%Y-%m-%dT%H")
    if last_day!=day:
-    save_learning_snapshot();save_whale_v2_learning_snapshot();last_day=day
+    save_learning_snapshot();last_day=day
+   if last_whale_hour!=whale_hour:
+    save_whale_v2_learning_snapshot();last_whale_hour=whale_hour
   except Exception as e:
    with LOCK:S["last_error"]="adaptive: "+str(e)[:160]
-  SHUTDOWN.wait(900)
+  SHUTDOWN.wait(300)
 
 def research_page_monitor(source,url):
  delay=60
