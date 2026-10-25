@@ -1008,6 +1008,57 @@ def close_news_position(sym,pos,price,reason):
    if S["positions"].get(sym,{}).get("opened")==pos["opened"]:S["positions"].pop(sym,None)
  return result
 
+@account_mutation
+def reconcile_open_paper_sizing(prices):
+ """One-time live PAPER resize of legacy pump/liquidation positions to the 5-20% policy.
+ Added size is filled at the current mark and entry is volume-weighted, so history is not backdated."""
+ with LOCK:
+  equity=float(S.get("equity",0) or 0)
+  books=(("pump_dump",copy.deepcopy(S.get("pump_positions",{})),"pump_positions"),
+         ("whale_liquidation",copy.deepcopy(S.get("whale_positions",{})),"whale_liq_positions"))
+ if equity<=0:return 0
+ changed=0
+ for strategy,book,table in books:
+  for sym,pos in book.items():
+   features=copy.deepcopy(pos.get("features") or {})
+   if features.get("allocation_policy")=="signal_liquidity_5_20_paper_v2":continue
+   mark=float(prices.get(sym,0) or 0)
+   if mark<=0:continue
+   if strategy=="pump_dump" and features.get("allocation_tier")=="SECONDARY":
+    frac=0.05
+    features["allocation_margin_fraction"]=0.05
+    features["allocation_policy"]="signal_liquidity_5_20_paper_v2"
+    features["signal_strength_score"]=float(pos.get("score",0) or 0)
+   else:
+    features["score"]=float(pos.get("score",features.get("score",0)) or 0)
+    features["side"]=int(pos.get("side",features.get("side",0)) or 0)
+    frac=liquidity_margin_fraction(sym,features)
+   frac=max(0.05,min(0.20,float(frac)))
+   target_margin=equity*frac
+   old_margin=float(pos.get("margin",0) or 0);lev=max(1.0,float(pos.get("leverage",TRADE_LEVERAGE)))
+   old_notional=float(pos.get("notional",old_margin*lev) or 0)
+   if target_margin<=old_margin*1.001:
+    continue
+   target_notional=target_margin*lev;add_notional=max(0.0,target_notional-old_notional)
+   if add_notional<=0:continue
+   old_entry=float(pos["entry"]);new_entry=(old_notional*old_entry+add_notional*mark)/target_notional
+   features["resized_at"]=now();features["resize_fill_price"]=mark
+   features["resize_from_margin"]=round(old_margin,8);features["resize_to_margin"]=round(target_margin,8)
+   with pg() as db:
+    with db.transaction():
+     STORE.fence(db)
+     db.execute("update "+table+" set entry=%s,margin=%s,notional=%s,features=%s::jsonb where symbol=%s",
+                (new_entry,target_margin,target_notional,json.dumps(features,default=str),sym))
+     db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'paper_position_resized',%s::jsonb)",
+                (now(),json.dumps({"strategy":strategy,"symbol":sym,"fraction":frac,"old_margin":old_margin,
+                 "new_margin":target_margin,"added_notional":add_notional,"fill_price":mark,"new_entry":new_entry},default=str)))
+   with LOCK:
+    key="pump_positions" if strategy=="pump_dump" else "whale_positions"
+    if sym in S.get(key,{}):
+     S[key][sym].update({"entry":new_entry,"margin":target_margin,"notional":target_notional,"features":features})
+   changed+=1
+ return changed
+
 def market():
  while not SHUTDOWN.is_set():
   S["_market_heartbeat"]=time.time()
@@ -1028,6 +1079,7 @@ def market():
    # Network and SQL work never owns the global state lock. Sources, health
    # and the lease heartbeat remain responsive during a slow checkpoint.
    if active and not SHUTDOWN.is_set():
+    reconcile_open_paper_sizing(valid)
     for sym,old_pos in positions.items():
      if sym not in valid:continue
      px=valid[sym];pos,reason=evaluate_exit(old_pos,px,now())
