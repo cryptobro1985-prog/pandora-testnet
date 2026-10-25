@@ -905,46 +905,61 @@ def whale_liq_close(symbol,price,reason):
 
 @account_mutation
 def whale_liq_mark_positions(prices):
+ # Evaluate every open whale position from one price snapshot, then persist all
+ # non-closing checkpoints in a single PostgreSQL transaction. With many restored
+ # positions this prevents 20-40 serial transactions from making market prices
+ # look stale to the scanners.
  with LOCK:
-  positions=copy.deepcopy(S["whale_positions"]);timelines={k:list(v) for k,v in S.get("_timeline",{}).items()}
+  positions=copy.deepcopy(S["whale_positions"])
+ updates=[]
  for sym,pos in positions.items():
   px=prices.get(sym)
   if not px:continue
   entry=float(pos["entry"]);side=int(pos["side"]);lev=float(pos["leverage"])
   with LOCK:ctx=copy.deepcopy(S.get("_pump_ctx",{}).get(sym,{}))
   mark=float(ctx.get("mark_price",0) or 0) or float(px)
-  features=copy.deepcopy(pos.get("features",{}));liq=float(features.get("liquidation_price",0) or 0);victim=str(features.get("victim_side","")).lower()
+  features=copy.deepcopy(pos.get("features",{}))
+  liq=float(features.get("liquidation_price",0) or 0)
+  victim=str(features.get("victim_side","")).lower()
   reached=bool(liq>0 and ((victim=="long" and mark<=liq) or (victim=="short" and mark>=liq)))
-  features_changed=False
   if reached and not features.get("liquidation_level_reached_at"):
-   features["liquidation_level_reached_at"]=now();features["liquidation_level_reached_mark"]=mark;features_changed=True
-   journal("whale_liq_level_reached",None,{"symbol":sym,"victim_side":victim,"liquidation_price":liq,"mark_price":mark,"entry":entry})
+   features["liquidation_level_reached_at"]=now()
+   features["liquidation_level_reached_mark"]=mark
+   features["pre_liquidation_hold_active"]=False
+   features["post_liq_search_started_at"]=now()
+   journal("whale_liq_level_reached",None,{"symbol":sym,"victim_side":victim,
+    "liquidation_price":liq,"mark_price":mark,"entry":entry})
   if features.get("liquidation_level_reached_at") and liq>0:
    post_bps=max(0.0,side*(mark/liq-1.0)*10000.0)
    if post_bps>float(features.get("post_liq_max_favorable_bps",0) or 0):
-    features["post_liq_max_favorable_bps"]=round(post_bps,2);features_changed=True
-  if features_changed:
-   with LOCK:
-    if sym in S["whale_positions"]:S["whale_positions"][sym]["features"]=features
-   with pg() as db:
-    with db.transaction():
-     STORE.fence(db);db.execute("update whale_liq_positions set features=%s::jsonb where symbol=%s and opened=%s",(json.dumps(features,default=str),sym,pos["opened"]))
-   pos["features"]=features
-  roe=(float(px)/entry-1)*side*lev;peak=max(float(pos.get("peak_roe",0) or 0),roe)
-  peak_price=entry*(1+(peak/lev)*side)
+    features["post_liq_max_favorable_bps"]=round(post_bps,2)
+  pos["features"]=features
+  roe=(float(px)/entry-1)*side*lev
+  peak=max(float(pos.get("peak_roe",0) or 0),roe)
+  peak_price=float(pos.get("peak",entry*(1+(peak/lev)*side)))
   probe=copy.deepcopy(pos);probe["peak"]=peak_price
   evaluated,reason=evaluate_exit(probe,float(px),now())
   new_peak=float(evaluated.get("peak",entry));peak=(new_peak/entry-1)*side*lev
+  state=risk_state(evaluated)
   with LOCK:
-   if sym in S["whale_positions"]:
-    S["whale_positions"][sym]["peak_roe"]=peak
-    S["whale_positions"][sym].update(risk_state(evaluated))
-    S["whale_positions"][sym]["last_price"]=float(px)
+   live=S["whale_positions"].get(sym)
+   if live and live.get("opened")==pos.get("opened"):
+    live["features"]=features
+    live["peak_roe"]=peak
+    live.update(state)
+    live["last_price"]=float(px)
   if reason:
-   whale_liq_close(sym,float(px),"local_extreme_weakening");continue
-  with pg() as c:
-   with c.transaction():
-    STORE.fence(c);c.execute("update whale_liq_positions set peak_roe=%s,risk_state=%s::jsonb where symbol=%s and opened=%s",(peak,json.dumps(risk_state(evaluated)),sym,pos["opened"]))
+   whale_liq_close(sym,float(px),"local_extreme_weakening")
+   continue
+  updates.append((peak,json.dumps(state,default=str),json.dumps(features,default=str),sym,pos["opened"]))
+ if updates:
+  with pg() as db:
+   with db.transaction():
+    STORE.fence(db)
+    with db.cursor() as cur:
+     cur.executemany("""update whale_liq_positions
+       set peak_roe=%s,risk_state=%s::jsonb,features=%s::jsonb
+       where symbol=%s and opened=%s""",updates)
 
 def _whale_liq_book(symbol):
  try:
