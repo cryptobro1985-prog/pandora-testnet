@@ -655,13 +655,26 @@ def liquidity_margin_fraction(symbol,features,base=None,regime=None):
   elif depth<1_000_000:liq_cap=0.18
   else:liq_cap=0.20
  if day>=500_000_000 and depth>=20_000_000:liq_cap=0.20
- frac=0.05+0.15*max(0.0,min(1.0,strength))
+ raw_frac=0.05+0.15*max(0.0,min(1.0,strength))
  if score<80:score_cap=0.05
  elif score<85:score_cap=0.08
  elif score<90:score_cap=0.10
  elif score<94:score_cap=0.13
  elif score<97:score_cap=0.16
  else:score_cap=0.20
+ # Liquidity must influence ordinary sizing, not merely cap it. Extremely strong
+ # pump/dump signals in a thin book are the exception because thin depth can
+ # amplify the impulse; liquidation trades remain conservative on thin books.
+ if depth<10_000:liq_quality=0.20
+ elif depth<50_000:liq_quality=0.35
+ elif depth<250_000:liq_quality=0.50
+ elif depth<1_000_000:liq_quality=0.68
+ elif depth<5_000_000:liq_quality=0.82
+ elif depth<20_000_000:liq_quality=0.92
+ else:liq_quality=1.00
+ thin_impulse_exception=(not is_liquidation and depth<50_000 and score>=97 and burst>=10 and flow>=0.25 and confirms>=3)
+ liquidity_multiplier=1.0 if thin_impulse_exception else (0.55+0.45*liq_quality)
+ frac=0.05+(raw_frac-0.05)*liquidity_multiplier
  frac=min(frac,liq_cap,score_cap)
  features["signal_score_cap_fraction"]=score_cap
  side=int(features.get("side",0) or 0)
@@ -677,8 +690,11 @@ def liquidity_margin_fraction(symbol,features,base=None,regime=None):
  features["sizing_book_depth_usd"]=round(depth,2)
  features["sizing_day_volume_usd"]=round(day,2)
  features["signal_strength_score"]=round(strength*100,2)
+ features["liquidity_quality"]=round(liq_quality,4)
+ features["liquidity_multiplier"]=round(liquidity_multiplier,4)
+ features["thin_book_impulse_exception"]=bool(thin_impulse_exception)
  features["allocation_margin_fraction"]=round(frac,4)
- features["allocation_policy"]="signal_momentum_liquidity_5_20_paper_v3"
+ features["allocation_policy"]="signal_momentum_liquidity_5_20_paper_v4"
  return frac
 
 def current_entry_price(symbol):
