@@ -632,12 +632,28 @@ def liquidity_margin_fraction(symbol,features,base=None,regime=None):
  whale_multiple=whale/floor if whale else 0.0
  # Signal component dominates; liquidity controls how much of the 20% ceiling is safe to test.
  strength=0.45*(score/100.0)+0.10*min(1.0,streak/3.0)+0.10*min(1.0,confirms/4.0)+0.10*min(1.0,burst/10.0)+0.10*min(1.0,flow)+0.15*min(1.0,whale_multiple/4.0)
- if depth<10_000:liq_cap=0.08
- elif depth<50_000:liq_cap=0.10
- elif depth<250_000:liq_cap=0.13
- elif depth<1_000_000:liq_cap=0.15
- elif depth<5_000_000:liq_cap=0.17
- else:liq_cap=0.20
+ # Liquidation entries stay execution-aware: a thin book raises cascade risk but also slippage.
+ # Pump/Dump is different in hard-test mode: thin books can amplify the move, so an extreme
+ # independently confirmed impulse may use a larger fraction instead of being capped at 8%.
+ is_liquidation=bool(whale or features.get("liquidation_price") or str(features.get("engine","")).startswith("whale"))
+ if is_liquidation:
+  if depth<10_000:liq_cap=0.08
+  elif depth<50_000:liq_cap=0.10
+  elif depth<250_000:liq_cap=0.13
+  elif depth<1_000_000:liq_cap=0.15
+  elif depth<5_000_000:liq_cap=0.17
+  else:liq_cap=0.20
+ else:
+  if depth<10_000:
+   if score>=97 and burst>=15 and flow>=0.30 and confirms>=3:liq_cap=0.20
+   elif score>=94 and burst>=8 and flow>=0.25 and confirms>=2:liq_cap=0.16
+   elif score>=90 and burst>=5 and flow>=0.20:liq_cap=0.13
+   else:liq_cap=0.08
+  elif depth<50_000:
+   liq_cap=0.20 if score>=97 and burst>=10 and flow>=0.25 else (0.16 if score>=92 else 0.12)
+  elif depth<250_000:liq_cap=0.16
+  elif depth<1_000_000:liq_cap=0.18
+  else:liq_cap=0.20
  if day>=500_000_000 and depth>=20_000_000:liq_cap=0.20
  frac=0.05+0.15*max(0.0,min(1.0,strength))
  if score<80:score_cap=0.05
@@ -662,7 +678,7 @@ def liquidity_margin_fraction(symbol,features,base=None,regime=None):
  features["sizing_day_volume_usd"]=round(day,2)
  features["signal_strength_score"]=round(strength*100,2)
  features["allocation_margin_fraction"]=round(frac,4)
- features["allocation_policy"]="signal_liquidity_5_20_paper_v2"
+ features["allocation_policy"]="signal_momentum_liquidity_5_20_paper_v3"
  return frac
 
 def current_entry_price(symbol):
@@ -1021,18 +1037,12 @@ def reconcile_open_paper_sizing(prices):
  for strategy,book,table in books:
   for sym,pos in book.items():
    features=copy.deepcopy(pos.get("features") or {})
-   if features.get("allocation_policy")=="signal_liquidity_5_20_paper_v2":continue
+   if features.get("allocation_policy")=="signal_momentum_liquidity_5_20_paper_v3":continue
    mark=float(prices.get(sym,0) or 0)
    if mark<=0:continue
-   if strategy=="pump_dump" and features.get("allocation_tier")=="SECONDARY":
-    frac=0.05
-    features["allocation_margin_fraction"]=0.05
-    features["allocation_policy"]="signal_liquidity_5_20_paper_v2"
-    features["signal_strength_score"]=float(pos.get("score",0) or 0)
-   else:
-    features["score"]=float(pos.get("score",features.get("score",0)) or 0)
-    features["side"]=int(pos.get("side",features.get("side",0)) or 0)
-    frac=liquidity_margin_fraction(sym,features)
+   features["score"]=float(pos.get("score",features.get("score",0)) or 0)
+   features["side"]=int(pos.get("side",features.get("side",0)) or 0)
+   frac=liquidity_margin_fraction(sym,features)
    frac=max(0.05,min(0.20,float(frac)))
    target_margin=equity*frac
    old_margin=float(pos.get("margin",0) or 0);lev=max(1.0,float(pos.get("leverage",TRADE_LEVERAGE)))
