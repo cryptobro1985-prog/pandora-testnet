@@ -21,7 +21,7 @@ def better(side, old, candidate):
     return max(old, candidate) if side > 0 else min(old, candidate)
 
 def risk_state(position):
-    keys=("peak","history","last_price","last_evaluated_at","last_exit_check")
+    keys=("peak","history","last_price","last_evaluated_at","last_exit_check","local_search_min_samples")
     return {key:position[key] for key in keys if key in position}
 
 def evaluate_exit(position, price, evaluated_at):
@@ -80,6 +80,12 @@ def evaluate_exit(position, price, evaluated_at):
     local_exit=(peak_price_move>=MIN_FAVORABLE_PRICE_MOVE and peak_recent and
                 weakening and local_price_giveback>=allowed_giveback)
 
+    # A restored position or a just-triggered liquidation must build a fresh
+    # post-event price path before a local extreme can be declared.
+    min_local_samples=max(0,int(pos.get("local_search_min_samples",0) or 0))
+    if min_local_samples and len(series)<min_local_samples:
+        local_exit=False
+
     # Whale-liquidation PAPER strategy: a local pullback must never harvest the
     # position before the tracked liquidation level has actually been touched.
     # The mark loop latches liquidation_level_reached_at; after that latch the
@@ -120,6 +126,8 @@ def evaluate_exit(position, price, evaluated_at):
         "slope_flip":slope_flip,
         "weakening":weakening,
         "local_extreme_exit":local_exit,
+        "local_search_samples":len(series),
+        "local_search_min_samples":min_local_samples,
         "pre_liquidation_hold":pre_liq_hold,
         "remaining_to_liquidation_pct":remaining_liq_pct,
         "pre_liquidation_hold_limit_pct":hold_limit if engine.startswith("whale_liquidation") else None,
