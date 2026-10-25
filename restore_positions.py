@@ -30,7 +30,7 @@ def liq_fraction(f):
     return max(.05,min(.20,frac,cap,scorecap))
 
 def restore_whales(c,prices):
-    action="restore-all-whale-original-entry-v6"
+    action="restore-all-whale-original-entry-v7"
     if c.execute("select 1 from operator_actions where action_id=%s",(action,)).fetchone():return []
     events=c.execute("""select distinct on (payload->>'symbol') id,recorded_at,payload from audit_journal
         where kind='whale_liq_trade_opened' and payload ? 'symbol'
@@ -63,11 +63,17 @@ def restore_whales(c,prices):
                 if crossed:reached=now();reached_mark=mark
             f["allocation_margin_fraction"]=round(frac,6);f["allocation_policy"]="signal_momentum_liquidity_5_20_paper_v4"
             f["original_entry_preserved"]=ent;f["reconstructed_sizing_at_original_entry"]=True;f["historical_strategy_reconstruction"]=True
-            f["restored_all_original_entries_v5"]=True
+            f["restored_all_original_entries_v7"]=True
             if reached:
                 f["liquidation_level_reached_at"]=reached;f["liquidation_level_reached_mark"]=reached_mark
                 f["pre_liquidation_hold_active"]=False;f["post_liq_search_started_at"]=now()
-            else:f["pre_liquidation_hold_active"]=True
+                # Reconstructed position starts a brand-new post-liquidation local
+                # search now; never reuse an earlier reconstructed path.
+                risk={"peak":mark or ent,"history":[mark or ent],"last_price":mark or ent,
+                      "local_search_min_samples":30,"post_liq_risk_reset_done":True}
+            else:
+                f["pre_liquidation_hold_active"]=True
+                risk={"peak":ent,"history":[],"local_search_min_samples":30}
             if liq>0 and mark>0 and victim in ("long","short"):
                 rem=((mark/liq)-1)*100 if victim=="long" else ((liq/mark)-1)*100
                 f["remaining_to_liquidation_pct_at_restore"]=round(rem,6)
@@ -77,8 +83,9 @@ def restore_whales(c,prices):
             if closed:c.execute("delete from trade_history where id=any(%s)",([int(t["id"]) for t in closed],))
             c.execute("delete from position_snapshots where strategy='whale_liquidation' and symbol=%s",(sym,))
             c.execute("""insert into whale_liq_positions(symbol,side,entry,notional,margin,leverage,opened,opened_epoch,peak_roe,score,features,risk_state)
-                values(%s,%s,%s,%s,%s,%s,%s,%s,0,%s,%s::jsonb,'{}'::jsonb)""",
-                (sym,side,ent,notional,margin,lev,opened,oe,float(p.get("score") or 0),json.dumps(f,default=str)))
+                values(%s,%s,%s,%s,%s,%s,%s,%s,0,%s,%s::jsonb,%s::jsonb)""",
+                (sym,side,ent,notional,margin,lev,opened,oe,float(p.get("score") or 0),
+                 json.dumps(f,default=str),json.dumps(risk,default=str)))
             out.append({"symbol":sym,"entry":ent,"margin_fraction":round(frac,4),"margin":round(margin,4),"score":float(p.get("score") or 0),"liq_reached":bool(reached),"reversed_pnl":round(rp,6)})
         if reversed_total:c.execute("update account_state set equity=equity-%s,realized_pnl=realized_pnl-%s,updated_at=%s where id=1",(reversed_total,reversed_total,now()))
         payload={"count":len(out),"positions":out,"reversed_realized_pnl":reversed_total,"policy":"original_entry_5_20_then_liquidation_then_fresh_local"}
