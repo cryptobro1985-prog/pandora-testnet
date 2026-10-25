@@ -104,7 +104,6 @@ PUMP_SECONDARY_SAME_SIDE_CAP=max(1,min(TARGET_OPEN_POSITIONS,int(os.getenv("PUMP
 WHALE_MAX_ACTIVE_POSITIONS=max(1,min(5,int(os.getenv("WHALE_MAX_ACTIVE_POSITIONS","5"))))
 WHALE_MARGIN_FRACTION=0.20
 WHALE_LEVERAGE=25.0
-PAPER_TOPUP_STEP=max(10.0,float(os.getenv("PAPER_TOPUP_STEP","100")))
 NEWS_MAX_AGE_SECONDS=float(os.getenv("NEWS_MAX_AGE_SECONDS","120"))
 NEWS_POLL_SECONDS=float(os.getenv("NEWS_POLL_SECONDS","15"))
 WHITEHOUSE_POLL_SECONDS=max(10.0,float(os.getenv("WHITEHOUSE_POLL_SECONDS","15")))
@@ -2748,7 +2747,7 @@ def operations_diagnostics():
      "pump_positions":len(S.get("pump_positions",{})),"pump_trades":S.get("pump_trades"),"shared_account_equity":S.get("equity"),
      "whale_liq_engine":copy.deepcopy(S["sources"].get("WhaleLiquidationScanner",{})),
      "whale_liq_positions":len(S.get("whale_positions",{})),"whale_liq_trades":S.get("whale_trades"),"account_model":"UNIFIED_PAPER_ACCOUNT",
-     "sizing_policy":{"margin_fraction":TRADE_MARGIN_FRACTION,"secondary_margin_fraction":PUMP_SECONDARY_MARGIN_FRACTION,"leverage":TRADE_LEVERAGE,"target_open_positions":TARGET_OPEN_POSITIONS,"max_open_positions":MAX_OPEN_POSITIONS,"pump_max_positions":PUMP_MAX_POSITIONS,"auto_topup_step":PAPER_TOPUP_STEP,"contributed_capital":S.get("contributed_capital",PAPER_RESET),"micro_analysis_threads":MICRO_ANALYSIS_THREADS},
+     "sizing_policy":{"margin_fraction":TRADE_MARGIN_FRACTION,"secondary_margin_fraction":PUMP_SECONDARY_MARGIN_FRACTION,"leverage":TRADE_LEVERAGE,"target_open_positions":TARGET_OPEN_POSITIONS,"max_open_positions":MAX_OPEN_POSITIONS,"pump_max_positions":PUMP_MAX_POSITIONS,"auto_topup_enabled":False,"contributed_capital":S.get("contributed_capital",PAPER_RESET),"micro_analysis_threads":MICRO_ANALYSIS_THREADS},
      "entry_rejections":dict(S.get("_entry_rejections",{})),
      "daily_audit":daily,
      "learning":{"samples":S.get("adaptive",{}).get("samples",0),"generated_at":S.get("adaptive",{}).get("generated_at"),"policy":S.get("adaptive",{}).get("policy")},
