@@ -2956,7 +2956,7 @@ def build_dashboard_snapshot():
  account_started=min(starts) if starts else now()
  try: account_age_seconds=max(0,int((datetime.datetime.now(datetime.timezone.utc)-datetime.datetime.fromisoformat(account_started.replace("Z","+00:00"))).total_seconds()))
  except Exception: account_age_seconds=0
- contributed=max(PAPER_RESET,float(state.get("contributed_capital",PAPER_RESET)));total=state["equity"]+unreal+pump_unreal+whale_unreal;account_roi=(total/contributed-1)*100;total_pnl_pct=(total/PAPER_RESET-1)*100;wl2_total=float(state.get("whale_v2_equity",PAPER_RESET))+whale_v2_unreal;wl2_pnl_pct=(wl2_total/PAPER_RESET-1)*100
+ contributed=max(PAPER_RESET,float(state.get("contributed_capital",PAPER_RESET)));total=state["equity"]+unreal+pump_unreal+whale_unreal;account_roi=(total/contributed-1)*100;total_pnl_pct=(float(state["equity"])/PAPER_RESET-1)*100;wl2_total=float(state.get("whale_v2_equity",PAPER_RESET))+whale_v2_unreal;wl2_pnl_pct=(wl2_total/PAPER_RESET-1)*100
  used_margin=sum(float(p.get("margin",float(p.get("notional",0))/max(1.0,float(p.get("leverage",TRADE_LEVERAGE))))) for book in (state.get("positions",{}),state.get("pump_positions",{}),state.get("whale_positions",{})) for p in book.values())
  free_margin=max(0.0,float(state["equity"])-used_margin);margin_utilization=(used_margin/float(state["equity"])*100.0) if float(state["equity"])>0 else 0.0
  visible_sources={k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and not k.startswith("XFree:") and k not in SEARCH_INDEX_FEEDS and not v.get("disabled") and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")}
