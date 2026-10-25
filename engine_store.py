@@ -85,7 +85,8 @@ class EngineStore:
                 state = row.get("risk_state") or {}
                 pos.update({k: v for k, v in state.items() if k in
                             ("peak", "trail_armed", "trail_stop", "history", "last_price",
-                             "last_evaluated_at", "last_exit_check")})
+                             "last_evaluated_at", "last_exit_check",
+                             "local_search_min_samples", "post_liq_risk_reset_done")})
                 if "peak" not in pos and recover_legacy:
                     prices = c.execute("""SELECT min(price) AS lo,max(price) AS hi
                         FROM market_context_snapshots WHERE symbol=%s AND ts>=%s""",
