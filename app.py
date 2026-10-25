@@ -960,6 +960,97 @@ def whale_liq_close(symbol,price,reason):
  return {"pnl":pnl,"equity":float(account["equity"])}
 
 @account_mutation
+def whale_v2_open(symbol,side,price,score,features):
+ if S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or side not in (-1,1):return False
+ price=current_entry_price(symbol)
+ if price is None:return False
+ with LOCK:
+  if not S["engine_active"] or symbol in S.get("whale_v2_positions",{}) or len(S.get("whale_v2_positions",{}))>=WL2_MAX_POSITIONS:return False
+  equity=float(S.get("whale_v2_equity",PAPER_RESET) or 0)
+  used=sum(float(p.get("margin",0) or 0) for p in S.get("whale_v2_positions",{}).values())
+ margin=equity*WL2_MARGIN_FRACTION
+ if equity<=0 or margin<=0 or used+margin>equity+1e-9:
+  journal("entry_skipped",None,{"strategy":"whale_liquidation_v2","symbol":symbol,"reason":"wl2_insufficient_virtual_margin","equity":equity,"used_margin":used})
+  return False
+ opened=now();epoch=time.time()
+ f=wl2_initial_position_state(features,price,opened)
+ f["allocation_margin_fraction"]=WL2_MARGIN_FRACTION;f["allocation_policy"]=WL2_POLICY
+ notional=margin*WL2_LEVERAGE
+ pos={"side":side,"entry":float(price),"notional":notional,"margin":margin,"leverage":WL2_LEVERAGE,
+      "opened":opened,"t":epoch,"score":float(score),"features":f}
+ with pg() as db:
+  with db.transaction():
+   STORE.fence(db)
+   row=db.execute("""insert into whale_liq_v2_positions(symbol,side,entry,notional,margin,leverage,opened,opened_epoch,score,features)
+      values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(symbol) do nothing returning symbol""",
+      (symbol,side,price,notional,margin,WL2_LEVERAGE,opened,epoch,float(score),json.dumps(f,default=str))).fetchone()
+   if not row:return False
+   db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'whale_v2_trade_opened',%s::jsonb)",
+      (now(),json.dumps({"strategy":"whale_liquidation_v2","symbol":symbol,"side":side,"entry":price,
+       "score":score,"margin":margin,"notional":notional,"leverage":WL2_LEVERAGE,"policy":WL2_POLICY},default=str)))
+ with LOCK:S["whale_v2_positions"][symbol]=pos
+ return True
+
+@account_mutation
+def whale_v2_close(symbol,price,reason):
+ with LOCK:pos=copy.deepcopy(S.get("whale_v2_positions",{}).get(symbol))
+ if not pos or not price:return None
+ pnl=paper_pnl(pos["notional"],pos["entry"],float(price),pos["side"],FEE)
+ with pg() as db:
+  with db.transaction():
+   STORE.fence(db)
+   row=db.execute("delete from whale_liq_v2_positions where symbol=%s and opened=%s returning symbol",(symbol,pos["opened"])).fetchone()
+   if not row:return None
+   account=db.execute("""update whale_liq_v2_account_state
+      set equity=equity+%s,realized_pnl=realized_pnl+%s,updated_at=%s where id=1
+      returning equity,realized_pnl""",(pnl,pnl,now())).fetchone()
+   payload=json.dumps(pos.get("features",{}),default=str)
+   db.execute("""insert into whale_liq_v2_trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,score,features)
+      values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
+      (pos["opened"],now(),symbol,pos["side"],pos["entry"],price,pnl,reason,pos.get("score",0),payload))
+   db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'whale_v2_trade_closed',%s::jsonb)",
+      (now(),json.dumps({"strategy":"whale_liquidation_v2","symbol":symbol,"side":pos["side"],
+       "entry":pos["entry"],"exit":price,"pnl":pnl,"reason":reason,"policy":WL2_POLICY},default=str)))
+ with LOCK:
+  S["whale_v2_positions"].pop(symbol,None);S["whale_v2_equity"]=float(account["equity"])
+  S["whale_v2_realized_pnl"]=float(account["realized_pnl"]);S["whale_v2_trades"]+=1
+ return {"pnl":pnl,"equity":float(account["equity"])}
+
+@account_mutation
+def whale_v2_mark_positions(prices):
+ with LOCK:
+  positions=copy.deepcopy(S.get("whale_v2_positions",{}))
+  timelines={k:list(v) for k,v in S.get("_timeline",{}).items()}
+  contexts=copy.deepcopy(S.get("_pump_ctx",{}))
+ stamp=time.time();updates=[]
+ for sym,pos in positions.items():
+  px=prices.get(sym)
+  if not px:continue
+  ctx=contexts.get(sym,{})
+  mark=float(ctx.get("mark_price",0) or 0) or float(px)
+  flow=float(ctx.get("flow_imbalance") or 0)
+  r15=_timeline_return(timelines.get(sym,[]),stamp,15,mark)
+  r60=_timeline_return(timelines.get(sym,[]),stamp,60,mark)
+  before=bool((pos.get("features") or {}).get("wl2_liquidation_level_reached_at"))
+  evaluated,reason=evaluate_wl2_position(pos,mark,now(),flow=flow,r15=r15,r60=r60)
+  after=bool((evaluated.get("features") or {}).get("wl2_liquidation_level_reached_at"))
+  if after and not before:
+   journal("whale_v2_liquidation_level_reached",None,{"symbol":sym,"entry":pos["entry"],"mark":mark,
+    "liquidation_price":evaluated["features"].get("liquidation_price"),"policy":WL2_POLICY})
+  with LOCK:
+   live=S.get("whale_v2_positions",{}).get(sym)
+   if live and live.get("opened")==pos.get("opened"):S["whale_v2_positions"][sym]=evaluated
+  if reason:
+   whale_v2_close(sym,mark,reason);continue
+  updates.append((json.dumps(evaluated.get("features",{}),default=str),sym,pos["opened"]))
+ if updates:
+  with pg() as db:
+   with db.transaction():
+    STORE.fence(db)
+    with db.cursor() as cur:
+     cur.executemany("update whale_liq_v2_positions set features=%s::jsonb where symbol=%s and opened=%s",updates)
+
+@account_mutation
 def whale_liq_mark_positions(prices):
  # Evaluate every open whale position from one price snapshot, then persist all
  # non-closing checkpoints in a single PostgreSQL transaction. With many restored
