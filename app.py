@@ -837,7 +837,7 @@ def pump_open(symbol,side,price,score,features,margin_fraction=None):
     STORE.fence(db)
     row=db.execute("""insert into pump_positions(symbol,side,entry,notional,margin,leverage,opened,opened_epoch,peak_roe,score,features)
      values(%s,%s,%s,%s,%s,%s,%s,%s,0,%s,%s::jsonb) on conflict(symbol) do nothing returning symbol""",
-     (symbol,side,price,notional,margin,WHALE_LEVERAGE,opened,epoch,float(score),json.dumps(features,default=str))).fetchone()
+     (symbol,side,price,notional,margin,TRADE_LEVERAGE,opened,epoch,float(score),json.dumps(features,default=str))).fetchone()
     if not row:return False
     db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'pump_trade_opened',%s::jsonb)",
      (now(),json.dumps({"strategy":"pump_dump","symbol":symbol,"side":side,"entry":price,"score":score,"margin":margin,"notional":notional,"leverage":TRADE_LEVERAGE},default=str)))
@@ -918,14 +918,14 @@ def whale_liq_open(symbol,side,price,score,features,margin_fraction=None):
  try:
   price=current_entry_price(symbol)
   if price is None:return False
-  notional=margin*TRADE_LEVERAGE;opened=now();epoch=time.time()
-  pos={"side":side,"entry":float(price),"notional":notional,"margin":margin,"leverage":TRADE_LEVERAGE,"opened":opened,"t":epoch,"peak_roe":0.0,"score":float(score),"features":features}
+  notional=margin*WHALE_LEVERAGE;opened=now();epoch=time.time()
+  pos={"side":side,"entry":float(price),"notional":notional,"margin":margin,"leverage":WHALE_LEVERAGE,"opened":opened,"t":epoch,"peak_roe":0.0,"score":float(score),"features":features}
   with pg() as db:
    with db.transaction():
     STORE.fence(db)
     row=db.execute("""insert into whale_liq_positions(symbol,side,entry,notional,margin,leverage,opened,opened_epoch,peak_roe,score,features)
      values(%s,%s,%s,%s,%s,%s,%s,%s,0,%s,%s::jsonb) on conflict(symbol) do nothing returning symbol""",
-     (symbol,side,price,notional,margin,TRADE_LEVERAGE,opened,epoch,float(score),json.dumps(features,default=str))).fetchone()
+     (symbol,side,price,notional,margin,WHALE_LEVERAGE,opened,epoch,float(score),json.dumps(features,default=str))).fetchone()
     if not row:return False
     db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'whale_liq_trade_opened',%s::jsonb)",
      (now(),json.dumps({"strategy":"whale_liquidation","symbol":symbol,"side":side,"entry":price,"score":score,"margin":margin,"notional":notional,"leverage":WHALE_LEVERAGE,"features":features},default=str)))
@@ -1191,8 +1191,7 @@ def reconcile_open_paper_sizing(prices):
  """
  with LOCK:
   equity=float(S.get("equity",0) or 0)
-  books=(("pump_dump",copy.deepcopy(S.get("pump_positions",{})),"pump_positions"),
-         ("whale_liquidation",copy.deepcopy(S.get("whale_positions",{})),"whale_liq_positions"))
+  books=(("pump_dump",copy.deepcopy(S.get("pump_positions",{})),"pump_positions"),)
  if equity<=0:return 0
  changed=0
  for strategy,book,table in books:
