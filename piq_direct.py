@@ -8,6 +8,7 @@ import html
 import json
 import re
 import urllib.parse
+import concurrent.futures
 
 from curl_cffi import requests as curl_requests
 
@@ -168,3 +169,38 @@ def high_signal(headline):
     text=headline or ""
     lo=text.lower()
     return bool(_HIGH_SIGNAL_TOKEN_RE.search(text)) or any(term in lo for term in _HIGH_SIGNAL_PHRASES)
+
+
+_story_cache={}
+
+def fetch_latest(timeout=4.0,limit=30):
+    """Fetch the public PiQ ticker/homepage and resolve only newly seen stories.
+
+    The first call may resolve a small batch of story pages to obtain exact
+    publication timestamps. Subsequent polls usually fetch just the new story,
+    so this does not hammer PiQ with one request per cached headline.
+    """
+    discovered=discover(timeout=timeout,limit=max(20,min(60,int(limit)*2)))
+    new=[item for item in discovered if item["url"] not in _story_cache][:12]
+    if new:
+        def load(item):
+            try:
+                return item["url"],fetch_story(item["url"],item.get("headline_hint"),timeout=timeout)
+            except Exception:
+                return item["url"],None
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(6,len(new))) as pool:
+            for url,row in pool.map(load,new):
+                if row:
+                    _story_cache[url]=row
+    current_urls=[item["url"] for item in discovered]
+    rows=[_story_cache[url] for url in current_urls if url in _story_cache]
+    if len(_story_cache)>500:
+        keep=set(current_urls)
+        for url in list(_story_cache):
+            if url not in keep and len(_story_cache)>300:
+                _story_cache.pop(url,None)
+    if not rows:
+        raise PiQReadError("no_timestamped_stories_resolved")
+    rows.sort(key=lambda row:row.get("created_at") or "",reverse=True)
+    discovery_url=discovered[0].get("discovery_url") if discovered else BASE
+    return rows[:max(1,int(limit))],discovery_url
