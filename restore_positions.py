@@ -86,29 +86,54 @@ def restore_whales(c,prices):
         c.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'whale_original_entries_restored',%s::jsonb)",(now(),json.dumps(payload,default=str)))
     return out
 
-def restore_btc(c):
-    action="restore-btc-short-80524-v4"
-    if c.execute("select 1 from operator_actions where action_id=%s",(action,)).fetchone():return None
+def restore_btc(c,prices):
+    action="restore-btc-short-80524-v5"
+    if c.execute("select 1 from operator_actions where action_id=%s",(action,)).fetchone():
+        return None
     cur=c.execute("select * from open_positions where symbol='BTC' for update").fetchone()
     if cur:
-        if abs(float(cur["entry"])-80524.5)<.01:return {"already_open":True,"entry":float(cur["entry"])}
-        return None
+        if abs(float(cur["entry"])-80524.5)>=.01:
+            return None
+        mark=float(prices.get("BTC",cur["entry"]) or cur["entry"])
+        state=dict(cur.get("risk_state") or {})
+        state.update({"peak":mark,"history":[mark],"last_price":mark,"local_search_min_samples":30})
+        payload={"symbol":"BTC","entry":float(cur["entry"]),"opened":cur["opened"],
+                 "margin":float(cur["margin"] or 0),"notional":float(cur["notional"] or 0),
+                 "leverage":float(cur["leverage"] or 25),"already_open":True,
+                 "fresh_local_window_reset":True,"restore_mark":mark,
+                 "local_search_min_samples":30}
+        with c.transaction():
+            c.execute("update open_positions set risk_state=%s::jsonb where symbol='BTC'",
+                      (json.dumps(state,default=str),))
+            c.execute("insert into operator_actions(action_id,completed_at,payload) values(%s,%s,%s::jsonb)",
+                      (action,now(),json.dumps(payload,default=str)))
+            c.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,%s,'btc_short_restore_window_reset',%s::jsonb)",
+                      (now(),cur.get("event_id"),json.dumps(payload,default=str)))
+        return payload
     t=c.execute("""select * from trade_history where symbol='BTC' and side=-1 and abs(entry-80524.5)<.01
         order by opened::timestamptz desc limit 1 for update""").fetchone()
     if not t:return None
     s=c.execute("select * from position_snapshots where strategy='news' and symbol='BTC' and opened=%s order by ts::timestamptz desc limit 1",(t["opened"],)).fetchone()
-    lev=max(1,float((s or {}).get("leverage") or 25));margin=max(.01,float((s or {}).get("margin") or 0));notional=max(.01,float((s or {}).get("notional") or margin*lev));pnl=float(t.get("pnl") or 0)
-    payload={"symbol":"BTC","entry":float(t["entry"]),"opened":t["opened"],"margin":margin,"notional":notional,"leverage":lev,
-             "reversed_realized_pnl":pnl,"local_search_min_samples":30}
+    lev=max(1,float((s or {}).get("leverage") or 25))
+    margin=max(.01,float((s or {}).get("margin") or 0))
+    notional=max(.01,float((s or {}).get("notional") or margin*lev))
+    pnl=float(t.get("pnl") or 0)
+    mark=float(prices.get("BTC",t["entry"]) or t["entry"])
+    state={"peak":mark,"history":[mark],"last_price":mark,"local_search_min_samples":30}
+    payload={"symbol":"BTC","entry":float(t["entry"]),"opened":t["opened"],"margin":margin,
+             "notional":notional,"leverage":lev,"reversed_realized_pnl":pnl,
+             "restore_mark":mark,"local_search_min_samples":30}
     with c.transaction():
         c.execute("""insert into open_positions(symbol,side,entry,notional,opened,opened_epoch,headline,locked,stop,leverage,margin,event_id,risk_state)
             values('BTC',-1,%s,%s,%s,%s,%s,false,null,%s,%s,%s,%s::jsonb)""",
             (float(t["entry"]),notional,t["opened"],epoch(t["opened"]),t.get("headline"),lev,margin,t.get("event_id"),
-             json.dumps({"peak":float(t["entry"]),"history":[],"local_search_min_samples":30},default=str)))
+             json.dumps(state,default=str)))
         c.execute("update account_state set equity=equity-%s,realized_pnl=realized_pnl-%s,updated_at=%s where id=1",(pnl,pnl,now()))
         c.execute("delete from trade_history where id=%s",(t["id"],))
-        c.execute("insert into operator_actions(action_id,completed_at,payload) values(%s,%s,%s::jsonb)",(action,now(),json.dumps(payload,default=str)))
-        c.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,%s,'btc_short_original_restored',%s::jsonb)",(now(),t.get("event_id"),json.dumps(payload,default=str)))
+        c.execute("insert into operator_actions(action_id,completed_at,payload) values(%s,%s,%s::jsonb)",
+                  (action,now(),json.dumps(payload,default=str)))
+        c.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,%s,'btc_short_original_restored',%s::jsonb)",
+                  (now(),t.get("event_id"),json.dumps(payload,default=str)))
     return payload
 
 def main():
@@ -117,6 +142,6 @@ def main():
         print(json.dumps({"kind":"restore_positions","ok":False,"error":"mids:"+str(e)[:160]}),flush=True);return
     with psycopg.connect(os.environ["DATABASE_URL"],autocommit=True,row_factory=dict_row,connect_timeout=8) as c:
         c.execute("create table if not exists operator_actions(action_id text primary key,completed_at text not null,payload jsonb not null)")
-        whales=restore_whales(c,prices);btc=restore_btc(c)
+        whales=restore_whales(c,prices);btc=restore_btc(c,prices)
     print(json.dumps({"kind":"restore_positions","ok":True,"whales":whales,"btc":btc},default=str),flush=True)
 if __name__=="__main__":main()
