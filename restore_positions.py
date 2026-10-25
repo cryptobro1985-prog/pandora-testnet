@@ -30,7 +30,7 @@ def liq_fraction(f):
     return max(.05,min(.20,frac,cap,scorecap))
 
 def restore_whales(c,prices):
-    action="restore-all-whale-original-entry-v5"
+    action="restore-all-whale-original-entry-v6"
     if c.execute("select 1 from operator_actions where action_id=%s",(action,)).fetchone():return []
     events=c.execute("""select distinct on (payload->>'symbol') id,recorded_at,payload from audit_journal
         where kind='whale_liq_trade_opened' and payload ? 'symbol'
@@ -93,7 +93,7 @@ def restore_btc(c):
     if cur:
         if abs(float(cur["entry"])-80524.5)<.01:return {"already_open":True,"entry":float(cur["entry"])}
         return None
-    t=c.execute("""select * from trade_history where strategy='news' and symbol='BTC' and side=-1 and abs(entry-80524.5)<.01
+    t=c.execute("""select * from trade_history where symbol='BTC' and side=-1 and abs(entry-80524.5)<.01
         order by opened::timestamptz desc limit 1 for update""").fetchone()
     if not t:return None
     s=c.execute("select * from position_snapshots where strategy='news' and symbol='BTC' and opened=%s order by ts::timestamptz desc limit 1",(t["opened"],)).fetchone()
