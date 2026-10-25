@@ -2418,13 +2418,12 @@ if __name__=="__main__":
  worker_specs=[
   ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),
   ("telemetry",telemetry),("pump_dump",impulse_scan),("whale_liquidations",whale_liquidation_scan),
-  ("adapt",adapt),("x_critical_4s",x_critical_realtime),("truth_trump",free_truth_realtime),
-  ("whitehouse_official",whitehouse_official_realtime),("piq_direct",piq_direct_realtime),
+  ("adapt",adapt),("x_critical_4s",x_critical_realtime),("piq_direct",piq_direct_realtime),
   ("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)
  ]
- # Keep exactly one live ingestion path per social network to avoid duplicate posts,
- # extra request load and conflicting source timestamps. X uses the four-account core;
- # Truth Social watches Trump only; PiQ is the direct public-site wire.
+ # Trading ingestion is intentionally minimal: four X accounts plus PiQ Direct and
+ # two official macro feeds. Truth/WhiteHouse page workers stay disabled while their
+ # public routes are blocked or redundant, avoiding useless requests and false signals.
  for name,url in FEEDS.items():
   if not name.startswith("XIndex:") and name not in SEARCH_INDEX_FEEDS:
    worker_specs.append(("feed:"+name,lambda n=name,u=url:news_feed(n,u)))
