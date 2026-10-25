@@ -3045,6 +3045,7 @@ def news_health_snapshot(daily=None):
   reasons=daily.get("decision_reasons_today_utc",{}) if isinstance(daily,dict) else {}
   stale=int(reasons.get("stale_news",0) or 0);decision_total=sum(int(v or 0) for v in reasons.values())
   with LOCK:
+   engine_active=bool(S.get("engine_active"))
    xmon=copy.deepcopy(S.get("sources",{}).get("XCriticalMonitor",{}))
    piq=copy.deepcopy(S.get("sources",{}).get("PiQDirect",{}))
   source_health={}
@@ -3069,11 +3070,11 @@ def news_health_snapshot(daily=None):
      "realtime_verified":rt_verified,**latest}
   last_fresh_age=round(wall-last_fresh[0],2) if last_fresh else None
   scanners_ok=bool(xmon.get("ok")) and bool(piq.get("ok"))
-  status=("SCANNER_ERROR" if not scanners_ok else
+  status=("STANDBY" if not engine_active else "SCANNER_ERROR" if not scanners_ok else
           "NO_FRESH_NEWS" if last_fresh_age is None or last_fresh_age>NEWS_SILENCE_WARN_SECONDS else "ACTIVE")
   eligible_at=last_eligible.get("recorded_at") if last_eligible else None
   eligible_epoch=publication_epoch(eligible_at) if eligible_at else None
-  return {"status":status,"scanner_transport_ok":scanners_ok,
+  return {"status":status,"engine_active":engine_active,"scanner_transport_ok":scanners_ok if engine_active else None,
     "realtime_status":"VERIFIED" if bool(xmon.get("realtime_verified")) and bool(piq.get("realtime_verified")) else "UNVERIFIED",
     "fresh_ingests_today":len(fresh_rows),"eligible_today":int(reasons.get("eligible",0) or 0),
     "stale_today":stale,"decision_total_today":decision_total,
@@ -3098,7 +3099,7 @@ def operations_diagnostics():
    with LOCK:
     S["news_health"]=copy.deepcopy(news_health)
     last_nh=float(S.get("_last_news_health_journal",0) or 0)
-    if time.time()-last_nh>=300:
+    if S.get("engine_active") and time.time()-last_nh>=300:
      S["_last_news_health_journal"]=time.time();do_news_health_journal=True
    if do_news_health_journal:
     try:journal("news_health_snapshot",None,news_health)
