@@ -2418,3 +2418,12 @@ if __name__=="__main__":
  if os.getenv("ENABLE_PUBLIC_X_HTML","0")=="1":
   for handle in WATCH:worker_specs.append(("public-x:"+handle,lambda h=handle:public_social_reader("x",h)))
  workers=[threading.Thread(target=supervised_worker,args=(label,fn),daemon=True,name=label) for label,fn in worker_specs]
+ # Operator action is intentionally one-shot; normal completion is not a health failure.
+ workers.append(threading.Thread(target=operator_one_shot_actions,daemon=True,name="operator_actions"))
+ for worker in workers:worker.start()
+ try:server.serve_forever()
+ finally:
+  SHUTDOWN.set();server.server_close()
+  for worker in workers:worker.join(timeout=0.5)
+  try:STORE.release()
+  except Exception:pass
