@@ -36,15 +36,16 @@ class WhaleLiquidationV2Tests(unittest.TestCase):
 
     def test_entry_requires_contracting_liquidation_distance(self):
         tracker = EligibilityTracker()
-        q1, _ = tracker.observe([self.candidate(0.80)], 1)
-        q2, _ = tracker.observe([self.candidate(0.74)], 2)
-        q3, rejected = tracker.observe([self.candidate(0.68)], 3)
+        q1, _, _ = tracker.observe([self.candidate(0.80)], 1)
+        q2, _, _ = tracker.observe([self.candidate(0.74)], 2)
+        q3, rejected, observed = tracker.observe([self.candidate(0.68)], 3)
         self.assertEqual(q1, [])
         self.assertEqual(q2, [])
         self.assertEqual(len(q3), 1)
         self.assertEqual(q3[0]["wl2_policy"], WL2_POLICY)
         self.assertGreaterEqual(q3[0]["wl2_distance_contraction_pct"], 0.10)
         self.assertNotIn("distance_not_contracting", rejected)
+        self.assertEqual(observed[0]["wl2_reject_reasons"], [])
 
     def test_pre_liquidation_distance_invalidation(self):
         candidate = self.candidate(0.30)
