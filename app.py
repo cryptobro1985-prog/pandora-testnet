@@ -101,6 +101,8 @@ PUMP_SECONDARY_SCORE=max(60.0,min(PUMP_PRIMARY_SCORE,float(os.getenv("PUMP_SECON
 PUMP_SECONDARY_MARGIN_FRACTION=max(0.05,min(POSITION_MARGIN_MAX,float(os.getenv("PUMP_SECONDARY_MARGIN_FRACTION","0.05"))))
 PUMP_QUEUE_TTL_SECONDS=max(15.0,min(180.0,float(os.getenv("PUMP_QUEUE_TTL_SECONDS","60"))))
 PUMP_SECONDARY_SAME_SIDE_CAP=max(1,min(TARGET_OPEN_POSITIONS,int(os.getenv("PUMP_SECONDARY_SAME_SIDE_CAP","4"))))
+WHALE_MAX_ACTIVE_POSITIONS=max(1,min(5,int(os.getenv("WHALE_MAX_ACTIVE_POSITIONS","5"))))
+WHALE_MARGIN_FRACTION=0.20
 PAPER_TOPUP_STEP=max(10.0,float(os.getenv("PAPER_TOPUP_STEP","100")))
 NEWS_MAX_AGE_SECONDS=float(os.getenv("NEWS_MAX_AGE_SECONDS","120"))
 NEWS_POLL_SECONDS=float(os.getenv("NEWS_POLL_SECONDS","15"))
@@ -637,42 +639,23 @@ def _reserve_shared_entry(symbol,margin_fraction=None):
  with LOCK:
   reservations=S.setdefault("_entry_reservations",{})
   total_open=len(S.get("positions",{}))+len(S.get("pump_positions",{}))+len(S.get("whale_positions",{}))
+  equity=float(S.get("equity",0) or 0)
+  used=_shared_used_margin()
+  free=max(0.0,equity-used)
   if total_open>=MAX_OPEN_POSITIONS:
-   return False,0.0,"portfolio_position_cap",0.0
+   return False,0.0,"portfolio_position_cap",free
   if _symbol_open_anywhere(symbol) or symbol in reservations:
-   return False,0.0,"symbol_already_open_shared_account",0.0
-  reservations[symbol]=0.0
- fraction=TRADE_MARGIN_FRACTION if margin_fraction is None else max(0.01,min(POSITION_MARGIN_MAX,float(margin_fraction)))
- try:
-  while True:
-   with LOCK:
-    equity=float(S["equity"])
-    margin=max(0.01,max(0.0,equity)*fraction)
-    used=_shared_used_margin()
-    free=max(0.0,equity-used)
-    if equity>0 and free+1e-9>=margin:
-     reservations[symbol]=margin
-     return True,margin,None,free
-   topup=PAPER_TOPUP_STEP
-   with pg() as db:
-     with db.transaction():
-      STORE.fence(db)
-      row=db.execute("""update account_state
-        set equity=equity+%s,contributed_capital=contributed_capital+%s,updated_at=%s
-        where id=1 returning equity,realized_pnl,contributed_capital""",
-        (topup,topup,now())).fetchone()
-      db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'paper_capital_topup',%s::jsonb)",
-        (now(),json.dumps({"amount":topup,"reason":"insufficient_free_margin","symbol":symbol,
-          "used_margin_before":used,"free_margin_before":free,"target_margin_before":margin,
-          "equity_after":float(row["equity"]),"contributed_capital_after":float(row["contributed_capital"]),
-          "current_margin_fraction_pct":TRADE_MARGIN_FRACTION*100.0,
-          "open_positions_total":len(S.get("positions",{}))+len(S.get("pump_positions",{}))+len(S.get("whale_positions",{}))},default=str)))
-   with LOCK:
-    S["equity"]=float(row["equity"]);S["realized_pnl"]=float(row["realized_pnl"])
-    S["contributed_capital"]=float(row["contributed_capital"])
- except Exception:
-  with LOCK:reservations.pop(symbol,None)
-  raise
+   return False,0.0,"symbol_already_open_shared_account",free
+  fraction=TRADE_MARGIN_FRACTION if margin_fraction is None else max(0.01,min(POSITION_MARGIN_MAX,float(margin_fraction)))
+  margin=max(0.01,max(0.0,equity)*fraction)
+  if equity<=0:
+   return False,0.0,"nonpositive_equity",free
+  if used>equity+1e-9:
+   return False,0.0,"portfolio_margin_over_cap",free
+  if free+1e-9<margin:
+   return False,0.0,"insufficient_free_margin",free
+  reservations[symbol]=margin
+  return True,margin,None,free
 
 def _release_shared_entry(symbol):
  with LOCK:S.setdefault("_entry_reservations",{}).pop(symbol,None)
@@ -854,7 +837,13 @@ def whale_liq_open(symbol,side,price,score,features,margin_fraction=None):
  if price is None:return False
  with LOCK:
   if not S["engine_active"]:return False
- margin_fraction=liquidity_margin_fraction(symbol,features,TRADE_MARGIN_FRACTION) if margin_fraction is None else margin_fraction
+  if len(S.get("whale_positions",{}))>=WHALE_MAX_ACTIVE_POSITIONS:return False
+ # WhaleLiquidation has its own fixed allocator: every NEW whale entry uses
+ # exactly 20% of current account equity as margin at the configured 25x leverage.
+ # The shared reservation layer still enforces total used margin <= 100% equity.
+ margin_fraction=WHALE_MARGIN_FRACTION
+ features["allocation_margin_fraction"]=WHALE_MARGIN_FRACTION
+ features["allocation_policy"]="whale_fixed_20pct_margin_equity_cap_v1"
  reserved,margin,reason,free=_reserve_shared_entry(symbol,margin_fraction)
  if not reserved:
   journal("entry_skipped",None,{"strategy":"whale_liquidation","symbol":symbol,"reason":reason,"free_margin":free})
@@ -1036,8 +1025,9 @@ def whale_liquidation_scan():
     qualified=[x for x in candidates if x["score"]>=LIQ_WHALE_SCORE_MIN and x["confirmation_streak"]>=2]
     for x in qualified:
      sym=x["symbol"];side=int(x["side"])
-     margin_fraction=liquidity_margin_fraction(sym,x,TRADE_MARGIN_FRACTION)
-     opened=whale_liq_open(sym,side,prices[sym],x["score"],x,margin_fraction)
+     with LOCK:
+      if len(S.get("whale_positions",{}))>=WHALE_MAX_ACTIVE_POSITIONS:break
+     opened=whale_liq_open(sym,side,prices[sym],x["score"],x,WHALE_MARGIN_FRACTION)
      action="OPENED" if opened else "QUALIFIED";key=(x["cluster_id"],action)
      if stamp-last_signal.get(key,0)<15:continue
      last_signal[key]=stamp
@@ -1361,7 +1351,7 @@ def impulse_scan():
        "market_scope":"all_hyperliquid_listed_perps","primary_score_min":PUMP_PRIMARY_SCORE,
        "secondary_score_min":PUMP_SECONDARY_SCORE,"primary_confirmation_scans":3,"secondary_confirmation_scans":2,
        "target_open_positions":TARGET_OPEN_POSITIONS,"max_open_positions":MAX_OPEN_POSITIONS,
-       "pump_max_positions":PUMP_MAX_POSITIONS,"secondary_margin_fraction":PUMP_SECONDARY_MARGIN_FRACTION,
+       "pump_max_positions":PUMP_MAX_POSITIONS,"whale_margin_fraction":WHALE_MARGIN_FRACTION,"whale_max_active_positions":WHALE_MAX_ACTIVE_POSITIONS,"secondary_margin_fraction":PUMP_SECONDARY_MARGIN_FRACTION,
        "queue_ttl_seconds":PUMP_QUEUE_TTL_SECONDS,"open_positions_total":total_open,
        "signal_ready_markets":sum(bool(c.get("trade_data_fresh")) for c in contexts.values()),"flow_source":"hyperliquid_ws_trades",
        "analysis_threads":MICRO_ANALYSIS_THREADS,"paper_positions":pump_open_count,
