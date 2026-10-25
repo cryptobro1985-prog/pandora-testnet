@@ -151,15 +151,20 @@ def fetch_story(url,headline_hint=None,timeout=4.0):
         raise PiQReadError("exact_publication_timestamp_missing")
     return {"id":url,"url":url,"text":headline,"created_at":published}
 
-_HIGH_SIGNAL_TERMS=(
-    "bitcoin","btc","ethereum","ether","eth","solana","sol","crypto","cryptocurrency","blockchain",
-    "stablecoin","token","coinbase","binance","tether","circle","etf","spot etf","hack","hacked","exploit",
-    "fed","fomc","federal reserve","rate cut","rate hike","interest rate","inflation","cpi","pce",
-    "nonfarm","payrolls","jobs report","treasury","yield","recession","sec "," sec","cftc",
-    "tariff","sanction","airstrike","missile","invasion","ceasefire","truce","war "," war",
-    "opec","oil "," oil","hormuz","suez","taiwan","china","default","shutdown",
+_HIGH_SIGNAL_PHRASES=(
+    "bitcoin","ethereum","ether","solana","crypto","cryptocurrency","blockchain",
+    "stablecoin","token","coinbase","binance","tether","circle","spot etf","etf approved",
+    "hack","hacked","exploit","federal reserve","fomc","rate cut","rate hike","interest rate",
+    "inflation","nonfarm","payrolls","jobs report","treasury","yield","recession",
+    "tariff","sanction","airstrike","missile","invasion","ceasefire","truce",
+    "opec","hormuz","suez","taiwan","china","default","shutdown",
+)
+_HIGH_SIGNAL_TOKEN_RE=re.compile(
+    r"(?<![A-Za-z0-9])(?:BTC|ETH|SOL|SEC|CFTC|CPI|PCE|OIL|WAR)(?![A-Za-z0-9])",
+    re.I,
 )
 
 def high_signal(headline):
-    lo=(headline or "").lower()
-    return any(term in lo for term in _HIGH_SIGNAL_TERMS)
+    text=headline or ""
+    lo=text.lower()
+    return bool(_HIGH_SIGNAL_TOKEN_RE.search(text)) or any(term in lo for term in _HIGH_SIGNAL_PHRASES)
