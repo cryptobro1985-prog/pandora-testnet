@@ -173,7 +173,7 @@ class RuntimeAuditTests(unittest.TestCase):
         self.assertEqual(app.MAX_OPEN_POSITIONS, 30)
         self.assertEqual(app.PUMP_MAX_POSITIONS, 20)
         self.assertAlmostEqual(app.TRADE_MARGIN_FRACTION, 0.05)
-        self.assertAlmostEqual(app.PUMP_SECONDARY_MARGIN_FRACTION, 0.025)
+        self.assertAlmostEqual(app.PUMP_SECONDARY_MARGIN_FRACTION, 0.05)
         self.assertAlmostEqual(app.POSITION_MARGIN_MAX, 0.20)
 
     def test_liquidity_ranked_sizing_scales_with_book(self):
