@@ -33,6 +33,7 @@ def purge_bch(c):
         c.execute("delete from pump_positions where symbol=%s",(symbol,))
         c.execute("delete from trade_history where strategy='pump_dump' and symbol=%s",(symbol,))
         c.execute("delete from pump_trade_history where symbol=%s",(symbol,))
+        c.execute("delete from pump_signal_journal where symbol=%s",(symbol,))
         c.execute("delete from position_snapshots where strategy='pump_dump' and symbol=%s",(symbol,))
         if removed_pnl:
             c.execute("""update account_state
