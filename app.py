@@ -248,11 +248,16 @@ def pinit():
   c.execute("create table if not exists whale_liq_trade_history (id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision, pnl double precision, reason text, score double precision, features jsonb)")
   c.execute("create table if not exists whale_liq_signal_journal (id text primary key, ts text not null, symbol text, side integer, score double precision, action text, features jsonb)")
   c.execute("create table if not exists account_capacity_snapshots (id bigserial primary key, ts text not null, equity double precision not null, contributed_capital double precision not null, used_margin double precision not null, free_margin double precision not null, margin_utilization_pct double precision not null, news_positions integer not null, pump_positions integer not null, whale_positions integer not null, total_positions integer not null, entry_margin_fraction double precision not null)")
+  c.execute("create table if not exists module_snapshots (id bigserial primary key, ts text not null, module text not null, ok boolean, state jsonb not null)")
+  c.execute("create table if not exists position_snapshots (id bigserial primary key, ts text not null, strategy text not null, symbol text not null, opened text, side integer, entry double precision, mark double precision, margin double precision, notional double precision, leverage double precision, unrealized_pnl double precision, roe_pct double precision, peak double precision, exit_reason text, exit_check jsonb not null default '{}'::jsonb, features jsonb not null default '{}'::jsonb)")
 
   c.execute("create index if not exists audit_journal_event_idx on audit_journal(event_id,id)")
   c.execute("create index if not exists audit_journal_kind_time_idx on audit_journal(kind,recorded_at)")
   c.execute("create index if not exists news_events_time_idx on news_events(ts desc)")
   c.execute("create index if not exists market_context_symbol_time_idx on market_context_snapshots(symbol,ts desc)")
+  c.execute("create index if not exists module_snapshots_module_time_idx on module_snapshots(module,ts desc)")
+  c.execute("create index if not exists position_snapshots_symbol_time_idx on position_snapshots(symbol,ts desc)")
+  c.execute("create index if not exists position_snapshots_strategy_time_idx on position_snapshots(strategy,ts desc)")
   row=c.execute("select equity,realized_pnl,contributed_capital from account_state where id=1").fetchone()
   if row:
    S["equity"]=float(row["equity"]);S["realized_pnl"]=float(row["realized_pnl"]);S["contributed_capital"]=float(row["contributed_capital"] or PAPER_RESET)
@@ -383,16 +388,71 @@ def save_capacity_snapshot():
   (now(),equity,contributed,used,free,util,news_n,pump_n,whale_n,news_n+pump_n+whale_n,TRADE_MARGIN_FRACTION))
 def save_market_context(ts,symbol,price,context):
  with pg() as c:c.execute("insert into market_context_snapshots(ts,symbol,price,context) values(%s,%s,%s,%s::jsonb)",(ts,symbol,price,json.dumps(context)))
+
+def save_module_snapshots():
+ # Low-frequency durable state for week-long post-test reconstruction.
+ # Event journals remain lossless for actual decisions/trades; this captures
+ # scanner health, thresholds, candidate counts and source latency over time.
+ tracked=("PumpDumpScanner","WhaleLiquidationScanner","XCriticalMonitor","XMonitor",
+          "PiQDirect","MarketTradeStream","MarketMetadata","PersistentPostgres")
+ with LOCK:
+  rows=[(now(),name,bool(S.get("sources",{}).get(name,{}).get("ok")),
+         copy.deepcopy(S.get("sources",{}).get(name,{})))
+        for name in tracked if name in S.get("sources",{})]
+ if not rows:return 0
+ with pg() as c:
+  for ts,name,ok,state in rows:
+   c.execute("insert into module_snapshots(ts,module,ok,state) values(%s,%s,%s,%s::jsonb)",
+             (ts,name,ok,json.dumps(state,default=str)))
+ return len(rows)
+
+def save_position_snapshots(prices):
+ # Snapshot every open PAPER position so a later audit can reconstruct the
+ # full path to the local-extreme exit instead of seeing only entry/exit PnL.
+ with LOCK:
+  books=(("news",copy.deepcopy(S.get("positions",{}))),
+         ("pump_dump",copy.deepcopy(S.get("pump_positions",{}))),
+         ("whale_liquidation",copy.deepcopy(S.get("whale_positions",{}))))
+ rows=[]
+ sampled_at=now()
+ for strategy,book in books:
+  for symbol,pos in book.items():
+   try:
+    entry=float(pos["entry"]);side=int(pos["side"]);lev=max(1.0,float(pos.get("leverage",TRADE_LEVERAGE)))
+    margin=float(pos.get("margin",float(pos.get("notional",0))/lev))
+    notional=float(pos.get("notional",margin*lev))
+    mark=float(prices.get(symbol,pos.get("last_price",entry)))
+    if not (math.isfinite(mark) and mark>0):continue
+    pnl=paper_pnl(notional,entry,mark,side,FEE)
+    roe=(pnl/margin*100.0) if margin>0 else 0.0
+    exit_check=copy.deepcopy(pos.get("last_exit_check") or {})
+    features=copy.deepcopy(pos.get("features") or {})
+    if strategy=="news":
+     features={**features,"event_id":pos.get("event_id"),"headline":pos.get("headline")}
+    rows.append((sampled_at,strategy,symbol,pos.get("opened"),side,entry,mark,margin,notional,lev,pnl,roe,
+                 pos.get("peak"),exit_check.get("reason"),exit_check,features))
+   except (TypeError,ValueError,KeyError,OverflowError):
+    continue
+ if not rows:return 0
+ with pg() as c:
+  for row in rows:
+   c.execute("""insert into position_snapshots
+    (ts,strategy,symbol,opened,side,entry,mark,margin,notional,leverage,unrealized_pnl,roe_pct,peak,exit_reason,exit_check,features)
+    values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb)""",
+    (*row[:-2],json.dumps(row[-2],default=str),json.dumps(row[-1],default=str)))
+ return len(rows)
+
 def export_rows(kind,after,limit):
  columns={"journal":("audit_journal","id"),"news":("news_events","id"),
           "features":("event_features","id"),"trades":("trade_history","id"),
           "positions":("open_positions","symbol"),"pump_signals":("pump_signal_journal","id"),
           "pump_trades":("pump_trade_history","id"),"learning":("learning_snapshots","id"),
           "whale_signals":("whale_liq_signal_journal","id"),"whale_trades":("whale_liq_trade_history","id"),
-          "capacity":("account_capacity_snapshots","id")}
+          "capacity":("account_capacity_snapshots","id"),"modules":("module_snapshots","id"),
+          "position_history":("position_snapshots","id")}
  if kind not in columns:raise ValueError("Unsupported export kind")
  table,key=columns[kind]
- cursor=int(after) if kind in ("journal","trades","pump_trades","learning","whale_trades","capacity") else after
+ cursor=int(after) if kind in ("journal","trades","pump_trades","learning","whale_trades","capacity","modules","position_history") else after
  with pg() as c:
   rows=c.execute(f"select * from {table} where {key}>%s order by {key} limit %s",(cursor,limit+1)).fetchall()
  return {"kind":kind,"rows":rows[:limit],"next_after":str(rows[limit-1][key]) if len(rows)>limit else None,"has_more":len(rows)>limit}
@@ -1036,11 +1096,14 @@ def telemetry():
  while not SHUTDOWN.is_set():
   try:
    with LOCK:
-    active=S["engine_active"];prices=dict(S.get("_prices",{}));symbols=list(S["positions"])
+    active=S["engine_active"];prices=dict(S.get("_prices",{}))
+    symbols=sorted(set(S.get("positions",{}))|set(S.get("pump_positions",{}))|set(S.get("whale_positions",{})))
     count=S["market_count"];equity=S["equity"]
    if active:
     save_market_snapshot(now(),count,equity,len(symbols))
     save_capacity_snapshot()
+    save_module_snapshots()
+    save_position_snapshots(prices)
     for sym in symbols:
      if SHUTDOWN.is_set():break
      if sym in prices:
