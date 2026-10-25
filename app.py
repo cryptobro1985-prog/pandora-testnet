@@ -23,7 +23,7 @@ from whale_signals import MIN_NOTIONAL_USD, cluster_positions, summarize_book, s
 from news_logic import analyze_headline, is_non_market_news as semantic_non_market
 from accounting import paper_pnl
 LATENCIES=LatencyMetrics()
-MARKET_OBS=RollingMarketData(max_symbols=256)
+MARKET_OBS=RollingMarketData(max_symbols=512)
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
 def choose(db_path,current=(-0.10,0.20)):
  with sqlite3.connect(db_path) as c: rows=c.execute("select pnl from trades order by id desc limit 120").fetchall()
@@ -1025,7 +1025,7 @@ def impulse_scan():
     stamp=time.time()
     if stamp-S.get("_last_poll_epoch",0)>10:raise RuntimeError("stale_market_prices")
     for sym in contexts:contexts[sym].update(MARKET_OBS.context(sym,stamp))
-    found=momentum_candidates(prices,history,volumes,stamp,minimum_day_volume=5_000_000.0,contexts=contexts)
+    found=momentum_candidates(prices,history,volumes,stamp,minimum_day_volume=0.0,contexts=contexts)
     for candidate in found:candidate["observed_at_epoch"]=stamp
     futures=[pool.submit(enrich,x) for x in found[:20]]
     enriched=[]
@@ -1059,7 +1059,7 @@ def impulse_scan():
      S["sources"]["PumpDumpScanner"]={"ok":bool(prices and volumes),"last_check":now(),"markets":len(prices),
        "liquid_markets":sum(v>=5_000_000 for v in volumes.values()),"raw_candidates":len(found),"micro_confirmed":len(enriched),
        "qualified_candidates":len(qualified),"top_candidates":qualified[:5],"mode":"high_conviction_paper_v3",
-       "scan_seconds":PUMP_SCAN_SECONDS,"actual_scan_seconds":round(time.monotonic()-started,3),"min_day_volume":5_000_000,"entry_score_min":84,"confirmation_scans":3,
+       "scan_seconds":PUMP_SCAN_SECONDS,"actual_scan_seconds":round(time.monotonic()-started,3),"min_day_volume":0,"market_scope":"all_hyperliquid_listed_perps","entry_score_min":84,"confirmation_scans":3,
        "signal_ready_markets":sum(bool(c.get("trade_data_fresh")) for c in contexts.values()),"flow_source":"hyperliquid_ws_trades",
        "analysis_threads":MICRO_ANALYSIS_THREADS,"paper_positions":len(S["pump_positions"]),
        "shared_account_equity":round(S["equity"],4),"market_regime":{"mode":"ADVISORY_ONLY"},
@@ -1072,10 +1072,14 @@ def impulse_scan():
 
 def market_trade_stream():
  def symbols():
+  # Pump/dump coverage is whole-market: subscribe to every currently listed
+  # Hyperliquid perp with metadata, not only the high-volume subset. Deep
+  # order-book work remains candidate-only, so broad trade coverage does not
+  # multiply expensive REST book requests.
   with LOCK:
-   volumes=dict(S.get("_day_volumes",{}));held=set(S["positions"])|set(S["pump_positions"])|set(S["whale_positions"])
-  liquid=sorted((s for s,v in volumes.items() if v>=5_000_000),key=lambda s:volumes[s],reverse=True)[:96]
-  return set(liquid)|LIQ_WHALE_SYMBOLS|held
+   volumes=dict(S.get("_day_volumes",{}));prices=set(S.get("_prices",{}));held=set(S["positions"])|set(S["pump_positions"])|set(S["whale_positions"])
+  listed=set(volumes)&prices if prices else set(volumes)
+  return listed|LIQ_WHALE_SYMBOLS|held
  def report(status):
   with LOCK:S["sources"]["MarketTradeStream"]={"last_check":now(),**status}
  run_trade_stream(MARKET_OBS,SHUTDOWN,symbols,report,os.getenv("HYPERLIQUID_WS_API","wss://api.hyperliquid.xyz/ws"))
