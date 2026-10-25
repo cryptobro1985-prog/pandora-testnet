@@ -2401,7 +2401,7 @@ if __name__=="__main__":
  worker_specs=[
   ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),
   ("telemetry",telemetry),("pump_dump",impulse_scan),("whale_liquidations",whale_liquidation_scan),
-  ("adapt",adapt),("x_critical_4s",x_critical_realtime),("truth_public",free_truth_realtime),("piq_direct",piq_direct_realtime),
+  ("adapt",adapt),("x_critical_4s",x_critical_realtime),("piq_direct",piq_direct_realtime),
   ("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)
  ]
  # Keep exactly one live ingestion path per social network to avoid duplicate posts,
