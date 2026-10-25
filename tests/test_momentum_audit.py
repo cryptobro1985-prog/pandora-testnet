@@ -54,6 +54,14 @@ class MomentumAuditTests(unittest.TestCase):
         f=self.fixture();f[0]["BTC"]=105
         self.assertEqual(self.scan(f),[])
 
+    def test_low_volume_market_is_still_scanned(self):
+        f=self.fixture()
+        f[2]["BTC"]=25_000
+        found=self.scan(f)
+        self.assertEqual(len(found),1)
+        self.assertEqual(found[0]["symbol"],"BTC")
+        self.assertEqual(found[0]["day_volume_usd"],25000)
+
     def test_detector_does_not_modify_source_history(self):
         f=self.fixture();before=copy.deepcopy(f)
         self.scan(f)
