@@ -28,7 +28,7 @@ def choose(db_path,current=(-0.10,0.20)):
  return {"stop":cand[0],"take":cand[1],"samples":len(xs),"validation_pnl":sum(valid),"changed":cand!=current}
 
 WATCH_GROUPS={
- "critical":["elonmusk","realDonaldTrump","POTUS","WhiteHouse","SECGov","federalreserve","BlackRock","Fidelity","ARKInvest","Grayscale"]
+ "critical":["elonmusk","realDonaldTrump","POTUS","WhiteHouse","SECGov","federalreserve","BlackRock","Fidelity","ARKInvest","Grayscale","FirstSquawk","PiQMarkets"]
 }
 WATCH=[];WATCH_CATEGORY={}
 for _category,_handles in WATCH_GROUPS.items():
@@ -219,6 +219,8 @@ def is_price_action_only_news(title,event_type):
  return event_type not in CAUSAL_EVENT_TYPES and any(term in lo for term in PRICE_ACTION_ONLY_TERMS)
 def source_weight(source):
  if source.startswith("XIndex:"):base=0.40
+ elif source=="XOfficial:FirstSquawk":base=0.92
+ elif source=="XOfficial:PiQMarkets":base=0.88
  elif source.startswith("XOfficial:"):base=0.90
  elif source.startswith("TruthSocialPublic"):base=0.95
  else:base=float(SOURCE_WEIGHTS.get(source,0.50))
@@ -1419,7 +1421,7 @@ def x_critical_realtime():
  handles=list(CRITICAL_X_HANDLES)
  poll=max(4.0,float(os.getenv("X_CRITICAL_POLL_SECONDS","4")))
  seen={};primed=set();last_success={};backend_used={};last_error={};inflight={}
- pool=concurrent.futures.ThreadPoolExecutor(max_workers=len(handles),thread_name_prefix="x-critical")
+ pool=concurrent.futures.ThreadPoolExecutor(max_workers=min(10,len(handles)),thread_name_prefix="x-critical")
  ingest_pool=concurrent.futures.ThreadPoolExecutor(max_workers=4,thread_name_prefix="x-critical-ingest")
  next_due={h:time.monotonic() for h in handles}
  def fetch_one(handle):
@@ -2398,12 +2400,3 @@ if __name__=="__main__":
  if os.getenv("ENABLE_PUBLIC_X_HTML","0")=="1":
   for handle in WATCH:worker_specs.append(("public-x:"+handle,lambda h=handle:public_social_reader("x",h)))
  workers=[threading.Thread(target=supervised_worker,args=(label,fn),daemon=True,name=label) for label,fn in worker_specs]
- # Operator action is intentionally one-shot; normal completion is not a health failure.
- workers.append(threading.Thread(target=operator_one_shot_actions,daemon=True,name="operator_actions"))
- for worker in workers:worker.start()
- try:server.serve_forever()
- finally:
-  SHUTDOWN.set();server.server_close()
-  for worker in workers:worker.join(timeout=0.5)
-  try:STORE.release()
-  except Exception:pass
