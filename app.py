@@ -86,13 +86,20 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 API=os.getenv("HYPERLIQUID_INFO_API","https://api.hyperliquid.xyz/info").strip() or "https://api.hyperliquid.xyz/info"
 DB="/tmp/pandora.sqlite3"
 START=time.time()
-S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0,"pump_positions":{},"pump_equity":100.0,"pump_realized_pnl":0.0,"pump_trades":0}
+S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0,"pump_positions":{},"pump_equity":100.0,"pump_realized_pnl":0.0,"pump_trades":0,"whale_positions":{},"whale_equity":100.0,"whale_realized_pnl":0.0,"whale_trades":0}
 LOCK=threading.RLock()
 SHUTDOWN=threading.Event()
 NEWS_MAX_AGE_SECONDS=float(os.getenv("NEWS_MAX_AGE_SECONDS","120"))
 NEWS_POLL_SECONDS=float(os.getenv("NEWS_POLL_SECONDS","15"))
 PUMP_SCAN_SECONDS=max(1.0,float(os.getenv("PUMP_SCAN_SECONDS","2")))
 MARKET_METADATA_SECONDS=max(3.0,float(os.getenv("MARKET_METADATA_SECONDS","5")))
+LIQ_WHALE_SCAN_SECONDS=max(3.0,float(os.getenv("LIQ_WHALE_SCAN_SECONDS","5")))
+LIQ_WHALE_MAX_DISTANCE_PCT=max(0.25,float(os.getenv("LIQ_WHALE_MAX_DISTANCE_PCT","1.0")))
+LIQ_WHALE_MIN_USD=max(100000.0,float(os.getenv("LIQ_WHALE_MIN_USD","2000000")))
+LIQ_WHALE_SCORE_MIN=max(40.0,float(os.getenv("LIQ_WHALE_SCORE_MIN","68")))
+LIQ_WHALE_LEV=max(1.0,float(os.getenv("LIQ_WHALE_LEV","10")))
+LIQ_WHALE_MARGIN_FRACTION=max(0.01,min(0.25,float(os.getenv("LIQ_WHALE_MARGIN_FRACTION","0.05"))))
+LIQ_WHALE_SYMBOLS={"BTC","ETH","SOL"}
 if not math.isfinite(NEWS_MAX_AGE_SECONDS) or NEWS_MAX_AGE_SECONDS<=0:raise ValueError("invalid news freshness window")
 if not math.isfinite(NEWS_POLL_SECONDS) or NEWS_POLL_SECONDS<1:raise ValueError("invalid news poll interval")
 S.update({"engine_active":False,"engine_error":None,"last_checkpoint":None,"last_market_error":None})
@@ -229,6 +236,10 @@ def pinit():
   c.execute("create table if not exists pump_positions (symbol text primary key, side integer not null, entry double precision not null, notional double precision not null, margin double precision not null, leverage double precision not null, opened text not null, opened_epoch double precision not null, peak_roe double precision not null default 0, score double precision not null default 0, features jsonb not null default '{}'::jsonb)")
   c.execute("create table if not exists pump_trade_history (id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision, pnl double precision, reason text, score double precision, features jsonb)")
   c.execute("create table if not exists learning_snapshots (id bigserial primary key, recorded_at text not null, samples integer not null, payload jsonb not null)")
+  c.execute("create table if not exists whale_liq_account_state (id integer primary key, equity double precision not null, realized_pnl double precision not null, updated_at text not null)")
+  c.execute("create table if not exists whale_liq_positions (symbol text primary key, side integer not null, entry double precision not null, notional double precision not null, margin double precision not null, leverage double precision not null, opened text not null, opened_epoch double precision not null, peak_roe double precision not null default 0, score double precision not null default 0, features jsonb not null default '{}'::jsonb)")
+  c.execute("create table if not exists whale_liq_trade_history (id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision, pnl double precision, reason text, score double precision, features jsonb)")
+  c.execute("create table if not exists whale_liq_signal_journal (id text primary key, ts text not null, symbol text, side integer, score double precision, action text, features jsonb)")
 
   c.execute("create index if not exists audit_journal_event_idx on audit_journal(event_id,id)")
   row=c.execute("select equity,realized_pnl from account_state where id=1").fetchone()
@@ -246,6 +257,15 @@ def pinit():
   for r in c.execute("select * from pump_positions").fetchall():
    ppositions[r["symbol"]]={"side":int(r["side"]),"entry":float(r["entry"]),"notional":float(r["notional"]),"margin":float(r["margin"]),"leverage":float(r["leverage"]),"opened":r["opened"],"t":float(r["opened_epoch"]),"peak_roe":float(r["peak_roe"] or 0),"score":float(r["score"] or 0),"features":r["features"] or {}}
   S["pump_positions"]=ppositions
+  wrow=c.execute("select equity,realized_pnl from whale_liq_account_state where id=1").fetchone()
+  if wrow:
+   S["whale_equity"]=float(wrow["equity"]);S["whale_realized_pnl"]=float(wrow["realized_pnl"])
+  else:c.execute("insert into whale_liq_account_state(id,equity,realized_pnl,updated_at) values(1,100,0,%s)",(now(),))
+  S["whale_trades"]=c.execute("select count(*) as n from whale_liq_trade_history").fetchone()["n"]
+  wpositions={}
+  for r in c.execute("select * from whale_liq_positions").fetchall():
+   wpositions[r["symbol"]]={"side":int(r["side"]),"entry":float(r["entry"]),"notional":float(r["notional"]),"margin":float(r["margin"]),"leverage":float(r["leverage"]),"opened":r["opened"],"t":float(r["opened_epoch"]),"peak_roe":float(r["peak_roe"] or 0),"score":float(r["score"] or 0),"features":r["features"] or {}}
+  S["whale_positions"]=wpositions
  STORE.migrate()
  _,positions=STORE.load(recover_legacy=False)
  S["positions"]=positions
@@ -321,7 +341,8 @@ def export_rows(kind,after,limit):
  columns={"journal":("audit_journal","id"),"news":("news_events","id"),
           "features":("event_features","id"),"trades":("trade_history","id"),
           "positions":("open_positions","symbol"),"pump_signals":("pump_signal_journal","id"),
-          "pump_trades":("pump_trade_history","id"),"learning":("learning_snapshots","id")}
+          "pump_trades":("pump_trade_history","id"),"learning":("learning_snapshots","id"),
+          "whale_signals":("whale_liq_signal_journal","id"),"whale_trades":("whale_liq_trade_history","id")}
  if kind not in columns:raise ValueError("Unsupported export kind")
  table,key=columns[kind]
  cursor=int(after) if kind in ("journal","trades","pump_trades","learning") else after
@@ -488,6 +509,163 @@ def pump_mark_positions(prices):
    with LOCK:
     if sym in S["pump_positions"]:S["pump_positions"][sym]["peak_roe"]=peak
 
+def whale_liq_open(symbol,side,price,score,features):
+ if S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or side not in (-1,1) or not price:return False
+ with LOCK:
+  if not S["engine_active"] or symbol in S["whale_positions"]:return False
+  equity=float(S["whale_equity"])
+ margin=max(0.01,equity*LIQ_WHALE_MARGIN_FRACTION);notional=margin*LIQ_WHALE_LEV;opened=now();epoch=time.time()
+ pos={"side":side,"entry":float(price),"notional":notional,"margin":margin,"leverage":LIQ_WHALE_LEV,"opened":opened,"t":epoch,"peak_roe":0.0,"score":float(score),"features":features}
+ with pg() as c:
+  with c.transaction():
+   STORE.fence(c)
+   row=c.execute("""insert into whale_liq_positions(symbol,side,entry,notional,margin,leverage,opened,opened_epoch,peak_roe,score,features)
+    values(%s,%s,%s,%s,%s,%s,%s,%s,0,%s,%s::jsonb) on conflict(symbol) do nothing returning symbol""",
+    (symbol,side,price,notional,margin,LIQ_WHALE_LEV,opened,epoch,float(score),json.dumps(features,default=str))).fetchone()
+   if not row:return False
+   c.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'whale_liq_trade_opened',%s::jsonb)",
+    (now(),json.dumps({"symbol":symbol,"side":side,"entry":price,"score":score,"margin":margin,"notional":notional,"features":features},default=str)))
+ with LOCK:S["whale_positions"][symbol]=pos
+ return True
+
+def whale_liq_close(symbol,price,reason):
+ with LOCK:pos=copy.deepcopy(S["whale_positions"].get(symbol))
+ if not pos or not price:return None
+ pnl=pos["notional"]*(float(price)/pos["entry"]-1)*pos["side"]-pos["notional"]*FEE*2
+ with pg() as c:
+  with c.transaction():
+   STORE.fence(c)
+   row=c.execute("delete from whale_liq_positions where symbol=%s and opened=%s returning symbol",(symbol,pos["opened"])).fetchone()
+   if not row:return None
+   account=c.execute("""update whale_liq_account_state set equity=case when equity+%s<=0 then 100 else equity+%s end,
+    realized_pnl=realized_pnl+%s,updated_at=%s where id=1 returning equity,realized_pnl""",(pnl,pnl,pnl,now())).fetchone()
+   c.execute("""insert into whale_liq_trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,score,features)
+    values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
+    (pos["opened"],now(),symbol,pos["side"],pos["entry"],price,pnl,reason,pos.get("score",0),json.dumps(pos.get("features",{}),default=str)))
+   c.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'whale_liq_trade_closed',%s::jsonb)",
+    (now(),json.dumps({"symbol":symbol,"side":pos["side"],"entry":pos["entry"],"exit":price,"pnl":pnl,"reason":reason,"features":pos.get("features",{})},default=str)))
+ with LOCK:
+  S["whale_positions"].pop(symbol,None);S["whale_equity"]=float(account["equity"]);S["whale_realized_pnl"]=float(account["realized_pnl"]);S["whale_trades"]+=1
+ return {"pnl":pnl,"equity":float(account["equity"])}
+
+def whale_liq_mark_positions(prices):
+ with LOCK:
+  positions=copy.deepcopy(S["whale_positions"]);timelines={k:list(v) for k,v in S.get("_timeline",{}).items()}
+ for sym,pos in positions.items():
+  px=prices.get(sym)
+  if not px:continue
+  entry=float(pos["entry"]);side=int(pos["side"]);lev=float(pos["leverage"])
+  roe=(float(px)/entry-1)*side*lev;peak=max(float(pos.get("peak_roe",0) or 0),roe)
+  peak_price=entry*(1+(peak/lev)*side)
+  probe=copy.deepcopy(pos);probe["peak"]=peak_price;probe["history"]=[float(r[1]) for r in timelines.get(sym,[])[-120:] if len(r)>=2]
+  evaluated,reason=evaluate_exit(probe,float(px),now())
+  new_peak=float(evaluated.get("peak",entry));peak=(new_peak/entry-1)*side*lev
+  with LOCK:
+   if sym in S["whale_positions"]:
+    S["whale_positions"][sym]["peak_roe"]=peak
+    S["whale_positions"][sym]["last_exit_check"]=evaluated.get("last_exit_check")
+    S["whale_positions"][sym]["last_price"]=float(px)
+  if reason:
+   whale_liq_close(sym,float(px),"local_extreme_weakening");continue
+  with pg() as c:
+   with c.transaction():
+    STORE.fence(c);c.execute("update whale_liq_positions set peak_roe=%s where symbol=%s and opened=%s",(peak,sym,pos["opened"]))
+
+def _whale_liq_book(symbol):
+ try:
+  book=json.loads(get(API,{"type":"l2Book","coin":symbol}));levels=book.get("levels",[])
+  if len(levels)<2:return None
+  bids,asks=levels[0][:10],levels[1][:10]
+  bd=sum(float(x.get("sz",0) or 0) for x in bids);ad=sum(float(x.get("sz",0) or 0) for x in asks)
+  return (bd-ad)/(bd+ad) if bd+ad else 0.0
+ except Exception:return None
+
+def _whale_liq_cvd(symbol):
+ try:
+  flow=hyperdata("/v1/orderflow/"+urllib.parse.quote(symbol)) or {}
+  snaps=flow.get("snapshots") or flow.get("timeframes") or {}
+  one=snaps.get("1m") if isinstance(snaps,dict) else None
+  if isinstance(one,dict):
+   cvd=float(one.get("cvd",0) or 0);buy=float(one.get("buy_volume",0) or 0);sell=float(one.get("sell_volume",0) or 0)
+   denom=buy+sell
+   return cvd,(buy-sell)/denom if denom else 0.0,one.get("coverage")
+  cvd=float(flow.get("cumulative_cvd",0) or 0)
+  return cvd,0.0,None
+ except Exception:return 0.0,0.0,None
+
+def whale_liquidation_scan():
+ last_signal={}
+ while not SHUTDOWN.is_set():
+  try:
+   with LOCK:
+    active=S["engine_active"];prices=dict(S.get("_prices",{}));history={k:list(v) for k,v in S.get("_timeline",{}).items()};contexts=copy.deepcopy(S.get("_pump_ctx",{}))
+   if not active:
+    SHUTDOWN.wait(0.5);continue
+   data=hyperdata("/v1/positions/danger-zone?threshold="+urllib.parse.quote(str(LIQ_WHALE_MAX_DISTANCE_PCT))) or {}
+   rows=data.get("positions",[]) if isinstance(data,dict) else []
+   stamp=time.time();candidates=[]
+   for p in rows:
+    try:
+     sym=str(p.get("symbol","")).upper()
+     if sym not in LIQ_WHALE_SYMBOLS or sym not in prices:continue
+     size=float(p.get("size_usd",0) or 0);dist=float(p.get("distance_pct",999) or 999)
+     scanned=float(p.get("scanned_at",0) or 0)
+     if size<LIQ_WHALE_MIN_USD or dist>LIQ_WHALE_MAX_DISTANCE_PCT or (scanned and stamp-scanned>900):continue
+     victim=str(p.get("side","")).lower()
+     side=-1 if victim=="long" else 1 if victim=="short" else 0
+     if not side:continue
+     px=float(prices[sym]);rows_t=history.get(sym,[])
+     r15=_timeline_return(rows_t,stamp,15,px);r60=_timeline_return(rows_t,stamp,60,px)
+     if r15 is None or r60 is None:continue
+     imb=_whale_liq_book(sym);cvd,flow_imb,coverage=_whale_liq_cvd(sym)
+     ctx=contexts.get(sym,{})
+     score=0.0
+     score+=25 if dist<=0.40 else 19 if dist<=0.70 else 13
+     score+=min(25.0,5.0+max(0.0,math.log10(max(size,1)/LIQ_WHALE_MIN_USD))*12.0)
+     if side*r15>=0.0005:score+=12
+     if side*r60>=0.0010:score+=14
+     if imb is not None and side*imb>=0.08:score+=10
+     if side*flow_imb>=0.08:score+=8
+     burst=float(ctx.get("volume_burst_ratio",0) or 0)
+     if burst>=1.5:score+=6
+     oi_delta=abs(float(ctx.get("oi_delta_60s",0) or 0))
+     if oi_delta>=0.003:score+=5
+     trend_ok=(side*r15>0 and side*r60>0)
+     pressure_ok=((imb is not None and side*imb>=0.02) or side*flow_imb>=0.05)
+     features={"engine":"whale_liquidation_hunt","symbol":sym,"side":side,"victim_side":victim,
+       "whale_address":p.get("address"),"whale_size_usd":size,"liquidation_price":p.get("liq_price"),
+       "distance_pct":dist,"scanned_at":scanned,"r15":r15,"r60":r60,"orderbook_imbalance":imb,
+       "cvd_1m":cvd,"flow_imbalance":flow_imb,"flow_coverage":coverage,"volume_burst_ratio":burst,
+       "oi_delta_60s":ctx.get("oi_delta_60s"),"score":round(score,2),"trend_ok":trend_ok,"pressure_ok":pressure_ok}
+     candidates.append(features)
+    except Exception:continue
+   candidates.sort(key=lambda x:(x["score"],x["whale_size_usd"]),reverse=True)
+   for x in candidates:
+    sym=x["symbol"];side=int(x["side"]);action="WATCH"
+    opened=False
+    if x["score"]>=LIQ_WHALE_SCORE_MIN and x["trend_ok"] and x["pressure_ok"]:
+     opened=whale_liq_open(sym,side,prices[sym],x["score"],x);action="OPENED" if opened else "QUALIFIED"
+    key=(sym,side,action);last=last_signal.get(key,0)
+    if stamp-last<15:continue
+    last_signal[key]=stamp
+    ident=hashlib.sha256(("WHALELIQ:"+sym+":"+str(side)+":"+str(int(stamp//15))+":"+action).encode()).hexdigest()
+    with pg() as c:
+     c.execute("""insert into whale_liq_signal_journal(id,ts,symbol,side,score,action,features)
+      values(%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(id) do nothing""",
+      (ident,now(),sym,side,float(x["score"]),action,json.dumps(x,default=str)))
+    journal("whale_liq_signal",None,{"symbol":sym,"side":side,"score":x["score"],"action":action,
+      "distance_pct":x["distance_pct"],"whale_size_usd":x["whale_size_usd"],"liquidation_price":x["liquidation_price"]})
+   with LOCK:
+    S["sources"]["WhaleLiquidationScanner"]={"ok":True,"last_check":now(),"mode":"paper_pre_liquidation_hunt",
+      "symbols":sorted(LIQ_WHALE_SYMBOLS),"scan_seconds":LIQ_WHALE_SCAN_SECONDS,"threshold_pct":LIQ_WHALE_MAX_DISTANCE_PCT,
+      "min_whale_usd":LIQ_WHALE_MIN_USD,"danger_positions":len(rows),"eligible_candidates":len(candidates),
+      "qualified_candidates":sum(x["score"]>=LIQ_WHALE_SCORE_MIN and x["trend_ok"] and x["pressure_ok"] for x in candidates),
+      "top_candidates":candidates[:5],"paper_positions":len(S["whale_positions"]),"paper_equity":round(S["whale_equity"],4),
+      "paper_trades":S["whale_trades"],"error":None}
+  except Exception as exc:
+   with LOCK:S["sources"]["WhaleLiquidationScanner"]={"ok":False,"last_check":now(),"mode":"paper_pre_liquidation_hunt","error":str(exc)[:180]}
+  SHUTDOWN.wait(LIQ_WHALE_SCAN_SECONDS)
+
 def flatten_news_for_regime(reason,prices):
  with LOCK:items=[(sym,copy.deepcopy(pos)) for sym,pos in S["positions"].items()]
  closed=[]
@@ -564,7 +742,8 @@ def market():
      hist=S.setdefault("_hist",{}).setdefault(sym,[]);hist.append(px)
      if len(hist)>120:del hist[:-120]
     S["last_market_error"]=None
-   if S["engine_active"]:pump_mark_positions(valid)
+   if S["engine_active"]:
+    pump_mark_positions(valid);whale_liq_mark_positions(valid)
   except LeaseLost as e:
    S["engine_active"]=False;S["engine_error"]=str(e)
   except Exception as e:
@@ -1547,6 +1726,10 @@ def build_dashboard_snapshot():
   px=prices.get(sym,p["entry"]);move=(px/p["entry"]-1)*p["side"];gross=p["notional"]*move;fees=p["notional"]*FEE+p["notional"]*(px/p["entry"])*FEE;pnl=gross-fees;lev=float(p.get("leverage",LEV));margin=float(p.get("margin",p["notional"]/lev));roi=(pnl/margin*100) if margin>0 else 0.0;unreal+=pnl
   positions.append({"symbol":sym,"side":"LONG" if p["side"]>0 else "SHORT","entry":p["entry"],"mark":px,"notional_usd":round(p["notional"],2),"margin_usd":round(margin,2),"leverage":lev,"roe_pct":round(roi,3),"unrealized_pnl":round(pnl,4),"opened":p["opened"],"headline":p["headline"],"protection_stop":p.get("stop"),"trailing_stop":p.get("trail_stop"),"peak":p.get("peak"),"trailing_armed":p.get("trail_armed",False),"last_evaluated_at":p.get("last_evaluated_at")})
  pump_positions=[];pump_unreal=0.0
+ whale_positions=[];whale_unreal=0.0
+ for sym,p in state.get("whale_positions",{}).items():
+  px=prices.get(sym,p["entry"]);move=(px/p["entry"]-1)*p["side"];gross=p["notional"]*move;fees=p["notional"]*FEE*2;pnl=gross-fees;whale_unreal+=pnl
+  whale_positions.append({"symbol":sym,"side":"LONG" if p["side"]>0 else "SHORT","entry":p["entry"],"mark":px,"notional_usd":round(p["notional"],2),"margin_usd":round(p["margin"],2),"leverage":p["leverage"],"roe_pct":round(pnl/p["margin"]*100,3) if p["margin"] else 0,"unrealized_pnl":round(pnl,4),"opened":p["opened"],"score":round(float(p.get("score",0)),2),"features":p.get("features",{})})
  for sym,p in state.get("pump_positions",{}).items():
   px=prices.get(sym,p["entry"]);move=(px/p["entry"]-1)*p["side"];gross=p["notional"]*move;fees=p["notional"]*FEE*2;pnl=gross-fees;pump_unreal+=pnl
   pump_positions.append({"symbol":sym,"side":"LONG" if p["side"]>0 else "SHORT","entry":p["entry"],"mark":px,"notional_usd":round(p["notional"],2),"margin_usd":round(p["margin"],2),"leverage":p["leverage"],"roe_pct":round(pnl/p["margin"]*100,3) if p["margin"] else 0,"unrealized_pnl":round(pnl,4),"opened":p["opened"],"score":round(float(p.get("score",0)),2)})
@@ -1556,7 +1739,7 @@ def build_dashboard_snapshot():
  except Exception: account_age_seconds=0
  total=state["equity"]+unreal;account_roi=(total/PAPER_RESET-1)*100
  visible_sources={k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and not k.startswith("XFree:") and k not in SEARCH_INDEX_FEEDS and not v.get("disabled") and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")}
- return {"mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"positions":positions,"pump_positions":pump_positions,"pump_balance":round(state.get("pump_equity",100.0),4),"pump_unrealized_pnl":round(pump_unreal,4),"pump_total_equity":round(state.get("pump_equity",100.0)+pump_unreal,4),"pump_realized_pnl":round(state.get("pump_realized_pnl",0.0),4),"pump_trades":state.get("pump_trades",0),"trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
+ return {"mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"positions":positions,"pump_positions":pump_positions,"pump_balance":round(state.get("pump_equity",100.0),4),"pump_unrealized_pnl":round(pump_unreal,4),"pump_total_equity":round(state.get("pump_equity",100.0)+pump_unreal,4),"pump_realized_pnl":round(state.get("pump_realized_pnl",0.0),4),"pump_trades":state.get("pump_trades",0),"whale_liq_positions":whale_positions,"whale_liq_balance":round(state.get("whale_equity",100.0),4),"whale_liq_unrealized_pnl":round(whale_unreal,4),"whale_liq_total_equity":round(state.get("whale_equity",100.0)+whale_unreal,4),"whale_liq_realized_pnl":round(state.get("whale_realized_pnl",0.0),4),"whale_liq_trades":state.get("whale_trades",0),"trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
 def dashboard():
  with LOCK:
@@ -1618,6 +1801,8 @@ def operations_diagnostics():
      "social_channels":{k:{"ok":v.get("ok"),"degraded":v.get("degraded"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds"),"delivery_latency_seconds":v.get("delivery_latency_seconds"),"accounts_ok":v.get("accounts_ok"),"accounts_initialized":v.get("accounts_initialized"),"accounts_total":v.get("accounts_total"),"active_accounts":v.get("active_accounts"),"scan_label":v.get("scan_label"),"key_accounts":v.get("key_accounts"),"disabled_retry_accounts":v.get("disabled_retry_accounts"),"recently_polled_accounts":v.get("recently_polled_accounts"),"target_poll_seconds":v.get("target_poll_seconds"),"backend_accounts":v.get("backend_accounts"),"rate_limited_accounts":v.get("rate_limited_accounts"),"backoff_accounts":v.get("backoff_accounts"),"scan_workers":v.get("scan_workers")} for k,v in S["sources"].items() if k in ("XMonitor","XFilteredStream","XListMonitor","TruthMonitor","TruthStream","TruthDirect:realDonaldTrump","TruthSocialPublic")},
      "pump_engine":copy.deepcopy(S["sources"].get("PumpDumpScanner",{})),
      "pump_positions":len(S.get("pump_positions",{})),"pump_equity":S.get("pump_equity"),"pump_trades":S.get("pump_trades"),
+     "whale_liq_engine":copy.deepcopy(S["sources"].get("WhaleLiquidationScanner",{})),
+     "whale_liq_positions":len(S.get("whale_positions",{})),"whale_liq_equity":S.get("whale_equity"),"whale_liq_trades":S.get("whale_trades"),
      "entry_rejections":dict(S.get("_entry_rejections",{})),
      "daily_audit":daily_audit_stats(),
      "learning":{"samples":S.get("adaptive",{}).get("samples",0),"generated_at":S.get("adaptive",{}).get("generated_at"),"policy":S.get("adaptive",{}).get("policy")},
@@ -1798,7 +1983,7 @@ if __name__=="__main__":
 
  worker_specs=[
   ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),
-  ("telemetry",telemetry),("pump_dump",impulse_scan),
+  ("telemetry",telemetry),("pump_dump",impulse_scan),("whale_liquidations",whale_liquidation_scan),
   ("adapt",adapt),("x_public_4s",free_x_realtime),("truth_public",free_truth_realtime),
   ("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)
  ]
