@@ -727,8 +727,8 @@ def market():
      for sym,px in valid.items():
       if sym not in S["positions"]:continue
       pos,reason=evaluate_exit(S["positions"][sym],px,now())
-      move=(px/pos["entry"]-1)*pos["side"]
-      if S["equity"]+pos["notional"]*move<=0:reason="liquidation"
+      # PAPER_ONLY exits are universal: confirmed local extreme + weakening.
+      # No strategy-specific TP/SL/timer or account-equity flatten may bypass it.
       # Retain an unsaved new extreme in memory if the database is temporarily
       # unavailable. Never delete a position or change equity before commit.
       S["positions"][sym]=pos
