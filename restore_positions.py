@@ -30,7 +30,7 @@ def liq_fraction(f):
     return max(.05,min(.20,frac,cap,scorecap))
 
 def restore_whales(c,prices):
-    action="restore-all-whale-original-entry-v7"
+    action="restore-all-whale-original-entry-v8"
     if c.execute("select 1 from operator_actions where action_id=%s",(action,)).fetchone():return []
     events=c.execute("""select distinct on (payload->>'symbol') id,recorded_at,payload from audit_journal
         where kind='whale_liq_trade_opened' and payload ? 'symbol'
@@ -94,7 +94,7 @@ def restore_whales(c,prices):
     return out
 
 def restore_btc(c,prices):
-    action="restore-btc-short-80524-v6"
+    action="restore-btc-short-80524-v7"
     if c.execute("select 1 from operator_actions where action_id=%s",(action,)).fetchone():
         return None
     cur=c.execute("select * from open_positions where symbol='BTC' for update").fetchone()
