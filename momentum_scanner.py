@@ -46,15 +46,21 @@ def candidates(prices,history,volumes,epoch,minimum_day_volume=5_000_000.0,conte
         ctx=contexts.get(symbol,{})
         oi_delta=float(ctx.get("oi_delta_60s") or 0)
         vol_burst=float(ctx.get("volume_burst_ratio") or 0)
-        # Abnormal participation is mandatory. Academic P&D work consistently
-        # finds anomalous volume more useful than raw price change alone.
-        if vol_burst<2.0:continue
+        vol_z=ctx.get("volume_rate_z")
+        baseline_n=int(ctx.get("volume_baseline_samples") or 0)
+        # Abnormal participation is mandatory. Once enough baseline observations
+        # exist, require a >=3-sigma activity shock; during warmup require a
+        # stronger pace ratio instead of trusting a thin baseline.
+        if baseline_n>=12:
+            if vol_z is None or float(vol_z)<3.0:continue
+        elif vol_burst<3.0:continue
 
         score=40.0
         score+=min(16,abs(r15)*2400)
         score+=min(16,abs(r60)*1200)
         score+=min(10,abs(r180)*450)
-        score+=min(12,max(0.0,(vol_burst-2.0))*2.0)
+        score+=min(10,max(0.0,(vol_burst-2.0))*1.5)
+        if vol_z is not None:score+=min(10,max(0.0,float(vol_z)-3.0)*2.5)
         if abs(oi_delta)>=0.003:score+=8
         if abs(oi_delta)>=0.010:score+=4
         if accel>=0.002:score+=6
@@ -63,7 +69,8 @@ def candidates(prices,history,volumes,epoch,minimum_day_volume=5_000_000.0,conte
             "symbol":symbol,"side":side,"score":round(max(0,min(100,score)),2),
             "r15_pct":round(r15*100,3),"r60_pct":round(r60*100,3),"r180_pct":round(r180*100,3),
             "accel":round(side*accel,6),"oi_delta_60s":round(oi_delta,6),
-            "volume_burst_ratio":round(vol_burst,3),"day_volume_usd":round(day_volume,2),
+            "volume_burst_ratio":round(vol_burst,3),"volume_rate_z":round(float(vol_z),3) if vol_z is not None else None,
+            "volume_baseline_samples":baseline_n,"day_volume_usd":round(day_volume,2),
             "trend_consistent":True,"exhaustion":False
         })
     return sorted(out,key=lambda x:x["score"],reverse=True)
