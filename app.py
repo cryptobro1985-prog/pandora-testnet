@@ -91,6 +91,14 @@ def account_mutation(fn):
  return run
 TRADE_LEVERAGE=max(1.0,min(50.0,float(os.getenv("TRADE_LEVERAGE","25"))))
 TRADE_MARGIN_FRACTION=max(0.01,min(0.25,float(os.getenv("TRADE_MARGIN_FRACTION","0.10"))))
+TARGET_OPEN_POSITIONS=max(1,min(7,int(os.getenv("TARGET_OPEN_POSITIONS","5"))))
+MAX_OPEN_POSITIONS=max(TARGET_OPEN_POSITIONS,min(10,int(os.getenv("MAX_OPEN_POSITIONS","7"))))
+PUMP_MAX_POSITIONS=max(TARGET_OPEN_POSITIONS,min(MAX_OPEN_POSITIONS,int(os.getenv("PUMP_MAX_POSITIONS","5"))))
+PUMP_PRIMARY_SCORE=max(70.0,min(100.0,float(os.getenv("PUMP_PRIMARY_SCORE","84"))))
+PUMP_SECONDARY_SCORE=max(60.0,min(PUMP_PRIMARY_SCORE,float(os.getenv("PUMP_SECONDARY_SCORE","76"))))
+PUMP_SECONDARY_MARGIN_FRACTION=max(0.01,min(TRADE_MARGIN_FRACTION,float(os.getenv("PUMP_SECONDARY_MARGIN_FRACTION","0.05"))))
+PUMP_QUEUE_TTL_SECONDS=max(15.0,min(180.0,float(os.getenv("PUMP_QUEUE_TTL_SECONDS","60"))))
+PUMP_SECONDARY_SAME_SIDE_CAP=max(1,min(TARGET_OPEN_POSITIONS,int(os.getenv("PUMP_SECONDARY_SAME_SIDE_CAP","4"))))
 PAPER_TOPUP_STEP=max(10.0,float(os.getenv("PAPER_TOPUP_STEP","100")))
 NEWS_MAX_AGE_SECONDS=float(os.getenv("NEWS_MAX_AGE_SECONDS","120"))
 NEWS_POLL_SECONDS=float(os.getenv("NEWS_POLL_SECONDS","15"))
@@ -342,7 +350,7 @@ def build_learning_snapshot():
             "max_utilization_pct":float(capacity["max_utilization_pct"] or 0),"avg_utilization_pct":float(capacity["avg_utilization_pct"] or 0),
             "p95_utilization_pct":float(capacity["p95_utilization_pct"] or 0),"peak_used_margin":float(capacity["peak_used_margin"] or 0),
             "max_contributed_capital":float(capacity["max_contributed_capital"] or PAPER_RESET),
-            "current_margin_fraction_pct":TRADE_MARGIN_FRACTION*100.0,
+            "current_margin_fraction_pct":fraction*100.0,
             "observed_no_topup_fraction_ceiling_pct":round(90.0/max(1,int(capacity["max_positions"] or 1)),2)},
           "generated_at":now(),"policy":"conservative_news_source_reweight_n10_other_strategies_observation_only"}
  return total_samples,payload
@@ -562,17 +570,21 @@ def _symbol_open_anywhere(symbol):
  return symbol in S.get("positions",{}) or symbol in S.get("pump_positions",{}) or symbol in S.get("whale_positions",{})
 
 @account_mutation
-def _reserve_shared_entry(symbol):
+def _reserve_shared_entry(symbol,margin_fraction=None):
  with LOCK:
   reservations=S.setdefault("_entry_reservations",{})
+  total_open=len(S.get("positions",{}))+len(S.get("pump_positions",{}))+len(S.get("whale_positions",{}))
+  if total_open>=MAX_OPEN_POSITIONS:
+   return False,0.0,"portfolio_position_cap",0.0
   if _symbol_open_anywhere(symbol) or symbol in reservations:
    return False,0.0,"symbol_already_open_shared_account",0.0
   reservations[symbol]=0.0
+ fraction=TRADE_MARGIN_FRACTION if margin_fraction is None else max(0.01,min(TRADE_MARGIN_FRACTION,float(margin_fraction)))
  try:
   while True:
    with LOCK:
     equity=float(S["equity"])
-    margin=max(0.01,max(0.0,equity)*TRADE_MARGIN_FRACTION)
+    margin=max(0.01,max(0.0,equity)*fraction)
     used=_shared_used_margin()
     free=max(0.0,equity-used)
     if equity>0 and free+1e-9>=margin:
@@ -612,14 +624,14 @@ def current_entry_price(symbol):
   return float(price) if price is not None and math.isfinite(float(price)) and float(price)>0 else None
 
 @account_mutation
-def pump_open(symbol,side,price,score,features):
+def pump_open(symbol,side,price,score,features,margin_fraction=None):
  if side not in (-1,1) or not price:return False
  if features.get("observed_at_epoch") and not 0<=time.time()-features["observed_at_epoch"]<=10:return False
  price=current_entry_price(symbol)
  if price is None:return False
  with LOCK:
-  if not S["engine_active"] or len(S["pump_positions"])>=3:return False
- reserved,margin,reason,free=_reserve_shared_entry(symbol)
+  if not S["engine_active"] or len(S["pump_positions"])>=PUMP_MAX_POSITIONS:return False
+ reserved,margin,reason,free=_reserve_shared_entry(symbol,margin_fraction)
  if not reserved:
   journal("entry_skipped",None,{"strategy":"pump_dump","symbol":symbol,"reason":reason,"free_margin":free})
   return False
