@@ -103,6 +103,7 @@ PUMP_QUEUE_TTL_SECONDS=max(15.0,min(180.0,float(os.getenv("PUMP_QUEUE_TTL_SECOND
 PUMP_SECONDARY_SAME_SIDE_CAP=max(1,min(TARGET_OPEN_POSITIONS,int(os.getenv("PUMP_SECONDARY_SAME_SIDE_CAP","4"))))
 WHALE_MAX_ACTIVE_POSITIONS=max(1,min(5,int(os.getenv("WHALE_MAX_ACTIVE_POSITIONS","5"))))
 WHALE_MARGIN_FRACTION=0.20
+WHALE_LEVERAGE=25.0
 PAPER_TOPUP_STEP=max(10.0,float(os.getenv("PAPER_TOPUP_STEP","100")))
 NEWS_MAX_AGE_SECONDS=float(os.getenv("NEWS_MAX_AGE_SECONDS","120"))
 NEWS_POLL_SECONDS=float(os.getenv("NEWS_POLL_SECONDS","15"))
@@ -770,7 +771,7 @@ def pump_open(symbol,side,price,score,features,margin_fraction=None):
     STORE.fence(db)
     row=db.execute("""insert into pump_positions(symbol,side,entry,notional,margin,leverage,opened,opened_epoch,peak_roe,score,features)
      values(%s,%s,%s,%s,%s,%s,%s,%s,0,%s,%s::jsonb) on conflict(symbol) do nothing returning symbol""",
-     (symbol,side,price,notional,margin,TRADE_LEVERAGE,opened,epoch,float(score),json.dumps(features,default=str))).fetchone()
+     (symbol,side,price,notional,margin,WHALE_LEVERAGE,opened,epoch,float(score),json.dumps(features,default=str))).fetchone()
     if not row:return False
     db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'pump_trade_opened',%s::jsonb)",
      (now(),json.dumps({"strategy":"pump_dump","symbol":symbol,"side":side,"entry":price,"score":score,"margin":margin,"notional":notional,"leverage":TRADE_LEVERAGE},default=str)))
@@ -861,7 +862,7 @@ def whale_liq_open(symbol,side,price,score,features,margin_fraction=None):
      (symbol,side,price,notional,margin,TRADE_LEVERAGE,opened,epoch,float(score),json.dumps(features,default=str))).fetchone()
     if not row:return False
     db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'whale_liq_trade_opened',%s::jsonb)",
-     (now(),json.dumps({"strategy":"whale_liquidation","symbol":symbol,"side":side,"entry":price,"score":score,"margin":margin,"notional":notional,"leverage":TRADE_LEVERAGE,"features":features},default=str)))
+     (now(),json.dumps({"strategy":"whale_liquidation","symbol":symbol,"side":side,"entry":price,"score":score,"margin":margin,"notional":notional,"leverage":WHALE_LEVERAGE,"features":features},default=str)))
   with LOCK:S["whale_positions"][symbol]=pos
   return True
  finally:_release_shared_entry(symbol)
@@ -1020,9 +1021,20 @@ def whale_liquidation_scan():
       "micro_confirmations":confirmations,"score":round(min(100,score),2),"trend_ok":trend_ok,"pressure_ok":pressure_ok}
      if not (trend_ok and pressure_ok):reject("directional_pressure_not_confirmed");continue
      candidates.append(x)
-    candidates.sort(key=lambda x:x["score"],reverse=True)
+    for x in candidates:
+     distance=max(0.0,float(x.get("distance_pct",99) or 99))
+     dyn=max(0.01,float(x.get("dynamic_entry_distance_pct",1) or 1))
+     proximity=max(0.0,min(1.0,1.0-distance/dyn))
+     vol=max(abs(float(x.get("r15",0) or 0))*250.0,abs(float(x.get("r60",0) or 0))*125.0,
+             min(1.0,float(x.get("volume_burst_ratio",0) or 0)/4.0),
+             min(1.0,max(0.0,float(x.get("volume_rate_z",0) or 0))/4.0))
+     impact=min(1.0,max(0.0,float(x.get("liquidation_flow_to_depth",0) or 0))/1.5)
+     pressure=max(0.0,min(1.0,int(x.get("side",0) or 0)*float(x.get("flow_imbalance",0) or 0)/0.25))
+     x["whale_rank_score"]=round(min(100.0,0.55*float(x["score"])+18.0*proximity+12.0*min(1.0,vol)+10.0*impact+5.0*pressure),2)
+    candidates.sort(key=lambda x:(x.get("whale_rank_score",0),x["score"],-x.get("distance_pct",99)),reverse=True)
     streaks=update_streaks(candidates,streaks,scan_id)
     qualified=[x for x in candidates if x["score"]>=LIQ_WHALE_SCORE_MIN and x["confirmation_streak"]>=2]
+    qualified.sort(key=lambda x:(x.get("whale_rank_score",0),x["score"],-x.get("distance_pct",99)),reverse=True)
     for x in qualified:
      sym=x["symbol"];side=int(x["side"])
      with LOCK:
