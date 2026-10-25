@@ -218,6 +218,13 @@ def source_weight(source):
  else:base=float(SOURCE_WEIGHTS.get(source,0.50))
  learned=S.get("adaptive",{}).get("source_multipliers",{}) if S.get("mode")=="PAPER_ONLY" else {}
  return max(0.20,min(1.00,base*float(learned.get(source,1.0))))
+def source_freshness_window(source):
+ if source.startswith("XOfficial:") or source.startswith("TruthSocialPublic"):
+  return min(35.0,NEWS_MAX_AGE_SECONDS)
+ if source in ("FedOfficial","SECOfficial","CFTCOfficial","DOJNews"):
+  return min(90.0,NEWS_MAX_AGE_SECONDS)
+ return NEWS_MAX_AGE_SECONDS
+
 STOP_ROE=-999.0;TAKE_ROE=0.20;LEV=25.0;MARGIN_FRACTION=0.10;FEE=0.00045;LOCK_TRIGGER_ROE=0.10;LOCK_ROE=0.075;PAPER_RESET=100.0;MIN_EXIT_ROE=0.075;TRAIL_ARM_ROE=0.12
 PUMP_LEV=TRADE_LEVERAGE;PUMP_MARGIN_FRACTION=TRADE_MARGIN_FRACTION;PUMP_MAX_POSITIONS=10;PUMP_STOP_ROE=-0.06;PUMP_TAKE_ROE=0.14;PUMP_TRAIL_ARM_ROE=0.09;PUMP_TRAIL_GAP_ROE=0.035;PUMP_MAX_HOLD_SECONDS=900
 def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -285,25 +292,36 @@ def journal(kind,event_id,payload):
 def persistent_trades(limit=100):
  with pg() as c:return c.execute("select * from trade_history order by id desc limit %s",(limit,)).fetchall()
 def build_learning_snapshot():
- # PAPER_ONLY learning: use realized historical outcomes to reweight source confidence.
- # It never changes news direction and never enables real orders.
+ # Statistical PAPER learning. It records outcomes broadly, but automatic
+ # adaptation stays intentionally bounded to NEWS source confidence.
  with pg() as c:
   rows=c.execute("""select n.source,count(*) as n,
       sum(case when t.pnl>0 then 1 else 0 end) as wins,
       avg(t.pnl) as avg_pnl,sum(t.pnl) as total_pnl
     from trade_history t join news_events n on n.id=t.event_id
     where t.event_id is not null group by n.source order by count(*) desc""").fetchall()
-  pump=c.execute("""select case when score<80 then '<80' when score<90 then '80-90' else '90+' end as bucket,count(*) as n,
+  strategy=c.execute("""select coalesce(strategy,'news') as strategy,count(*) as n,
+      sum(case when pnl>0 then 1 else 0 end) as wins,avg(pnl) as avg_pnl,sum(pnl) as total_pnl
+    from trade_history group by 1 order by 1""").fetchall()
+  event_types=c.execute("""select coalesce(f.features->>'event_type','unknown') as event_type,count(*) as n,
+      sum(case when t.pnl>0 then 1 else 0 end) as wins,avg(t.pnl) as avg_pnl,sum(t.pnl) as total_pnl
+    from trade_history t join event_features f on f.id=t.event_id
+    where t.event_id is not null group by 1 order by n desc""").fetchall()
+  pump=c.execute("""select case when score<84 then '<84' when score<90 then '84-90' else '90+' end as bucket,count(*) as n,
       sum(case when pnl>0 then 1 else 0 end) as wins,avg(pnl) as avg_pnl,sum(pnl) as total_pnl
     from trade_history where strategy='pump_dump' group by 1 order by 1""").fetchall()
- multipliers={}
- source_stats={}
- total_samples=0
+  whale=c.execute("""select case when score<76 then '<76' when score<85 then '76-85' else '85+' end as bucket,count(*) as n,
+      sum(case when pnl>0 then 1 else 0 end) as wins,avg(pnl) as avg_pnl,sum(pnl) as total_pnl,
+      avg(nullif(features->>'distance_pct','')::double precision) as avg_distance_pct,
+      avg(nullif(features->>'liquidation_flow_to_depth','')::double precision) as avg_flow_to_depth
+    from trade_history where strategy='whale_liquidation' group by 1 order by 1""").fetchall()
+  funding=c.execute("""select count(*) as topups,
+      coalesce(sum((payload->>'amount')::double precision),0) as amount
+    from audit_journal where kind='paper_capital_topup'""").fetchone()
+ multipliers={};source_stats={};total_samples=0
  for r in rows:
   n=int(r["n"] or 0);wins=int(r["wins"] or 0);avg=float(r["avg_pnl"] or 0);total=float(r["total_pnl"] or 0)
-  total_samples+=n;wr=(wins/n) if n else 0.0
-  # Small bounded adjustment only after enough observations.
-  mult=1.0
+  total_samples+=n;wr=(wins/n) if n else 0.0;mult=1.0
   if n>=5:
    edge=(wr-0.5)*0.30
    if avg>0:edge+=0.03
@@ -312,8 +330,10 @@ def build_learning_snapshot():
   multipliers[str(r["source"])]=round(mult,4)
   source_stats[str(r["source"])]={"samples":n,"wins":wins,"win_rate":round(wr,4),"avg_pnl":avg,"total_pnl":total,"multiplier":round(mult,4)}
  payload={"mode":"PAPER_ONLY","source_multipliers":multipliers,"source_stats":source_stats,
-          "pump_score_buckets":[dict(x) for x in pump],"generated_at":now(),
-          "policy":"confidence_reweight_only_direction_unchanged"}
+          "strategy_stats":[dict(x) for x in strategy],"event_type_stats":[dict(x) for x in event_types],
+          "pump_score_buckets":[dict(x) for x in pump],"whale_score_buckets":[dict(x) for x in whale],
+          "funding":{"topups":int(funding["topups"] or 0),"amount":float(funding["amount"] or 0)},
+          "generated_at":now(),"policy":"bounded_news_source_reweight_other_strategies_observation_only"}
  return total_samples,payload
 
 def save_learning_snapshot():
@@ -323,7 +343,8 @@ def save_learning_snapshot():
             (now(),samples,json.dumps(payload,default=str)))
  with LOCK:S["adaptive"]={"samples":samples,"changed":True,**payload}
  journal("learning_snapshot",None,{"samples":samples,"source_count":len(payload["source_stats"]),
-         "pump_buckets":len(payload["pump_score_buckets"]),"policy":payload["policy"]})
+         "pump_buckets":len(payload["pump_score_buckets"]),"whale_buckets":len(payload["whale_score_buckets"]),
+         "strategy_count":len(payload["strategy_stats"]),"policy":payload["policy"]})
  return payload
 
 def load_latest_learning():
@@ -1111,32 +1132,38 @@ def reaction_shadow(sym,side,published_at,price,limit_bps=150.0):
  move=side*(price/anchor-1)*10000
  return {"available":True,"anchor_price":anchor,"anchor_epoch":ts,"move_bps":move,"threshold_bps":limit_bps,"would_skip":move>limit_bps}
 def record_event(ident,source,title,sym,base_side,prices,published_at=None):
- fresh=freshness(published_at,time.time(),NEWS_MAX_AGE_SECONDS)
+ fresh_window=source_freshness_window(source)
+ fresh=freshness(published_at,time.time(),fresh_window)
  if not fresh["allowed"]:
-  save_event_feature(ident,now(),source,title,sym,0,0.0,{"freshness":fresh,"market_structure_filter_active":False})
-  journal("decision",ident,{"symbol":sym,"side":0,"reason":fresh["reason"],"freshness":fresh,"published_at":published_at})
+  save_event_feature(ident,now(),source,title,sym,0,0.0,{"freshness":fresh,"freshness_window_seconds":fresh_window,"market_structure_filter_active":False})
+  journal("decision",ident,{"symbol":sym,"side":0,"reason":fresh["reason"],"freshness":fresh,"freshness_window_seconds":fresh_window,"published_at":published_at})
   return 0
  event_type,event_side=classify_event(title,base_side)
- weight=source_weight(source)
- # Explicit event classification may supply direction when the simple keyword score missed it.
- # It may not reverse an already directional headline.
- effective_side=base_side if base_side else event_side
+ weight=source_weight(source);effective_side=base_side if base_side else event_side
  if not sym or sym not in prices:
   journal("decision",ident,{"symbol":sym,"raw_side":base_side,"event_side":event_side,"event_type":event_type,"source_weight":weight,"side":0,"reason":"no_tradable_market"})
   return 0
  side,conf,features=decide(title,sym,effective_side,prices)
  features["event_type"]=event_type;features["source_weight"]=weight;features["freshness"]=fresh
- # PAPER experiment: source prior changes confidence, not direction. Very weak sources need a clearer decision.
+ features["freshness_window_seconds"]=fresh_window
  conf=min(1.0,conf*weight)
  if side and weight<0.50:side=0
- save_event_feature(ident,now(),source,title,sym,side,conf,features)
- shadow=reaction_shadow(sym,side,published_at,prices.get(sym))
- journal("decision",ident,{"symbol":sym,"raw_side":base_side,"event_side":event_side,"effective_side":effective_side,"event_type":event_type,"source_weight":weight,"side":side,"confidence":conf,"price":prices.get(sym),"features":features,"reaction_shadow":shadow,"reaction_filter_active":False,"reason":"direction_guard_or_low_source_weight" if not side else "eligible"})
- if side:open_signal(sym,side,title,prices,ident,published_at)
+ reaction_limit=100.0 if sym in ("BTC","ETH") else 150.0
+ shadow=reaction_shadow(sym,side,published_at,prices.get(sym),reaction_limit)
+ late=bool(side and shadow.get("available") and shadow.get("would_skip"))
+ if late:side=0
+ features["reaction_shadow"]=shadow;features["reaction_filter_active"]=True
+ save_event_feature(ident,now(),source,title,sym,side,conf if side else 0.0,features)
+ reason="news_already_priced" if late else ("direction_guard_or_low_source_weight" if not side else "eligible")
+ journal("decision",ident,{"symbol":sym,"raw_side":base_side,"event_side":event_side,"effective_side":effective_side,
+   "event_type":event_type,"source_weight":weight,"side":side,"confidence":conf if side else 0.0,
+   "price":prices.get(sym),"features":features,"reaction_shadow":shadow,"reaction_filter_active":True,"reason":reason})
+ if side:open_signal(sym,side,title,prices,ident,published_at,source)
  return side
 
-def open_signal(sym,side,title,prices,event_id=None,published_at=None):
- fresh=freshness(published_at,time.time(),NEWS_MAX_AGE_SECONDS)
+def open_signal(sym,side,title,prices,event_id=None,published_at=None,source=""):
+ fresh_window=source_freshness_window(source)
+ fresh=freshness(published_at,time.time(),fresh_window)
  reason=None
  with LOCK:
   if not fresh["allowed"]:reason=fresh["reason"]
@@ -1145,7 +1172,7 @@ def open_signal(sym,side,title,prices,event_id=None,published_at=None):
   elif time.time()-S.get("_last_poll_epoch",0)>10:reason="stale_market_price"
   elif sym not in S.get("_prices",{}) or not side:reason="no_price_or_direction"
  if reason:
-  journal("entry_skipped",event_id,{"strategy":"news","symbol":sym,"reason":reason,"freshness":fresh});return False
+  journal("entry_skipped",event_id,{"strategy":"news","symbol":sym,"reason":reason,"freshness":fresh,"freshness_window_seconds":fresh_window});return False
  reserved,margin,reason,free=_reserve_shared_entry(sym)
  if not reserved:
   journal("entry_skipped",event_id,{"strategy":"news","symbol":sym,"reason":reason,"freshness":fresh,"free_margin":free});return False
