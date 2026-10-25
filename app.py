@@ -28,15 +28,7 @@ def choose(db_path,current=(-0.10,0.20)):
  return {"stop":cand[0],"take":cand[1],"samples":len(xs),"validation_pnl":sum(valid),"changed":cand!=current}
 
 WATCH_GROUPS={
- "core":["elonmusk","realDonaldTrump","POTUS","WhiteHouse","JDVance","PressSec","Scavino47","federalreserve","SECGov","USTreasury","CFTC","DHSgov","SecScottBessent","Reuters","ReutersBiz","AP","APBusiness","BBCWorld","business","BNODesk","DeItaone","KobeissiLetter","financialjuice","LiveSquawk","CoinDesk","Cointelegraph","DecryptMedia","TheBlockCo","Blockworks","BitcoinMagazine","WuBlockchain","Lookonchain","PeckShieldAlert","CertiKAlert","whale_alert","arkham","DefiLlama","CoinGlass","coinbase","binance","Bybit_Official","hyperliquidX","saylor","cz_binance","VitalikButerin"],
- "news":["CNBC","zerohedge","unusual_whales","FirstSquawk","TreeNewsFeed","tier10k","WSJ","FT","ForbesCrypto"],
- "asset_managers":["BlackRock","iShares","Fidelity","DigitalAssets","ARKInvest","CathieDWood","Grayscale","Bitwise","vaneck_us","21Shares","CoinSharesCo","Hashdex","InvescoUS","WisdomTreeFunds","ProShares"],
- "crypto_funds":["galaxyhq","PanteraCapital","a16zcrypto","cdixon","alive_eth","eddylazzarin","guywuolletjr","paradigm","multicoin","dragonfly_xyz","hosseeb","HadickM","ElectricCapital","bcap","_kinjalbshah","CremeDeLaCrypto","pbartstephens","PlaceholderVC","HaunVentures"],
- "market_makers":["wintermute_t","GSR_io","CumberlandSays","jumpcryptohq","JaneStreetGroup","FlowTraders","DRWTrading","FalconXGlobal","B2C2Group","keyrock","Citadel","citsecurities"],
- "exchanges":["CoinbaseAssets","OKX","krakenfx","Gemini","bitget","gate_io","MEXC","HTX_Global","DeribitOfficial","cryptocom"],
- "security":["zachxbt","SlowMist_Team","CyversAlerts","chainalysis","TRMLabs"],
- "influencers":["brian_armstrong","CryptoHayes","APompliano","RaoulGMI","cobie","jack","paoloardoino","davidsacks","NayibBukele"],
- "policy":["SenateBanking","FinancialCmte","TheJusticeDept","SpeakerJohnson"]
+ "critical":["elonmusk","realDonaldTrump","SECGov","federalreserve","BlackRock","Fidelity","ARKInvest","Grayscale"]
 }
 WATCH=[];WATCH_CATEGORY={}
 for _category,_handles in WATCH_GROUPS.items():
@@ -1204,7 +1196,7 @@ def free_x_realtime():
   pool.shutdown(wait=False,cancel_futures=True);ingest_pool.shutdown(wait=False,cancel_futures=True)
 
 
-CRITICAL_X_HANDLES=["elonmusk","realDonaldTrump","SECGov","federalreserve","BlackRock","Fidelity","ARKInvest","Grayscale"]
+CRITICAL_X_HANDLES=list(WATCH)
 
 def x_critical_realtime():
  handles=list(CRITICAL_X_HANDLES)
@@ -1233,9 +1225,10 @@ def x_critical_realtime():
     errors.append(name+":"+str(exc)[:70])
   raise RuntimeError(" | ".join(errors)[:420])
  with LOCK:
-  S["sources"]["XCriticalMonitor"]={"ok":False,"mode":"dedicated_critical_pool_starting","last_check":now(),
-   "accounts_ok":0,"accounts_total":len(handles),"scan_label":"CRITICAL 0 / %s"%len(handles),
+  _xcrit={"ok":False,"mode":"dedicated_critical_pool_starting","last_check":now(),
+   "accounts_ok":0,"accounts_total":len(handles),"scan_label":"SCANNING 0 / %s"%len(handles),
    "target_poll_seconds":poll,"key_accounts":{h:{"ok":False,"active":False} for h in handles},"error":None}
+  S["sources"]["XCriticalMonitor"]=copy.deepcopy(_xcrit);S["sources"]["XMonitor"]=copy.deepcopy(_xcrit)
  try:
   while not SHUTDOWN.is_set():
    if not S["engine_active"]:
@@ -1277,11 +1270,12 @@ def x_critical_realtime():
                "backend":backend_used.get(h),"last_success_epoch":last_success.get(h),
                "error":last_error.get(h)} for h in handles}
     ok_count=sum(v["ok"] for v in status.values())
-    S["sources"]["XCriticalMonitor"]={"ok":ok_count==len(handles),"mode":"dedicated_critical_pool","last_check":now(),
-      "accounts_ok":ok_count,"accounts_total":len(handles),"active_accounts":ok_count,
-      "scan_label":"CRITICAL %s / %s"%(ok_count,len(handles)),"target_poll_seconds":poll,
+    _xcrit={"ok":ok_count==len(handles),"mode":"dedicated_critical_pool","last_check":now(),
+      "accounts_ok":ok_count,"accounts_initialized":len(handles),"accounts_total":len(handles),"active_accounts":ok_count,
+      "scan_label":"SCANNING %s / %s"%(ok_count,len(handles)),"target_poll_seconds":poll,
       "key_accounts":status,"scan_workers":len(handles),"realtime_verified":ok_count==len(handles),
       "error":None if ok_count==len(handles) else "partial_critical_coverage"}
+    S["sources"]["XCriticalMonitor"]=copy.deepcopy(_xcrit);S["sources"]["XMonitor"]=copy.deepcopy(_xcrit)
    SHUTDOWN.wait(0.05)
  finally:
   pool.shutdown(wait=False,cancel_futures=True);ingest_pool.shutdown(wait=False,cancel_futures=True)
@@ -2077,7 +2071,7 @@ if __name__=="__main__":
  worker_specs=[
   ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),
   ("telemetry",telemetry),("pump_dump",impulse_scan),("whale_liquidations",whale_liquidation_scan),
-  ("adapt",adapt),("x_critical_4s",x_critical_realtime),("x_public_4s",free_x_realtime),("truth_public",free_truth_realtime),
+  ("adapt",adapt),("x_critical_4s",x_critical_realtime),("truth_public",free_truth_realtime),
   ("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)
  ]
  if os.getenv("X_AUTH_TOKEN","").strip() and os.getenv("X_CT0","").strip() and os.getenv("X_LIST_ID","").strip():worker_specs.append(("x_list_official",x_list_realtime))
