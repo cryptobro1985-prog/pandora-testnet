@@ -34,7 +34,7 @@ class WhaleExitPolicyTests(unittest.TestCase):
         self.assertGreater(evaluated["last_exit_check"]["remaining_to_liquidation_pct"],0.75)
         self.assertFalse(evaluated["last_exit_check"]["local_extreme_exit"])
 
-    def test_whale_local_exit_resumes_after_liquidation_latch(self):
+    def test_whale_local_exit_restarts_fresh_after_liquidation_latch(self):
         features={
             "engine": "whale_liquidation_cluster_v4",
             "victim_side": "long",
@@ -46,6 +46,20 @@ class WhaleExitPolicyTests(unittest.TestCase):
             98.6,
             "2026-10-25T09:01:00+00:00",
         )
+        self.assertIsNone(reason)
+        self.assertTrue(evaluated["post_liq_risk_reset_done"])
+        self.assertEqual(evaluated["history"],[98.6])
+        self.assertGreaterEqual(evaluated["local_search_min_samples"],15)
+        self.assertFalse(evaluated["last_exit_check"]["local_extreme_exit"])
+
+        # Build a fresh post-liquidation path: first a new local low, then a
+        # confirmed bounce. Only this new path is eligible for exit.
+        prices=[98.4,98.2,98.0,97.8,97.6,97.5,97.4,97.3,97.2,97.1,97.0,97.1,97.2,97.4,97.6]
+        reason=None
+        for i,price in enumerate(prices,1):
+            evaluated,reason=evaluate_exit(
+                evaluated,price,f"2026-10-25T09:01:{i:02d}+00:00"
+            )
         self.assertEqual(reason,"local_extreme_weakening")
         self.assertFalse(evaluated["last_exit_check"]["pre_liquidation_hold"])
         self.assertTrue(evaluated["last_exit_check"]["local_extreme_exit"])
