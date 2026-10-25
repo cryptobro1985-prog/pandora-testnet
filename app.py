@@ -878,7 +878,8 @@ def whale_liquidation_scan():
      r15=_timeline_return(history.get(sym,[]),stamp,15,prices[sym]);r60=_timeline_return(history.get(sym,[]),stamp,60,prices[sym])
      if r15 is None or r60 is None:reject("insufficient_price_history");continue
      dist=p["distance_pct"];impact=material["liquidation_flow_to_depth"]
-     dynamic=min(LIQ_WHALE_MAX_DISTANCE_PCT,LIQ_WHALE_BASE_ENTRY_DISTANCE[sym]+(0.15 if impact>=.5 else 0)+(0.2 if impact>=1 else 0)+(0.2 if impact>=2 else 0))
+     base_distance=LIQ_WHALE_BASE_ENTRY_DISTANCE.get(sym,LIQ_WHALE_DEFAULT_ENTRY_DISTANCE)
+     dynamic=min(LIQ_WHALE_MAX_DISTANCE_PCT,base_distance+(0.15 if impact>=.5 else 0)+(0.2 if impact>=1 else 0)+(0.2 if impact>=2 else 0))
      if dist>dynamic:reject("outside_dynamic_entry_distance");continue
      flow=float(ctx.get("flow_imbalance") or 0);imb=float(book["imbalance"])
      trend_ok=side*r15>=.0004 and side*r60>=.0008
@@ -891,12 +892,14 @@ def whale_liquidation_scan():
      pressure_ok=confirmations>=3 and flow_ok
      score=20+max(0,22*(1-dist/max(dynamic,.01)))+min(18,5+max(0,math.log10(p["size_usd"]/material["minimum_notional_usd"]))*10)+min(15,impact*7.5)
      score+=8*bool(side*r15>=.0004)+10*bool(side*r60>=.0008)+8*book_ok+8*flow_ok+5*participation_ok+4*oi_ok
-     x={**material,"engine":"whale_liquidation_clusters_v3","observed_at_epoch":stamp,"symbol":sym,"side":side,"victim_side":p["side"],
+     x={**material,"engine":"whale_liquidation_all_market_v4","observed_at_epoch":stamp,"symbol":sym,"side":side,"victim_side":p["side"],
       "cluster_id":p["cluster_id"],"wallet_count":p["wallet_count"],"whale_size_usd":p["size_usd"],
       "liquidation_price":p["liq_price"],"mark_price":p["mark_price"],"distance_pct":dist,"dynamic_entry_distance_pct":dynamic,
       "position_age_seconds":p["position_age_seconds"],"r15":r15,"r60":r60,"orderbook_imbalance":imb,
       "flow_imbalance":flow,"cvd_1m":ctx.get("cvd_1m"),"volume_rate_z":vol_z,"volume_burst_ratio":burst,
-      "oi_delta_60s":oi,"micro_confirmations":confirmations,"score":round(min(100,score),2),"trend_ok":trend_ok,"pressure_ok":pressure_ok}
+      "oi_delta_60s":oi,"book_depth_usd":round(float(book.get("bid_depth_usd",0) or 0)+float(book.get("ask_depth_usd",0) or 0),2),
+      "day_volume_usd":float(S.get("_day_volumes",{}).get(sym,0) or 0),
+      "micro_confirmations":confirmations,"score":round(min(100,score),2),"trend_ok":trend_ok,"pressure_ok":pressure_ok}
      if not (trend_ok and pressure_ok):reject("directional_pressure_not_confirmed");continue
      candidates.append(x)
     candidates.sort(key=lambda x:x["score"],reverse=True)
@@ -904,7 +907,8 @@ def whale_liquidation_scan():
     qualified=[x for x in candidates if x["score"]>=LIQ_WHALE_SCORE_MIN and x["confirmation_streak"]>=2]
     for x in qualified:
      sym=x["symbol"];side=int(x["side"])
-     opened=whale_liq_open(sym,side,prices[sym],x["score"],x)
+     margin_fraction=liquidity_margin_fraction(sym,x,TRADE_MARGIN_FRACTION)
+     opened=whale_liq_open(sym,side,prices[sym],x["score"],x,margin_fraction)
      action="OPENED" if opened else "QUALIFIED";key=(x["cluster_id"],action)
      if stamp-last_signal.get(key,0)<15:continue
      last_signal[key]=stamp
@@ -915,15 +919,15 @@ def whale_liquidation_scan():
      except Exception as obs_exc:
       with LOCK:S["last_error"]="whale_observation: "+str(obs_exc)[:160]
     elapsed=time.monotonic()-started
-    with LOCK:S["sources"]["WhaleLiquidationScanner"]={"ok":True,"last_check":now(),"mode":"material_liquidation_clusters_v3",
-     "symbols":sorted(LIQ_WHALE_SYMBOLS),"scan_seconds":LIQ_WHALE_SCAN_SECONDS,"actual_scan_seconds":round(elapsed,3),
-     "min_whale_usd":LIQ_WHALE_MIN_BY_SYMBOL,"threshold_policy":"research_floors_plus_oi_volume_depth_not_optimized",
+    with LOCK:S["sources"]["WhaleLiquidationScanner"]={"ok":True,"last_check":now(),"mode":"all_market_liquidation_clusters_v4",
+     "symbols":"ALL_HYPERLIQUID_LISTED","scan_seconds":LIQ_WHALE_SCAN_SECONDS,"actual_scan_seconds":round(elapsed,3),
+     "min_whale_usd":{"major":LIQ_WHALE_MIN_BY_SYMBOL,"default":LIQ_WHALE_DEFAULT_MIN_USD},"threshold_policy":"dynamic_all_market_floor_plus_oi_volume_depth",
      "danger_positions":len(rows),"clusters":len(clusters),"eligible_candidates":len(candidates),"qualified_candidates":len(qualified),
      "rejections":rejections,"top_candidates":candidates[:5],"paper_positions":len(S["whale_positions"]),"paper_trades":S["whale_trades"],
      "coverage":"observed_hyperliquid_wallets_only_not_global_heatmap","shared_account_equity":round(S["equity"],4),"error":None}
    except Exception as exc:
     streaks={}
-    with LOCK:S["sources"]["WhaleLiquidationScanner"]={"ok":False,"last_check":now(),"mode":"material_liquidation_clusters_v3","error":str(exc)[:180]}
+    with LOCK:S["sources"]["WhaleLiquidationScanner"]={"ok":False,"last_check":now(),"mode":"all_market_liquidation_clusters_v4","error":str(exc)[:180]}
    SHUTDOWN.wait(max(.05,LIQ_WHALE_SCAN_SECONDS-(time.monotonic()-started)))
  finally:pool.shutdown(wait=False,cancel_futures=True)
 
@@ -1103,11 +1107,11 @@ def impulse_scan():
      sym=candidate["symbol"];side=int(candidate["side"]);tier=candidate.get("allocation_tier","SECONDARY")
      if _symbol_open_anywhere(sym):continue
      if tier=="SECONDARY":
-      if total_open>=TARGET_OPEN_POSITIONS:continue
       if sum(1 for x in open_sides if x==side)>=PUMP_SECONDARY_SAME_SIDE_CAP:continue
-      margin_fraction=PUMP_SECONDARY_MARGIN_FRACTION
+      ranked_fraction=liquidity_margin_fraction(sym,candidate,PUMP_SECONDARY_MARGIN_FRACTION)
+      margin_fraction=min(ranked_fraction,max(PUMP_SECONDARY_MARGIN_FRACTION,0.05))
      else:
-      margin_fraction=TRADE_MARGIN_FRACTION
+      margin_fraction=liquidity_margin_fraction(sym,candidate,TRADE_MARGIN_FRACTION)
      opened=bool(prices.get(sym)) and pump_open(sym,side,prices[sym],candidate["score"],candidate,margin_fraction)
      action="OPENED_"+tier if opened else "QUALIFIED_"+tier
      if opened:
