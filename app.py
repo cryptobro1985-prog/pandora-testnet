@@ -556,6 +556,37 @@ def engine_coordinator():
  try:STORE.release()
  except Exception:pass
 
+def post_lease_historical_restore():
+ # A rolling Render deploy starts before the old instance has released the
+ # single-writer lease. Historical repair must therefore run only *after* this
+ # instance owns the lease; otherwise the draining instance can overwrite the
+ # restored risk checkpoint with stale in-memory state.
+ while not SHUTDOWN.is_set():
+  with LOCK:active=bool(S.get("engine_active"))
+  if not active:
+   SHUTDOWN.wait(.5);continue
+  try:
+   with ACCOUNT_LOCK:
+    with LOCK:
+     if not S.get("engine_active"):continue
+    import restore_positions
+    restore_positions.main()
+    # The repair mutates durable PAPER state directly. Reload every persistent
+    # book before normal workers are allowed to mutate the account again.
+    pinit()
+    with LOCK:
+     S["last_checkpoint"]=now()
+     summary={"news_positions":len(S.get("positions",{})),
+              "pump_positions":len(S.get("pump_positions",{})),
+              "whale_positions":len(S.get("whale_positions",{})),
+              "equity":S.get("equity")}
+   journal("post_lease_historical_restore",None,summary)
+   with LOCK:S["sources"]["HistoricalRestore"]={"ok":True,"last_check":now(),"mode":"post_lease_one_shot",**summary}
+   return
+  except Exception as exc:
+   with LOCK:S["sources"]["HistoricalRestore"]={"ok":False,"last_check":now(),"mode":"post_lease_one_shot","error":type(exc).__name__+":"+str(exc)[:160]}
+   SHUTDOWN.wait(2)
+
 def operator_one_shot_actions():
  action_id=os.getenv("PANDORA_ONE_SHOT_ACTION_ID","").strip()
  symbol=os.getenv("PANDORA_ONE_SHOT_CLOSE_SYMBOL","").strip().upper()
@@ -2899,6 +2930,7 @@ if __name__=="__main__":
  workers=[threading.Thread(target=supervised_worker,args=(label,fn),daemon=True,name=label) for label,fn in worker_specs]
  # Operator action is intentionally one-shot; normal completion is not a health failure.
  workers.append(threading.Thread(target=operator_one_shot_actions,daemon=True,name="operator_actions"))
+ workers.append(threading.Thread(target=post_lease_historical_restore,daemon=True,name="historical_restore"))
  for worker in workers:worker.start()
  try:server.serve_forever()
  finally:
