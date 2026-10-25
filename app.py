@@ -82,7 +82,7 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 API=os.getenv("HYPERLIQUID_INFO_API","https://api.hyperliquid.xyz/info").strip() or "https://api.hyperliquid.xyz/info"
 DB="/tmp/pandora.sqlite3"
 START=time.time()
-S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0,"pump_positions":{},"pump_equity":100.0,"pump_realized_pnl":0.0,"pump_trades":0,"whale_positions":{},"whale_equity":100.0,"whale_realized_pnl":0.0,"whale_trades":0,"whale_v2_positions":{},"whale_v2_equity":100.0,"whale_v2_realized_pnl":0.0,"whale_v2_trades":0,"whale_v2_learning":{}}
+S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0,"pump_positions":{},"pump_equity":100.0,"pump_realized_pnl":0.0,"pump_trades":0,"whale_positions":{},"whale_equity":100.0,"whale_realized_pnl":0.0,"whale_trades":0,"whale_v2_positions":{},"whale_v2_equity":100.0,"whale_v2_realized_pnl":0.0,"whale_v2_trades":0,"whale_v2_learning":{},"news_health":{}}
 LOCK=threading.RLock()
 ACCOUNT_LOCK=threading.RLock()
 MARKET_REFRESH_LOCK=threading.Lock()
@@ -2964,7 +2964,7 @@ def build_dashboard_snapshot():
 "whale_v2_unrealized_pnl":round(whale_v2_unreal,4),"whale_v2_balance":round(float(state.get("whale_v2_equity",PAPER_RESET)),4),
 "whale_v2_total_equity":round(wl2_total,4),"whale_v2_pnl_pct":round(wl2_pnl_pct,3),
 "whale_v2_trades":state.get("whale_v2_trades",0),"whale_v2_engine":copy.deepcopy(state.get("sources",{}).get("WhaleLiquidationV2",{})),
-"whale_v2_learning":copy.deepcopy(state.get("whale_v2_learning",{})),"account_model":"UNIFIED_PAPER_ACCOUNT","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
+"whale_v2_learning":copy.deepcopy(state.get("whale_v2_learning",{})),"account_model":"UNIFIED_PAPER_ACCOUNT","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
 def dashboard():
  with LOCK:
@@ -3010,10 +3010,99 @@ def daily_audit_stats():
  except Exception as exc:
   return {"error":str(exc)[:180]}
 
+
+CORE_NEWS_SOURCES=("XOfficial:FirstSquawk","XOfficial:realDonaldTrump","XOfficial:federalreserve","XOfficial:SECGov","PiQDirect","FedMonetary","ECBOfficial")
+NEWS_SILENCE_WARN_SECONDS=max(300.0,float(os.getenv("NEWS_SILENCE_WARN_SECONDS","1800")))
+
+def news_health_snapshot(daily=None):
+ daily=daily or daily_audit_stats()
+ try:
+  with pg() as c:
+   rows=c.execute("""select ts,source,published_at,title,symbol,signal
+     from news_events
+     where ts::timestamptz >= date_trunc('day', now())
+     order by ts desc limit 600""").fetchall()
+   last_eligible=c.execute("""select recorded_at,event_id,payload
+     from audit_journal
+     where recorded_at::timestamptz >= date_trunc('day', now())
+       and kind='decision' and payload->>'reason'='eligible'
+     order by recorded_at desc limit 1""").fetchone()
+  wall=time.time();latest_by_source={};fresh_rows=[]
+  for row in rows:
+   source=str(row.get("source") or "")
+   if source not in CORE_NEWS_SOURCES:continue
+   rec=publication_epoch(row.get("ts"));pub=publication_epoch(row.get("published_at"))
+   lag=(rec-pub) if rec is not None and pub is not None else None
+   if source not in latest_by_source:
+    latest_by_source[source]={"received_at":row.get("ts"),"published_at":row.get("published_at"),
+      "headline":row.get("title"),"symbol":row.get("symbol"),"signal":row.get("signal"),
+      "publication_age_seconds":round(wall-pub,2) if pub is not None else None,
+      "ingest_lag_seconds":round(lag,2) if lag is not None else None}
+   if lag is not None and lag>=-10 and lag<=source_freshness_window(source):
+    fresh_rows.append((rec or 0,row,lag))
+  fresh_rows.sort(key=lambda item:item[0],reverse=True)
+  last_fresh=fresh_rows[0] if fresh_rows else None
+  reasons=daily.get("decision_reasons_today_utc",{}) if isinstance(daily,dict) else {}
+  stale=int(reasons.get("stale_news",0) or 0);decision_total=sum(int(v or 0) for v in reasons.values())
+  with LOCK:
+   xmon=copy.deepcopy(S.get("sources",{}).get("XCriticalMonitor",{}))
+   piq=copy.deepcopy(S.get("sources",{}).get("PiQDirect",{}))
+  source_health={}
+  xkeys=xmon.get("key_accounts") or {}
+  for source in CORE_NEWS_SOURCES:
+   latest=latest_by_source.get(source,{})
+   if source.startswith("XOfficial:"):
+    handle=source.split(":",1)[1];runtime=xkeys.get(handle,{})
+    transport_ok=bool(runtime.get("ok"))
+    latest_age=runtime.get("latest_post_age_seconds")
+    rt_verified=bool((runtime.get("delivery") or {}).get("realtime_verified"))
+   elif source=="PiQDirect":
+    transport_ok=bool(piq.get("ok"));latest_age=latest.get("publication_age_seconds");rt_verified=bool(piq.get("realtime_verified"))
+   else:
+    with LOCK:runtime=copy.deepcopy(S.get("sources",{}).get(source,{}))
+    transport_ok=bool(runtime.get("ok"));latest_age=latest.get("publication_age_seconds");rt_verified=bool(runtime.get("realtime_verified"))
+   if not transport_ok:status="ERROR"
+   elif latest_age is None:status="REALTIME_UNVERIFIED"
+   elif float(latest_age)>NEWS_SILENCE_WARN_SECONDS:status="NO_FRESH_NEWS"
+   else:status="ACTIVE"
+   source_health[source]={"transport_ok":transport_ok,"status":status,"latest_post_age_seconds":latest_age,
+     "realtime_verified":rt_verified,**latest}
+  last_fresh_age=round(wall-last_fresh[0],2) if last_fresh else None
+  scanners_ok=bool(xmon.get("ok")) and bool(piq.get("ok"))
+  status=("SCANNER_ERROR" if not scanners_ok else
+          "NO_FRESH_NEWS" if last_fresh_age is None or last_fresh_age>NEWS_SILENCE_WARN_SECONDS else "ACTIVE")
+  eligible_at=last_eligible.get("recorded_at") if last_eligible else None
+  eligible_epoch=publication_epoch(eligible_at) if eligible_at else None
+  return {"status":status,"scanner_transport_ok":scanners_ok,
+    "realtime_status":"VERIFIED" if bool(xmon.get("realtime_verified")) and bool(piq.get("realtime_verified")) else "UNVERIFIED",
+    "fresh_ingests_today":len(fresh_rows),"eligible_today":int(reasons.get("eligible",0) or 0),
+    "stale_today":stale,"decision_total_today":decision_total,
+    "stale_rate_pct":round(stale/decision_total*100,2) if decision_total else 0.0,
+    "last_fresh_received_at":last_fresh[1].get("ts") if last_fresh else None,
+    "last_fresh_published_at":last_fresh[1].get("published_at") if last_fresh else None,
+    "last_fresh_source":last_fresh[1].get("source") if last_fresh else None,
+    "last_fresh_headline":last_fresh[1].get("title") if last_fresh else None,
+    "last_fresh_age_seconds":last_fresh_age,
+    "last_eligible_at":eligible_at,
+    "last_eligible_age_seconds":round(wall-eligible_epoch,2) if eligible_epoch is not None else None,
+    "silence_warn_seconds":NEWS_SILENCE_WARN_SECONDS,"sources":source_health}
+ except Exception as exc:
+  return {"status":"HEALTH_QUERY_ERROR","scanner_transport_ok":False,"error":str(exc)[:180]}
+
+
 def operations_diagnostics():
  while not SHUTDOWN.is_set():
   try:
-   health=health_state();daily=daily_audit_stats()
+   health=health_state();daily=daily_audit_stats();news_health=news_health_snapshot(daily)
+   do_news_health_journal=False
+   with LOCK:
+    S["news_health"]=copy.deepcopy(news_health)
+    last_nh=float(S.get("_last_news_health_journal",0) or 0)
+    if time.time()-last_nh>=300:
+     S["_last_news_health_journal"]=time.time();do_news_health_journal=True
+   if do_news_health_journal:
+    try:journal("news_health_snapshot",None,news_health)
+    except Exception:pass
    with LOCK:
     report={"kind":"pandora_diagnostics","time":now(),"engine_active":S["engine_active"],
      "engine_error":S.get("engine_error"),"last_error":S.get("last_error"),"market_count":S.get("market_count"),
@@ -3033,7 +3122,7 @@ def operations_diagnostics():
      "whale_v2_equity":S.get("whale_v2_equity",PAPER_RESET),"whale_v2_learning":copy.deepcopy(S.get("whale_v2_learning",{})),
      "sizing_policy":{"margin_fraction":TRADE_MARGIN_FRACTION,"secondary_margin_fraction":PUMP_SECONDARY_MARGIN_FRACTION,"leverage":TRADE_LEVERAGE,"target_open_positions":TARGET_OPEN_POSITIONS,"max_open_positions":MAX_OPEN_POSITIONS,"pump_max_positions":PUMP_MAX_POSITIONS,"auto_topup_enabled":False,"contributed_capital":S.get("contributed_capital",PAPER_RESET),"micro_analysis_threads":MICRO_ANALYSIS_THREADS,"whale_v2_margin_fraction":WL2_MARGIN_FRACTION,"whale_v2_leverage":WL2_LEVERAGE,"whale_v2_max_positions":WL2_MAX_POSITIONS},
      "entry_rejections":dict(S.get("_entry_rejections",{})),
-     "daily_audit":daily,
+     "daily_audit":daily,"news_health":copy.deepcopy(S.get("news_health",{})),
      "learning":{"samples":S.get("adaptive",{}).get("samples",0),"generated_at":S.get("adaptive",{}).get("generated_at"),"policy":S.get("adaptive",{}).get("policy")},
      "risk_ready":health["risk_ready"],"latency_metrics":LATENCIES.snapshot(time.time()),"trade_stream":copy.deepcopy(S["sources"].get("MarketTradeStream",{}))}
    print(json.dumps(report,ensure_ascii=False,default=str),flush=True)
@@ -3073,8 +3162,18 @@ def html_dashboard(data):
 
  pump_pos="".join('<tr><td>%s</td><td>%s</td><td>$%s</td><td>$%s</td><td>%sx</td><td>%s</td><td>%s</td><td class="%s">%s%%</td><td class="%s">$%s</td><td>%s</td></tr>'%(esc(x["symbol"]),x["side"],x["margin_usd"],x["notional_usd"],x["leverage"],x["entry"],x["mark"],"posv" if x["roe_pct"]>=0 else "negv",x["roe_pct"],"posv" if x["unrealized_pnl"]>=0 else "negv",x["unrealized_pnl"],x.get("score",0)) for x in data.get("pump_positions",[])) or '<tr><td colspan=10>No pump/dump positions</td></tr>'
  src="".join('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'%(esc(k),(esc(v.get("scan_label")) if k=="XMonitor" and v.get("scan_label") else ("OK" if v.get("ok") else "ERROR")),esc(v.get("last_check","")),esc(v.get("error",""))) for k,v in data["sources"].items())
+
+ nh=data.get("news_health",{}) or {}
+ nh_status=nh.get("status","UNKNOWN")
+ nh_class="posv" if nh_status=="ACTIVE" else ("negv" if nh_status in ("SCANNER_ERROR","HEALTH_QUERY_ERROR") else "warnv")
+ last_fresh_age=nh.get("last_fresh_age_seconds")
+ last_fresh_txt=("-" if last_fresh_age is None else ("%ss"%round(float(last_fresh_age),1)))
+ news_health_cards='<div class="grid"><b>NEWS SCANNER<br><span class="%s">%s</span></b><b>REALTIME<br><span class="%s">%s</span></b><b>FRESH INGESTS TODAY<br>%s</b><b>ELIGIBLE TODAY<br>%s</b><b>STALE TODAY<br>%s (%s%%)</b><b>LAST FRESH AGE<br>%s</b></div>'%(nh_class,esc(nh_status),"posv" if nh.get("realtime_status")=="VERIFIED" else "warnv",esc(nh.get("realtime_status","UNVERIFIED")),nh.get("fresh_ingests_today",0),nh.get("eligible_today",0),nh.get("stale_today",0),nh.get("stale_rate_pct",0),last_fresh_txt)
+ nh_sources=nh.get("sources",{}) or {}
+ news_health_rows="".join('<tr><td>%s</td><td class="%s">%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'%(esc(k),"posv" if v.get("status")=="ACTIVE" else ("negv" if v.get("status")=="ERROR" else "warnv"),esc(v.get("status","-")),esc(v.get("latest_post_age_seconds","-")),esc(v.get("ingest_lag_seconds","-")),esc(v.get("realtime_verified",False))) for k,v in nh_sources.items()) or '<tr><td colspan=5>No news health data yet</td></tr>'
+ news_health_note='<div class="muted">Last fresh: %s · %s · %s</div>'%(esc(nh.get("last_fresh_received_at") or "-"),esc(nh.get("last_fresh_source") or "-"),esc(nh.get("last_fresh_headline") or "-"))
  news="".join('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'%(esc(x["ts"]),esc(x["source"]),esc(x["symbol"]),esc(x["signal"]),esc(x["title"])) for x in data["news"][:12])
- return '''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>PANDORA LIVE</title><style>body{font-family:system-ui;background:#080b10;color:#e8edf5;margin:24px}h1{margin:0}.muted{color:#8b98aa}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:18px 0}.grid b{background:#111722;padding:16px;border-radius:12px}table{width:100%%;border-collapse:collapse;background:#0e141e;margin-bottom:22px}td,th{padding:9px;border-bottom:1px solid #202938;text-align:left;font-size:13px}th{color:#91a2b8}.posv{color:#49d17d;font-weight:700}.negv{color:#ff6262;font-weight:700}a{color:#8bc4ff}</style></head><body><h1>PANDORA LIVE</h1><div class="muted">Paper engine · dashboard refresh 5s · last market poll %s</div>%s<h2>Open positions</h2><button onclick="closePos(null)">Close Everything</button><button onclick="location.reload()">Refresh</button><p id="actionResult"></p><table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Trigger</th><th>Action</th></tr>%s</table><h2>Pump/Dump PAPER positions</h2><table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h2>Whale Liquidation</h2>%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h3>Whale liquidation candidates</h3><table><tr><th>Token</th><th>Trade side</th><th>Whale size</th><th>Distance</th><th>Score</th><th>Victim</th><th>Liq price</th></tr>%s</table><h2>Whale Liquidation 2.0 — isolated $100 A/B sleeve</h2>%s%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h2>Closed trades</h2><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>PnL</th><th>Reason</th></tr>%s</table><h2>Sources</h2><table><tr><th>Source</th><th>Status</th><th>Checked</th><th>Error</th></tr>%s</table><h2>Latest news</h2><table><tr><th>Time</th><th>Source</th><th>Token</th><th>Raw signal</th><th>Headline</th></tr>%s</table><p>Errors: %s · Last error: %s</p><p><a href="/api/dashboard">JSON dashboard</a> · <a href="/features">Features</a> · <a href="/trades">Trades</a> · <a href="/news">News</a></p><script>let closing=false;setInterval(()=>{if(!closing&&document.visibilityState==="visible")location.reload()},5000);async function closePos(sym){if(closing||!confirm(sym?"Close "+sym+"?":"Close ALL positions?"))return;closing=true;const status=document.getElementById("actionResult");status.textContent="Processing close request...";try{const r=await fetch("/api/positions/close",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(sym?{symbol:sym}:{all:true})});const result=await r.json();status.textContent=r.ok?"Close confirmed: "+JSON.stringify(result):(r.status===401?"Controls locked: open the control-access link once, then retry.":"Close failed ("+r.status+"): "+JSON.stringify(result));if(r.ok){location.reload();return}}catch(e){status.textContent="Close request failed: "+String(e)}finally{closing=false}}</script></body></html>'''%(esc(data["last_poll"]),cards,pos,pump_pos,whale_cards,whale_pos_html,whale_candidates_html,wl2_cards,wl2_compare,wl2_pos_html,trs,src,news,data["errors"],esc(data["last_error"]))
+ return '''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>PANDORA LIVE</title><style>body{font-family:system-ui;background:#080b10;color:#e8edf5;margin:24px}h1{margin:0}.muted{color:#8b98aa}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:18px 0}.grid b{background:#111722;padding:16px;border-radius:12px}table{width:100%%;border-collapse:collapse;background:#0e141e;margin-bottom:22px}td,th{padding:9px;border-bottom:1px solid #202938;text-align:left;font-size:13px}th{color:#91a2b8}.posv{color:#49d17d;font-weight:700}.negv{color:#ff6262;font-weight:700}.warnv{color:#f6c453;font-weight:700}a{color:#8bc4ff}</style></head><body><h1>PANDORA LIVE</h1><div class="muted">Paper engine · dashboard refresh 5s · last market poll %s</div>%s<h2>Open positions</h2><button onclick="closePos(null)">Close Everything</button><button onclick="location.reload()">Refresh</button><p id="actionResult"></p><table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Trigger</th><th>Action</th></tr>%s</table><h2>Pump/Dump PAPER positions</h2><table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h2>Whale Liquidation</h2>%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h3>Whale liquidation candidates</h3><table><tr><th>Token</th><th>Trade side</th><th>Whale size</th><th>Distance</th><th>Score</th><th>Victim</th><th>Liq price</th></tr>%s</table><h2>Whale Liquidation 2.0 — isolated $100 A/B sleeve</h2>%s%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h2>Closed trades</h2><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>PnL</th><th>Reason</th></tr>%s</table><h2>News Scanner Health</h2>%s%s<table><tr><th>Source</th><th>Freshness</th><th>Latest post age (s)</th><th>Ingest lag (s)</th><th>Realtime verified</th></tr>%s</table><h2>Sources</h2><table><tr><th>Source</th><th>Status</th><th>Checked</th><th>Error</th></tr>%s</table><h2>Latest news</h2><table><tr><th>Time</th><th>Source</th><th>Token</th><th>Raw signal</th><th>Headline</th></tr>%s</table><p>Errors: %s · Last error: %s</p><p><a href="/api/dashboard">JSON dashboard</a> · <a href="/features">Features</a> · <a href="/trades">Trades</a> · <a href="/news">News</a></p><script>let closing=false;setInterval(()=>{if(!closing&&document.visibilityState==="visible")location.reload()},5000);async function closePos(sym){if(closing||!confirm(sym?"Close "+sym+"?":"Close ALL positions?"))return;closing=true;const status=document.getElementById("actionResult");status.textContent="Processing close request...";try{const r=await fetch("/api/positions/close",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(sym?{symbol:sym}:{all:true})});const result=await r.json();status.textContent=r.ok?"Close confirmed: "+JSON.stringify(result):(r.status===401?"Controls locked: open the control-access link once, then retry.":"Close failed ("+r.status+"): "+JSON.stringify(result));if(r.ok){location.reload();return}}catch(e){status.textContent="Close request failed: "+String(e)}finally{closing=false}}</script></body></html>'''%(esc(data["last_poll"]),cards,pos,pump_pos,whale_cards,whale_pos_html,whale_candidates_html,wl2_cards,wl2_compare,wl2_pos_html,trs,news_health_cards,news_health_note,news_health_rows,src,news,data["errors"],esc(data["last_error"]))
 
 
 @account_mutation
