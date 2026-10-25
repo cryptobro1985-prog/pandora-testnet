@@ -82,6 +82,7 @@ START=time.time()
 S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0,"pump_positions":{},"pump_equity":100.0,"pump_realized_pnl":0.0,"pump_trades":0,"whale_positions":{},"whale_equity":100.0,"whale_realized_pnl":0.0,"whale_trades":0}
 LOCK=threading.RLock()
 ACCOUNT_LOCK=threading.RLock()
+MARKET_REFRESH_LOCK=threading.Lock()
 SHUTDOWN=threading.Event()
 def account_mutation(fn):
  @functools.wraps(fn)
@@ -962,12 +963,12 @@ def whale_liquidation_scan():
   while not SHUTDOWN.is_set():
    started=time.monotonic()
    try:
-    with LOCK:
-     active=S["engine_active"];prices=dict(S.get("_prices",{}));history={k:list(v) for k,v in S.get("_timeline",{}).items()};contexts=copy.deepcopy(S.get("_pump_ctx",{}))
-     market_epoch=S.get("_last_poll_epoch",0)
+    with LOCK:active=S["engine_active"]
     if not active:
      SHUTDOWN.wait(0.5);continue
-    if time.time()-market_epoch>10:raise RuntimeError("stale_market_prices")
+    prices=refresh_market_prices(max_age=8.0)
+    with LOCK:
+     history={k:list(v) for k,v in S.get("_timeline",{}).items()};contexts=copy.deepcopy(S.get("_pump_ctx",{}))
     data=hyperdata("/v1/positions/danger-zone?threshold="+urllib.parse.quote(str(LIQ_WHALE_MAX_DISTANCE_PCT)))
     if not isinstance(data,dict) or not isinstance(data.get("positions"),list):raise RuntimeError("danger_zone_unavailable_or_invalid")
     rows=data["positions"];stamp=time.time();scan_id+=1
@@ -1160,23 +1161,41 @@ def reconcile_open_paper_sizing(prices):
    changed+=1
  return changed
 
+def refresh_market_prices(force=False,max_age=8.0):
+ # Emergency refresh keeps scanners live even when the position-checkpoint part
+ # of the market worker is busy writing many PAPER positions to PostgreSQL.
+ # Network I/O is serialized but never holds the global state lock.
+ with LOCK:
+  cached=dict(S.get("_prices",{}));last=float(S.get("_last_poll_epoch",0) or 0)
+ if not force and cached and time.time()-last<=max_age:return cached
+ with MARKET_REFRESH_LOCK:
+  with LOCK:
+   cached=dict(S.get("_prices",{}));last=float(S.get("_last_poll_epoch",0) or 0)
+  if not force and cached and time.time()-last<=max_age:return cached
+  mids=json.loads(get(API,{"type":"allMids"}))
+  valid={k:float(v) for k,v in mids.items() if re.match(r"^[A-Z0-9]{2,15}$",k) and math.isfinite(float(v)) and float(v)>0}
+  if not valid:raise ValueError("empty market response")
+  stamp=time.time()
+  with LOCK:
+   S["last_poll"]=now();S["_last_poll_epoch"]=stamp;S["market_count"]=len(valid);S["_prices"]=valid;S["last_market_error"]=None
+   for sym,px in valid.items():
+    track=S.setdefault("_timeline",{}).setdefault(sym,[])
+    if not track or stamp-float(track[-1][0])>=0.5:
+     track.append((stamp,px))
+     if len(track)>600:del track[:-600]
+    hist=S.setdefault("_hist",{}).setdefault(sym,[])
+    if not hist or float(hist[-1])!=px:
+     hist.append(px)
+     if len(hist)>120:del hist[:-120]
+  return valid
+
 def market():
  while not SHUTDOWN.is_set():
   S["_market_heartbeat"]=time.time()
   try:
-   mids=json.loads(get(API,{"type":"allMids"}))
-   valid={k:float(v) for k,v in mids.items() if re.match(r"^[A-Z0-9]{2,15}$",k) and math.isfinite(float(v)) and float(v)>0}
-   if not valid:raise ValueError("empty market response")
+   valid=refresh_market_prices(force=True)
    with LOCK:
-    S["last_poll"]=now();S["_last_poll_epoch"]=time.time();S["market_count"]=len(valid);S["_prices"]=valid
     positions=copy.deepcopy(S["positions"]);active=S["engine_active"]
-    stamp=time.time()
-    for sym,px in valid.items():
-     track=S.setdefault("_timeline",{}).setdefault(sym,[]);track.append((stamp,px))
-     if len(track)>600:del track[:-600]
-     hist=S.setdefault("_hist",{}).setdefault(sym,[]);hist.append(px)
-     if len(hist)>120:del hist[:-120]
-    S["last_market_error"]=None
    # Network and SQL work never owns the global state lock. Sources, health
    # and the lease heartbeat remain responsive during a slow checkpoint.
    if active and not SHUTDOWN.is_set():
@@ -1243,13 +1262,14 @@ def impulse_scan():
   while not SHUTDOWN.is_set():
    started=time.monotonic()
    try:
-    with LOCK:
-     active=S["engine_active"];prices=dict(S.get("_prices",{}));history={k:list(v) for k,v in S.get("_timeline",{}).items()}
-     volumes=dict(S.get("_day_volumes",{}));contexts=copy.deepcopy(S.get("_pump_ctx",{}))
+    with LOCK:active=S["engine_active"]
     if not active:
      SHUTDOWN.wait(0.5);continue
+    prices=refresh_market_prices(max_age=8.0)
+    with LOCK:
+     history={k:list(v) for k,v in S.get("_timeline",{}).items()}
+     volumes=dict(S.get("_day_volumes",{}));contexts=copy.deepcopy(S.get("_pump_ctx",{}))
     stamp=time.time()
-    if stamp-S.get("_last_poll_epoch",0)>10:raise RuntimeError("stale_market_prices")
     regime=market_regime(prices,history,volumes,stamp)
     for sym in contexts:contexts[sym].update(MARKET_OBS.context(sym,stamp))
     found=momentum_candidates(prices,history,volumes,stamp,minimum_day_volume=0.0,contexts=contexts)
