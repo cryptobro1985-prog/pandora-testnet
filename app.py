@@ -30,7 +30,7 @@ def choose(db_path,current=(-0.10,0.20)):
 
 WATCH_GROUPS={
  # Deliberately small high-signal X core. PiQ is scanned directly from its public site, not X.
- "critical":["FirstSquawk","realDonaldTrump","federalreserve","SECGov","elonmusk"]
+ "critical":["FirstSquawk","realDonaldTrump","federalreserve","SECGov"]
 }
 WATCH=[];WATCH_CATEGORY={}
 for _category,_handles in WATCH_GROUPS.items():
@@ -178,10 +178,12 @@ def is_price_action_only_news(title,event_type):
  return event_type not in CAUSAL_EVENT_TYPES and any(term in lo for term in PRICE_ACTION_ONLY_TERMS)
 def source_weight(source):
  if source.startswith("XIndex:"):base=0.40
- elif source=="XOfficial:FirstSquawk":base=0.98
+ elif source=="XOfficial:FirstSquawk":base=0.99
+ elif source=="XOfficial:realDonaldTrump":base=1.00
+ elif source in ("XOfficial:federalreserve","XOfficial:SECGov"):base=1.00
  elif source=="PiQDirect":base=0.96
  elif source.startswith("XOfficial:"):base=0.92
- elif source.startswith("TruthSocialPublic"):base=0.98
+ elif source.startswith("TruthSocialPublic"):base=1.00
  else:base=float(SOURCE_WEIGHTS.get(source,0.50))
  learned=S.get("adaptive",{}).get("source_multipliers",{}) if S.get("mode")=="PAPER_ONLY" else {}
  return max(0.20,min(1.00,base*float(learned.get(source,1.0))))
@@ -1203,6 +1205,21 @@ def open_signal(sym,side,title,prices,event_id=None,published_at=None,source="")
 def ingest_event(ident,source,title,published_at=None,source_url=None):
  # No long-running source or analysis code owns the risk loop's lock.
  if not S["engine_active"] or SHUTDOWN.is_set():return False
+ stamp=publication_epoch(published_at);received=time.time()
+ if stamp is not None and 0<=received-stamp<=NEWS_MAX_AGE_SECONDS:
+  normalized=re.sub(r"[^a-z0-9$]+"," ",htmlmod.unescape(title).lower()).strip()
+  if normalized:
+   hkey=hashlib.sha256(normalized.encode()).hexdigest()
+   with LOCK:
+    cache=S.setdefault("_recent_news_keys",{})
+    last=cache.get(hkey)
+    if last is not None and received-last<600:
+     return False
+    cache[hkey]=received
+    if len(cache)>2000:
+     cutoff=received-900
+     for k,t in list(cache.items()):
+      if t<cutoff:cache.pop(k,None)
  with LOCK:prices=dict(S.get("_prices",{}))
  sym,side=detect(title,prices)
  non_market=is_non_market_news(title)
@@ -2401,12 +2418,13 @@ if __name__=="__main__":
  worker_specs=[
   ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),
   ("telemetry",telemetry),("pump_dump",impulse_scan),("whale_liquidations",whale_liquidation_scan),
-  ("adapt",adapt),("x_critical_4s",x_critical_realtime),("piq_direct",piq_direct_realtime),
+  ("adapt",adapt),("x_critical_4s",x_critical_realtime),("truth_trump",free_truth_realtime),
+  ("whitehouse_official",whitehouse_official_realtime),("piq_direct",piq_direct_realtime),
   ("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)
  ]
  # Keep exactly one live ingestion path per social network to avoid duplicate posts,
- # extra request load and conflicting source timestamps. x_critical_realtime has its
- # own backend fallback chain; free_truth_realtime handles Trump on Truth Social.
+ # extra request load and conflicting source timestamps. X uses the four-account core;
+ # Truth Social watches Trump only; PiQ is the direct public-site wire.
  for name,url in FEEDS.items():
   if not name.startswith("XIndex:") and name not in SEARCH_INDEX_FEEDS:
    worker_specs.append(("feed:"+name,lambda n=name,u=url:news_feed(n,u)))
