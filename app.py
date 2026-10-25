@@ -90,13 +90,14 @@ def account_mutation(fn):
   with ACCOUNT_LOCK:return fn(*args,**kwargs)
  return run
 TRADE_LEVERAGE=max(1.0,min(50.0,float(os.getenv("TRADE_LEVERAGE","25"))))
-TRADE_MARGIN_FRACTION=max(0.01,min(0.25,float(os.getenv("TRADE_MARGIN_FRACTION","0.10"))))
-TARGET_OPEN_POSITIONS=max(1,min(7,int(os.getenv("TARGET_OPEN_POSITIONS","5"))))
-MAX_OPEN_POSITIONS=max(TARGET_OPEN_POSITIONS,min(10,int(os.getenv("MAX_OPEN_POSITIONS","7"))))
-PUMP_MAX_POSITIONS=max(TARGET_OPEN_POSITIONS,min(MAX_OPEN_POSITIONS,int(os.getenv("PUMP_MAX_POSITIONS","5"))))
+TRADE_MARGIN_FRACTION=max(0.01,min(0.20,float(os.getenv("TRADE_MARGIN_FRACTION","0.05"))))
+POSITION_MARGIN_MAX=max(TRADE_MARGIN_FRACTION,min(0.20,float(os.getenv("POSITION_MARGIN_MAX","0.20"))))
+TARGET_OPEN_POSITIONS=max(1,min(20,int(os.getenv("TARGET_OPEN_POSITIONS","10"))))
+MAX_OPEN_POSITIONS=max(TARGET_OPEN_POSITIONS,min(30,int(os.getenv("MAX_OPEN_POSITIONS","30"))))
+PUMP_MAX_POSITIONS=max(TARGET_OPEN_POSITIONS,min(MAX_OPEN_POSITIONS,int(os.getenv("PUMP_MAX_POSITIONS","20"))))
 PUMP_PRIMARY_SCORE=max(70.0,min(100.0,float(os.getenv("PUMP_PRIMARY_SCORE","84"))))
 PUMP_SECONDARY_SCORE=max(60.0,min(PUMP_PRIMARY_SCORE,float(os.getenv("PUMP_SECONDARY_SCORE","76"))))
-PUMP_SECONDARY_MARGIN_FRACTION=max(0.01,min(TRADE_MARGIN_FRACTION,float(os.getenv("PUMP_SECONDARY_MARGIN_FRACTION","0.05"))))
+PUMP_SECONDARY_MARGIN_FRACTION=max(0.01,min(TRADE_MARGIN_FRACTION,float(os.getenv("PUMP_SECONDARY_MARGIN_FRACTION","0.025"))))
 PUMP_QUEUE_TTL_SECONDS=max(15.0,min(180.0,float(os.getenv("PUMP_QUEUE_TTL_SECONDS","60"))))
 PUMP_SECONDARY_SAME_SIDE_CAP=max(1,min(TARGET_OPEN_POSITIONS,int(os.getenv("PUMP_SECONDARY_SAME_SIDE_CAP","4"))))
 PAPER_TOPUP_STEP=max(10.0,float(os.getenv("PAPER_TOPUP_STEP","100")))
@@ -112,10 +113,12 @@ LIQ_WHALE_MIN_USD=max(100000.0,float(os.getenv("LIQ_WHALE_MIN_USD","2000000")))
 LIQ_WHALE_SCORE_MIN=max(50.0,float(os.getenv("LIQ_WHALE_SCORE_MIN","76")))
 LIQ_WHALE_MAX_POSITION_AGE_SECONDS=max(30.0,float(os.getenv("LIQ_WHALE_MAX_POSITION_AGE_SECONDS","180")))
 LIQ_WHALE_MIN_BY_SYMBOL=dict(MIN_NOTIONAL_USD)
+LIQ_WHALE_DEFAULT_MIN_USD=max(25_000.0,float(os.getenv("LIQ_WHALE_DEFAULT_MIN_USD","25000")))
 LIQ_WHALE_BASE_ENTRY_DISTANCE={"BTC":0.45,"ETH":0.60,"SOL":0.75}
+LIQ_WHALE_DEFAULT_ENTRY_DISTANCE=max(0.35,min(LIQ_WHALE_MAX_DISTANCE_PCT,float(os.getenv("LIQ_WHALE_DEFAULT_ENTRY_DISTANCE","0.90"))))
 LIQ_WHALE_LEV=TRADE_LEVERAGE
 LIQ_WHALE_MARGIN_FRACTION=TRADE_MARGIN_FRACTION
-LIQ_WHALE_SYMBOLS={"BTC","ETH","SOL"}
+LIQ_WHALE_SYMBOLS=set()
 if not math.isfinite(NEWS_MAX_AGE_SECONDS) or NEWS_MAX_AGE_SECONDS<=0:raise ValueError("invalid news freshness window")
 if not math.isfinite(NEWS_POLL_SECONDS) or NEWS_POLL_SECONDS<1:raise ValueError("invalid news poll interval")
 S.update({"engine_active":False,"engine_error":None,"last_checkpoint":None,"last_market_error":None})
@@ -579,7 +582,7 @@ def _reserve_shared_entry(symbol,margin_fraction=None):
   if _symbol_open_anywhere(symbol) or symbol in reservations:
    return False,0.0,"symbol_already_open_shared_account",0.0
   reservations[symbol]=0.0
- fraction=TRADE_MARGIN_FRACTION if margin_fraction is None else max(0.01,min(TRADE_MARGIN_FRACTION,float(margin_fraction)))
+ fraction=TRADE_MARGIN_FRACTION if margin_fraction is None else max(0.01,min(POSITION_MARGIN_MAX,float(margin_fraction)))
  try:
   while True:
    with LOCK:
@@ -613,6 +616,31 @@ def _reserve_shared_entry(symbol,margin_fraction=None):
 
 def _release_shared_entry(symbol):
  with LOCK:S.setdefault("_entry_reservations",{}).pop(symbol,None)
+
+def liquidity_margin_fraction(symbol,features,base=None):
+ """Paper-test sizing from executable liquidity, never from symbol name alone."""
+ base=TRADE_MARGIN_FRACTION if base is None else float(base)
+ depth=float(features.get("book_depth_usd",0) or features.get("opposing_depth_usd",0) or 0)
+ day=float(features.get("day_volume_usd",0) or 0)
+ score=float(features.get("score",0) or 0)
+ if depth<=0:
+  frac=max(0.01,min(base,POSITION_MARGIN_MAX))
+ elif depth<50_000:frac=0.02
+ elif depth<250_000:frac=0.03
+ elif depth<1_000_000:frac=0.05
+ elif depth<5_000_000:frac=0.08
+ elif depth<20_000_000:frac=0.12
+ elif depth<50_000_000:frac=0.15
+ else:frac=0.18
+ if depth>=50_000_000 and day>=500_000_000:frac=0.20
+ if score and score<80:frac*=0.80
+ elif score>=92:frac*=1.10
+ frac=max(0.01,min(POSITION_MARGIN_MAX,frac))
+ features["sizing_book_depth_usd"]=round(depth,2)
+ features["sizing_day_volume_usd"]=round(day,2)
+ features["allocation_margin_fraction"]=round(frac,4)
+ features["allocation_policy"]="liquidity_ranked_paper_v1"
+ return frac
 
 def current_entry_price(symbol):
  with LOCK:
@@ -705,14 +733,15 @@ def pump_mark_positions(prices):
     STORE.fence(db);db.execute("update pump_positions set peak_roe=%s,risk_state=%s::jsonb where symbol=%s and opened=%s",(peak,json.dumps(risk_state(evaluated)),sym,pos["opened"]))
 
 @account_mutation
-def whale_liq_open(symbol,side,price,score,features):
+def whale_liq_open(symbol,side,price,score,features,margin_fraction=None):
  if S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or side not in (-1,1) or not price:return False
  if features.get("observed_at_epoch") and not 0<=time.time()-features["observed_at_epoch"]<=10:return False
  price=current_entry_price(symbol)
  if price is None:return False
  with LOCK:
   if not S["engine_active"]:return False
- reserved,margin,reason,free=_reserve_shared_entry(symbol)
+ margin_fraction=liquidity_margin_fraction(symbol,features,TRADE_MARGIN_FRACTION) if margin_fraction is None else margin_fraction
+ reserved,margin,reason,free=_reserve_shared_entry(symbol,margin_fraction)
  if not reserved:
   journal("entry_skipped",None,{"strategy":"whale_liquidation","symbol":symbol,"reason":reason,"free_margin":free})
   return False
