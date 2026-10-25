@@ -25,6 +25,11 @@ from accounting import paper_pnl
 from whale_v2 import (EligibilityTracker as WL2EligibilityTracker, evaluate_position as evaluate_wl2_position,
                       initial_position_state as wl2_initial_position_state, learning_summary as wl2_learning_summary,
                       WL2_MARGIN_FRACTION, WL2_LEVERAGE, WL2_MAX_POSITIONS, WL2_POLICY)
+from hype_h1_swing import (POLICY as HYPE_SWING_POLICY, SYMBOL as HYPE_SWING_SYMBOL,
+                           INTERVAL as HYPE_SWING_INTERVAL, STARTING_EQUITY as HYPE_SWING_STARTING_EQUITY,
+                           MARGIN_FRACTION as HYPE_SWING_MARGIN_FRACTION, LEVERAGE as HYPE_SWING_LEVERAGE,
+                           analyze as analyze_hype_h1, position_exit as hype_position_exit,
+                           update_path as hype_update_path, shadow_triggers as hype_shadow_triggers)
 LATENCIES=LatencyMetrics()
 MARKET_OBS=RollingMarketData(max_symbols=512)
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
@@ -82,7 +87,7 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 API=os.getenv("HYPERLIQUID_INFO_API","https://api.hyperliquid.xyz/info").strip() or "https://api.hyperliquid.xyz/info"
 DB="/tmp/pandora.sqlite3"
 START=time.time()
-S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0,"pump_positions":{},"pump_equity":100.0,"pump_realized_pnl":0.0,"pump_trades":0,"whale_positions":{},"whale_equity":100.0,"whale_realized_pnl":0.0,"whale_trades":0,"whale_v2_positions":{},"whale_v2_equity":100.0,"whale_v2_realized_pnl":0.0,"whale_v2_trades":0,"whale_v2_learning":{},"news_health":{}}
+S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0,"pump_positions":{},"pump_equity":100.0,"pump_realized_pnl":0.0,"pump_trades":0,"whale_positions":{},"whale_equity":100.0,"whale_realized_pnl":0.0,"whale_trades":0,"whale_v2_positions":{},"whale_v2_equity":100.0,"whale_v2_realized_pnl":0.0,"whale_v2_trades":0,"whale_v2_learning":{},"hype_swing_position":null,"hype_swing_equity":100.0,"hype_swing_realized_pnl":0.0,"hype_swing_trades":0,"hype_swing_started_at":null,"news_health":{}}
 LOCK=threading.RLock()
 ACCOUNT_LOCK=threading.RLock()
 MARKET_REFRESH_LOCK=threading.Lock()
@@ -270,6 +275,14 @@ def pinit():
   c.execute("create table if not exists whale_liq_v2_trade_history (id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision, pnl double precision, reason text, score double precision, features jsonb)")
   c.execute("create table if not exists whale_liq_v2_signal_journal (id text primary key, ts text not null, symbol text, side integer, score double precision, action text, features jsonb)")
   c.execute("create table if not exists whale_liq_v2_learning_snapshots (id bigserial primary key, recorded_at text not null, samples integer not null, payload jsonb not null)")
+  c.execute("create table if not exists hype_swing_account_state (id integer primary key, equity double precision not null, realized_pnl double precision not null, started_at text not null, updated_at text not null)")
+  c.execute("create table if not exists hype_swing_positions (symbol text primary key, side integer not null, entry double precision not null, notional double precision not null, margin double precision not null, leverage double precision not null, opened text not null, opened_epoch double precision not null, signal_candle_time bigint, features jsonb not null default '{}'::jsonb)")
+  c.execute("create table if not exists hype_swing_trade_history (id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision, pnl double precision, reason text, margin double precision, notional double precision, leverage double precision, features jsonb)")
+  c.execute("create table if not exists hype_swing_signal_journal (id text primary key, ts text not null, candle_time bigint, action text not null, side integer, price double precision, features jsonb not null default '{}'::jsonb)")
+  c.execute("create table if not exists hype_swing_shadow_exits (id bigserial primary key, opened text not null, entry_candle_time bigint, side integer not null, entry double precision not null, extreme_exit_at text, extreme_exit_price double precision, weakening_exit_at text, weakening_exit_price double precision, actual_exit_at text, actual_exit_price double precision, actual_exit_reason text, status text not null default 'OPEN', context jsonb not null default '{}'::jsonb)")
+  c.execute("create index if not exists hype_swing_trade_closed_idx on hype_swing_trade_history(closed desc)")
+  c.execute("create index if not exists hype_swing_signal_time_idx on hype_swing_signal_journal(ts desc)")
+  c.execute("create index if not exists hype_swing_shadow_open_idx on hype_swing_shadow_exits(status,opened)")
   c.execute("create index if not exists whale_liq_v2_trade_closed_idx on whale_liq_v2_trade_history(closed desc)")
   c.execute("create index if not exists whale_liq_v2_signal_time_idx on whale_liq_v2_signal_journal(ts desc)")
   c.execute("create table if not exists account_capacity_snapshots (id bigserial primary key, ts text not null, equity double precision not null, contributed_capital double precision not null, used_margin double precision not null, free_margin double precision not null, margin_utilization_pct double precision not null, news_positions integer not null, pump_positions integer not null, whale_positions integer not null, total_positions integer not null, entry_margin_fraction double precision not null)")
@@ -313,6 +326,14 @@ def pinit():
    v2positions[r["symbol"]]={"side":int(r["side"]),"entry":float(r["entry"]),"notional":float(r["notional"]),"margin":float(r["margin"]),"leverage":float(r["leverage"]),"opened":r["opened"],"t":float(r["opened_epoch"]),"score":float(r["score"] or 0),"features":r["features"] or {}}
   S["whale_v2_positions"]=v2positions
   S["whale_v2_trades"]=c.execute("select count(*) as n from whale_liq_v2_trade_history").fetchone()["n"]
+  c.execute("insert into hype_swing_account_state(id,equity,realized_pnl,started_at,updated_at) values(1,%s,0,%s,%s) on conflict(id) do nothing",(HYPE_SWING_STARTING_EQUITY,now(),now()))
+  hsacct=c.execute("select equity,realized_pnl,started_at from hype_swing_account_state where id=1").fetchone()
+  S["hype_swing_equity"]=float(hsacct["equity"]);S["hype_swing_realized_pnl"]=float(hsacct["realized_pnl"]);S["hype_swing_started_at"]=hsacct["started_at"]
+  hsrow=c.execute("select * from hype_swing_positions where symbol=%s",(HYPE_SWING_SYMBOL,)).fetchone()
+  S["hype_swing_position"]=({"side":int(hsrow["side"]),"entry":float(hsrow["entry"]),"notional":float(hsrow["notional"]),
+    "margin":float(hsrow["margin"]),"leverage":float(hsrow["leverage"]),"opened":hsrow["opened"],"t":float(hsrow["opened_epoch"]),
+    "signal_candle_time":int(hsrow["signal_candle_time"] or 0),"features":hsrow["features"] or {}} if hsrow else None)
+  S["hype_swing_trades"]=c.execute("select count(*) as n from hype_swing_trade_history").fetchone()["n"]
  STORE.migrate()
  _,positions=STORE.load(recover_legacy=False)
  S["positions"]=positions
@@ -1473,6 +1494,205 @@ def refresh_market_prices(force=False,max_age=8.0):
      if len(hist)>120:del hist[:-120]
   return valid
 
+
+def _hype_h1_candles(hours=120):
+ end_ms=int(time.time()*1000);start_ms=end_ms-int(max(24,hours)*3600*1000)
+ rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":HYPE_SWING_SYMBOL,"interval":HYPE_SWING_INTERVAL,"startTime":start_ms,"endTime":end_ms}}))
+ if not isinstance(rows,list):raise RuntimeError("hype_h1_candle_snapshot_invalid")
+ return rows,end_ms
+
+def _hype_claim(action,side,analysis,price=None):
+ candle=int(analysis.get("signal_candle_time") or 0)
+ ident="HYPE_H1:%s:%s:%s"%(action,candle,int(side or 0))
+ payload={**analysis,"action":action,"side":int(side or 0),"policy":HYPE_SWING_POLICY}
+ with pg() as db:
+  with db.transaction():
+   STORE.fence(db)
+   row=db.execute("""insert into hype_swing_signal_journal(id,ts,candle_time,action,side,price,features)
+     values(%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(id) do nothing returning id""",
+     (ident,now(),candle,action,int(side or 0),price,json.dumps(payload,default=str))).fetchone()
+   if row and action=="OBSERVE":
+    db.execute("insert into scanner_observations(ts,module,payload) values(%s,%s,%s::jsonb)",
+      (now(),"hype_h1_local_swing_v1",json.dumps(payload,default=str)))
+ return bool(row)
+
+@account_mutation
+def hype_swing_open(side,price,analysis):
+ if S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or int(side) not in (-1,1):return False
+ with LOCK:
+  if not S.get("engine_active") or S.get("hype_swing_position"):return False
+  equity=float(S.get("hype_swing_equity",HYPE_SWING_STARTING_EQUITY) or 0)
+ if equity<=0:return False
+ price=float(price);margin=equity*HYPE_SWING_MARGIN_FRACTION;notional=margin*HYPE_SWING_LEVERAGE
+ if margin<=0 or notional<=0:return False
+ if not _hype_claim("OPEN",side,analysis,price):return False
+ opened=now();epoch=time.time()
+ features={**analysis,"policy":HYPE_SWING_POLICY,"allocation_margin_fraction":HYPE_SWING_MARGIN_FRACTION,
+  "leverage":HYPE_SWING_LEVERAGE,"mfe_price_move":0.0,"mae_price_move":0.0,"mfe_roe_pct":0.0,"mae_roe_pct":0.0,
+  "entry_mark":price,"shadow_exit_modes":["opposite_local_extreme","h1_momentum_weakening"]}
+ pos={"side":int(side),"entry":price,"notional":notional,"margin":margin,"leverage":HYPE_SWING_LEVERAGE,
+      "opened":opened,"t":epoch,"signal_candle_time":int(analysis.get("signal_candle_time") or 0),"features":features}
+ with pg() as db:
+  with db.transaction():
+   STORE.fence(db)
+   row=db.execute("""insert into hype_swing_positions(symbol,side,entry,notional,margin,leverage,opened,opened_epoch,signal_candle_time,features)
+      values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(symbol) do nothing returning symbol""",
+      (HYPE_SWING_SYMBOL,int(side),price,notional,margin,HYPE_SWING_LEVERAGE,opened,epoch,pos["signal_candle_time"],json.dumps(features,default=str))).fetchone()
+   if not row:return False
+   db.execute("""insert into hype_swing_shadow_exits(opened,entry_candle_time,side,entry,context)
+     values(%s,%s,%s,%s,%s::jsonb)""",(opened,pos["signal_candle_time"],int(side),price,json.dumps(features,default=str)))
+   db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'hype_swing_trade_opened',%s::jsonb)",
+     (now(),json.dumps({"strategy":"hype_h1_local_swing_v1","symbol":HYPE_SWING_SYMBOL,"side":int(side),
+      "entry":price,"margin":margin,"notional":notional,"leverage":HYPE_SWING_LEVERAGE,"equity":equity,
+      "pivot_type":analysis.get("pivot_type"),"pivot_price":analysis.get("pivot_price"),"policy":HYPE_SWING_POLICY},default=str)))
+ with LOCK:S["hype_swing_position"]=pos
+ return True
+
+@account_mutation
+def hype_swing_close(price,reason,analysis=None):
+ with LOCK:pos=copy.deepcopy(S.get("hype_swing_position"))
+ if not pos:return None
+ price=float(price);pnl=paper_pnl(pos["notional"],pos["entry"],price,pos["side"],FEE)
+ features=copy.deepcopy(pos.get("features") or {})
+ if analysis:features["exit_analysis"]=analysis
+ features["actual_exit_reason"]=reason;features["actual_exit_mark"]=price
+ with pg() as db:
+  with db.transaction():
+   STORE.fence(db)
+   row=db.execute("delete from hype_swing_positions where symbol=%s and opened=%s returning symbol",(HYPE_SWING_SYMBOL,pos["opened"])).fetchone()
+   if not row:return None
+   acct=db.execute("""update hype_swing_account_state set equity=equity+%s,realized_pnl=realized_pnl+%s,updated_at=%s
+     where id=1 returning equity,realized_pnl""",(pnl,pnl,now())).fetchone()
+   db.execute("""insert into hype_swing_trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,margin,notional,leverage,features)
+     values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
+     (pos["opened"],now(),HYPE_SWING_SYMBOL,pos["side"],pos["entry"],price,pnl,reason,pos["margin"],pos["notional"],pos["leverage"],json.dumps(features,default=str)))
+   db.execute("""update hype_swing_shadow_exits set actual_exit_at=%s,actual_exit_price=%s,actual_exit_reason=%s
+     where opened=%s""",(now(),price,reason,pos["opened"]))
+   db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'hype_swing_trade_closed',%s::jsonb)",
+     (now(),json.dumps({"strategy":"hype_h1_local_swing_v1","symbol":HYPE_SWING_SYMBOL,"side":pos["side"],
+      "entry":pos["entry"],"exit":price,"pnl":pnl,"reason":reason,"equity":float(acct["equity"]),
+      "mae_roe_pct":features.get("mae_roe_pct"),"mfe_roe_pct":features.get("mfe_roe_pct"),"policy":HYPE_SWING_POLICY},default=str)))
+ with LOCK:
+  S["hype_swing_position"]=None;S["hype_swing_equity"]=float(acct["equity"])
+  S["hype_swing_realized_pnl"]=float(acct["realized_pnl"]);S["hype_swing_trades"]=int(S.get("hype_swing_trades",0))+1
+ return {"pnl":pnl,"equity":float(acct["equity"]),"reason":reason}
+
+def _hype_update_shadows(analysis,mark):
+ triggers_cache={}
+ with pg() as db:
+  rows=db.execute("""select id,opened,side,entry,extreme_exit_at,weakening_exit_at from hype_swing_shadow_exits
+    where status='OPEN' order by id""").fetchall()
+  if not rows:return
+  with db.transaction():
+   STORE.fence(db)
+   for row in rows:
+    side=int(row["side"]);entry=float(row["entry"]);tr=hype_shadow_triggers(side,analysis)
+    favorable=side*(float(mark)/entry-1.0)
+    extreme_at=row["extreme_exit_at"];weak_at=row["weakening_exit_at"]
+    if tr.get("extreme") and not extreme_at:
+     extreme_at=now()
+     db.execute("update hype_swing_shadow_exits set extreme_exit_at=%s,extreme_exit_price=%s where id=%s",(extreme_at,float(mark),row["id"]))
+    if tr.get("weakening") and favorable>=0.004 and not weak_at:
+     weak_at=now()
+     db.execute("update hype_swing_shadow_exits set weakening_exit_at=%s,weakening_exit_price=%s where id=%s",(weak_at,float(mark),row["id"]))
+    if extreme_at and weak_at:
+     db.execute("update hype_swing_shadow_exits set status='COMPLETE' where id=%s",(row["id"],))
+
+@account_mutation
+def hype_swing_mark_positions(prices):
+ with LOCK:pos=copy.deepcopy(S.get("hype_swing_position"))
+ if not pos:return
+ mark=prices.get(HYPE_SWING_SYMBOL)
+ if not mark:return
+ updated,liq=hype_update_path(pos,float(mark))
+ with LOCK:
+  live=S.get("hype_swing_position")
+  if live and live.get("opened")==pos.get("opened"):S["hype_swing_position"]=updated
+ if liq:
+  hype_swing_close(float(mark),"paper_liquidation_proxy")
+  return
+ stamp=time.time()
+ with LOCK:last=float(S.get("_hype_path_persist_epoch",0) or 0)
+ if stamp-last<30:return
+ with LOCK:S["_hype_path_persist_epoch"]=stamp
+ with pg() as db:
+  with db.transaction():
+   STORE.fence(db)
+   db.execute("update hype_swing_positions set features=%s::jsonb where symbol=%s and opened=%s",
+     (json.dumps(updated.get("features",{}),default=str),HYPE_SWING_SYMBOL,pos["opened"]))
+   pnl=paper_pnl(updated["notional"],updated["entry"],float(mark),updated["side"],FEE)
+   db.execute("""insert into position_snapshots(ts,strategy,symbol,opened,side,entry,mark,margin,notional,leverage,unrealized_pnl,roe_pct,features)
+      values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
+     (now(),"hype_h1_local_swing_v1",HYPE_SWING_SYMBOL,updated["opened"],updated["side"],updated["entry"],float(mark),
+      updated["margin"],updated["notional"],updated["leverage"],pnl,pnl/updated["margin"]*100 if updated["margin"] else 0,
+      json.dumps(updated.get("features",{}),default=str)))
+
+def hype_swing_stats():
+ try:
+  with pg() as db:
+   agg=db.execute("""select count(*) as samples,sum(case when pnl>0 then 1 else 0 end) as wins,
+     coalesce(sum(pnl),0) as total_pnl,avg(pnl) as avg_pnl,
+     avg(nullif(features->>'mae_roe_pct','')::double precision) as avg_mae_roe_pct,
+     avg(nullif(features->>'mfe_roe_pct','')::double precision) as avg_mfe_roe_pct
+     from hype_swing_trade_history""").fetchone()
+   reasons=db.execute("select reason,count(*) as n from hype_swing_trade_history group by reason order by n desc").fetchall()
+   shadows=db.execute("""select count(*) as samples,
+     avg(case when extreme_exit_price is not null then side*(extreme_exit_price/entry-1)*%s*100 end) as extreme_avg_gross_roe_pct,
+     avg(case when weakening_exit_price is not null then side*(weakening_exit_price/entry-1)*%s*100 end) as weakening_avg_gross_roe_pct
+     from hype_swing_shadow_exits""",(HYPE_SWING_LEVERAGE,HYPE_SWING_LEVERAGE)).fetchone()
+  n=int(agg["samples"] or 0);wins=int(agg["wins"] or 0)
+  return {"samples":n,"wins":wins,"win_rate":round(wins/n,4) if n else None,
+    "total_pnl":float(agg["total_pnl"] or 0),"avg_pnl":float(agg["avg_pnl"]) if agg["avg_pnl"] is not None else None,
+    "avg_mae_roe_pct":float(agg["avg_mae_roe_pct"]) if agg["avg_mae_roe_pct"] is not None else None,
+    "avg_mfe_roe_pct":float(agg["avg_mfe_roe_pct"]) if agg["avg_mfe_roe_pct"] is not None else None,
+    "exit_reasons":[dict(x) for x in reasons],
+    "shadow":{"samples":int(shadows["samples"] or 0),
+      "extreme_avg_gross_roe_pct":float(shadows["extreme_avg_gross_roe_pct"]) if shadows["extreme_avg_gross_roe_pct"] is not None else None,
+      "weakening_avg_gross_roe_pct":float(shadows["weakening_avg_gross_roe_pct"]) if shadows["weakening_avg_gross_roe_pct"] is not None else None}}
+ except Exception as exc:return {"error":str(exc)[:180]}
+
+def hype_h1_local_swing_loop():
+ last_observed=None
+ while not SHUTDOWN.is_set():
+  try:
+   with LOCK:active=bool(S.get("engine_active"))
+   if not active:
+    SHUTDOWN.wait(1);continue
+   rows,stamp_ms=_hype_h1_candles()
+   analysis=analyze_hype_h1(rows,stamp_ms)
+   prices=refresh_market_prices(max_age=8.0);mark=prices.get(HYPE_SWING_SYMBOL)
+   if not mark:raise RuntimeError("HYPE mark unavailable")
+   candle=analysis.get("signal_candle_time")
+   if analysis.get("ready") and candle!=last_observed:
+    if _hype_claim("OBSERVE",analysis.get("entry_side",0),analysis,float(mark)):last_observed=candle
+    else:last_observed=candle
+   if analysis.get("ready"):
+    _hype_update_shadows(analysis,float(mark))
+    with LOCK:pos=copy.deepcopy(S.get("hype_swing_position"))
+    if pos:
+     reason=hype_position_exit(pos,analysis,float(mark))
+     if reason:
+      closed=hype_swing_close(float(mark),reason,analysis)
+      if closed and reason.startswith("opposite_local_") and int(analysis.get("entry_side") or 0) in (-1,1):
+       hype_swing_open(int(analysis["entry_side"]),float(mark),analysis)
+    elif int(analysis.get("entry_side") or 0) in (-1,1):
+     hype_swing_open(int(analysis["entry_side"]),float(mark),analysis)
+   with LOCK:
+    S["sources"]["HypeH1LocalSwing"]={"ok":True,"last_check":now(),"mode":"paper_isolated_h1_local_extremes",
+      "policy":HYPE_SWING_POLICY,"symbol":HYPE_SWING_SYMBOL,"interval":HYPE_SWING_INTERVAL,
+      "paper_only":True,"equity":S.get("hype_swing_equity"),"trades":S.get("hype_swing_trades",0),
+      "position_open":bool(S.get("hype_swing_position")),"margin_fraction":HYPE_SWING_MARGIN_FRACTION,
+      "leverage":HYPE_SWING_LEVERAGE,"last_signal_candle":candle,"pivot_type":analysis.get("pivot_type"),
+      "pivot_price":analysis.get("pivot_price"),"entry_side":analysis.get("entry_side"),"long_weak_score":analysis.get("long_weak_score"),
+      "short_weak_score":analysis.get("short_weak_score"),"error":None}
+  except LeaseLost as exc:
+   with LOCK:S["sources"]["HypeH1LocalSwing"]={"ok":False,"last_check":now(),"mode":"standby","error":str(exc)[:160]}
+  except Exception as exc:
+   with LOCK:S["sources"]["HypeH1LocalSwing"]={"ok":False,"last_check":now(),"mode":"paper_isolated_h1_local_extremes","error":type(exc).__name__+":"+str(exc)[:160]}
+   try:journal("hype_swing_error",None,{"error":type(exc).__name__+":"+str(exc)[:180]})
+   except Exception:pass
+  SHUTDOWN.wait(30)
+
 def market():
  while not SHUTDOWN.is_set():
   S["_market_heartbeat"]=time.time()
@@ -1495,7 +1715,7 @@ def market():
       elif not STORE.save(sym,pos):
        with LOCK:
         if S["positions"].get(sym,{}).get("opened")==pos["opened"]:S["positions"].pop(sym,None)
-    pump_mark_positions(valid);whale_liq_mark_positions(valid);whale_v2_mark_positions(valid)
+    pump_mark_positions(valid);whale_liq_mark_positions(valid);whale_v2_mark_positions(valid);hype_swing_mark_positions(valid)
     with LOCK:S["last_checkpoint"]=now()
   except LeaseLost as e:
    S["engine_active"]=False;S["engine_error"]=str(e)
@@ -2940,6 +3160,15 @@ def build_dashboard_snapshot():
  pump_positions=[];pump_unreal=0.0
  whale_positions=[];whale_unreal=0.0
  whale_v2_positions=[];whale_v2_unreal=0.0
+ hype_swing_position=None;hype_swing_unreal=0.0
+ hspos=state.get("hype_swing_position")
+ if hspos:
+  hsmark=prices.get(HYPE_SWING_SYMBOL,hspos["entry"]);hype_swing_unreal=paper_pnl(hspos["notional"],hspos["entry"],hsmark,hspos["side"],FEE)
+  hype_swing_position={"strategy":"HYPE_H1_LOCAL_SWING_V1","symbol":HYPE_SWING_SYMBOL,"side":"LONG" if hspos["side"]>0 else "SHORT",
+   "entry":hspos["entry"],"mark":hsmark,"margin_usd":round(hspos["margin"],2),"notional_usd":round(hspos["notional"],2),
+   "leverage":hspos["leverage"],"roe_pct":round(hype_swing_unreal/hspos["margin"]*100,3) if hspos["margin"] else 0,
+   "unrealized_pnl":round(hype_swing_unreal,4),"opened":hspos["opened"],"features":hspos.get("features",{})}
+ hype_swing_total=float(state.get("hype_swing_equity",HYPE_SWING_STARTING_EQUITY))+hype_swing_unreal
  for sym,p in state.get("whale_positions",{}).items():
   px=prices.get(sym,p["entry"]);move=(px/p["entry"]-1)*p["side"];gross=p["notional"]*move;fees=p["notional"]*FEE*2;pnl=paper_pnl(p["notional"],p["entry"],px,p["side"],FEE);whale_unreal+=pnl
   whale_positions.append({"strategy":"WHALE_LIQ","symbol":sym,"side":"LONG" if p["side"]>0 else "SHORT","entry":p["entry"],"mark":px,"notional_usd":round(p["notional"],2),"margin_usd":round(p["margin"],2),"leverage":p["leverage"],"roe_pct":round(pnl/p["margin"]*100,3) if p["margin"] else 0,"unrealized_pnl":round(pnl,4),"opened":p["opened"],"score":round(float(p.get("score",0)),2),"features":p.get("features",{})})
@@ -2964,7 +3193,12 @@ def build_dashboard_snapshot():
 "whale_v2_unrealized_pnl":round(whale_v2_unreal,4),"whale_v2_balance":round(float(state.get("whale_v2_equity",PAPER_RESET)),4),
 "whale_v2_total_equity":round(wl2_total,4),"whale_v2_pnl_pct":round(wl2_pnl_pct,3),
 "whale_v2_trades":state.get("whale_v2_trades",0),"whale_v2_engine":copy.deepcopy(state.get("sources",{}).get("WhaleLiquidationV2",{})),
-"whale_v2_learning":copy.deepcopy(state.get("whale_v2_learning",{})),"account_model":"UNIFIED_PAPER_ACCOUNT","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
+"whale_v2_learning":copy.deepcopy(state.get("whale_v2_learning",{})),
+"hype_h1_position":hype_swing_position,"hype_h1_balance":round(float(state.get("hype_swing_equity",HYPE_SWING_STARTING_EQUITY)),4),
+"hype_h1_unrealized_pnl":round(hype_swing_unreal,4),"hype_h1_total_equity":round(hype_swing_total,4),
+"hype_h1_pnl_pct":round((hype_swing_total/HYPE_SWING_STARTING_EQUITY-1)*100,3),"hype_h1_realized_pnl":round(float(state.get("hype_swing_realized_pnl",0)),4),
+"hype_h1_trades":state.get("hype_swing_trades",0),"hype_h1_engine":copy.deepcopy(state.get("sources",{}).get("HypeH1LocalSwing",{})),
+"hype_h1_stats":hype_swing_stats(),"hype_h1_policy":HYPE_SWING_POLICY,"account_model":"UNIFIED_PAPER_ACCOUNT","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
 def dashboard():
  with LOCK:
@@ -3121,6 +3355,9 @@ def operations_diagnostics():
      "whale_v2_engine":copy.deepcopy(S["sources"].get("WhaleLiquidationV2",{})),
      "whale_v2_positions":len(S.get("whale_v2_positions",{})),"whale_v2_trades":S.get("whale_v2_trades",0),
      "whale_v2_equity":S.get("whale_v2_equity",PAPER_RESET),"whale_v2_learning":copy.deepcopy(S.get("whale_v2_learning",{})),
+     "hype_h1_engine":copy.deepcopy(S["sources"].get("HypeH1LocalSwing",{})),
+     "hype_h1_position":bool(S.get("hype_swing_position")),"hype_h1_equity":S.get("hype_swing_equity",HYPE_SWING_STARTING_EQUITY),
+     "hype_h1_trades":S.get("hype_swing_trades",0),
      "sizing_policy":{"margin_fraction":TRADE_MARGIN_FRACTION,"secondary_margin_fraction":PUMP_SECONDARY_MARGIN_FRACTION,"leverage":TRADE_LEVERAGE,"target_open_positions":TARGET_OPEN_POSITIONS,"max_open_positions":MAX_OPEN_POSITIONS,"pump_max_positions":PUMP_MAX_POSITIONS,"auto_topup_enabled":False,"contributed_capital":S.get("contributed_capital",PAPER_RESET),"micro_analysis_threads":MICRO_ANALYSIS_THREADS,"whale_v2_margin_fraction":WL2_MARGIN_FRACTION,"whale_v2_leverage":WL2_LEVERAGE,"whale_v2_max_positions":WL2_MAX_POSITIONS},
      "entry_rejections":dict(S.get("_entry_rejections",{})),
      "daily_audit":daily,"news_health":copy.deepcopy(S.get("news_health",{})),
@@ -3161,6 +3398,12 @@ def html_dashboard(data):
  wl2_v2=(wl2_learning.get("v2") or {}).get("metrics") or {}
  wl2_compare='<div class="muted">A/B week 1 · V1 samples: %s · V2 samples: %s · V2 rejected signals: %s · rules frozen during comparison</div>'%(wl2_v1.get("samples",0),wl2_v2.get("samples",0),sum(int(x.get("n",0) or 0) for x in (wl2_learning.get("v2") or {}).get("signal_actions",[]) if x.get("action")=="REJECTED"))
 
+ hype=data.get("hype_h1_position") or {}
+ hype_engine=data.get("hype_h1_engine") or {}
+ hype_stats=data.get("hype_h1_stats") or {}
+ hype_cards='<div class="grid"><b>HYPE H1 ENGINE<br>%s</b><b>VIRTUAL BALANCE<br>$%s</b><b>TOTAL EQUITY<br>$%s</b><b>P&L<br><span class="%s">%s%%</span></b><b>OPEN POSITION<br>%s</b><b>TRADES<br>%s</b><b>MARGIN / LEV<br>25%% / 25x</b><b>LAST PIVOT<br>%s @ %s</b><b>WEEK-1 POLICY<br>FROZEN</b></div>'%("OK" if hype_engine.get("ok") else "ERROR",data.get("hype_h1_balance",100),data.get("hype_h1_total_equity",100),"posv" if data.get("hype_h1_pnl_pct",0)>=0 else "negv",data.get("hype_h1_pnl_pct",0),hype.get("side","FLAT"),data.get("hype_h1_trades",0),esc(hype_engine.get("pivot_type") or "-"),hype_engine.get("pivot_price") or "-")
+ hype_pos_html=('<tr><td>%s</td><td>%s</td><td>$%s</td><td>$%s</td><td>%sx</td><td>%s</td><td>%s</td><td class="%s">%s%%</td><td class="%s">$%s</td><td>%s / %s</td></tr>'%(esc(hype.get("symbol","HYPE")),esc(hype.get("side","FLAT")),hype.get("margin_usd",0),hype.get("notional_usd",0),hype.get("leverage",25),hype.get("entry","-"),hype.get("mark","-"),"posv" if hype.get("roe_pct",0)>=0 else "negv",hype.get("roe_pct",0),"posv" if hype.get("unrealized_pnl",0)>=0 else "negv",hype.get("unrealized_pnl",0),round(float((hype.get("features") or {}).get("mae_roe_pct",0) or 0),2),round(float((hype.get("features") or {}).get("mfe_roe_pct",0) or 0),2)) if hype else '<tr><td colspan=10>No HYPE H1 position</td></tr>')
+ hype_note='<div class="muted">H1 local low → LONG; local high → SHORT. Exit: opposite confirmed H1 extreme or H1 momentum weakening. Shadow comparison records both exit modes. Samples: %s · win rate: %s · avg MAE: %s%% · avg MFE: %s%%</div>'%(hype_stats.get("samples",0),hype_stats.get("win_rate","-"),hype_stats.get("avg_mae_roe_pct","-"),hype_stats.get("avg_mfe_roe_pct","-"))
  pump_pos="".join('<tr><td>%s</td><td>%s</td><td>$%s</td><td>$%s</td><td>%sx</td><td>%s</td><td>%s</td><td class="%s">%s%%</td><td class="%s">$%s</td><td>%s</td></tr>'%(esc(x["symbol"]),x["side"],x["margin_usd"],x["notional_usd"],x["leverage"],x["entry"],x["mark"],"posv" if x["roe_pct"]>=0 else "negv",x["roe_pct"],"posv" if x["unrealized_pnl"]>=0 else "negv",x["unrealized_pnl"],x.get("score",0)) for x in data.get("pump_positions",[])) or '<tr><td colspan=10>No pump/dump positions</td></tr>'
  src="".join('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'%(esc(k),(esc(v.get("scan_label")) if k=="XMonitor" and v.get("scan_label") else ("OK" if v.get("ok") else "ERROR")),esc(v.get("last_check","")),esc(v.get("error",""))) for k,v in data["sources"].items())
 
@@ -3174,7 +3417,7 @@ def html_dashboard(data):
  news_health_rows="".join('<tr><td>%s</td><td class="%s">%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'%(esc(k),"posv" if v.get("status")=="ACTIVE" else ("negv" if v.get("status")=="ERROR" else "warnv"),esc(v.get("status","-")),esc(v.get("latest_post_age_seconds","-")),esc(v.get("ingest_lag_seconds","-")),esc(v.get("realtime_verified",False))) for k,v in nh_sources.items()) or '<tr><td colspan=5>No news health data yet</td></tr>'
  news_health_note='<div class="muted">Last fresh: %s · %s · %s</div>'%(esc(nh.get("last_fresh_received_at") or "-"),esc(nh.get("last_fresh_source") or "-"),esc(nh.get("last_fresh_headline") or "-"))
  news="".join('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'%(esc(x["ts"]),esc(x["source"]),esc(x["symbol"]),esc(x["signal"]),esc(x["title"])) for x in data["news"][:12])
- return '''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>PANDORA LIVE</title><style>body{font-family:system-ui;background:#080b10;color:#e8edf5;margin:24px}h1{margin:0}.muted{color:#8b98aa}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:18px 0}.grid b{background:#111722;padding:16px;border-radius:12px}table{width:100%%;border-collapse:collapse;background:#0e141e;margin-bottom:22px}td,th{padding:9px;border-bottom:1px solid #202938;text-align:left;font-size:13px}th{color:#91a2b8}.posv{color:#49d17d;font-weight:700}.negv{color:#ff6262;font-weight:700}.warnv{color:#f6c453;font-weight:700}a{color:#8bc4ff}</style></head><body><h1>PANDORA LIVE</h1><div class="muted">Paper engine · dashboard refresh 5s · last market poll %s</div>%s<h2>Open positions</h2><button onclick="closePos(null)">Close Everything</button><button onclick="location.reload()">Refresh</button><p id="actionResult"></p><table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Trigger</th><th>Action</th></tr>%s</table><h2>Pump/Dump PAPER positions</h2><table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h2>Whale Liquidation</h2>%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h3>Whale liquidation candidates</h3><table><tr><th>Token</th><th>Trade side</th><th>Whale size</th><th>Distance</th><th>Score</th><th>Victim</th><th>Liq price</th></tr>%s</table><h2>Whale Liquidation 2.0 — isolated $100 A/B sleeve</h2>%s%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h2>Closed trades</h2><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>PnL</th><th>Reason</th></tr>%s</table><h2>News Scanner Health</h2>%s%s<table><tr><th>Source</th><th>Freshness</th><th>Latest post age (s)</th><th>Ingest lag (s)</th><th>Realtime verified</th></tr>%s</table><h2>Sources</h2><table><tr><th>Source</th><th>Status</th><th>Checked</th><th>Error</th></tr>%s</table><h2>Latest news</h2><table><tr><th>Time</th><th>Source</th><th>Token</th><th>Raw signal</th><th>Headline</th></tr>%s</table><p>Errors: %s · Last error: %s</p><p><a href="/api/dashboard">JSON dashboard</a> · <a href="/features">Features</a> · <a href="/trades">Trades</a> · <a href="/news">News</a></p><script>let closing=false;setInterval(()=>{if(!closing&&document.visibilityState==="visible")location.reload()},5000);async function closePos(sym){if(closing||!confirm(sym?"Close "+sym+"?":"Close ALL positions?"))return;closing=true;const status=document.getElementById("actionResult");status.textContent="Processing close request...";try{const r=await fetch("/api/positions/close",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(sym?{symbol:sym}:{all:true})});const result=await r.json();status.textContent=r.ok?"Close confirmed: "+JSON.stringify(result):(r.status===401?"Controls locked: open the control-access link once, then retry.":"Close failed ("+r.status+"): "+JSON.stringify(result));if(r.ok){location.reload();return}}catch(e){status.textContent="Close request failed: "+String(e)}finally{closing=false}}</script></body></html>'''%(esc(data["last_poll"]),cards,pos,pump_pos,whale_cards,whale_pos_html,whale_candidates_html,wl2_cards,wl2_compare,wl2_pos_html,trs,news_health_cards,news_health_note,news_health_rows,src,news,data["errors"],esc(data["last_error"]))
+ return '''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>PANDORA LIVE</title><style>body{font-family:system-ui;background:#080b10;color:#e8edf5;margin:24px}h1{margin:0}.muted{color:#8b98aa}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:18px 0}.grid b{background:#111722;padding:16px;border-radius:12px}table{width:100%%;border-collapse:collapse;background:#0e141e;margin-bottom:22px}td,th{padding:9px;border-bottom:1px solid #202938;text-align:left;font-size:13px}th{color:#91a2b8}.posv{color:#49d17d;font-weight:700}.negv{color:#ff6262;font-weight:700}.warnv{color:#f6c453;font-weight:700}a{color:#8bc4ff}</style></head><body><h1>PANDORA LIVE</h1><div class="muted">Paper engine · dashboard refresh 5s · last market poll %s</div>%s<h2>Open positions</h2><button onclick="closePos(null)">Close Everything</button><button onclick="location.reload()">Refresh</button><p id="actionResult"></p><table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Trigger</th><th>Action</th></tr>%s</table><h2>Pump/Dump PAPER positions</h2><table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h2>Whale Liquidation</h2>%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h3>Whale liquidation candidates</h3><table><tr><th>Token</th><th>Trade side</th><th>Whale size</th><th>Distance</th><th>Score</th><th>Victim</th><th>Liq price</th></tr>%s</table><h2>Whale Liquidation 2.0 — isolated $100 A/B sleeve</h2>%s%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h2>HYPE H1 Local Swing — isolated $100 PAPER sleeve</h2>%s%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>MAE / MFE ROE</th></tr>%s</table><h2>Closed trades</h2><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>PnL</th><th>Reason</th></tr>%s</table><h2>News Scanner Health</h2>%s%s<table><tr><th>Source</th><th>Freshness</th><th>Latest post age (s)</th><th>Ingest lag (s)</th><th>Realtime verified</th></tr>%s</table><h2>Sources</h2><table><tr><th>Source</th><th>Status</th><th>Checked</th><th>Error</th></tr>%s</table><h2>Latest news</h2><table><tr><th>Time</th><th>Source</th><th>Token</th><th>Raw signal</th><th>Headline</th></tr>%s</table><p>Errors: %s · Last error: %s</p><p><a href="/api/dashboard">JSON dashboard</a> · <a href="/features">Features</a> · <a href="/trades">Trades</a> · <a href="/news">News</a></p><script>let closing=false;setInterval(()=>{if(!closing&&document.visibilityState==="visible")location.reload()},5000);async function closePos(sym){if(closing||!confirm(sym?"Close "+sym+"?":"Close ALL positions?"))return;closing=true;const status=document.getElementById("actionResult");status.textContent="Processing close request...";try{const r=await fetch("/api/positions/close",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(sym?{symbol:sym}:{all:true})});const result=await r.json();status.textContent=r.ok?"Close confirmed: "+JSON.stringify(result):(r.status===401?"Controls locked: open the control-access link once, then retry.":"Close failed ("+r.status+"): "+JSON.stringify(result));if(r.ok){location.reload();return}}catch(e){status.textContent="Close request failed: "+String(e)}finally{closing=false}}</script></body></html>'''%(esc(data["last_poll"]),cards,pos,pump_pos,whale_cards,whale_pos_html,whale_candidates_html,wl2_cards,wl2_compare,wl2_pos_html,hype_cards,hype_note,hype_pos_html,trs,news_health_cards,news_health_note,news_health_rows,src,news,data["errors"],esc(data["last_error"]))
 
 
 @account_mutation
@@ -3341,7 +3584,7 @@ if __name__=="__main__":
 
  worker_specs=[
   ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),("market_trades",market_trade_stream),
-  ("telemetry",telemetry),("pump_dump",impulse_scan),("whale_liquidations",whale_liquidation_scan),
+  ("telemetry",telemetry),("pump_dump",impulse_scan),("whale_liquidations",whale_liquidation_scan),("hype_h1_local_swing",hype_h1_local_swing_loop),
   ("adapt",adapt),("x_critical_4s",x_critical_realtime),("piq_direct",piq_direct_realtime),
   ("news_recovery",recover_news_processing),
   ("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)
