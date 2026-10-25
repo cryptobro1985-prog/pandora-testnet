@@ -1042,8 +1042,11 @@ def close_news_position(sym,pos,price,reason):
 
 @account_mutation
 def reconcile_open_paper_sizing(prices):
- """One-time live PAPER resize of legacy pump/liquidation positions to the 5-20% policy.
- Added size is filled at the current mark and entry is volume-weighted, so history is not backdated."""
+ """One-time PAPER resize of legacy pump/liquidation positions to the 5-20% policy.
+
+ Historical reconstruction keeps the *original* entry price. Changing the margin
+ changes the counterfactual size of the corrected strategy, not the recorded fill.
+ """
  with LOCK:
   equity=float(S.get("equity",0) or 0)
   books=(("pump_dump",copy.deepcopy(S.get("pump_positions",{})),"pump_positions"),
@@ -1053,7 +1056,9 @@ def reconcile_open_paper_sizing(prices):
  for strategy,book,table in books:
   for sym,pos in book.items():
    features=copy.deepcopy(pos.get("features") or {})
-   if features.get("allocation_policy")=="signal_momentum_liquidity_5_20_paper_v3":continue
+   policy=str(features.get("allocation_policy") or "")
+   if policy in ("signal_momentum_liquidity_5_20_paper_v4","signal_momentum_liquidity_5_20_paper_v3"):
+    continue
    mark=float(prices.get(sym,0) or 0)
    if mark<=0:continue
    features["score"]=float(pos.get("score",features.get("score",0)) or 0)
@@ -1064,24 +1069,36 @@ def reconcile_open_paper_sizing(prices):
    old_margin=float(pos.get("margin",0) or 0);lev=max(1.0,float(pos.get("leverage",TRADE_LEVERAGE)))
    old_notional=float(pos.get("notional",old_margin*lev) or 0)
    if target_margin<=old_margin*1.001:
+    features["allocation_policy"]="signal_momentum_liquidity_5_20_paper_v4"
+    with pg() as db:
+     with db.transaction():
+      STORE.fence(db)
+      db.execute("update "+table+" set features=%s::jsonb where symbol=%s",(json.dumps(features,default=str),sym))
+    with LOCK:
+     key="pump_positions" if strategy=="pump_dump" else "whale_positions"
+     if sym in S.get(key,{}):S[key][sym]["features"]=features
     continue
-   target_notional=target_margin*lev;add_notional=max(0.0,target_notional-old_notional)
-   if add_notional<=0:continue
-   old_entry=float(pos["entry"]);new_entry=(old_notional*old_entry+add_notional*mark)/target_notional
-   features["resized_at"]=now();features["resize_fill_price"]=mark
+   target_notional=target_margin*lev
+   original_entry=float(pos["entry"])
+   features["resized_at"]=now();features["resize_reference_mark"]=mark
    features["resize_from_margin"]=round(old_margin,8);features["resize_to_margin"]=round(target_margin,8)
+   features["reconstructed_sizing_at_original_entry"]=True
+   features["original_entry_preserved"]=original_entry
+   features["allocation_policy"]="signal_momentum_liquidity_5_20_paper_v4"
    with pg() as db:
     with db.transaction():
      STORE.fence(db)
-     db.execute("update "+table+" set entry=%s,margin=%s,notional=%s,features=%s::jsonb where symbol=%s",
-                (new_entry,target_margin,target_notional,json.dumps(features,default=str),sym))
+     db.execute("update "+table+" set margin=%s,notional=%s,features=%s::jsonb where symbol=%s",
+                (target_margin,target_notional,json.dumps(features,default=str),sym))
      db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'paper_position_resized',%s::jsonb)",
                 (now(),json.dumps({"strategy":strategy,"symbol":sym,"fraction":frac,"old_margin":old_margin,
-                 "new_margin":target_margin,"added_notional":add_notional,"fill_price":mark,"new_entry":new_entry},default=str)))
+                 "new_margin":target_margin,"old_notional":old_notional,"new_notional":target_notional,
+                 "reference_mark":mark,"entry_preserved":original_entry,
+                 "counterfactual_reconstruction":True},default=str)))
    with LOCK:
     key="pump_positions" if strategy=="pump_dump" else "whale_positions"
     if sym in S.get(key,{}):
-     S[key][sym].update({"entry":new_entry,"margin":target_margin,"notional":target_notional,"features":features})
+     S[key][sym].update({"entry":original_entry,"margin":target_margin,"notional":target_notional,"features":features})
    changed+=1
  return changed
 
