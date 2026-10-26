@@ -1702,7 +1702,7 @@ def local_swing_close(symbol,price,reason,analysis=None,watch_context=None):
  if watch_context:features["m15_profit_protection"]=watch_context
  features["actual_exit_reason"]=reason;features["actual_exit_mark"]=price
  watch=None
- if reason=="m15_adverse_pressure_profit_protect":
+ if reason in ("m15_adverse_pressure_profit_protect","profit_lock_stop","m15_momentum_weakening"):
   watch={"symbol":symbol,"side":int(pos["side"]),
    "origin_signal_candle":int(features.get("origin_m15_signal_candle") or pos.get("signal_candle_time") or 0),
    "exit_price":price,"exit_at":now(),"expires_epoch":time.time()+LOCAL_REENTRY_WATCH_SECONDS,
@@ -1902,10 +1902,12 @@ def hype_h1_local_swing_loop():
         _local_watch_clear(symbol,"watch_expired");watch=None;action="WATCH_EXPIRED"
        elif analysis.get("ready") and int(analysis.get("entry_side") or 0)==-int(watch.get("side") or 0):
         _local_watch_clear(symbol,"opposite_m15_pivot_invalidated_watch");watch=None;action="WATCH_INVALIDATED_BY_M15"
-       elif analysis.get("ready") and int(analysis.get("entry_side") or 0)==int(watch.get("side") or 0):
-        side=int(watch["side"]);_local_watch_clear(symbol,"new_same_side_m15_pivot")
-        if local_swing_open(symbol,side,analysis,"M15"):action="REENTER_NEW_M15_PIVOT"
-        watch=None
+       elif (analysis.get("ready") and int(analysis.get("entry_side") or 0)==int(watch.get("side") or 0)
+             and int(analysis.get("signal_candle_time") or 0)>int(watch.get("origin_signal_candle") or 0)):
+        side=int(watch["side"])
+        if local_swing_open(symbol,side,analysis,"M15"):
+         _local_watch_clear(symbol,"new_same_side_m15_pivot")
+         action="REENTER_NEW_M15_PIVOT";watch=None
        elif local_m15_reentry_ready(int(watch.get("side") or 0),m15_live,flow_imb):
         if local_swing_open(symbol,int(watch["side"]),analysis,"REENTRY",m15_live,watch):action="M15_RECOVERY_REENTRY"
       if not watch and not action and analysis.get("ready") and int(analysis.get("entry_side") or 0) in (-1,1):
