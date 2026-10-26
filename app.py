@@ -1995,11 +1995,20 @@ def market():
  while not SHUTDOWN.is_set():
   S["_market_heartbeat"]=time.time()
   try:
-   valid=refresh_market_prices(force=True)
+   valid=refresh_market_prices(force=False,max_age=2.0)
    with LOCK:active=S["engine_active"]
    # Network and SQL work never owns the global state lock. Sources, health
    # and the lease heartbeat remain responsive during a slow checkpoint.
    if active and not SHUTDOWN.is_set():
+    # Process Pump & Dump hard stops before any expensive news/db work.
+    # A failure in the news strategy must not prevent Pump risk evaluation.
+    try:
+     pump_mark_positions(valid)
+    except LeaseLost:
+     raise
+    except Exception as pump_exc:
+     S["errors"]+=1
+     S["last_error"]="pump_risk: "+str(pump_exc)[:180]
     emergency_profit_take(valid)
     with LOCK:
      positions=copy.deepcopy(S["positions"]);news_timelines={k:list(v) for k,v in S.get("_timeline",{}).items()}
@@ -2022,7 +2031,7 @@ def market():
       elif not STORE.save(sym,pos):
        with LOCK:
         if S["positions"].get(sym,{}).get("opened")==pos["opened"]:S["positions"].pop(sym,None)
-    pump_mark_positions(valid);whale_liq_mark_positions(valid);hype_swing_mark_positions(valid)
+    whale_liq_mark_positions(valid);hype_swing_mark_positions(valid)
     with LOCK:S["last_checkpoint"]=now()
   except LeaseLost as e:
    S["engine_active"]=False;S["engine_error"]=str(e)
