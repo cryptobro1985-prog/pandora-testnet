@@ -35,8 +35,11 @@ from whale_v2 import (EligibilityTracker as WL2EligibilityTracker, evaluate_posi
 from hype_h1_swing import (POLICY as HYPE_SWING_POLICY, SYMBOL as HYPE_SWING_SYMBOL,
                            INTERVAL as HYPE_SWING_INTERVAL, STARTING_EQUITY as HYPE_SWING_STARTING_EQUITY,
                            MARGIN_FRACTION as HYPE_SWING_MARGIN_FRACTION, LEVERAGE as HYPE_SWING_LEVERAGE,
+                           PROFIT_LOCK_ARM_MOVE as HYPE_PROFIT_LOCK_ARM_MOVE,
+                           PROFIT_LOCK_BUFFER_MOVE as HYPE_PROFIT_LOCK_BUFFER_MOVE,
                            analyze as analyze_hype_h1, position_exit as hype_position_exit,
-                           update_path as hype_update_path, shadow_triggers as hype_shadow_triggers)
+                           update_path as hype_update_path, profit_lock_exit as hype_profit_lock_exit,
+                           shadow_triggers as hype_shadow_triggers)
 LATENCIES=LatencyMetrics()
 MARKET_OBS=RollingMarketData(max_symbols=512)
 LIQUIDATION_TAPE=LiquidationTape()
@@ -1619,7 +1622,9 @@ def hype_swing_open(side,price,analysis):
   learning_decision_id="HYPE_H1:"+str(int(analysis.get("signal_candle_time") or 0))+":"+str(int(side))
   features={**analysis,"policy":HYPE_SWING_POLICY,"learning_decision_id":learning_decision_id,"allocation_margin_fraction":HYPE_SWING_MARGIN_FRACTION,
    "leverage":HYPE_SWING_LEVERAGE,"mfe_price_move":0.0,"mae_price_move":0.0,"mfe_roe_pct":0.0,"mae_roe_pct":0.0,
-   "entry_mark":price,"shadow_exit_modes":["opposite_local_extreme","h1_momentum_weakening"]}
+   "entry_mark":price,"profit_lock_armed":False,"profit_lock_arm_move_pct":HYPE_PROFIT_LOCK_ARM_MOVE*100.0,
+   "profit_lock_buffer_move_pct":HYPE_PROFIT_LOCK_BUFFER_MOVE*100.0,
+   "shadow_exit_modes":["opposite_local_extreme","h1_momentum_weakening","profit_lock_stop"]}
   pos={"side":int(side),"entry":price,"notional":notional,"margin":margin,"leverage":HYPE_SWING_LEVERAGE,
        "opened":opened,"t":epoch,"signal_candle_time":int(analysis.get("signal_candle_time") or 0),"features":features}
   with pg() as db:
@@ -1709,7 +1714,20 @@ def hype_swing_mark_positions(prices):
  if not pos:return
  mark=prices.get(HYPE_SWING_SYMBOL)
  if not mark:return
+ was_armed=bool((pos.get("features") or {}).get("profit_lock_armed"))
  updated,liq=hype_update_path(pos,float(mark))
+ newly_armed=(not was_armed) and bool((updated.get("features") or {}).get("profit_lock_armed"))
+ lock_fill=hype_profit_lock_exit(updated,float(mark))
+ if lock_fill is not None:
+  features=updated.setdefault("features",{})
+  features["profit_lock_trigger_mark"]=float(mark)
+  features["profit_lock_exit_price"]=float(lock_fill)
+  features["profit_lock_triggered_at"]=now()
+  with LOCK:
+   live=S.get("hype_swing_position")
+   if live and live.get("opened")==pos.get("opened"):S["hype_swing_position"]=updated
+  hype_swing_close(float(lock_fill),"profit_lock_stop")
+  return
  with LOCK:
   live=S.get("hype_swing_position")
   if live and live.get("opened")==pos.get("opened"):S["hype_swing_position"]=updated
@@ -1718,13 +1736,18 @@ def hype_swing_mark_positions(prices):
   return
  stamp=time.time()
  with LOCK:last=float(S.get("_hype_path_persist_epoch",0) or 0)
- if stamp-last<30:return
+ if stamp-last<30 and not newly_armed:return
  with LOCK:S["_hype_path_persist_epoch"]=stamp
  with pg() as db:
   with db.transaction():
    STORE.fence(db)
    db.execute("update hype_swing_positions set features=%s::jsonb where symbol=%s and opened=%s",
      (json.dumps(updated.get("features",{}),default=str),HYPE_SWING_SYMBOL,pos["opened"]))
+   if newly_armed:
+    db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'hype_swing_profit_lock_armed',%s::jsonb)",
+      (now(),json.dumps({"strategy":"hype_h1_local_swing_v1","symbol":HYPE_SWING_SYMBOL,"side":updated["side"],
+       "entry":updated["entry"],"mark":float(mark),"stop":(updated.get("features") or {}).get("profit_lock_stop"),
+       "arm_move_pct":HYPE_PROFIT_LOCK_ARM_MOVE*100.0,"buffer_move_pct":HYPE_PROFIT_LOCK_BUFFER_MOVE*100.0},default=str)))
    pnl=paper_pnl(updated["notional"],updated["entry"],float(mark),updated["side"],FEE)
    db.execute("""insert into position_snapshots(ts,strategy,symbol,opened,side,entry,mark,margin,notional,leverage,unrealized_pnl,roe_pct,features)
       values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
@@ -1792,6 +1815,10 @@ def hype_h1_local_swing_loop():
       "short_weak_score":analysis.get("short_weak_score"),"analysis_ready":bool(analysis.get("ready")),
       "signal_reason":analysis.get("reason") or ("confirmed_h1_pivot" if analysis.get("entry_side") else "waiting_for_confirmed_h1_pivot"),
       "signal_candle_close_time":analysis.get("signal_candle_close_time"),"confirmation_right_candles":1,
+      "profit_lock":{"enabled":True,"arm_move_pct":HYPE_PROFIT_LOCK_ARM_MOVE*100.0,
+       "buffer_move_pct":HYPE_PROFIT_LOCK_BUFFER_MOVE*100.0,
+       "armed":bool(((S.get("hype_swing_position") or {}).get("features") or {}).get("profit_lock_armed")),
+       "stop":((S.get("hype_swing_position") or {}).get("features") or {}).get("profit_lock_stop")},
       "signal_claim_atomic":True,"error":None}
   except LeaseLost as exc:
    with LOCK:S["sources"]["HypeH1LocalSwing"]={"ok":False,"last_check":now(),"mode":"standby","error":str(exc)[:160]}
