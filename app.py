@@ -20,7 +20,7 @@ from piq_direct import discover as piq_discover, fetch_story as piq_fetch_story,
 from source_health import LatencyMetrics, aggregate_delivery
 from market_data import RollingMarketData
 from market_stream import run_trade_stream
-from hyperliquid_transport import RestBudget
+from hyperliquid_transport import RestBudget, RestDeferred
 from whale_signals import (MIN_NOTIONAL_USD, cluster_positions, summarize_book, significance, update_streaks,
                            PriceToValueTracker, price_to_value_entry, PRICE_TO_VALUE_POLICY)
 from news_logic import analyze_headline, is_non_market_news as semantic_non_market
@@ -4114,8 +4114,32 @@ def health_state():
          "news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"market_structure_filter_active":False,
          "mode":S["mode"],"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
+class HyperliquidBudgetProxy(BaseHTTPRequestHandler):
+ def log_message(self,*args):pass
+ def do_POST(self):
+  if self.path!="/info":self.send_error(404);return
+  try:
+   size=int(self.headers.get("Content-Length","0"))
+   if not 0<size<=65536:raise ValueError("invalid_request_size")
+   payload=json.loads(self.rfile.read(size))
+   if not isinstance(payload,dict) or not isinstance(payload.get("type"),str):raise ValueError("invalid_info_request")
+   body=get(API,payload);status=200;retry=None
+  except RestDeferred:
+   status=503;body=b'{"error":"shared_rest_budget_deferred"}';retry=max(1,int(HL_REST_BUDGET.status()["cooldown_seconds"]))
+  except urllib.error.HTTPError as exc:
+   status=exc.code;body=b'{"error":"upstream_info_request_failed"}';retry=max(1,int(HL_REST_BUDGET.status()["cooldown_seconds"])) if status==429 else None
+  except (ValueError,TypeError):status=400;body=b'{"error":"invalid_request"}';retry=None
+  except Exception:status=502;body=b'{"error":"upstream_unavailable"}';retry=None
+  self.send_response(status);self.send_header("Content-Type","application/json");self.send_header("Content-Length",str(len(body)))
+  if retry:self.send_header("Retry-After",str(retry))
+  self.end_headers()
+  try:self.wfile.write(body)
+  except (BrokenPipeError,ConnectionResetError):pass
+
 if __name__=="__main__":
- try:subprocess.Popen(["hyperdata","api","--port","8420"],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+ budget_proxy=ThreadingHTTPServer(("127.0.0.1",8421),HyperliquidBudgetProxy)
+ threading.Thread(target=budget_proxy.serve_forever,daemon=True,name="shared-hl-rest-budget").start()
+ try:subprocess.Popen([os.sys.executable,"hyperdata_runner.py"],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
  except Exception as e:S["sources"]["HyperData"]={"ok":False,"error":str(e)[:120]}
  init();pinit()
  S["sources"]["PersistentPostgres"]={"ok":True,"last_check":now(),"mode":"primary_state_and_trade_history"}

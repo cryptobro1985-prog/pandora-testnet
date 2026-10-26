@@ -88,3 +88,36 @@ class CandleTests(unittest.TestCase):
         callback.assert_called_once_with(row)
         subs=[json.loads(c.args[0])['subscription'] for c in ws.send.call_args_list if 'subscription' in json.loads(c.args[0])]
         self.assertEqual(len(subs),4)
+
+class SidecarTests(unittest.TestCase):
+    def test_only_public_exchange_info_is_routed_through_budget(self):
+        from hyperdata_runner import routed_url
+        self.assertEqual(routed_url('https://api.hyperliquid.xyz/info'),'http://127.0.0.1:8421/info')
+        for url in ('https://api.hyperliquid.xyz/exchange','https://example.test/info','wss://api.hyperliquid.xyz/ws'):
+            self.assertEqual(routed_url(url),url)
+
+    def test_simultaneous_429s_do_not_multiply_cooldown(self):
+        b=RestBudget(clock=lambda:0)
+        for _ in range(10):b.limited()
+        self.assertEqual(b.status()['cooldown_seconds'],30)
+
+    def test_sidecar_and_app_share_single_outbound_budget(self):
+        import threading
+        import urllib.request
+        server=app.ThreadingHTTPServer(('127.0.0.1',0),app.HyperliquidBudgetProxy)
+        worker=threading.Thread(target=server.serve_forever,daemon=True);worker.start()
+        budget=RestBudget(limit=120)
+        response=MagicMock();response.__enter__.return_value.read.return_value=b'{}'
+        original=urllib.request.urlopen
+        url='http://127.0.0.1:%s/info'%server.server_port
+        def network(req,**kw):
+            if req.full_url==app.API:return response
+            return original(req,**kw)
+        try:
+            with patch.object(app,'HL_REST_BUDGET',budget),patch.object(app.urllib.request,'urlopen',side_effect=network):
+                req=urllib.request.Request(url,data=b'{"type":"metaAndAssetCtxs"}',headers={'Content-Type':'application/json'})
+                with original(req,timeout=2) as reply:self.assertEqual(reply.status,200)
+                with self.assertRaises(RestDeferred):app.get(app.API,{'type':'metaAndAssetCtxs'})
+                app.get(app.API,{'type':'allMids'})
+            self.assertEqual(budget.status()['sent'],2)
+        finally:server.shutdown();server.server_close()

@@ -26,6 +26,8 @@ class RestBudget:
         kind = (body or {}).get('type')
         if kind in ('l2Book', 'allMids', 'clearinghouseState', 'orderStatus', 'spotClearinghouseState', 'exchangeStatus'):
             return 2
+        if kind in ('userFills', 'userFillsByTime', 'historicalOrders', 'recentTrades'):
+            return 120  # conservative reservation for response-size surcharges
         if kind == 'userRole':
             return 60
         if kind == 'candleSnapshot':
@@ -52,7 +54,8 @@ class RestBudget:
     def limited(self, retry_after=None):
         with self.lock:
             now = self.clock()
-            self.failures += 1; self.rate_limited += 1; self.last_429 = self.wall()
+            if now >= self.until:self.failures += 1
+            self.rate_limited += 1; self.last_429 = self.wall()
             delay = min(300, 30 * 2**min(self.failures-1,4))
             if retry_after:
                 try:
