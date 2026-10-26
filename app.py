@@ -1958,8 +1958,8 @@ def hype_h1_local_swing_loop():
        "leverage":HYPE_SWING_LEVERAGE,"compound_from_shared_equity":True,"h1_blocks_entries":True,
        "profit_lock":{"enabled":True,"arm_move_pct":HYPE_PROFIT_LOCK_ARM_MOVE*100.0,
         "buffer_move_pct":HYPE_PROFIT_LOCK_BUFFER_MOVE*100.0},
-       "m15_profit_protection":True,"m15_reentry":True,"reentry_watch_seconds":LOCAL_REENTRY_WATCH_SECONDS,
-       "max_reentries_per_swing":LOCAL_REENTRY_MAX_PER_SWING,"parallel_scan_workers":4,"details":details,
+       "m15_profit_protection":True,"m15_reentry":True,"reentry_watch_seconds":LOCAL_REENTRY_WATCH_SECONDS or None,
+       "max_reentries_per_swing":LOCAL_REENTRY_MAX_PER_SWING or None,"parallel_scan_workers":4,"details":details,
        "error":None if all(x.get("ok") for x in details.values()) else "partial_symbol_scan_failure"}
    except LeaseLost as exc:
     with LOCK:S["sources"]["HypeH1LocalSwing"]={"ok":False,"last_check":now(),"mode":"standby","symbols":list(LOCAL_SWING_SYMBOLS),"error":str(exc)[:160]}
@@ -3653,7 +3653,7 @@ def build_dashboard_snapshot():
  if not local_book and state.get("hype_swing_position"):local_book={HYPE_SWING_SYMBOL:state["hype_swing_position"]}
  for lsym,hspos in local_book.items():
   hsmark=prices.get(lsym,hspos["entry"]);lspnl=paper_pnl(hspos["notional"],hspos["entry"],hsmark,hspos["side"],FEE);hype_swing_unreal+=lspnl
-  card={"strategy":"LOCAL_M15_SWING_V4","symbol":lsym,"side":"LONG" if hspos["side"]>0 else "SHORT",
+  card={"strategy":"LOCAL_H1_M15_SWING_V5","symbol":lsym,"side":"LONG" if hspos["side"]>0 else "SHORT",
    "entry":hspos["entry"],"mark":hsmark,"margin_usd":round(hspos["margin"],2),"notional_usd":round(hspos["notional"],2),
    "leverage":hspos["leverage"],"roe_pct":round(lspnl/hspos["margin"]*100,3) if hspos["margin"] else 0,
    "unrealized_pnl":round(lspnl,4),"opened":hspos["opened"],"features":hspos.get("features",{})}
