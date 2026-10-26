@@ -129,6 +129,12 @@ PUMP_SECONDARY_SAME_SIDE_CAP=max(1,min(TARGET_OPEN_POSITIONS,int(os.getenv("PUMP
 WHALE_MAX_ACTIVE_POSITIONS=max(1,min(5,int(os.getenv("WHALE_MAX_ACTIVE_POSITIONS","5"))))
 WHALE_MARGIN_FRACTION=TRADE_MARGIN_FRACTION
 WHALE_LEVERAGE=25.0
+PROFIT_PROTECT_ARM_MOVE=max(0.002,float(os.getenv("PROFIT_PROTECT_ARM_MOVE","0.004")))
+PROFIT_PROTECT_LOCK_MOVE=max(0.0010,min(PROFIT_PROTECT_ARM_MOVE,float(os.getenv("PROFIT_PROTECT_LOCK_MOVE","0.0012"))))
+PROFIT_PROTECT_REVERSAL_MIN_MOVE=max(PROFIT_PROTECT_LOCK_MOVE,float(os.getenv("PROFIT_PROTECT_REVERSAL_MIN_MOVE","0.0012")))
+PROFIT_PROTECT_R15=max(0.0005,float(os.getenv("PROFIT_PROTECT_R15","0.0012")))
+PROFIT_PROTECT_R60=max(PROFIT_PROTECT_R15,float(os.getenv("PROFIT_PROTECT_R60","0.0022")))
+PROFIT_PROTECT_FLOW=max(0.05,float(os.getenv("PROFIT_PROTECT_FLOW","0.12")))
 NEWS_MAX_AGE_SECONDS=float(os.getenv("NEWS_MAX_AGE_SECONDS","120"))
 NEWS_POLL_SECONDS=float(os.getenv("NEWS_POLL_SECONDS","15"))
 WHITEHOUSE_POLL_SECONDS=max(10.0,float(os.getenv("WHITEHOUSE_POLL_SECONDS","15")))
@@ -1076,28 +1082,37 @@ def pump_close(symbol,price,reason):
 
 @account_mutation
 def pump_mark_positions(prices):
- # Universal exit policy: confirmed local extreme + weakening only.
+ # Local-extreme exit plus the global earned-profit protection overlay.
  with LOCK:
   positions=copy.deepcopy(S["pump_positions"])
   timelines={k:list(v) for k,v in S.get("_timeline",{}).items()}
+ stamp=time.time()
  for sym,pos in positions.items():
   px=prices.get(sym)
   if not px:continue
   entry=float(pos["entry"]);side=int(pos["side"]);lev=float(pos["leverage"])
-  prior_peak_roe=float(pos.get("peak_roe",0) or 0)
+  protected,protect_reason,protect_fill,protect_state=_profit_protection_eval(pos,sym,float(px),stamp,timelines.get(sym,[]))
+  _profit_protection_arm_journal("pump_dump",sym,bool(pos.get("profit_lock_armed")),protected)
+  if protect_reason:
+   with LOCK:
+    live=S["pump_positions"].get(sym)
+    if live and live.get("opened")==pos.get("opened"):S["pump_positions"][sym]=protected
+   pump_close(sym,protect_fill,protect_reason);continue
+  prior_peak_roe=float(protected.get("peak_roe",0) or 0)
   peak_price=entry*(1+(prior_peak_roe/lev)*side)
-  probe=copy.deepcopy(pos);probe["peak"]=peak_price
+  probe=copy.deepcopy(protected);probe["peak"]=peak_price
   evaluated,reason=evaluate_exit(probe,float(px),now())
   peak_price=float(evaluated.get("peak",entry));peak=(peak_price/entry-1)*side*lev
   with LOCK:
    if sym in S["pump_positions"]:
     S["pump_positions"][sym].update(risk_state(evaluated))
+    S["pump_positions"][sym]["features"]=copy.deepcopy(evaluated.get("features",{}))
     S["pump_positions"][sym]["last_price"]=float(px);S["pump_positions"][sym]["peak_roe"]=peak
   if reason:
    pump_close(sym,px,"local_extreme_weakening");continue
   with pg() as db:
    with db.transaction():
-    STORE.fence(db);db.execute("update pump_positions set peak_roe=%s,risk_state=%s::jsonb where symbol=%s and opened=%s",(peak,json.dumps(risk_state(evaluated)),sym,pos["opened"]))
+    STORE.fence(db);db.execute("update pump_positions set peak_roe=%s,risk_state=%s::jsonb,features=%s::jsonb where symbol=%s and opened=%s",(peak,json.dumps(risk_state(evaluated)),json.dumps(evaluated.get("features",{}),default=str),sym,pos["opened"]))
 
 @account_mutation
 def whale_liq_open(symbol,side,price,score,features,margin_fraction=None):
@@ -1240,8 +1255,15 @@ def whale_v2_mark_positions(prices):
   flow=float(MARKET_OBS.context(sym,stamp).get("flow_imbalance") or 0)
   r15=_timeline_return(timelines.get(sym,[]),stamp,15,mark)
   r60=_timeline_return(timelines.get(sym,[]),stamp,60,mark)
-  before=bool((pos.get("features") or {}).get("wl2_liquidation_level_reached_at"))
-  evaluated,reason=evaluate_wl2_position(pos,mark,now(),flow=flow,r15=r15,r60=r60)
+  protected,protect_reason,protect_fill,protect_state=_profit_protection_eval(pos,sym,mark,stamp,timelines.get(sym,[]))
+  _profit_protection_arm_journal("whale_liquidation_v2",sym,bool((pos.get("features") or {}).get("profit_protection",{}).get("armed")),protected)
+  if protect_reason:
+   with LOCK:
+    live=S.get("whale_v2_positions",{}).get(sym)
+    if live and live.get("opened")==pos.get("opened"):S["whale_v2_positions"][sym]=protected
+   whale_v2_close(sym,protect_fill,protect_reason);continue
+  before=bool((protected.get("features") or {}).get("wl2_liquidation_level_reached_at"))
+  evaluated,reason=evaluate_wl2_position(protected,mark,now(),flow=flow,r15=r15,r60=r60)
   after=bool((evaluated.get("features") or {}).get("wl2_liquidation_level_reached_at"))
   if after and not before:
    journal("whale_v2_liquidation_level_reached",None,{"symbol":sym,"entry":pos["entry"],"mark":mark,
@@ -1267,7 +1289,8 @@ def whale_liq_mark_positions(prices):
  # look stale to the scanners.
  with LOCK:
   positions=copy.deepcopy(S["whale_positions"])
- updates=[]
+  timelines={k:list(v) for k,v in S.get("_timeline",{}).items()}
+ stamp=time.time();updates=[]
  for sym,pos in positions.items():
   px=prices.get(sym)
   if not px:continue
@@ -1290,6 +1313,15 @@ def whale_liq_mark_positions(prices):
    if post_bps>float(features.get("post_liq_max_favorable_bps",0) or 0):
     features["post_liq_max_favorable_bps"]=round(post_bps,2)
   pos["features"]=features
+  protected,protect_reason,protect_fill,protect_state=_profit_protection_eval(pos,sym,float(px),stamp,timelines.get(sym,[]))
+  _profit_protection_arm_journal("whale_liquidation",sym,bool(pos.get("profit_lock_armed")),protected)
+  if protect_reason:
+   with LOCK:
+    live=S["whale_positions"].get(sym)
+    if live and live.get("opened")==pos.get("opened"):S["whale_positions"][sym]=protected
+   whale_liq_close(sym,protect_fill,protect_reason)
+   continue
+  pos=protected;features=copy.deepcopy(pos.get("features",{}))
   roe=(float(px)/entry-1)*side*lev
   peak=max(float(pos.get("peak_roe",0) or 0),roe)
   peak_price=float(pos.get("peak",entry*(1+(peak/lev)*side)))
@@ -1553,6 +1585,62 @@ def _timeline_return(rows,stamp,age,current):
  t,p=min(candidates,key=lambda r:abs((stamp-float(r[0]))-age))
  try:return float(current)/float(p)-1
  except Exception:return None
+
+def _profit_protection_eval(position,symbol,mark,stamp,timeline):
+ """Strategy-agnostic PAPER profit protection.
+
+ It has two layers:
+ 1) after +0.40% favorable price movement, lock at +0.12% from entry;
+ 2) while still profitable, close early on a confirmed fast reversal using
+    15s/60s price pressure, executed trade-flow and giveback from MFE.
+ """
+ pos=copy.deepcopy(position or {})
+ try:
+  entry=float(pos["entry"]);side=int(pos["side"]);mark=float(mark)
+ except Exception:return pos,None,None,{"ready":False}
+ if entry<=0 or mark<=0 or side not in (-1,1):return pos,None,None,{"ready":False}
+ features=copy.deepcopy(pos.get("features") or {})
+ prior=features.get("profit_protection") or {}
+ peak=max(float(pos.get("profit_peak_move",prior.get("peak_move",0)) or 0),side*(mark/entry-1.0))
+ favorable=side*(mark/entry-1.0)
+ was_armed=bool(pos.get("profit_lock_armed",prior.get("armed",False)))
+ armed=was_armed or peak>=PROFIT_PROTECT_ARM_MOVE
+ stop=entry*(1.0+side*PROFIT_PROTECT_LOCK_MOVE) if armed else None
+ r15=_timeline_return(timeline or [],stamp,15,mark)
+ r60=_timeline_return(timeline or [],stamp,60,mark)
+ observed=MARKET_OBS.context(symbol,stamp)
+ flow=observed.get("flow_imbalance")
+ flow_fresh=bool(observed.get("trade_data_fresh"))
+ adverse15=r15 is not None and side*float(r15)<=-PROFIT_PROTECT_R15
+ adverse60=r60 is not None and side*float(r60)<=-PROFIT_PROTECT_R60
+ adverse_flow=flow_fresh and flow is not None and side*float(flow)<=-PROFIT_PROTECT_FLOW
+ giveback=max(0.0,peak-favorable)
+ giveback_trigger=max(0.0006,min(0.0020,max(peak,0.0)*0.20))
+ adverse_giveback=giveback>=giveback_trigger
+ score=sum((adverse15,adverse60,adverse_flow,adverse_giveback))
+ hard_stop=bool(armed and stop is not None and ((side>0 and mark<=stop) or (side<0 and mark>=stop)))
+ reversal=bool(favorable>=PROFIT_PROTECT_REVERSAL_MIN_MOVE and score>=3 and (adverse15 or adverse60))
+ state={"enabled":True,"armed":armed,"arm_move_pct":PROFIT_PROTECT_ARM_MOVE*100.0,
+  "lock_move_pct":PROFIT_PROTECT_LOCK_MOVE*100.0,"peak_move":peak,"current_move":favorable,
+  "stop":stop,"return_15s":r15,"return_60s":r60,"flow_imbalance":flow if flow_fresh else None,
+  "flow_fresh":flow_fresh,"giveback":giveback,"giveback_trigger":giveback_trigger,
+  "adverse_score":score,"adverse_15s":adverse15,"adverse_60s":adverse60,
+  "adverse_flow":adverse_flow,"adverse_giveback":adverse_giveback,"checked_at":now()}
+ pos["profit_peak_move"]=peak;pos["profit_lock_armed"]=armed;pos["profit_lock_stop"]=stop
+ if armed and not was_armed:pos["profit_protect_armed_at"]=now()
+ pos["profit_protect_last"]=state
+ features["profit_protection"]=state;pos["features"]=features
+ if hard_stop:return pos,"profit_lock_stop",float(stop),state
+ if reversal:return pos,"profit_protect_fast_reversal",mark,state
+ return pos,None,None,state
+
+def _profit_protection_arm_journal(strategy,symbol,before,after):
+ if not before and bool(after.get("profit_lock_armed")):
+  state=after.get("profit_protect_last") or {}
+  journal("profit_protection_armed",None,{"strategy":strategy,"symbol":symbol,
+   "entry":after.get("entry"),"side":after.get("side"),"stop":state.get("stop"),
+   "arm_move_pct":PROFIT_PROTECT_ARM_MOVE*100.0,"lock_move_pct":PROFIT_PROTECT_LOCK_MOVE*100.0,
+   "peak_move_pct":float(state.get("peak_move",0) or 0)*100.0})
 
 def market_regime(prices,history,volumes,stamp):
  with LOCK:candles=copy.deepcopy(S.get("_regime_candles",{}))
@@ -2040,11 +2128,19 @@ def market():
    # and the lease heartbeat remain responsive during a slow checkpoint.
    if active and not SHUTDOWN.is_set():
     emergency_profit_take(valid)
-    with LOCK:positions=copy.deepcopy(S["positions"])
-    reconcile_open_paper_sizing(valid)
+    with LOCK:
+     positions=copy.deepcopy(S["positions"]);news_timelines={k:list(v) for k,v in S.get("_timeline",{}).items()}
+    reconcile_open_paper_sizing(valid);protect_stamp=time.time()
     for sym,old_pos in positions.items():
      if sym not in valid:continue
-     px=valid[sym];pos,reason=evaluate_exit(old_pos,px,now())
+     px=valid[sym]
+     protected,protect_reason,protect_fill,protect_state=_profit_protection_eval(old_pos,sym,float(px),protect_stamp,news_timelines.get(sym,[]))
+     _profit_protection_arm_journal("news",sym,bool(old_pos.get("profit_lock_armed")),protected)
+     if protect_reason:
+      with LOCK:
+       if S["positions"].get(sym,{}).get("opened")==old_pos.get("opened"):S["positions"][sym]=protected
+      close_news_position(sym,protected,protect_fill,protect_reason);continue
+     pos,reason=evaluate_exit(protected,px,now())
      with ACCOUNT_LOCK:
       with LOCK:
        if S["positions"].get(sym,{}).get("opened")!=pos["opened"]:continue
@@ -3799,6 +3895,7 @@ def operations_diagnostics():
      "local_swing_symbols":list(LOCAL_SWING_SYMBOLS),"local_swing_positions":list(S.get("local_swing_positions",{}).keys()),
      "local_swing_watch":copy.deepcopy(S.get("local_swing_watch",{})),
      "sizing_policy":{"margin_fraction":TRADE_MARGIN_FRACTION,"secondary_margin_fraction":PUMP_SECONDARY_MARGIN_FRACTION,"leverage":TRADE_LEVERAGE,"target_open_positions":TARGET_OPEN_POSITIONS,"max_open_positions":MAX_OPEN_POSITIONS,"pump_max_positions":PUMP_MAX_POSITIONS,"auto_topup_enabled":False,"contributed_capital":S.get("contributed_capital",PAPER_RESET),"micro_analysis_threads":MICRO_ANALYSIS_THREADS,"whale_v2_margin_fraction":WL2_MARGIN_FRACTION,"whale_v2_leverage":WL2_LEVERAGE,"whale_v2_max_positions":WL2_MAX_POSITIONS},
+     "universal_profit_protection":{"enabled":True,"strategies":["news","pump_dump","whale_liquidation","whale_liquidation_v2","local_h1_m15_swing_v3"],"arm_move_pct":PROFIT_PROTECT_ARM_MOVE*100.0,"lock_move_pct":PROFIT_PROTECT_LOCK_MOVE*100.0,"reversal_min_move_pct":PROFIT_PROTECT_REVERSAL_MIN_MOVE*100.0,"r15_adverse_pct":PROFIT_PROTECT_R15*100.0,"r60_adverse_pct":PROFIT_PROTECT_R60*100.0,"flow_threshold":PROFIT_PROTECT_FLOW},
      "entry_rejections":dict(S.get("_entry_rejections",{})),
      "account_pnl_pct":dash.get("account_pnl_pct"),"realized_pnl_pct":dash.get("realized_pnl_pct"),
      "unrealized_pnl":dash.get("unrealized_pnl"),"total_equity":dash.get("total_equity"),
