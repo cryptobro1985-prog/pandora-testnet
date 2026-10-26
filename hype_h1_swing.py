@@ -6,11 +6,11 @@ Signals use completed 1h candles only, so local extrema are confirmed without fu
 
 import math
 
-POLICY = "hype_h1_local_swing_v1_frozen_week1"
+POLICY = "hype_h1_local_swing_v2_causal_execution"
 SYMBOL = "HYPE"
 INTERVAL = "1h"
 STARTING_EQUITY = 100.0
-MARGIN_FRACTION = 0.25
+MARGIN_FRACTION = 0.10
 LEVERAGE = 25.0
 PIVOT_LOOKBACK = 4
 MIN_FAVORABLE_MOVE_FOR_WEAKENING = 0.004
@@ -36,6 +36,10 @@ def completed_candles(rows, now_ms):
         v = _f(row.get("v"))
         if None in (t, T, o, h, l, c) or min(o, h, l, c) <= 0:
             continue
+        if not (3_599_000 <= T-t <= 3_600_000 and l <= min(o,c) <= max(o,c) <= h):
+            continue
+        if v is not None and v < 0:
+            continue
         # A tiny grace prevents a boundary race at the exact hourly close.
         if T > float(now_ms) - 1000:
             continue
@@ -52,9 +56,14 @@ def _ret(a, b):
 
 def analyze(rows, now_ms):
     candles = completed_candles(rows, now_ms)
-    if len(candles) < PIVOT_LOOKBACK + 5:
+    if len(candles) < PIVOT_LOOKBACK + 2:
         return {"ready": False, "reason": "insufficient_closed_h1_candles",
                 "closed_candles": len(candles), "policy": POLICY}
+    if float(now_ms) - candles[-1]["T"] > 3_600_000 + 90_000:
+        return {"ready": False, "reason": "stale_h1_history", "policy": POLICY}
+    recent = candles[-(PIVOT_LOOKBACK+2):]
+    if any(abs(b["t"]-a["t"]-3_600_000)>1000 for a,b in zip(recent,recent[1:])):
+        return {"ready": False, "reason": "gapped_h1_history", "policy": POLICY}
 
     x = candles[-1]       # latest completed H1 candle: confirmation candle
     p = candles[-2]       # candidate local extreme
@@ -140,6 +149,12 @@ def position_exit(position, analysis, mark):
     entry = _f(position.get("entry"))
     mark = _f(mark)
     if side not in (-1, 1) or entry is None or mark is None:
+        return None
+    # The candle that opened a position cannot also be a new H1 exit signal
+    # on the next poll. Wait for a later completed candle.
+    entry_candle = position.get("signal_candle_time")
+    signal_candle = analysis.get("signal_candle_time")
+    if entry_candle is not None and signal_candle is not None and signal_candle <= entry_candle:
         return None
 
     if side > 0 and analysis.get("local_high"):

@@ -6,6 +6,129 @@ Order-book/CVD confirmation is applied by app.py before an entry is allowed.
 """
 import math
 
+POLICY = "momentum_breadth_continuation_v5"
+
+
+def horizon_return(rows, epoch, age, current, candles=None):
+    """Use observed quotes, or completed candles for horizons of 5m or more."""
+    tolerance = min(5.0, age * .20)
+    valid = [(t, p) for t, p in rows if age - tolerance <= epoch - t <= age + tolerance
+             and math.isfinite(p) and p > 0]
+    nearest = min(valid, key=lambda row: abs(epoch - row[0] - age)) if valid else None
+    anchor = {"t": nearest[0], "p": nearest[1]} if nearest else None
+    if anchor is None and age >= 300:
+        # A candle close is known only at its closing timestamp. Never use an
+        # open candle or a close after the requested historical anchor.
+        valid = [(float(t), float(p)) for t, p in (candles or [])
+                 if 0 <= epoch - age - float(t) <= 65 and float(p) > 0]
+        if valid:
+            t, p = max(valid)
+            anchor = {"t": t, "p": p}
+    return float(current) / anchor["p"] - 1 if anchor else None
+
+
+def breadth_regime(prices, history, volumes, epoch, candles=None):
+    """Separate an acute impulse from a persistent broad market trend."""
+    rows = []
+    candles = candles or {}
+    for symbol, price in prices.items():
+        if volumes.get(symbol, 0) < 5_000_000:
+            continue
+        moves = {str(age): horizon_return(history.get(symbol, []), epoch, age,
+                                          price, candles.get(symbol))
+                 for age in (60, 180, 300, 900, 1800)}
+        if any(value is not None for value in moves.values()):
+            rows.append({"symbol": symbol, **moves})
+    result = {"mode": "WARMUP", "side": 0, "count": len(rows),
+              "policy": POLICY, "candidates": [], "horizons": {}}
+    # Five independently observed liquid markets suffice. Requiring twenty
+    # made a single missing history disable breadth for the entire venue.
+    for age, threshold in ((60, .0025), (180, .005), (300, .003),
+                           (900, .006), (1800, .010)):
+        values = [r[str(age)] for r in rows if r[str(age)] is not None]
+        summary = {"count": len(values),
+                   "mean": sum(values) / len(values) if values else None,
+                   "down": sum(v <= -threshold for v in values) / len(values) if values else 0,
+                   "up": sum(v >= threshold for v in values) / len(values) if values else 0}
+        result["horizons"][str(age)] = summary
+        result["avg" + str(age)] = summary["mean"]
+        result["down" + str(age)] = summary["down"]
+        result["up" + str(age)] = summary["up"]
+    if not any(h["count"] >= 5 for h in result["horizons"].values()):
+        return result
+    result["mode"] = "NORMAL"
+    for age, mean_limit, breadth in ((60, .0022, .60), (180, .0055, .65),
+                                    (300, .0030, .60), (900, .0060, .60),
+                                    (1800, .0100, .60)):
+        h = result["horizons"][str(age)]
+        if h["count"] < 5:
+            continue
+        side = -1 if h["down"] >= breadth and h["mean"] <= -mean_limit else (
+            1 if h["up"] >= breadth and h["mean"] >= mean_limit else 0)
+        if side:
+            result.update(side=side, trigger_horizon_seconds=age,
+                          mode=("MARKET_DUMP" if side < 0 else "MARKET_PUMP") if age <= 180
+                          else ("MARKET_DOWNTREND" if side < 0 else "MARKET_UPTREND"))
+            break
+    return result
+
+
+def continuation_candidates(prices, history, volumes, epoch, contexts, regime):
+    """An active broad move need not accelerate or produce another 3-sigma burst.
+
+    Real symbol momentum, participation and later book/flow checks still apply.
+    Ordinary quiet drift or a bounce against the broad move is never an entry.
+    """
+    side = int(regime.get("side") or 0)
+    if not side:
+        return []
+    found = []
+    for symbol, price in prices.items():
+        ctx = contexts.get(symbol, {})
+        if not ctx.get("trade_data_fresh") or not 0 <= epoch - float(ctx.get("epoch", 0)) <= 15:
+            continue
+        moves = [horizon_return(history.get(symbol, []), epoch, age, price)
+                 for age in (15, 60, 180)]
+        if any(v is None for v in moves):
+            continue
+        r15, r60, r180 = moves
+        if not (side * r15 >= .0004 and side * r60 >= .0012 and side * r180 >= .0025):
+            continue
+        if abs(r15) > .018 or abs(r60) > .035 or abs(r180) > .060:
+            continue
+        burst = float(ctx.get("volume_burst_ratio") or 0)
+        z = float(ctx.get("volume_rate_z") or 0)
+        oi = float(ctx.get("oi_delta_60s") or 0)
+        flow = float(ctx.get("flow_imbalance") or 0)
+        participation = burst >= 1.2 or z >= 1.0 or abs(oi) >= .0025
+        if not participation or side * flow < .12:
+            continue
+        score = min(94, 65 + min(12, abs(r60) * 1800) + min(10, abs(r180) * 900)
+                    + min(7, side * flow * 15))
+        found.append({"symbol": symbol, "side": side, "score": round(score, 2),
+                      "candidate_kind": "market_continuation", "policy": POLICY,
+                      "r15_pct": r15 * 100, "r60_pct": r60 * 100, "r180_pct": r180 * 100,
+                      "oi_delta_60s": oi, "volume_burst_ratio": burst,
+                      "volume_rate_z": ctx.get("volume_rate_z"),
+                      "day_volume_usd": volumes.get(symbol, 0),
+                      "trend_consistent": True, "exhaustion": False})
+    return sorted(found, key=lambda x: x["score"], reverse=True)
+
+
+def direction_guard(symbol, side, prices, history, epoch, regime):
+    if int(regime.get("side") or 0) not in (0, side):
+        return "opposite_broad_market_direction"
+    price = prices.get(symbol)
+    if not price:
+        return "missing_current_price"
+    moves = [horizon_return(history.get(symbol, []), epoch, age, price)
+             for age in (15, 60, 180)]
+    if any(v is None for v in moves):
+        return "missing_current_momentum_history"
+    if any(side * v <= 0 for v in moves):
+        return "symbol_momentum_reversed"
+    return None
+
 def _anchor(samples,epoch,age):
     tolerance=min(5.0,age*0.20)
     rows=[r for r in samples if age-tolerance <= epoch-r["t"] <= age+tolerance]
@@ -69,6 +192,7 @@ def candidates(prices,history,volumes,epoch,minimum_day_volume=0.0,contexts=None
 
         out.append({
             "symbol":symbol,"side":side,"score":round(max(0,min(100,score)),2),
+            "candidate_kind":"abnormal_impulse","policy":POLICY,
             "r15_pct":round(r15*100,3),"r60_pct":round(r60*100,3),"r180_pct":round(r180*100,3),
             "accel":round(side*accel,6),"oi_delta_60s":round(oi_delta,6),
             "volume_burst_ratio":round(vol_burst,3),"volume_rate_z":round(float(vol_z),3) if vol_z is not None else None,

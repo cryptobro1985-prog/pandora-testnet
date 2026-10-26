@@ -101,7 +101,7 @@ class PiQWorkerTests(unittest.TestCase):
 
     def test_startup_only_resolves_eight_and_never_trades_old_pages(self):
         rows=[{"url":"https://piqmarkets.com/story/test-"+str(i)} for i in range(20)]
-        stop,fetched,ingested,_=self.run_worker(lambda url,*a,**k:self.story(url,999),discover=lambda **k:rows)
+        stop,fetched,ingested,_=self.run_worker(lambda url,*a,**k:self.story(url,1000-app.NEWS_MAX_AGE_SECONDS-1),discover=lambda **k:rows)
         self.assertEqual(fetched.call_count,8);ingested.assert_not_called()
         self.assertEqual(stop.status[-1]["startup_old_filtered"],8)
         self.assertFalse(stop.status[-1]["realtime_verified"])

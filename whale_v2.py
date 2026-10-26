@@ -15,14 +15,15 @@ This module never places real orders.
 import copy
 import math
 
-WL2_POLICY = "whale_liquidation_v2_frozen_week1"
-WL2_MARGIN_FRACTION = 0.20
+WL2_POLICY = "whale_liquidation_v2_pipeline_v2"
+WL2_MARGIN_FRACTION = 0.10
 WL2_LEVERAGE = 25.0
 WL2_MAX_POSITIONS = 5
 WL2_MIN_SCORE = 82.0
 WL2_MIN_RANK = 80.0
 WL2_MAX_ENTRY_DISTANCE_PCT = 0.90
 WL2_DISTANCE_POINTS = 4
+WL2_DISTANCE_WINDOW_SECONDS = 60.0
 WL2_MIN_CONTRACTION_PCT = 0.05
 WL2_MIN_CONFIRMATIONS = 4
 WL2_MIN_FLOW = 0.12
@@ -79,16 +80,28 @@ class EligibilityTracker:
             side = int(x.get("side") or 0)
             cluster = str(x.get("cluster_id") or symbol)
             key = (cluster, symbol, side)
+            if key in seen:
+                continue
             seen.add(key)
 
             distance = _finite(x.get("distance_pct"), 99.0)
+            epoch = _finite(x.get("observed_at_epoch"), scan_id * 3.0)
+            previous_scan = self._seen_scan.get(key)
             hist = self._distance.setdefault(key, [])
-            hist.append(distance)
-            if len(hist) > 8:
-                del hist[:-8]
+            # Observations arrive for all valid clusters, including passes
+            # rejected by the v1 entry filters. A missing scan/transport gap
+            # cannot be bridged to manufacture contraction evidence.
+            if (previous_scan is not None and scan_id - previous_scan > 2) or (
+                    hist and (epoch < hist[-1][0] or epoch - hist[-1][0] > 12)):
+                hist.clear()
+            if previous_scan != scan_id:
+                hist.append((epoch, distance))
+            hist[:] = [(t, d) for t, d in hist if 0 <= epoch - t <= WL2_DISTANCE_WINDOW_SECONDS][-24:]
             self._seen_scan[key] = scan_id
 
-            reasons = []
+            reasons = list(x.get("upstream_reject_reasons") or [])
+            if side not in (-1, 1):
+                reasons.append("invalid_trade_direction")
             score = _finite(x.get("score"))
             rank = _finite(x.get("whale_rank_score"), score)
             dynamic = max(0.01, _finite(x.get("dynamic_entry_distance_pct"), WL2_MAX_ENTRY_DISTANCE_PCT))
@@ -101,7 +114,7 @@ class EligibilityTracker:
             if distance > entry_cap:
                 reasons.append("not_close_enough")
 
-            contraction_window = hist[-WL2_DISTANCE_POINTS:]
+            contraction_window = [d for _, d in hist]
             contraction_steps = 0
             contraction = 0.0
             if len(contraction_window) >= 3:
@@ -110,11 +123,13 @@ class EligibilityTracker:
                     for i in range(1, len(contraction_window))
                 )
                 contraction = contraction_window[0] - contraction_window[-1]
-            required_steps = max(2, len(contraction_window) - 2)
+            required_steps = max(2, (len(contraction_window) - 1) // 2)
             contracting = (
                 len(contraction_window) >= 3
                 and contraction_steps >= required_steps
                 and contraction >= WL2_MIN_CONTRACTION_PCT
+                and contraction_window[-1] <= contraction_window[-2] + 1e-9
+                and contraction_window[-1] <= min(contraction_window[:-1]) + .005
             )
             if not contracting:
                 reasons.append("distance_not_contracting")
@@ -171,6 +186,7 @@ class EligibilityTracker:
             x["wl2_distance_history_pct"] = [round(v, 6) for v in contraction_window]
             x["wl2_distance_contraction_pct"] = round(contraction, 6)
             x["wl2_distance_contraction_steps"] = int(contraction_steps)
+            x["wl2_distance_window_seconds"] = round(hist[-1][0] - hist[0][0], 3) if hist else 0
             x["wl2_trend_aligned"] = bool(trend_aligned)
             x["wl2_flow_ok"] = bool(flow_ok)
             x["wl2_cvd_ok"] = bool(cvd_ok)
@@ -234,6 +250,10 @@ def initial_position_state(candidate, entry_price, opened_at):
             "wl2_mae_price_move": 0.0,
         }
     )
+    if candidate.get("entry_route") == "confirmed_cross_venue_cascade":
+        x["wl2_liquidation_level_reached_at"] = opened_at
+        x["wl2_post_liq_history"] = [float(entry_price)]
+        x["wl2_post_liq_best_price"] = float(entry_price)
     return x
 
 

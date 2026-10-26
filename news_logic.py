@@ -107,7 +107,7 @@ _RULES = tuple((name, side, _rx(pattern)) for name, side, pattern in (
     ("MONETARY_EASING", 1, r"\b(?:rate cuts?|cuts? (?:interest )?rates?|lowers? (?:interest )?rates?|dovish pivot|quantitative easing)\b"),
     ("MONETARY_TIGHTENING", -1, r"\b(?:rate hikes?|hikes? (?:interest )?rates?|raises? (?:interest )?rates?|hawkish pivot|higher for longer)\b"),
     ("RISK_ON_DEESCALATION", 1, r"\b(?:ceasefire|truce|peace deal|peace agreement|de-escalation)\b|\b(?:sanctions?|tariffs?)\b.{0,25}\b(?:lifted|reduced|removed|relief|exemptions?)\b|\b(?:lifts?|removes?|reduces?)\b.{0,25}\b(?:sanctions?|tariffs?)\b"),
-    ("RISK_OFF_GEOPOLITICS", -1, r"\b(?:airstrikes?|missile strikes?|military strikes?|military operations|major operations against|invasion|war escalates|blockade|government shutdown|sovereign default)\b|\b(?:sanctions?|tariffs?)\b.{0,25}\b(?:imposed|announced|tightened|hikes?|raised|increased)\b|\b(?:announces?|imposes?|raises?)\b.{0,25}\b(?:sanctions?|tariffs?)\b"),
+    ("RISK_OFF_GEOPOLITICS", -1, r"\b(?:airstrikes?|missile (?:strikes?|attacks?)|military strikes?|military operations|major operations against|invasion|war escalates|blockade|government shutdown|sovereign default)\b|\b(?:ballistic missiles?)\b.{0,30}\b(?:launched|fired|intercepted)\b|\b(?:sanctions?|tariffs?)\b.{0,25}\b(?:imposed|announced|tightened|hikes?|raised|increased)\b|\b(?:announces?|imposes?|raises?)\b.{0,25}\b(?:sanctions?|tariffs?)\b"),
     ("TOKEN_UNLOCK", -1, r"\b(?:token unlock|tokens? unlocked|unlock(?:s|ing)?\s+\$?\d|vesting release)\b"),
 ))
 
