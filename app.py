@@ -3570,6 +3570,7 @@ def operations_diagnostics():
     try:journal("news_health_snapshot",None,news_health)
     except Exception:pass
    with LOCK:
+    dash=copy.deepcopy(S.get("_dashboard_cache",{}))
     report={"kind":"pandora_diagnostics","time":now(),"engine_active":S["engine_active"],
      "engine_error":S.get("engine_error"),"last_error":S.get("last_error"),"market_count":S.get("market_count"),
      "market_error":S.get("last_market_error"),"positions":len(S["positions"]),
@@ -3591,6 +3592,10 @@ def operations_diagnostics():
      "hype_h1_trades":S.get("hype_swing_trades",0),
      "sizing_policy":{"margin_fraction":TRADE_MARGIN_FRACTION,"secondary_margin_fraction":PUMP_SECONDARY_MARGIN_FRACTION,"leverage":TRADE_LEVERAGE,"target_open_positions":TARGET_OPEN_POSITIONS,"max_open_positions":MAX_OPEN_POSITIONS,"pump_max_positions":PUMP_MAX_POSITIONS,"auto_topup_enabled":False,"contributed_capital":S.get("contributed_capital",PAPER_RESET),"micro_analysis_threads":MICRO_ANALYSIS_THREADS,"whale_v2_margin_fraction":WL2_MARGIN_FRACTION,"whale_v2_leverage":WL2_LEVERAGE,"whale_v2_max_positions":WL2_MAX_POSITIONS},
      "entry_rejections":dict(S.get("_entry_rejections",{})),
+     "account_pnl_pct":dash.get("account_pnl_pct"),"realized_pnl_pct":dash.get("realized_pnl_pct"),
+     "unrealized_pnl":dash.get("unrealized_pnl"),"total_equity":dash.get("total_equity"),
+     "decision_learning":copy.deepcopy(S.get("learning_audit",{})),
+     "decision_learning_source":copy.deepcopy(S["sources"].get("DecisionLearning",{})),
      "daily_audit":daily,"news_health":copy.deepcopy(S.get("news_health",{})),
      "learning":{"samples":S.get("adaptive",{}).get("samples",0),"generated_at":S.get("adaptive",{}).get("generated_at"),"policy":S.get("adaptive",{}).get("policy")},
      "risk_ready":health["risk_ready"],"latency_metrics":LATENCIES.snapshot(time.time()),"trade_stream":copy.deepcopy(S["sources"].get("MarketTradeStream",{}))}
