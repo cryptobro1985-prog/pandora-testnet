@@ -128,7 +128,7 @@ def update_labels(connect, prices, now_epoch=None, limit=1000):
         rows = conn.execute("""select seq,decision_id,ts,symbol,side,entry_price,leverage,labels,status
             from decision_learning_log
             where status in ('PENDING','PARTIAL') and ts >= %s
-            order by seq desc limit %s""", (cutoff, int(limit))).fetchall()
+            order by seq asc limit %s""", (cutoff, int(limit))).fetchall()
         updated = completed = 0
         for row in rows:
             symbol = str(row["symbol"] or "")
