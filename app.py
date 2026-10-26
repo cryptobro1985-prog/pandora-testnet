@@ -20,6 +20,7 @@ from piq_direct import discover as piq_discover, fetch_story as piq_fetch_story,
 from source_health import LatencyMetrics, aggregate_delivery
 from market_data import RollingMarketData
 from market_stream import run_trade_stream
+from hyperliquid_transport import RestBudget
 from whale_signals import (MIN_NOTIONAL_USD, cluster_positions, summarize_book, significance, update_streaks,
                            PriceToValueTracker, price_to_value_entry, PRICE_TO_VALUE_POLICY)
 from news_logic import analyze_headline, is_non_market_news as semantic_non_market
@@ -608,10 +609,19 @@ def persistent_news(limit=50):
  with pg() as c:return c.execute("select ts,source,title,symbol,signal,published_at,source_url from news_events order by ts desc limit %s",(limit,)).fetchall()
 def persistent_features(limit=100):
  with pg() as c:return c.execute("select ts,source,title,symbol,decision,confidence,features from event_features order by ts desc limit %s",(limit,)).fetchall()
+HL_REST_BUDGET=RestBudget()
+
 def get(url,body=None):
  data=None if body is None else json.dumps(body).encode()
  req=urllib.request.Request(url,data=data,headers={"User-Agent":"Mozilla/5.0 PANDORA-research/1.0","Content-Type":"application/json"})
- with urllib.request.urlopen(req,timeout=4 if url==API else 8) as r:return r.read()
+ if url==API:HL_REST_BUDGET.acquire(body or {})
+ try:
+  with urllib.request.urlopen(req,timeout=4 if url==API else 8) as r:result=r.read()
+ except urllib.error.HTTPError as exc:
+  if url==API and exc.code==429:HL_REST_BUDGET.limited(exc.headers.get("Retry-After") if exc.headers else None)
+  raise
+ if url==API:HL_REST_BUDGET.success()
+ return result
 def init():
  with sqlite3.connect(DB) as c:
   c.execute("create table if not exists news (id text primary key,ts text,source text,title text,symbol text,signal integer)")
@@ -1549,6 +1559,33 @@ _LOCAL_CANDLE_CACHE={}
 _LOCAL_CANDLE_CACHE_LOCK=threading.RLock()
 _LOCAL_CANDLE_REFRESH_LOCK=threading.Lock()
 _LOCAL_CANDLE_BACKOFF={}
+_LOCAL_CANDLE_STREAM={}
+def accept_local_candles(data):
+ rows=data if isinstance(data,list) else [data]
+ stamp=time.monotonic();wall_ms=int(time.time()*1000)
+ with _LOCAL_CANDLE_CACHE_LOCK:
+  for row in rows:
+   if not isinstance(row,dict):continue
+   symbol,interval=row.get("s"),row.get("i")
+   if symbol not in LOCAL_SWING_SYMBOLS or interval not in ("1h","15m"):continue
+   try:
+    t,T=int(row["t"]),int(row["T"])
+    values=[float(row[k]) for k in ("o","h","l","c","v")]
+    o,h,l,c,v=values;step=3600000 if interval=="1h" else 900000
+    if not all(math.isfinite(z) for z in values) or min(o,h,l,c)<=0 or v<0:continue
+    if not (step-1000<=T-t<=step and l<=min(o,c)<=max(o,c)<=h and t<=wall_ms+1000 and T>=wall_ms-2*step):continue
+   except (KeyError,TypeError,ValueError,OverflowError):continue
+   key=(symbol,interval,120 if interval=="1h" else 12)
+   cached=_LOCAL_CANDLE_CACHE.get(key)
+   old=cached[1] if cached else []
+   merged={int(r["t"]):r for r in old}
+   merged[t]=dict(row)
+   # A delayed WS update cannot replace a newer version of the same candle.
+   previous=_LOCAL_CANDLE_STREAM.get((symbol,interval))
+   if previous and t<previous[1]:continue
+   _LOCAL_CANDLE_CACHE[key]=(stamp,[merged[k] for k in sorted(merged)][-125:],wall_ms)
+   _LOCAL_CANDLE_STREAM[(symbol,interval)]=(stamp,t)
+
 def _local_candles(symbol,interval,hours):
  key=(symbol,interval,hours)
  ttl=45.0 if interval==LOCAL_SWING_M15_INTERVAL else 120.0
@@ -1556,7 +1593,10 @@ def _local_candles(symbol,interval,hours):
  stamp=time.monotonic()
  with _LOCAL_CANDLE_CACHE_LOCK:
   cached=_LOCAL_CANDLE_CACHE.get(key)
-  if cached and stamp-cached[0]<ttl:return cached[1],cached[2]
+  stream=_LOCAL_CANDLE_STREAM.get((symbol,interval))
+  if cached and stream and stamp-stream[0]<45 and len(cached[1])>=10:
+   return cached[1],int(time.time()*1000)
+  if cached and len(cached[1])>=10 and stamp-cached[0]<ttl:return cached[1],int(time.time()*1000)
   if stamp<_LOCAL_CANDLE_BACKOFF.get(key,0):
    if cached and stamp-cached[0]<max_stale:return cached[1],cached[2]
    raise RuntimeError("local_swing_candle_rate_limit_backoff:"+symbol+":"+interval)
@@ -1565,11 +1605,14 @@ def _local_candles(symbol,interval,hours):
   stamp=time.monotonic()
   with _LOCAL_CANDLE_CACHE_LOCK:
    cached=_LOCAL_CANDLE_CACHE.get(key)
-   if cached and stamp-cached[0]<ttl:return cached[1],cached[2]
+   if cached and len(cached[1])>=10 and stamp-cached[0]<ttl:return cached[1],int(time.time()*1000)
    if stamp<_LOCAL_CANDLE_BACKOFF.get(key,0):
     if cached and stamp-cached[0]<max_stale:return cached[1],cached[2]
     raise RuntimeError("local_swing_candle_rate_limit_backoff:"+symbol+":"+interval)
   end_ms=int(time.time()*1000);start_ms=end_ms-int(max(12,hours)*3600*1000)
+  if cached and len(cached[1])>=10:
+   step=3600000 if interval=="1h" else 900000
+   start_ms=max(start_ms,int(cached[1][-1]["t"])-step)
   try:
    rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":symbol,"interval":interval,"startTime":start_ms,"endTime":end_ms}}))
    if not isinstance(rows,list):raise RuntimeError("local_swing_candle_snapshot_invalid:"+symbol+":"+interval)
@@ -1581,6 +1624,12 @@ def _local_candles(symbol,interval,hours):
     if cached and time.monotonic()-cached[0]<max_stale:return cached[1],cached[2]
    raise
   with _LOCAL_CANDLE_CACHE_LOCK:
+   # Merge REST with WS updates received while this HTTP request was running.
+   current=_LOCAL_CANDLE_CACHE.get(key)
+   merged={int(r["t"]):r for r in (cached[1] if cached else [])}
+   merged.update({int(r["t"]):r for r in rows})
+   if current and current[0]>stamp:merged.update({int(r["t"]):r for r in current[1]})
+   rows=[merged[k] for k in sorted(merged)][-125:]
    _LOCAL_CANDLE_CACHE[key]=(time.monotonic(),rows,end_ms)
    _LOCAL_CANDLE_BACKOFF.pop(key,None)
   return rows,end_ms
@@ -1968,7 +2017,8 @@ def hype_h1_local_swing_loop():
        "profit_lock":{"enabled":True,"arm_move_pct":HYPE_PROFIT_LOCK_ARM_MOVE*100.0,
         "buffer_move_pct":HYPE_PROFIT_LOCK_BUFFER_MOVE*100.0},
        "m15_profit_protection":True,"m15_reentry":True,"reentry_watch_seconds":LOCAL_REENTRY_WATCH_SECONDS or None,
-       "max_reentries_per_swing":LOCAL_REENTRY_MAX_PER_SWING or None,"parallel_scan_workers":4,"details":details,
+       "max_reentries_per_swing":LOCAL_REENTRY_MAX_PER_SWING or None,"parallel_scan_workers":4,"details":details,"rest_transport":HL_REST_BUDGET.status(),
+       "candle_transport":"websocket_with_incremental_rest_recovery",
        "error":None if all(x.get("ok") for x in details.values()) else "partial_symbol_scan_failure"}
    except LeaseLost as exc:
     with LOCK:S["sources"]["HypeH1LocalSwing"]={"ok":False,"last_check":now(),"mode":"standby","symbols":list(LOCAL_SWING_SYMBOLS),"error":str(exc)[:160]}
@@ -2271,7 +2321,9 @@ def market_regime_history():
     SHUTDOWN.wait(2);continue
    stamp=time.time()
    def fetch(sym):
-    rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":sym,"interval":"1m","startTime":int((stamp-6*3600)*1000),"endTime":int(stamp*1000)}}))
+    with LOCK:prior=list(S.get("_regime_candles",{}).get(sym,[]))
+    start=max(stamp-6*3600,prior[-1][0]-120) if prior else stamp-6*3600
+    rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":sym,"interval":"1m","startTime":int(start*1000),"endTime":int(stamp*1000)}}))
     if not isinstance(rows,list):raise ValueError("invalid_candle_history")
     return [(float(r["T"])/1000,float(r["c"])) for r in rows
             if isinstance(r,dict) and 0<float(r.get("T",0))/1000<stamp and float(r.get("c",0))>0]
@@ -2280,7 +2332,10 @@ def market_regime_history():
     try:
      rows=job.result()
      if not rows:raise ValueError("empty_completed_candles")
-     with LOCK:S.setdefault("_regime_candles",{})[sym]=rows[-360:]
+     with LOCK:
+      prior=S.setdefault("_regime_candles",{}).get(sym,[])
+      merged=dict(prior);merged.update(dict(rows))
+      S["_regime_candles"][sym]=sorted(merged.items())[-360:]
      loaded+=1
     except Exception as exc:errors[sym]=str(exc)[:90]
    with LOCK:S["sources"]["MarketBreadthHistory"]={"ok":loaded>=5,"last_check":now(),"loaded_markets":loaded,
@@ -2301,7 +2356,7 @@ def market_trade_stream():
   return listed|LIQ_WHALE_SYMBOLS|held
  def report(status):
   with LOCK:S["sources"]["MarketTradeStream"]={"last_check":now(),**status}
- run_trade_stream(MARKET_OBS,SHUTDOWN,symbols,report,os.getenv("HYPERLIQUID_WS_API","wss://api.hyperliquid.xyz/ws"),on_mids=accept_market_prices)
+ run_trade_stream(MARKET_OBS,SHUTDOWN,symbols,report,os.getenv("HYPERLIQUID_WS_API","wss://api.hyperliquid.xyz/ws"),on_mids=accept_market_prices,on_candles=accept_local_candles,candle_symbols=LOCAL_SWING_SYMBOLS)
 
 def market_metadata():
  while not SHUTDOWN.is_set():
