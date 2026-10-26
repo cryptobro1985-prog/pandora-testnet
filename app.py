@@ -1072,23 +1072,24 @@ def whale_liq_close(symbol,price,reason):
 
 @account_mutation
 def whale_liq_mark_positions(prices):
- # Evaluate every open whale position from one price snapshot, then persist all
- # non-closing checkpoints in a single PostgreSQL transaction. With many restored
- # positions this prevents 20-40 serial transactions from making market prices
- # look stale to the scanners.
  with LOCK:
   positions=copy.deepcopy(S["whale_positions"])
   timelines={k:list(v) for k,v in S.get("_timeline",{}).items()}
+  contexts=copy.deepcopy(S.get("_pump_ctx",{}))
  stamp=time.time();updates=[]
  for sym,pos in positions.items():
   px=prices.get(sym)
   if not px:continue
   entry=float(pos["entry"]);side=int(pos["side"]);lev=float(pos["leverage"])
-  with LOCK:ctx=copy.deepcopy(S.get("_pump_ctx",{}).get(sym,{}))
+  ctx=contexts.get(sym,{})
   mark=float(ctx.get("mark_price",0) or 0) or float(px)
   features=copy.deepcopy(pos.get("features",{}))
   liq=float(features.get("liquidation_price",0) or 0)
   victim=str(features.get("victim_side","")).lower()
+  price_move=side*(mark/entry-1.0)
+  features["ptv_mfe_price_move"]=max(float(features.get("ptv_mfe_price_move",0) or 0),price_move)
+  features["ptv_mae_price_move"]=min(float(features.get("ptv_mae_price_move",0) or 0),price_move)
+
   reached=bool(liq>0 and ((victim=="long" and mark<=liq) or (victim=="short" and mark>=liq)))
   if reached and not features.get("liquidation_level_reached_at"):
    features["liquidation_level_reached_at"]=now()
@@ -1096,11 +1097,12 @@ def whale_liq_mark_positions(prices):
    features["pre_liquidation_hold_active"]=False
    features["post_liq_search_started_at"]=now()
    journal("whale_liq_level_reached",None,{"symbol":sym,"victim_side":victim,
-    "liquidation_price":liq,"mark_price":mark,"entry":entry})
+    "liquidation_price":liq,"mark_price":mark,"entry":entry,"policy":PRICE_TO_VALUE_POLICY})
   if features.get("liquidation_level_reached_at") and liq>0:
    post_bps=max(0.0,side*(mark/liq-1.0)*10000.0)
    if post_bps>float(features.get("post_liq_max_favorable_bps",0) or 0):
     features["post_liq_max_favorable_bps"]=round(post_bps,2)
+
   pos["features"]=features
   protected,protect_reason,protect_fill,protect_state=_profit_protection_eval(pos,sym,float(px),stamp,timelines.get(sym,[]))
   _profit_protection_arm_journal("whale_liquidation",sym,bool(pos.get("profit_lock_armed")),protected)
@@ -1111,24 +1113,69 @@ def whale_liq_mark_positions(prices):
    whale_liq_close(sym,protect_fill,protect_reason)
    continue
   pos=protected;features=copy.deepcopy(pos.get("features",{}))
+
+  pre_liq=not features.get("liquidation_level_reached_at") and liq>0 and victim in ("long","short")
+  if pre_liq:
+   remaining=((mark/liq)-1.0)*100.0 if victim=="long" else ((liq/mark)-1.0)*100.0
+   remaining=max(0.0,remaining)
+   hist=[float(v) for v in features.get("ptv_distance_history_after_entry",[]) if v is not None][-11:]
+   hist.append(remaining);features["ptv_distance_history_after_entry"]=hist[-12:]
+   widening=len(hist)>=2 and hist[-1]>hist[-2]+0.015
+   features["ptv_widen_streak"]=int(features.get("ptv_widen_streak",0) or 0)+1 if widening else 0
+   flow=float(MARKET_OBS.context(sym,stamp).get("flow_imbalance") or 0)
+   r15=_timeline_return(timelines.get(sym,[]),stamp,15,mark)
+   r60=_timeline_return(timelines.get(sym,[]),stamp,60,mark)
+   trend_against=(r15 is not None and r60 is not None and side*r15<=-0.00030 and side*r60<=-0.00060)
+   flow_against=side*flow<=-0.08
+   thesis_break=trend_against and (flow_against or int(features.get("ptv_widen_streak",0) or 0)>=2)
+   features["ptv_thesis_break_streak"]=int(features.get("ptv_thesis_break_streak",0) or 0)+1 if thesis_break else 0
+   features["ptv_remaining_to_liquidation_pct"]=remaining
+   features["ptv_flow_against"]=bool(flow_against)
+   features["ptv_trend_against"]=bool(trend_against)
+
+   entry_dist=max(0.05,float(features.get("ptv_entry_distance_pct",remaining) or remaining))
+   distance_invalid=(remaining>min(1.25,entry_dist+0.25) and int(features.get("ptv_widen_streak",0) or 0)>=2)
+   thesis_invalid=int(features.get("ptv_thesis_break_streak",0) or 0)>=2
+   peak_move=float(features.get("ptv_mfe_price_move",0) or 0)
+   if peak_move>=0.0025:features["ptv_profit_lock_armed"]=True
+   profit_lock=bool(features.get("ptv_profit_lock_armed")) and price_move<=0.0012 and peak_move>=0.0025
+   profit_weakening=price_move>=0.0012 and trend_against and flow_against
+
+   pos["features"]=features
+   if profit_lock:
+    with LOCK:
+     live=S["whale_positions"].get(sym)
+     if live and live.get("opened")==pos.get("opened"):live["features"]=features
+    whale_liq_close(sym,float(px),"ptv_profit_lock");continue
+   if profit_weakening:
+    with LOCK:
+     live=S["whale_positions"].get(sym)
+     if live and live.get("opened")==pos.get("opened"):live["features"]=features
+    whale_liq_close(sym,float(px),"ptv_profit_weakening");continue
+   if distance_invalid or thesis_invalid:
+    with LOCK:
+     live=S["whale_positions"].get(sym)
+     if live and live.get("opened")==pos.get("opened"):live["features"]=features
+    whale_liq_close(sym,float(px),"ptv_distance_invalidation" if distance_invalid else "ptv_thesis_break");continue
+
   roe=(float(px)/entry-1)*side*lev
   peak=max(float(pos.get("peak_roe",0) or 0),roe)
   peak_price=float(pos.get("peak",entry*(1+(peak/lev)*side)))
-  probe=copy.deepcopy(pos);probe["peak"]=peak_price
+  probe=copy.deepcopy(pos);probe["peak"]=peak_price;probe["features"]=features
   evaluated,reason=evaluate_exit(probe,float(px),now())
   new_peak=float(evaluated.get("peak",entry));peak=(new_peak/entry-1)*side*lev
   state=risk_state(evaluated)
   with LOCK:
    live=S["whale_positions"].get(sym)
    if live and live.get("opened")==pos.get("opened"):
-    live["features"]=features
+    live["features"]=copy.deepcopy(evaluated.get("features",features))
     live["peak_roe"]=peak
     live.update(state)
     live["last_price"]=float(px)
   if reason:
-   whale_liq_close(sym,float(px),"local_extreme_weakening")
+   whale_liq_close(sym,float(px),"ptv_post_liq_weakening")
    continue
-  updates.append((peak,json.dumps(state,default=str),json.dumps(features,default=str),sym,pos["opened"]))
+  updates.append((peak,json.dumps(state,default=str),json.dumps(evaluated.get("features",features),default=str),sym,pos["opened"]))
  if updates:
   with pg() as db:
    with db.transaction():
@@ -1149,8 +1196,7 @@ def _whale_liq_cvd(symbol):
  return observed.get("cvd_1m") or 0.0,observed.get("flow_imbalance") or 0.0,observed.get("trade_coverage_seconds")
 
 def whale_liquidation_scan():
- last_signal={};streaks={};scan_id=0;v2_tracker=WL2EligibilityTracker()
- v2_rejection_totals={};v2_journal_at={};v2_last_observation=0
+ last_signal={};scan_id=0;ptv_tracker=PriceToValueTracker();rejection_totals={}
  pool=concurrent.futures.ThreadPoolExecutor(max_workers=10,thread_name_prefix="whale-book")
  try:
   while not SHUTDOWN.is_set():
@@ -1161,196 +1207,155 @@ def whale_liquidation_scan():
      SHUTDOWN.wait(0.5);continue
     prices=refresh_market_prices(max_age=8.0)
     with LOCK:
-     history={k:list(v) for k,v in S.get("_timeline",{}).items()};contexts=copy.deepcopy(S.get("_pump_ctx",{}))
+     history={k:list(v) for k,v in S.get("_timeline",{}).items()}
+     contexts=copy.deepcopy(S.get("_pump_ctx",{}))
     danger_error=None
     try:
      data=hyperdata("/v1/positions/danger-zone?threshold="+urllib.parse.quote(str(LIQ_WHALE_MAX_DISTANCE_PCT)))
-     if not isinstance(data,dict) or not isinstance(data.get("positions"),list):raise RuntimeError("danger_zone_unavailable_or_invalid")
+     if not isinstance(data,dict) or not isinstance(data.get("positions"),list):
+      raise RuntimeError("danger_zone_unavailable_or_invalid")
      rows=data["positions"]
     except Exception as exc:
      rows=[];danger_error=str(exc)[:180]
+
     stamp=time.time();scan_id+=1
     for sym in contexts:contexts[sym].update(MARKET_OBS.context(sym,stamp))
     clusters=cluster_positions(rows,prices,contexts,stamp,LIQ_WHALE_MAX_POSITION_AGE_SECONDS,LIQ_WHALE_MAX_DISTANCE_PCT)
     rejections={};eligible=[]
-    # WL2 sees the distance on every valid cluster pass, before v1 eligibility.
-    # Shared freshness/materiality failures remain explicit entry vetoes.
-    v2_inputs={p["cluster_id"]:{"symbol":p["symbol"],"side":p["trade_side"],"cluster_id":p["cluster_id"],
-      "distance_pct":p["distance_pct"],"liquidation_price":p["liq_price"],"victim_side":p["side"],
-      "observed_at_epoch":stamp,"score":0,"whale_rank_score":0,"upstream_reject_reasons":[]} for p in clusters}
     def reject(reason):rejections[reason]=rejections.get(reason,0)+1
+
     for cluster in clusters:
-     # Run cheap significance tests before acquiring one shared book per asset.
      probe=significance(cluster,None,contexts.get(cluster["symbol"],{}),floors=LIQ_WHALE_MIN_BY_SYMBOL)
      if probe["reason"]=="missing_orderbook":eligible.append(cluster)
-     else:
-      reject(probe["reason"]);v2_inputs[cluster["cluster_id"]]["upstream_reject_reasons"]=[probe["reason"]]
-    cascades=LIQUIDATION_TAPE.snapshot(stamp)
-    cascade_symbols={x["symbol"] for x in cascades if x["symbol"] in prices and x["events"]>=2 and
-      x["last_event_age_seconds"]<=10 and x["dominance"]>=.75 and
-      x["notional_usd"]>={"BTC":500000,"ETH":250000,"SOL":100000}.get(x["symbol"],50000) and
-      contexts.get(x["symbol"],{}).get("trade_data_fresh")}
-    jobs={sym:pool.submit(_whale_liq_book,sym) for sym in ({p["symbol"] for p in eligible}|cascade_symbols)}
-    books={sym:job.result() for sym,job in jobs.items()}
-    candidates=[]
+     else:reject(probe["reason"])
+
+    jobs={sym:pool.submit(_whale_liq_book,sym) for sym in {p["symbol"] for p in eligible}}
+    books={}
+    for sym,job in jobs.items():
+     try:books[sym]=job.result(timeout=3)
+     except Exception:books[sym]=None
+
+    raw_candidates=[]
     for p in eligible:
-     sym=p["symbol"];side=p["trade_side"];ctx=contexts[sym];book=books[sym]
+     sym=p["symbol"];side=p["trade_side"];ctx=contexts.get(sym,{});book=books.get(sym)
      p=dict(p,evaluated_at=time.time())
      material=significance(p,book,ctx,floors=LIQ_WHALE_MIN_BY_SYMBOL)
      if not material["allowed"]:
-      reject(material["reason"]);v2_inputs[p["cluster_id"]]["upstream_reject_reasons"]=[material["reason"]];continue
-     r15=_timeline_return(history.get(sym,[]),stamp,15,prices[sym]);r60=_timeline_return(history.get(sym,[]),stamp,60,prices[sym])
-     r300=_timeline_return(history.get(sym,[]),stamp,300,prices[sym]);r900=_timeline_return(history.get(sym,[]),stamp,900,prices[sym])
+      reject(material["reason"]);continue
+
+     r15=_timeline_return(history.get(sym,[]),stamp,15,prices[sym])
+     r60=_timeline_return(history.get(sym,[]),stamp,60,prices[sym])
+     r300=_timeline_return(history.get(sym,[]),stamp,300,prices[sym])
+     r900=_timeline_return(history.get(sym,[]),stamp,900,prices[sym])
      if r15 is None or r60 is None:
-      reject("insufficient_price_history");v2_inputs[p["cluster_id"]]["upstream_reject_reasons"]=["insufficient_price_history"];continue
-     dist=p["distance_pct"];impact=material["liquidation_flow_to_depth"]
+      reject("insufficient_price_history");continue
+
+     dist=p["distance_pct"];impact=float(material.get("liquidation_flow_to_depth",0) or 0)
      base_distance=LIQ_WHALE_BASE_ENTRY_DISTANCE.get(sym,LIQ_WHALE_DEFAULT_ENTRY_DISTANCE)
-     dynamic=min(LIQ_WHALE_MAX_DISTANCE_PCT,base_distance+(0.15 if impact>=.5 else 0)+(0.2 if impact>=1 else 0)+(0.2 if impact>=2 else 0))
-     flow=float(ctx.get("flow_imbalance") or 0);imb=float(book["imbalance"])
-     trend_ok=side*r15>=.0004 and side*r60>=.0008
-     book_ok=side*imb>=.06 and book["spread_bps"]<=12
-     flow_ok=side*flow>=.08
-     vol_z=ctx.get("volume_rate_z");burst=float(ctx.get("volume_burst_ratio") or 0)
-     participation_ok=burst>=1.5 or (vol_z is not None and vol_z>=2.5)
-     oi=float(ctx.get("oi_delta_60s") or 0);oi_ok=abs(oi)>=.0025
-     confirmations=sum((book_ok,flow_ok,participation_ok,oi_ok,impact>=.5))
-     pressure_ok=confirmations>=3 and flow_ok
-     score=20+max(0,22*(1-dist/max(dynamic,.01)))+min(18,5+max(0,math.log10(p["size_usd"]/material["minimum_notional_usd"]))*10)+min(15,impact*7.5)
-     score+=8*bool(side*r15>=.0004)+10*bool(side*r60>=.0008)+8*book_ok+8*flow_ok+5*participation_ok+4*oi_ok
-     x={**material,"engine":"whale_liquidation_all_market_v4","observed_at_epoch":stamp,"symbol":sym,"side":side,"victim_side":p["side"],
+     dynamic=min(LIQ_WHALE_MAX_DISTANCE_PCT,base_distance+(0.10 if impact>=.5 else 0)+(0.15 if impact>=1 else 0)+(0.15 if impact>=2 else 0))
+     flow=float(ctx.get("flow_imbalance") or 0)
+     imb=float((book or {}).get("imbalance") or 0)
+     spread=float((book or {}).get("spread_bps",9999) or 9999)
+     vol_z=ctx.get("volume_rate_z")
+     burst=float(ctx.get("volume_burst_ratio") or 0)
+     oi=float(ctx.get("oi_delta_60s") or 0)
+     book_ok=side*imb>=.03 and spread<=15
+     flow_ok=side*flow>=.04
+     participation_ok=burst>=1.15 or (vol_z is not None and float(vol_z)>=1.3)
+     oi_ok=abs(oi)>=.0015
+     confirmations=sum((book_ok,flow_ok,participation_ok,oi_ok,impact>=.25))
+
+     score=25+max(0,25*(1-dist/max(dynamic,.01)))+min(18,impact*9)
+     score+=10*bool(side*r15>=.00015)+12*bool(side*r60>=.00035)+6*book_ok+6*flow_ok+4*participation_ok+4*oi_ok
+     raw_candidates.append({**material,"engine":"price_to_value_liquidation","policy":PRICE_TO_VALUE_POLICY,
+      "observed_at_epoch":stamp,"symbol":sym,"side":side,"victim_side":p["side"],
       "cluster_id":p["cluster_id"],"wallet_count":p["wallet_count"],"whale_size_usd":p["size_usd"],
-      "liquidation_price":p["liq_price"],"mark_price":p["mark_price"],"distance_pct":dist,"dynamic_entry_distance_pct":dynamic,
-      "position_age_seconds":p["position_age_seconds"],"r15":r15,"r60":r60,"r300":r300,"r900":r900,"orderbook_imbalance":imb,
-      "flow_imbalance":flow,"cvd_1m":ctx.get("cvd_1m"),"volume_rate_z":vol_z,"volume_burst_ratio":burst,
-      "oi_delta_60s":oi,"book_depth_usd":round(float(book.get("bid_depth_usd",0) or 0)+float(book.get("ask_depth_usd",0) or 0),2),
-      "day_volume_usd":float(S.get("_day_volumes",{}).get(sym,0) or 0),
-      "micro_confirmations":confirmations,"score":round(min(100,score),2),"trend_ok":trend_ok,"pressure_ok":pressure_ok}
-     v2_inputs[p["cluster_id"]]=x
-     if dist>dynamic:reject("outside_dynamic_entry_distance");continue
-     if not (trend_ok and pressure_ok):reject("directional_pressure_not_confirmed");continue
-     candidates.append(x)
-    for x in v2_inputs.values():
-     distance=max(0.0,float(x.get("distance_pct",99) or 99))
-     dyn=max(0.01,float(x.get("dynamic_entry_distance_pct",1) or 1))
-     proximity=max(0.0,min(1.0,1.0-distance/dyn))
-     vol=max(abs(float(x.get("r15",0) or 0))*250.0,abs(float(x.get("r60",0) or 0))*125.0,
-             min(1.0,float(x.get("volume_burst_ratio",0) or 0)/4.0),
-             min(1.0,max(0.0,float(x.get("volume_rate_z",0) or 0))/4.0))
-     impact=min(1.0,max(0.0,float(x.get("liquidation_flow_to_depth",0) or 0))/1.5)
-     pressure=max(0.0,min(1.0,int(x.get("side",0) or 0)*float(x.get("flow_imbalance",0) or 0)/0.25))
-     x["whale_rank_score"]=round(min(100.0,0.55*float(x["score"])+18.0*proximity+12.0*min(1.0,vol)+10.0*impact+5.0*pressure),2)
-    candidates.sort(key=lambda x:(x.get("whale_rank_score",0),x["score"],-x.get("distance_pct",99)),reverse=True)
-    streaks=update_streaks(candidates,streaks,scan_id)
-    v2_qualified,v2_rejections,v2_observed=v2_tracker.observe(list(v2_inputs.values()),scan_id)
-    regime=market_regime(prices,history,S.get("_day_volumes",{}),time.time())
-    cascade_qualified,cascade_rejections=cascade_candidates(cascades,prices,history,contexts,books,time.time(),regime)
-    # Already observed forced closes have a separate continuation route. They
-    # do not pretend to be future liquidation targets with contracting distance.
-    existing={(x["symbol"],x["side"]) for x in v2_qualified}
-    v2_qualified.extend(x for x in cascade_qualified if (x["symbol"],x["side"]) not in existing)
-    for reason,count in cascade_rejections.items():v2_rejections[reason]=v2_rejections.get(reason,0)+count
-    for reason,count in v2_rejections.items():v2_rejection_totals[reason]=v2_rejection_totals.get(reason,0)+count
-    v2_opened=[]
-    v2_journal_rows=[]
-    v2_qualified_ids={str(x.get("cluster_id")) for x in v2_qualified}
-    for x in v2_qualified:
-     with LOCK:v2_capacity=len(S.get("whale_v2_positions",{}))<WL2_MAX_POSITIONS
-     learn_id=hashlib.sha256(("WL2_ENTRY:"+str(x.get("cluster_id"))+":"+str(int(stamp//15))).encode()).hexdigest()
-     x["learning_decision_id"]=learn_id
-     opened=v2_capacity and whale_v2_open(x["symbol"],int(x["side"]),prices.get(x["symbol"]),x["score"],x)
-     action="OPENED" if opened else ("QUALIFIED_CAPACITY" if not v2_capacity else "QUALIFIED")
-     if opened:v2_opened.append(x["symbol"])
-     ident=hashlib.sha256((WL2_POLICY+":"+str(x.get("cluster_id"))+":"+str(int(stamp//15))+":"+action).encode()).hexdigest()
-     reason="entry_opened" if opened else ("wl2_position_capacity" if not v2_capacity else "qualified_but_entry_vetoed_or_duplicate")
-     log_learning_decision(learn_id,"whale_liquidation_v2",x["symbol"],int(x["side"]),action,reason,
-       prices.get(x["symbol"]),x.get("score"),WL2_LEVERAGE,x)
-     v2_journal_rows.append((ident,now(),x["symbol"],int(x["side"]),float(x["score"]),action,json.dumps(x,default=str)))
-    for x in v2_observed:
-     if str(x.get("cluster_id")) in v2_qualified_ids:continue
-     key=(x["cluster_id"],tuple(x.get("wl2_reject_reasons") or []))
-     if stamp-v2_journal_at.get(key,0)<60:continue
-     v2_journal_at[key]=stamp
-     ident=hashlib.sha256((WL2_POLICY+":"+str(x.get("cluster_id"))+":"+str(int(stamp//60))+":REJECTED:"+str(key[1])).encode()).hexdigest()
-     reject_reason=",".join(str(r) for r in (x.get("wl2_reject_reasons") or x.get("upstream_reject_reasons") or ["wl2_filters"]))
-     reject_learn_id=hashlib.sha256(("WL2_OBS:"+str(x.get("cluster_id"))+":"+str(int(stamp//60))).encode()).hexdigest()
-     x["learning_decision_id"]=reject_learn_id
-     log_learning_decision(reject_learn_id,"whale_liquidation_v2",x["symbol"],int(x["side"]),"REJECTED",reject_reason,
-       prices.get(x["symbol"]),x.get("score"),WL2_LEVERAGE,x)
-     v2_journal_rows.append((ident,now(),x["symbol"],int(x["side"]),float(x["score"]),"REJECTED",json.dumps(x,default=str)))
-    if v2_journal_rows:
-     with pg() as db:
-      with db.cursor() as cur:
-       cur.executemany("""insert into whale_liq_v2_signal_journal(id,ts,symbol,side,score,action,features)
-        values(%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(id) do nothing""",v2_journal_rows)
-    if len(v2_journal_at)>2000:v2_journal_at={k:t for k,t in v2_journal_at.items() if stamp-t<600}
-    if v2_opened or stamp-v2_last_observation>=30:
-     try:
-      save_scanner_observation("whale_liquidation_v2",{"policy":WL2_POLICY,"candidates":v2_observed[:30],
-       "qualified":v2_qualified[:20],"opened":v2_opened,"rejections":v2_rejections,"scan_epoch":stamp})
-      v2_last_observation=stamp
-     except Exception as obs_exc:
-      with LOCK:S["last_error"]="whale_v2_observation: "+str(obs_exc)[:160]
-    with LOCK:
-     S["sources"]["WhaleLiquidationV2"]={"ok":True,"last_check":now(),"mode":"independent_cluster_observation_v2",
-      "policy":WL2_POLICY,"candidate_count":len(v2_observed),"qualified_candidates":len(v2_qualified),
-      "input_clusters":len(clusters),"v1_entry_candidates":len(candidates),"distance_window_seconds":60,
-      "confirmed_cascade_observations":len(cascades),"confirmed_cascade_candidates":len(cascade_qualified),
-      "pre_liquidation_source_error":danger_error,"confirmed_cascade_source_connected":LIQUIDATION_TAPE.connected,
-      "opened_this_scan":v2_opened,"paper_positions":len(S.get("whale_v2_positions",{})),
-      "paper_trades":S.get("whale_v2_trades",0),"virtual_equity":round(float(S.get("whale_v2_equity",PAPER_RESET)),4),
-      "margin_fraction":WL2_MARGIN_FRACTION,"leverage":WL2_LEVERAGE,"max_positions":WL2_MAX_POSITIONS,
-      "rejections":v2_rejections,"rejections_since_start":dict(v2_rejection_totals),"learning_mode":"observe_only_v2_revised","error":None}
-    qualified=[x for x in candidates if x["score"]>=LIQ_WHALE_SCORE_MIN and x["confirmation_streak"]>=2]
-    qualified.sort(key=lambda x:(x.get("whale_rank_score",0),x["score"],-x.get("distance_pct",99)),reverse=True)
-    v1_bucket=int(stamp//60)
-    v1_candidate_ids={str(x.get("cluster_id")) for x in candidates}
-    v1_qualified_ids={str(x.get("cluster_id")) for x in qualified}
-    for observed in v2_inputs.values():
-     sym=observed.get("symbol");side=int(observed.get("side") or 0);cid=str(observed.get("cluster_id"))
-     if not sym or side not in (-1,1):continue
-     if cid in v1_qualified_ids:v1_action="QUALIFIED";v1_reason="passed_score_and_confirmation"
-     elif cid in v1_candidate_ids:v1_action="REJECTED";v1_reason="score_or_confirmation_streak"
-     else:
-      v1_action="REJECTED"
-      v1_reason=",".join(str(r) for r in (observed.get("upstream_reject_reasons") or ["distance_direction_pressure_or_materiality_filter"]))
-     v1_id=hashlib.sha256(("WHALE_V1_OBS:"+cid+":"+str(v1_bucket)).encode()).hexdigest()
-     log_learning_decision(v1_id,"whale_liquidation",sym,side,v1_action,v1_reason,prices.get(sym),
-       observed.get("score"),WHALE_LEVERAGE,observed)
+      "liquidation_price":p["liq_price"],"mark_price":p["mark_price"],"distance_pct":dist,
+      "dynamic_entry_distance_pct":dynamic,"position_age_seconds":p["position_age_seconds"],
+      "r15":r15,"r60":r60,"r300":r300,"r900":r900,"orderbook_imbalance":imb,
+      "spread_bps":spread,"flow_imbalance":flow,"cvd_1m":ctx.get("cvd_1m"),
+      "volume_rate_z":vol_z,"volume_burst_ratio":burst,"oi_delta_60s":oi,
+      "micro_confirmations":confirmations,"score":round(min(100,score),2)})
+
+    tracked=ptv_tracker.observe(raw_candidates,scan_id,stamp)
+    regime=market_regime(prices,history,S.get("_day_volumes",{}),stamp)
+    regime_side=int(regime.get("side") or 0)
+    evaluated=[price_to_value_entry(x,regime_side) for x in tracked]
+    qualified=[x for x in evaluated if x.get("ptv_qualified")]
+
+    best_by_symbol={}
+    for x in sorted(qualified,key=lambda z:(float(z.get("distance_pct",99)),
+                                             -float(z.get("ptv_quality_score",0)),
+                                             -float(z.get("whale_size_usd",0)))):
+     best_by_symbol.setdefault(x["symbol"],x)
+    qualified=list(best_by_symbol.values())
+    qualified.sort(key=lambda x:(-float(x.get("ptv_quality_score",0)),float(x.get("distance_pct",99))))
+
+    for x in evaluated:
+     if x.get("ptv_qualified"):continue
+     for reason in x.get("ptv_reject_reasons") or ["ptv_rejected"]:reject(reason)
+    for reason,count in rejections.items():rejection_totals[reason]=rejection_totals.get(reason,0)+count
+
+    opened_now=[]
     for x in qualified:
      sym=x["symbol"];side=int(x["side"])
-     v1_entry_id=hashlib.sha256(("WHALE_V1_ENTRY:"+str(x.get("cluster_id"))+":"+str(int(stamp//15))).encode()).hexdigest()
-     x["learning_decision_id"]=v1_entry_id
-     with LOCK:
-      whale_capacity=len(S.get("whale_positions",{}))<WHALE_MAX_ACTIVE_POSITIONS
-     if not whale_capacity:
-      log_learning_decision(v1_entry_id,"whale_liquidation",sym,side,"SKIPPED","whale_position_cap",
-       prices.get(sym),x.get("score"),WHALE_LEVERAGE,x);continue
-     opened=whale_liq_open(sym,side,prices[sym],x["score"],x,WHALE_MARGIN_FRACTION)
-     action="OPENED" if opened else "QUALIFIED";key=(x["cluster_id"],action)
-     log_learning_decision(v1_entry_id,"whale_liquidation",sym,side,action,
-       "entry_opened" if opened else "qualified_but_entry_vetoed_or_capacity",prices.get(sym),x.get("score"),WHALE_LEVERAGE,x)
-     if stamp-last_signal.get(key,0)<15:continue
-     last_signal[key]=stamp
-     ident=hashlib.sha256(("WHALELIQ3:"+x["cluster_id"]+":"+str(int(stamp//15))+":"+action).encode()).hexdigest()
-     with pg() as db:db.execute("insert into whale_liq_signal_journal(id,ts,symbol,side,score,action,features) values(%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(id) do nothing",(ident,now(),sym,side,x["score"],action,json.dumps(x,default=str)))
-    if clusters or candidates or qualified:
-     try:save_scanner_observation("whale_liquidation",{"danger_positions":len(rows),"clusters":clusters[:20],"candidates":candidates[:20],"qualified":qualified[:20],"rejections":rejections,"scan_epoch":stamp})
+     learn_id=hashlib.sha256(("PTV_ENTRY:"+str(x.get("cluster_id"))+":"+str(int(stamp//15))).encode()).hexdigest()
+     x["learning_decision_id"]=learn_id
+     with LOCK:capacity=len(S.get("whale_positions",{}))<WHALE_MAX_ACTIVE_POSITIONS
+     opened=capacity and whale_liq_open(sym,side,prices.get(sym),x.get("ptv_quality_score",x["score"]),x,WHALE_MARGIN_FRACTION)
+     action="OPENED" if opened else ("SKIPPED" if not capacity else "QUALIFIED")
+     reason="entry_opened" if opened else ("whale_position_cap" if not capacity else "qualified_but_entry_vetoed_or_symbol_busy")
+     log_learning_decision(learn_id,"whale_liquidation",sym,side,action,reason,prices.get(sym),
+       x.get("ptv_quality_score",x.get("score")),WHALE_LEVERAGE,x)
+     if opened:opened_now.append(sym)
+
+     key=(x["cluster_id"],action)
+     if stamp-last_signal.get(key,0)>=15:
+      last_signal[key]=stamp
+      ident=hashlib.sha256(("PTV:"+x["cluster_id"]+":"+str(int(stamp//15))+":"+action).encode()).hexdigest()
+      with pg() as db:db.execute(
+       "insert into whale_liq_signal_journal(id,ts,symbol,side,score,action,features) values(%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(id) do nothing",
+       (ident,now(),sym,side,x.get("ptv_quality_score",x["score"]),action,json.dumps(x,default=str)))
+
+    bucket=int(stamp//60)
+    for x in evaluated:
+     if x.get("ptv_qualified"):continue
+     sym=x.get("symbol");side=int(x.get("side") or 0)
+     if not sym or side not in (-1,1):continue
+     reason=",".join(str(r) for r in (x.get("ptv_reject_reasons") or ["ptv_rejected"]))
+     did=hashlib.sha256(("PTV_OBS:"+str(x.get("cluster_id"))+":"+str(bucket)).encode()).hexdigest()
+     log_learning_decision(did,"whale_liquidation",sym,side,"REJECTED",reason,prices.get(sym),
+       x.get("ptv_quality_score",x.get("score")),WHALE_LEVERAGE,x)
+
+    if clusters or evaluated or qualified:
+     try:save_scanner_observation("whale_liquidation",{"policy":PRICE_TO_VALUE_POLICY,
+      "danger_positions":len(rows),"clusters":clusters[:25],"candidates":evaluated[:25],
+      "qualified":qualified[:15],"opened":opened_now,"market_regime":regime,
+      "rejections":rejections,"scan_epoch":stamp})
      except Exception as obs_exc:
       with LOCK:S["last_error"]="whale_observation: "+str(obs_exc)[:160]
+
     elapsed=time.monotonic()-started
-    with LOCK:S["sources"]["WhaleLiquidationScanner"]={"ok":danger_error is None,"last_check":now(),"mode":"all_market_liquidation_clusters_v4",
-     "symbols":"ALL_HYPERLIQUID_LISTED","scan_seconds":LIQ_WHALE_SCAN_SECONDS,"actual_scan_seconds":round(elapsed,3),
-     "min_whale_usd":{"major":LIQ_WHALE_MIN_BY_SYMBOL,"default":LIQ_WHALE_DEFAULT_MIN_USD},"threshold_policy":"dynamic_all_market_floor_plus_oi_volume_depth",
-     "danger_positions":len(rows),"clusters":len(clusters),"eligible_candidates":len(candidates),"qualified_candidates":len(qualified),
-     "rejections":rejections,"top_candidates":candidates[:5],"paper_positions":len(S["whale_positions"]),"paper_trades":S["whale_trades"],
-     "coverage":"observed_hyperliquid_wallets_only_not_global_heatmap","shared_account_equity":round(S["equity"],4),"error":danger_error}
+    with LOCK:S["sources"]["WhaleLiquidationScanner"]={"ok":danger_error is None,"last_check":now(),
+     "mode":"price_to_value_liquidation","policy":PRICE_TO_VALUE_POLICY,
+     "symbols":"ALL_HYPERLIQUID_LISTED","scan_seconds":LIQ_WHALE_SCAN_SECONDS,
+     "actual_scan_seconds":round(elapsed,3),"danger_positions":len(rows),"clusters":len(clusters),
+     "eligible_candidates":len(evaluated),"qualified_candidates":len(qualified),
+     "opened_this_scan":opened_now,"rejections":rejections,
+     "rejections_since_start":dict(rejection_totals),
+     "top_candidates":qualified[:5] if qualified else sorted(evaluated,key=lambda x:float(x.get("distance_pct",99)))[:5],
+     "paper_positions":len(S["whale_positions"]),"paper_trades":S["whale_trades"],
+     "market_regime":regime,
+     "entry_logic":"trend->nearest_material_liquidation->approach->micro_confirmation",
+     "exit_logic":"profit_protection->distance/thesis_invalidation->post_liquidation_weakening",
+     "coverage":"observed_hyperliquid_wallets_only_not_global_heatmap",
+     "shared_account_equity":round(S["equity"],4),"error":danger_error}
    except Exception as exc:
-    streaks={}
-    with LOCK:
-     S["sources"]["WhaleLiquidationScanner"]={"ok":False,"last_check":now(),"mode":"all_market_liquidation_clusters_v4","error":str(exc)[:180]}
-     S["sources"]["WhaleLiquidationV2"]={"ok":False,"last_check":now(),"mode":"ab_shadow_frozen_week1","policy":WL2_POLICY,"error":str(exc)[:180]}
+    with LOCK:S["sources"]["WhaleLiquidationScanner"]={"ok":False,"last_check":now(),
+     "mode":"price_to_value_liquidation","policy":PRICE_TO_VALUE_POLICY,"error":str(exc)[:180]}
    SHUTDOWN.wait(max(.05,LIQ_WHALE_SCAN_SECONDS-(time.monotonic()-started)))
- finally:pool.shutdown(wait=False,cancel_futures=True)
+ finally:
+  pool.shutdown(wait=False,cancel_futures=True)
 
 def flatten_news_for_regime(reason,prices):
  with LOCK:items=[(sym,copy.deepcopy(pos)) for sym,pos in S["positions"].items()]
