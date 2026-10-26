@@ -1,30 +1,32 @@
-"""H1 local-extreme + M15 pressure/re-entry PAPER strategy.
+"""M15 local-swing PAPER strategy with H1 context.
 
 Pure signal logic only. No exchange orders, credentials, networking or persistence.
-H1 pivots define the directional swing. M15 pressure can protect an already-profitable
-position before the opposite H1 extreme, then arm a watch state for a recovery re-entry.
+Completed M15 pivots define long/short swing entries and reversals in both trend and
+counter-trend corrections. H1 is informational context only and never blocks an M15 trade.
+A mature partial M15 candle plus live flow can protect earned profit before the next pivot.
 """
 
 import math
 
-POLICY = "local_swing_h1_m15_protect_reentry_v3"
+POLICY = "local_swing_m15_h1_context_v4"
 SYMBOL = "HYPE"  # backwards-compatible primary symbol
 SYMBOLS = ("HYPE", "NEAR")
-INTERVAL = "1h"
+INTERVAL = "15m"
 M15_INTERVAL = "15m"
+H1_CONTEXT_INTERVAL = "1h"
 STARTING_EQUITY = 100.0
-MARGIN_FRACTION = 0.10
+MARGIN_FRACTION = 0.25
 LEVERAGE = 25.0
 PIVOT_LOOKBACK = 4
-MIN_FAVORABLE_MOVE_FOR_WEAKENING = 0.004
-PROFIT_LOCK_ARM_MOVE = 0.004
+MIN_FAVORABLE_MOVE_FOR_WEAKENING = 0.0015
+PROFIT_LOCK_ARM_MOVE = 0.0025
 PROFIT_LOCK_BUFFER_MOVE = 0.0012
 M15_PROFIT_EXIT_MIN_MOVE = 0.0012
 M15_PRESSURE_MIN_SCORE = 3
 M15_RECOVERY_MIN_SCORE = 3
 M15_PARTIAL_MIN_AGE_MS = 3 * 60 * 1000
-REENTRY_WATCH_SECONDS = 6 * 3600
-REENTRY_MAX_PER_SWING = 2
+REENTRY_WATCH_SECONDS = 2 * 3600
+REENTRY_MAX_PER_SWING = 4
 LIQUIDATION_PROXY_ROE = -0.95
 
 
@@ -61,7 +63,7 @@ def _completed(rows, now_ms, interval_ms):
 
 
 def completed_candles(rows, now_ms):
-    return _completed(rows, now_ms, 3_600_000)
+    return _completed(rows, now_ms, 900_000)
 
 
 def completed_m15_candles(rows, now_ms):
@@ -75,13 +77,13 @@ def _ret(a, b):
 def analyze(rows, now_ms, symbol=SYMBOL):
     candles = completed_candles(rows, now_ms)
     if len(candles) < PIVOT_LOOKBACK + 2:
-        return {"ready": False, "reason": "insufficient_closed_h1_candles",
+        return {"ready": False, "reason": "insufficient_closed_m15_candles",
                 "closed_candles": len(candles), "policy": POLICY, "symbol": symbol}
-    if float(now_ms) - candles[-1]["T"] > 3_600_000 + 90_000:
-        return {"ready": False, "reason": "stale_h1_history", "policy": POLICY, "symbol": symbol}
+    if float(now_ms) - candles[-1]["T"] > 900_000 + 45_000:
+        return {"ready": False, "reason": "stale_m15_history", "policy": POLICY, "symbol": symbol}
     recent = candles[-(PIVOT_LOOKBACK+2):]
-    if any(abs(b["t"]-a["t"]-3_600_000)>1000 for a,b in zip(recent,recent[1:])):
-        return {"ready": False, "reason": "gapped_h1_history", "policy": POLICY, "symbol": symbol}
+    if any(abs(b["t"]-a["t"]-900_000)>1000 for a,b in zip(recent,recent[1:])):
+        return {"ready": False, "reason": "gapped_m15_history", "policy": POLICY, "symbol": symbol}
 
     x = candles[-1]
     p = candles[-2]
@@ -151,13 +153,29 @@ def analyze(rows, now_ms, symbol=SYMBOL):
         "short_weakening": short_weak_score >= 2,
         "long_weak_score": long_weak_score,
         "short_weak_score": short_weak_score,
-        "last_h1_return": last_ret,
-        "previous_h1_return": prev_ret,
-        "momentum_3h": mom3,
-        "previous_momentum_3h": prev_mom3,
+        "last_m15_return": last_ret,
+        "previous_m15_return": prev_ret,
+        "momentum_45m": mom3,
+        "previous_momentum_45m": prev_mom3,
         "confirmation_close": x["c"],
         "closed_candles": len(candles),
     }
+
+
+def analyze_h1_context(rows, now_ms, symbol=SYMBOL):
+    candles = _completed(rows, now_ms, 3_600_000)
+    if len(candles) < 5:
+        return {"ready": False, "reason": "insufficient_h1_context", "symbol": symbol}
+    if float(now_ms) - candles[-1]["T"] > 3_600_000 + 120_000:
+        return {"ready": False, "reason": "stale_h1_context", "symbol": symbol}
+    closes=[x["c"] for x in candles]
+    r1=_ret(closes[-2],closes[-1])
+    r4=_ret(closes[-5],closes[-1])
+    trend_side=1 if r4>0 else (-1 if r4<0 else 0)
+    return {"ready": True, "symbol": symbol, "interval": H1_CONTEXT_INTERVAL,
+            "trend_side": trend_side, "return_1h": r1, "return_4h": r4,
+            "context_only": True, "blocks_m15_entries": False,
+            "last_candle_time": candles[-1]["t"]}
 
 
 def _usable_m15(rows, now_ms):
@@ -297,9 +315,9 @@ def position_exit(position, analysis, mark):
     enough_move = max(favorable, peak_favorable) >= MIN_FAVORABLE_MOVE_FOR_WEAKENING
     if enough_move:
         if side > 0 and analysis.get("long_weakening"):
-            return "h1_momentum_weakening"
+            return "m15_momentum_weakening"
         if side < 0 and analysis.get("short_weakening"):
-            return "h1_momentum_weakening"
+            return "m15_momentum_weakening"
     return None
 
 
