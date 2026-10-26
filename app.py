@@ -1485,7 +1485,16 @@ def refresh_market_prices(force=False,max_age=8.0):
   with LOCK:
    cached=dict(S.get("_prices",{}));last=float(S.get("_last_poll_epoch",0) or 0)
   if not force and cached and time.time()-last<=max_age:return cached
-  mids=json.loads(get(API,{"type":"allMids"}))
+  try:
+   mids=json.loads(get(API,{"type":"allMids"}))
+  except urllib.error.HTTPError as exc:
+   # Hyperliquid can transiently rate-limit duplicate allMids requests. If the
+   # market worker already has a very recent snapshot, keep the risk/exit loop
+   # alive from that snapshot instead of turning a harmless 429 into an engine error.
+   if exc.code==429 and cached and time.time()-last<=12.0:
+    with LOCK:S["last_market_error"]=None
+    return cached
+   raise
   valid={k:float(v) for k,v in mids.items() if re.match(r"^[A-Z0-9]{2,15}$",k) and math.isfinite(float(v)) and float(v)>0}
   if not valid:raise ValueError("empty market response")
   stamp=time.time()
