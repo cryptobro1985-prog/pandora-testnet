@@ -2754,7 +2754,7 @@ def x_critical_realtime():
      stamps=[t for t in stamps if t is not None and t<=time.time()+10]
      if stamps:latest_publication[h]=max(stamps)
      latencies=[]
-     for p in sorted(fresh,key=lambda q:publication_epoch(q.get("created_at")) or 0):
+     for p in sorted(fresh,key=lambda q:publication_epoch(q.get("created_at")) or 0,reverse=True):
       stamp=publication_epoch(p.get("created_at"));age=time.time()-stamp if stamp is not None else None
       # A mirror can resurface an old/pinned post after a backend switch.
       # Its publication age is not a measured delivery delay while watching.
@@ -2763,8 +2763,8 @@ def x_critical_realtime():
       post_id=str(p["id"])
       if (h,post_id) in queued_ids:continue
       ident=hashlib.sha256(("XFree:"+h+":"+str(p["id"])).encode()).hexdigest()
-      if len(pending_ingests)<32:
-       # New stale posts go through the durable audit path too. The entry guard
+      if len(pending_ingests)<32 and (len(pending_ingests)<16 or freshness(p.get("created_at"),time.time(),source_freshness_window("XOfficial:"+h))["allowed"]):
+       # Keep queue capacity for actionable fresh posts when backlog is high. The entry guard
        # rejects them; silently dropping them hid the actual source latency.
        future=ingest_pool.submit(ingest_with_retry,ident,"XOfficial:"+h,p["text"],p.get("created_at"),p.get("url"))
        pending_ingests[future]=(h,post_id);queued_ids.add((h,post_id))
