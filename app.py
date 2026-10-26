@@ -1,4 +1,4 @@
-import os,json,time,threading,urllib.request,urllib.parse,sqlite3,datetime,xml.etree.ElementTree as ET,re,hashlib,subprocess,html as htmlmod
+import os,json,time,threading,urllib.request,urllib.parse,urllib.error,sqlite3,datetime,xml.etree.ElementTree as ET,re,hashlib,subprocess,html as htmlmod
 import sqlite3,math,email.utils,secrets,signal,copy,concurrent.futures,functools
 import websocket
 import psycopg
@@ -1526,19 +1526,44 @@ def refresh_market_prices(force=False,max_age=8.0):
 # Avoid repeated identical Hyperliquid candle requests across local scanner cycles.
 # M15 remains reasonably fresh; H1 context cannot change on every 10s loop.
 _LOCAL_CANDLE_CACHE={}
-_LOCAL_CANDLE_CACHE_LOCK=threading.Lock()
+_LOCAL_CANDLE_CACHE_LOCK=threading.RLock()
+_LOCAL_CANDLE_REFRESH_LOCK=threading.Lock()
+_LOCAL_CANDLE_BACKOFF={}
 def _local_candles(symbol,interval,hours):
  key=(symbol,interval,hours)
- ttl=20.0 if interval==LOCAL_SWING_M15_INTERVAL else 90.0
+ ttl=45.0 if interval==LOCAL_SWING_M15_INTERVAL else 120.0
+ max_stale=75.0 if interval==LOCAL_SWING_M15_INTERVAL else 180.0
  stamp=time.monotonic()
  with _LOCAL_CANDLE_CACHE_LOCK:
   cached=_LOCAL_CANDLE_CACHE.get(key)
   if cached and stamp-cached[0]<ttl:return cached[1],cached[2]
- end_ms=int(time.time()*1000);start_ms=end_ms-int(max(12,hours)*3600*1000)
- rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":symbol,"interval":interval,"startTime":start_ms,"endTime":end_ms}}))
- if not isinstance(rows,list):raise RuntimeError("local_swing_candle_snapshot_invalid:"+symbol+":"+interval)
- with _LOCAL_CANDLE_CACHE_LOCK:_LOCAL_CANDLE_CACHE[key]=(time.monotonic(),rows,end_ms)
- return rows,end_ms
+  if stamp<_LOCAL_CANDLE_BACKOFF.get(key,0):
+   if cached and stamp-cached[0]<max_stale:return cached[1],cached[2]
+   raise RuntimeError("local_swing_candle_rate_limit_backoff:"+symbol+":"+interval)
+ # Serialize refreshes to avoid concurrent API bursts across LOCAL symbols.
+ with _LOCAL_CANDLE_REFRESH_LOCK:
+  stamp=time.monotonic()
+  with _LOCAL_CANDLE_CACHE_LOCK:
+   cached=_LOCAL_CANDLE_CACHE.get(key)
+   if cached and stamp-cached[0]<ttl:return cached[1],cached[2]
+   if stamp<_LOCAL_CANDLE_BACKOFF.get(key,0):
+    if cached and stamp-cached[0]<max_stale:return cached[1],cached[2]
+    raise RuntimeError("local_swing_candle_rate_limit_backoff:"+symbol+":"+interval)
+  end_ms=int(time.time()*1000);start_ms=end_ms-int(max(12,hours)*3600*1000)
+  try:
+   rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":symbol,"interval":interval,"startTime":start_ms,"endTime":end_ms}}))
+   if not isinstance(rows,list):raise RuntimeError("local_swing_candle_snapshot_invalid:"+symbol+":"+interval)
+  except urllib.error.HTTPError as exc:
+   if exc.code!=429:raise
+   with _LOCAL_CANDLE_CACHE_LOCK:
+    _LOCAL_CANDLE_BACKOFF[key]=time.monotonic()+30.0
+    cached=_LOCAL_CANDLE_CACHE.get(key)
+    if cached and time.monotonic()-cached[0]<max_stale:return cached[1],cached[2]
+   raise
+  with _LOCAL_CANDLE_CACHE_LOCK:
+   _LOCAL_CANDLE_CACHE[key]=(time.monotonic(),rows,end_ms)
+   _LOCAL_CANDLE_BACKOFF.pop(key,None)
+  return rows,end_ms
 
 def _local_h1_candles(symbol,hours=120):
  return _local_candles(symbol,LOCAL_SWING_H1_CONTEXT_INTERVAL,hours)
