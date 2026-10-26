@@ -261,3 +261,149 @@ def update_streaks(candidates, prior, scan_id):
                            "scan_id": scan_id}
         candidate["confirmation_streak"] = result[key]["count"]
     return result
+
+
+PRICE_TO_VALUE_POLICY = "price_to_value_liquidation_v1"
+PTV_MAX_ENTRY_DISTANCE_PCT = 0.95
+PTV_MIN_CONTRACTION_PCT = 0.015
+
+
+class PriceToValueTracker:
+    """Track whether price is actually moving toward a liquidation cluster."""
+
+    def __init__(self):
+        self._history = {}
+        self._last_scan = {}
+
+    def observe(self, candidates, scan_id, epoch):
+        out = []
+        for raw in candidates:
+            x = dict(raw)
+            key = str(x.get("cluster_id") or "")
+            if not key:
+                continue
+            distance = _finite(x.get("distance_pct"))
+            if distance is None or distance < 0:
+                continue
+            hist = self._history.setdefault(key, [])
+            last_scan = self._last_scan.get(key)
+            if last_scan is not None and scan_id-last_scan > 3:
+                hist.clear()
+            if not hist or hist[-1][0] != scan_id:
+                hist.append((scan_id, float(epoch), distance))
+            hist[:] = [row for row in hist if 0 <= float(epoch)-row[1] <= 45.0][-12:]
+            self._last_scan[key] = scan_id
+
+            values = [row[2] for row in hist]
+            contraction = values[0]-values[-1] if len(values) >= 2 else 0.0
+            last_step = values[-2]-values[-1] if len(values) >= 2 else 0.0
+            non_widening = len(values) >= 2 and last_step >= -0.005
+            approaching = (
+                len(values) >= 2
+                and non_widening
+                and (contraction >= PTV_MIN_CONTRACTION_PCT or last_step >= 0.01)
+            )
+            x["ptv_policy"] = PRICE_TO_VALUE_POLICY
+            x["ptv_distance_history_pct"] = [round(v, 6) for v in values]
+            x["ptv_distance_contraction_pct"] = round(contraction, 6)
+            x["ptv_last_distance_step_pct"] = round(last_step, 6)
+            x["ptv_approaching"] = bool(approaching)
+            out.append(x)
+
+        for key, last in list(self._last_scan.items()):
+            if scan_id-last > 20:
+                self._last_scan.pop(key, None)
+                self._history.pop(key, None)
+        return out
+
+
+def price_to_value_entry(candidate, regime_side=0):
+    """Score trend, nearest target, approach and micro pressure without unanimity."""
+    x = dict(candidate)
+    reasons = []
+    side = int(x.get("side") or 0)
+    distance = _finite(x.get("distance_pct"))
+    if side not in (-1, 1) or distance is None:
+        x["ptv_qualified"] = False
+        x["ptv_reject_reasons"] = ["invalid_direction_or_distance"]
+        return x
+
+    dynamic = _finite(x.get("dynamic_entry_distance_pct"))
+    if dynamic is None or dynamic <= 0:
+        dynamic = PTV_MAX_ENTRY_DISTANCE_PCT
+    entry_cap = min(PTV_MAX_ENTRY_DISTANCE_PCT, max(0.25, dynamic))
+    if distance > entry_cap:
+        reasons.append("outside_entry_distance")
+
+    r15 = _finite(x.get("r15")) or 0.0
+    r60 = _finite(x.get("r60")) or 0.0
+    r300 = _finite(x.get("r300"))
+    r900 = _finite(x.get("r900"))
+    fast_votes = int(side*r15 >= 0.00015) + int(side*r60 >= 0.00035)
+    slow_votes = 0
+    slow_count = 0
+    if r300 is not None:
+        slow_count += 1
+        slow_votes += int(side*r300 >= -0.00025)
+    if r900 is not None:
+        slow_count += 1
+        slow_votes += int(side*r900 >= -0.00075)
+    strong_slow_against = (
+        (r300 is not None and side*r300 <= -0.0020)
+        or (r900 is not None and side*r900 <= -0.0035)
+    )
+    trend_ok = fast_votes >= 1 and fast_votes+slow_votes >= 2 and not strong_slow_against
+    if not trend_ok:
+        reasons.append("trend_not_toward_liquidation")
+
+    approaching = bool(x.get("ptv_approaching"))
+    approach_ok = approaching or (distance <= 0.30 and fast_votes >= 1)
+    if not approach_ok:
+        reasons.append("target_not_approaching")
+
+    flow = _finite(x.get("flow_imbalance")) or 0.0
+    book = _finite(x.get("orderbook_imbalance")) or 0.0
+    spread = _finite(x.get("spread_bps"))
+    impact = _finite(x.get("liquidation_flow_to_depth")) or 0.0
+    burst = _finite(x.get("volume_burst_ratio")) or 0.0
+    vol_z = _finite(x.get("volume_rate_z"))
+    micro_votes = 0
+    micro_votes += int(side*flow >= 0.04)
+    micro_votes += int(side*book >= 0.03 and (spread is None or spread <= 15.0))
+    micro_votes += int(impact >= 0.25)
+    micro_votes += int(burst >= 1.15 or (vol_z is not None and vol_z >= 1.3))
+    micro_required = 1 if distance <= 0.30 else 2
+    if micro_votes < micro_required:
+        reasons.append("micro_pressure_too_weak")
+
+    regime_side = int(regime_side or 0)
+    regime_conflict = regime_side in (-1, 1) and regime_side != side
+    if regime_conflict and not (distance <= 0.45 and fast_votes == 2 and micro_votes >= 2):
+        reasons.append("market_regime_conflict")
+
+    proximity = max(0.0, 1.0-distance/max(entry_cap, 0.01))
+    contraction = max(0.0, _finite(x.get("ptv_distance_contraction_pct")) or 0.0)
+    slow_ratio = slow_votes/max(1, slow_count)
+    quality = (
+        25.0*proximity
+        + 22.0*(fast_votes/2.0)
+        + 13.0*slow_ratio
+        + 15.0*min(1.0, contraction/0.08)
+        + 15.0*min(1.0, micro_votes/3.0)
+        + 10.0*min(1.0, impact/1.0)
+    )
+    if distance <= 0.30 and fast_votes >= 1:
+        quality += 5.0
+    quality = min(100.0, quality)
+
+    x["ptv_entry_distance_cap_pct"] = round(entry_cap, 6)
+    x["ptv_fast_trend_votes"] = fast_votes
+    x["ptv_slow_trend_votes"] = slow_votes
+    x["ptv_micro_votes"] = micro_votes
+    x["ptv_regime_side"] = regime_side
+    x["ptv_quality_score"] = round(quality, 2)
+    x["ptv_reject_reasons"] = reasons
+    x["ptv_qualified"] = not reasons and quality >= 60.0
+    if not x["ptv_qualified"] and not reasons:
+        x["ptv_reject_reasons"] = ["quality_below_min"]
+    return x
