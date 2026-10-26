@@ -5,8 +5,9 @@ show a sustained, directionally consistent impulse plus abnormal participation.
 Order-book/CVD confirmation is applied by app.py before an entry is allowed.
 """
 import math
+import statistics
 
-POLICY = "momentum_breadth_continuation_v5"
+POLICY = "pump_dump_h1_h4_regime_v6"
 
 
 def horizon_return(rows, epoch, age, current, candles=None):
@@ -27,7 +28,7 @@ def horizon_return(rows, epoch, age, current, candles=None):
     return float(current) / anchor["p"] - 1 if anchor else None
 
 
-def breadth_regime(prices, history, volumes, epoch, candles=None):
+def breadth_regime(prices, history, volumes, epoch, candles=None, require_trend_context=False):
     """Separate an acute impulse from a persistent broad market trend."""
     rows = []
     candles = candles or {}
@@ -36,7 +37,7 @@ def breadth_regime(prices, history, volumes, epoch, candles=None):
             continue
         moves = {str(age): horizon_return(history.get(symbol, []), epoch, age,
                                           price, candles.get(symbol))
-                 for age in (60, 180, 300, 900, 1800)}
+                 for age in (60, 180, 300, 900, 1800, 3600, 14400)}
         if any(value is not None for value in moves.values()):
             rows.append({"symbol": symbol, **moves})
     result = {"mode": "WARMUP", "side": 0, "count": len(rows),
@@ -44,19 +45,46 @@ def breadth_regime(prices, history, volumes, epoch, candles=None):
     # Five independently observed liquid markets suffice. Requiring twenty
     # made a single missing history disable breadth for the entire venue.
     for age, threshold in ((60, .0025), (180, .005), (300, .003),
-                           (900, .006), (1800, .010)):
+                           (900, .006), (1800, .010), (3600, .004), (14400, .010)):
         values = [r[str(age)] for r in rows if r[str(age)] is not None]
         summary = {"count": len(values),
                    "mean": sum(values) / len(values) if values else None,
+                   "median": statistics.median(values) if values else None,
                    "down": sum(v <= -threshold for v in values) / len(values) if values else 0,
                    "up": sum(v >= threshold for v in values) / len(values) if values else 0}
         result["horizons"][str(age)] = summary
         result["avg" + str(age)] = summary["mean"]
         result["down" + str(age)] = summary["down"]
         result["up" + str(age)] = summary["up"]
+    # H1/H4 choose the permitted direction. A broad fifteen-minute rebound is
+    # timing information, not permission to buy inside a larger downtrend.
+    slow_sides = []
+    for age, threshold in ((3600, .004), (14400, .010)):
+        h = result["horizons"][str(age)]
+        if h["count"] < 5:
+            continue
+        majors = [r[str(age)] for r in rows if r["symbol"] in ("BTC","ETH","SOL") and r[str(age)] is not None]
+        major_down = sum(v <= -threshold for v in majors) >= 2
+        major_up = sum(v >= threshold for v in majors) >= 2
+        side = -1 if (h["median"] <= -threshold and h["down"] >= .60) or major_down else (
+            1 if (h["median"] >= threshold and h["up"] >= .60) or major_up else 0)
+        if side:slow_sides.append((age, side))
+    result["direction_basis"] = "H1_H4_then_short_term_timing"
+    result["slow_trend_votes"] = [{"horizon_seconds":age,"side":side} for age,side in slow_sides]
+    if require_trend_context and any(result["horizons"][str(age)]["count"] < 5 for age in (3600,14400)):
+        result.update(mode="WARMUP", allowed_sides=[], reason="waiting_for_H1_H4_context")
+        return result
+    if len({side for _,side in slow_sides}) > 1:
+        result.update(mode="TRANSITION", allowed_sides=[], reason="H1_H4_direction_conflict")
+        return result
+    if slow_sides:
+        age, side = slow_sides[0]
+        result.update(mode="MARKET_DOWNTREND" if side < 0 else "MARKET_UPTREND", side=side,
+                      allowed_sides=[side],trigger_horizon_seconds=age)
+        return result
     if not any(h["count"] >= 5 for h in result["horizons"].values()):
         return result
-    result["mode"] = "NORMAL"
+    result.update(mode="FLAT", allowed_sides=[-1, 1])
     for age, mean_limit, breadth in ((60, .0022, .60), (180, .0055, .65),
                                     (300, .0030, .60), (900, .0060, .60),
                                     (1800, .0100, .60)):
@@ -67,10 +95,27 @@ def breadth_regime(prices, history, volumes, epoch, candles=None):
             1 if h["up"] >= breadth and h["mean"] >= mean_limit else 0)
         if side:
             result.update(side=side, trigger_horizon_seconds=age,
+                          allowed_sides=[side],
                           mode=("MARKET_DUMP" if side < 0 else "MARKET_PUMP") if age <= 180
                           else ("MARKET_DOWNTREND" if side < 0 else "MARKET_UPTREND"))
             break
     return result
+
+
+def regime_candidate_guard(candidate, regime):
+    side = int(candidate.get("side") or 0)
+    if regime.get("mode") in ("WARMUP", "TRANSITION") or side not in regime.get("allowed_sides", [-1, 1]):
+        return "market_regime_disallows_direction"
+    if int(regime.get("side") or 0) not in (0, side):
+        return "opposite_broad_market_direction"
+    if regime.get("mode") == "FLAT":
+        # An isolated anomaly must exceed the contemporaneous market move,
+        # rather than buying every coin participating in an ordinary rebound.
+        median = regime.get("horizons", {}).get("60", {}).get("median")
+        move = candidate.get("r60_pct")
+        if median is None or move is None or side * (float(move)/100-median) < .0025:
+            return "not_an_isolated_relative_price_anomaly"
+    return None
 
 
 def continuation_candidates(prices, history, volumes, epoch, contexts, regime):
@@ -116,6 +161,8 @@ def continuation_candidates(prices, history, volumes, epoch, contexts, regime):
 
 
 def direction_guard(symbol, side, prices, history, epoch, regime):
+    if regime.get("mode") in ("WARMUP", "TRANSITION"):
+        return "market_regime_not_ready"
     if int(regime.get("side") or 0) not in (0, side):
         return "opposite_broad_market_direction"
     price = prices.get(symbol)

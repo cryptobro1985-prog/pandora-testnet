@@ -87,3 +87,13 @@ class ReleaseStorageTests(unittest.TestCase):
         with self.connect() as db:
             rows=db.execute("select count(*) as n from trade_history where symbol=%s and opened=%s",(self.symbol,opened)).fetchone()["n"]
         self.assertEqual(rows,0)
+
+    def test_batch_exclusion_freezes_identities_and_keeps_later_trades(self):
+        self.assertTrue(app.pump_open(self.symbol,1,100,99,{}))
+        request={'id':'test-batch-'+uuid.uuid4().hex,'type':'EXCLUDE_OPEN_PUMP_LONGS'}
+        self.assertTrue(app.exclude_authorized_pump_longs(request))
+        self.assertNotIn(self.symbol,app.S['pump_positions'])
+        self.assertTrue(app.pump_open(self.symbol,1,100,99,{}))
+        later=app.S['pump_positions'][self.symbol]['opened']
+        self.assertTrue(app.exclude_authorized_pump_longs(request))
+        self.assertEqual(app.S['pump_positions'][self.symbol]['opened'],later)
