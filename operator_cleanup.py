@@ -45,6 +45,7 @@ def purge_removed_strategy(c):
         c.execute("""update account_capacity_snapshots
                      set pump_positions=0,total_positions=news_positions+whale_positions
                      where pump_positions<>0 or total_positions<>news_positions+whale_positions""")
+        c.execute("alter table account_capacity_snapshots alter column pump_positions set default 0")
         if removed_pnl:
             c.execute("""update account_state
                          set equity=equity-%s,realized_pnl=realized_pnl-%s,updated_at=%s
