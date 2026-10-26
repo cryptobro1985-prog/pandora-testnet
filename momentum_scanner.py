@@ -68,6 +68,16 @@ def breadth_regime(prices, history, volumes, epoch, candles=None, require_trend_
         major_up = sum(v >= threshold for v in majors) >= 2
         side = -1 if (h["median"] <= -threshold and h["down"] >= .60) or major_down else (
             1 if (h["median"] >= threshold and h["up"] >= .60) or major_up else 0)
+        # Even a modest, consistently signed higher-timeframe move is a
+        # directional veto. Strong-trend thresholds must not turn a declining
+        # H1/H4 into a neutral market where a 15m rebound can authorize longs.
+        if not side:
+            noise = .0005 if age == 3600 else .0010
+            values = [r[str(age)] for r in rows if r[str(age)] is not None]
+            down = sum(v <= -noise for v in values) / len(values)
+            up = sum(v >= noise for v in values) / len(values)
+            side = -1 if h["median"] <= -noise and down >= .60 else (
+                1 if h["median"] >= noise and up >= .60 else 0)
         if side:slow_sides.append((age, side))
     result["direction_basis"] = "H1_H4_then_short_term_timing"
     result["slow_trend_votes"] = [{"horizon_seconds":age,"side":side} for age,side in slow_sides]

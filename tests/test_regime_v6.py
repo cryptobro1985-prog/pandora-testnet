@@ -22,6 +22,11 @@ class RegimeV6Tests(unittest.TestCase):
         r=self.regime(self.fixture(.01,.025));self.assertEqual(r['side'],1)
         self.assertIsNotNone(regime_candidate_guard({'side':-1,'r60_pct':-2},r))
 
+    def test_moderate_higher_decline_cannot_be_overridden_by_a_rebound(self):
+        r=self.regime(self.fixture(-.003,-.009))
+        self.assertEqual(r['allowed_sides'],[-1])
+        self.assertIsNotNone(regime_candidate_guard({'side':1,'r60_pct':1},r))
+
     def test_conflicting_higher_timeframes_block_both_directions(self):
         r=self.regime(self.fixture(.01,-.025));self.assertEqual(r['mode'],'TRANSITION')
         for side in (-1,1):self.assertIsNotNone(regime_candidate_guard({'side':side},r))
