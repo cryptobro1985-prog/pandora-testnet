@@ -1876,53 +1876,110 @@ def hype_swing_stats():
  except Exception as exc:return {"error":str(exc)[:180]}
 
 def hype_h1_local_swing_loop():
- last_observed=None
- while not SHUTDOWN.is_set():
-  try:
-   with LOCK:active=bool(S.get("engine_active"))
-   if not active:
-    SHUTDOWN.wait(1);continue
-   rows,stamp_ms=_hype_h1_candles()
-   analysis=analyze_hype_h1(rows,stamp_ms)
-   prices=refresh_market_prices(max_age=8.0);mark=prices.get(HYPE_SWING_SYMBOL)
-   if not mark:raise RuntimeError("HYPE mark unavailable")
-   candle=analysis.get("signal_candle_time")
-   if analysis.get("ready") and candle!=last_observed:
-    if _hype_claim("OBSERVE",analysis.get("entry_side",0),analysis,float(mark)):last_observed=candle
-    else:last_observed=candle
-   if analysis.get("ready"):
-    _hype_update_shadows(analysis,float(mark))
-    with LOCK:pos=copy.deepcopy(S.get("hype_swing_position"))
-    if pos:
-     reason=hype_position_exit(pos,analysis,float(mark))
-     if reason:
-      closed=hype_swing_close(float(mark),reason,analysis)
-      if closed and reason.startswith("opposite_local_") and int(analysis.get("entry_side") or 0) in (-1,1):
-       hype_swing_open(int(analysis["entry_side"]),float(mark),analysis)
-    elif int(analysis.get("entry_side") or 0) in (-1,1):
-     hype_swing_open(int(analysis["entry_side"]),float(mark),analysis)
-   with LOCK:
-    S["sources"]["HypeH1LocalSwing"]={"ok":True,"last_check":now(),"mode":"paper_isolated_h1_local_extremes",
-      "policy":HYPE_SWING_POLICY,"symbol":HYPE_SWING_SYMBOL,"interval":HYPE_SWING_INTERVAL,
-      "paper_only":True,"equity":S.get("hype_swing_equity"),"trades":S.get("hype_swing_trades",0),
-      "position_open":bool(S.get("hype_swing_position")),"margin_fraction":HYPE_SWING_MARGIN_FRACTION,
-      "leverage":HYPE_SWING_LEVERAGE,"last_signal_candle":candle,"pivot_type":analysis.get("pivot_type"),
-      "pivot_price":analysis.get("pivot_price"),"entry_side":analysis.get("entry_side"),"long_weak_score":analysis.get("long_weak_score"),
-      "short_weak_score":analysis.get("short_weak_score"),"analysis_ready":bool(analysis.get("ready")),
-      "signal_reason":analysis.get("reason") or ("confirmed_h1_pivot" if analysis.get("entry_side") else "waiting_for_confirmed_h1_pivot"),
-      "signal_candle_close_time":analysis.get("signal_candle_close_time"),"confirmation_right_candles":1,
-      "profit_lock":{"enabled":True,"arm_move_pct":HYPE_PROFIT_LOCK_ARM_MOVE*100.0,
-       "buffer_move_pct":HYPE_PROFIT_LOCK_BUFFER_MOVE*100.0,
-       "armed":bool(((S.get("hype_swing_position") or {}).get("features") or {}).get("profit_lock_armed")),
-       "stop":((S.get("hype_swing_position") or {}).get("features") or {}).get("profit_lock_stop")},
-      "signal_claim_atomic":True,"error":None}
-  except LeaseLost as exc:
-   with LOCK:S["sources"]["HypeH1LocalSwing"]={"ok":False,"last_check":now(),"mode":"standby","error":str(exc)[:160]}
-  except Exception as exc:
-   with LOCK:S["sources"]["HypeH1LocalSwing"]={"ok":False,"last_check":now(),"mode":"paper_isolated_h1_local_extremes","error":type(exc).__name__+":"+str(exc)[:160]}
-   try:journal("hype_swing_error",None,{"error":type(exc).__name__+":"+str(exc)[:180]})
-   except Exception:pass
-  SHUTDOWN.wait(30)
+ last_observed={};pool=concurrent.futures.ThreadPoolExecutor(max_workers=4,thread_name_prefix="local-swing")
+ try:
+  while not SHUTDOWN.is_set():
+   try:
+    with LOCK:active=bool(S.get("engine_active"))
+    if not active:
+     SHUTDOWN.wait(1);continue
+    prices=refresh_market_prices(max_age=8.0)
+    jobs={}
+    for symbol in LOCAL_SWING_SYMBOLS:
+     jobs[(symbol,"h1")]=pool.submit(_local_h1_candles,symbol)
+     jobs[(symbol,"m15")]=pool.submit(_local_m15_candles,symbol)
+    fetched={};fetch_errors={}
+    for key,fut in jobs.items():
+     try:fetched[key]=fut.result(timeout=12)
+     except Exception as exc:fetch_errors[key[0]]=type(exc).__name__+":"+str(exc)[:120]
+    details={}
+    for symbol in LOCAL_SWING_SYMBOLS:
+     mark=prices.get(symbol)
+     if symbol in fetch_errors or not mark:
+      details[symbol]={"ok":False,"error":fetch_errors.get(symbol) or "mark_unavailable","position_open":symbol in S.get("local_swing_positions",{})}
+      continue
+     h1_rows,h1_ms=fetched[(symbol,"h1")];m15_rows,m15_ms=fetched[(symbol,"m15")]
+     analysis=analyze_hype_h1(h1_rows,h1_ms,symbol)
+     with LOCK:
+      pos=copy.deepcopy(S.get("local_swing_positions",{}).get(symbol))
+      watch=copy.deepcopy(S.get("local_swing_watch",{}).get(symbol))
+     target_side=int((pos or watch or {}).get("side") or analysis.get("entry_side") or 1)
+     m15=analyze_local_m15(m15_rows,m15_ms,target_side)
+     flow=MARKET_OBS.context(symbol,time.time())
+     flow_imb=flow.get("flow_imbalance")
+     candle=analysis.get("signal_candle_time")
+     if analysis.get("ready") and candle!=last_observed.get(symbol):
+      _local_claim(symbol,"OBSERVE",analysis.get("entry_side",0),analysis,float(mark))
+      last_observed[symbol]=candle
+     if analysis.get("ready"):_local_update_shadows(symbol,analysis,float(mark))
+
+     action=None
+     if pos:
+      if local_m15_profit_protection(pos,m15,float(mark),flow_imb):
+       watch_context={"m15":m15,"flow_imbalance":flow_imb,"flow_source":"hyperliquid_ws_trades",
+        "observed_at":now(),"reason":"strong_counter_pressure_while_profitable"}
+       closed=local_swing_close(symbol,float(mark),"m15_adverse_pressure_profit_protect",analysis,watch_context)
+       action="M15_PROFIT_PROTECT_EXIT" if closed else None
+      else:
+       reason=hype_position_exit(pos,analysis,float(mark)) if analysis.get("ready") else None
+       if reason:
+        closed=local_swing_close(symbol,float(mark),reason,analysis)
+        action="H1_EXIT:"+reason if closed else None
+        if closed and reason.startswith("opposite_local_") and int(analysis.get("entry_side") or 0) in (-1,1):
+         if local_swing_open(symbol,int(analysis["entry_side"]),analysis,"H1"):action+="->REVERSE_H1_ENTRY"
+     else:
+      if watch:
+       if time.time()>=float(watch.get("expires_epoch",0) or 0):
+        _local_watch_clear(symbol,"watch_expired");watch=None;action="WATCH_EXPIRED"
+       elif analysis.get("ready") and int(analysis.get("entry_side") or 0)==-int(watch.get("side") or 0):
+        _local_watch_clear(symbol,"opposite_h1_pivot_invalidated_watch");watch=None;action="WATCH_INVALIDATED_BY_H1"
+       elif analysis.get("ready") and int(analysis.get("entry_side") or 0)==int(watch.get("side") or 0):
+        side=int(watch["side"]);_local_watch_clear(symbol,"new_same_side_h1_pivot")
+        if local_swing_open(symbol,side,analysis,"H1"):action="REENTER_NEW_H1_PIVOT"
+        watch=None
+       elif local_m15_reentry_ready(int(watch.get("side") or 0),m15,flow_imb):
+        if local_swing_open(symbol,int(watch["side"]),analysis,"REENTRY",m15,watch):action="M15_RECOVERY_REENTRY"
+      if not watch and not action and analysis.get("ready") and int(analysis.get("entry_side") or 0) in (-1,1):
+       if local_swing_open(symbol,int(analysis["entry_side"]),analysis,"H1"):action="H1_ENTRY"
+
+     with LOCK:
+      live=copy.deepcopy(S.get("local_swing_positions",{}).get(symbol))
+      live_watch=copy.deepcopy(S.get("local_swing_watch",{}).get(symbol))
+     details[symbol]={"ok":True,"symbol":symbol,"mark":float(mark),"position_open":bool(live),
+      "side":int(live.get("side")) if live else None,"watching_for_reentry":bool(live_watch),
+      "watch_side":int(live_watch.get("side")) if live_watch else None,
+      "watch_expires_epoch":live_watch.get("expires_epoch") if live_watch else None,
+      "watch_reentries":int(live_watch.get("reentries",0)) if live_watch else None,
+      "h1":{"ready":bool(analysis.get("ready")),"pivot_type":analysis.get("pivot_type"),"pivot_price":analysis.get("pivot_price"),
+       "entry_side":analysis.get("entry_side"),"signal_candle_time":candle,"long_weak_score":analysis.get("long_weak_score"),
+       "short_weak_score":analysis.get("short_weak_score"),"reason":analysis.get("reason")},
+      "m15":{"ready":bool(m15.get("ready")),"partial":m15.get("partial"),"adverse_score":m15.get("adverse_score"),
+       "recovery_score":m15.get("recovery_score"),"strong_adverse_pressure":m15.get("strong_adverse_pressure"),
+       "recovery_confirmed":m15.get("recovery_confirmed"),"flow_imbalance":flow_imb},
+      "last_action":action,"error":None}
+    with LOCK:
+     open_positions=copy.deepcopy(S.get("local_swing_positions",{}));watches=copy.deepcopy(S.get("local_swing_watch",{}))
+     S["hype_swing_position"]=open_positions.get(HYPE_SWING_SYMBOL)
+     S["sources"]["HypeH1LocalSwing"]={"ok":all(x.get("ok") for x in details.values()),"last_check":now(),
+       "mode":"paper_multiasset_h1_local_m15_profit_protection_reentry","policy":HYPE_SWING_POLICY,
+       "symbols":list(LOCAL_SWING_SYMBOLS),"h1_interval":HYPE_SWING_INTERVAL,"protection_interval":LOCAL_SWING_M15_INTERVAL,
+       "paper_only":True,"equity":S.get("hype_swing_equity"),"trades":S.get("hype_swing_trades",0),
+       "open_positions":list(open_positions.keys()),"watching_for_reentry":list(watches.keys()),
+       "position_count":len(open_positions),"watch_count":len(watches),"margin_fraction":HYPE_SWING_MARGIN_FRACTION,
+       "leverage":HYPE_SWING_LEVERAGE,"profit_lock":{"enabled":True,"arm_move_pct":HYPE_PROFIT_LOCK_ARM_MOVE*100.0,
+        "buffer_move_pct":HYPE_PROFIT_LOCK_BUFFER_MOVE*100.0},
+       "m15_profit_protection":True,"m15_reentry":True,"reentry_watch_seconds":LOCAL_REENTRY_WATCH_SECONDS,
+       "max_reentries_per_swing":LOCAL_REENTRY_MAX_PER_SWING,"parallel_scan_workers":4,"details":details,
+       "error":None if all(x.get("ok") for x in details.values()) else "partial_symbol_scan_failure"}
+   except LeaseLost as exc:
+    with LOCK:S["sources"]["HypeH1LocalSwing"]={"ok":False,"last_check":now(),"mode":"standby","symbols":list(LOCAL_SWING_SYMBOLS),"error":str(exc)[:160]}
+   except Exception as exc:
+    with LOCK:S["sources"]["HypeH1LocalSwing"]={"ok":False,"last_check":now(),"mode":"paper_multiasset_h1_local_m15_profit_protection_reentry","symbols":list(LOCAL_SWING_SYMBOLS),"error":type(exc).__name__+":"+str(exc)[:160]}
+    try:journal("local_swing_error",None,{"error":type(exc).__name__+":"+str(exc)[:180]})
+    except Exception:pass
+   SHUTDOWN.wait(15)
+ finally:
+  pool.shutdown(wait=False,cancel_futures=True)
 
 @account_mutation
 def emergency_profit_take(prices):
