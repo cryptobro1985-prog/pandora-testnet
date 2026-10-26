@@ -1,14 +1,17 @@
-"""HYPE H1 local-extreme PAPER strategy.
+"""H1 local-extreme + M15 pressure/re-entry PAPER strategy.
 
 Pure signal logic only. No exchange orders, credentials, networking or persistence.
-Signals use completed 1h candles only, so local extrema are confirmed without future data.
+H1 pivots define the directional swing. M15 pressure can protect an already-profitable
+position before the opposite H1 extreme, then arm a watch state for a recovery re-entry.
 """
 
 import math
 
-POLICY = "hype_h1_local_swing_v2_causal_execution"
-SYMBOL = "HYPE"
+POLICY = "local_swing_h1_m15_protect_reentry_v3"
+SYMBOL = "HYPE"  # backwards-compatible primary symbol
+SYMBOLS = ("HYPE", "NEAR")
 INTERVAL = "1h"
+M15_INTERVAL = "15m"
 STARTING_EQUITY = 100.0
 MARGIN_FRACTION = 0.10
 LEVERAGE = 25.0
@@ -16,6 +19,12 @@ PIVOT_LOOKBACK = 4
 MIN_FAVORABLE_MOVE_FOR_WEAKENING = 0.004
 PROFIT_LOCK_ARM_MOVE = 0.004
 PROFIT_LOCK_BUFFER_MOVE = 0.0012
+M15_PROFIT_EXIT_MIN_MOVE = 0.0012
+M15_PRESSURE_MIN_SCORE = 3
+M15_RECOVERY_MIN_SCORE = 3
+M15_PARTIAL_MIN_AGE_MS = 3 * 60 * 1000
+REENTRY_WATCH_SECONDS = 6 * 3600
+REENTRY_MAX_PER_SWING = 2
 LIQUIDATION_PROXY_ROE = -0.95
 
 
@@ -27,7 +36,7 @@ def _f(value):
     return x if math.isfinite(x) else None
 
 
-def completed_candles(rows, now_ms):
+def _completed(rows, now_ms, interval_ms):
     out = []
     for row in rows or []:
         if not isinstance(row, dict):
@@ -38,11 +47,10 @@ def completed_candles(rows, now_ms):
         v = _f(row.get("v"))
         if None in (t, T, o, h, l, c) or min(o, h, l, c) <= 0:
             continue
-        if not (3_599_000 <= T-t <= 3_600_000 and l <= min(o,c) <= max(o,c) <= h):
+        if not (interval_ms - 1000 <= T-t <= interval_ms and l <= min(o,c) <= max(o,c) <= h):
             continue
         if v is not None and v < 0:
             continue
-        # A tiny grace prevents a boundary race at the exact hourly close.
         if T > float(now_ms) - 1000:
             continue
         out.append({"t": int(t), "T": int(T), "o": o, "h": h, "l": l, "c": c,
@@ -52,23 +60,31 @@ def completed_candles(rows, now_ms):
     return [dedup[k] for k in sorted(dedup)]
 
 
+def completed_candles(rows, now_ms):
+    return _completed(rows, now_ms, 3_600_000)
+
+
+def completed_m15_candles(rows, now_ms):
+    return _completed(rows, now_ms, 900_000)
+
+
 def _ret(a, b):
     return (b / a - 1.0) if a and b else 0.0
 
 
-def analyze(rows, now_ms):
+def analyze(rows, now_ms, symbol=SYMBOL):
     candles = completed_candles(rows, now_ms)
     if len(candles) < PIVOT_LOOKBACK + 2:
         return {"ready": False, "reason": "insufficient_closed_h1_candles",
-                "closed_candles": len(candles), "policy": POLICY}
+                "closed_candles": len(candles), "policy": POLICY, "symbol": symbol}
     if float(now_ms) - candles[-1]["T"] > 3_600_000 + 90_000:
-        return {"ready": False, "reason": "stale_h1_history", "policy": POLICY}
+        return {"ready": False, "reason": "stale_h1_history", "policy": POLICY, "symbol": symbol}
     recent = candles[-(PIVOT_LOOKBACK+2):]
     if any(abs(b["t"]-a["t"]-3_600_000)>1000 for a,b in zip(recent,recent[1:])):
-        return {"ready": False, "reason": "gapped_h1_history", "policy": POLICY}
+        return {"ready": False, "reason": "gapped_h1_history", "policy": POLICY, "symbol": symbol}
 
-    x = candles[-1]       # latest completed H1 candle: confirmation candle
-    p = candles[-2]       # candidate local extreme
+    x = candles[-1]
+    p = candles[-2]
     prior = candles[-2-PIVOT_LOOKBACK:-2]
     prior_lows = [z["l"] for z in prior]
     prior_highs = [z["h"] for z in prior]
@@ -121,7 +137,7 @@ def analyze(rows, now_ms):
     return {
         "ready": True,
         "policy": POLICY,
-        "symbol": SYMBOL,
+        "symbol": symbol,
         "interval": INTERVAL,
         "signal_candle_time": x["t"],
         "signal_candle_close_time": x["T"],
@@ -144,6 +160,119 @@ def analyze(rows, now_ms):
     }
 
 
+def _usable_m15(rows, now_ms):
+    candles = completed_m15_candles(rows, now_ms)
+    current = None
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        t, T = _f(row.get("t")), _f(row.get("T"))
+        o, h, l, c = (_f(row.get(k)) for k in ("o", "h", "l", "c"))
+        v = _f(row.get("v"))
+        if None in (t, T, o, h, l, c) or min(o,h,l,c) <= 0:
+            continue
+        if not (899_000 <= T-t <= 900_000 and l <= min(o,c) <= max(o,c) <= h):
+            continue
+        if t <= float(now_ms) < T and float(now_ms)-t >= M15_PARTIAL_MIN_AGE_MS:
+            current = {"t": int(t), "T": int(T), "o": o, "h": h, "l": l, "c": c,
+                       "v": 0.0 if v is None else max(0.0, v), "partial": True,
+                       "age_ms": int(float(now_ms)-t)}
+    if current and (not candles or current["t"] > candles[-1]["t"]):
+        return candles + [current]
+    return candles
+
+
+def analyze_m15(rows, now_ms, side):
+    side = int(side or 0)
+    candles = _usable_m15(rows, now_ms)
+    if side not in (-1, 1) or len(candles) < 5:
+        return {"ready": False, "reason": "insufficient_m15_data", "side": side,
+                "closed_or_mature_candles": len(candles), "policy": POLICY}
+    x = candles[-1]
+    prev = candles[-2]
+    r1 = _ret(prev["c"], x["c"])
+    r2 = _ret(candles[-3]["c"], x["c"])
+    rng = max(x["h"]-x["l"], 1e-12)
+    body_fraction = abs(x["c"]-x["o"]) / rng
+    candle_dir = 1 if x["c"] > x["o"] else (-1 if x["c"] < x["o"] else 0)
+    close_location = (x["c"]-x["l"]) / rng
+    prior_volumes = [z.get("v",0.0) for z in candles[-9:-1] if z.get("v",0.0) > 0]
+    avg_v = sum(prior_volumes)/len(prior_volumes) if prior_volumes else 0.0
+    volume_ratio = (x.get("v",0.0)/avg_v) if avg_v > 0 else None
+
+    adverse_score = 0
+    if side*r1 <= -0.0015:
+        adverse_score += 1
+    if side*r2 <= -0.0025:
+        adverse_score += 1
+    if candle_dir == -side and body_fraction >= 0.50:
+        adverse_score += 1
+    if (side > 0 and close_location <= 0.30) or (side < 0 and close_location >= 0.70):
+        adverse_score += 1
+    if volume_ratio is not None and volume_ratio >= 1.35:
+        adverse_score += 1
+
+    recovery_score = 0
+    if side*r1 >= 0.0012:
+        recovery_score += 1
+    if side*r2 >= 0.0020:
+        recovery_score += 1
+    if candle_dir == side and body_fraction >= 0.42:
+        recovery_score += 1
+    if (side > 0 and close_location >= 0.65) or (side < 0 and close_location <= 0.35):
+        recovery_score += 1
+    if volume_ratio is not None and volume_ratio >= 0.90:
+        recovery_score += 1
+
+    return {
+        "ready": True,
+        "policy": POLICY,
+        "interval": M15_INTERVAL,
+        "side": side,
+        "candle_time": x["t"],
+        "candle_close_time": x["T"],
+        "partial": bool(x.get("partial")),
+        "partial_age_seconds": round(float(x.get("age_ms",0))/1000.0,1) if x.get("partial") else None,
+        "return_15m": r1,
+        "return_30m": r2,
+        "body_fraction": body_fraction,
+        "close_location": close_location,
+        "volume_ratio": volume_ratio,
+        "adverse_score": adverse_score,
+        "recovery_score": recovery_score,
+        "strong_adverse_pressure": adverse_score >= M15_PRESSURE_MIN_SCORE and side*r1 < 0,
+        "recovery_confirmed": recovery_score >= M15_RECOVERY_MIN_SCORE and side*r1 > 0,
+    }
+
+
+def m15_profit_protection(position, m15, mark, flow_imbalance=None):
+    if not position or not m15 or not m15.get("ready"):
+        return False
+    side = int(position.get("side",0) or 0)
+    entry = _f(position.get("entry"))
+    mark = _f(mark)
+    if side not in (-1,1) or entry is None or mark is None:
+        return False
+    favorable = side*(mark/entry-1.0)
+    if favorable < M15_PROFIT_EXIT_MIN_MOVE:
+        return False
+    adverse = bool(m15.get("strong_adverse_pressure"))
+    flow_confirms = False
+    fi = _f(flow_imbalance)
+    if fi is not None:
+        flow_confirms = side*fi <= -0.10
+    return adverse and (int(m15.get("adverse_score",0)) >= 4 or flow_confirms)
+
+
+def m15_reentry_ready(side, m15, flow_imbalance=None):
+    if int(side or 0) not in (-1,1) or not m15 or not m15.get("ready"):
+        return False
+    if not bool(m15.get("recovery_confirmed")):
+        return False
+    fi = _f(flow_imbalance)
+    return int(m15.get("recovery_score",0)) >= 4 or fi is None or int(side)*fi >= 0.06
+
+
 def position_exit(position, analysis, mark):
     if not position or not analysis.get("ready"):
         return None
@@ -152,8 +281,6 @@ def position_exit(position, analysis, mark):
     mark = _f(mark)
     if side not in (-1, 1) or entry is None or mark is None:
         return None
-    # The candle that opened a position cannot also be a new H1 exit signal
-    # on the next poll. Wait for a later completed candle.
     entry_candle = position.get("signal_candle_time")
     signal_candle = analysis.get("signal_candle_time")
     if entry_candle is not None and signal_candle is not None and signal_candle <= entry_candle:
