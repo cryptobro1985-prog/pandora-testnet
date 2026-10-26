@@ -507,9 +507,9 @@ def save_whale_v2_learning_snapshot():
   summary=wl2_learning_summary([dict(x) for x in v2_rows])
   def delta(a,b):
    return (b-a) if a is not None and b is not None else None
-  payload={"policy":WL2_POLICY,"adaptation_mode":"observe_only_frozen_week1",
+  payload={"policy":WL2_POLICY,"adaptation_mode":"observe_only_versioned_v2",
     "experiment_started_at":started,
-    "comparison_basis":"same wall-clock period; use win_rate/gross_roe/MAE/MFE for fair comparison because v1 shares the main PAPER account while v2 has an isolated $100 sleeve",
+    "comparison_basis":"versioned observational comparison; all new entries share the main PAPER account; older v1 sizing and restored positions are not a controlled A/B sample",
     "v1":{"open_positions":int(v1_open),"metrics":v1,"distance_buckets":[dict(x) for x in v1_buckets],
       "exit_reasons":[dict(x) for x in v1_exits],"signal_actions":[dict(x) for x in v1_signals]},
     "v2":{"open_positions":int(v2_open),"virtual_equity":float(account["equity"]),"realized_pnl":float(account["realized_pnl"]),
@@ -520,7 +520,7 @@ def save_whale_v2_learning_snapshot():
       "avg_mae_roe_pct":delta(v1["path"]["avg_mae_roe_pct"],v2["path"]["avg_mae_roe_pct"]),
       "avg_mfe_roe_pct":delta(v1["path"]["avg_mfe_roe_pct"],v2["path"]["avg_mfe_roe_pct"]),
       "liquidation_hit_rate":delta(v1["liquidation_hit_rate"],v2["liquidation_hit_rate"])},
-    "note":"Week-one thresholds are frozen. Learning is observe-only: all entries, rejections, paths and outcomes are recorded, but the live rules are not auto-mutated mid-experiment.",
+    "note":"Policy revised on 2026-10-26. Learning records entries, rejections, paths and outcomes without mutating live rules. New entries share one account and use 10% margin at 25x.",
     "generated_at":now()}
   with pg() as c:
    c.execute("insert into whale_liq_v2_learning_snapshots(recorded_at,samples,payload) values(%s,%s,%s::jsonb)",
@@ -1230,9 +1230,14 @@ def whale_liquidation_scan():
     prices=refresh_market_prices(max_age=8.0)
     with LOCK:
      history={k:list(v) for k,v in S.get("_timeline",{}).items()};contexts=copy.deepcopy(S.get("_pump_ctx",{}))
-    data=hyperdata("/v1/positions/danger-zone?threshold="+urllib.parse.quote(str(LIQ_WHALE_MAX_DISTANCE_PCT)))
-    if not isinstance(data,dict) or not isinstance(data.get("positions"),list):raise RuntimeError("danger_zone_unavailable_or_invalid")
-    rows=data["positions"];stamp=time.time();scan_id+=1
+    danger_error=None
+    try:
+     data=hyperdata("/v1/positions/danger-zone?threshold="+urllib.parse.quote(str(LIQ_WHALE_MAX_DISTANCE_PCT)))
+     if not isinstance(data,dict) or not isinstance(data.get("positions"),list):raise RuntimeError("danger_zone_unavailable_or_invalid")
+     rows=data["positions"]
+    except Exception as exc:
+     rows=[];danger_error=str(exc)[:180]
+    stamp=time.time();scan_id+=1
     for sym in contexts:contexts[sym].update(MARKET_OBS.context(sym,stamp))
     clusters=cluster_positions(rows,prices,contexts,stamp,LIQ_WHALE_MAX_POSITION_AGE_SECONDS,LIQ_WHALE_MAX_DISTANCE_PCT)
     rejections={};eligible=[]
@@ -1348,6 +1353,7 @@ def whale_liquidation_scan():
       "policy":WL2_POLICY,"candidate_count":len(v2_observed),"qualified_candidates":len(v2_qualified),
       "input_clusters":len(clusters),"v1_entry_candidates":len(candidates),"distance_window_seconds":60,
       "confirmed_cascade_observations":len(cascades),"confirmed_cascade_candidates":len(cascade_qualified),
+      "pre_liquidation_source_error":danger_error,"confirmed_cascade_source_connected":LIQUIDATION_TAPE.connected,
       "opened_this_scan":v2_opened,"paper_positions":len(S.get("whale_v2_positions",{})),
       "paper_trades":S.get("whale_v2_trades",0),"virtual_equity":round(float(S.get("whale_v2_equity",PAPER_RESET)),4),
       "margin_fraction":WL2_MARGIN_FRACTION,"leverage":WL2_LEVERAGE,"max_positions":WL2_MAX_POSITIONS,
@@ -1369,12 +1375,12 @@ def whale_liquidation_scan():
      except Exception as obs_exc:
       with LOCK:S["last_error"]="whale_observation: "+str(obs_exc)[:160]
     elapsed=time.monotonic()-started
-    with LOCK:S["sources"]["WhaleLiquidationScanner"]={"ok":True,"last_check":now(),"mode":"all_market_liquidation_clusters_v4",
+    with LOCK:S["sources"]["WhaleLiquidationScanner"]={"ok":danger_error is None,"last_check":now(),"mode":"all_market_liquidation_clusters_v4",
      "symbols":"ALL_HYPERLIQUID_LISTED","scan_seconds":LIQ_WHALE_SCAN_SECONDS,"actual_scan_seconds":round(elapsed,3),
      "min_whale_usd":{"major":LIQ_WHALE_MIN_BY_SYMBOL,"default":LIQ_WHALE_DEFAULT_MIN_USD},"threshold_policy":"dynamic_all_market_floor_plus_oi_volume_depth",
      "danger_positions":len(rows),"clusters":len(clusters),"eligible_candidates":len(candidates),"qualified_candidates":len(qualified),
      "rejections":rejections,"top_candidates":candidates[:5],"paper_positions":len(S["whale_positions"]),"paper_trades":S["whale_trades"],
-     "coverage":"observed_hyperliquid_wallets_only_not_global_heatmap","shared_account_equity":round(S["equity"],4),"error":None}
+     "coverage":"observed_hyperliquid_wallets_only_not_global_heatmap","shared_account_equity":round(S["equity"],4),"error":danger_error}
    except Exception as exc:
     streaks={}
     with LOCK:
@@ -1694,7 +1700,9 @@ def emergency_profit_take(prices):
        "targets":pending,"cooldown_until_epoch":stamp+COOLDOWN_SECONDS,"status":"CLOSING"}
    journal("portfolio_emergency_triggered",None,{"shock":shock,"targets":pending,"cooldown_seconds":COOLDOWN_SECONDS})
  if not pending:
-  with LOCK:S.setdefault("emergency_profit_guard",{"enabled":True,"status":"ARMED","cooldown_seconds":COOLDOWN_SECONDS})
+  with LOCK:
+   state=S.setdefault("emergency_profit_guard",{"enabled":True,"cooldown_seconds":COOLDOWN_SECONDS})
+   state["status"]="COOLDOWN" if stamp<float(S.get("_emergency_until",0) or 0) else "ARMED"
   return []
  callbacks={"news":None,"pump_dump":pump_close,"whale_liquidation":whale_liq_close,
             "whale_liquidation_v2":whale_v2_close,"hype_h1_local_swing_v1":None}
@@ -3513,30 +3521,27 @@ def html_dashboard(data):
 @account_mutation
 def manual_close(symbol=None,reason_override=None):
  with LOCK:
-  all_symbols=set(S.get("positions",{}))|set(S.get("pump_positions",{}))|set(S.get("whale_positions",{}))
-  targets=sorted(all_symbols) if symbol is None else [symbol]
+  books=[("news",copy.deepcopy(S.get("positions",{}))),("pump_dump",copy.deepcopy(S.get("pump_positions",{}))),
+         ("whale_liquidation",copy.deepcopy(S.get("whale_positions",{}))),
+         ("whale_liquidation_v2",copy.deepcopy(S.get("whale_v2_positions",{}))),
+         ("hype_h1_local_swing_v1",{"HYPE":copy.deepcopy(S["hype_swing_position"])} if S.get("hype_swing_position") else {})]
+ targets=[(strategy,sym,pos) for strategy,book in books for sym,pos in book.items() if symbol is None or sym==symbol]
+ if not targets and symbol:return {"ok":False,"results":[{"symbol":symbol,"ok":False,"error":"position_not_found"}]}
  results=[]
- for sym in targets:
+ for strategy,sym,pos in targets:
   with LOCK:
-   news_pos=copy.deepcopy(S.get("positions",{}).get(sym))
-   pump_pos=copy.deepcopy(S.get("pump_positions",{}).get(sym))
-   whale_pos=copy.deepcopy(S.get("whale_positions",{}).get(sym))
    price=S.get("_prices",{}).get(sym)
-  if not any((news_pos,pump_pos,whale_pos)):
-   results.append({"symbol":sym,"ok":False,"error":"position_not_found"});continue
-  with LOCK:fresh_price=S.get("_last_poll_epoch") and 0<=time.time()-S["_last_poll_epoch"]<=10 and S["engine_active"]
-  if not fresh_price or not price:
+   fresh=S.get("_last_poll_epoch") and 0<=time.time()-S["_last_poll_epoch"]<=10 and S["engine_active"]
+  if not fresh or not price:
    results.append({"symbol":sym,"ok":False,"error":"fresh_market_price_and_active_engine_required"});continue
   reason=reason_override or ("manual_close_all" if symbol is None else "manual_close")
-  if pump_pos:
-   result=pump_close(sym,price,reason)
-  elif whale_pos:
-   result=whale_liq_close(sym,price,reason)
-  else:
-   result=close_news_position(sym,news_pos,price,reason)
-  if result is None:
-   results.append({"symbol":sym,"ok":False,"error":"close_not_committed"});continue
-  results.append({"symbol":sym,"ok":True,"price":price,"pnl":result.get("pnl")})
+  if strategy=="news":result=close_news_position(sym,pos,price,reason)
+  elif strategy=="pump_dump":result=pump_close(sym,price,reason)
+  elif strategy=="whale_liquidation":result=whale_liq_close(sym,price,reason)
+  elif strategy=="whale_liquidation_v2":result=whale_v2_close(sym,price,reason)
+  else:result=hype_swing_close(price,reason)
+  if result is None:results.append({"symbol":sym,"ok":False,"error":"close_not_committed"});continue
+  results.append({"symbol":sym,"strategy":strategy,"ok":True,"price":price,"pnl":result.get("pnl")})
  return {"ok":all(x["ok"] for x in results) if results else True,"results":results}
 
 

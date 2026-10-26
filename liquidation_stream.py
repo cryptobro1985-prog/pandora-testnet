@@ -47,7 +47,7 @@ class LiquidationTape:
                         continue
                     stamp = float(order["T"]) / 1000
                     price, quantity = float(order["ap"]), float(order["l"])
-                    if not all(math.isfinite(v) for v in (stamp, price, quantity)) or min(price, quantity) <= 0:
+                    if not all(math.isfinite(v) for v in (stamp, price, quantity, price*quantity)) or min(price, quantity) <= 0:
                         continue
                     if not -1 <= received_at - stamp <= 10:
                         continue
