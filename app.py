@@ -3541,6 +3541,20 @@ def news_feed(source,url):
     except Exception:pass
    delay=min(300,max(base_poll,delay*1.7))
   SHUTDOWN.wait(delay)
+def today_realized_pnl_utc():
+ # UTC realized PnL from durable strategy journals; excludes open-position mark-to-market.
+ try:
+  with pg() as db:
+   row=db.execute("""SELECT COALESCE(SUM(pnl),0) AS pnl, COUNT(*) AS trades FROM (
+    SELECT pnl FROM trade_history WHERE closed::timestamptz >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+    UNION ALL SELECT pnl FROM pump_trade_history WHERE closed::timestamptz >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+    UNION ALL SELECT pnl FROM whale_liq_trade_history WHERE closed::timestamptz >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+    UNION ALL SELECT pnl FROM hype_swing_trade_history WHERE closed::timestamptz >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+   ) t""").fetchone()
+  return {"pnl":round(float(row["pnl"]),4),"trades":int(row["trades"]),"timezone":"UTC","basis":"realized_closed_trades"}
+ except Exception as exc:
+  return {"pnl":None,"trades":None,"timezone":"UTC","error":type(exc).__name__+":"+str(exc)[:100]}
+
 def build_dashboard_snapshot():
  with LOCK:
   state={k:copy.deepcopy(v) for k,v in S.items() if not k.startswith("_")}
@@ -3588,7 +3602,7 @@ def build_dashboard_snapshot():
  used_margin=sum(float(p.get("margin",float(p.get("notional",0))/max(1.0,float(p.get("leverage",TRADE_LEVERAGE))))) for book in (state.get("positions",{}),state.get("pump_positions",{}),state.get("whale_positions",{}),local_book) for p in book.values())
  free_margin=max(0.0,float(state["equity"])-used_margin);margin_utilization=(used_margin/float(state["equity"])*100.0) if float(state["equity"])>0 else 0.0
  visible_sources={k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and not k.startswith("XFree:") and k not in SEARCH_INDEX_FEEDS and not v.get("disabled") and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")}
- return {"statistics_basis":state.get("statistics_basis","full_recorded_history"),"operator_cleanup":state.get("operator_cleanup",{}),"emergency_profit_guard":state.get("emergency_profit_guard",{}),"daily_activity":state.get("daily_activity",{}),"daily_entry_limit":None,"margin_budget":"shared_all_strategies","mode":state["mode"],"balance":round(state["equity"],4),"capital_contributed":round(float(state.get("contributed_capital",PAPER_RESET)),4),"unrealized_pnl":round(unreal+pump_unreal+whale_unreal+hype_swing_unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"account_pnl_pct":round(account_pnl_pct,3),"realized_pnl_pct":round(realized_pnl_pct,3),"total_pnl_pct":round(total_pnl_pct,3),"used_margin":round(used_margin,4),"free_margin":round(free_margin,4),"margin_utilization_pct":round(margin_utilization,3),"trade_margin_fraction_pct":round(TRADE_MARGIN_FRACTION*100,3),"trade_leverage":TRADE_LEVERAGE,"positions":positions+pump_positions+whale_positions+local_swing_positions,"pump_positions":pump_positions,
+ return {"today_pnl":today_realized_pnl_utc(),"statistics_basis":state.get("statistics_basis","full_recorded_history"),"operator_cleanup":state.get("operator_cleanup",{}),"emergency_profit_guard":state.get("emergency_profit_guard",{}),"daily_activity":state.get("daily_activity",{}),"daily_entry_limit":None,"margin_budget":"shared_all_strategies","mode":state["mode"],"balance":round(state["equity"],4),"capital_contributed":round(float(state.get("contributed_capital",PAPER_RESET)),4),"unrealized_pnl":round(unreal+pump_unreal+whale_unreal+hype_swing_unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"account_pnl_pct":round(account_pnl_pct,3),"realized_pnl_pct":round(realized_pnl_pct,3),"total_pnl_pct":round(total_pnl_pct,3),"used_margin":round(used_margin,4),"free_margin":round(free_margin,4),"margin_utilization_pct":round(margin_utilization,3),"trade_margin_fraction_pct":round(TRADE_MARGIN_FRACTION*100,3),"trade_leverage":TRADE_LEVERAGE,"positions":positions+pump_positions+whale_positions+local_swing_positions,"pump_positions":pump_positions,
 "pump_unrealized_pnl":round(pump_unreal,4),"pump_realized_pnl":round(float(state.get("pump_realized_pnl",0) or 0),4),
 "pump_total_pnl":round(float(state.get("pump_realized_pnl",0) or 0)+pump_unreal,4),
 "pump_history_baseline":copy.deepcopy(state.get("pump_history_baseline",{})),"pump_trades":state.get("pump_trades",0),"whale_liq_positions":whale_positions,"whale_liq_unrealized_pnl":round(whale_unreal,4),"whale_liq_trades":state.get("whale_trades",0),"whale_liq_engine":copy.deepcopy(state.get("sources",{}).get("WhaleLiquidationScanner",{})),"hype_h1_position":hype_swing_position,"local_swing_positions":local_swing_positions,"local_swing_watch":copy.deepcopy(state.get("local_swing_watch",{})),
@@ -3784,7 +3798,11 @@ def dashboard_cache_loop():
 def html_dashboard(data):
  esc=lambda x:str(x).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
  age=data.get("account_age_seconds",0);age_txt="%dd %02dh %02dm"%(age//86400,(age%86400)//3600,(age%3600)//60)
+ today=data.get("today_pnl") or {}
+ today_value=today.get("pnl")
+ today_card='<b>TODAY P&L (UTC, REALIZED)<br><span class="%s">%s</span></b>'%("posv" if (today_value or 0)>=0 else "negv",("$ %.4f"%today_value) if today_value is not None else "UNAVAILABLE")
  cards='<div class="grid"><b>MODE<br>%s</b><b>ACCOUNT BALANCE<br>$ %s</b><b>CONTRIBUTED<br>$ %s</b><b>UNREALIZED P&L<br>$ %s</b><b>TOTAL EQUITY<br>$ %s</b><b>ACCOUNT P&L %% (OPEN + REALIZED)<br>%s%%</b><b>TOTAL P&L FROM $100<br><span class="%s">%s%%</span></b><b>USED MARGIN<br>$ %s</b><b>FREE MARGIN<br>$ %s</b><b>MARGIN LOAD<br>%s%%</b><b>SIZE / LEV<br>%s%% / %sx</b><b>ACCOUNT AGE<br>%s</b><b>OPEN POSITIONS<br>%s</b><b>PUMP POSITIONS<br>%s</b><b>WHALE POSITIONS<br>%s</b></div>'%(esc(data["mode"]),data["balance"],data.get("capital_contributed",100),data["unrealized_pnl"],data["total_equity"],data["account_roi_pct"],"posv" if data.get("total_pnl_pct",data["account_roi_pct"])>=0 else "negv",data.get("total_pnl_pct",data["account_roi_pct"]),data.get("used_margin",0),data.get("free_margin",0),data.get("margin_utilization_pct",0),data.get("trade_margin_fraction_pct",0),data.get("trade_leverage",TRADE_LEVERAGE),age_txt,len(data["positions"]),len(data.get("pump_positions",[])),len(data.get("whale_liq_positions",[])))
+ cards=cards.replace("</div>",today_card+"</div>",1)
  pos="".join('<tr><td>%s</td><td>%s</td><td>$%s</td><td>$%s</td><td>%sx</td><td>%s</td><td>%s</td><td class="%s">%s%%</td><td class="%s">$%s</td><td>%s</td><td><button onclick="closePos(this.dataset.sym)" data-sym="%s">Close</button></td></tr>'%(esc(x["symbol"]),x["side"],x.get("margin_usd",0),x.get("notional_usd",0),x.get("leverage",LEV),x["entry"],x["mark"],"posv" if x.get("roe_pct",0)>=0 else "negv",x.get("roe_pct",0),"posv" if x["unrealized_pnl"]>=0 else "negv",x["unrealized_pnl"],esc(x.get("headline") or x.get("strategy") or x.get("features",{}).get("engine") or "PAPER_SIGNAL"),esc(x["symbol"])) for x in data["positions"]) or '<tr><td colspan=11>No open positions</td></tr>'
  trs="".join('<tr><td>%s</td><td>%s</td><td>%s</td><td class="%s">$%s</td><td>%s</td></tr>'%(esc(x["closed"]),esc(x["symbol"]),"LONG" if x["side"]>0 else ("SHORT" if x["side"]<0 else "MIXED"),"posv" if float(x["pnl"] or 0)>=0 else "negv",round(float(x["pnl"] or 0),4),esc(x["reason"])) for x in data["trades"]) or '<tr><td colspan=5>No closed trades</td></tr>'
  whale_engine=data.get("whale_liq_engine",{}) or {}
