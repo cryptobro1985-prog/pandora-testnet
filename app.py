@@ -28,7 +28,7 @@ from learning_audit import (ensure_schema as ensure_learning_schema,
                             record_decision as record_learning_decision,
                             update_labels as update_learning_labels,
                             summary as learning_audit_summary)
-from emergency_guard import reversal as emergency_reversal, profit_targets, COOLDOWN_SECONDS, equity_drawdown_state
+from emergency_guard import reversal as emergency_reversal, profit_targets, COOLDOWN_SECONDS
 from liquidation_stream import LiquidationTape, run as run_liquidation_stream, cascade_candidates
 from hype_h1_swing import (POLICY as HYPE_SWING_POLICY, SYMBOL as HYPE_SWING_SYMBOL,
                            SYMBOLS as LOCAL_SWING_SYMBOLS, INTERVAL as HYPE_SWING_INTERVAL,
@@ -267,12 +267,6 @@ STORE=EngineStore(pg,FEE,PAPER_RESET)
 def pinit():
  with pg() as c:
   c.execute("create table if not exists account_state (id integer primary key, equity double precision not null, realized_pnl double precision not null, updated_at text not null)")
-  c.execute("create table if not exists portfolio_guard_state (id integer primary key, state jsonb not null default '{}'::jsonb)")
-  c.execute("insert into portfolio_guard_state(id,state) values(1,'{}'::jsonb) on conflict(id) do nothing")
-  guard=c.execute("select state from portfolio_guard_state where id=1").fetchone()["state"]
-  S["portfolio_equity_guard"]=guard
-  if guard.get("status") in ("CLOSING","PAUSED"):
-   S["_emergency_until"]=max(time.time()+15,float(guard.get("blocked_until",0) or 0))
   c.execute("alter table account_state add column if not exists contributed_capital double precision not null default 100")
   c.execute("create table if not exists open_positions (symbol text primary key, side integer not null, entry double precision not null, notional double precision not null, opened text not null, opened_epoch double precision not null, headline text, locked boolean not null default false, stop double precision)")
   c.execute("alter table open_positions add column if not exists leverage double precision")
@@ -867,7 +861,6 @@ def _symbol_open_anywhere(symbol):
 def _reserve_shared_entry(symbol,margin_fraction=None,strategy="shared"):
  with LOCK:
   reservations=S.setdefault("_entry_reservations",{})
-  if time.time()<float(S.get("_emergency_until",0) or 0):return False,0.0,"emergency_profit_cooldown",0.0
   total_open=sum(len(S.get(k,{})) for k in ("positions","pump_positions","whale_positions","local_swing_positions"))
   reservation_key=symbol if strategy=="shared" else strategy+":"+symbol
   equity=float(S.get("equity",0) or 0)
@@ -910,7 +903,6 @@ def liquidity_margin_fraction(symbol,features,base=None,regime=None):
 def current_entry_price(symbol):
  with LOCK:
   if not S["engine_active"] or S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or SHUTDOWN.is_set():return None
-  if time.time()<float(S.get("_emergency_until",0) or 0):return None
   if time.time()-S.get("_last_poll_epoch",0)>10:return None
   checkpoint=publication_epoch(S.get("last_checkpoint"))
   if checkpoint is None or time.time()-checkpoint>15:return None
@@ -1963,43 +1955,6 @@ def hype_h1_local_swing_loop():
   pool.shutdown(wait=False,cancel_futures=True)
 
 @account_mutation
-def portfolio_equity_protect(prices):
- with LOCK:
-  if not S.get("engine_active") or S.get("mode")!="PAPER_ONLY":return []
-  books=[("news",copy.deepcopy(S.get("positions",{}))),("pump_dump",copy.deepcopy(S.get("pump_positions",{}))),
-         ("whale_liquidation",copy.deepcopy(S.get("whale_positions",{}))),
-         ("local_m15_swing_v4",copy.deepcopy(S.get("local_swing_positions",{})))]
-  cash=float(S["equity"])
-  old=copy.deepcopy(S.get("portfolio_equity_guard",{}))
- stamp=time.time()
- positions=[(strategy,sym,pos) for strategy,book in books for sym,pos in book.items()]
- if any(not prices.get(sym) for _,sym,_ in positions):
-  with LOCK:S["_emergency_until"]=max(float(S.get("_emergency_until",0) or 0),stamp+15)
-  return []
- equity=cash+sum(paper_pnl(p["notional"],p["entry"],float(prices[sym]),p["side"],FEE) for _,sym,p in positions)
- state=equity_drawdown_state(old,max(0.,equity),stamp,bool(positions))
- # Persist the latch before any close; a restart must continue closing, not rearm.
- with pg() as db:
-  with db.transaction():
-   STORE.fence(db)
-   db.execute("update portfolio_guard_state set state=%s::jsonb where id=1",(json.dumps(state),))
- with LOCK:
-  S["portfolio_equity_guard"]=state
-  if state["status"] in ("CLOSING","PAUSED"):
-   S["_emergency_until"]=max(float(S.get("_emergency_until",0) or 0),stamp+15,float(state.get("blocked_until",0) or 0))
- if state["status"]!="CLOSING":return []
- if old.get("status")!="CLOSING":journal("portfolio_drawdown_triggered",None,state)
- closed=[]
- for strategy,sym,pos in positions:
-  price=float(prices[sym]);reason="portfolio_drawdown_stop"
-  if strategy=="news":result=close_news_position(sym,pos,price,reason)
-  elif strategy=="pump_dump":result=pump_close(sym,price,reason)
-  elif strategy=="whale_liquidation":result=whale_liq_close(sym,price,reason)
-  else:result=local_swing_close(sym,price,reason)
-  if result:closed.append({"strategy":strategy,"symbol":sym,"pnl":result.get("pnl")})
- return closed
-
-@account_mutation
 def emergency_profit_take(prices):
  stamp=time.time()
  with LOCK:
@@ -2021,7 +1976,7 @@ def emergency_profit_take(prices):
  if not pending:
   with LOCK:
    state=S.setdefault("emergency_profit_guard",{"enabled":True,"cooldown_seconds":COOLDOWN_SECONDS})
-   state["status"]="COOLDOWN" if stamp<float(S.get("_emergency_until",0) or 0) else "ARMED"
+   state["status"]="MONITORING" if stamp<float(S.get("_emergency_until",0) or 0) else "ARMED"
   return []
  callbacks={"news":None,"pump_dump":pump_close,"whale_liquidation":whale_liq_close,"local_m15_swing_v4":None}
  live_books=dict(books);closed=[];remaining=[]
@@ -2055,7 +2010,6 @@ def market():
    # Network and SQL work never owns the global state lock. Sources, health
    # and the lease heartbeat remain responsive during a slow checkpoint.
    if active and not SHUTDOWN.is_set():
-    portfolio_equity_protect(valid)
     # Process Pump & Dump hard stops before any expensive news/db work.
     # A failure in the news strategy must not prevent Pump risk evaluation.
     try:
@@ -3703,7 +3657,7 @@ def build_dashboard_snapshot():
  used_margin=sum(float(p.get("margin",float(p.get("notional",0))/max(1.0,float(p.get("leverage",TRADE_LEVERAGE))))) for book in (state.get("positions",{}),state.get("pump_positions",{}),state.get("whale_positions",{}),local_book) for p in book.values())
  free_margin=max(0.0,float(state["equity"])-used_margin);margin_utilization=(used_margin/float(state["equity"])*100.0) if float(state["equity"])>0 else 0.0
  visible_sources={k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and not k.startswith("XFree:") and k not in SEARCH_INDEX_FEEDS and not v.get("disabled") and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")}
- return {"today_pnl":today_realized_pnl_utc(),"statistics_basis":state.get("statistics_basis","full_recorded_history"),"operator_cleanup":state.get("operator_cleanup",{}),"portfolio_equity_guard":state.get("portfolio_equity_guard",{}),"emergency_profit_guard":state.get("emergency_profit_guard",{}),"daily_activity":state.get("daily_activity",{}),"daily_entry_limit":None,"margin_budget":"shared_all_strategies","mode":state["mode"],"balance":round(state["equity"],4),"capital_contributed":round(float(state.get("contributed_capital",PAPER_RESET)),4),"unrealized_pnl":round(unreal+pump_unreal+whale_unreal+hype_swing_unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"account_pnl_pct":round(account_pnl_pct,3),"realized_pnl_pct":round(realized_pnl_pct,3),"total_pnl_pct":round(total_pnl_pct,3),"used_margin":round(used_margin,4),"free_margin":round(free_margin,4),"margin_utilization_pct":round(margin_utilization,3),"trade_margin_fraction_pct":round(TRADE_MARGIN_FRACTION*100,3),"trade_leverage":TRADE_LEVERAGE,"positions":positions+pump_positions+whale_positions+local_swing_positions,"pump_positions":pump_positions,
+ return {"today_pnl":today_realized_pnl_utc(),"statistics_basis":state.get("statistics_basis","full_recorded_history"),"operator_cleanup":state.get("operator_cleanup",{}),"emergency_profit_guard":state.get("emergency_profit_guard",{}),"daily_activity":state.get("daily_activity",{}),"daily_entry_limit":None,"margin_budget":"shared_all_strategies","mode":state["mode"],"balance":round(state["equity"],4),"capital_contributed":round(float(state.get("contributed_capital",PAPER_RESET)),4),"unrealized_pnl":round(unreal+pump_unreal+whale_unreal+hype_swing_unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"account_pnl_pct":round(account_pnl_pct,3),"realized_pnl_pct":round(realized_pnl_pct,3),"total_pnl_pct":round(total_pnl_pct,3),"used_margin":round(used_margin,4),"free_margin":round(free_margin,4),"margin_utilization_pct":round(margin_utilization,3),"trade_margin_fraction_pct":round(TRADE_MARGIN_FRACTION*100,3),"trade_leverage":TRADE_LEVERAGE,"positions":positions+pump_positions+whale_positions+local_swing_positions,"pump_positions":pump_positions,
 "pump_unrealized_pnl":round(pump_unreal,4),"pump_realized_pnl":round(float(state.get("pump_realized_pnl",0) or 0),4),
 "pump_total_pnl":round(float(state.get("pump_realized_pnl",0) or 0)+pump_unreal,4),
 "pump_history_baseline":copy.deepcopy(state.get("pump_history_baseline",{})),"pump_trades":state.get("pump_trades",0),"whale_liq_positions":whale_positions,"whale_liq_unrealized_pnl":round(whale_unreal,4),"whale_liq_trades":state.get("whale_trades",0),"whale_liq_engine":copy.deepcopy(state.get("sources",{}).get("WhaleLiquidationScanner",{})),"hype_h1_position":hype_swing_position,"local_swing_positions":local_swing_positions,"local_swing_watch":copy.deepcopy(state.get("local_swing_watch",{})),
@@ -3731,7 +3685,7 @@ def dashboard():
    "margin_usd":round(margin,2),"leverage":p.get("leverage",LEV),
    "roe_pct":round(pnl/margin*100,3) if margin else 0,"unrealized_pnl":round(pnl,4),
    "opened":p["opened"],"headline":p.get("headline","")})
- return {"statistics_basis":state.get("statistics_basis","full_recorded_history"),"operator_cleanup":state.get("operator_cleanup",{}),"portfolio_equity_guard":state.get("portfolio_equity_guard",{}),"emergency_profit_guard":state.get("emergency_profit_guard",{}),"daily_activity":state.get("daily_activity",{}),"daily_entry_limit":None,"margin_budget":"shared_all_strategies","mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),
+ return {"statistics_basis":state.get("statistics_basis","full_recorded_history"),"operator_cleanup":state.get("operator_cleanup",{}),"emergency_profit_guard":state.get("emergency_profit_guard",{}),"daily_activity":state.get("daily_activity",{}),"daily_entry_limit":None,"margin_budget":"shared_all_strategies","mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),
   "total_equity":round(state["equity"]+unreal,4),"realized_pnl":round(state["realized_pnl"],4),
   "account_age_seconds":0,"account_roi_pct":round(((state["equity"]+unreal)/PAPER_RESET-1)*100,3),"total_pnl_pct":round(((state["equity"]+unreal)/PAPER_RESET-1)*100,3),
   "positions":positions,"pump_positions":[],"pump_balance":round(state.get("pump_equity",100.0),4),"pump_unrealized_pnl":0.0,"pump_total_equity":round(state.get("pump_equity",100.0),4),"pump_realized_pnl":round(state.get("pump_realized_pnl",0.0),4),"pump_trades":state.get("pump_trades",0),"trades":[],"news":[],"features":[],"sources":{k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and not k.startswith("XFree:") and k not in SEARCH_INDEX_FEEDS and not v.get("disabled") and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")},
@@ -3904,9 +3858,7 @@ def html_dashboard(data):
  today_card='<b>TODAY P&L (UTC, REALIZED)<br><span class="%s">%s</span></b>'%("posv" if (today_value or 0)>=0 else "negv",("$ %.4f"%today_value) if today_value is not None else "UNAVAILABLE")
  cards='<div class="grid"><b>MODE<br>%s</b><b>ACCOUNT BALANCE<br>$ %s</b><b>CONTRIBUTED<br>$ %s</b><b>UNREALIZED P&L<br>$ %s</b><b>TOTAL EQUITY<br>$ %s</b><b>ACCOUNT P&L %% (OPEN + REALIZED)<br>%s%%</b><b>TOTAL P&L FROM $100<br><span class="%s">%s%%</span></b><b>USED MARGIN<br>$ %s</b><b>FREE MARGIN<br>$ %s</b><b>MARGIN LOAD<br>%s%%</b><b>SIZE / LEV<br>%s%% / %sx</b><b>ACCOUNT AGE<br>%s</b><b>OPEN POSITIONS<br>%s</b><b>PUMP POSITIONS<br>%s</b><b>WHALE POSITIONS<br>%s</b></div>'%(esc(data["mode"]),data["balance"],data.get("capital_contributed",100),data["unrealized_pnl"],data["total_equity"],data["account_roi_pct"],"posv" if data.get("total_pnl_pct",data["account_roi_pct"])>=0 else "negv",data.get("total_pnl_pct",data["account_roi_pct"]),data.get("used_margin",0),data.get("free_margin",0),data.get("margin_utilization_pct",0),data.get("trade_margin_fraction_pct",0),data.get("trade_leverage",TRADE_LEVERAGE),age_txt,len(data["positions"]),len(data.get("pump_positions",[])),len(data.get("whale_liq_positions",[])))
  cards=cards.replace("</div>",today_card+"</div>",1)
- guard=data.get("portfolio_equity_guard") or {}
- guard_card='<b>ACCOUNT PROTECTION<br>%s · 5%%<br>Peak $%.2f · Drawdown %.2f%%</b>'%(esc(guard.get("status","INITIALIZING")),float(guard.get("peak",0) or 0),100*float(guard.get("drawdown",0) or 0))
- cards=cards.replace("</div>",guard_card+"</div>",1)
+
  pos="".join('<tr><td>%s</td><td>%s</td><td>$%s</td><td>$%s</td><td>%sx</td><td>%s</td><td>%s</td><td class="%s">%s%%</td><td class="%s">$%s</td><td>%s</td><td><button onclick="closePos(this.dataset.sym)" data-sym="%s">Close</button></td></tr>'%(esc(x["symbol"]),x["side"],x.get("margin_usd",0),x.get("notional_usd",0),x.get("leverage",LEV),x["entry"],x["mark"],"posv" if x.get("roe_pct",0)>=0 else "negv",x.get("roe_pct",0),"posv" if x["unrealized_pnl"]>=0 else "negv",x["unrealized_pnl"],esc(x.get("headline") or x.get("strategy") or x.get("features",{}).get("engine") or "PAPER_SIGNAL"),esc(x["symbol"])) for x in data["positions"]) or '<tr><td colspan=11>No open positions</td></tr>'
  trs="".join('<tr><td>%s</td><td>%s</td><td>%s</td><td class="%s">$%s</td><td>%s</td></tr>'%(esc(x["closed"]),esc(x["symbol"]),"LONG" if x["side"]>0 else ("SHORT" if x["side"]<0 else "MIXED"),"posv" if float(x["pnl"] or 0)>=0 else "negv",round(float(x["pnl"] or 0),4),esc(x["reason"])) for x in data["trades"]) or '<tr><td colspan=5>No closed trades</td></tr>'
  whale_engine=data.get("whale_liq_engine",{}) or {}

@@ -37,29 +37,3 @@ def profit_targets(books, prices, shock, fee):
     if not shock.get("triggered") or not any(p["side"] == -shock["side"] for p in profitable):
         return []
     return profitable
-
-
-def equity_drawdown_state(state, equity, epoch, has_positions, max_drawdown=.05, cooldown=900.):
-    """Durable portfolio circuit breaker, independent of a market reversal.
-
-    Peak starts at the first observed net equity, never an invented historical high.
-    A triggered close remains latched until all positions are gone. Resume after
-    cooldown from a new observed baseline rather than retriggering the old peak.
-    """
-    import math
-    out=dict(state or {})
-    if not math.isfinite(equity) or equity < 0 or not math.isfinite(epoch):
-        raise ValueError('invalid portfolio equity')
-    status=out.get('status','ARMED')
-    if status=='CLOSING':
-        if not has_positions:out['status']='PAUSED'
-        return out
-    if status=='PAUSED':
-        if epoch < float(out.get('blocked_until',0)) or has_positions:return out
-        return dict(status='ARMED',peak=equity,last_equity=equity,drawdown=0.,blocked_until=0.,max_drawdown=max_drawdown)
-    peak=max(float(out.get('peak',equity)),equity)
-    drawdown=(peak-equity)/peak if peak>0 else 0.
-    out.update(status='ARMED',peak=peak,last_equity=equity,drawdown=drawdown,max_drawdown=max_drawdown)
-    if drawdown >= max_drawdown:
-        out.update(status='CLOSING' if has_positions else 'PAUSED',triggered_at=epoch,blocked_until=epoch+cooldown)
-    return out
