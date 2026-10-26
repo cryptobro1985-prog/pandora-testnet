@@ -786,7 +786,13 @@ def exclude_authorized_pump_position(request):
 def authorized_cleanup_worker():
  path=os.path.join(os.path.dirname(__file__),"operator_requests.json")
  if not os.path.exists(path):return
- with open(path) as source:requests=json.load(source).get("actions",[])
+ try:
+  with open(path) as source:
+   payload=json.load(source)
+  requests=payload.get("actions",[]) if isinstance(payload,dict) else []
+ except Exception as exc:
+  with LOCK:S["operator_cleanup"]={"ok":False,"ignored_invalid_operator_requests":True,"error":type(exc).__name__+":"+str(exc)[:120]}
+  return
  while requests and not SHUTDOWN.is_set():
   for request in list(requests):
    try:
@@ -1236,10 +1242,18 @@ def whale_liquidation_scan():
      else:reject(probe["reason"])
 
     jobs={sym:pool.submit(_whale_liq_book,sym) for sym in {p["symbol"] for p in eligible}}
-    books={}
-    for sym,job in jobs.items():
-     try:books[sym]=job.result(timeout=3)
-     except Exception:books[sym]=None
+    books={sym:None for sym in jobs}
+    # One global deadline for the whole order-book phase. Sequential per-job
+    # timeouts could stretch a nominal 3s scan into 8-15s when several venues lag.
+    if jobs:
+     done,pending=concurrent.futures.wait(set(jobs.values()),timeout=2.20)
+     reverse={job:sym for sym,job in jobs.items()}
+     for job in done:
+      sym=reverse[job]
+      try:books[sym]=job.result()
+      except Exception:books[sym]=None
+     for job in pending:
+      job.cancel()
 
     raw_candidates=[]
     for p in eligible:
