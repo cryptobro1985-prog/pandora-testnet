@@ -802,12 +802,15 @@ def exclude_authorized_pump_position(request):
   with db.transaction():
    STORE.fence(db)
    if db.execute("select 1 from operator_actions where action_id=%s",(action_id,)).fetchone():return True
-   rows=db.execute("delete from trade_history where strategy='pump_dump' and symbol=%s and opened=%s returning pnl",(symbol,opened)).fetchall()
+   rows=db.execute("delete from trade_history where strategy='pump_dump' and symbol=%s and opened=%s returning pnl,closed",(symbol,opened)).fetchall()
    reversed_pnl=sum(float(r["pnl"] or 0) for r in rows)
    db.execute("delete from pump_trade_history where symbol=%s and opened=%s",(symbol,opened))
    db.execute("delete from position_snapshots where strategy='pump_dump' and symbol=%s and opened=%s",(symbol,opened))
    db.execute("delete from pump_signal_journal where symbol=%s and ts::timestamptz between %s::timestamptz-interval '10 seconds' and %s::timestamptz+interval '10 seconds'",(symbol,opened,opened))
-   db.execute("delete from audit_journal where payload->>'symbol'=%s and kind in ('pump_trade_opened','pump_trade_closed') and recorded_at::timestamptz >= %s::timestamptz",(symbol,opened))
+   db.execute("""delete from audit_journal where payload->>'symbol'=%s
+     and kind in ('pump_trade_opened','pump_trade_closed')
+     and (payload->>'opened'=%s or (not(payload ? 'opened') and kind='pump_trade_opened'
+       and recorded_at::timestamptz between %s::timestamptz and %s::timestamptz+interval '10 seconds'))""",(symbol,opened,opened,opened))
    account=db.execute("update account_state set equity=equity-%s,realized_pnl=realized_pnl-%s,updated_at=%s where id=1 returning equity,realized_pnl",(reversed_pnl,reversed_pnl,now())).fetchone()
    counts=db.execute("select count(*) as total,count(*) filter(where strategy='pump_dump') as pump from trade_history").fetchone()
    payload={"action":"excluded_user_selected_pump_test","symbol":symbol,"excluded_trades":len(rows),
@@ -969,7 +972,7 @@ def pump_open(symbol,side,price,score,features,margin_fraction=None):
      (symbol,side,price,notional,margin,TRADE_LEVERAGE,opened,epoch,float(score),json.dumps(features,default=str))).fetchone()
     if not row:return False
     db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'pump_trade_opened',%s::jsonb)",
-     (now(),json.dumps({"strategy":"pump_dump","symbol":symbol,"side":side,"entry":price,"score":score,"margin":margin,"notional":notional,"leverage":TRADE_LEVERAGE},default=str)))
+     (now(),json.dumps({"strategy":"pump_dump","symbol":symbol,"opened":opened,"side":side,"entry":price,"score":score,"margin":margin,"notional":notional,"leverage":TRADE_LEVERAGE},default=str)))
   with LOCK:S["pump_positions"][symbol]=pos
   return True
  finally:_release_shared_entry(symbol)
@@ -994,7 +997,7 @@ def pump_close(symbol,price,reason):
     values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
     (pos["opened"],now(),symbol,pos["side"],pos["entry"],price,pnl,reason,pos.get("score",0),features))
    c.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'pump_trade_closed',%s::jsonb)",
-    (now(),json.dumps({"strategy":"pump_dump","symbol":symbol,"side":pos["side"],"entry":pos["entry"],"exit":price,"pnl":pnl,"reason":reason},default=str)))
+    (now(),json.dumps({"strategy":"pump_dump","symbol":symbol,"opened":pos["opened"],"side":pos["side"],"entry":pos["entry"],"exit":price,"pnl":pnl,"reason":reason},default=str)))
  with LOCK:
   S["pump_positions"].pop(symbol,None);S["equity"]=float(account["equity"]);S["realized_pnl"]=float(account["realized_pnl"])
   S["pump_equity"]=S["equity"];S["pump_realized_pnl"]=S["realized_pnl"];S["pump_trades"]+=1;S["trades"]+=1
