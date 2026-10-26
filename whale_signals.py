@@ -169,7 +169,7 @@ def summarize_book(payload, depth_bps=10.0):
 
 
 def significance(cluster, book, ctx, floors=None, oi_fraction=0.0025,
-                 flow_multiple=2.0, min_impact=0.5):
+                 flow_multiple=2.0, min_impact=0.25):
     """Require material potential flow relative to this venue's OI and depth.
 
     All thresholds are prospective research settings. The 20% first-slice model
@@ -203,16 +203,26 @@ def significance(cluster, book, ctx, floors=None, oi_fraction=0.0025,
     coverage = _finite(ctx.get("trade_coverage_seconds"))
     buy = _finite(ctx.get("buy_volume_60s"))
     sell = _finite(ctx.get("sell_volume_60s"))
-    if (ctx.get("volume_source") != "hyperliquid_ws_trades" or
-            ctx.get("trade_data_fresh") is not True or coverage is None or coverage < 60 or
-            buy is None or sell is None or min(buy, sell) < 0):
-        return dict(result, reason="missing_observed_trade_flow")
-    flow = buy+sell
-    minimum = max(floor, oi_fraction*oi_usd, flow_multiple*flow)
+    flow_available = (
+        ctx.get("volume_source") == "hyperliquid_ws_trades"
+        and ctx.get("trade_data_fresh") is True
+        and coverage is not None and coverage >= 15
+        and buy is not None and sell is not None and min(buy, sell) >= 0
+    )
+    flow = None
+    if flow_available:
+        observed = buy+sell
+        # Normalize a partial but fresh websocket window toward 60 seconds,
+        # capped to avoid exploding the threshold during startup.
+        scale = min(4.0, max(1.0, 60.0/max(coverage, 1.0)))
+        flow = observed*scale
+    minimum = max(floor, oi_fraction*oi_usd, flow_multiple*flow if flow is not None else 0.0)
     result.update({"minimum_notional_usd": minimum, "min_notional": minimum,
                    "open_interest_usd": oi_usd, "size_to_oi": size/oi_usd,
                    "observed_volume_60s_usd": flow,
-                   "size_to_60s_flow": size/flow if flow > 0 else None,
+                   "size_to_60s_flow": size/flow if flow and flow > 0 else None,
+                   "trade_flow_available": bool(flow_available),
+                   "trade_flow_coverage_seconds": coverage,
                    "forced_flow_first_slice_usd": size*0.20,
                    "oi_fraction_threshold": oi_fraction,
                    "flow_multiple_threshold": flow_multiple,
