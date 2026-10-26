@@ -1560,7 +1560,7 @@ _LOCAL_CANDLE_CACHE_LOCK=threading.RLock()
 _LOCAL_CANDLE_REFRESH_LOCK=threading.Lock()
 _LOCAL_CANDLE_BACKOFF={}
 _LOCAL_CANDLE_STREAM={}
-def accept_local_candles(data):
+def accept_local_candles(data,history=False):
  rows=data if isinstance(data,list) else [data]
  stamp=time.monotonic();wall_ms=int(time.time()*1000)
  with _LOCAL_CANDLE_CACHE_LOCK:
@@ -1573,18 +1573,18 @@ def accept_local_candles(data):
     values=[float(row[k]) for k in ("o","h","l","c","v")]
     o,h,l,c,v=values;step=3600000 if interval=="1h" else 900000
     if not all(math.isfinite(z) for z in values) or min(o,h,l,c)<=0 or v<0:continue
-    if not (step-1000<=T-t<=step and l<=min(o,c)<=max(o,c)<=h and t<=wall_ms+1000 and T>=wall_ms-2*step):continue
+    if not (step-1000<=T-t<=step and l<=min(o,c)<=max(o,c)<=h and t<=wall_ms+1000 and T>=wall_ms-((120 if interval=="1h" else 12)*3600000 if history else 2*step)):continue
    except (KeyError,TypeError,ValueError,OverflowError):continue
    key=(symbol,interval,120 if interval=="1h" else 12)
    cached=_LOCAL_CANDLE_CACHE.get(key)
    old=cached[1] if cached else []
    merged={int(r["t"]):r for r in old}
-   merged[t]=dict(row)
+   if not (history and cached and any(int(r["t"])==t for r in cached[1])):merged[t]=dict(row)
    # A delayed WS update cannot replace a newer version of the same candle.
    previous=_LOCAL_CANDLE_STREAM.get((symbol,interval))
-   if previous and t<previous[1]:continue
+   if not history and previous and t<previous[1]:continue
    _LOCAL_CANDLE_CACHE[key]=(stamp,[merged[k] for k in sorted(merged)][-125:],wall_ms)
-   _LOCAL_CANDLE_STREAM[(symbol,interval)]=(stamp,t)
+   if not history:_LOCAL_CANDLE_STREAM[(symbol,interval)]=(stamp,t)
 
 def _local_candles(symbol,interval,hours):
  key=(symbol,interval,hours)
@@ -2356,7 +2356,7 @@ def market_trade_stream():
   return listed|LIQ_WHALE_SYMBOLS|held
  def report(status):
   with LOCK:S["sources"]["MarketTradeStream"]={"last_check":now(),**status}
- run_trade_stream(MARKET_OBS,SHUTDOWN,symbols,report,os.getenv("HYPERLIQUID_WS_API","wss://api.hyperliquid.xyz/ws"),on_mids=accept_market_prices,on_candles=accept_local_candles,candle_symbols=LOCAL_SWING_SYMBOLS)
+ run_trade_stream(MARKET_OBS,SHUTDOWN,symbols,report,os.getenv("HYPERLIQUID_WS_API","wss://api.hyperliquid.xyz/ws"),on_mids=accept_market_prices,on_candles=accept_local_candles,candle_symbols=LOCAL_SWING_SYMBOLS,on_candle_history=lambda rows:accept_local_candles(rows,history=True))
 
 def market_metadata():
  while not SHUTDOWN.is_set():

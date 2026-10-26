@@ -129,3 +129,22 @@ class AdaptiveBudgetTests(unittest.TestCase):
         b.limited();self.assertEqual(b.limit,300)
         now[0]=31;b.limited();self.assertEqual(b.limit,150)
         now[0]=92;b.limited();self.assertEqual(b.limit,120)
+
+class HistoryBootstrapTests(CandleTests):
+    def test_history_bootstrap_restores_old_rows_without_overwriting_live_candle(self):
+        rows=self.rows();app.accept_local_candles(dict(rows[-1],c='101.7'))
+        app.accept_local_candles(rows,history=True)
+        with patch.object(app,'get') as network:result,_=app._local_m15_candles('HYPE')
+        network.assert_not_called();self.assertEqual(len(result),12);self.assertEqual(result[-1]['c'],'101.7')
+
+    def test_socket_bootstraps_history_via_documented_info_post(self):
+        stop=MagicMock();stop.is_set.side_effect=[False,False,True,True]
+        ws=MagicMock();rows=self.rows()
+        ws.recv.return_value=json.dumps({'channel':'post','data':{'id':1000000,'response':{'type':'info','payload':{'type':'candleSnapshot','data':rows}}}})
+        callback=MagicMock()
+        with patch('market_stream.websocket.create_connection',return_value=ws):
+            run_trade_stream(MagicMock(),stop,lambda:set(),lambda _:None,'wss://test',candle_symbols=('HYPE','NEAR'),on_candle_history=callback)
+        callback.assert_called_once_with(rows)
+        posts=[json.loads(c.args[0]) for c in ws.send.call_args_list if json.loads(c.args[0]).get('method')=='post']
+        self.assertEqual(len(posts),4)
+        self.assertTrue(all(p['request']['payload']['type']=='candleSnapshot' for p in posts))
