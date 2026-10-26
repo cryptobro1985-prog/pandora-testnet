@@ -100,10 +100,11 @@ def evaluate_exit(position, price, evaluated_at):
     liq=float(features.get("liquidation_price",0) or 0)
     victim=str(features.get("victim_side","")).lower()
     engine=str(features.get("engine",""))
+    whale_engine=engine.startswith("whale_liquidation") or engine=="price_to_value_liquidation"
     # The first evaluation after the liquidation latch starts a brand-new local
     # search. Pre-liquidation price history must never be reused to manufacture
     # an immediate post-liquidation exit.
-    if engine.startswith("whale_liquidation") and features.get("liquidation_level_reached_at") and not pos.get("post_liq_risk_reset_done"):
+    if whale_engine and features.get("liquidation_level_reached_at") and not pos.get("post_liq_risk_reset_done"):
         peak=price
         series=[price]
         pos["peak"]=price
@@ -115,7 +116,7 @@ def evaluate_exit(position, price, evaluated_at):
     remaining_liq_pct=None
     hold_limit=max(0.10,min(1.50,float(features.get("pre_liquidation_hold_limit_pct",
                        features.get("dynamic_entry_distance_pct",0.75)) or 0.75)))
-    if engine.startswith("whale_liquidation") and liq>0 and victim in ("long","short") and not features.get("liquidation_level_reached_at"):
+    if whale_engine and liq>0 and victim in ("long","short") and not features.get("liquidation_level_reached_at"):
         reached=(victim=="long" and price<=liq) or (victim=="short" and price>=liq)
         if not reached:
             remaining_liq_pct=((price/liq)-1.0)*100.0 if victim=="long" else ((liq/price)-1.0)*100.0
@@ -147,7 +148,7 @@ def evaluate_exit(position, price, evaluated_at):
         "local_search_min_samples":min_local_samples,
         "pre_liquidation_hold":pre_liq_hold,
         "remaining_to_liquidation_pct":remaining_liq_pct,
-        "pre_liquidation_hold_limit_pct":hold_limit if engine.startswith("whale_liquidation") else None,
+        "pre_liquidation_hold_limit_pct":hold_limit if whale_engine else None,
         "reason":reason
     }
     pos["history"]=series
