@@ -1406,12 +1406,14 @@ def whale_liquidation_scan():
     v2_qualified_ids={str(x.get("cluster_id")) for x in v2_qualified}
     for x in v2_qualified:
      with LOCK:v2_capacity=len(S.get("whale_v2_positions",{}))<WL2_MAX_POSITIONS
+     learn_id=hashlib.sha256(("WL2_ENTRY:"+str(x.get("cluster_id"))+":"+str(int(stamp//15))).encode()).hexdigest()
+     x["learning_decision_id"]=learn_id
      opened=v2_capacity and whale_v2_open(x["symbol"],int(x["side"]),prices.get(x["symbol"]),x["score"],x)
      action="OPENED" if opened else ("QUALIFIED_CAPACITY" if not v2_capacity else "QUALIFIED")
      if opened:v2_opened.append(x["symbol"])
      ident=hashlib.sha256((WL2_POLICY+":"+str(x.get("cluster_id"))+":"+str(int(stamp//15))+":"+action).encode()).hexdigest()
      reason="entry_opened" if opened else ("wl2_position_capacity" if not v2_capacity else "qualified_but_entry_vetoed_or_duplicate")
-     log_learning_decision("WL2:"+ident,"whale_liquidation_v2",x["symbol"],int(x["side"]),action,reason,
+     log_learning_decision(learn_id,"whale_liquidation_v2",x["symbol"],int(x["side"]),action,reason,
        prices.get(x["symbol"]),x.get("score"),WL2_LEVERAGE,x)
      v2_journal_rows.append((ident,now(),x["symbol"],int(x["side"]),float(x["score"]),action,json.dumps(x,default=str)))
     for x in v2_observed:
@@ -1421,7 +1423,9 @@ def whale_liquidation_scan():
      v2_journal_at[key]=stamp
      ident=hashlib.sha256((WL2_POLICY+":"+str(x.get("cluster_id"))+":"+str(int(stamp//60))+":REJECTED:"+str(key[1])).encode()).hexdigest()
      reject_reason=",".join(str(r) for r in (x.get("wl2_reject_reasons") or x.get("upstream_reject_reasons") or ["wl2_filters"]))
-     log_learning_decision("WL2:"+ident,"whale_liquidation_v2",x["symbol"],int(x["side"]),"REJECTED",reject_reason,
+     reject_learn_id=hashlib.sha256(("WL2_OBS:"+str(x.get("cluster_id"))+":"+str(int(stamp//60))).encode()).hexdigest()
+     x["learning_decision_id"]=reject_learn_id
+     log_learning_decision(reject_learn_id,"whale_liquidation_v2",x["symbol"],int(x["side"]),"REJECTED",reject_reason,
        prices.get(x["symbol"]),x.get("score"),WL2_LEVERAGE,x)
      v2_journal_rows.append((ident,now(),x["symbol"],int(x["side"]),float(x["score"]),"REJECTED",json.dumps(x,default=str)))
     if v2_journal_rows:
@@ -1465,11 +1469,15 @@ def whale_liquidation_scan():
        observed.get("score"),WHALE_LEVERAGE,observed)
     for x in qualified:
      sym=x["symbol"];side=int(x["side"])
+     v1_entry_id=hashlib.sha256(("WHALE_V1_ENTRY:"+str(x.get("cluster_id"))+":"+str(int(stamp//15))).encode()).hexdigest()
+     x["learning_decision_id"]=v1_entry_id
      with LOCK:
-      if len(S.get("whale_positions",{}))>=WHALE_MAX_ACTIVE_POSITIONS:break
+      whale_capacity=len(S.get("whale_positions",{}))<WHALE_MAX_ACTIVE_POSITIONS
+     if not whale_capacity:
+      log_learning_decision(v1_entry_id,"whale_liquidation",sym,side,"SKIPPED","whale_position_cap",
+       prices.get(sym),x.get("score"),WHALE_LEVERAGE,x);continue
      opened=whale_liq_open(sym,side,prices[sym],x["score"],x,WHALE_MARGIN_FRACTION)
      action="OPENED" if opened else "QUALIFIED";key=(x["cluster_id"],action)
-     v1_entry_id=hashlib.sha256(("WHALE_V1_ENTRY:"+str(x.get("cluster_id"))+":"+str(int(stamp//15))+":"+action).encode()).hexdigest()
      log_learning_decision(v1_entry_id,"whale_liquidation",sym,side,action,
        "entry_opened" if opened else "qualified_but_entry_vetoed_or_capacity",prices.get(sym),x.get("score"),WHALE_LEVERAGE,x)
      if stamp-last_signal.get(key,0)<15:continue
@@ -1608,7 +1616,8 @@ def hype_swing_open(side,price,analysis):
  try:
   price=float(price);notional=margin*HYPE_SWING_LEVERAGE
   opened=now();epoch=time.time()
-  features={**analysis,"policy":HYPE_SWING_POLICY,"allocation_margin_fraction":HYPE_SWING_MARGIN_FRACTION,
+  learning_decision_id="HYPE_H1:"+str(int(analysis.get("signal_candle_time") or 0))+":"+str(int(side))
+  features={**analysis,"policy":HYPE_SWING_POLICY,"learning_decision_id":learning_decision_id,"allocation_margin_fraction":HYPE_SWING_MARGIN_FRACTION,
    "leverage":HYPE_SWING_LEVERAGE,"mfe_price_move":0.0,"mae_price_move":0.0,"mfe_roe_pct":0.0,"mae_roe_pct":0.0,
    "entry_mark":price,"shadow_exit_modes":["opposite_local_extreme","h1_momentum_weakening"]}
   pos={"side":int(side),"entry":price,"notional":notional,"margin":margin,"leverage":HYPE_SWING_LEVERAGE,
@@ -1875,12 +1884,15 @@ def market():
 
 def impulse_scan():
  last_signal={};streaks={};candidate_queue={};last_observation=0
- micro_rejections={}
+ micro_rejections={};micro_rejected_samples={}
  pool=concurrent.futures.ThreadPoolExecutor(max_workers=MICRO_ANALYSIS_THREADS,thread_name_prefix="pump-micro")
  def enrich(candidate):
   candidate=dict(candidate);sym=candidate["symbol"];side=int(candidate["side"])
   def rejected(reason):
-   with LOCK:micro_rejections[reason]=micro_rejections.get(reason,0)+1
+   candidate["micro_reject_reason"]=reason
+   with LOCK:
+    micro_rejections[reason]=micro_rejections.get(reason,0)+1
+    micro_rejected_samples[(sym,side)]=copy.deepcopy(candidate)
    return None
   try:
    book=_whale_liq_book(sym)
@@ -1946,7 +1958,7 @@ def impulse_scan():
     found=[x for x in combined.values() if regime_candidate_guard(x,regime) is None]
     found.sort(key=lambda x:x["score"],reverse=True)
     for candidate in found:candidate["observed_at_epoch"]=stamp
-    micro_rejections.clear()
+    micro_rejections.clear();micro_rejected_samples.clear()
     futures=[pool.submit(enrich,x) for x in found[:30]]
     enriched=[]
     for future in concurrent.futures.as_completed(futures):
@@ -1980,19 +1992,30 @@ def impulse_scan():
      sym=observed.get("symbol");side=int(observed.get("side") or 0)
      if not sym or side not in (-1,1):continue
      key=(sym,side)
-     if key in qualified_keys:obs_action="QUALIFIED";obs_reason="passed_current_filters"
-     elif key in micro_keys:obs_action="REJECTED";obs_reason="score_confirmation_or_regime_filter"
-     else:obs_action="REJECTED";obs_reason="microstructure_filter"
+     rejected_sample=micro_rejected_samples.get(key)
+     if key in qualified_keys:obs_action="QUALIFIED";obs_reason="passed_current_filters";obs_features=observed
+     elif key in micro_keys:obs_action="REJECTED";obs_reason="score_or_confirmation_streak";obs_features=observed
+     else:
+      obs_action="REJECTED";obs_reason=(rejected_sample or {}).get("micro_reject_reason") or "microstructure_filter"
+      obs_features=rejected_sample or observed
      obs_id=hashlib.sha256(("PUMP_OBS:"+sym+":"+str(side)+":"+str(pump_bucket)).encode()).hexdigest()
      log_learning_decision(obs_id,"pump_dump",sym,side,obs_action,obs_reason,prices.get(sym),
-       observed.get("score"),TRADE_LEVERAGE,observed)
+       obs_features.get("score"),TRADE_LEVERAGE,obs_features)
     for candidate in queued:
      total_open,pump_open_count,open_sides=portfolio_counts()
-     if total_open>=MAX_OPEN_POSITIONS or pump_open_count>=PUMP_MAX_POSITIONS:break
      sym=candidate["symbol"];side=int(candidate["side"]);tier=candidate.get("allocation_tier","SECONDARY")
-     if _symbol_open_anywhere(sym):continue
+     learn_id=hashlib.sha256(("PUMP_ENTRY:"+sym+":"+str(side)+":"+str(pump_bucket)).encode()).hexdigest()
+     candidate["learning_decision_id"]=learn_id
+     if total_open>=MAX_OPEN_POSITIONS or pump_open_count>=PUMP_MAX_POSITIONS:
+      log_learning_decision(learn_id,"pump_dump",sym,side,"SKIPPED","portfolio_position_cap" if total_open>=MAX_OPEN_POSITIONS else "pump_position_cap",
+       prices.get(sym),candidate.get("score"),TRADE_LEVERAGE,candidate);continue
+     if _symbol_open_anywhere(sym):
+      log_learning_decision(learn_id,"pump_dump",sym,side,"SKIPPED","symbol_already_open_shared_account",
+       prices.get(sym),candidate.get("score"),TRADE_LEVERAGE,candidate);continue
      if tier=="SECONDARY":
-      if sum(1 for x in open_sides if x==side)>=PUMP_SECONDARY_SAME_SIDE_CAP:continue
+      if sum(1 for x in open_sides if x==side)>=PUMP_SECONDARY_SAME_SIDE_CAP:
+       log_learning_decision(learn_id,"pump_dump",sym,side,"SKIPPED","secondary_same_side_cap",
+        prices.get(sym),candidate.get("score"),TRADE_LEVERAGE,candidate);continue
       ranked_fraction=liquidity_margin_fraction(sym,candidate,PUMP_SECONDARY_MARGIN_FRACTION,regime)
       margin_fraction=ranked_fraction
      else:
@@ -2002,7 +2025,6 @@ def impulse_scan():
      if opened:
       opened_this_scan.append(sym);candidate_queue.pop((sym,side),None)
      learn_reason="entry_opened" if opened else "qualified_but_entry_vetoed_or_capacity"
-     learn_id=hashlib.sha256(("PUMP_DECISION:"+sym+":"+str(side)+":"+str(pump_bucket)+":"+action).encode()).hexdigest()
      log_learning_decision(learn_id,"pump_dump",sym,side,action,learn_reason,prices.get(sym),
        candidate.get("score"),TRADE_LEVERAGE,candidate)
      bucket=pump_bucket;ident=hashlib.sha256(("PUMP4:"+sym+":"+str(side)+":"+str(bucket)+":"+action).encode()).hexdigest()
@@ -2014,7 +2036,7 @@ def impulse_scan():
         (ident,now(),sym,side,float(candidate["score"]),action,json.dumps(candidate,default=str)))
     if found or qualified or stamp-last_observation>=60:
      try:
-      save_scanner_observation("pump_dump",{"policy":"momentum_breadth_continuation_v5","raw_candidates":found[:30],"micro_confirmed":enriched[:30],"primary":primary[:20],"secondary":secondary[:20],"queue":queued[:20],"opened":opened_this_scan,"market_regime":regime,"micro_rejections":dict(micro_rejections),"counter_market_rejected":blocked_counter,"scan_epoch":stamp})
+      save_scanner_observation("pump_dump",{"policy":"momentum_breadth_continuation_v5","raw_candidates":found[:30],"micro_confirmed":enriched[:30],"primary":primary[:20],"secondary":secondary[:20],"queue":queued[:20],"opened":opened_this_scan,"market_regime":regime,"micro_rejections":dict(micro_rejections),"micro_rejected_samples":list(micro_rejected_samples.values())[:30],"counter_market_rejected":blocked_counter,"scan_epoch":stamp})
       last_observation=stamp
      except Exception as obs_exc:
       with LOCK:S["last_error"]="pump_observation: "+str(obs_exc)[:160]
