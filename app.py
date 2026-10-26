@@ -3691,11 +3691,11 @@ def today_realized_pnl_utc():
  except Exception as exc:
   return {"pnl":None,"trades":None,"timezone":"UTC","error":type(exc).__name__+":"+str(exc)[:100]}
 
-def build_dashboard_snapshot():
+def build_dashboard_snapshot(history=None):
  with LOCK:
   state={k:copy.deepcopy(v) for k,v in S.items() if not k.startswith("_")}
   state["_prices"]=dict(S.get("_prices",{}))
- trades=[dict(x) for x in persistent_trades(100)]
+ trades=copy.deepcopy(history.get("trades",[])) if history is not None else [dict(x) for x in persistent_trades(100)]
  baseline=copy.deepcopy(state.get("pump_history_baseline",{}))
  if int(baseline.get("restored_closed_trades",0) or 0)>0:
   trades.append({"id":"RESTORED_PUMP_BASELINE","opened":None,"closed":PUMP_RESTORED_HISTORY_TIMESTAMP,
@@ -3704,8 +3704,8 @@ def build_dashboard_snapshot():
    "reason":"restored historical aggregate; individual deleted rows unavailable",
    "headline":"PUMP_DUMP","event_id":None,"strategy":"pump_dump_restored_baseline","score":None,
    "features":{"restored_aggregate":True}})
- newsrows=[dict(x) for x in persistent_news(20)]
- feats=[dict(x) for x in persistent_features(10)]
+ newsrows=copy.deepcopy(history.get("news",[])) if history is not None else [dict(x) for x in persistent_news(20)]
+ feats=copy.deepcopy(history.get("features",[])) if history is not None else [dict(x) for x in persistent_features(10)]
  prices=state.get("_prices",{});positions=[];unreal=0.0
  for sym,p in state["positions"].items():
   px=prices.get(sym,p["entry"]);move=(px/p["entry"]-1)*p["side"];gross=p["notional"]*move;fees=p["notional"]*FEE+p["notional"]*(px/p["entry"])*FEE;pnl=paper_pnl(p["notional"],p["entry"],px,p["side"],FEE);lev=float(p.get("leverage",LEV));margin=float(p.get("margin",p["notional"]/lev));roi=(pnl/margin*100) if margin>0 else 0.0;unreal+=pnl
@@ -3738,7 +3738,7 @@ def build_dashboard_snapshot():
  used_margin=sum(float(p.get("margin",float(p.get("notional",0))/max(1.0,float(p.get("leverage",TRADE_LEVERAGE))))) for book in (state.get("positions",{}),state.get("pump_positions",{}),state.get("whale_positions",{}),local_book) for p in book.values())
  free_margin=max(0.0,float(state["equity"])-used_margin);margin_utilization=(used_margin/float(state["equity"])*100.0) if float(state["equity"])>0 else 0.0
  visible_sources={k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and not k.startswith("XFree:") and k not in SEARCH_INDEX_FEEDS and not v.get("disabled") and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")}
- return {"today_pnl":today_realized_pnl_utc(),"statistics_basis":state.get("statistics_basis","full_recorded_history"),"operator_cleanup":state.get("operator_cleanup",{}),"emergency_profit_guard":state.get("emergency_profit_guard",{}),"daily_activity":state.get("daily_activity",{}),"daily_entry_limit":None,"margin_budget":"shared_all_strategies","mode":state["mode"],"balance":round(state["equity"],4),"capital_contributed":round(float(state.get("contributed_capital",PAPER_RESET)),4),"unrealized_pnl":round(unreal+pump_unreal+whale_unreal+hype_swing_unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"account_pnl_pct":round(account_pnl_pct,3),"realized_pnl_pct":round(realized_pnl_pct,3),"total_pnl_pct":round(total_pnl_pct,3),"used_margin":round(used_margin,4),"free_margin":round(free_margin,4),"margin_utilization_pct":round(margin_utilization,3),"trade_margin_fraction_pct":round(TRADE_MARGIN_FRACTION*100,3),"trade_leverage":TRADE_LEVERAGE,"positions":positions+pump_positions+whale_positions+local_swing_positions,"pump_positions":pump_positions,
+ return {"snapshot_at":now(),"history_updated_at":(history or {}).get("updated_at"),"history_error":(history or {}).get("error"),"today_pnl":history.get("today_pnl",{}) if history is not None else today_realized_pnl_utc(),"statistics_basis":state.get("statistics_basis","full_recorded_history"),"operator_cleanup":state.get("operator_cleanup",{}),"emergency_profit_guard":state.get("emergency_profit_guard",{}),"daily_activity":state.get("daily_activity",{}),"daily_entry_limit":None,"margin_budget":"shared_all_strategies","mode":state["mode"],"balance":round(state["equity"],4),"capital_contributed":round(float(state.get("contributed_capital",PAPER_RESET)),4),"unrealized_pnl":round(unreal+pump_unreal+whale_unreal+hype_swing_unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"account_pnl_pct":round(account_pnl_pct,3),"realized_pnl_pct":round(realized_pnl_pct,3),"total_pnl_pct":round(total_pnl_pct,3),"used_margin":round(used_margin,4),"free_margin":round(free_margin,4),"margin_utilization_pct":round(margin_utilization,3),"trade_margin_fraction_pct":round(TRADE_MARGIN_FRACTION*100,3),"trade_leverage":TRADE_LEVERAGE,"positions":positions+pump_positions+whale_positions+local_swing_positions,"pump_positions":pump_positions,
 "pump_unrealized_pnl":round(pump_unreal,4),"pump_realized_pnl":round(float(state.get("pump_realized_pnl",0) or 0),4),
 "pump_total_pnl":round(float(state.get("pump_realized_pnl",0) or 0)+pump_unreal,4),
 "pump_history_baseline":copy.deepcopy(state.get("pump_history_baseline",{})),"pump_trades":state.get("pump_trades",0),"whale_liq_positions":whale_positions,"whale_liq_unrealized_pnl":round(whale_unreal,4),"whale_liq_trades":state.get("whale_trades",0),"whale_liq_engine":copy.deepcopy(state.get("sources",{}).get("WhaleLiquidationScanner",{})),"hype_h1_position":hype_swing_position,"local_swing_positions":local_swing_positions,"local_swing_watch":copy.deepcopy(state.get("local_swing_watch",{})),
@@ -3746,36 +3746,14 @@ def build_dashboard_snapshot():
 "hype_h1_unrealized_pnl":round(hype_swing_unreal,4),"hype_h1_total_equity":round(hype_swing_total,4),
 "hype_h1_pnl_pct":round((hype_swing_total/HYPE_SWING_STARTING_EQUITY-1)*100,3),"hype_h1_realized_pnl":round(float(state.get("hype_swing_realized_pnl",0)),4),
 "hype_h1_trades":state.get("hype_swing_trades",0),"hype_h1_engine":copy.deepcopy(state.get("sources",{}).get("HypeH1LocalSwing",{})),
-"hype_h1_stats":hype_swing_stats(),"hype_h1_policy":HYPE_SWING_POLICY,"account_model":"UNIFIED_PAPER_ACCOUNT_ALL_STRATEGIES","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"decision_learning":copy.deepcopy(state.get("learning_audit",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
+"hype_h1_stats":history.get("hype_stats",{}) if history is not None else hype_swing_stats(),"hype_h1_policy":HYPE_SWING_POLICY,"account_model":"UNIFIED_PAPER_ACCOUNT_ALL_STRATEGIES","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"decision_learning":copy.deepcopy(state.get("learning_audit",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
 def dashboard():
- with LOCK:
-  cached=S.get("_dashboard_cache")
-  if cached:return copy.deepcopy(cached)
-  state={k:copy.deepcopy(v) for k,v in S.items() if not k.startswith("_")}
-  prices=dict(S.get("_prices",{}))
- positions=[]
- unreal=0.0
- for sym,p in state["positions"].items():
-  price=prices.get(sym,p["entry"])
-  pnl=paper_pnl(p["notional"],p["entry"],price,p["side"],FEE)
-  margin=float(p.get("margin",p["notional"]/max(1,float(p.get("leverage",LEV)))))
-  unreal+=pnl
-  positions.append({"symbol":sym,"side":"LONG" if p["side"]>0 else "SHORT",
-   "entry":p["entry"],"mark":price,"notional_usd":round(p["notional"],2),
-   "margin_usd":round(margin,2),"leverage":p.get("leverage",LEV),
-   "roe_pct":round(pnl/margin*100,3) if margin else 0,"unrealized_pnl":round(pnl,4),
-   "opened":p["opened"],"headline":p.get("headline","")})
- return {"statistics_basis":state.get("statistics_basis","full_recorded_history"),"operator_cleanup":state.get("operator_cleanup",{}),"emergency_profit_guard":state.get("emergency_profit_guard",{}),"daily_activity":state.get("daily_activity",{}),"daily_entry_limit":None,"margin_budget":"shared_all_strategies","mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),
-  "total_equity":round(state["equity"]+unreal,4),"realized_pnl":round(state["realized_pnl"],4),
-  "account_age_seconds":0,"account_roi_pct":round(((state["equity"]+unreal)/PAPER_RESET-1)*100,3),"total_pnl_pct":round(((state["equity"]+unreal)/PAPER_RESET-1)*100,3),
-  "positions":positions,"pump_positions":[],"pump_balance":round(state.get("pump_equity",100.0),4),"pump_unrealized_pnl":0.0,"pump_total_equity":round(state.get("pump_equity",100.0),4),"pump_realized_pnl":round(state.get("pump_realized_pnl",0.0),4),"pump_trades":state.get("pump_trades",0),"trades":[],"news":[],"features":[],"sources":{k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and not k.startswith("XFree:") and k not in SEARCH_INDEX_FEEDS and not v.get("disabled") and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")},
-  "errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],
-  "market_count":state["market_count"],"last_poll":state["last_poll"],
-  "uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],
-  "engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],
-  "last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,
-  "market_structure_filter_active":False,"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
+ # Render open positions from current in-memory prices; slow history queries
+ # must never pin an old account/price snapshot indefinitely.
+ with LOCK:history=copy.deepcopy(S.get("_dashboard_history",{}))
+ return build_dashboard_snapshot(history=history)
+
 
 def daily_audit_stats():
  try:
@@ -3922,14 +3900,29 @@ def operations_diagnostics():
   except Exception as e:print("diagnostics_error: "+str(e)[:180],flush=True)
   SHUTDOWN.wait(30)
 
+def dashboard_history_loop():
+ while not SHUTDOWN.is_set():
+  try:
+   value={"trades":[dict(x) for x in persistent_trades(100)],
+          "news":[dict(x) for x in persistent_news(20)],
+          "features":[dict(x) for x in persistent_features(10)],
+          "today_pnl":today_realized_pnl_utc(),"hype_stats":hype_swing_stats(),
+          "updated_at":now(),"error":None}
+   with LOCK:S["_dashboard_history"]=value
+  except Exception as exc:
+   with LOCK:
+    previous=S.setdefault("_dashboard_history",{})
+    previous["error"]=type(exc).__name__+":"+str(exc)[:120]
+  SHUTDOWN.wait(15)
+
 def dashboard_cache_loop():
  while not SHUTDOWN.is_set():
   try:
-   value=build_dashboard_snapshot()
+   value=dashboard()
    with LOCK:S["_dashboard_cache"]=value
   except Exception as exc:
    with LOCK:S["last_error"]="dashboard_cache: "+str(exc)[:150]
-  SHUTDOWN.wait(5)
+  SHUTDOWN.wait(2)
 
 def html_dashboard(data):
  esc=lambda x:str(x).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
@@ -3939,6 +3932,9 @@ def html_dashboard(data):
  today_card='<b>TODAY P&L (UTC, REALIZED)<br><span class="%s">%s</span></b>'%("posv" if (today_value or 0)>=0 else "negv",("$ %.4f"%today_value) if today_value is not None else "UNAVAILABLE")
  cards='<div class="grid"><b>MODE<br>%s</b><b>ACCOUNT BALANCE<br>$ %s</b><b>CONTRIBUTED<br>$ %s</b><b>UNREALIZED P&L<br>$ %s</b><b>TOTAL EQUITY<br>$ %s</b><b>ACCOUNT P&L %% (OPEN + REALIZED)<br>%s%%</b><b>TOTAL P&L FROM $100<br><span class="%s">%s%%</span></b><b>USED MARGIN<br>$ %s</b><b>FREE MARGIN<br>$ %s</b><b>MARGIN LOAD<br>%s%%</b><b>SIZE / LEV<br>%s%% / %sx</b><b>ACCOUNT AGE<br>%s</b><b>OPEN POSITIONS<br>%s</b><b>PUMP POSITIONS<br>%s</b><b>WHALE POSITIONS<br>%s</b></div>'%(esc(data["mode"]),data["balance"],data.get("capital_contributed",100),data["unrealized_pnl"],data["total_equity"],data["account_roi_pct"],"posv" if data.get("total_pnl_pct",data["account_roi_pct"])>=0 else "negv",data.get("total_pnl_pct",data["account_roi_pct"]),data.get("used_margin",0),data.get("free_margin",0),data.get("margin_utilization_pct",0),data.get("trade_margin_fraction_pct",0),data.get("trade_leverage",TRADE_LEVERAGE),age_txt,len(data["positions"]),len(data.get("pump_positions",[])),len(data.get("whale_liq_positions",[])))
  cards=cards.replace("</div>",today_card+"</div>",1)
+ history_at=data.get("history_updated_at")
+ history_error=data.get("history_error")
+ cards+='<p class="muted">History updated: %s%s</p>'%(esc(history_at or "loading")," · "+esc(history_error) if history_error else "")
 
  pos="".join('<tr><td>%s</td><td>%s</td><td>$%s</td><td>$%s</td><td>%sx</td><td>%s</td><td>%s</td><td class="%s">%s%%</td><td class="%s">$%s</td><td>%s</td><td><button onclick="closePos(this.dataset.sym)" data-sym="%s">Close</button></td></tr>'%(esc(x["symbol"]),x["side"],x.get("margin_usd",0),x.get("notional_usd",0),x.get("leverage",LEV),x["entry"],x["mark"],"posv" if x.get("roe_pct",0)>=0 else "negv",x.get("roe_pct",0),"posv" if x["unrealized_pnl"]>=0 else "negv",x["unrealized_pnl"],esc(x.get("headline") or x.get("strategy") or x.get("features",{}).get("engine") or "PAPER_SIGNAL"),esc(x["symbol"])) for x in data["positions"]) or '<tr><td colspan=11>No open positions</td></tr>'
  trs="".join('<tr><td>%s</td><td>%s</td><td>%s</td><td class="%s">$%s</td><td>%s</td></tr>'%(esc(x["closed"]),esc(x["symbol"]),"LONG" if x["side"]>0 else ("SHORT" if x["side"]<0 else "MIXED"),"posv" if float(x["pnl"] or 0)>=0 else "negv",round(float(x["pnl"] or 0),4),esc(x["reason"])) for x in data["trades"]) or '<tr><td colspan=5>No closed trades</td></tr>'
@@ -3976,7 +3972,8 @@ def html_dashboard(data):
  news_health_rows="".join('<tr><td>%s</td><td class="%s">%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'%(esc(k),"posv" if v.get("status")=="ACTIVE" else ("negv" if v.get("status")=="ERROR" else "warnv"),esc(v.get("status","-")),esc(v.get("latest_post_age_seconds","-")),esc(v.get("ingest_lag_seconds","-")),esc(v.get("realtime_verified",False))) for k,v in nh_sources.items()) or '<tr><td colspan=5>No news health data yet</td></tr>'
  news_health_note='<div class="muted">Last fresh: %s · %s · %s</div>'%(esc(nh.get("last_fresh_received_at") or "-"),esc(nh.get("last_fresh_source") or "-"),esc(nh.get("last_fresh_headline") or "-"))
  news="".join('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'%(esc(x["ts"]),esc(x["source"]),esc(x["symbol"]),esc(x["signal"]),esc(x["title"])) for x in data["news"][:12])
- return '''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>PANDORA LIVE</title><style>body{font-family:system-ui;background:#080b10;color:#e8edf5;margin:24px}h1{margin:0}.muted{color:#8b98aa}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:18px 0}.grid b{background:#111722;padding:16px;border-radius:12px}table{width:100%%;border-collapse:collapse;background:#0e141e;margin-bottom:22px}td,th{padding:9px;border-bottom:1px solid #202938;text-align:left;font-size:13px}th{color:#91a2b8}.posv{color:#49d17d;font-weight:700}.negv{color:#ff6262;font-weight:700}.warnv{color:#f6c453;font-weight:700}a{color:#8bc4ff}</style></head><body><h1>PANDORA LIVE</h1><div class="muted">Paper engine · dashboard refresh 5s · last market poll %s</div>%s<h2>Open positions</h2><button onclick="closePos(null)">Close Everything</button><button onclick="location.reload()">Refresh</button><p id="actionResult"></p><table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Trigger</th><th>Action</th></tr>%s</table><h2>Pump/Dump PAPER positions</h2>%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h2>Price to Value Liquidation</h2>%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h3>Whale liquidation candidates</h3><table><tr><th>Token</th><th>Trade side</th><th>Whale size</th><th>Distance</th><th>Score</th><th>Victim</th><th>Liq price</th></tr>%s</table><h2>LOCAL H1 / M15 — HYPE + NEAR</h2>%s%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>MAE / MFE ROE</th></tr>%s</table><h2>Closed trades</h2><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>PnL</th><th>Reason</th></tr>%s</table><h2>News Scanner Health</h2>%s%s<table><tr><th>Source</th><th>Freshness</th><th>Latest post age (s)</th><th>Ingest lag (s)</th><th>Realtime verified</th></tr>%s</table><h2>Sources</h2><table><tr><th>Source</th><th>Status</th><th>Checked</th><th>Error</th></tr>%s</table><h2>Latest news</h2><table><tr><th>Time</th><th>Source</th><th>Token</th><th>Raw signal</th><th>Headline</th></tr>%s</table><p>Errors: %s · Last error: %s</p><p><a href="/api/dashboard">JSON dashboard</a> · <a href="/features">Features</a> · <a href="/trades">Trades</a> · <a href="/news">News</a></p><script>let closing=false;setInterval(()=>{if(!closing&&document.visibilityState==="visible")location.reload()},15000);async function closePos(sym){if(closing||!confirm(sym?"Close "+sym+"?":"Close ALL positions?"))return;closing=true;const status=document.getElementById("actionResult");status.textContent="Processing close request...";try{const r=await fetch("/api/positions/close",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(sym?{symbol:sym}:{all:true})});const result=await r.json();status.textContent=r.ok?"Close confirmed: "+JSON.stringify(result):(r.status===401?"Controls locked: open the control-access link once, then retry.":"Close failed ("+r.status+"): "+JSON.stringify(result));if(r.ok){location.reload();return}}catch(e){status.textContent="Close request failed: "+String(e)}finally{closing=false}}</script></body></html>'''%(esc(data["last_poll"]),cards,pos,pump_cards,pump_pos,whale_cards,whale_pos_html,whale_candidates_html,hype_cards,hype_note,hype_pos_html,trs,news_health_cards,news_health_note,news_health_rows,src,news,data["errors"],esc(data["last_error"]))
+ page='''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>PANDORA LIVE</title><style>body{font-family:system-ui;background:#080b10;color:#e8edf5;margin:24px}h1{margin:0}.muted{color:#8b98aa}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:18px 0}.grid b{background:#111722;padding:16px;border-radius:12px}table{width:100%%;border-collapse:collapse;background:#0e141e;margin-bottom:22px}td,th{padding:9px;border-bottom:1px solid #202938;text-align:left;font-size:13px}th{color:#91a2b8}.posv{color:#49d17d;font-weight:700}.negv{color:#ff6262;font-weight:700}.warnv{color:#f6c453;font-weight:700}a{color:#8bc4ff}</style></head><body><p id="refreshStatus" class="muted">Connecting live updates…</p><main id="dashboardContent" data-poll="__MARKET_POLL__"><h1>PANDORA LIVE</h1><div class="muted">Paper engine · automatic updates every 5s · last market poll %s</div>%s<h2>Open positions</h2><button onclick="closePos(null)">Close Everything</button><button onclick="location.reload()">Refresh</button><p id="actionResult"></p><table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Trigger</th><th>Action</th></tr>%s</table><h2>Pump/Dump PAPER positions</h2>%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h2>Price to Value Liquidation</h2>%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h3>Whale liquidation candidates</h3><table><tr><th>Token</th><th>Trade side</th><th>Whale size</th><th>Distance</th><th>Score</th><th>Victim</th><th>Liq price</th></tr>%s</table><h2>LOCAL H1 / M15 — HYPE + NEAR</h2>%s%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>MAE / MFE ROE</th></tr>%s</table><h2>Closed trades</h2><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>PnL</th><th>Reason</th></tr>%s</table><h2>News Scanner Health</h2>%s%s<table><tr><th>Source</th><th>Freshness</th><th>Latest post age (s)</th><th>Ingest lag (s)</th><th>Realtime verified</th></tr>%s</table><h2>Sources</h2><table><tr><th>Source</th><th>Status</th><th>Checked</th><th>Error</th></tr>%s</table><h2>Latest news</h2><table><tr><th>Time</th><th>Source</th><th>Token</th><th>Raw signal</th><th>Headline</th></tr>%s</table><p>Errors: %s · Last error: %s</p><p><a href="/api/dashboard">JSON dashboard</a> · <a href="/features">Features</a> · <a href="/trades">Trades</a> · <a href="/news">News</a></p></main><script>let closing=false,refreshing=false,refreshTimer=null;async function refreshDashboard(){clearTimeout(refreshTimer);if(refreshing||closing||document.visibilityState!=="visible"){if(document.visibilityState==="visible")refreshTimer=setTimeout(refreshDashboard,5000);return;}refreshing=true;const indicator=document.getElementById("refreshStatus");const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),10000);try{const response=await fetch("/?refresh="+Date.now(),{cache:"no-store",credentials:"same-origin",signal:controller.signal});if(!response.ok)throw new Error("HTTP "+response.status);const doc=new DOMParser().parseFromString(await response.text(),"text/html");const incoming=doc.getElementById("dashboardContent");if(!incoming)throw new Error("Invalid dashboard response");if(closing)return;const current=document.getElementById("dashboardContent");const top=window.scrollY;current.replaceWith(document.importNode(incoming,true));window.scrollTo(0,top);const marketAt=Date.parse(incoming.dataset.poll);const age=Number.isFinite(marketAt)?Math.max(0,(Date.now()-marketAt)/1000):null;indicator.textContent="Updated "+new Date().toLocaleTimeString()+(age===null?" · market freshness unavailable":" · market age "+age.toFixed(1)+"s")+(age!==null&&age>20?" · MARKET DATA STALE":"");indicator.style.color=age!==null&&age<=20?"#49d17d":"#f6c453"}catch(error){indicator.textContent="Update failed; retrying automatically · "+String(error);indicator.style.color="#ff6262"}finally{clearTimeout(timeout);refreshing=false;if(document.visibilityState==="visible")refreshTimer=setTimeout(refreshDashboard,5000)}}document.addEventListener("visibilitychange",()=>{clearTimeout(refreshTimer);if(document.visibilityState==="visible")refreshDashboard()});refreshTimer=setTimeout(refreshDashboard,5000);async function closePos(sym){if(closing||!confirm(sym?"Close "+sym+"?":"Close ALL positions?"))return;closing=true;const status=document.getElementById("actionResult");status.textContent="Processing close request...";try{const r=await fetch("/api/positions/close",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(sym?{symbol:sym}:{all:true})});const result=await r.json();status.textContent=r.ok?"Close confirmed: "+JSON.stringify(result):(r.status===401?"Controls locked: open the control-access link once, then retry.":"Close failed ("+r.status+"): "+JSON.stringify(result));if(r.ok){location.reload();return}}catch(e){status.textContent="Close request failed: "+String(e)}finally{closing=false}}</script></body></html>'''%(esc(data["last_poll"]),cards,pos,pump_cards,pump_pos,whale_cards,whale_pos_html,whale_candidates_html,hype_cards,hype_note,hype_pos_html,trs,news_health_cards,news_health_note,news_health_rows,src,news,data["errors"],esc(data["last_error"]))
+ return page.replace("__MARKET_POLL__",esc(data.get("last_poll") or ""))
 
 
 @account_mutation
@@ -4165,7 +4162,7 @@ if __name__=="__main__":
   ("telemetry",telemetry),("pump_dump",impulse_scan),("whale_liquidations",whale_liquidation_scan),("hype_h1_local_swing",hype_h1_local_swing_loop),
   ("adapt",adapt),("x_critical_4s",x_critical_realtime),("piq_direct",piq_direct_realtime),
   ("news_recovery",recover_news_processing),("decision_learning",learning_shadow_loop),
-  ("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)
+  ("dashboard_history",dashboard_history_loop),("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)
  ]
  # Trading ingestion is intentionally minimal: four high-signal X accounts,
  # PiQ Direct and two official macro feeds. Direct Truth Social is excluded from
