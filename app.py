@@ -15,7 +15,7 @@ from x_list import fetch_list as x_list_fetch
 from x_page import fetch as free_x_page_fetch
 from realtime_free import fetch_x as free_x_fetch, fetch_x_search as free_x_search_fetch, fetch_x_fixupx as free_x_fixupx_fetch, fetch_x_lookup as free_x_lookup_fetch, fetch_x_embed as free_x_embed_fetch, fetch_x_nitter as free_x_nitter_fetch, fetch_x_syndication as free_x_syndication_fetch, fetch_x_syndication as free_x_syn_fetch, fetch_x_vx as free_x_vx_fetch, fetch_truth as free_truth_fetch, fetch_truth_activitypub as free_truth_ap_fetch, fetch_truth_rss as free_truth_rss_fetch, fetch_trump_archive as free_trump_archive_fetch
 from momentum_scanner import (candidates as momentum_candidates, breadth_regime,
-                              continuation_candidates, direction_guard)
+                              continuation_candidates, direction_guard, regime_candidate_guard)
 from piq_direct import discover as piq_discover, fetch_story as piq_fetch_story, high_signal as piq_high_signal
 from source_health import LatencyMetrics, aggregate_delivery
 from market_data import RollingMarketData
@@ -826,16 +826,53 @@ def authorized_cleanup_worker():
  with open(path) as source:requests=json.load(source).get("actions",[])
  while requests and not SHUTDOWN.is_set():
   for request in list(requests):
-   if request.get("type")!="EXCLUDE_PUMP_POSITION":continue
    try:
-    if exclude_authorized_pump_position(request):
+    kind=request.get("type")
+    if kind=="EXCLUDE_OPEN_PUMP_LONGS":
+     completed=exclude_authorized_pump_longs(request)
+    elif kind=="EXCLUDE_PUMP_POSITION":
+     completed=exclude_authorized_pump_position(request)
+    else:continue
+    if completed:
      with LOCK:
-      S["statistics_basis"]="operator_filtered_REZ_test_excluded"
-      S["operator_cleanup"]={"ok":True,"action_id":request["id"],"symbol":request["symbol"]}
+      S["statistics_basis"]="operator_filtered_pump_test_exclusions"
+      if kind=="EXCLUDE_PUMP_POSITION":S["operator_cleanup"]={"ok":True,"action_id":request["id"],"symbol":request["symbol"]}
      requests.remove(request)
    except Exception as exc:
     with LOCK:S["operator_cleanup"]={"ok":False,"error":str(exc)[:160]}
   if requests:SHUTDOWN.wait(2)
+
+@account_mutation
+def exclude_authorized_pump_longs(request):
+ action_id=str(request["id"])
+ with LOCK:
+  if not S.get("engine_active") or S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled"):return False
+ with pg() as db:
+  with db.transaction():
+   STORE.fence(db)
+   prior=db.execute("select payload from operator_actions where action_id=%s for update",(action_id,)).fetchone()
+   if prior:
+    payload=prior["payload"]
+   else:
+    # Freeze the exact identities once. A crash/restart must not expand this
+    # request to positions opened later under the repaired strategy.
+    rows=db.execute("select symbol,opened from pump_positions where side=1 order by symbol").fetchall()
+    payload={"stage":"pending","selected":[{"symbol":r["symbol"],"opened":r["opened"],
+      "id":action_id+":"+hashlib.sha256((r["symbol"]+r["opened"]).encode()).hexdigest()[:16]} for r in rows],
+      "statistics_basis":"operator_filtered"}
+    db.execute("insert into operator_actions(action_id,completed_at,payload) values(%s,%s,%s::jsonb)",(action_id,now(),json.dumps(payload)))
+ if payload.get("stage")!="done":
+  for selected in payload["selected"]:
+   if not exclude_authorized_pump_position(selected):return False
+  payload["stage"]="done"
+  with pg() as db:
+   with db.transaction():
+    STORE.fence(db)
+    db.execute("update operator_actions set completed_at=%s,payload=%s::jsonb where action_id=%s",(now(),json.dumps(payload),action_id))
+ with LOCK:
+  S["statistics_basis"]="operator_filtered_pump_test_exclusions"
+  S["operator_cleanup"]={"ok":True,"action_id":action_id,"selected":[{"symbol":r["symbol"],"opened":r["opened"]} for r in payload["selected"]]}
+ return True
 
 def _shared_used_margin():
  total=0.0
@@ -908,7 +945,7 @@ def pump_open(symbol,side,price,score,features,margin_fraction=None):
    latest_prices=dict(S.get("_prices",{}));history={k:list(v) for k,v in S.get("_timeline",{}).items()}
    volumes=dict(S.get("_day_volumes",{}))
   regime=market_regime(latest_prices,history,volumes,time.time())
-  rejection=direction_guard(symbol,side,latest_prices,history,time.time(),regime)
+  rejection=regime_candidate_guard(features,regime) or direction_guard(symbol,side,latest_prices,history,time.time(),regime)
   if rejection:
    journal("entry_skipped",None,{"strategy":"pump_dump","symbol":symbol,"reason":rejection,"market_regime":regime.get("mode")})
    return False
@@ -1414,7 +1451,7 @@ def _timeline_return(rows,stamp,age,current):
 
 def market_regime(prices,history,volumes,stamp):
  with LOCK:candles=copy.deepcopy(S.get("_regime_candles",{}))
- return breadth_regime(prices,history,volumes,stamp,candles)
+ return breadth_regime(prices,history,volumes,stamp,candles,require_trend_context=True)
 
 @account_mutation
 def close_news_position(sym,pos,price,reason):
@@ -1830,7 +1867,7 @@ def impulse_scan():
     combined={(x["symbol"],int(x["side"])):x for x in continuation}
     combined.update({(x["symbol"],int(x["side"])):x for x in found})
     blocked_counter=sum(int(x["side"])!=int(regime["side"]) for x in combined.values()) if regime.get("side") else 0
-    found=[x for x in combined.values() if not regime.get("side") or int(x["side"])==int(regime["side"])]
+    found=[x for x in combined.values() if regime_candidate_guard(x,regime) is None]
     found.sort(key=lambda x:x["score"],reverse=True)
     for candidate in found:candidate["observed_at_epoch"]=stamp
     micro_rejections.clear()
@@ -1893,7 +1930,7 @@ def impulse_scan():
      S["sources"]["PumpDumpScanner"]={"ok":bool(prices and volumes),"last_check":now(),"markets":len(prices),
        "liquid_markets":sum(v>=5_000_000 for v in volumes.values()),"raw_candidates":len(found),"micro_confirmed":len(enriched),
        "qualified_candidates":len(qualified),"primary_candidates":len(primary),"secondary_candidates":len(secondary),
-       "candidate_queue":len(candidate_queue),"top_candidates":qualified[:5],"mode":"breadth_continuation_paper_v5",
+       "candidate_queue":len(candidate_queue),"top_candidates":qualified[:5],"mode":"pump_dump_H1_H4_direction_v6",
        "raw_impulses":raw_impulses,"continuation_candidates":len(continuation),"counter_market_rejected":blocked_counter,
        "micro_rejections":dict(micro_rejections),"queue_revalidation":"current_scan_required",
        "scan_seconds":PUMP_SCAN_SECONDS,"actual_scan_seconds":round(time.monotonic()-started,3),"min_day_volume":0,
@@ -1925,7 +1962,7 @@ def market_regime_history():
     SHUTDOWN.wait(2);continue
    stamp=time.time()
    def fetch(sym):
-    rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":sym,"interval":"1m","startTime":int((stamp-3600)*1000),"endTime":int(stamp*1000)}}))
+    rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":sym,"interval":"1m","startTime":int((stamp-6*3600)*1000),"endTime":int(stamp*1000)}}))
     if not isinstance(rows,list):raise ValueError("invalid_candle_history")
     return [(float(r["T"])/1000,float(r["c"])) for r in rows
             if isinstance(r,dict) and 0<float(r.get("T",0))/1000<stamp and float(r.get("c",0))>0]
@@ -1934,11 +1971,11 @@ def market_regime_history():
     try:
      rows=job.result()
      if not rows:raise ValueError("empty_completed_candles")
-     with LOCK:S.setdefault("_regime_candles",{})[sym]=rows[-60:]
+     with LOCK:S.setdefault("_regime_candles",{})[sym]=rows[-360:]
      loaded+=1
     except Exception as exc:errors[sym]=str(exc)[:90]
    with LOCK:S["sources"]["MarketBreadthHistory"]={"ok":loaded>=5,"last_check":now(),"loaded_markets":loaded,
-    "requested_markets":len(symbols),"mode":"completed_1m_candles_breadth_only","refresh_seconds":300,
+    "requested_markets":len(symbols),"mode":"completed_1m_H1_H4_context","refresh_seconds":300,
     "error":None if not errors else errors}
    SHUTDOWN.wait(300)
  finally:pool.shutdown(wait=False,cancel_futures=True)
