@@ -21,7 +21,13 @@ def better(side, old, candidate):
     return max(old, candidate) if side > 0 else min(old, candidate)
 
 def risk_state(position):
-    keys=("peak","history","last_price","last_evaluated_at","last_exit_check","local_search_min_samples","post_liq_risk_reset_done")
+    # Profit protection is strategy-agnostic durable risk state. Keeping it in
+    # the same checkpoint as peak/history means a Render restart cannot silently
+    # disarm an already-earned PAPER profit lock.
+    keys=("peak","history","last_price","last_evaluated_at","last_exit_check",
+          "local_search_min_samples","post_liq_risk_reset_done",
+          "profit_lock_armed","profit_lock_stop","profit_peak_move",
+          "profit_protect_last","profit_protect_armed_at")
     return {key:position[key] for key in keys if key in position}
 
 def evaluate_exit(position, price, evaluated_at):
