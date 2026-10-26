@@ -14,6 +14,8 @@ MARGIN_FRACTION = 0.10
 LEVERAGE = 25.0
 PIVOT_LOOKBACK = 4
 MIN_FAVORABLE_MOVE_FOR_WEAKENING = 0.004
+PROFIT_LOCK_ARM_MOVE = 0.004
+PROFIT_LOCK_BUFFER_MOVE = 0.0012
 LIQUIDATION_PROXY_ROE = -0.95
 
 
@@ -185,14 +187,42 @@ def update_path(position, mark):
         return out, False
     move = side * (mark / entry - 1.0)
     roe = move * lev
-    features["mfe_price_move"] = max(float(features.get("mfe_price_move", 0.0) or 0.0), move)
+    prior_mfe = max(0.0, float(features.get("mfe_price_move", 0.0) or 0.0))
+    peak_move = max(prior_mfe, move)
+    features["mfe_price_move"] = peak_move
     features["mae_price_move"] = min(float(features.get("mae_price_move", 0.0) or 0.0), move)
     features["mfe_roe_pct"] = max(float(features.get("mfe_roe_pct", 0.0) or 0.0), roe * 100.0)
     features["mae_roe_pct"] = min(float(features.get("mae_roe_pct", 0.0) or 0.0), roe * 100.0)
+    if bool(features.get("profit_lock_armed")) or peak_move >= PROFIT_LOCK_ARM_MOVE:
+        features["profit_lock_armed"] = True
+        features["profit_lock_stop"] = entry * (1.0 + side * PROFIT_LOCK_BUFFER_MOVE)
+        features["profit_lock_arm_move_pct"] = PROFIT_LOCK_ARM_MOVE * 100.0
+        features["profit_lock_buffer_move_pct"] = PROFIT_LOCK_BUFFER_MOVE * 100.0
+    else:
+        features["profit_lock_armed"] = False
     features["last_mark"] = mark
     features["last_gross_roe_pct"] = roe * 100.0
     out["features"] = features
     return out, roe <= LIQUIDATION_PROXY_ROE
+
+
+def profit_lock_exit(position, mark):
+    if not position:
+        return None
+    mark = _f(mark)
+    entry = _f(position.get("entry"))
+    side = int(position.get("side", 0) or 0)
+    features = position.get("features") or {}
+    stop = _f(features.get("profit_lock_stop"))
+    if mark is None or entry is None or side not in (-1, 1):
+        return None
+    if not bool(features.get("profit_lock_armed")) or stop is None:
+        return None
+    if side > 0 and mark <= stop:
+        return stop
+    if side < 0 and mark >= stop:
+        return stop
+    return None
 
 
 def shadow_triggers(side, analysis):
