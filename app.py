@@ -2809,7 +2809,7 @@ def free_x_realtime():
   with LOCK:S["sources"]["XMonitor"]={"ok":False,"degraded":True,"mode":"active_4s_probe_pool",
    "last_check":now(),"accounts_total":len(handles),"error":"worker_crash:"+str(exc)[:180]}
  finally:
-  pool.shutdown(wait=False,cancel_futures=True);ingest_pool.shutdown(wait=False,cancel_futures=True)
+  pool.shutdown(wait=False,cancel_futures=True);race_pool.shutdown(wait=False,cancel_futures=True);ingest_pool.shutdown(wait=False,cancel_futures=True)
 
 
 CRITICAL_X_HANDLES=list(WATCH)
@@ -2830,24 +2830,54 @@ def ingest_with_retry(ident,source,title,published_at=None,source_url=None):
 def x_critical_realtime():
  handles=list(CRITICAL_X_HANDLES)
  poll=max(4.0,float(os.getenv("X_CRITICAL_POLL_SECONDS","4")))
+ firstsquawk_poll=max(2.0,float(os.getenv("FIRSTSQUAWK_POLL_SECONDS","2.5")))
  seen={};primed=set();last_success={};backend_used={};last_error={};inflight={};pending_ingests={};queued_ids=set();latest_publication={};poll_intervals={};fetch_started={}
  received_counts={h:{"new_posts_queued":0,"stale_posts_queued":0,"queue_backpressure":0} for h in handles}
  pool=concurrent.futures.ThreadPoolExecutor(max_workers=min(10,len(handles)),thread_name_prefix="x-critical")
- ingest_pool=concurrent.futures.ThreadPoolExecutor(max_workers=4,thread_name_prefix="x-critical-ingest")
+ race_pool=concurrent.futures.ThreadPoolExecutor(max_workers=8,thread_name_prefix="x-freshest-race")
+ ingest_pool=concurrent.futures.ThreadPoolExecutor(max_workers=8,thread_name_prefix="x-critical-ingest")
  next_due={h:time.monotonic() for h in handles}
+ def newest_epoch(posts):
+  stamps=[publication_epoch(p.get("created_at")) for p in posts or []]
+  stamps=[x for x in stamps if x is not None and x<=time.time()+10]
+  return max(stamps,default=-1)
  def fetch_one(handle,preferred=None):
   errors=[]
   chain=[
-   ("syndication",lambda:free_x_syndication_fetch(handle,timeout=2.2)),
-   ("embed",lambda:free_x_embed_fetch(handle,timeout=2.2)),
-   ("fx",lambda:free_x_fetch(handle,timeout=2.2,attempts=1)),
-   ("xlookup",lambda:free_x_lookup_fetch(handle,timeout=2.2)),
-   ("fixupx",lambda:free_x_fixupx_fetch(handle,timeout=2.2)),
-   ("nitter",lambda:free_x_nitter_fetch(handle,timeout=2.2)),
-   ("vx",lambda:free_x_vx_fetch(handle,timeout=2.2)),
+   ("syndication",lambda:free_x_syndication_fetch(handle,timeout=2.0)),
+   ("embed",lambda:free_x_embed_fetch(handle,timeout=2.0)),
+   ("fx",lambda:free_x_fetch(handle,timeout=2.0,attempts=1)),
+   ("xlookup",lambda:free_x_lookup_fetch(handle,timeout=2.0)),
+   ("fixupx",lambda:free_x_fixupx_fetch(handle,timeout=2.0)),
+   ("nitter",lambda:free_x_nitter_fetch(handle,timeout=2.0)),
+   ("vx",lambda:free_x_vx_fetch(handle,timeout=2.0)),
   ]
-  # Reuse the working backend; retrying known failed mirrors on every poll
-  # otherwise turns a nominal 4s poll into a sequential 10-15s fallback chain.
+  # FirstSquawk is latency-critical. A merely healthy mirror can lag the
+  # publisher by a minute, so race independent public routes and choose the
+  # timeline with the newest real publication timestamp.
+  if handle=="FirstSquawk":
+   race=[
+    ("syndication",lambda:free_x_syndication_fetch(handle,timeout=1.8)),
+    ("fx",lambda:free_x_fetch(handle,timeout=1.8,attempts=1)),
+    ("xlookup",lambda:free_x_lookup_fetch(handle,timeout=1.8)),
+    ("fixupx",lambda:free_x_fixupx_fetch(handle,timeout=1.8)),
+   ]
+   futures={race_pool.submit(fn):name for name,fn in race}
+   done,_=concurrent.futures.wait(futures,timeout=2.05)
+   candidates=[]
+   for fut in done:
+    name=futures[fut]
+    try:
+     posts=fut.result()
+     if posts:candidates.append((newest_epoch(posts),name,posts))
+     else:errors.append(name+":empty")
+    except Exception as exc:errors.append(name+":"+str(exc)[:70])
+   for fut in futures:
+    if not fut.done():fut.cancel()
+   if candidates:
+    _,name,posts=max(candidates,key=lambda row:row[0])
+    return posts,"freshest_race:"+name
+  # Other critical accounts keep the low-request preferred-backend path.
   chain.sort(key=lambda item:item[0]!=preferred)
   for name,fn in chain:
    try:
@@ -2871,7 +2901,8 @@ def x_critical_realtime():
     if h in active or mono<next_due[h]:continue
     if h in fetch_started:poll_intervals[h]=mono-fetch_started[h]
     fetch_started[h]=mono
-    inflight[pool.submit(fetch_one,h,backend_used.get(h))]=(h,mono);next_due[h]=mono+poll
+    hpoll=firstsquawk_poll if h=="FirstSquawk" else poll
+    inflight[pool.submit(fetch_one,h,backend_used.get(h))]=(h,mono);next_due[h]=mono+hpoll
    for fut in list(pending_ingests):
     if not fut.done():continue
     handle,post_id=pending_ingests.pop(fut);queued_ids.discard((handle,post_id))
@@ -2941,6 +2972,7 @@ def x_critical_realtime():
     _xcrit={"ok":ok_count==len(handles),"mode":"dedicated_critical_pool","last_check":now(),
       "accounts_ok":ok_count,"accounts_initialized":len(handles),"accounts_total":len(handles),"active_accounts":ok_count,
       "scan_label":"SCANNING %s / %s"%(ok_count,len(handles)),"target_poll_seconds":poll,
+      "firstsquawk_target_poll_seconds":firstsquawk_poll,"firstsquawk_freshest_backend_race":True,
       "key_accounts":status,"scan_workers":len(handles),**aggregate_delivery(status),"pending_events":len(pending_ingests),
       "error":None if ok_count==len(handles) else "partial_critical_coverage"}
     S["sources"]["XCriticalMonitor"]=copy.deepcopy(_xcrit);S["sources"]["XMonitor"]=copy.deepcopy(_xcrit)
@@ -3498,15 +3530,15 @@ def whitehouse_official_realtime():
 def piq_direct_realtime():
  # Discovery and story resolution have separate bounds. A failed story remains
  # retryable instead of disappearing permanently into the seen-URL set.
- poll=max(4.0,float(os.getenv("PIQ_POLL_SECONDS","5")))
+ poll=max(2.0,float(os.getenv("PIQ_FAST_POLL_SECONDS","2.5")))
  seen={};pending={};fetching={};ingesting={};startup_ignored=set()
  primed=False;delay=poll;previous_started=None;error_log_at=0;visible=0
  next_discovery=0;transport_ok=False;err=None;last_request_seconds=None;cycle_interval=None
  totals={"story_fetch_failures_total":0,"story_retries_total":0,"exhausted_stories_total":0,
          "ingestion_errors_total":0,"ingested_total":0,"filtered_low_signal":0,"startup_old_filtered":0}
  last_story_error=None;last_ingest_error=None;last_delivery=None
- fetch_pool=concurrent.futures.ThreadPoolExecutor(max_workers=4,thread_name_prefix="piq-story")
- ingest_pool=concurrent.futures.ThreadPoolExecutor(max_workers=2,thread_name_prefix="piq-ingest")
+ fetch_pool=concurrent.futures.ThreadPoolExecutor(max_workers=6,thread_name_prefix="piq-story")
+ ingest_pool=concurrent.futures.ThreadPoolExecutor(max_workers=4,thread_name_prefix="piq-ingest")
  def finish(url):
   pending.pop(url,None);seen[url]=time.monotonic()
   if len(seen)>1200:
@@ -3569,7 +3601,7 @@ def piq_direct_realtime():
      discovery_started=time.monotonic()
      cycle_interval=discovery_started-previous_started if previous_started is not None else None
      previous_started=discovery_started
-     rows=piq_discover(timeout=min(4.0,max(2.0,poll)),limit=40)
+     rows=piq_discover(timeout=min(3.0,max(1.8,poll)),limit=40)
      last_request_seconds=time.monotonic()-discovery_started
      next_discovery=discovery_started+poll;visible=len(rows);transport_ok=True;err=None;delay=poll
      bootstrap=not primed
@@ -3588,10 +3620,10 @@ def piq_direct_realtime():
      if time.monotonic()-record["first_seen"]>=60:
       totals["exhausted_stories_total"]+=1;finish(url);continue
      if time.monotonic()<record["not_before"]:continue
-     if record["state"]=="fetch_wait" and len(fetching)<16:
+     if record["state"]=="fetch_wait" and len(fetching)<24:
       record["fetch_attempts"]+=1;record["state"]="fetching";item=record["item"]
-      fetching[fetch_pool.submit(piq_fetch_story,url,item.get("headline_hint"),timeout=4.0)]=url
-     elif record["state"]=="ready" and len(ingesting)<16:
+      fetching[fetch_pool.submit(piq_fetch_story,url,item.get("headline_hint"),timeout=3.0)]=url
+     elif record["state"]=="ready" and len(ingesting)<24:
       record["ingest_attempts"]+=1;record["state"]="ingesting";story=record["story"]
       ident=hashlib.sha256(("PiQDirect:"+url).encode()).hexdigest()
       ingesting[ingest_pool.submit(ingest_event,ident,"PiQDirect",story["text"],story.get("created_at"),url)]=url
@@ -3608,7 +3640,7 @@ def piq_direct_realtime():
    with LOCK:S["sources"]["PiQDirect"]={"ok":transport_ok,"degraded":bool(cycle_errors or len(pending)>=32),
     "last_check":now(),"mode":"public_site_direct_scan","poll_seconds":poll,"stories_visible":visible,
     "new_visible":new_visible,"new_ingested":ingested_cycle,"pending_stories":len(pending),
-    "fetches_inflight":len(fetching),"ingestions_inflight":len(ingesting),"story_workers":4,
+    "fetches_inflight":len(fetching),"ingestions_inflight":len(ingesting),"story_workers":6,"ingest_workers":4,
     "retrying_stories":sum(r["fetch_attempts"]>1 or r["ingest_attempts"]>1 for r in pending.values()),
     "request_seconds":round(last_request_seconds,3) if last_request_seconds is not None else None,
     "cycle_seconds":round(time.monotonic()-started,3),
@@ -3618,7 +3650,7 @@ def piq_direct_realtime():
     "last_story_error":last_story_error,"last_ingest_error":last_ingest_error,"error":err,**totals}
    # Completed story and ingestion futures are drained promptly between polls;
    # their latency does not include another full discovery interval per stage.
-   SHUTDOWN.wait(min(0.20,max(0.05,next_discovery-time.monotonic())))
+   SHUTDOWN.wait(min(0.10,max(0.03,next_discovery-time.monotonic())))
  finally:
   fetch_pool.shutdown(wait=False,cancel_futures=True);ingest_pool.shutdown(wait=False,cancel_futures=True)
 
