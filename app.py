@@ -1989,7 +1989,7 @@ def emergency_profit_take(prices):
   books=[("news",copy.deepcopy(S.get("positions",{}))),("pump_dump",copy.deepcopy(S.get("pump_positions",{}))),
          ("whale_liquidation",copy.deepcopy(S.get("whale_positions",{}))),
          ("whale_liquidation_v2",copy.deepcopy(S.get("whale_v2_positions",{}))),
-         ("hype_h1_local_swing_v1",{"HYPE":copy.deepcopy(S["hype_swing_position"])} if S.get("hype_swing_position") else {})]
+         ("local_h1_m15_swing_v3",copy.deepcopy(S.get("local_swing_positions",{})))]
   history={s:list(S.get("_timeline",{}).get(s,[])) for s in ("BTC","ETH","SOL")}
   pending=copy.deepcopy(S.get("_emergency_pending",[]))
  shock=emergency_reversal(prices,history,stamp)
@@ -2007,7 +2007,7 @@ def emergency_profit_take(prices):
    state["status"]="COOLDOWN" if stamp<float(S.get("_emergency_until",0) or 0) else "ARMED"
   return []
  callbacks={"news":None,"pump_dump":pump_close,"whale_liquidation":whale_liq_close,
-            "whale_liquidation_v2":whale_v2_close,"hype_h1_local_swing_v1":None}
+            "whale_liquidation_v2":whale_v2_close,"local_h1_m15_swing_v3":None}
  live_books=dict(books);closed=[];remaining=[]
  for target in pending:
   strategy=target["strategy"];sym=target["symbol"];pos=live_books.get(strategy,{}).get(sym)
@@ -2015,7 +2015,7 @@ def emergency_profit_take(prices):
   price=prices.get(sym)
   if not price:remaining.append(target);continue
   if strategy=="news":result=close_news_position(sym,pos,price,"portfolio_emergency_profit_take")
-  elif strategy=="hype_h1_local_swing_v1":result=hype_swing_close(price,"portfolio_emergency_profit_take")
+  elif strategy=="local_h1_m15_swing_v3":result=local_swing_close(sym,price,"portfolio_emergency_profit_take")
   else:result=callbacks[strategy](sym,price,"portfolio_emergency_profit_take")
   if result:closed.append({**target,"exit":price,"pnl":result.get("pnl")})
   else:remaining.append(target)
@@ -3792,6 +3792,8 @@ def operations_diagnostics():
      "hype_h1_engine":copy.deepcopy(S["sources"].get("HypeH1LocalSwing",{})),
      "hype_h1_position":bool(S.get("hype_swing_position")),"hype_h1_equity":S.get("hype_swing_equity",HYPE_SWING_STARTING_EQUITY),
      "hype_h1_trades":S.get("hype_swing_trades",0),
+     "local_swing_symbols":list(LOCAL_SWING_SYMBOLS),"local_swing_positions":list(S.get("local_swing_positions",{}).keys()),
+     "local_swing_watch":copy.deepcopy(S.get("local_swing_watch",{})),
      "sizing_policy":{"margin_fraction":TRADE_MARGIN_FRACTION,"secondary_margin_fraction":PUMP_SECONDARY_MARGIN_FRACTION,"leverage":TRADE_LEVERAGE,"target_open_positions":TARGET_OPEN_POSITIONS,"max_open_positions":MAX_OPEN_POSITIONS,"pump_max_positions":PUMP_MAX_POSITIONS,"auto_topup_enabled":False,"contributed_capital":S.get("contributed_capital",PAPER_RESET),"micro_analysis_threads":MICRO_ANALYSIS_THREADS,"whale_v2_margin_fraction":WL2_MARGIN_FRACTION,"whale_v2_leverage":WL2_LEVERAGE,"whale_v2_max_positions":WL2_MAX_POSITIONS},
      "entry_rejections":dict(S.get("_entry_rejections",{})),
      "account_pnl_pct":dash.get("account_pnl_pct"),"realized_pnl_pct":dash.get("realized_pnl_pct"),
@@ -3864,7 +3866,7 @@ def manual_close(symbol=None,reason_override=None):
   books=[("news",copy.deepcopy(S.get("positions",{}))),("pump_dump",copy.deepcopy(S.get("pump_positions",{}))),
          ("whale_liquidation",copy.deepcopy(S.get("whale_positions",{}))),
          ("whale_liquidation_v2",copy.deepcopy(S.get("whale_v2_positions",{}))),
-         ("hype_h1_local_swing_v1",{"HYPE":copy.deepcopy(S["hype_swing_position"])} if S.get("hype_swing_position") else {})]
+         ("local_h1_m15_swing_v3",copy.deepcopy(S.get("local_swing_positions",{})))]
  targets=[(strategy,sym,pos) for strategy,book in books for sym,pos in book.items() if symbol is None or sym==symbol]
  if not targets and symbol:return {"ok":False,"results":[{"symbol":symbol,"ok":False,"error":"position_not_found"}]}
  results=[]
@@ -3879,7 +3881,7 @@ def manual_close(symbol=None,reason_override=None):
   elif strategy=="pump_dump":result=pump_close(sym,price,reason)
   elif strategy=="whale_liquidation":result=whale_liq_close(sym,price,reason)
   elif strategy=="whale_liquidation_v2":result=whale_v2_close(sym,price,reason)
-  else:result=hype_swing_close(price,reason)
+  else:result=local_swing_close(sym,price,reason)
   if result is None:results.append({"symbol":sym,"ok":False,"error":"close_not_committed"});continue
   results.append({"symbol":sym,"strategy":strategy,"ok":True,"price":price,"pnl":result.get("pnl")})
  return {"ok":all(x["ok"] for x in results) if results else True,"results":results}
