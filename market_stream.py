@@ -4,7 +4,7 @@ import time
 import websocket
 
 
-def run_trade_stream(observations, stop, symbols_provider, report, url):
+def run_trade_stream(observations, stop, symbols_provider, report, url, on_mids=None):
     while not stop.is_set():
         ws = None
         try:
@@ -13,6 +13,8 @@ def run_trade_stream(observations, stop, symbols_provider, report, url):
             ws.settimeout(2)
             for symbol in sorted(selected):
                 ws.send(json.dumps({"method": "subscribe", "subscription": {"type": "trades", "coin": symbol}}))
+            if on_mids is not None:
+                ws.send(json.dumps({"method":"subscribe","subscription":{"type":"allMids"}}))
             observations.mark_connected(time.time(), selected)
             last_ping = last_report = 0
             last_refresh = last_received = time.time()
@@ -30,6 +32,9 @@ def run_trade_stream(observations, stop, symbols_provider, report, url):
                     observations.heartbeat(last_received)
                     if message.get("channel") == "trades":
                         observations.ingest_trades(message.get("data", []), last_received)
+                    elif message.get("channel") == "allMids" and on_mids is not None:
+                        data=message.get("data") or {}
+                        on_mids(data.get("mids",{}))
                     elif message.get("channel") == "error":
                         raise RuntimeError("exchange_subscription_error")
                 except websocket.WebSocketTimeoutException:

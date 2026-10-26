@@ -1496,6 +1496,28 @@ def reconcile_open_paper_sizing(prices):
  # historical entry price or reconstruct their performance after the fact.
  return 0
 
+def accept_market_prices(mids):
+ valid={}
+ for k,v in (mids or {}).items():
+  try:
+   px=float(v)
+   if re.match(r"^[A-Z0-9]{2,15}$",k) and math.isfinite(px) and px>0:valid[k]=px
+  except (ValueError,TypeError):continue
+ if not valid:raise ValueError("empty market response")
+ stamp=time.time()
+ with LOCK:
+  S["last_poll"]=now();S["_last_poll_epoch"]=stamp;S["market_count"]=len(valid);S["_prices"]=valid;S["last_market_error"]=None
+  for sym,px in valid.items():
+   track=S.setdefault("_timeline",{}).setdefault(sym,[])
+   if not track or stamp-float(track[-1][0])>=0.5:
+    track.append((stamp,px))
+    if len(track)>1800:del track[:-1800]
+   hist=S.setdefault("_hist",{}).setdefault(sym,[])
+   if not hist or float(hist[-1])!=px:
+    hist.append(px)
+    if len(hist)>120:del hist[:-120]
+ return valid
+
 def refresh_market_prices(force=False,max_age=8.0):
  # Emergency refresh keeps scanners live even when the position-checkpoint part
  # of the market worker is busy writing many PAPER positions to PostgreSQL.
@@ -1517,21 +1539,8 @@ def refresh_market_prices(force=False,max_age=8.0):
     with LOCK:S["last_market_error"]=None
     return cached
    raise
-  valid={k:float(v) for k,v in mids.items() if re.match(r"^[A-Z0-9]{2,15}$",k) and math.isfinite(float(v)) and float(v)>0}
-  if not valid:raise ValueError("empty market response")
-  stamp=time.time()
-  with LOCK:
-   S["last_poll"]=now();S["_last_poll_epoch"]=stamp;S["market_count"]=len(valid);S["_prices"]=valid;S["last_market_error"]=None
-   for sym,px in valid.items():
-    track=S.setdefault("_timeline",{}).setdefault(sym,[])
-    if not track or stamp-float(track[-1][0])>=0.5:
-     track.append((stamp,px))
-     if len(track)>1800:del track[:-1800]
-    hist=S.setdefault("_hist",{}).setdefault(sym,[])
-    if not hist or float(hist[-1])!=px:
-     hist.append(px)
-     if len(hist)>120:del hist[:-120]
-  return valid
+  return accept_market_prices(mids)
+
 
 
 # Avoid repeated identical Hyperliquid candle requests across local scanner cycles.
@@ -1579,7 +1588,7 @@ def _local_candles(symbol,interval,hours):
 def _local_h1_candles(symbol,hours=120):
  return _local_candles(symbol,LOCAL_SWING_H1_CONTEXT_INTERVAL,hours)
 
-def _local_m15_candles(symbol,hours=36):
+def _local_m15_candles(symbol,hours=12):
  return _local_candles(symbol,LOCAL_SWING_M15_INTERVAL,hours)
 
 def _hype_h1_candles(hours=120):
@@ -2292,7 +2301,7 @@ def market_trade_stream():
   return listed|LIQ_WHALE_SYMBOLS|held
  def report(status):
   with LOCK:S["sources"]["MarketTradeStream"]={"last_check":now(),**status}
- run_trade_stream(MARKET_OBS,SHUTDOWN,symbols,report,os.getenv("HYPERLIQUID_WS_API","wss://api.hyperliquid.xyz/ws"))
+ run_trade_stream(MARKET_OBS,SHUTDOWN,symbols,report,os.getenv("HYPERLIQUID_WS_API","wss://api.hyperliquid.xyz/ws"),on_mids=accept_market_prices)
 
 def market_metadata():
  while not SHUTDOWN.is_set():
