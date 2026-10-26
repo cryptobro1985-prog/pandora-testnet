@@ -108,7 +108,7 @@ def evaluate_exit(position, price, evaluated_at):
         series=[price]
         pos["peak"]=price
         pos["history"]=[price]
-        pos["local_search_min_samples"]=max(15,int(pos.get("local_search_min_samples",0) or 0))
+        pos["local_search_min_samples"]=max(8,int(pos.get("local_search_min_samples",0) or 0))
         pos["post_liq_risk_reset_done"]=True
         local_exit=False
     pre_liq_hold=False
