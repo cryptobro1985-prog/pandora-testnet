@@ -993,7 +993,10 @@ def _reserve_shared_entry(symbol,margin_fraction=None,strategy="shared"):
   if used>equity+1e-9:
    return False,0.0,"portfolio_margin_over_cap",free
   if free+1e-9<margin:
-   return False,0.0,"insufficient_free_margin",free
+   if strategy=="local_swing" and free>=0.01:
+    margin=free
+   else:
+    return False,0.0,"insufficient_free_margin",free
   reservations[reservation_key]=margin
   return True,margin,None,free
 
