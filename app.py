@@ -43,6 +43,7 @@ from hype_h1_swing import (POLICY as HYPE_SWING_POLICY, SYMBOL as HYPE_SWING_SYM
                            analyze_m15 as analyze_local_m15,
                            m15_profit_protection as local_m15_profit_protection,
                            m15_reentry_ready as local_m15_reentry_ready,
+                           m15_reentry_after_exit as local_m15_reentry_after_exit,
                            position_exit as hype_position_exit, update_path as hype_update_path,
                            profit_lock_exit as hype_profit_lock_exit, shadow_triggers as hype_shadow_triggers)
 LATENCIES=LatencyMetrics()
@@ -310,6 +311,8 @@ def pinit():
   c.execute("create table if not exists hype_swing_account_state (id integer primary key, equity double precision not null, realized_pnl double precision not null, started_at text not null, updated_at text not null)")
   c.execute("create table if not exists hype_swing_positions (symbol text primary key, side integer not null, entry double precision not null, notional double precision not null, margin double precision not null, leverage double precision not null, opened text not null, opened_epoch double precision not null, signal_candle_time bigint, features jsonb not null default '{}'::jsonb)")
   c.execute("create table if not exists hype_swing_trade_history (id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision, pnl double precision, reason text, margin double precision, notional double precision, leverage double precision, features jsonb)")
+  c.execute("create table if not exists local_h1_direction (symbol text primary key, analysis jsonb not null)")
+  S["local_h1_direction"]={r["symbol"]:r["analysis"] for r in c.execute("select symbol,analysis from local_h1_direction").fetchall()}
   c.execute("create table if not exists hype_swing_signal_journal (id text primary key, ts text not null, candle_time bigint, action text not null, side integer, price double precision, features jsonb not null default '{}'::jsonb)")
   c.execute("create table if not exists hype_swing_shadow_exits (id bigserial primary key, opened text not null, entry_candle_time bigint, side integer not null, entry double precision not null, extreme_exit_at text, extreme_exit_price double precision, weakening_exit_at text, weakening_exit_price double precision, actual_exit_at text, actual_exit_price double precision, actual_exit_reason text, status text not null default 'OPEN', context jsonb not null default '{}'::jsonb)")
   c.execute("alter table hype_swing_shadow_exits add column if not exists symbol text")
@@ -375,7 +378,7 @@ def pinit():
   S["hype_swing_position"]=hspositions.get(HYPE_SWING_SYMBOL)
   watches={}
   for wr in c.execute("select * from local_swing_watchlist").fetchall():
-   if float(wr["expires_epoch"])>time.time():
+   if True:  # H1 opposite pivot, rather than a timer, invalidates the watch
     watches[wr["symbol"]]={"symbol":wr["symbol"],"side":int(wr["side"]),"origin_signal_candle":int(wr["origin_signal_candle"] or 0),
       "exit_price":float(wr["exit_price"] or 0),"exit_at":wr["exit_at"],"expires_epoch":float(wr["expires_epoch"]),
       "reentries":int(wr["reentries"] or 0),"context":wr["context"] or {}}
@@ -1584,7 +1587,7 @@ def _hype_h1_candles(hours=120):
 
 def _local_claim(symbol,action,side,analysis,price=None):
  candle=int(analysis.get("signal_candle_time") or 0)
- ident="LOCAL_M15:%s:%s:%s:%s"%(symbol,action,candle,int(side or 0))
+ ident="LOCAL_H1:%s:%s:%s:%s"%(symbol,action,candle,int(side or 0))
  payload={**analysis,"symbol":symbol,"action":action,"side":int(side or 0),"policy":HYPE_SWING_POLICY}
  with pg() as db:
   with db.transaction():
@@ -1594,10 +1597,10 @@ def _local_claim(symbol,action,side,analysis,price=None):
      (ident,now(),candle,action,int(side or 0),price,json.dumps(payload,default=str))).fetchone()
    if row and action=="OBSERVE":
     db.execute("insert into scanner_observations(ts,module,payload) values(%s,%s,%s::jsonb)",
-      (now(),"local_m15_swing_v4",json.dumps(payload,default=str)))
+      (now(),"local_h1_m15_swing_v5",json.dumps(payload,default=str)))
  if row:
-  log_learning_decision("LOCAL_M15:"+symbol+":"+str(candle)+":"+str(int(side or 0)),"local_m15_swing_v4",
-   symbol,int(side or 0),action,"confirmed_m15_pivot",price,None,HYPE_SWING_LEVERAGE,payload)
+  log_learning_decision("LOCAL_H1:"+symbol+":"+str(candle)+":"+str(int(side or 0)),"local_h1_m15_swing_v5",
+   symbol,int(side or 0),action,"confirmed_h1_pivot",price,None,HYPE_SWING_LEVERAGE,payload)
  return bool(row)
 
 def _hype_claim(action,side,analysis,price=None):
@@ -1620,10 +1623,11 @@ def local_swing_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=None):
  if symbol not in LOCAL_SWING_SYMBOLS:return False
  if S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or int(side) not in (-1,1):return False
  if not analysis.get("ready"):return False
+ if not analysis.get("h1_direction_anchor") or int(analysis.get("entry_side") or 0)!=int(side):return False
  if entry_kind=="M15" and int(analysis.get("entry_side") or 0)!=int(side):return False
  if entry_kind=="REENTRY":
   if not watch or int(watch.get("side") or 0)!=int(side):return False
-  if int(watch.get("reentries") or 0)>=LOCAL_REENTRY_MAX_PER_SWING:return False
+  if LOCAL_REENTRY_MAX_PER_SWING>0 and int(watch.get("reentries") or 0)>=LOCAL_REENTRY_MAX_PER_SWING:return False
   if int(analysis.get("entry_side") or 0)==-int(side):return False
  price=current_entry_price(symbol)
  if price is None:return False
@@ -1633,33 +1637,33 @@ def local_swing_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=None):
  if equity<=0:return False
  reserved,margin,reason,free=_reserve_shared_entry(symbol,HYPE_SWING_MARGIN_FRACTION,strategy="local_swing")
  if not reserved:
-  journal("entry_skipped",None,{"strategy":"local_m15_swing_v4","symbol":symbol,"reason":reason,"free_margin":free,"entry_kind":entry_kind})
+  journal("entry_skipped",None,{"strategy":"local_h1_m15_swing_v5","symbol":symbol,"reason":reason,"free_margin":free,"entry_kind":entry_kind})
   log_learning_decision("LOCAL_SKIP:"+symbol+":"+str(int(time.time()//15))+":"+str(int(side)),
-   "local_m15_swing_v4",symbol,int(side),"SKIPPED",reason,price,None,HYPE_SWING_LEVERAGE,{**analysis,"entry_kind":entry_kind})
+   "local_h1_m15_swing_v5",symbol,int(side),"SKIPPED",reason,price,None,HYPE_SWING_LEVERAGE,{**analysis,"entry_kind":entry_kind})
   return False
  try:
   price=float(price);notional=margin*HYPE_SWING_LEVERAGE
   opened=now();epoch=time.time()
   reentries=(int(watch.get("reentries") or 0)+1) if entry_kind=="REENTRY" and watch else 0
-  origin_signal=int((watch or {}).get("origin_signal_candle") or analysis.get("signal_candle_time") or 0)
+  origin_signal=int(analysis.get("signal_candle_time") or 0)
   claim_token=int((m15 or {}).get("candle_time") or analysis.get("signal_candle_time") or 0)
   learning_decision_id=("LOCAL_REENTRY:%s:%s:%s:%s"%(symbol,claim_token,int(side),reentries)
-    if entry_kind=="REENTRY" else "LOCAL_M15:%s:%s:%s"%(symbol,origin_signal,int(side)))
-  features={**analysis,"symbol":symbol,"policy":HYPE_SWING_POLICY,"strategy_name":"local_m15_swing_v4",
-   "learning_decision_id":learning_decision_id,"entry_kind":entry_kind,"origin_m15_signal_candle":origin_signal,
+    if entry_kind=="REENTRY" else "LOCAL_H1:%s:%s:%s"%(symbol,origin_signal,int(side)))
+  features={**analysis,"symbol":symbol,"policy":HYPE_SWING_POLICY,"strategy_name":"local_h1_m15_swing_v5",
+   "learning_decision_id":learning_decision_id,"entry_kind":entry_kind,"origin_h1_signal_candle":origin_signal,
    "swing_reentries":reentries,"allocation_margin_fraction":HYPE_SWING_MARGIN_FRACTION,
    "leverage":HYPE_SWING_LEVERAGE,"mfe_price_move":0.0,"mae_price_move":0.0,"mfe_roe_pct":0.0,"mae_roe_pct":0.0,
    "entry_mark":price,"profit_lock_armed":False,"profit_lock_arm_move_pct":HYPE_PROFIT_LOCK_ARM_MOVE*100.0,
    "profit_lock_buffer_move_pct":HYPE_PROFIT_LOCK_BUFFER_MOVE*100.0,
    "m15_reentry_context":m15 if entry_kind=="REENTRY" else None,
-   "shadow_exit_modes":["opposite_m15_local_extreme","m15_momentum_weakening","profit_lock_stop","m15_adverse_pressure_profit_protect"]}
+   "shadow_exit_modes":["opposite_h1_local_extreme","m15_momentum_weakening","profit_lock_stop","m15_adverse_pressure_profit_protect"]}
   pos={"symbol":symbol,"side":int(side),"entry":price,"notional":notional,"margin":margin,"leverage":HYPE_SWING_LEVERAGE,
        "opened":opened,"t":epoch,"signal_candle_time":origin_signal,"features":features}
   with pg() as db:
    with db.transaction():
     STORE.fence(db)
     claim_id=("LOCAL_REENTRY:OPEN:%s:%s:%s:%s"%(symbol,claim_token,int(side),reentries)
-      if entry_kind=="REENTRY" else "LOCAL_M15:OPEN:%s:%s:%s"%(symbol,origin_signal,int(side)))
+      if entry_kind=="REENTRY" else "LOCAL_H1:OPEN:%s:%s:%s"%(symbol,origin_signal,int(side)))
     claim=db.execute("""insert into hype_swing_signal_journal(id,ts,candle_time,action,side,price,features)
       values(%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(id) do nothing returning id""",
       (claim_id,opened,claim_token,"REENTRY" if entry_kind=="REENTRY" else "OPEN",int(side),price,json.dumps(features,default=str))).fetchone()
@@ -1672,16 +1676,16 @@ def local_swing_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=None):
       values(%s,%s,%s,%s,%s::jsonb,%s)""",(opened,origin_signal,int(side),price,json.dumps(features,default=str),symbol))
     if entry_kind=="REENTRY":db.execute("delete from local_swing_watchlist where symbol=%s",(symbol,))
     db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'local_swing_trade_opened',%s::jsonb)",
-      (now(),json.dumps({"strategy":"local_m15_swing_v4","symbol":symbol,"side":int(side),"entry_kind":entry_kind,
+      (now(),json.dumps({"strategy":"local_h1_m15_swing_v5","symbol":symbol,"side":int(side),"entry_kind":entry_kind,
        "entry":price,"margin":margin,"notional":notional,"leverage":HYPE_SWING_LEVERAGE,"equity":equity,
-       "origin_m15_signal_candle":origin_signal,"reentries":reentries,"pivot_type":analysis.get("pivot_type"),
+       "origin_h1_signal_candle":origin_signal,"reentries":reentries,"pivot_type":analysis.get("pivot_type"),
        "pivot_price":analysis.get("pivot_price"),"policy":HYPE_SWING_POLICY},default=str)))
   with LOCK:
    S.setdefault("local_swing_positions",{})[symbol]=pos
    if symbol==HYPE_SWING_SYMBOL:S["hype_swing_position"]=pos
    if entry_kind=="REENTRY":S.setdefault("local_swing_watch",{}).pop(symbol,None)
-  log_learning_decision(learning_decision_id,"local_m15_swing_v4",symbol,int(side),"OPENED",
-   "m15_recovery_reentry" if entry_kind=="REENTRY" else "m15_local_entry",price,None,HYPE_SWING_LEVERAGE,features)
+  log_learning_decision(learning_decision_id,"local_h1_m15_swing_v5",symbol,int(side),"OPENED",
+   "m15_recovery_reentry" if entry_kind=="REENTRY" else "h1_anchor_m15_entry",price,None,HYPE_SWING_LEVERAGE,features)
   return True
  finally:_release_shared_entry(symbol,strategy="local_swing")
 
@@ -1702,8 +1706,8 @@ def local_swing_close(symbol,price,reason,analysis=None,watch_context=None):
  watch=None
  if reason in ("m15_adverse_pressure_profit_protect","profit_lock_stop","m15_momentum_weakening"):
   watch={"symbol":symbol,"side":int(pos["side"]),
-   "origin_signal_candle":int(features.get("origin_m15_signal_candle") or pos.get("signal_candle_time") or 0),
-   "exit_price":price,"exit_at":now(),"expires_epoch":time.time()+LOCAL_REENTRY_WATCH_SECONDS,
+   "origin_signal_candle":int(features.get("origin_h1_signal_candle") or features.get("origin_m15_signal_candle") or pos.get("signal_candle_time") or 0),
+   "exit_price":price,"exit_at":now(),"expires_epoch":0.0,
    "reentries":int(features.get("swing_reentries",0) or 0),"context":watch_context or {}}
  with pg() as db:
   with db.transaction():
@@ -1717,8 +1721,8 @@ def local_swing_close(symbol,price,reason,analysis=None,watch_context=None):
      values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
      (pos["opened"],now(),symbol,pos["side"],pos["entry"],price,pnl,reason,pos["margin"],pos["notional"],pos["leverage"],json.dumps(features,default=str)))
    db.execute("""insert into trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,strategy,features)
-     values(%s,%s,%s,%s,%s,%s,%s,%s,'local_m15_swing_v4',%s::jsonb)""",
-     (pos["opened"],now(),symbol,pos["side"],pos["entry"],price,pnl,reason,json.dumps(features,default=str)))
+     values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
+     (pos["opened"],now(),symbol,pos["side"],pos["entry"],price,pnl,reason,features.get("strategy_name","local_h1_m15_swing_v5"),json.dumps(features,default=str)))
    db.execute("""update hype_swing_shadow_exits set actual_exit_at=%s,actual_exit_price=%s,actual_exit_reason=%s
      where coalesce(symbol,'HYPE')=%s and opened=%s""",(now(),price,reason,symbol,pos["opened"]))
    if watch:
@@ -1729,7 +1733,7 @@ def local_swing_close(symbol,price,reason,analysis=None,watch_context=None):
       reentries=excluded.reentries,context=excluded.context""",
       (symbol,watch["side"],watch["origin_signal_candle"],watch["exit_price"],watch["exit_at"],watch["expires_epoch"],watch["reentries"],json.dumps(watch["context"],default=str)))
    db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'local_swing_trade_closed',%s::jsonb)",
-     (now(),json.dumps({"strategy":"local_m15_swing_v4","symbol":symbol,"side":pos["side"],
+     (now(),json.dumps({"strategy":"local_h1_m15_swing_v5","symbol":symbol,"side":pos["side"],
       "entry":pos["entry"],"exit":price,"pnl":pnl,"reason":reason,"equity":float(acct["equity"]),
       "watch_armed":bool(watch),"mae_roe_pct":features.get("mae_roe_pct"),"mfe_roe_pct":features.get("mfe_roe_pct"),
       "policy":HYPE_SWING_POLICY},default=str)))
@@ -1807,13 +1811,13 @@ def hype_swing_mark_positions(prices):
       (json.dumps(updated.get("features",{}),default=str),symbol,pos["opened"]))
     if newly_armed:
      db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'local_swing_profit_lock_armed',%s::jsonb)",
-       (now(),json.dumps({"strategy":"local_m15_swing_v4","symbol":symbol,"side":updated["side"],
+       (now(),json.dumps({"strategy":"local_h1_m15_swing_v5","symbol":symbol,"side":updated["side"],
         "entry":updated["entry"],"mark":float(mark),"stop":(updated.get("features") or {}).get("profit_lock_stop"),
         "arm_move_pct":HYPE_PROFIT_LOCK_ARM_MOVE*100.0,"buffer_move_pct":HYPE_PROFIT_LOCK_BUFFER_MOVE*100.0},default=str)))
     pnl=paper_pnl(updated["notional"],updated["entry"],float(mark),updated["side"],FEE)
     db.execute("""insert into position_snapshots(ts,strategy,symbol,opened,side,entry,mark,margin,notional,leverage,unrealized_pnl,roe_pct,features)
        values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
-      (now(),"local_m15_swing_v4",symbol,updated["opened"],updated["side"],updated["entry"],float(mark),
+      (now(),"local_h1_m15_swing_v5",symbol,updated["opened"],updated["side"],updated["entry"],float(mark),
        updated["margin"],updated["notional"],updated["leverage"],pnl,pnl/updated["margin"]*100 if updated["margin"] else 0,
        json.dumps(updated.get("features",{}),default=str)))
 
@@ -1841,6 +1845,22 @@ def hype_swing_stats():
       "weakening_avg_gross_roe_pct":float(shadows["weakening_avg_gross_roe_pct"]) if shadows["weakening_avg_gross_roe_pct"] is not None else None}}
  except Exception as exc:return {"error":str(exc)[:180]}
 
+def local_h1_direction(rows,now_ms,symbol):
+ analysis=analyze_hype_h1(rows,now_ms,symbol)
+ if not analysis.get("ready"):return analysis
+ with LOCK:prior=copy.deepcopy(S.get("local_h1_direction",{}).get(symbol))
+ if prior and (not analysis.get("anchor_confirmed") or int(prior.get("signal_candle_time") or 0)>int(analysis.get("signal_candle_time") or 0)):
+  return {**prior,"ready":True,"last_candle_time":analysis.get("last_candle_time")}
+ if analysis.get("entry_side") not in (-1,1):return analysis
+ if not prior or analysis.get("signal_candle_time")!=prior.get("signal_candle_time"):
+  with pg() as db:
+   with db.transaction():
+    STORE.fence(db)
+    db.execute("insert into local_h1_direction(symbol,analysis) values(%s,%s::jsonb) on conflict(symbol) do update set analysis=excluded.analysis",
+      (symbol,json.dumps(analysis)))
+  with LOCK:S.setdefault("local_h1_direction",{})[symbol]=copy.deepcopy(analysis)
+ return analysis
+
 def hype_h1_local_swing_loop():
  last_observed={};pool=concurrent.futures.ThreadPoolExecutor(max_workers=4,thread_name_prefix="local-m15-swing")
  try:
@@ -1865,7 +1885,7 @@ def hype_h1_local_swing_loop():
       details[symbol]={"ok":False,"error":fetch_errors.get(symbol) or "mark_unavailable","position_open":symbol in S.get("local_swing_positions",{})}
       continue
      h1_rows,h1_ms=fetched[(symbol,"h1")];m15_rows,m15_ms=fetched[(symbol,"m15")]
-     analysis=analyze_hype_h1(m15_rows,m15_ms,symbol)
+     analysis=local_h1_direction(h1_rows,h1_ms,symbol)
      h1_context=analyze_local_h1_context(h1_rows,h1_ms,symbol)
      with LOCK:
       pos=copy.deepcopy(S.get("local_swing_positions",{}).get(symbol))
@@ -1882,33 +1902,30 @@ def hype_h1_local_swing_loop():
 
      action=None
      if pos:
-      if local_m15_profit_protection(pos,m15_live,float(mark),flow_imb):
+      h1_exit=hype_position_exit(pos,analysis,float(mark)) if analysis.get("ready") else None
+      if h1_exit:
+       closed=local_swing_close(symbol,float(mark),h1_exit,analysis)
+       action="H1_EXIT:"+h1_exit if closed else None
+      elif local_m15_profit_protection(pos,m15_live,float(mark),flow_imb):
        watch_context={"m15":m15_live,"h1_context":h1_context,"flow_imbalance":flow_imb,
         "flow_source":"hyperliquid_ws_trades","observed_at":now(),"reason":"m15_counter_pressure_while_profitable"}
        closed=local_swing_close(symbol,float(mark),"m15_adverse_pressure_profit_protect",analysis,watch_context)
        action="M15_PROFIT_PROTECT_EXIT" if closed else None
-      else:
-       reason=hype_position_exit(pos,analysis,float(mark)) if analysis.get("ready") else None
-       if reason:
-        closed=local_swing_close(symbol,float(mark),reason,analysis)
-        action="M15_EXIT:"+reason if closed else None
-        if closed and reason.startswith("opposite_local_") and int(analysis.get("entry_side") or 0) in (-1,1):
-         if local_swing_open(symbol,int(analysis["entry_side"]),analysis,"M15"):action+="->REVERSE_M15_ENTRY"
      else:
       if watch:
-       if time.time()>=float(watch.get("expires_epoch",0) or 0):
-        _local_watch_clear(symbol,"watch_expired");watch=None;action="WATCH_EXPIRED"
-       elif analysis.get("ready") and int(analysis.get("entry_side") or 0)==-int(watch.get("side") or 0):
-        _local_watch_clear(symbol,"opposite_m15_pivot_invalidated_watch");watch=None;action="WATCH_INVALIDATED_BY_M15"
+       if analysis.get("ready") and int(analysis.get("entry_side") or 0)==-int(watch.get("side") or 0):
+        _local_watch_clear(symbol,"opposite_h1_pivot_invalidated_watch");watch=None;action="WATCH_INVALIDATED_BY_H1"
        elif (analysis.get("ready") and int(analysis.get("entry_side") or 0)==int(watch.get("side") or 0)
-             and int(analysis.get("signal_candle_time") or 0)>int(watch.get("origin_signal_candle") or 0)):
+             and int(analysis.get("signal_candle_time") or 0)>int(watch.get("origin_signal_candle") or 0)
+             and local_m15_reentry_after_exit(int(watch.get("side") or 0),m15_live,float(mark),watch,flow_imb)):
         side=int(watch["side"])
         if local_swing_open(symbol,side,analysis,"M15"):
-         _local_watch_clear(symbol,"new_same_side_m15_pivot")
-         action="REENTER_NEW_M15_PIVOT";watch=None
-       elif local_m15_reentry_ready(int(watch.get("side") or 0),m15_live,flow_imb):
+         _local_watch_clear(symbol,"new_same_side_h1_pivot")
+         action="REENTER_NEW_H1_PIVOT";watch=None
+       elif local_m15_reentry_after_exit(int(watch.get("side") or 0),m15_live,float(mark),watch,flow_imb):
         if local_swing_open(symbol,int(watch["side"]),analysis,"REENTRY",m15_live,watch):action="M15_RECOVERY_REENTRY"
-      if not watch and not action and analysis.get("ready") and int(analysis.get("entry_side") or 0) in (-1,1):
+      if (not watch and not action and analysis.get("ready") and int(analysis.get("entry_side") or 0) in (-1,1)
+          and local_m15_reentry_ready(int(analysis["entry_side"]),m15_live,flow_imb)):
        if local_swing_open(symbol,int(analysis["entry_side"]),analysis,"M15"):action="M15_ENTRY"
 
      with LOCK:
@@ -1919,7 +1936,7 @@ def hype_h1_local_swing_loop():
       "watch_side":int(live_watch.get("side")) if live_watch else None,
       "watch_expires_epoch":live_watch.get("expires_epoch") if live_watch else None,
       "watch_reentries":int(live_watch.get("reentries",0)) if live_watch else None,
-      "m15_local":{"ready":bool(analysis.get("ready")),"pivot_type":analysis.get("pivot_type"),
+      "h1_local":{"ready":bool(analysis.get("ready")),"pivot_type":analysis.get("pivot_type"),
        "pivot_price":analysis.get("pivot_price"),"entry_side":analysis.get("entry_side"),
        "signal_candle_time":candle,"long_weak_score":analysis.get("long_weak_score"),
        "short_weak_score":analysis.get("short_weak_score"),"reason":analysis.get("reason")},
@@ -1932,13 +1949,13 @@ def hype_h1_local_swing_loop():
      open_positions=copy.deepcopy(S.get("local_swing_positions",{}));watches=copy.deepcopy(S.get("local_swing_watch",{}))
      S["hype_swing_position"]=open_positions.get(HYPE_SWING_SYMBOL)
      S["sources"]["HypeH1LocalSwing"]={"ok":all(x.get("ok") for x in details.values()),"last_check":now(),
-       "mode":"paper_multiasset_m15_local_h1_context_profit_protection_reentry","policy":HYPE_SWING_POLICY,
+       "mode":"paper_h1_direction_m15_protection_reentry","policy":HYPE_SWING_POLICY,
        "symbols":list(LOCAL_SWING_SYMBOLS),"signal_interval":HYPE_SWING_INTERVAL,
        "h1_context_interval":LOCAL_SWING_H1_CONTEXT_INTERVAL,"protection_interval":LOCAL_SWING_M15_INTERVAL,
        "paper_only":True,"equity":S.get("hype_swing_equity"),"trades":S.get("hype_swing_trades",0),
        "open_positions":list(open_positions.keys()),"watching_for_reentry":list(watches.keys()),
        "position_count":len(open_positions),"watch_count":len(watches),"margin_fraction":HYPE_SWING_MARGIN_FRACTION,
-       "leverage":HYPE_SWING_LEVERAGE,"compound_from_shared_equity":True,"h1_blocks_entries":False,
+       "leverage":HYPE_SWING_LEVERAGE,"compound_from_shared_equity":True,"h1_blocks_entries":True,
        "profit_lock":{"enabled":True,"arm_move_pct":HYPE_PROFIT_LOCK_ARM_MOVE*100.0,
         "buffer_move_pct":HYPE_PROFIT_LOCK_BUFFER_MOVE*100.0},
        "m15_profit_protection":True,"m15_reentry":True,"reentry_watch_seconds":LOCAL_REENTRY_WATCH_SECONDS,
@@ -1947,7 +1964,7 @@ def hype_h1_local_swing_loop():
    except LeaseLost as exc:
     with LOCK:S["sources"]["HypeH1LocalSwing"]={"ok":False,"last_check":now(),"mode":"standby","symbols":list(LOCAL_SWING_SYMBOLS),"error":str(exc)[:160]}
    except Exception as exc:
-    with LOCK:S["sources"]["HypeH1LocalSwing"]={"ok":False,"last_check":now(),"mode":"paper_multiasset_m15_local_h1_context_profit_protection_reentry","symbols":list(LOCAL_SWING_SYMBOLS),"error":type(exc).__name__+":"+str(exc)[:160]}
+    with LOCK:S["sources"]["HypeH1LocalSwing"]={"ok":False,"last_check":now(),"mode":"paper_h1_direction_m15_protection_reentry","symbols":list(LOCAL_SWING_SYMBOLS),"error":type(exc).__name__+":"+str(exc)[:160]}
     try:journal("local_swing_error",None,{"error":type(exc).__name__+":"+str(exc)[:180]})
     except Exception:pass
    SHUTDOWN.wait(10)
@@ -1961,7 +1978,7 @@ def emergency_profit_take(prices):
   if not S.get("engine_active") or S.get("mode")!="PAPER_ONLY":return []
   books=[("news",copy.deepcopy(S.get("positions",{}))),("pump_dump",copy.deepcopy(S.get("pump_positions",{}))),
          ("whale_liquidation",copy.deepcopy(S.get("whale_positions",{}))),
-         ("local_m15_swing_v4",copy.deepcopy(S.get("local_swing_positions",{})))]
+         ("local_h1_m15_swing_v5",copy.deepcopy(S.get("local_swing_positions",{})))]
   history={s:list(S.get("_timeline",{}).get(s,[])) for s in ("BTC","ETH","SOL")}
   pending=copy.deepcopy(S.get("_emergency_pending",[]))
  shock=emergency_reversal(prices,history,stamp)
@@ -1978,7 +1995,7 @@ def emergency_profit_take(prices):
    state=S.setdefault("emergency_profit_guard",{"enabled":True,"cooldown_seconds":COOLDOWN_SECONDS})
    state["status"]="MONITORING" if stamp<float(S.get("_emergency_until",0) or 0) else "ARMED"
   return []
- callbacks={"news":None,"pump_dump":pump_close,"whale_liquidation":whale_liq_close,"local_m15_swing_v4":None}
+ callbacks={"news":None,"pump_dump":pump_close,"whale_liquidation":whale_liq_close,"local_h1_m15_swing_v5":None}
  live_books=dict(books);closed=[];remaining=[]
  for target in pending:
   strategy=target["strategy"];sym=target["symbol"];pos=live_books.get(strategy,{}).get(sym)
@@ -1986,7 +2003,7 @@ def emergency_profit_take(prices):
   price=prices.get(sym)
   if not price:remaining.append(target);continue
   if strategy=="news":result=close_news_position(sym,pos,price,"portfolio_emergency_profit_take")
-  elif strategy=="local_m15_swing_v4":result=local_swing_close(sym,price,"portfolio_emergency_profit_take")
+  elif strategy=="local_h1_m15_swing_v5":result=local_swing_close(sym,price,"portfolio_emergency_profit_take")
   else:result=callbacks[strategy](sym,price,"portfolio_emergency_profit_take")
   if result:closed.append({**target,"exit":price,"pnl":result.get("pnl")})
   else:remaining.append(target)
@@ -3828,7 +3845,7 @@ def operations_diagnostics():
      "local_swing_symbols":list(LOCAL_SWING_SYMBOLS),"local_swing_positions":list(S.get("local_swing_positions",{}).keys()),
      "local_swing_watch":copy.deepcopy(S.get("local_swing_watch",{})),
      "sizing_policy":{"margin_fraction":TRADE_MARGIN_FRACTION,"secondary_margin_fraction":PUMP_SECONDARY_MARGIN_FRACTION,"leverage":TRADE_LEVERAGE,"target_open_positions":TARGET_OPEN_POSITIONS,"max_open_positions":MAX_OPEN_POSITIONS,"pump_max_positions":PUMP_MAX_POSITIONS,"auto_topup_enabled":False,"contributed_capital":S.get("contributed_capital",PAPER_RESET),"micro_analysis_threads":MICRO_ANALYSIS_THREADS},
-     "universal_profit_protection":{"enabled":True,"strategies":["news","pump_dump","whale_liquidation","local_m15_swing_v4"],"arm_move_pct":PROFIT_PROTECT_ARM_MOVE*100.0,"lock_move_pct":PROFIT_PROTECT_LOCK_MOVE*100.0,"reversal_min_move_pct":PROFIT_PROTECT_REVERSAL_MIN_MOVE*100.0,"r15_adverse_pct":PROFIT_PROTECT_R15*100.0,"r60_adverse_pct":PROFIT_PROTECT_R60*100.0,"flow_threshold":PROFIT_PROTECT_FLOW},
+     "universal_profit_protection":{"enabled":True,"strategies":["news","pump_dump","whale_liquidation","local_h1_m15_swing_v5"],"arm_move_pct":PROFIT_PROTECT_ARM_MOVE*100.0,"lock_move_pct":PROFIT_PROTECT_LOCK_MOVE*100.0,"reversal_min_move_pct":PROFIT_PROTECT_REVERSAL_MIN_MOVE*100.0,"r15_adverse_pct":PROFIT_PROTECT_R15*100.0,"r60_adverse_pct":PROFIT_PROTECT_R60*100.0,"flow_threshold":PROFIT_PROTECT_FLOW},
      "entry_rejections":dict(S.get("_entry_rejections",{})),
      "account_pnl_pct":dash.get("account_pnl_pct"),"realized_pnl_pct":dash.get("realized_pnl_pct"),
      "unrealized_pnl":dash.get("unrealized_pnl"),"total_equity":dash.get("total_equity"),
@@ -3872,7 +3889,7 @@ def html_dashboard(data):
  hype_engine=data.get("hype_h1_engine") or {}
  hype_stats=data.get("hype_h1_stats") or {}
  local_symbols=data.get("local_swing_symbols",["HYPE","NEAR"])
- hype_cards='<div class="grid"><b>LOCAL M15 ENGINE<br>%s</b><b>TOKENS<br>%s</b><b>TOTAL EQUITY<br>$%s</b><b>P&L<br><span class="%s">%s%%</span></b><b>OPEN POSITIONS<br>%s</b><b>TRADES<br>%s</b><b>MARGIN / LEV<br>25%% / 25x</b><b>H1 FILTER<br>CONTEXT ONLY</b></div>'%("OK" if hype_engine.get("ok") else "ERROR",esc(" + ".join(local_symbols)),data.get("hype_h1_total_equity",100),"posv" if data.get("hype_h1_pnl_pct",0)>=0 else "negv",data.get("hype_h1_pnl_pct",0),len(local_positions),data.get("hype_h1_trades",0))
+ hype_cards='<div class="grid"><b>LOCAL H1 / M15 ENGINE<br>%s</b><b>TOKENS<br>%s</b><b>TOTAL EQUITY<br>$%s</b><b>P&L<br><span class="%s">%s%%</span></b><b>OPEN POSITIONS<br>%s</b><b>TRADES<br>%s</b><b>MARGIN / LEV<br>25%% / 25x</b><b>H1 DIRECTION<br>LOCAL HIGH / LOCAL LOW</b></div>'%("OK" if hype_engine.get("ok") else "ERROR",esc(" + ".join(local_symbols)),data.get("hype_h1_total_equity",100),"posv" if data.get("hype_h1_pnl_pct",0)>=0 else "negv",data.get("hype_h1_pnl_pct",0),len(local_positions),data.get("hype_h1_trades",0))
  hype_pos_html="".join('<tr><td>%s</td><td>%s</td><td>$%s</td><td>$%s</td><td>%sx</td><td>%s</td><td>%s</td><td class="%s">%s%%</td><td class="%s">$%s</td><td>%s / %s</td></tr>'%(esc(x.get("symbol","")),esc(x.get("side","FLAT")),x.get("margin_usd",0),x.get("notional_usd",0),x.get("leverage",25),x.get("entry","-"),x.get("mark","-"),"posv" if x.get("roe_pct",0)>=0 else "negv",x.get("roe_pct",0),"posv" if x.get("unrealized_pnl",0)>=0 else "negv",x.get("unrealized_pnl",0),round(float((x.get("features") or {}).get("mae_roe_pct",0) or 0),2),round(float((x.get("features") or {}).get("mfe_roe_pct",0) or 0),2)) for x in local_positions) or '<tr><td colspan=10>No HYPE / NEAR M15 position</td></tr>'
  hype_note='<div class="muted">HYPE + NEAR: M15 local low → LONG; local high → SHORT. H1 is context only and never blocks an M15 entry. Target margin is 25%% of total PAPER balance; if free margin is lower, the strategy uses all remaining free margin. Exit: opposite M15 local, momentum weakening or profit protection. Samples: %s · win rate: %s · avg MAE: %s%% · avg MFE: %s%%</div>'%(hype_stats.get("samples",0),hype_stats.get("win_rate","-"),hype_stats.get("avg_mae_roe_pct","-"),hype_stats.get("avg_mfe_roe_pct","-"))
  pump_positions_data=data.get("pump_positions",[]) or []
@@ -3895,7 +3912,7 @@ def html_dashboard(data):
  news_health_rows="".join('<tr><td>%s</td><td class="%s">%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'%(esc(k),"posv" if v.get("status")=="ACTIVE" else ("negv" if v.get("status")=="ERROR" else "warnv"),esc(v.get("status","-")),esc(v.get("latest_post_age_seconds","-")),esc(v.get("ingest_lag_seconds","-")),esc(v.get("realtime_verified",False))) for k,v in nh_sources.items()) or '<tr><td colspan=5>No news health data yet</td></tr>'
  news_health_note='<div class="muted">Last fresh: %s · %s · %s</div>'%(esc(nh.get("last_fresh_received_at") or "-"),esc(nh.get("last_fresh_source") or "-"),esc(nh.get("last_fresh_headline") or "-"))
  news="".join('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'%(esc(x["ts"]),esc(x["source"]),esc(x["symbol"]),esc(x["signal"]),esc(x["title"])) for x in data["news"][:12])
- return '''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>PANDORA LIVE</title><style>body{font-family:system-ui;background:#080b10;color:#e8edf5;margin:24px}h1{margin:0}.muted{color:#8b98aa}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:18px 0}.grid b{background:#111722;padding:16px;border-radius:12px}table{width:100%%;border-collapse:collapse;background:#0e141e;margin-bottom:22px}td,th{padding:9px;border-bottom:1px solid #202938;text-align:left;font-size:13px}th{color:#91a2b8}.posv{color:#49d17d;font-weight:700}.negv{color:#ff6262;font-weight:700}.warnv{color:#f6c453;font-weight:700}a{color:#8bc4ff}</style></head><body><h1>PANDORA LIVE</h1><div class="muted">Paper engine · dashboard refresh 5s · last market poll %s</div>%s<h2>Open positions</h2><button onclick="closePos(null)">Close Everything</button><button onclick="location.reload()">Refresh</button><p id="actionResult"></p><table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Trigger</th><th>Action</th></tr>%s</table><h2>Pump/Dump PAPER positions</h2>%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h2>Price to Value Liquidation</h2>%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h3>Whale liquidation candidates</h3><table><tr><th>Token</th><th>Trade side</th><th>Whale size</th><th>Distance</th><th>Score</th><th>Victim</th><th>Liq price</th></tr>%s</table><h2>LOCAL M15 — HYPE + NEAR</h2>%s%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>MAE / MFE ROE</th></tr>%s</table><h2>Closed trades</h2><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>PnL</th><th>Reason</th></tr>%s</table><h2>News Scanner Health</h2>%s%s<table><tr><th>Source</th><th>Freshness</th><th>Latest post age (s)</th><th>Ingest lag (s)</th><th>Realtime verified</th></tr>%s</table><h2>Sources</h2><table><tr><th>Source</th><th>Status</th><th>Checked</th><th>Error</th></tr>%s</table><h2>Latest news</h2><table><tr><th>Time</th><th>Source</th><th>Token</th><th>Raw signal</th><th>Headline</th></tr>%s</table><p>Errors: %s · Last error: %s</p><p><a href="/api/dashboard">JSON dashboard</a> · <a href="/features">Features</a> · <a href="/trades">Trades</a> · <a href="/news">News</a></p><script>let closing=false;setInterval(()=>{if(!closing&&document.visibilityState==="visible")location.reload()},15000);async function closePos(sym){if(closing||!confirm(sym?"Close "+sym+"?":"Close ALL positions?"))return;closing=true;const status=document.getElementById("actionResult");status.textContent="Processing close request...";try{const r=await fetch("/api/positions/close",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(sym?{symbol:sym}:{all:true})});const result=await r.json();status.textContent=r.ok?"Close confirmed: "+JSON.stringify(result):(r.status===401?"Controls locked: open the control-access link once, then retry.":"Close failed ("+r.status+"): "+JSON.stringify(result));if(r.ok){location.reload();return}}catch(e){status.textContent="Close request failed: "+String(e)}finally{closing=false}}</script></body></html>'''%(esc(data["last_poll"]),cards,pos,pump_cards,pump_pos,whale_cards,whale_pos_html,whale_candidates_html,hype_cards,hype_note,hype_pos_html,trs,news_health_cards,news_health_note,news_health_rows,src,news,data["errors"],esc(data["last_error"]))
+ return '''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>PANDORA LIVE</title><style>body{font-family:system-ui;background:#080b10;color:#e8edf5;margin:24px}h1{margin:0}.muted{color:#8b98aa}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:18px 0}.grid b{background:#111722;padding:16px;border-radius:12px}table{width:100%%;border-collapse:collapse;background:#0e141e;margin-bottom:22px}td,th{padding:9px;border-bottom:1px solid #202938;text-align:left;font-size:13px}th{color:#91a2b8}.posv{color:#49d17d;font-weight:700}.negv{color:#ff6262;font-weight:700}.warnv{color:#f6c453;font-weight:700}a{color:#8bc4ff}</style></head><body><h1>PANDORA LIVE</h1><div class="muted">Paper engine · dashboard refresh 5s · last market poll %s</div>%s<h2>Open positions</h2><button onclick="closePos(null)">Close Everything</button><button onclick="location.reload()">Refresh</button><p id="actionResult"></p><table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Trigger</th><th>Action</th></tr>%s</table><h2>Pump/Dump PAPER positions</h2>%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h2>Price to Value Liquidation</h2>%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h3>Whale liquidation candidates</h3><table><tr><th>Token</th><th>Trade side</th><th>Whale size</th><th>Distance</th><th>Score</th><th>Victim</th><th>Liq price</th></tr>%s</table><h2>LOCAL H1 / M15 — HYPE + NEAR</h2>%s%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>MAE / MFE ROE</th></tr>%s</table><h2>Closed trades</h2><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>PnL</th><th>Reason</th></tr>%s</table><h2>News Scanner Health</h2>%s%s<table><tr><th>Source</th><th>Freshness</th><th>Latest post age (s)</th><th>Ingest lag (s)</th><th>Realtime verified</th></tr>%s</table><h2>Sources</h2><table><tr><th>Source</th><th>Status</th><th>Checked</th><th>Error</th></tr>%s</table><h2>Latest news</h2><table><tr><th>Time</th><th>Source</th><th>Token</th><th>Raw signal</th><th>Headline</th></tr>%s</table><p>Errors: %s · Last error: %s</p><p><a href="/api/dashboard">JSON dashboard</a> · <a href="/features">Features</a> · <a href="/trades">Trades</a> · <a href="/news">News</a></p><script>let closing=false;setInterval(()=>{if(!closing&&document.visibilityState==="visible")location.reload()},15000);async function closePos(sym){if(closing||!confirm(sym?"Close "+sym+"?":"Close ALL positions?"))return;closing=true;const status=document.getElementById("actionResult");status.textContent="Processing close request...";try{const r=await fetch("/api/positions/close",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(sym?{symbol:sym}:{all:true})});const result=await r.json();status.textContent=r.ok?"Close confirmed: "+JSON.stringify(result):(r.status===401?"Controls locked: open the control-access link once, then retry.":"Close failed ("+r.status+"): "+JSON.stringify(result));if(r.ok){location.reload();return}}catch(e){status.textContent="Close request failed: "+String(e)}finally{closing=false}}</script></body></html>'''%(esc(data["last_poll"]),cards,pos,pump_cards,pump_pos,whale_cards,whale_pos_html,whale_candidates_html,hype_cards,hype_note,hype_pos_html,trs,news_health_cards,news_health_note,news_health_rows,src,news,data["errors"],esc(data["last_error"]))
 
 
 @account_mutation
@@ -3903,7 +3920,7 @@ def manual_close(symbol=None,reason_override=None):
  with LOCK:
   books=[("news",copy.deepcopy(S.get("positions",{}))),("pump_dump",copy.deepcopy(S.get("pump_positions",{}))),
          ("whale_liquidation",copy.deepcopy(S.get("whale_positions",{}))),
-         ("local_m15_swing_v4",copy.deepcopy(S.get("local_swing_positions",{})))]
+         ("local_h1_m15_swing_v5",copy.deepcopy(S.get("local_swing_positions",{})))]
  targets=[(strategy,sym,pos) for strategy,book in books for sym,pos in book.items() if symbol is None or sym==symbol]
  if not targets and symbol:return {"ok":False,"results":[{"symbol":symbol,"ok":False,"error":"position_not_found"}]}
  results=[]

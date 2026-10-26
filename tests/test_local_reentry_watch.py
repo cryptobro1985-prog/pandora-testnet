@@ -30,7 +30,7 @@ class LocalReentryWatchTests(unittest.TestCase):
                     self.assertTrue(any('insert into local_swing_watchlist' in c.args[0] for c in db.execute.call_args_list))
 
     def run_scan(self,candle,opened):
-        watch=dict(side=1,origin_signal_candle=123,expires_epoch=app.time.time()+1000,reentries=0)
+        watch=dict(side=1,origin_signal_candle=123,expires_epoch=app.time.time()+1000,reentries=0,exit_price=99.9)
         app.S['local_swing_watch']={'HYPE':watch}
         stop=MagicMock();stop.is_set.side_effect=[False,True]
         analysis=dict(ready=True,entry_side=1,signal_candle_time=candle)
@@ -38,7 +38,7 @@ class LocalReentryWatchTests(unittest.TestCase):
              patch.object(app,'refresh_market_prices',return_value={'HYPE':100.}), \
              patch.object(app,'_local_h1_candles',return_value=([],0)), \
              patch.object(app,'_local_m15_candles',return_value=([],0)), \
-             patch.object(app,'analyze_hype_h1',return_value=analysis), \
+             patch.object(app,'local_h1_direction',return_value=analysis), \
              patch.object(app,'analyze_local_h1_context',return_value={}), \
              patch.object(app,'analyze_local_m15',return_value={'ready':True,'recovery_confirmed':True,'recovery_score':4}), \
              patch.object(app,'_local_claim'),patch.object(app,'_local_update_shadows'), \
@@ -62,4 +62,4 @@ class LocalReentryWatchTests(unittest.TestCase):
 
     def test_successful_new_pivot_consumes_watch(self):
         enter,clear=self.run_scan(124,True)
-        clear.assert_called_once_with('HYPE','new_same_side_m15_pivot')
+        clear.assert_called_once_with('HYPE','new_same_side_h1_pivot')

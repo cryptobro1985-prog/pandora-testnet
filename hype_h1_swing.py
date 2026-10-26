@@ -1,17 +1,17 @@
-"""M15 local-swing PAPER strategy with H1 context.
+"""H1 local-extreme direction with M15 execution and recovery re-entry.
 
 Pure signal logic only. No exchange orders, credentials, networking or persistence.
-Completed M15 pivots define long/short swing entries and reversals in both trend and
-counter-trend corrections. H1 is informational context only and never blocks an M15 trade.
+Confirmed H1 extrema define the direction until the opposite H1 extreme.
+M15 pressure manages protective exits and same-direction recovery entries.
 A mature partial M15 candle plus live flow can protect earned profit before the next pivot.
 """
 
 import math
 
-POLICY = "local_swing_m15_h1_context_v4"
+POLICY = "local_swing_h1_bias_m15_execution_v5"
 SYMBOL = "HYPE"  # backwards-compatible primary symbol
 SYMBOLS = ("HYPE", "NEAR")
-INTERVAL = "15m"
+INTERVAL = "1h"
 M15_INTERVAL = "15m"
 H1_CONTEXT_INTERVAL = "1h"
 STARTING_EQUITY = 100.0
@@ -25,8 +25,8 @@ M15_PROFIT_EXIT_MIN_MOVE = 0.0012
 M15_PRESSURE_MIN_SCORE = 3
 M15_RECOVERY_MIN_SCORE = 3
 M15_PARTIAL_MIN_AGE_MS = 3 * 60 * 1000
-REENTRY_WATCH_SECONDS = 2 * 3600
-REENTRY_MAX_PER_SWING = 4
+REENTRY_WATCH_SECONDS = 0  # H1 anchor remains active until opposite pivot
+REENTRY_MAX_PER_SWING = 0  # no arbitrary count limit within an H1 swing
 LIQUIDATION_PROXY_ROE = -0.95
 
 
@@ -63,7 +63,7 @@ def _completed(rows, now_ms, interval_ms):
 
 
 def completed_candles(rows, now_ms):
-    return _completed(rows, now_ms, 900_000)
+    return _completed(rows, now_ms, 3_600_000)
 
 
 def completed_m15_candles(rows, now_ms):
@@ -74,16 +74,16 @@ def _ret(a, b):
     return (b / a - 1.0) if a and b else 0.0
 
 
-def analyze(rows, now_ms, symbol=SYMBOL):
+def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL):
     candles = completed_candles(rows, now_ms)
     if len(candles) < PIVOT_LOOKBACK + 2:
-        return {"ready": False, "reason": "insufficient_closed_m15_candles",
+        return {"ready": False, "reason": "insufficient_closed_h1_candles",
                 "closed_candles": len(candles), "policy": POLICY, "symbol": symbol}
-    if float(now_ms) - candles[-1]["T"] > 900_000 + 45_000:
-        return {"ready": False, "reason": "stale_m15_history", "policy": POLICY, "symbol": symbol}
+    if float(now_ms) - candles[-1]["T"] > 3_600_000 + 120_000:
+        return {"ready": False, "reason": "stale_h1_history", "policy": POLICY, "symbol": symbol}
     recent = candles[-(PIVOT_LOOKBACK+2):]
-    if any(abs(b["t"]-a["t"]-900_000)>1000 for a,b in zip(recent,recent[1:])):
-        return {"ready": False, "reason": "gapped_m15_history", "policy": POLICY, "symbol": symbol}
+    if any(abs(b["t"]-a["t"]-3_600_000)>1000 for a,b in zip(recent,recent[1:])):
+        return {"ready": False, "reason": "gapped_h1_history", "policy": POLICY, "symbol": symbol}
 
     x = candles[-1]
     p = candles[-2]
@@ -153,13 +153,36 @@ def analyze(rows, now_ms, symbol=SYMBOL):
         "short_weakening": short_weak_score >= 2,
         "long_weak_score": long_weak_score,
         "short_weak_score": short_weak_score,
-        "last_m15_return": last_ret,
-        "previous_m15_return": prev_ret,
-        "momentum_45m": mom3,
-        "previous_momentum_45m": prev_mom3,
+        "last_h1_return": last_ret,
+        "previous_h1_return": prev_ret,
+        "momentum_3h": mom3,
+        "previous_momentum_3h": prev_mom3,
         "confirmation_close": x["c"],
         "closed_candles": len(candles),
     }
+
+
+def analyze(rows, now_ms, symbol=SYMBOL):
+    """Last causally confirmed H1 extreme, held across subsequent H1 candles.
+
+    A pivot is known only when its following H1 candle has closed. Reconstructing
+    the latest pivot from closed history also keeps the bias stable after restart.
+    """
+    latest = _analyze_h1_pivot(rows, now_ms, symbol)
+    if not latest.get("ready"):
+        return latest
+    candles = completed_candles(rows, now_ms)
+    anchor = None
+    for end in range(PIVOT_LOOKBACK + 2, len(candles) + 1):
+        sample = candles[:end]
+        candidate = _analyze_h1_pivot(sample, sample[-1]["T"] + 1001, symbol)
+        if candidate.get("ready") and candidate.get("entry_side") in (-1, 1):
+            anchor = candidate
+    result = dict(anchor or latest)
+    result.update(last_candle_time=candles[-1]["t"], closed_candles=len(candles),
+                  h1_direction_anchor=True, execution_interval=M15_INTERVAL,
+                  anchor_confirmed=bool(anchor))
+    return result
 
 
 def analyze_h1_context(rows, now_ms, symbol=SYMBOL):
@@ -174,7 +197,7 @@ def analyze_h1_context(rows, now_ms, symbol=SYMBOL):
     trend_side=1 if r4>0 else (-1 if r4<0 else 0)
     return {"ready": True, "symbol": symbol, "interval": H1_CONTEXT_INTERVAL,
             "trend_side": trend_side, "return_1h": r1, "return_4h": r4,
-            "context_only": True, "blocks_m15_entries": False,
+            "context_only": False, "blocks_m15_entries": True,
             "last_candle_time": candles[-1]["t"]}
 
 
@@ -291,6 +314,14 @@ def m15_reentry_ready(side, m15, flow_imbalance=None):
     return int(m15.get("recovery_score",0)) >= 4 or fi is None or int(side)*fi >= 0.06
 
 
+def m15_reentry_after_exit(side, m15, mark, watch, flow_imbalance=None):
+    if not m15_reentry_ready(side, m15, flow_imbalance):
+        return False
+    exit_price = _f((watch or {}).get("exit_price"))
+    mark = _f(mark)
+    return bool(exit_price and mark and int(side) * (mark / exit_price - 1.0) > 0)
+
+
 def position_exit(position, analysis, mark):
     if not position or not analysis.get("ready"):
         return None
@@ -299,6 +330,8 @@ def position_exit(position, analysis, mark):
     mark = _f(mark)
     if side not in (-1, 1) or entry is None or mark is None:
         return None
+    if analysis.get("h1_direction_anchor") and int(analysis.get("entry_side") or 0) == -side:
+        return "opposite_local_high" if side > 0 else "opposite_local_low"
     entry_candle = position.get("signal_candle_time")
     signal_candle = analysis.get("signal_candle_time")
     if entry_candle is not None and signal_candle is not None and signal_candle <= entry_candle:
@@ -309,15 +342,6 @@ def position_exit(position, analysis, mark):
     if side < 0 and analysis.get("local_low"):
         return "opposite_local_low"
 
-    favorable = side * (mark / entry - 1.0)
-    features = position.get("features") or {}
-    peak_favorable = max(0.0, float(features.get("mfe_price_move", 0.0) or 0.0))
-    enough_move = max(favorable, peak_favorable) >= MIN_FAVORABLE_MOVE_FOR_WEAKENING
-    if enough_move:
-        if side > 0 and analysis.get("long_weakening"):
-            return "m15_momentum_weakening"
-        if side < 0 and analysis.get("short_weakening"):
-            return "m15_momentum_weakening"
     return None
 
 
