@@ -613,11 +613,11 @@ def save_capacity_snapshot():
  with LOCK:
   equity=float(S.get("equity",0) or 0);contributed=float(S.get("contributed_capital",PAPER_RESET) or PAPER_RESET)
   used=float(_shared_used_margin());free=max(0.0,equity-used)
-   news_n=len(S.get("positions",{}));whale_n=len(S.get("whale_positions",{}))
+  news_n=len(S.get("positions",{}));whale_n=len(S.get("whale_positions",{}))
   util=(used/equity*100.0) if equity>0 else 0.0
  with pg() as c:c.execute("""insert into account_capacity_snapshots
   (ts,equity,contributed_capital,used_margin,free_margin,margin_utilization_pct,news_positions,whale_positions,total_positions,entry_margin_fraction)
-  values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+  values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
   (now(),equity,contributed,used,free,util,news_n,whale_n,news_n+whale_n,TRADE_MARGIN_FRACTION))
 def save_market_context(ts,symbol,price,context):
  with pg() as c:c.execute("insert into market_context_snapshots(ts,symbol,price,context) values(%s,%s,%s,%s::jsonb)",(ts,symbol,price,json.dumps(context)))
