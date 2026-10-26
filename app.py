@@ -1880,7 +1880,7 @@ def emergency_profit_take(prices):
  with LOCK:
   if not S.get("engine_active") or S.get("mode")!="PAPER_ONLY":return []
   books=[("news",copy.deepcopy(S.get("positions",{}))),("pump_dump",copy.deepcopy(S.get("pump_positions",{}))),
-         ("whale_liquidation",copy.deepcopy(S.get("whale_positions",{}))),,
+         ("whale_liquidation",copy.deepcopy(S.get("whale_positions",{}))),
          ("local_m15_swing_v4",copy.deepcopy(S.get("local_swing_positions",{})))]
   history={s:list(S.get("_timeline",{}).get(s,[])) for s in ("BTC","ETH","SOL")}
   pending=copy.deepcopy(S.get("_emergency_pending",[]))
@@ -3793,7 +3793,7 @@ def html_dashboard(data):
 def manual_close(symbol=None,reason_override=None):
  with LOCK:
   books=[("news",copy.deepcopy(S.get("positions",{}))),("pump_dump",copy.deepcopy(S.get("pump_positions",{}))),
-         ("whale_liquidation",copy.deepcopy(S.get("whale_positions",{}))),,
+         ("whale_liquidation",copy.deepcopy(S.get("whale_positions",{}))),
          ("local_m15_swing_v4",copy.deepcopy(S.get("local_swing_positions",{})))]
  targets=[(strategy,sym,pos) for strategy,book in books for sym,pos in book.items() if symbol is None or sym==symbol]
  if not targets and symbol:return {"ok":False,"results":[{"symbol":symbol,"ok":False,"error":"position_not_found"}]}
