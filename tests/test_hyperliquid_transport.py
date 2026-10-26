@@ -121,3 +121,11 @@ class SidecarTests(unittest.TestCase):
                 app.get(app.API,{'type':'allMids'})
             self.assertEqual(budget.status()['sent'],2)
         finally:server.shutdown();server.server_close()
+
+class AdaptiveBudgetTests(unittest.TestCase):
+    def test_rate_limit_reduces_future_load_once_per_cooldown(self):
+        now=[0.];b=RestBudget(clock=lambda:now[0])
+        b.limited();self.assertEqual(b.limit,300)
+        b.limited();self.assertEqual(b.limit,300)
+        now[0]=31;b.limited();self.assertEqual(b.limit,150)
+        now[0]=92;b.limited();self.assertEqual(b.limit,120)

@@ -54,7 +54,9 @@ class RestBudget:
     def limited(self, retry_after=None):
         with self.lock:
             now = self.clock()
-            if now >= self.until:self.failures += 1
+            if now >= self.until:
+                self.failures += 1
+                self.limit = min(self.limit, max(120, self.limit // 2))
             self.rate_limited += 1; self.last_429 = self.wall()
             delay = min(300, 30 * 2**min(self.failures-1,4))
             if retry_after:
