@@ -988,6 +988,17 @@ def pump_mark_positions(prices):
   px=prices.get(sym)
   if not px:continue
   entry=float(pos["entry"]);side=int(pos["side"]);lev=float(pos["leverage"])
+  # An earned-profit lock does not protect a position that never went positive.
+  # Limit adverse mark moves and exit stale losing momentum positions in PAPER mode.
+  adverse_move=(float(px)/entry-1.0)*side
+  age_seconds=max(0.0,stamp-float(pos.get("t") or pos.get("opened_epoch") or stamp))
+  hard_loss_price_pct=max(0.003,min(0.02,float(os.getenv("PUMP_HARD_LOSS_PRICE_PCT","0.008"))))
+  stale_exit_seconds=max(900.0,float(os.getenv("PUMP_STALE_LOSS_SECONDS","3600")))
+  stale_loss_price_pct=max(0.0005,float(os.getenv("PUMP_STALE_LOSS_PRICE_PCT","0.0015")))
+  if adverse_move<=-hard_loss_price_pct:
+   pump_close(sym,float(px),"pump_hard_adverse_move");continue
+  if age_seconds>=stale_exit_seconds and adverse_move<=-stale_loss_price_pct:
+   pump_close(sym,float(px),"pump_stale_losing_thesis");continue
   protected,protect_reason,protect_fill,protect_state=_profit_protection_eval(pos,sym,float(px),stamp,timelines.get(sym,[]))
   _profit_protection_arm_journal("pump_dump",sym,bool(pos.get("profit_lock_armed")),protected)
   if protect_reason:
