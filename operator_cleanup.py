@@ -38,7 +38,7 @@ def purge_removed_strategy(c):
         c.execute("delete from module_snapshots where module='PumpDumpScanner'")
         c.execute("delete from decision_learning_log where strategy='pump_dump'")
         c.execute("""delete from audit_journal
-                     where kind ilike '%pump%'
+                     where position('pump' in lower(kind))>0
                         or payload->>'strategy'='pump_dump'
                         or payload->>'engine'='pump_dump'""")
         c.execute("update learning_snapshots set payload=payload-'pump_score_buckets' where payload ? 'pump_score_buckets'")
@@ -52,7 +52,7 @@ def purge_removed_strategy(c):
                          where id=1""",(removed_pnl,removed_pnl,now()))
         c.execute("""delete from operator_actions
                      where action_id<>%s and
-                           (payload::text ilike '%pump_dump%' or payload::text ilike '%pump%')""",(action_id,))
+                           (position('pump_dump' in lower(payload::text))>0 or position('pump' in lower(payload::text))>0)""",(action_id,))
         payload={"action":"removed_strategy_history","removed":counts,"reversed_realized_pnl":removed_pnl}
         c.execute("insert into operator_actions(action_id,completed_at,payload) values(%s,%s,%s::jsonb)",
                   (action_id,now(),json.dumps(payload,default=str)))
