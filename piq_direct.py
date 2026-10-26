@@ -9,6 +9,7 @@ import json
 import re
 import urllib.parse
 import concurrent.futures
+import threading
 from html.parser import HTMLParser
 
 from curl_cffi import requests as curl_requests
@@ -19,6 +20,14 @@ DISCOVERY_URLS=(
     BASE+"/",
 )
 UA="Mozilla/5.0 (compatible; PANDORA-market-news/1.0)"
+_tls=threading.local()
+
+def _session():
+    session=getattr(_tls,"session",None)
+    if session is None:
+        session=curl_requests.Session()
+        _tls.session=session
+    return session
 
 class PiQReadError(RuntimeError):
     pass
@@ -37,11 +46,13 @@ def _trusted_url(url,story=False):
         raise PiQReadError("invalid_story_url")
     return urllib.parse.urlunsplit(("https","piqmarkets.com",parsed.path,"",""))
 
-def _request(url,timeout=4.0):
+def _request(url,timeout=3.0):
     url=_trusted_url(url)
-    r=curl_requests.get(
+    # Persistent per-worker connections remove a full TLS handshake from the
+    # discovery -> story hot path and materially reduce ingest latency.
+    r=_session().get(
         url,
-        headers={"User-Agent":UA,"Accept":"text/html,application/xhtml+xml","Cache-Control":"no-cache"},
+        headers={"User-Agent":UA,"Accept":"text/html,application/xhtml+xml","Cache-Control":"no-cache","Connection":"keep-alive"},
         impersonate="chrome",
         timeout=timeout,
         allow_redirects=False,
@@ -60,7 +71,7 @@ def _clean(value):
     value=html.unescape(re.sub(r"<[^>]+>"," ",value or ""))
     return re.sub(r"\s+"," ",value).strip()
 
-def discover(timeout=4.0,limit=40):
+def discover(timeout=3.0,limit=40):
     """Return unique public /story/ URLs visible in the ticker or homepage."""
     limit=max(1,min(100,int(limit)))
     errors=[]
@@ -177,7 +188,7 @@ def _json_nodes(scripts):
         for node in _walk_json(payload):yield kind.lower(),node
 
 
-def fetch_story(url,headline_hint=None,timeout=4.0):
+def fetch_story(url,headline_hint=None,timeout=3.0):
     url=_trusted_url(url,story=True)
     page=_request(url,timeout=timeout)
     metadata=_PageMetadata();metadata.feed(page)
