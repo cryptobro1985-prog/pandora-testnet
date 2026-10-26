@@ -81,11 +81,6 @@ def purge_whale_v2(c):
     return payload
 
 def main():
-    mids={}
-    try:
-        mids=hyperliquid_mids()
-    except Exception as exc:
-        print(json.dumps({"kind":"operator_cleanup","warning":"mids_unavailable","error":str(exc)[:180]}),flush=True)
     with psycopg.connect(os.environ["DATABASE_URL"],autocommit=True,row_factory=dict_row,connect_timeout=8) as c:
         c.execute("create table if not exists operator_actions (action_id text primary key, completed_at text not null, payload jsonb not null)")
         purge_bch(c)
