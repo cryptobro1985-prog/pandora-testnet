@@ -340,7 +340,7 @@ def update_path(position, mark):
     features["mae_roe_pct"] = min(float(features.get("mae_roe_pct", 0.0) or 0.0), roe * 100.0)
     if bool(features.get("profit_lock_armed")) or peak_move >= PROFIT_LOCK_ARM_MOVE:
         features["profit_lock_armed"] = True
-        features["profit_lock_stop"] = entry * (1.0 + side * PROFIT_LOCK_BUFFER_MOVE)
+        features["profit_lock_stop"] = entry * (1.0 + side * max(PROFIT_LOCK_BUFFER_MOVE, peak_move * 0.50))
         features["profit_lock_arm_move_pct"] = PROFIT_LOCK_ARM_MOVE * 100.0
         features["profit_lock_buffer_move_pct"] = PROFIT_LOCK_BUFFER_MOVE * 100.0
     else:
@@ -364,9 +364,9 @@ def profit_lock_exit(position, mark):
     if not bool(features.get("profit_lock_armed")) or stop is None:
         return None
     if side > 0 and mark <= stop:
-        return stop
+        return mark
     if side < 0 and mark >= stop:
-        return stop
+        return mark
     return None
 
 

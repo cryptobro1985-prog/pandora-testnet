@@ -129,7 +129,7 @@ def regime_candidate_guard(candidate, regime):
 
 
 def continuation_candidates(prices, history, volumes, epoch, contexts, regime):
-    """An active broad move need not accelerate or produce another 3-sigma burst.
+    """A continuation requires abnormal executed volume, not just broad-market drift.
 
     Real symbol momentum, participation and later book/flow checks still apply.
     Ordinary quiet drift or a bounce against the broad move is never an entry.
@@ -155,7 +155,7 @@ def continuation_candidates(prices, history, volumes, epoch, contexts, regime):
         z = float(ctx.get("volume_rate_z") or 0)
         oi = float(ctx.get("oi_delta_60s") or 0)
         flow = float(ctx.get("flow_imbalance") or 0)
-        participation = burst >= 1.2 or z >= 1.0 or abs(oi) >= .0025
+        participation = burst >= 2.0 and z >= 1.0
         if not participation or side * flow < .12:
             continue
         score = min(94, 65 + min(12, abs(r60) * 1800) + min(10, abs(r180) * 900)

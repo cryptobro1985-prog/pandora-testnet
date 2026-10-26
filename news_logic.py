@@ -213,6 +213,9 @@ def analyze_headline(title, prices):
             and not _FAILED_CEASEFIRE.search(text)):
         return refuse("unresolved_ceasefire_negotiations", "UNCERTAIN")
 
+    if re.search(r"\b(?:share|stock|equity)\s+(?:buybacks?|repurchases?)\b", text, re.I) and re.search(r"\b(?:rather than|instead of|favors?.{0,60}\bto)\b", text, re.I):
+        return refuse("equity_buyback_not_token_purchase", "AMBIGUOUS_TARGET")
+
     surprise = _inflation_surprise(text)
     events = []
     if surprise:
@@ -233,6 +236,9 @@ def analyze_headline(title, prices):
             (name == "ENFORCEMENT" and resolved_lawsuit) or
             (name == "RISK_ON_DEESCALATION" and failed_ceasefire) or
             (name == "ETF_APPROVAL" and rejected_etf)):
+            continue
+        # Equity repurchases are not purchases of the cryptocurrency mentioned.
+        if name == "BUYBACK" and re.search(r"\b(?:share|stock|equity)\s+(?:buybacks?|repurchases?)\b", text, re.I):
             continue
         match = pattern.search(text)
         if not match:

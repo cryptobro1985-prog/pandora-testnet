@@ -1157,11 +1157,13 @@ def whale_liq_mark_positions(prices):
    features["ptv_trend_against"]=bool(trend_against)
 
    entry_dist=max(0.05,float(features.get("ptv_entry_distance_pct",remaining) or remaining))
-   distance_invalid=(remaining>min(1.25,entry_dist+0.25) and int(features.get("ptv_widen_streak",0) or 0)>=2)
+   distance_invalid=(remaining>min(1.25,entry_dist+0.25))
+   # Absolute thesis boundary cannot be disabled by flat ticks or sparse history.
+   if price_move<=-0.008:distance_invalid=True
    thesis_invalid=int(features.get("ptv_thesis_break_streak",0) or 0)>=2
    peak_move=float(features.get("ptv_mfe_price_move",0) or 0)
    if peak_move>=0.0025:features["ptv_profit_lock_armed"]=True
-   profit_lock=bool(features.get("ptv_profit_lock_armed")) and price_move<=0.0012 and peak_move>=0.0025
+   profit_lock=bool(features.get("ptv_profit_lock_armed")) and price_move<=max(0.0012,peak_move*0.50) and peak_move>=0.0025
    profit_weakening=price_move>=0.0012 and trend_against and flow_against
 
    pos["features"]=features
@@ -1415,7 +1417,7 @@ def _profit_protection_eval(position,symbol,mark,stamp,timeline):
  """Strategy-agnostic PAPER profit protection.
 
  It has two layers:
- 1) after +0.40% favorable price movement, lock at +0.12% from entry;
+ 1) after +0.40% favorable movement, protect half the peak (floor +0.12%);
  2) while still profitable, close early on a confirmed fast reversal using
     15s/60s price pressure, executed trade-flow and giveback from MFE.
  """
@@ -1430,7 +1432,8 @@ def _profit_protection_eval(position,symbol,mark,stamp,timeline):
  favorable=side*(mark/entry-1.0)
  was_armed=bool(pos.get("profit_lock_armed",prior.get("armed",False)))
  armed=was_armed or peak>=PROFIT_PROTECT_ARM_MOVE
- stop=entry*(1.0+side*PROFIT_PROTECT_LOCK_MOVE) if armed else None
+ lock_move=max(PROFIT_PROTECT_LOCK_MOVE, peak*0.50)
+ stop=entry*(1.0+side*lock_move) if armed else None
  r15=_timeline_return(timeline or [],stamp,15,mark)
  r60=_timeline_return(timeline or [],stamp,60,mark)
  observed=MARKET_OBS.context(symbol,stamp)
@@ -1455,7 +1458,7 @@ def _profit_protection_eval(position,symbol,mark,stamp,timeline):
  if armed and not was_armed:pos["profit_protect_armed_at"]=now()
  pos["profit_protect_last"]=state
  features["profit_protection"]=state;pos["features"]=features
- if hard_stop:return pos,"profit_lock_stop",float(stop),state
+ if hard_stop:return pos,"profit_lock_stop",mark,state
  if reversal:return pos,"profit_protect_fast_reversal",mark,state
  return pos,None,None,state
 
