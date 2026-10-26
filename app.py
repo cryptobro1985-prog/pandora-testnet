@@ -3593,14 +3593,17 @@ def build_dashboard_snapshot():
  pump_positions=[];pump_unreal=0.0
  whale_positions=[];whale_unreal=0.0
  whale_v2_positions=[];whale_v2_unreal=0.0
- hype_swing_position=None;hype_swing_unreal=0.0
- hspos=state.get("hype_swing_position")
- if hspos:
-  hsmark=prices.get(HYPE_SWING_SYMBOL,hspos["entry"]);hype_swing_unreal=paper_pnl(hspos["notional"],hspos["entry"],hsmark,hspos["side"],FEE)
-  hype_swing_position={"strategy":"HYPE_H1_LOCAL_SWING_V1","symbol":HYPE_SWING_SYMBOL,"side":"LONG" if hspos["side"]>0 else "SHORT",
+ hype_swing_position=None;local_swing_positions=[];hype_swing_unreal=0.0
+ local_book=state.get("local_swing_positions",{})
+ if not local_book and state.get("hype_swing_position"):local_book={HYPE_SWING_SYMBOL:state["hype_swing_position"]}
+ for lsym,hspos in local_book.items():
+  hsmark=prices.get(lsym,hspos["entry"]);lspnl=paper_pnl(hspos["notional"],hspos["entry"],hsmark,hspos["side"],FEE);hype_swing_unreal+=lspnl
+  card={"strategy":"LOCAL_H1_M15_SWING_V3","symbol":lsym,"side":"LONG" if hspos["side"]>0 else "SHORT",
    "entry":hspos["entry"],"mark":hsmark,"margin_usd":round(hspos["margin"],2),"notional_usd":round(hspos["notional"],2),
-   "leverage":hspos["leverage"],"roe_pct":round(hype_swing_unreal/hspos["margin"]*100,3) if hspos["margin"] else 0,
-   "unrealized_pnl":round(hype_swing_unreal,4),"opened":hspos["opened"],"features":hspos.get("features",{})}
+   "leverage":hspos["leverage"],"roe_pct":round(lspnl/hspos["margin"]*100,3) if hspos["margin"] else 0,
+   "unrealized_pnl":round(lspnl,4),"opened":hspos["opened"],"features":hspos.get("features",{})}
+  local_swing_positions.append(card)
+  if lsym==HYPE_SWING_SYMBOL:hype_swing_position=card
  hype_swing_total=float(state.get("hype_swing_equity",HYPE_SWING_STARTING_EQUITY))+hype_swing_unreal
  for sym,p in state.get("whale_positions",{}).items():
   px=prices.get(sym,p["entry"]);move=(px/p["entry"]-1)*p["side"];gross=p["notional"]*move;fees=p["notional"]*FEE*2;pnl=paper_pnl(p["notional"],p["entry"],px,p["side"],FEE);whale_unreal+=pnl
@@ -3619,15 +3622,16 @@ def build_dashboard_snapshot():
  try: account_age_seconds=max(0,int((datetime.datetime.now(datetime.timezone.utc)-datetime.datetime.fromisoformat(account_started.replace("Z","+00:00"))).total_seconds()))
  except Exception: account_age_seconds=0
  contributed=max(PAPER_RESET,float(state.get("contributed_capital",PAPER_RESET)));total=state["equity"]+unreal+pump_unreal+whale_unreal+whale_v2_unreal+hype_swing_unreal;account_pnl_pct=(total/contributed-1)*100;account_roi=account_pnl_pct;realized_pnl_pct=(float(state["realized_pnl"])/contributed)*100;total_pnl_pct=(total/PAPER_RESET-1)*100;wl2_total=float(state.get("whale_v2_equity",PAPER_RESET))+whale_v2_unreal;wl2_pnl_pct=(wl2_total/PAPER_RESET-1)*100
- used_margin=sum(float(p.get("margin",float(p.get("notional",0))/max(1.0,float(p.get("leverage",TRADE_LEVERAGE))))) for book in (state.get("positions",{}),state.get("pump_positions",{}),state.get("whale_positions",{}),state.get("whale_v2_positions",{}),{"HYPE":state["hype_swing_position"]} if state.get("hype_swing_position") else {}) for p in book.values())
+ used_margin=sum(float(p.get("margin",float(p.get("notional",0))/max(1.0,float(p.get("leverage",TRADE_LEVERAGE))))) for book in (state.get("positions",{}),state.get("pump_positions",{}),state.get("whale_positions",{}),state.get("whale_v2_positions",{}),local_book) for p in book.values())
  free_margin=max(0.0,float(state["equity"])-used_margin);margin_utilization=(used_margin/float(state["equity"])*100.0) if float(state["equity"])>0 else 0.0
  visible_sources={k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and not k.startswith("XFree:") and k not in SEARCH_INDEX_FEEDS and not v.get("disabled") and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")}
- return {"statistics_basis":state.get("statistics_basis","full_recorded_history"),"operator_cleanup":state.get("operator_cleanup",{}),"emergency_profit_guard":state.get("emergency_profit_guard",{}),"daily_activity":state.get("daily_activity",{}),"daily_entry_limit":None,"margin_budget":"shared_all_strategies","mode":state["mode"],"balance":round(state["equity"],4),"capital_contributed":round(float(state.get("contributed_capital",PAPER_RESET)),4),"unrealized_pnl":round(unreal+pump_unreal+whale_unreal+whale_v2_unreal+hype_swing_unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"account_pnl_pct":round(account_pnl_pct,3),"realized_pnl_pct":round(realized_pnl_pct,3),"total_pnl_pct":round(total_pnl_pct,3),"used_margin":round(used_margin,4),"free_margin":round(free_margin,4),"margin_utilization_pct":round(margin_utilization,3),"trade_margin_fraction_pct":round(TRADE_MARGIN_FRACTION*100,3),"trade_leverage":TRADE_LEVERAGE,"positions":positions+pump_positions+whale_positions+whale_v2_positions+([hype_swing_position] if hype_swing_position else []),"pump_positions":pump_positions,"pump_unrealized_pnl":round(pump_unreal,4),"pump_trades":state.get("pump_trades",0),"whale_liq_positions":whale_positions,"whale_liq_unrealized_pnl":round(whale_unreal,4),"whale_liq_trades":state.get("whale_trades",0),"whale_liq_engine":copy.deepcopy(state.get("sources",{}).get("WhaleLiquidationScanner",{})),"whale_v2_positions":whale_v2_positions,
+ return {"statistics_basis":state.get("statistics_basis","full_recorded_history"),"operator_cleanup":state.get("operator_cleanup",{}),"emergency_profit_guard":state.get("emergency_profit_guard",{}),"daily_activity":state.get("daily_activity",{}),"daily_entry_limit":None,"margin_budget":"shared_all_strategies","mode":state["mode"],"balance":round(state["equity"],4),"capital_contributed":round(float(state.get("contributed_capital",PAPER_RESET)),4),"unrealized_pnl":round(unreal+pump_unreal+whale_unreal+whale_v2_unreal+hype_swing_unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"account_pnl_pct":round(account_pnl_pct,3),"realized_pnl_pct":round(realized_pnl_pct,3),"total_pnl_pct":round(total_pnl_pct,3),"used_margin":round(used_margin,4),"free_margin":round(free_margin,4),"margin_utilization_pct":round(margin_utilization,3),"trade_margin_fraction_pct":round(TRADE_MARGIN_FRACTION*100,3),"trade_leverage":TRADE_LEVERAGE,"positions":positions+pump_positions+whale_positions+whale_v2_positions+local_swing_positions,"pump_positions":pump_positions,"pump_unrealized_pnl":round(pump_unreal,4),"pump_trades":state.get("pump_trades",0),"whale_liq_positions":whale_positions,"whale_liq_unrealized_pnl":round(whale_unreal,4),"whale_liq_trades":state.get("whale_trades",0),"whale_liq_engine":copy.deepcopy(state.get("sources",{}).get("WhaleLiquidationScanner",{})),"whale_v2_positions":whale_v2_positions,
 "whale_v2_unrealized_pnl":round(whale_v2_unreal,4),"whale_v2_balance":round(float(state.get("whale_v2_equity",PAPER_RESET)),4),
 "whale_v2_total_equity":round(wl2_total,4),"whale_v2_pnl_pct":round(wl2_pnl_pct,3),
 "whale_v2_trades":state.get("whale_v2_trades",0),"whale_v2_engine":copy.deepcopy(state.get("sources",{}).get("WhaleLiquidationV2",{})),
 "whale_v2_learning":copy.deepcopy(state.get("whale_v2_learning",{})),
-"hype_h1_position":hype_swing_position,"hype_h1_balance":round(float(state.get("hype_swing_equity",HYPE_SWING_STARTING_EQUITY)),4),
+"hype_h1_position":hype_swing_position,"local_swing_positions":local_swing_positions,"local_swing_watch":copy.deepcopy(state.get("local_swing_watch",{})),
+"local_swing_symbols":list(LOCAL_SWING_SYMBOLS),"hype_h1_balance":round(float(state.get("hype_swing_equity",HYPE_SWING_STARTING_EQUITY)),4),
 "hype_h1_unrealized_pnl":round(hype_swing_unreal,4),"hype_h1_total_equity":round(hype_swing_total,4),
 "hype_h1_pnl_pct":round((hype_swing_total/HYPE_SWING_STARTING_EQUITY-1)*100,3),"hype_h1_realized_pnl":round(float(state.get("hype_swing_realized_pnl",0)),4),
 "hype_h1_trades":state.get("hype_swing_trades",0),"hype_h1_engine":copy.deepcopy(state.get("sources",{}).get("HypeH1LocalSwing",{})),
