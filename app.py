@@ -33,13 +33,19 @@ from whale_v2 import (EligibilityTracker as WL2EligibilityTracker, evaluate_posi
                       initial_position_state as wl2_initial_position_state, learning_summary as wl2_learning_summary,
                       WL2_MARGIN_FRACTION, WL2_LEVERAGE, WL2_MAX_POSITIONS, WL2_POLICY)
 from hype_h1_swing import (POLICY as HYPE_SWING_POLICY, SYMBOL as HYPE_SWING_SYMBOL,
-                           INTERVAL as HYPE_SWING_INTERVAL, STARTING_EQUITY as HYPE_SWING_STARTING_EQUITY,
+                           SYMBOLS as LOCAL_SWING_SYMBOLS, INTERVAL as HYPE_SWING_INTERVAL,
+                           M15_INTERVAL as LOCAL_SWING_M15_INTERVAL,
+                           STARTING_EQUITY as HYPE_SWING_STARTING_EQUITY,
                            MARGIN_FRACTION as HYPE_SWING_MARGIN_FRACTION, LEVERAGE as HYPE_SWING_LEVERAGE,
                            PROFIT_LOCK_ARM_MOVE as HYPE_PROFIT_LOCK_ARM_MOVE,
                            PROFIT_LOCK_BUFFER_MOVE as HYPE_PROFIT_LOCK_BUFFER_MOVE,
-                           analyze as analyze_hype_h1, position_exit as hype_position_exit,
-                           update_path as hype_update_path, profit_lock_exit as hype_profit_lock_exit,
-                           shadow_triggers as hype_shadow_triggers)
+                           REENTRY_WATCH_SECONDS as LOCAL_REENTRY_WATCH_SECONDS,
+                           REENTRY_MAX_PER_SWING as LOCAL_REENTRY_MAX_PER_SWING,
+                           analyze as analyze_hype_h1, analyze_m15 as analyze_local_m15,
+                           m15_profit_protection as local_m15_profit_protection,
+                           m15_reentry_ready as local_m15_reentry_ready,
+                           position_exit as hype_position_exit, update_path as hype_update_path,
+                           profit_lock_exit as hype_profit_lock_exit, shadow_triggers as hype_shadow_triggers)
 LATENCIES=LatencyMetrics()
 MARKET_OBS=RollingMarketData(max_symbols=512)
 LIQUIDATION_TAPE=LiquidationTape()
@@ -98,7 +104,7 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 API=os.getenv("HYPERLIQUID_INFO_API","https://api.hyperliquid.xyz/info").strip() or "https://api.hyperliquid.xyz/info"
 DB="/tmp/pandora.sqlite3"
 START=time.time()
-S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0,"pump_positions":{},"pump_equity":100.0,"pump_realized_pnl":0.0,"pump_trades":0,"whale_positions":{},"whale_equity":100.0,"whale_realized_pnl":0.0,"whale_trades":0,"whale_v2_positions":{},"whale_v2_equity":100.0,"whale_v2_realized_pnl":0.0,"whale_v2_trades":0,"whale_v2_learning":{},"hype_swing_position":None,"hype_swing_equity":100.0,"hype_swing_realized_pnl":0.0,"hype_swing_trades":0,"hype_swing_started_at":None,"news_health":{}}
+S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0,"pump_positions":{},"pump_equity":100.0,"pump_realized_pnl":0.0,"pump_trades":0,"whale_positions":{},"whale_equity":100.0,"whale_realized_pnl":0.0,"whale_trades":0,"whale_v2_positions":{},"whale_v2_equity":100.0,"whale_v2_realized_pnl":0.0,"whale_v2_trades":0,"whale_v2_learning":{},"local_swing_positions":{},"local_swing_watch":{},"hype_swing_position":None,"hype_swing_equity":100.0,"hype_swing_realized_pnl":0.0,"hype_swing_trades":0,"hype_swing_started_at":None,"news_health":{}}
 LOCK=threading.RLock()
 ACCOUNT_LOCK=threading.RLock()
 MARKET_REFRESH_LOCK=threading.Lock()
@@ -290,6 +296,12 @@ def pinit():
   c.execute("create table if not exists hype_swing_trade_history (id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision, pnl double precision, reason text, margin double precision, notional double precision, leverage double precision, features jsonb)")
   c.execute("create table if not exists hype_swing_signal_journal (id text primary key, ts text not null, candle_time bigint, action text not null, side integer, price double precision, features jsonb not null default '{}'::jsonb)")
   c.execute("create table if not exists hype_swing_shadow_exits (id bigserial primary key, opened text not null, entry_candle_time bigint, side integer not null, entry double precision not null, extreme_exit_at text, extreme_exit_price double precision, weakening_exit_at text, weakening_exit_price double precision, actual_exit_at text, actual_exit_price double precision, actual_exit_reason text, status text not null default 'OPEN', context jsonb not null default '{}'::jsonb)")
+  c.execute("alter table hype_swing_shadow_exits add column if not exists symbol text")
+  c.execute("update hype_swing_shadow_exits set symbol='HYPE' where symbol is null")
+  c.execute("""create table if not exists local_swing_watchlist (
+    symbol text primary key, side integer not null, origin_signal_candle bigint, exit_price double precision,
+    exit_at text not null, expires_epoch double precision not null, reentries integer not null default 0,
+    context jsonb not null default '{}'::jsonb)""")
   c.execute("create index if not exists hype_swing_trade_closed_idx on hype_swing_trade_history(closed desc)")
   c.execute("create index if not exists hype_swing_signal_time_idx on hype_swing_signal_journal(ts desc)")
   c.execute("create index if not exists hype_swing_shadow_open_idx on hype_swing_shadow_exits(status,opened)")
@@ -340,10 +352,21 @@ def pinit():
   c.execute("insert into hype_swing_account_state(id,equity,realized_pnl,started_at,updated_at) values(1,%s,0,%s,%s) on conflict(id) do nothing",(HYPE_SWING_STARTING_EQUITY,now(),now()))
   hsacct=c.execute("select equity,realized_pnl,started_at from hype_swing_account_state where id=1").fetchone()
   S["hype_swing_equity"]=float(hsacct["equity"]);S["hype_swing_realized_pnl"]=float(hsacct["realized_pnl"]);S["hype_swing_started_at"]=hsacct["started_at"]
-  hsrow=c.execute("select * from hype_swing_positions where symbol=%s",(HYPE_SWING_SYMBOL,)).fetchone()
-  S["hype_swing_position"]=({"side":int(hsrow["side"]),"entry":float(hsrow["entry"]),"notional":float(hsrow["notional"]),
+  hspositions={}
+  for hsrow in c.execute("select * from hype_swing_positions").fetchall():
+   hspositions[hsrow["symbol"]]={"side":int(hsrow["side"]),"entry":float(hsrow["entry"]),"notional":float(hsrow["notional"]),
     "margin":float(hsrow["margin"]),"leverage":float(hsrow["leverage"]),"opened":hsrow["opened"],"t":float(hsrow["opened_epoch"]),
-    "signal_candle_time":int(hsrow["signal_candle_time"] or 0),"features":hsrow["features"] or {}} if hsrow else None)
+    "signal_candle_time":int(hsrow["signal_candle_time"] or 0),"features":hsrow["features"] or {}}
+  S["local_swing_positions"]=hspositions
+  S["hype_swing_position"]=hspositions.get(HYPE_SWING_SYMBOL)
+  watches={}
+  for wr in c.execute("select * from local_swing_watchlist").fetchall():
+   if float(wr["expires_epoch"])>time.time():
+    watches[wr["symbol"]]={"symbol":wr["symbol"],"side":int(wr["side"]),"origin_signal_candle":int(wr["origin_signal_candle"] or 0),
+      "exit_price":float(wr["exit_price"] or 0),"exit_at":wr["exit_at"],"expires_epoch":float(wr["expires_epoch"]),
+      "reentries":int(wr["reentries"] or 0),"context":wr["context"] or {}}
+   else:c.execute("delete from local_swing_watchlist where symbol=%s",(wr["symbol"],))
+  S["local_swing_watch"]=watches
   S["hype_swing_trades"]=c.execute("select count(*) as n from hype_swing_trade_history").fetchone()["n"]
  STORE.migrate()
  _,positions=STORE.load(recover_legacy=False)
@@ -925,8 +948,9 @@ def exclude_authorized_pump_longs(request):
 
 def _shared_used_margin():
  total=0.0
- for book in (S.get("positions",{}),S.get("pump_positions",{}),S.get("whale_positions",{}),S.get("whale_v2_positions",{}),
-              {"HYPE":S["hype_swing_position"]} if S.get("hype_swing_position") else {}):
+ local_book=S.get("local_swing_positions",{})
+ if not local_book and S.get("hype_swing_position"):local_book={HYPE_SWING_SYMBOL:S["hype_swing_position"]}
+ for book in (S.get("positions",{}),S.get("pump_positions",{}),S.get("whale_positions",{}),S.get("whale_v2_positions",{}),local_book):
   for p in book.values():
    lev=max(1.0,float(p.get("leverage",TRADE_LEVERAGE)))
    total+=float(p.get("margin",float(p.get("notional",0))/lev))
@@ -934,14 +958,15 @@ def _shared_used_margin():
  return total
 
 def _symbol_open_anywhere(symbol):
- return symbol in S.get("positions",{}) or symbol in S.get("pump_positions",{}) or symbol in S.get("whale_positions",{})
+ return (symbol in S.get("positions",{}) or symbol in S.get("pump_positions",{}) or symbol in S.get("whale_positions",{}) or
+         symbol in S.get("whale_v2_positions",{}) or symbol in S.get("local_swing_positions",{}))
 
 @account_mutation
 def _reserve_shared_entry(symbol,margin_fraction=None,strategy="shared"):
  with LOCK:
   reservations=S.setdefault("_entry_reservations",{})
   if time.time()<float(S.get("_emergency_until",0) or 0):return False,0.0,"emergency_profit_cooldown",0.0
-  total_open=sum(len(S.get(k,{})) for k in ("positions","pump_positions","whale_positions","whale_v2_positions"))+bool(S.get("hype_swing_position"))
+  total_open=sum(len(S.get(k,{})) for k in ("positions","pump_positions","whale_positions","whale_v2_positions","local_swing_positions"))
   reservation_key=symbol if strategy=="shared" else strategy+":"+symbol
   equity=float(S.get("equity",0) or 0)
   used=_shared_used_margin()
