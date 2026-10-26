@@ -20,7 +20,8 @@ from piq_direct import discover as piq_discover, fetch_story as piq_fetch_story,
 from source_health import LatencyMetrics, aggregate_delivery
 from market_data import RollingMarketData
 from market_stream import run_trade_stream
-from whale_signals import MIN_NOTIONAL_USD, cluster_positions, summarize_book, significance, update_streaks
+from whale_signals import (MIN_NOTIONAL_USD, cluster_positions, summarize_book, significance, update_streaks,
+                           PriceToValueTracker, price_to_value_entry, PRICE_TO_VALUE_POLICY)
 from news_logic import analyze_headline, is_non_market_news as semantic_non_market
 from accounting import paper_pnl
 from learning_audit import (ensure_schema as ensure_learning_schema,
@@ -29,9 +30,6 @@ from learning_audit import (ensure_schema as ensure_learning_schema,
                             summary as learning_audit_summary)
 from emergency_guard import reversal as emergency_reversal, profit_targets, COOLDOWN_SECONDS
 from liquidation_stream import LiquidationTape, run as run_liquidation_stream, cascade_candidates
-from whale_v2 import (EligibilityTracker as WL2EligibilityTracker, evaluate_position as evaluate_wl2_position,
-                      initial_position_state as wl2_initial_position_state, learning_summary as wl2_learning_summary,
-                      WL2_MARGIN_FRACTION, WL2_LEVERAGE, WL2_MAX_POSITIONS, WL2_POLICY)
 from hype_h1_swing import (POLICY as HYPE_SWING_POLICY, SYMBOL as HYPE_SWING_SYMBOL,
                            SYMBOLS as LOCAL_SWING_SYMBOLS, INTERVAL as HYPE_SWING_INTERVAL,
                            M15_INTERVAL as LOCAL_SWING_M15_INTERVAL, H1_CONTEXT_INTERVAL as LOCAL_SWING_H1_CONTEXT_INTERVAL,
@@ -105,7 +103,7 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 API=os.getenv("HYPERLIQUID_INFO_API","https://api.hyperliquid.xyz/info").strip() or "https://api.hyperliquid.xyz/info"
 DB="/tmp/pandora.sqlite3"
 START=time.time()
-S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0,"pump_positions":{},"pump_equity":100.0,"pump_realized_pnl":0.0,"pump_trades":0,"pump_history_baseline":{},"whale_positions":{},"whale_equity":100.0,"whale_realized_pnl":0.0,"whale_trades":0,"whale_v2_positions":{},"whale_v2_equity":100.0,"whale_v2_realized_pnl":0.0,"whale_v2_trades":0,"whale_v2_learning":{},"local_swing_positions":{},"local_swing_watch":{},"hype_swing_position":None,"hype_swing_equity":100.0,"hype_swing_realized_pnl":0.0,"hype_swing_trades":0,"hype_swing_started_at":None,"news_health":{}}
+S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0,"pump_positions":{},"pump_equity":100.0,"pump_realized_pnl":0.0,"pump_trades":0,"pump_history_baseline":{},"whale_positions":{},"whale_equity":100.0,"whale_realized_pnl":0.0,"whale_trades":0,"local_swing_positions":{},"local_swing_watch":{},"hype_swing_position":None,"hype_swing_equity":100.0,"hype_swing_realized_pnl":0.0,"hype_swing_trades":0,"hype_swing_started_at":None,"news_health":{}}
 LOCK=threading.RLock()
 ACCOUNT_LOCK=threading.RLock()
 MARKET_REFRESH_LOCK=threading.Lock()
@@ -309,11 +307,6 @@ def pinit():
   c.execute("create table if not exists whale_liq_positions (symbol text primary key, side integer not null, entry double precision not null, notional double precision not null, margin double precision not null, leverage double precision not null, opened text not null, opened_epoch double precision not null, peak_roe double precision not null default 0, score double precision not null default 0, features jsonb not null default '{}'::jsonb)")
   c.execute("create table if not exists whale_liq_trade_history (id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision, pnl double precision, reason text, score double precision, features jsonb)")
   c.execute("create table if not exists whale_liq_signal_journal (id text primary key, ts text not null, symbol text, side integer, score double precision, action text, features jsonb)")
-  c.execute("create table if not exists whale_liq_v2_account_state (id integer primary key, equity double precision not null, realized_pnl double precision not null, started_at text not null, updated_at text not null)")
-  c.execute("create table if not exists whale_liq_v2_positions (symbol text primary key, side integer not null, entry double precision not null, notional double precision not null, margin double precision not null, leverage double precision not null, opened text not null, opened_epoch double precision not null, score double precision not null default 0, features jsonb not null default '{}'::jsonb)")
-  c.execute("create table if not exists whale_liq_v2_trade_history (id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision, pnl double precision, reason text, score double precision, features jsonb)")
-  c.execute("create table if not exists whale_liq_v2_signal_journal (id text primary key, ts text not null, symbol text, side integer, score double precision, action text, features jsonb)")
-  c.execute("create table if not exists whale_liq_v2_learning_snapshots (id bigserial primary key, recorded_at text not null, samples integer not null, payload jsonb not null)")
   c.execute("create table if not exists hype_swing_account_state (id integer primary key, equity double precision not null, realized_pnl double precision not null, started_at text not null, updated_at text not null)")
   c.execute("create table if not exists hype_swing_positions (symbol text primary key, side integer not null, entry double precision not null, notional double precision not null, margin double precision not null, leverage double precision not null, opened text not null, opened_epoch double precision not null, signal_candle_time bigint, features jsonb not null default '{}'::jsonb)")
   c.execute("create table if not exists hype_swing_trade_history (id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision, pnl double precision, reason text, margin double precision, notional double precision, leverage double precision, features jsonb)")
@@ -328,8 +321,6 @@ def pinit():
   c.execute("create index if not exists hype_swing_trade_closed_idx on hype_swing_trade_history(closed desc)")
   c.execute("create index if not exists hype_swing_signal_time_idx on hype_swing_signal_journal(ts desc)")
   c.execute("create index if not exists hype_swing_shadow_open_idx on hype_swing_shadow_exits(status,opened)")
-  c.execute("create index if not exists whale_liq_v2_trade_closed_idx on whale_liq_v2_trade_history(closed desc)")
-  c.execute("create index if not exists whale_liq_v2_signal_time_idx on whale_liq_v2_signal_journal(ts desc)")
   c.execute("create table if not exists account_capacity_snapshots (id bigserial primary key, ts text not null, equity double precision not null, contributed_capital double precision not null, used_margin double precision not null, free_margin double precision not null, margin_utilization_pct double precision not null, news_positions integer not null, pump_positions integer not null, whale_positions integer not null, total_positions integer not null, entry_margin_fraction double precision not null)")
   c.execute("create table if not exists module_snapshots (id bigserial primary key, ts text not null, module text not null, ok boolean, state jsonb not null)")
   c.execute("create table if not exists position_snapshots (id bigserial primary key, ts text not null, strategy text not null, symbol text not null, opened text, side integer, entry double precision, mark double precision, margin double precision, notional double precision, leverage double precision, unrealized_pnl double precision, roe_pct double precision, peak double precision, exit_reason text, exit_check jsonb not null default '{}'::jsonb, features jsonb not null default '{}'::jsonb)")
@@ -372,14 +363,6 @@ def pinit():
   for r in c.execute("select * from whale_liq_positions").fetchall():
    wpositions[r["symbol"]]={"side":int(r["side"]),"entry":float(r["entry"]),"notional":float(r["notional"]),"margin":float(r["margin"]),"leverage":float(r["leverage"]),"opened":r["opened"],"t":float(r["opened_epoch"]),"peak_roe":float(r["peak_roe"] or 0),"score":float(r["score"] or 0),"features":r["features"] or {},**risk_state(r.get("risk_state") or {})}
   S["whale_positions"]=wpositions
-  c.execute("insert into whale_liq_v2_account_state(id,equity,realized_pnl,started_at,updated_at) values(1,%s,0,%s,%s) on conflict(id) do nothing",(PAPER_RESET,now(),now()))
-  v2account=c.execute("select equity,realized_pnl,started_at from whale_liq_v2_account_state where id=1").fetchone()
-  S["whale_v2_equity"]=float(v2account["equity"]);S["whale_v2_realized_pnl"]=float(v2account["realized_pnl"]);S["whale_v2_started_at"]=v2account["started_at"]
-  v2positions={}
-  for r in c.execute("select * from whale_liq_v2_positions").fetchall():
-   v2positions[r["symbol"]]={"side":int(r["side"]),"entry":float(r["entry"]),"notional":float(r["notional"]),"margin":float(r["margin"]),"leverage":float(r["leverage"]),"opened":r["opened"],"t":float(r["opened_epoch"]),"score":float(r["score"] or 0),"features":r["features"] or {}}
-  S["whale_v2_positions"]=v2positions
-  S["whale_v2_trades"]=c.execute("select count(*) as n from whale_liq_v2_trade_history").fetchone()["n"]
   c.execute("insert into hype_swing_account_state(id,equity,realized_pnl,started_at,updated_at) values(1,%s,0,%s,%s) on conflict(id) do nothing",(HYPE_SWING_STARTING_EQUITY,now(),now()))
   hsacct=c.execute("select equity,realized_pnl,started_at from hype_swing_account_state where id=1").fetchone()
   S["hype_swing_equity"]=float(hsacct["equity"]);S["hype_swing_realized_pnl"]=float(hsacct["realized_pnl"]);S["hype_swing_started_at"]=hsacct["started_at"]
@@ -468,8 +451,6 @@ def build_learning_snapshot():
       avg(nullif(features->>'distance_pct','')::double precision) as avg_distance_pct,
       avg(nullif(features->>'liquidation_flow_to_depth','')::double precision) as avg_flow_to_depth
     from trade_history where strategy='whale_liquidation' group by 1 order by 1""").fetchall()
-  whale_v2_rows=c.execute("select pnl,features from whale_liq_v2_trade_history order by id").fetchall()
-  whale_v2_summary=wl2_learning_summary([dict(x) for x in whale_v2_rows])
   funding=c.execute("""select count(*) as topups,
       coalesce(sum((payload->>'amount')::double precision),0) as amount
     from audit_journal where kind='paper_capital_topup'""").fetchone()
@@ -495,7 +476,7 @@ def build_learning_snapshot():
  total_samples=sum(int(x["n"] or 0) for x in strategy)
  payload={"mode":"PAPER_ONLY","source_multipliers":multipliers,"source_stats":source_stats,
           "strategy_stats":[dict(x) for x in strategy],"event_type_stats":[dict(x) for x in event_types],
-          "pump_score_buckets":[dict(x) for x in pump],"whale_score_buckets":[dict(x) for x in whale],"whale_v2_summary":whale_v2_summary,
+          "pump_score_buckets":[dict(x) for x in pump],"whale_score_buckets":[dict(x) for x in whale],
           "funding":{"topups":int(funding["topups"] or 0),"amount":float(funding["amount"] or 0)},
           "capacity":{"samples":int(capacity["samples"] or 0),"max_positions":int(capacity["max_positions"] or 0),
             "max_utilization_pct":float(capacity["max_utilization_pct"] or 0),"avg_utilization_pct":float(capacity["avg_utilization_pct"] or 0),
@@ -516,125 +497,6 @@ def save_learning_snapshot():
          "pump_buckets":len(payload["pump_score_buckets"]),"whale_buckets":len(payload["whale_score_buckets"]),
          "strategy_count":len(payload["strategy_stats"]),"policy":payload["policy"]})
  return payload
-
-def save_whale_v2_learning_snapshot():
- try:
-  with pg() as c:
-   account=c.execute("select equity,realized_pnl,started_at from whale_liq_v2_account_state where id=1").fetchone()
-   started=account["started_at"]
-   v2_rows=c.execute("select pnl,features from whale_liq_v2_trade_history order by id").fetchall()
-   v1_stats=c.execute("""select count(*) as samples,
-      sum(case when pnl>0 then 1 else 0 end) as wins,
-      coalesce(sum(pnl),0) as total_pnl,avg(pnl) as avg_pnl,
-      avg(side*(exit/entry-1)*25*100) as avg_gross_roe_pct_ex_fees,
-      min(side*(exit/entry-1)*25*100) as worst_gross_roe_pct_ex_fees,
-      max(side*(exit/entry-1)*25*100) as best_gross_roe_pct_ex_fees,
-      avg(case when features->>'liquidation_level_reached_at' is not null then 1.0 else 0.0 end) as liquidation_hit_rate
-      from trade_history
-      where strategy='whale_liquidation' and opened::timestamptz >= %s::timestamptz""",(started,)).fetchone()
-   v2_stats=c.execute("""select count(*) as samples,
-      sum(case when pnl>0 then 1 else 0 end) as wins,
-      coalesce(sum(pnl),0) as total_pnl,avg(pnl) as avg_pnl,
-      avg(side*(exit/entry-1)*25*100) as avg_gross_roe_pct_ex_fees,
-      min(side*(exit/entry-1)*25*100) as worst_gross_roe_pct_ex_fees,
-      max(side*(exit/entry-1)*25*100) as best_gross_roe_pct_ex_fees,
-      avg(case when features->>'wl2_liquidation_level_reached_at' is not null then 1.0 else 0.0 end) as liquidation_hit_rate
-      from whale_liq_v2_trade_history
-      where opened::timestamptz >= %s::timestamptz""",(started,)).fetchone()
-   v1_paths=c.execute("""with per_position as (
-      select symbol,opened,min(roe_pct) as mae_roe_pct,max(roe_pct) as mfe_roe_pct
-      from position_snapshots
-      where strategy='whale_liquidation' and opened::timestamptz >= %s::timestamptz
-      group by symbol,opened)
-      select count(*) as positions,avg(mae_roe_pct) as avg_mae_roe_pct,
-       avg(mfe_roe_pct) as avg_mfe_roe_pct,min(mae_roe_pct) as worst_mae_roe_pct,
-       max(mfe_roe_pct) as best_mfe_roe_pct from per_position""",(started,)).fetchone()
-   v2_paths=c.execute("""with per_position as (
-      select symbol,opened,min(roe_pct) as mae_roe_pct,max(roe_pct) as mfe_roe_pct
-      from position_snapshots
-      where strategy='whale_liquidation_v2' and opened::timestamptz >= %s::timestamptz
-      group by symbol,opened)
-      select count(*) as positions,avg(mae_roe_pct) as avg_mae_roe_pct,
-       avg(mfe_roe_pct) as avg_mfe_roe_pct,min(mae_roe_pct) as worst_mae_roe_pct,
-       max(mfe_roe_pct) as best_mfe_roe_pct from per_position""",(started,)).fetchone()
-   v1_buckets=c.execute("""select
-      case when nullif(features->>'distance_pct','')::double precision < .35 then '<0.35%%'
-           when nullif(features->>'distance_pct','')::double precision < .60 then '0.35-0.60%%'
-           else '0.60%%+' end as distance_bucket,
-      count(*) as n,sum(case when pnl>0 then 1 else 0 end) as wins,
-      avg(side*(exit/entry-1)*25*100) as avg_gross_roe_pct_ex_fees,
-      avg(pnl) as avg_pnl,sum(pnl) as total_pnl
-      from trade_history where strategy='whale_liquidation'
-      and opened::timestamptz >= %s::timestamptz group by 1 order by 1""",(started,)).fetchall()
-   v2_buckets=c.execute("""select
-      case when nullif(features->>'wl2_entry_distance_pct','')::double precision < .35 then '<0.35%%'
-           when nullif(features->>'wl2_entry_distance_pct','')::double precision < .60 then '0.35-0.60%%'
-           else '0.60-0.90%%' end as distance_bucket,
-      count(*) as n,sum(case when pnl>0 then 1 else 0 end) as wins,
-      avg(side*(exit/entry-1)*25*100) as avg_gross_roe_pct_ex_fees,
-      avg(pnl) as avg_pnl,sum(pnl) as total_pnl,
-      avg(nullif(features->>'whale_rank_score','')::double precision) as avg_rank
-      from whale_liq_v2_trade_history
-      where opened::timestamptz >= %s::timestamptz group by 1 order by 1""",(started,)).fetchall()
-   v1_exits=c.execute("""select reason,count(*) as n from trade_history
-      where strategy='whale_liquidation' and opened::timestamptz >= %s::timestamptz
-      group by reason order by n desc""",(started,)).fetchall()
-   v2_exits=c.execute("""select reason,count(*) as n from whale_liq_v2_trade_history
-      where opened::timestamptz >= %s::timestamptz group by reason order by n desc""",(started,)).fetchall()
-   v1_signals=c.execute("""select action,count(*) as n from whale_liq_signal_journal
-      where ts::timestamptz >= %s::timestamptz group by action order by n desc""",(started,)).fetchall()
-   v2_signals=c.execute("""select action,count(*) as n from whale_liq_v2_signal_journal
-      where ts::timestamptz >= %s::timestamptz group by action order by n desc""",(started,)).fetchall()
-   v1_open=c.execute("select count(*) as n from whale_liq_positions").fetchone()["n"]
-   v2_open=c.execute("select count(*) as n from whale_liq_v2_positions").fetchone()["n"]
-
-  def norm(stats,paths):
-   samples=int(stats["samples"] or 0);wins=int(stats["wins"] or 0)
-   return {"samples":samples,"wins":wins,"win_rate":(wins/samples) if samples else None,
-    "total_pnl":float(stats["total_pnl"] or 0),
-    "avg_pnl":float(stats["avg_pnl"]) if stats["avg_pnl"] is not None else None,
-    "avg_gross_roe_pct_ex_fees":float(stats["avg_gross_roe_pct_ex_fees"]) if stats["avg_gross_roe_pct_ex_fees"] is not None else None,
-    "worst_gross_roe_pct_ex_fees":float(stats["worst_gross_roe_pct_ex_fees"]) if stats["worst_gross_roe_pct_ex_fees"] is not None else None,
-    "best_gross_roe_pct_ex_fees":float(stats["best_gross_roe_pct_ex_fees"]) if stats["best_gross_roe_pct_ex_fees"] is not None else None,
-    "liquidation_hit_rate":float(stats["liquidation_hit_rate"]) if stats["liquidation_hit_rate"] is not None else None,
-    "path":{"positions":int(paths["positions"] or 0),
-      "avg_mae_roe_pct":float(paths["avg_mae_roe_pct"]) if paths["avg_mae_roe_pct"] is not None else None,
-      "avg_mfe_roe_pct":float(paths["avg_mfe_roe_pct"]) if paths["avg_mfe_roe_pct"] is not None else None,
-      "worst_mae_roe_pct":float(paths["worst_mae_roe_pct"]) if paths["worst_mae_roe_pct"] is not None else None,
-      "best_mfe_roe_pct":float(paths["best_mfe_roe_pct"]) if paths["best_mfe_roe_pct"] is not None else None}}
-
-  v1=norm(v1_stats,v1_paths);v2=norm(v2_stats,v2_paths)
-  summary=wl2_learning_summary([dict(x) for x in v2_rows])
-  def delta(a,b):
-   return (b-a) if a is not None and b is not None else None
-  payload={"policy":WL2_POLICY,"adaptation_mode":"observe_only_versioned_v2",
-    "experiment_started_at":started,
-    "comparison_basis":"versioned observational comparison; all new entries share the main PAPER account; older v1 sizing and restored positions are not a controlled A/B sample",
-    "v1":{"open_positions":int(v1_open),"metrics":v1,"distance_buckets":[dict(x) for x in v1_buckets],
-      "exit_reasons":[dict(x) for x in v1_exits],"signal_actions":[dict(x) for x in v1_signals]},
-    "v2":{"open_positions":int(v2_open),"virtual_equity":float(account["equity"]),"realized_pnl":float(account["realized_pnl"]),
-      "metrics":v2,"profit_factor":summary.get("profit_factor"),"distance_buckets":[dict(x) for x in v2_buckets],
-      "exit_reasons":[dict(x) for x in v2_exits],"signal_actions":[dict(x) for x in v2_signals]},
-    "delta_v2_minus_v1":{"win_rate":delta(v1["win_rate"],v2["win_rate"]),
-      "avg_gross_roe_pct_ex_fees":delta(v1["avg_gross_roe_pct_ex_fees"],v2["avg_gross_roe_pct_ex_fees"]),
-      "avg_mae_roe_pct":delta(v1["path"]["avg_mae_roe_pct"],v2["path"]["avg_mae_roe_pct"]),
-      "avg_mfe_roe_pct":delta(v1["path"]["avg_mfe_roe_pct"],v2["path"]["avg_mfe_roe_pct"]),
-      "liquidation_hit_rate":delta(v1["liquidation_hit_rate"],v2["liquidation_hit_rate"])},
-    "note":"Policy revised on 2026-10-26. Learning records entries, rejections, paths and outcomes without mutating live rules. New entries share one account and use 10% margin at 25x.",
-    "generated_at":now()}
-  with pg() as c:
-   c.execute("insert into whale_liq_v2_learning_snapshots(recorded_at,samples,payload) values(%s,%s,%s::jsonb)",
-     (now(),int(v2["samples"]),json.dumps(payload,default=str)))
-  with LOCK:S["whale_v2_learning"]=payload
-  journal("whale_v2_learning_snapshot",None,{"v1_samples":v1["samples"],"v2_samples":v2["samples"],"policy":WL2_POLICY})
-  return payload
- except Exception as exc:
-  err=type(exc).__name__+":"+str(exc)[:300]
-  with LOCK:S["last_error"]="wl2_learning: "+err
-  try:journal("whale_v2_learning_error",None,{"error":err,"policy":WL2_POLICY})
-  except Exception:pass
-  print(json.dumps({"kind":"whale_v2_learning_error","error":err,"policy":WL2_POLICY},ensure_ascii=False),flush=True)
-  return None
 
 def load_latest_learning():
  try:
@@ -673,7 +535,7 @@ def save_module_snapshots():
  # Low-frequency durable state for week-long post-test reconstruction.
  # Event journals remain lossless for actual decisions/trades; this captures
  # scanner health, thresholds, candidate counts and source latency over time.
- tracked=("HypeH1LocalSwing","ConfirmedLiquidationStream","MarketBreadthHistory","CoinDesk","Cointelegraph","PumpDumpScanner","WhaleLiquidationScanner","WhaleLiquidationV2","DecisionLearning","XCriticalMonitor","XMonitor",
+ tracked=("HypeH1LocalSwing","ConfirmedLiquidationStream","MarketBreadthHistory","CoinDesk","Cointelegraph","PumpDumpScanner","WhaleLiquidationScanner","DecisionLearning","XCriticalMonitor","XMonitor",
           "PiQDirect","MarketTradeStream","MarketMetadata","PersistentPostgres")
  with LOCK:
   rows=[(now(),name,bool(S.get("sources",{}).get(name,{}).get("ok")),
@@ -732,12 +594,11 @@ def export_rows(kind,after,limit):
           "positions":("open_positions","symbol"),"pump_signals":("pump_signal_journal","id"),
           "pump_trades":("pump_trade_history","id"),"learning":("learning_snapshots","id"),
           "whale_signals":("whale_liq_signal_journal","id"),"whale_trades":("whale_liq_trade_history","id"),
-          "whale_v2_signals":("whale_liq_v2_signal_journal","id"),"whale_v2_trades":("whale_liq_v2_trade_history","id"),"whale_v2_learning":("whale_liq_v2_learning_snapshots","id"),
           "capacity":("account_capacity_snapshots","id"),"modules":("module_snapshots","id"),
           "position_history":("position_snapshots","id"),"scanner_observations":("scanner_observations","id"),"decisions":("decision_learning_log","seq"),"operators":("operator_actions","action_id"),"hype_signals":("hype_swing_signal_journal","id"),"hype_trades":("hype_swing_trade_history","id")}
  if kind not in columns:raise ValueError("Unsupported export kind")
  table,key=columns[kind]
- cursor=int(after) if kind in ("journal","trades","pump_trades","learning","whale_trades","whale_v2_trades","whale_v2_learning","capacity","modules","position_history","decisions","hype_trades") else after
+ cursor=int(after) if kind in ("journal","trades","pump_trades","learning","whale_trades","capacity","modules","position_history","decisions","hype_trades") else after
  with pg() as c:
   rows=c.execute(f"select * from {table} where {key}>%s order by {key} limit %s",(cursor,limit+1)).fetchall()
  return {"kind":kind,"rows":rows[:limit],"next_after":str(rows[limit-1][key]) if len(rows)>limit else None,"has_more":len(rows)>limit}
@@ -981,7 +842,7 @@ def _shared_used_margin():
  total=0.0
  local_book=S.get("local_swing_positions",{})
  if not local_book and S.get("hype_swing_position"):local_book={HYPE_SWING_SYMBOL:S["hype_swing_position"]}
- for book in (S.get("positions",{}),S.get("pump_positions",{}),S.get("whale_positions",{}),S.get("whale_v2_positions",{}),local_book):
+ for book in (S.get("positions",{}),S.get("pump_positions",{}),S.get("whale_positions",{}),local_book):
   for p in book.values():
    lev=max(1.0,float(p.get("leverage",TRADE_LEVERAGE)))
    total+=float(p.get("margin",float(p.get("notional",0))/lev))
@@ -997,7 +858,7 @@ def _reserve_shared_entry(symbol,margin_fraction=None,strategy="shared"):
  with LOCK:
   reservations=S.setdefault("_entry_reservations",{})
   if time.time()<float(S.get("_emergency_until",0) or 0):return False,0.0,"emergency_profit_cooldown",0.0
-  total_open=sum(len(S.get(k,{})) for k in ("positions","pump_positions","whale_positions","whale_v2_positions","local_swing_positions"))
+  total_open=sum(len(S.get(k,{})) for k in ("positions","pump_positions","whale_positions","local_swing_positions"))
   reservation_key=symbol if strategy=="shared" else strategy+":"+symbol
   equity=float(S.get("equity",0) or 0)
   used=_shared_used_margin()
@@ -1208,110 +1069,6 @@ def whale_liq_close(symbol,price,reason):
   S["whale_positions"].pop(symbol,None);S["equity"]=float(account["equity"]);S["realized_pnl"]=float(account["realized_pnl"])
   S["whale_equity"]=S["equity"];S["whale_realized_pnl"]=S["realized_pnl"];S["whale_trades"]+=1;S["trades"]+=1
  return {"pnl":pnl,"equity":float(account["equity"])}
-
-@account_mutation
-def whale_v2_open(symbol,side,price,score,features):
- if S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or side not in (-1,1):return False
- if features.get("observed_at_epoch") and not 0<=time.time()-float(features["observed_at_epoch"])<=10:return False
- price=current_entry_price(symbol)
- if price is None:return False
- with LOCK:
-  if not S["engine_active"] or symbol in S.get("whale_v2_positions",{}) or len(S.get("whale_v2_positions",{}))>=WL2_MAX_POSITIONS:return False
- reserved,margin,reason,free=_reserve_shared_entry(symbol,strategy="whale_v2")
- if not reserved:
-  journal("entry_skipped",None,{"strategy":"whale_liquidation_v2","symbol":symbol,"reason":reason,"free_margin":free})
-  return False
- try:
-  opened=now();epoch=time.time()
-  f=wl2_initial_position_state(features,price,opened)
-  f["allocation_margin_fraction"]=WL2_MARGIN_FRACTION;f["allocation_policy"]=WL2_POLICY
-  notional=margin*WL2_LEVERAGE
-  pos={"side":side,"entry":float(price),"notional":notional,"margin":margin,"leverage":WL2_LEVERAGE,
-       "opened":opened,"t":epoch,"score":float(score),"features":f}
-  with pg() as db:
-   with db.transaction():
-    STORE.fence(db)
-    row=db.execute("""insert into whale_liq_v2_positions(symbol,side,entry,notional,margin,leverage,opened,opened_epoch,score,features)
-       values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(symbol) do nothing returning symbol""",
-       (symbol,side,price,notional,margin,WL2_LEVERAGE,opened,epoch,float(score),json.dumps(f,default=str))).fetchone()
-    if not row:return False
-    db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'whale_v2_trade_opened',%s::jsonb)",
-       (now(),json.dumps({"strategy":"whale_liquidation_v2","symbol":symbol,"side":side,"entry":price,
-        "score":score,"margin":margin,"notional":notional,"leverage":WL2_LEVERAGE,"policy":WL2_POLICY},default=str)))
-  with LOCK:S["whale_v2_positions"][symbol]=pos
-  return True
- finally:_release_shared_entry(symbol,strategy="whale_v2")
-
-@account_mutation
-def whale_v2_close(symbol,price,reason):
- with LOCK:pos=copy.deepcopy(S.get("whale_v2_positions",{}).get(symbol))
- if not pos or not price:return None
- pnl=paper_pnl(pos["notional"],pos["entry"],float(price),pos["side"],FEE)
- with pg() as db:
-  with db.transaction():
-   STORE.fence(db)
-   row=db.execute("delete from whale_liq_v2_positions where symbol=%s and opened=%s returning symbol",(symbol,pos["opened"])).fetchone()
-   if not row:return None
-   account=db.execute("""update whale_liq_v2_account_state
-      set equity=equity+%s,realized_pnl=realized_pnl+%s,updated_at=%s where id=1
-      returning equity,realized_pnl""",(pnl,pnl,now())).fetchone()
-   shared=db.execute("update account_state set equity=equity+%s,realized_pnl=realized_pnl+%s,updated_at=%s where id=1 returning equity,realized_pnl",(pnl,pnl,now())).fetchone()
-   payload=json.dumps(pos.get("features",{}),default=str)
-   db.execute("""insert into whale_liq_v2_trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,score,features)
-      values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
-      (pos["opened"],now(),symbol,pos["side"],pos["entry"],price,pnl,reason,pos.get("score",0),payload))
-   db.execute("""insert into trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,strategy,score,features)
-      values(%s,%s,%s,%s,%s,%s,%s,%s,'whale_liquidation_v2',%s,%s::jsonb)""",
-      (pos["opened"],now(),symbol,pos["side"],pos["entry"],price,pnl,reason,pos.get("score",0),payload))
-   db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'whale_v2_trade_closed',%s::jsonb)",
-      (now(),json.dumps({"strategy":"whale_liquidation_v2","symbol":symbol,"side":pos["side"],
-       "entry":pos["entry"],"exit":price,"pnl":pnl,"reason":reason,"policy":WL2_POLICY},default=str)))
- with LOCK:
-  S["whale_v2_positions"].pop(symbol,None);S["whale_v2_equity"]=float(account["equity"])
-  S["whale_v2_realized_pnl"]=float(account["realized_pnl"]);S["whale_v2_trades"]+=1
-  S["equity"]=float(shared["equity"]);S["realized_pnl"]=float(shared["realized_pnl"]);S["trades"]+=1
- return {"pnl":pnl,"equity":float(account["equity"])}
-
-@account_mutation
-def whale_v2_mark_positions(prices):
- with LOCK:
-  positions=copy.deepcopy(S.get("whale_v2_positions",{}))
-  timelines={k:list(v) for k,v in S.get("_timeline",{}).items()}
-  contexts=copy.deepcopy(S.get("_pump_ctx",{}))
- stamp=time.time();updates=[]
- for sym,pos in positions.items():
-  px=prices.get(sym)
-  if not px:continue
-  ctx=contexts.get(sym,{})
-  mark=float(px)
-  flow=float(MARKET_OBS.context(sym,stamp).get("flow_imbalance") or 0)
-  r15=_timeline_return(timelines.get(sym,[]),stamp,15,mark)
-  r60=_timeline_return(timelines.get(sym,[]),stamp,60,mark)
-  protected,protect_reason,protect_fill,protect_state=_profit_protection_eval(pos,sym,mark,stamp,timelines.get(sym,[]))
-  _profit_protection_arm_journal("whale_liquidation_v2",sym,bool((pos.get("features") or {}).get("profit_protection",{}).get("armed")),protected)
-  if protect_reason:
-   with LOCK:
-    live=S.get("whale_v2_positions",{}).get(sym)
-    if live and live.get("opened")==pos.get("opened"):S["whale_v2_positions"][sym]=protected
-   whale_v2_close(sym,protect_fill,protect_reason);continue
-  before=bool((protected.get("features") or {}).get("wl2_liquidation_level_reached_at"))
-  evaluated,reason=evaluate_wl2_position(protected,mark,now(),flow=flow,r15=r15,r60=r60)
-  after=bool((evaluated.get("features") or {}).get("wl2_liquidation_level_reached_at"))
-  if after and not before:
-   journal("whale_v2_liquidation_level_reached",None,{"symbol":sym,"entry":pos["entry"],"mark":mark,
-    "liquidation_price":evaluated["features"].get("liquidation_price"),"policy":WL2_POLICY})
-  with LOCK:
-   live=S.get("whale_v2_positions",{}).get(sym)
-   if live and live.get("opened")==pos.get("opened"):S["whale_v2_positions"][sym]=evaluated
-  if reason:
-   whale_v2_close(sym,mark,reason);continue
-  updates.append((json.dumps(evaluated.get("features",{}),default=str),sym,pos["opened"]))
- if updates:
-  with pg() as db:
-   with db.transaction():
-    STORE.fence(db)
-    with db.cursor() as cur:
-     cur.executemany("update whale_liq_v2_positions set features=%s::jsonb where symbol=%s and opened=%s",updates)
 
 @account_mutation
 def whale_liq_mark_positions(prices):
