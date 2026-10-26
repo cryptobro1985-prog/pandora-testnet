@@ -105,7 +105,7 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 API=os.getenv("HYPERLIQUID_INFO_API","https://api.hyperliquid.xyz/info").strip() or "https://api.hyperliquid.xyz/info"
 DB="/tmp/pandora.sqlite3"
 START=time.time()
-S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0,"pump_positions":{},"pump_equity":100.0,"pump_realized_pnl":0.0,"pump_trades":0,"whale_positions":{},"whale_equity":100.0,"whale_realized_pnl":0.0,"whale_trades":0,"whale_v2_positions":{},"whale_v2_equity":100.0,"whale_v2_realized_pnl":0.0,"whale_v2_trades":0,"whale_v2_learning":{},"local_swing_positions":{},"local_swing_watch":{},"hype_swing_position":None,"hype_swing_equity":100.0,"hype_swing_realized_pnl":0.0,"hype_swing_trades":0,"hype_swing_started_at":None,"news_health":{}}
+S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0,"pump_positions":{},"pump_equity":100.0,"pump_realized_pnl":0.0,"pump_trades":0,"pump_history_baseline":{},"whale_positions":{},"whale_equity":100.0,"whale_realized_pnl":0.0,"whale_trades":0,"whale_v2_positions":{},"whale_v2_equity":100.0,"whale_v2_realized_pnl":0.0,"whale_v2_trades":0,"whale_v2_learning":{},"local_swing_positions":{},"local_swing_watch":{},"hype_swing_position":None,"hype_swing_equity":100.0,"hype_swing_realized_pnl":0.0,"hype_swing_trades":0,"hype_swing_started_at":None,"news_health":{}}
 LOCK=threading.RLock()
 ACCOUNT_LOCK=threading.RLock()
 MARKET_REFRESH_LOCK=threading.Lock()
@@ -257,6 +257,10 @@ def source_freshness_window(source):
 
 STOP_ROE=-999.0;TAKE_ROE=0.20;LEV=25.0;MARGIN_FRACTION=0.10;FEE=0.00045;LOCK_TRIGGER_ROE=0.10;LOCK_ROE=0.075;PAPER_RESET=100.0;MIN_EXIT_ROE=0.075;TRAIL_ARM_ROE=0.12
 PUMP_LEV=TRADE_LEVERAGE;PUMP_MARGIN_FRACTION=TRADE_MARGIN_FRACTION;PUMP_STOP_ROE=-0.06;PUMP_TAKE_ROE=0.14;PUMP_TRAIL_ARM_ROE=0.09;PUMP_TRAIL_GAP_ROE=0.035;PUMP_MAX_HOLD_SECONDS=900
+PUMP_RESTORED_HISTORY_TRADES=26
+PUMP_RESTORED_HISTORY_PNL=38.77481472248827
+PUMP_RESTORED_HISTORY_ACTION="restore-pump-history-baseline-v1"
+PUMP_RESTORED_HISTORY_TIMESTAMP="2026-10-26T08:18:24.779166+00:00"
 def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
 def pg():
  # Neon transaction pooling rejects statement_timeout in startup options.
@@ -287,6 +291,18 @@ def pinit():
   c.execute("create table if not exists pump_signal_journal (id text primary key, ts text not null, symbol text, side integer, score double precision, action text, features jsonb)")
   c.execute("create table if not exists bad_signal_feedback (id bigserial primary key, recorded_at text not null, event_id text, symbol text, headline text, reason text, payload jsonb)")
   c.execute("create table if not exists operator_actions (action_id text primary key, completed_at text not null, payload jsonb not null)")
+  restored=c.execute("select payload from operator_actions where action_id=%s",(PUMP_RESTORED_HISTORY_ACTION,)).fetchone()
+  if not restored:
+   acct0=c.execute("select id from account_state where id=1").fetchone()
+   if acct0:
+    c.execute("update account_state set equity=equity+%s,realized_pnl=realized_pnl+%s,updated_at=%s where id=1",
+      (PUMP_RESTORED_HISTORY_PNL,PUMP_RESTORED_HISTORY_PNL,now()))
+    payload={"action":"restore_pump_history_baseline","strategy":"pump_dump",
+      "restored_closed_trades":PUMP_RESTORED_HISTORY_TRADES,"restored_realized_pnl":PUMP_RESTORED_HISTORY_PNL,
+      "source":"render_cleanup_log_2026-10-26T08:18:24.779166Z",
+      "note":"Individual deleted trade rows unavailable; exact count and aggregate realized PnL restored."}
+    c.execute("insert into operator_actions(action_id,completed_at,payload) values(%s,%s,%s::jsonb)",
+      (PUMP_RESTORED_HISTORY_ACTION,now(),json.dumps(payload,default=str)))
   c.execute("create table if not exists pump_positions (symbol text primary key, side integer not null, entry double precision not null, notional double precision not null, margin double precision not null, leverage double precision not null, opened text not null, opened_epoch double precision not null, peak_roe double precision not null default 0, score double precision not null default 0, features jsonb not null default '{}'::jsonb)")
   c.execute("create table if not exists pump_trade_history (id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision, pnl double precision, reason text, score double precision, features jsonb)")
   c.execute("create table if not exists learning_snapshots (id bigserial primary key, recorded_at text not null, samples integer not null, payload jsonb not null)")
@@ -335,9 +351,17 @@ def pinit():
    c.execute("insert into account_state(id,equity,realized_pnl,updated_at,contributed_capital) values(1,%s,%s,%s,%s)",(S["equity"],S["realized_pnl"],now(),PAPER_RESET))
    S["contributed_capital"]=PAPER_RESET
   S["news_seen"]=c.execute("select count(*) as n from news_events").fetchone()["n"]
-  S["trades"]=c.execute("select count(*) as n from trade_history").fetchone()["n"]
-  S["pump_equity"]=S["equity"];S["pump_realized_pnl"]=S["realized_pnl"]
-  S["pump_trades"]=c.execute("select count(*) as n from trade_history where strategy='pump_dump'").fetchone()["n"]
+  baseline_row=c.execute("select payload from operator_actions where action_id=%s",(PUMP_RESTORED_HISTORY_ACTION,)).fetchone()
+  baseline=(baseline_row["payload"] if baseline_row else {}) or {}
+  baseline_trades=int(baseline.get("restored_closed_trades",0) or 0)
+  baseline_pnl=float(baseline.get("restored_realized_pnl",0) or 0)
+  pump_live=c.execute("select count(*) as n,coalesce(sum(pnl),0) as pnl from trade_history where strategy='pump_dump'").fetchone()
+  S["trades"]=int(c.execute("select count(*) as n from trade_history").fetchone()["n"])+baseline_trades
+  S["pump_equity"]=S["equity"]
+  S["pump_realized_pnl"]=baseline_pnl+float(pump_live["pnl"] or 0)
+  S["pump_trades"]=baseline_trades+int(pump_live["n"] or 0)
+  S["pump_history_baseline"]={"restored_closed_trades":baseline_trades,"restored_realized_pnl":baseline_pnl,
+    "source":baseline.get("source"),"exact_rows_available":False}
   ppositions={}
   for r in c.execute("select * from pump_positions").fetchall():
    ppositions[r["symbol"]]={"side":int(r["side"]),"entry":float(r["entry"]),"notional":float(r["notional"]),"margin":float(r["margin"]),"leverage":float(r["leverage"]),"opened":r["opened"],"t":float(r["opened_epoch"]),"peak_roe":float(r["peak_roe"] or 0),"score":float(r["score"] or 0),"features":r["features"] or {},**risk_state(r.get("risk_state") or {})}
@@ -1085,7 +1109,7 @@ def pump_close(symbol,price,reason):
     (now(),json.dumps({"strategy":"pump_dump","symbol":symbol,"opened":pos["opened"],"side":pos["side"],"entry":pos["entry"],"exit":price,"pnl":pnl,"reason":reason},default=str)))
  with LOCK:
   S["pump_positions"].pop(symbol,None);S["equity"]=float(account["equity"]);S["realized_pnl"]=float(account["realized_pnl"])
-  S["pump_equity"]=S["equity"];S["pump_realized_pnl"]=S["realized_pnl"];S["pump_trades"]+=1;S["trades"]+=1
+  S["pump_equity"]=S["equity"];S["pump_realized_pnl"]=float(S.get("pump_realized_pnl",0) or 0)+float(pnl);S["pump_trades"]+=1;S["trades"]+=1
  return {"pnl":pnl,"equity":float(account["equity"])}
 
 @account_mutation
