@@ -1014,12 +1014,20 @@ def whale_liq_open(symbol,side,price,score,features,margin_fraction=None):
  with LOCK:
   if not S["engine_active"]:return False
   if len(S.get("whale_positions",{}))>=WHALE_MAX_ACTIVE_POSITIONS:return False
- # WhaleLiquidation has its own fixed allocator: every NEW whale entry uses
- # exactly 20% of current account equity as margin at the configured 25x leverage.
- # The shared reservation layer still enforces total used margin <= 100% equity.
+ # PriceToValueLiquidation sizes from total PAPER equity; the shared
+ # reservation layer still enforces total used margin <= 100% equity.
  margin_fraction=WHALE_MARGIN_FRACTION
+ features=copy.deepcopy(features)
+ features["engine"]="price_to_value_liquidation"
+ features["policy"]=PRICE_TO_VALUE_POLICY
+ features["ptv_entry_distance_pct"]=float(features.get("distance_pct",0) or 0)
+ features["ptv_distance_history_after_entry"]=[float(features.get("distance_pct",0) or 0)]
+ features["ptv_widen_streak"]=0
+ features["ptv_thesis_break_streak"]=0
+ features["ptv_mfe_price_move"]=0.0
+ features["ptv_mae_price_move"]=0.0
  features["allocation_margin_fraction"]=WHALE_MARGIN_FRACTION
- features["allocation_policy"]="whale_fixed_20pct_margin_equity_cap_v1"
+ features["allocation_policy"]="price_to_value_liquidation_equity_fraction_v1"
  reserved,margin,reason,free=_reserve_shared_entry(symbol,margin_fraction)
  if not reserved:
   journal("entry_skipped",None,{"strategy":"whale_liquidation","symbol":symbol,"reason":reason,"free_margin":free})
@@ -1057,7 +1065,7 @@ def whale_liq_close(symbol,price,reason):
    features=json.dumps(pos.get("features",{}),default=str)
    c.execute("""insert into trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,headline,event_id,strategy,score,features)
     values(%s,%s,%s,%s,%s,%s,%s,%s,%s,null,'whale_liquidation',%s,%s::jsonb)""",
-    (pos["opened"],now(),symbol,pos["side"],pos["entry"],price,pnl,reason,"WHALE_LIQUIDATION",pos.get("score",0),features))
+    (pos["opened"],now(),symbol,pos["side"],pos["entry"],price,pnl,reason,"PRICE_TO_VALUE_LIQUIDATION",pos.get("score",0),features))
    c.execute("""insert into whale_liq_trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,score,features)
     values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
     (pos["opened"],now(),symbol,pos["side"],pos["entry"],price,pnl,reason,pos.get("score",0),features))
