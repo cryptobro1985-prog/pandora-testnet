@@ -1113,6 +1113,13 @@ def whale_liq_mark_positions(prices):
   features["ptv_mfe_price_move"]=max(float(features.get("ptv_mfe_price_move",0) or 0),price_move)
   features["ptv_mae_price_move"]=min(float(features.get("ptv_mae_price_move",0) or 0),price_move)
 
+  # Touching the target must not disable risk if the liquidation fails to cascade.
+  if price_move<=-0.008:
+   with LOCK:
+    live=S["whale_positions"].get(sym)
+    if live and live.get("opened")==pos.get("opened"):live["features"]=features
+   whale_liq_close(sym,float(px),"ptv_hard_adverse_move");continue
+
   reached=bool(liq>0 and ((victim=="long" and mark<=liq) or (victim=="short" and mark>=liq)))
   if reached and not features.get("liquidation_level_reached_at"):
    features["liquidation_level_reached_at"]=now()

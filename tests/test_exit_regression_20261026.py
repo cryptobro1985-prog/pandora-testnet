@@ -61,8 +61,19 @@ class RegressionTests(unittest.TestCase):
                   _profit_protection_eval=lambda p,*a: (p,None,None,{}),
                   _profit_protection_arm_journal=lambda *a: None,
                   whale_liq_close=lambda *a: closed.append(a))
-        app_function('whale_liq_mark_positions',ns)({'X':99.})
+        app_function('whale_liq_mark_positions',ns)({'X':99.5})
         self.assertEqual(closed[0][2], 'ptv_distance_invalidation')
+
+    def test_whale_loss_limit_survives_target_touch(self):
+        closed=[]
+        pos=dict(entry=100.,side=-1,leverage=25.,opened='test',
+                 features=dict(liquidation_price=99.9,victim_side='long',
+                               liquidation_level_reached_at='earlier'))
+        ns=dict(copy=copy,LOCK=threading.RLock(),time=SimpleNamespace(time=lambda:10),
+                S=dict(whale_positions={'X':pos},_timeline={}),now=lambda:'test',
+                whale_liq_close=lambda *a:closed.append(a))
+        app_function('whale_liq_mark_positions',ns)({'X':102.})
+        self.assertEqual(closed[0][2],'ptv_hard_adverse_move')
 
     def test_equity_buyback_is_not_eth_purchase(self):
         title = "Tom Lee's Bitmine favors share buybacks to ether purchases as crypto declines"
