@@ -17,6 +17,16 @@ class PiQDirectTests(unittest.TestCase):
         self.assertIn("https://piqmarkets.com/story/bitcoin-etf-flows-rise",urls)
         self.assertIn("https://piqmarkets.com/story/fed-cuts-rates",urls)
 
+    def test_live_ticker_json_absolute_tracking_urls(self):
+        payload={"items":[{"title":"Fed cuts rates","link":"https://piqmarkets.com/story/fed-cuts?utm_source=embed"},
+                          {"title":"Bad","link":"https://evil.com/story/bad"}]}
+        page='<script type="application/json" id="cfg">'+json.dumps(payload)+'</script>'
+        with patch("piq_direct._request", return_value=page):
+            rows=piq_direct.discover()
+        self.assertEqual(len(rows),1)
+        self.assertEqual(rows[0]["url"],"https://piqmarkets.com/story/fed-cuts")
+        self.assertEqual(rows[0]["headline_hint"],"Fed cuts rates")
+
     def test_fetch_story_uses_structured_timestamp(self):
         page='''<html><head>
         <script type="application/ld+json">

@@ -109,6 +109,19 @@ def discover(timeout=3.0,limit=40):
             found.append({"url":href,"headline_hint":None,"discovery_url":source_url})
             if len(found)>=limit:
                 return found
+        # The live ticker embeds absolute, tracked story URLs in JSON cfg.items.
+        # Parse data only; story publication time is still verified by fetch_story.
+        metadata=_PageMetadata()
+        metadata.feed(page)
+        for _,node in _json_nodes(metadata.scripts):
+            link=node.get("link")
+            if not isinstance(link,str):continue
+            try:href=_trusted_url(urllib.parse.urljoin(BASE,link),story=True)
+            except PiQReadError:continue
+            if href in seen:continue
+            seen.add(href)
+            found.append({"url":href,"headline_hint":_clean(node.get("title")) or None,"discovery_url":source_url})
+            if len(found)>=limit:return found
         # A usable ticker is sufficient; a second homepage fetch adds latency
         # without improving the timestamp provenance of the discovered links.
         if len(found)>=min(limit,10):
