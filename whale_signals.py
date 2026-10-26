@@ -411,9 +411,11 @@ def price_to_value_entry(candidate, regime_side=0):
     x["ptv_slow_trend_votes"] = slow_votes
     x["ptv_micro_votes"] = micro_votes
     x["ptv_regime_side"] = regime_side
+    quality_min = 55.0 if distance <= 0.35 else 60.0
     x["ptv_quality_score"] = round(quality, 2)
+    x["ptv_quality_min"] = quality_min
     x["ptv_reject_reasons"] = reasons
-    x["ptv_qualified"] = not reasons and quality >= 60.0
+    x["ptv_qualified"] = not reasons and quality >= quality_min
     if not x["ptv_qualified"] and not reasons:
         x["ptv_reject_reasons"] = ["quality_below_min"]
     return x
