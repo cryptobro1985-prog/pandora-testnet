@@ -14,7 +14,8 @@ from x_guest import read as guest_x_read
 from x_list import fetch_list as x_list_fetch
 from x_page import fetch as free_x_page_fetch
 from realtime_free import fetch_x as free_x_fetch, fetch_x_search as free_x_search_fetch, fetch_x_fixupx as free_x_fixupx_fetch, fetch_x_lookup as free_x_lookup_fetch, fetch_x_embed as free_x_embed_fetch, fetch_x_nitter as free_x_nitter_fetch, fetch_x_syndication as free_x_syndication_fetch, fetch_x_syndication as free_x_syn_fetch, fetch_x_vx as free_x_vx_fetch, fetch_truth as free_truth_fetch, fetch_truth_activitypub as free_truth_ap_fetch, fetch_truth_rss as free_truth_rss_fetch, fetch_trump_archive as free_trump_archive_fetch
-from momentum_scanner import candidates as momentum_candidates
+from momentum_scanner import (candidates as momentum_candidates, breadth_regime,
+                              continuation_candidates, direction_guard)
 from piq_direct import discover as piq_discover, fetch_story as piq_fetch_story, high_signal as piq_high_signal
 from source_health import LatencyMetrics, aggregate_delivery
 from market_data import RollingMarketData
@@ -22,6 +23,8 @@ from market_stream import run_trade_stream
 from whale_signals import MIN_NOTIONAL_USD, cluster_positions, summarize_book, significance, update_streaks
 from news_logic import analyze_headline, is_non_market_news as semantic_non_market
 from accounting import paper_pnl
+from emergency_guard import reversal as emergency_reversal, profit_targets, COOLDOWN_SECONDS
+from liquidation_stream import LiquidationTape, run as run_liquidation_stream, cascade_candidates
 from whale_v2 import (EligibilityTracker as WL2EligibilityTracker, evaluate_position as evaluate_wl2_position,
                       initial_position_state as wl2_initial_position_state, learning_summary as wl2_learning_summary,
                       WL2_MARGIN_FRACTION, WL2_LEVERAGE, WL2_MAX_POSITIONS, WL2_POLICY)
@@ -32,6 +35,7 @@ from hype_h1_swing import (POLICY as HYPE_SWING_POLICY, SYMBOL as HYPE_SWING_SYM
                            update_path as hype_update_path, shadow_triggers as hype_shadow_triggers)
 LATENCIES=LatencyMetrics()
 MARKET_OBS=RollingMarketData(max_symbols=512)
+LIQUIDATION_TAPE=LiquidationTape()
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
 def choose(db_path,current=(-0.10,0.20)):
  with sqlite3.connect(db_path) as c: rows=c.execute("select pnl from trades order by id desc limit 120").fetchall()
@@ -98,19 +102,19 @@ def account_mutation(fn):
   # Serialize account writes without blocking price/health/source snapshots.
   with ACCOUNT_LOCK:return fn(*args,**kwargs)
  return run
-TRADE_LEVERAGE=max(1.0,min(50.0,float(os.getenv("TRADE_LEVERAGE","25"))))
-TRADE_MARGIN_FRACTION=max(0.01,min(0.20,float(os.getenv("TRADE_MARGIN_FRACTION","0.05"))))
-POSITION_MARGIN_MAX=max(TRADE_MARGIN_FRACTION,min(0.20,float(os.getenv("POSITION_MARGIN_MAX","0.20"))))
+TRADE_LEVERAGE=25.0
+TRADE_MARGIN_FRACTION=0.10
+POSITION_MARGIN_MAX=0.10
 TARGET_OPEN_POSITIONS=max(1,min(20,int(os.getenv("TARGET_OPEN_POSITIONS","10"))))
 MAX_OPEN_POSITIONS=max(TARGET_OPEN_POSITIONS,min(30,int(os.getenv("MAX_OPEN_POSITIONS","30"))))
 PUMP_MAX_POSITIONS=max(TARGET_OPEN_POSITIONS,min(MAX_OPEN_POSITIONS,int(os.getenv("PUMP_MAX_POSITIONS","20"))))
 PUMP_PRIMARY_SCORE=max(70.0,min(100.0,float(os.getenv("PUMP_PRIMARY_SCORE","84"))))
 PUMP_SECONDARY_SCORE=max(60.0,min(PUMP_PRIMARY_SCORE,float(os.getenv("PUMP_SECONDARY_SCORE","76"))))
-PUMP_SECONDARY_MARGIN_FRACTION=max(0.05,min(POSITION_MARGIN_MAX,float(os.getenv("PUMP_SECONDARY_MARGIN_FRACTION","0.05"))))
+PUMP_SECONDARY_MARGIN_FRACTION=TRADE_MARGIN_FRACTION
 PUMP_QUEUE_TTL_SECONDS=max(15.0,min(180.0,float(os.getenv("PUMP_QUEUE_TTL_SECONDS","60"))))
 PUMP_SECONDARY_SAME_SIDE_CAP=max(1,min(TARGET_OPEN_POSITIONS,int(os.getenv("PUMP_SECONDARY_SAME_SIDE_CAP","4"))))
 WHALE_MAX_ACTIVE_POSITIONS=max(1,min(5,int(os.getenv("WHALE_MAX_ACTIVE_POSITIONS","5"))))
-WHALE_MARGIN_FRACTION=0.20
+WHALE_MARGIN_FRACTION=TRADE_MARGIN_FRACTION
 WHALE_LEVERAGE=25.0
 NEWS_MAX_AGE_SECONDS=float(os.getenv("NEWS_MAX_AGE_SECONDS","120"))
 NEWS_POLL_SECONDS=float(os.getenv("NEWS_POLL_SECONDS","15"))
@@ -139,6 +143,8 @@ FEEDS={
  # by PiQ Direct and FirstSquawk, so duplicate crypto/general-news RSS is removed.
  "FedMonetary":"https://www.federalreserve.gov/feeds/press_monetary.xml",
  "ECBOfficial":"https://www.ecb.europa.eu/rss/press.html",
+ "CoinDesk":"https://www.coindesk.com/arc/outboundfeeds/rss/",
+ "Cointelegraph":"https://cointelegraph.com/rss",
 }
 SEARCH_INDEX_FEEDS=set()
 RESEARCH_PAGES={}
@@ -160,7 +166,8 @@ EXPLICIT_TOKEN_PATTERNS={
 # They are logged and gently affect confidence/eligibility, but can never reverse news direction.
 SOURCE_WEIGHTS={
  "FedMonetary":1.00,"ECBOfficial":0.95,"WhiteHouseOfficial":1.00,
- "TruthSocialPublic":0.98,"XOfficial":0.92,"PiQDirect":0.96
+ "TruthSocialPublic":0.98,"XOfficial":0.92,"PiQDirect":0.96,
+ "CoinDesk":0.90,"Cointelegraph":0.85
 }
 NON_MARKET_PATTERNS=(
  r"\\b(?:giveaway|sweepstakes|contest|competition)\\b",
@@ -224,12 +231,8 @@ def source_weight(source):
  learned=S.get("adaptive",{}).get("source_multipliers",{}) if S.get("mode")=="PAPER_ONLY" else {}
  return max(0.20,min(1.00,base*float(learned.get(source,1.0))))
 def source_freshness_window(source):
- if source.startswith("XOfficial:") or source.startswith("TruthSocialPublic"):
-  return min(35.0,NEWS_MAX_AGE_SECONDS)
- if source=="PiQDirect":
-  return min(60.0,NEWS_MAX_AGE_SECONDS)
- if source in ("FedMonetary","ECBOfficial","WhiteHouseOfficial"):
-  return min(90.0,NEWS_MAX_AGE_SECONDS)
+ # Use the advertised publication-age limit consistently. Hidden 35s/60s
+ # overrides discarded otherwise eligible posts received via public mirrors.
  return NEWS_MAX_AGE_SECONDS
 
 STOP_ROE=-999.0;TAKE_ROE=0.20;LEV=25.0;MARGIN_FRACTION=0.10;FEE=0.00045;LOCK_TRIGGER_ROE=0.10;LOCK_ROE=0.075;PAPER_RESET=100.0;MIN_EXIT_ROE=0.075;TRAIL_ARM_ROE=0.12
@@ -570,7 +573,7 @@ def save_module_snapshots():
  # Low-frequency durable state for week-long post-test reconstruction.
  # Event journals remain lossless for actual decisions/trades; this captures
  # scanner health, thresholds, candidate counts and source latency over time.
- tracked=("PumpDumpScanner","WhaleLiquidationScanner","WhaleLiquidationV2","XCriticalMonitor","XMonitor",
+ tracked=("HypeH1LocalSwing","ConfirmedLiquidationStream","MarketBreadthHistory","CoinDesk","Cointelegraph","PumpDumpScanner","WhaleLiquidationScanner","WhaleLiquidationV2","XCriticalMonitor","XMonitor",
           "PiQDirect","MarketTradeStream","MarketMetadata","PersistentPostgres")
  with LOCK:
   rows=[(now(),name,bool(S.get("sources",{}).get(name,{}).get("ok")),
@@ -631,10 +634,10 @@ def export_rows(kind,after,limit):
           "whale_signals":("whale_liq_signal_journal","id"),"whale_trades":("whale_liq_trade_history","id"),
           "whale_v2_signals":("whale_liq_v2_signal_journal","id"),"whale_v2_trades":("whale_liq_v2_trade_history","id"),"whale_v2_learning":("whale_liq_v2_learning_snapshots","id"),
           "capacity":("account_capacity_snapshots","id"),"modules":("module_snapshots","id"),
-          "position_history":("position_snapshots","id"),"scanner_observations":("scanner_observations","id")}
+          "position_history":("position_snapshots","id"),"scanner_observations":("scanner_observations","id"),"operators":("operator_actions","action_id"),"hype_signals":("hype_swing_signal_journal","id"),"hype_trades":("hype_swing_trade_history","id")}
  if kind not in columns:raise ValueError("Unsupported export kind")
  table,key=columns[kind]
- cursor=int(after) if kind in ("journal","trades","pump_trades","learning","whale_trades","whale_v2_trades","whale_v2_learning","capacity","modules","position_history") else after
+ cursor=int(after) if kind in ("journal","trades","pump_trades","learning","whale_trades","whale_v2_trades","whale_v2_learning","capacity","modules","position_history","hype_trades") else after
  with pg() as c:
   rows=c.execute(f"select * from {table} where {key}>%s order by {key} limit %s",(cursor,limit+1)).fetchall()
  return {"kind":kind,"rows":rows[:limit],"next_after":str(rows[limit-1][key]) if len(rows)>limit else None,"has_more":len(rows)>limit}
@@ -784,9 +787,60 @@ def operator_one_shot_actions():
    SHUTDOWN.wait(2)
 
 
+@account_mutation
+def exclude_authorized_pump_position(request):
+ symbol=str(request["symbol"]);opened=str(request["opened"]);action_id=str(request["id"])
+ with pg() as db:
+  if db.execute("select 1 from operator_actions where action_id=%s",(action_id,)).fetchone():return True
+ with LOCK:
+  if not S.get("engine_active") or S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled"):return False
+  position=copy.deepcopy(S.get("pump_positions",{}).get(symbol));price=S.get("_prices",{}).get(symbol)
+  if not price or time.time()-S.get("_last_poll_epoch",0)>10:return False
+ if position and position.get("opened")==opened:
+  if not pump_close(symbol,price,"operator_exclude_pump_test"):return False
+ with pg() as db:
+  with db.transaction():
+   STORE.fence(db)
+   if db.execute("select 1 from operator_actions where action_id=%s",(action_id,)).fetchone():return True
+   rows=db.execute("delete from trade_history where strategy='pump_dump' and symbol=%s and opened=%s returning pnl",(symbol,opened)).fetchall()
+   reversed_pnl=sum(float(r["pnl"] or 0) for r in rows)
+   db.execute("delete from pump_trade_history where symbol=%s and opened=%s",(symbol,opened))
+   db.execute("delete from position_snapshots where strategy='pump_dump' and symbol=%s and opened=%s",(symbol,opened))
+   db.execute("delete from pump_signal_journal where symbol=%s and ts::timestamptz between %s::timestamptz-interval '10 seconds' and %s::timestamptz+interval '10 seconds'",(symbol,opened,opened))
+   db.execute("delete from audit_journal where payload->>'symbol'=%s and kind in ('pump_trade_opened','pump_trade_closed') and recorded_at::timestamptz >= %s::timestamptz",(symbol,opened))
+   account=db.execute("update account_state set equity=equity-%s,realized_pnl=realized_pnl-%s,updated_at=%s where id=1 returning equity,realized_pnl",(reversed_pnl,reversed_pnl,now())).fetchone()
+   counts=db.execute("select count(*) as total,count(*) filter(where strategy='pump_dump') as pump from trade_history").fetchone()
+   payload={"action":"excluded_user_selected_pump_test","symbol":symbol,"excluded_trades":len(rows),
+            "statistics_basis":"operator_filtered","requested_at":"2026-10-26"}
+   db.execute("insert into operator_actions(action_id,completed_at,payload) values(%s,%s,%s::jsonb)",(action_id,now(),json.dumps(payload)))
+ with LOCK:
+  S["equity"]=float(account["equity"]);S["realized_pnl"]=float(account["realized_pnl"])
+  S["trades"]=int(counts["total"]);S["pump_trades"]=int(counts["pump"])
+  S["statistics_basis"]="operator_filtered_REZ_test_excluded"
+  S["operator_cleanup"]={"ok":True,"action_id":action_id,"symbol":symbol,"excluded_trades":len(rows)}
+ return True
+
+def authorized_cleanup_worker():
+ path=os.path.join(os.path.dirname(__file__),"operator_requests.json")
+ if not os.path.exists(path):return
+ with open(path) as source:requests=json.load(source).get("actions",[])
+ while requests and not SHUTDOWN.is_set():
+  for request in list(requests):
+   if request.get("type")!="EXCLUDE_PUMP_POSITION":continue
+   try:
+    if exclude_authorized_pump_position(request):
+     with LOCK:
+      S["statistics_basis"]="operator_filtered_REZ_test_excluded"
+      S["operator_cleanup"]={"ok":True,"action_id":request["id"],"symbol":request["symbol"]}
+     requests.remove(request)
+   except Exception as exc:
+    with LOCK:S["operator_cleanup"]={"ok":False,"error":str(exc)[:160]}
+  if requests:SHUTDOWN.wait(2)
+
 def _shared_used_margin():
  total=0.0
- for book in (S.get("positions",{}),S.get("pump_positions",{}),S.get("whale_positions",{})):
+ for book in (S.get("positions",{}),S.get("pump_positions",{}),S.get("whale_positions",{}),S.get("whale_v2_positions",{}),
+              {"HYPE":S["hype_swing_position"]} if S.get("hype_swing_position") else {}):
   for p in book.values():
    lev=max(1.0,float(p.get("leverage",TRADE_LEVERAGE)))
    total+=float(p.get("margin",float(p.get("notional",0))/lev))
@@ -797,18 +851,20 @@ def _symbol_open_anywhere(symbol):
  return symbol in S.get("positions",{}) or symbol in S.get("pump_positions",{}) or symbol in S.get("whale_positions",{})
 
 @account_mutation
-def _reserve_shared_entry(symbol,margin_fraction=None):
+def _reserve_shared_entry(symbol,margin_fraction=None,strategy="shared"):
  with LOCK:
   reservations=S.setdefault("_entry_reservations",{})
-  total_open=len(S.get("positions",{}))+len(S.get("pump_positions",{}))+len(S.get("whale_positions",{}))
+  if time.time()<float(S.get("_emergency_until",0) or 0):return False,0.0,"emergency_profit_cooldown",0.0
+  total_open=sum(len(S.get(k,{})) for k in ("positions","pump_positions","whale_positions","whale_v2_positions"))+bool(S.get("hype_swing_position"))
+  reservation_key=symbol if strategy=="shared" else strategy+":"+symbol
   equity=float(S.get("equity",0) or 0)
   used=_shared_used_margin()
   free=max(0.0,equity-used)
   if total_open>=MAX_OPEN_POSITIONS:
    return False,0.0,"portfolio_position_cap",free
-  if _symbol_open_anywhere(symbol) or symbol in reservations:
+  if (strategy=="shared" and _symbol_open_anywhere(symbol)) or reservation_key in reservations:
    return False,0.0,"symbol_already_open_shared_account",free
-  fraction=TRADE_MARGIN_FRACTION if margin_fraction is None else max(0.01,min(POSITION_MARGIN_MAX,float(margin_fraction)))
+  fraction=TRADE_MARGIN_FRACTION
   margin=max(0.01,max(0.0,equity)*fraction)
   if equity<=0:
    return False,0.0,"nonpositive_equity",free
@@ -816,94 +872,25 @@ def _reserve_shared_entry(symbol,margin_fraction=None):
    return False,0.0,"portfolio_margin_over_cap",free
   if free+1e-9<margin:
    return False,0.0,"insufficient_free_margin",free
-  reservations[symbol]=margin
+  reservations[reservation_key]=margin
   return True,margin,None,free
 
-def _release_shared_entry(symbol):
- with LOCK:S.setdefault("_entry_reservations",{}).pop(symbol,None)
+def _release_shared_entry(symbol,strategy="shared"):
+ key=symbol if strategy=="shared" else strategy+":"+symbol
+ with LOCK:S.setdefault("_entry_reservations",{}).pop(key,None)
 
 def liquidity_margin_fraction(symbol,features,base=None,regime=None):
- """Paper-test sizing: 5%-20% from signal strength, liquidity and market alignment."""
- depth=float(features.get("book_depth_usd",0) or features.get("opposing_depth_usd",0) or 0)
- day=float(features.get("day_volume_usd",0) or 0)
- score=max(0.0,min(100.0,float(features.get("score",0) or 0)))
- streak=max(0,float(features.get("confirmation_streak",0) or 0))
- confirms=max(0,float(features.get("micro_confirmations",0) or 0))
- burst=max(0.0,float(features.get("volume_burst_ratio",0) or 0))
- flow=abs(float(features.get("flow_imbalance",0) or 0))
- whale=max(0.0,float(features.get("whale_size_usd",0) or 0))
- floor=max(1.0,float(features.get("floor_notional_usd",features.get("minimum_notional_usd",1)) or 1))
- whale_multiple=whale/floor if whale else 0.0
- # Signal component dominates; liquidity controls how much of the 20% ceiling is safe to test.
- strength=0.45*(score/100.0)+0.10*min(1.0,streak/3.0)+0.10*min(1.0,confirms/4.0)+0.10*min(1.0,burst/10.0)+0.10*min(1.0,flow)+0.15*min(1.0,whale_multiple/4.0)
- # Liquidation entries stay execution-aware: a thin book raises cascade risk but also slippage.
- # Pump/Dump is different in hard-test mode: thin books can amplify the move, so an extreme
- # independently confirmed impulse may use a larger fraction instead of being capped at 8%.
- is_liquidation=bool(whale or features.get("liquidation_price") or str(features.get("engine","")).startswith("whale"))
- if is_liquidation:
-  if depth<10_000:liq_cap=0.08
-  elif depth<50_000:liq_cap=0.10
-  elif depth<250_000:liq_cap=0.13
-  elif depth<1_000_000:liq_cap=0.15
-  elif depth<5_000_000:liq_cap=0.17
-  else:liq_cap=0.20
- else:
-  if depth<10_000:
-   if score>=97 and burst>=15 and flow>=0.30 and confirms>=3:liq_cap=0.20
-   elif score>=94 and burst>=8 and flow>=0.25 and confirms>=2:liq_cap=0.16
-   elif score>=90 and burst>=5 and flow>=0.20:liq_cap=0.13
-   else:liq_cap=0.08
-  elif depth<50_000:
-   liq_cap=0.20 if score>=97 and burst>=10 and flow>=0.25 else (0.16 if score>=92 else 0.12)
-  elif depth<250_000:liq_cap=0.16
-  elif depth<1_000_000:liq_cap=0.18
-  else:liq_cap=0.20
- if day>=500_000_000 and depth>=20_000_000:liq_cap=0.20
- raw_frac=0.05+0.15*max(0.0,min(1.0,strength))
- if score<80:score_cap=0.05
- elif score<85:score_cap=0.08
- elif score<90:score_cap=0.10
- elif score<94:score_cap=0.13
- elif score<97:score_cap=0.16
- else:score_cap=0.20
- # Liquidity must influence ordinary sizing, not merely cap it. Extremely strong
- # pump/dump signals in a thin book are the exception because thin depth can
- # amplify the impulse; liquidation trades remain conservative on thin books.
- if depth<10_000:liq_quality=0.20
- elif depth<50_000:liq_quality=0.35
- elif depth<250_000:liq_quality=0.50
- elif depth<1_000_000:liq_quality=0.68
- elif depth<5_000_000:liq_quality=0.82
- elif depth<20_000_000:liq_quality=0.92
- else:liq_quality=1.00
- thin_impulse_exception=(not is_liquidation and depth<50_000 and score>=97 and burst>=10 and flow>=0.25 and confirms>=3)
- liquidity_multiplier=1.0 if thin_impulse_exception else (0.55+0.45*liq_quality)
- frac=0.05+(raw_frac-0.05)*liquidity_multiplier
- frac=min(frac,liq_cap,score_cap)
- features["signal_score_cap_fraction"]=score_cap
- side=int(features.get("side",0) or 0)
+ features["allocation_margin_fraction"]=TRADE_MARGIN_FRACTION
+ features["allocation_policy"]="fixed_10pct_compound_shared_all_strategies_v5"
  if regime:
-  mode=str(regime.get("mode","NORMAL"))
-  rside=int(regime.get("side",0) or 0)
-  features["market_regime"]=mode
-  features["market_regime_side"]=rside
-  if rside and side and side!=rside:
-   frac=0.05
-   features["market_regime_conflict"]=True
- frac=max(0.05,min(POSITION_MARGIN_MAX,frac))
- features["sizing_book_depth_usd"]=round(depth,2)
- features["sizing_day_volume_usd"]=round(day,2)
- features["signal_strength_score"]=round(strength*100,2)
- features["liquidity_quality"]=round(liq_quality,4)
- features["liquidity_multiplier"]=round(liquidity_multiplier,4)
- features["thin_book_impulse_exception"]=bool(thin_impulse_exception)
- features["allocation_margin_fraction"]=round(frac,4)
- features["allocation_policy"]="signal_momentum_liquidity_5_20_paper_v4"
- return frac
+  features["market_regime"]=regime.get("mode")
+  features["market_regime_side"]=regime.get("side",0)
+ return TRADE_MARGIN_FRACTION
 
 def current_entry_price(symbol):
  with LOCK:
   if not S["engine_active"] or S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or SHUTDOWN.is_set():return None
+  if time.time()<float(S.get("_emergency_until",0) or 0):return None
   if time.time()-S.get("_last_poll_epoch",0)>10:return None
   checkpoint=publication_epoch(S.get("last_checkpoint"))
   if checkpoint is None or time.time()-checkpoint>15:return None
@@ -916,6 +903,16 @@ def pump_open(symbol,side,price,score,features,margin_fraction=None):
  if features.get("observed_at_epoch") and not 0<=time.time()-features["observed_at_epoch"]<=10:return False
  price=current_entry_price(symbol)
  if price is None:return False
+ if features.get("observed_at_epoch"):
+  with LOCK:
+   latest_prices=dict(S.get("_prices",{}));history={k:list(v) for k,v in S.get("_timeline",{}).items()}
+   volumes=dict(S.get("_day_volumes",{}))
+  regime=market_regime(latest_prices,history,volumes,time.time())
+  rejection=direction_guard(symbol,side,latest_prices,history,time.time(),regime)
+  if rejection:
+   journal("entry_skipped",None,{"strategy":"pump_dump","symbol":symbol,"reason":rejection,"market_regime":regime.get("mode")})
+   return False
+  features=dict(features,entry_market_regime=regime.get("mode"),entry_market_regime_side=regime.get("side"),entry_direction_revalidated_at=now())
  with LOCK:
   if not S["engine_active"] or len(S["pump_positions"])>=PUMP_MAX_POSITIONS:return False
  reserved,margin,reason,free=_reserve_shared_entry(symbol,margin_fraction)
@@ -1062,30 +1059,30 @@ def whale_v2_open(symbol,side,price,score,features):
  if price is None:return False
  with LOCK:
   if not S["engine_active"] or symbol in S.get("whale_v2_positions",{}) or len(S.get("whale_v2_positions",{}))>=WL2_MAX_POSITIONS:return False
-  equity=float(S.get("whale_v2_equity",PAPER_RESET) or 0)
-  used=sum(float(p.get("margin",0) or 0) for p in S.get("whale_v2_positions",{}).values())
- margin=equity*WL2_MARGIN_FRACTION
- if equity<=0 or margin<=0 or used+margin>equity+1e-9:
-  journal("entry_skipped",None,{"strategy":"whale_liquidation_v2","symbol":symbol,"reason":"wl2_insufficient_virtual_margin","equity":equity,"used_margin":used})
+ reserved,margin,reason,free=_reserve_shared_entry(symbol,strategy="whale_v2")
+ if not reserved:
+  journal("entry_skipped",None,{"strategy":"whale_liquidation_v2","symbol":symbol,"reason":reason,"free_margin":free})
   return False
- opened=now();epoch=time.time()
- f=wl2_initial_position_state(features,price,opened)
- f["allocation_margin_fraction"]=WL2_MARGIN_FRACTION;f["allocation_policy"]=WL2_POLICY
- notional=margin*WL2_LEVERAGE
- pos={"side":side,"entry":float(price),"notional":notional,"margin":margin,"leverage":WL2_LEVERAGE,
-      "opened":opened,"t":epoch,"score":float(score),"features":f}
- with pg() as db:
-  with db.transaction():
-   STORE.fence(db)
-   row=db.execute("""insert into whale_liq_v2_positions(symbol,side,entry,notional,margin,leverage,opened,opened_epoch,score,features)
-      values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(symbol) do nothing returning symbol""",
-      (symbol,side,price,notional,margin,WL2_LEVERAGE,opened,epoch,float(score),json.dumps(f,default=str))).fetchone()
-   if not row:return False
-   db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'whale_v2_trade_opened',%s::jsonb)",
-      (now(),json.dumps({"strategy":"whale_liquidation_v2","symbol":symbol,"side":side,"entry":price,
-       "score":score,"margin":margin,"notional":notional,"leverage":WL2_LEVERAGE,"policy":WL2_POLICY},default=str)))
- with LOCK:S["whale_v2_positions"][symbol]=pos
- return True
+ try:
+  opened=now();epoch=time.time()
+  f=wl2_initial_position_state(features,price,opened)
+  f["allocation_margin_fraction"]=WL2_MARGIN_FRACTION;f["allocation_policy"]=WL2_POLICY
+  notional=margin*WL2_LEVERAGE
+  pos={"side":side,"entry":float(price),"notional":notional,"margin":margin,"leverage":WL2_LEVERAGE,
+       "opened":opened,"t":epoch,"score":float(score),"features":f}
+  with pg() as db:
+   with db.transaction():
+    STORE.fence(db)
+    row=db.execute("""insert into whale_liq_v2_positions(symbol,side,entry,notional,margin,leverage,opened,opened_epoch,score,features)
+       values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(symbol) do nothing returning symbol""",
+       (symbol,side,price,notional,margin,WL2_LEVERAGE,opened,epoch,float(score),json.dumps(f,default=str))).fetchone()
+    if not row:return False
+    db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'whale_v2_trade_opened',%s::jsonb)",
+       (now(),json.dumps({"strategy":"whale_liquidation_v2","symbol":symbol,"side":side,"entry":price,
+        "score":score,"margin":margin,"notional":notional,"leverage":WL2_LEVERAGE,"policy":WL2_POLICY},default=str)))
+  with LOCK:S["whale_v2_positions"][symbol]=pos
+  return True
+ finally:_release_shared_entry(symbol,strategy="whale_v2")
 
 @account_mutation
 def whale_v2_close(symbol,price,reason):
@@ -1100,9 +1097,13 @@ def whale_v2_close(symbol,price,reason):
    account=db.execute("""update whale_liq_v2_account_state
       set equity=equity+%s,realized_pnl=realized_pnl+%s,updated_at=%s where id=1
       returning equity,realized_pnl""",(pnl,pnl,now())).fetchone()
+   shared=db.execute("update account_state set equity=equity+%s,realized_pnl=realized_pnl+%s,updated_at=%s where id=1 returning equity,realized_pnl",(pnl,pnl,now())).fetchone()
    payload=json.dumps(pos.get("features",{}),default=str)
    db.execute("""insert into whale_liq_v2_trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,score,features)
       values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
+      (pos["opened"],now(),symbol,pos["side"],pos["entry"],price,pnl,reason,pos.get("score",0),payload))
+   db.execute("""insert into trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,strategy,score,features)
+      values(%s,%s,%s,%s,%s,%s,%s,%s,'whale_liquidation_v2',%s,%s::jsonb)""",
       (pos["opened"],now(),symbol,pos["side"],pos["entry"],price,pnl,reason,pos.get("score",0),payload))
    db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'whale_v2_trade_closed',%s::jsonb)",
       (now(),json.dumps({"strategy":"whale_liquidation_v2","symbol":symbol,"side":pos["side"],
@@ -1110,6 +1111,7 @@ def whale_v2_close(symbol,price,reason):
  with LOCK:
   S["whale_v2_positions"].pop(symbol,None);S["whale_v2_equity"]=float(account["equity"])
   S["whale_v2_realized_pnl"]=float(account["realized_pnl"]);S["whale_v2_trades"]+=1
+  S["equity"]=float(shared["equity"]);S["realized_pnl"]=float(shared["realized_pnl"]);S["trades"]+=1
  return {"pnl":pnl,"equity":float(account["equity"])}
 
 @account_mutation
@@ -1123,8 +1125,8 @@ def whale_v2_mark_positions(prices):
   px=prices.get(sym)
   if not px:continue
   ctx=contexts.get(sym,{})
-  mark=float(ctx.get("mark_price",0) or 0) or float(px)
-  flow=float(ctx.get("flow_imbalance") or 0)
+  mark=float(px)
+  flow=float(MARKET_OBS.context(sym,stamp).get("flow_imbalance") or 0)
   r15=_timeline_return(timelines.get(sym,[]),stamp,15,mark)
   r60=_timeline_return(timelines.get(sym,[]),stamp,60,mark)
   before=bool((pos.get("features") or {}).get("wl2_liquidation_level_reached_at"))
@@ -1216,6 +1218,7 @@ def _whale_liq_cvd(symbol):
 
 def whale_liquidation_scan():
  last_signal={};streaks={};scan_id=0;v2_tracker=WL2EligibilityTracker()
+ v2_rejection_totals={};v2_journal_at={};v2_last_observation=0
  pool=concurrent.futures.ThreadPoolExecutor(max_workers=10,thread_name_prefix="whale-book")
  try:
   while not SHUTDOWN.is_set():
@@ -1233,27 +1236,39 @@ def whale_liquidation_scan():
     for sym in contexts:contexts[sym].update(MARKET_OBS.context(sym,stamp))
     clusters=cluster_positions(rows,prices,contexts,stamp,LIQ_WHALE_MAX_POSITION_AGE_SECONDS,LIQ_WHALE_MAX_DISTANCE_PCT)
     rejections={};eligible=[]
+    # WL2 sees the distance on every valid cluster pass, before v1 eligibility.
+    # Shared freshness/materiality failures remain explicit entry vetoes.
+    v2_inputs={p["cluster_id"]:{"symbol":p["symbol"],"side":p["trade_side"],"cluster_id":p["cluster_id"],
+      "distance_pct":p["distance_pct"],"liquidation_price":p["liq_price"],"victim_side":p["side"],
+      "observed_at_epoch":stamp,"score":0,"whale_rank_score":0,"upstream_reject_reasons":[]} for p in clusters}
     def reject(reason):rejections[reason]=rejections.get(reason,0)+1
     for cluster in clusters:
      # Run cheap significance tests before acquiring one shared book per asset.
      probe=significance(cluster,None,contexts.get(cluster["symbol"],{}),floors=LIQ_WHALE_MIN_BY_SYMBOL)
      if probe["reason"]=="missing_orderbook":eligible.append(cluster)
-     else:reject(probe["reason"])
-    jobs={sym:pool.submit(_whale_liq_book,sym) for sym in {p["symbol"] for p in eligible}}
+     else:
+      reject(probe["reason"]);v2_inputs[cluster["cluster_id"]]["upstream_reject_reasons"]=[probe["reason"]]
+    cascades=LIQUIDATION_TAPE.snapshot(stamp)
+    cascade_symbols={x["symbol"] for x in cascades if x["symbol"] in prices and x["events"]>=2 and
+      x["last_event_age_seconds"]<=10 and x["dominance"]>=.75 and
+      x["notional_usd"]>={"BTC":500000,"ETH":250000,"SOL":100000}.get(x["symbol"],50000) and
+      contexts.get(x["symbol"],{}).get("trade_data_fresh")}
+    jobs={sym:pool.submit(_whale_liq_book,sym) for sym in ({p["symbol"] for p in eligible}|cascade_symbols)}
     books={sym:job.result() for sym,job in jobs.items()}
     candidates=[]
     for p in eligible:
      sym=p["symbol"];side=p["trade_side"];ctx=contexts[sym];book=books[sym]
      p=dict(p,evaluated_at=time.time())
      material=significance(p,book,ctx,floors=LIQ_WHALE_MIN_BY_SYMBOL)
-     if not material["allowed"]:reject(material["reason"]);continue
+     if not material["allowed"]:
+      reject(material["reason"]);v2_inputs[p["cluster_id"]]["upstream_reject_reasons"]=[material["reason"]];continue
      r15=_timeline_return(history.get(sym,[]),stamp,15,prices[sym]);r60=_timeline_return(history.get(sym,[]),stamp,60,prices[sym])
      r300=_timeline_return(history.get(sym,[]),stamp,300,prices[sym]);r900=_timeline_return(history.get(sym,[]),stamp,900,prices[sym])
-     if r15 is None or r60 is None:reject("insufficient_price_history");continue
+     if r15 is None or r60 is None:
+      reject("insufficient_price_history");v2_inputs[p["cluster_id"]]["upstream_reject_reasons"]=["insufficient_price_history"];continue
      dist=p["distance_pct"];impact=material["liquidation_flow_to_depth"]
      base_distance=LIQ_WHALE_BASE_ENTRY_DISTANCE.get(sym,LIQ_WHALE_DEFAULT_ENTRY_DISTANCE)
      dynamic=min(LIQ_WHALE_MAX_DISTANCE_PCT,base_distance+(0.15 if impact>=.5 else 0)+(0.2 if impact>=1 else 0)+(0.2 if impact>=2 else 0))
-     if dist>dynamic:reject("outside_dynamic_entry_distance");continue
      flow=float(ctx.get("flow_imbalance") or 0);imb=float(book["imbalance"])
      trend_ok=side*r15>=.0004 and side*r60>=.0008
      book_ok=side*imb>=.06 and book["spread_bps"]<=12
@@ -1273,9 +1288,11 @@ def whale_liquidation_scan():
       "oi_delta_60s":oi,"book_depth_usd":round(float(book.get("bid_depth_usd",0) or 0)+float(book.get("ask_depth_usd",0) or 0),2),
       "day_volume_usd":float(S.get("_day_volumes",{}).get(sym,0) or 0),
       "micro_confirmations":confirmations,"score":round(min(100,score),2),"trend_ok":trend_ok,"pressure_ok":pressure_ok}
+     v2_inputs[p["cluster_id"]]=x
+     if dist>dynamic:reject("outside_dynamic_entry_distance");continue
      if not (trend_ok and pressure_ok):reject("directional_pressure_not_confirmed");continue
      candidates.append(x)
-    for x in candidates:
+    for x in v2_inputs.values():
      distance=max(0.0,float(x.get("distance_pct",99) or 99))
      dyn=max(0.01,float(x.get("dynamic_entry_distance_pct",1) or 1))
      proximity=max(0.0,min(1.0,1.0-distance/dyn))
@@ -1287,39 +1304,54 @@ def whale_liquidation_scan():
      x["whale_rank_score"]=round(min(100.0,0.55*float(x["score"])+18.0*proximity+12.0*min(1.0,vol)+10.0*impact+5.0*pressure),2)
     candidates.sort(key=lambda x:(x.get("whale_rank_score",0),x["score"],-x.get("distance_pct",99)),reverse=True)
     streaks=update_streaks(candidates,streaks,scan_id)
-    v2_qualified,v2_rejections,v2_observed=v2_tracker.observe(candidates,scan_id)
+    v2_qualified,v2_rejections,v2_observed=v2_tracker.observe(list(v2_inputs.values()),scan_id)
+    regime=market_regime(prices,history,S.get("_day_volumes",{}),time.time())
+    cascade_qualified,cascade_rejections=cascade_candidates(cascades,prices,history,contexts,books,time.time(),regime)
+    # Already observed forced closes have a separate continuation route. They
+    # do not pretend to be future liquidation targets with contracting distance.
+    existing={(x["symbol"],x["side"]) for x in v2_qualified}
+    v2_qualified.extend(x for x in cascade_qualified if (x["symbol"],x["side"]) not in existing)
+    for reason,count in cascade_rejections.items():v2_rejections[reason]=v2_rejections.get(reason,0)+count
+    for reason,count in v2_rejections.items():v2_rejection_totals[reason]=v2_rejection_totals.get(reason,0)+count
     v2_opened=[]
+    v2_journal_rows=[]
     v2_qualified_ids={str(x.get("cluster_id")) for x in v2_qualified}
     for x in v2_qualified:
      with LOCK:v2_capacity=len(S.get("whale_v2_positions",{}))<WL2_MAX_POSITIONS
      opened=v2_capacity and whale_v2_open(x["symbol"],int(x["side"]),prices.get(x["symbol"]),x["score"],x)
      action="OPENED" if opened else ("QUALIFIED_CAPACITY" if not v2_capacity else "QUALIFIED")
      if opened:v2_opened.append(x["symbol"])
-     ident=hashlib.sha256(("WHALELIQ2:"+str(x.get("cluster_id"))+":"+str(scan_id)+":"+action).encode()).hexdigest()
-     with pg() as db:
-      db.execute("""insert into whale_liq_v2_signal_journal(id,ts,symbol,side,score,action,features)
-       values(%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(id) do nothing""",
-       (ident,now(),x["symbol"],int(x["side"]),float(x["score"]),action,json.dumps(x,default=str)))
+     ident=hashlib.sha256((WL2_POLICY+":"+str(x.get("cluster_id"))+":"+str(int(stamp//15))+":"+action).encode()).hexdigest()
+     v2_journal_rows.append((ident,now(),x["symbol"],int(x["side"]),float(x["score"]),action,json.dumps(x,default=str)))
     for x in v2_observed:
      if str(x.get("cluster_id")) in v2_qualified_ids:continue
-     ident=hashlib.sha256(("WHALELIQ2:"+str(x.get("cluster_id"))+":"+str(scan_id)+":REJECTED").encode()).hexdigest()
+     key=(x["cluster_id"],tuple(x.get("wl2_reject_reasons") or []))
+     if stamp-v2_journal_at.get(key,0)<60:continue
+     v2_journal_at[key]=stamp
+     ident=hashlib.sha256((WL2_POLICY+":"+str(x.get("cluster_id"))+":"+str(int(stamp//60))+":REJECTED:"+str(key[1])).encode()).hexdigest()
+     v2_journal_rows.append((ident,now(),x["symbol"],int(x["side"]),float(x["score"]),"REJECTED",json.dumps(x,default=str)))
+    if v2_journal_rows:
      with pg() as db:
-      db.execute("""insert into whale_liq_v2_signal_journal(id,ts,symbol,side,score,action,features)
-       values(%s,%s,%s,%s,%s,'REJECTED',%s::jsonb) on conflict(id) do nothing""",
-       (ident,now(),x["symbol"],int(x["side"]),float(x["score"]),json.dumps(x,default=str)))
-    if v2_observed:
+      with db.cursor() as cur:
+       cur.executemany("""insert into whale_liq_v2_signal_journal(id,ts,symbol,side,score,action,features)
+        values(%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(id) do nothing""",v2_journal_rows)
+    if len(v2_journal_at)>2000:v2_journal_at={k:t for k,t in v2_journal_at.items() if stamp-t<600}
+    if v2_opened or stamp-v2_last_observation>=30:
      try:
       save_scanner_observation("whale_liquidation_v2",{"policy":WL2_POLICY,"candidates":v2_observed[:30],
        "qualified":v2_qualified[:20],"opened":v2_opened,"rejections":v2_rejections,"scan_epoch":stamp})
+      v2_last_observation=stamp
      except Exception as obs_exc:
       with LOCK:S["last_error"]="whale_v2_observation: "+str(obs_exc)[:160]
     with LOCK:
-     S["sources"]["WhaleLiquidationV2"]={"ok":True,"last_check":now(),"mode":"ab_shadow_frozen_week1",
+     S["sources"]["WhaleLiquidationV2"]={"ok":True,"last_check":now(),"mode":"independent_cluster_observation_v2",
       "policy":WL2_POLICY,"candidate_count":len(v2_observed),"qualified_candidates":len(v2_qualified),
+      "input_clusters":len(clusters),"v1_entry_candidates":len(candidates),"distance_window_seconds":60,
+      "confirmed_cascade_observations":len(cascades),"confirmed_cascade_candidates":len(cascade_qualified),
       "opened_this_scan":v2_opened,"paper_positions":len(S.get("whale_v2_positions",{})),
       "paper_trades":S.get("whale_v2_trades",0),"virtual_equity":round(float(S.get("whale_v2_equity",PAPER_RESET)),4),
       "margin_fraction":WL2_MARGIN_FRACTION,"leverage":WL2_LEVERAGE,"max_positions":WL2_MAX_POSITIONS,
-      "rejections":v2_rejections,"learning_mode":"observe_only_frozen_week1","error":None}
+      "rejections":v2_rejections,"rejections_since_start":dict(v2_rejection_totals),"learning_mode":"observe_only_v2_revised","error":None}
     qualified=[x for x in candidates if x["score"]>=LIQ_WHALE_SCORE_MIN and x["confirmation_streak"]>=2]
     qualified.sort(key=lambda x:(x.get("whale_rank_score",0),x["score"],-x.get("distance_pct",99)),reverse=True)
     for x in qualified:
@@ -1375,26 +1407,8 @@ def _timeline_return(rows,stamp,age,current):
  except Exception:return None
 
 def market_regime(prices,history,volumes,stamp):
- rows=[]
- for sym,px in prices.items():
-  if volumes.get(sym,0)<5_000_000:continue
-  r60=_timeline_return(history.get(sym,[]),stamp,60,px);r180=_timeline_return(history.get(sym,[]),stamp,180,px)
-  if r60 is None:continue
-  rows.append({"symbol":sym,"r60":r60,"r180":r180 if r180 is not None else r60})
- if len(rows)<20:return {"mode":"NORMAL","count":len(rows),"candidates":[]}
- avg60=sum(x["r60"] for x in rows)/len(rows);avg180=sum(x["r180"] for x in rows)/len(rows)
- down60=sum(x["r60"]<=-0.0025 for x in rows)/len(rows);up60=sum(x["r60"]>=0.0025 for x in rows)/len(rows)
- down180=sum(x["r180"]<=-0.005 for x in rows)/len(rows);up180=sum(x["r180"]>=0.005 for x in rows)/len(rows)
- mode="NORMAL";side=0
- if (down60>=0.60 and avg60<=-0.0022) or (down180>=0.65 and avg180<=-0.0055):mode="MARKET_DUMP";side=-1
- elif (up60>=0.60 and avg60>=0.0022) or (up180>=0.65 and avg180>=0.0055):mode="MARKET_PUMP";side=1
- candidates=[]
- if side:
-  ranked=sorted((x for x in rows if side*x["r60"]>0),key=lambda x:side*x["r60"],reverse=True)
-  for x in ranked[:PUMP_MAX_POSITIONS]:
-   score=min(100,60+abs(x["r60"])*4000+abs(x["r180"])*1200)
-   candidates.append({"symbol":x["symbol"],"side":side,"score":round(score,2),"r60_pct":round(x["r60"]*100,3),"r180_pct":round(x["r180"]*100,3),"regime":mode,"exhaustion":False})
- return {"mode":mode,"side":side,"count":len(rows),"avg60":avg60,"avg180":avg180,"down60":down60,"up60":up60,"down180":down180,"up180":up180,"candidates":candidates}
+ with LOCK:candles=copy.deepcopy(S.get("_regime_candles",{}))
+ return breadth_regime(prices,history,volumes,stamp,candles)
 
 @account_mutation
 def close_news_position(sym,pos,price,reason):
@@ -1405,66 +1419,10 @@ def close_news_position(sym,pos,price,reason):
    if S["positions"].get(sym,{}).get("opened")==pos["opened"]:S["positions"].pop(sym,None)
  return result
 
-@account_mutation
 def reconcile_open_paper_sizing(prices):
- """One-time PAPER resize of legacy pump/liquidation positions to the 5-20% policy.
-
- Historical reconstruction keeps the *original* entry price. Changing the margin
- changes the counterfactual size of the corrected strategy, not the recorded fill.
- """
- with LOCK:
-  equity=float(S.get("equity",0) or 0)
-  books=(("pump_dump",copy.deepcopy(S.get("pump_positions",{})),"pump_positions"),)
- if equity<=0:return 0
- changed=0
- for strategy,book,table in books:
-  for sym,pos in book.items():
-   features=copy.deepcopy(pos.get("features") or {})
-   policy=str(features.get("allocation_policy") or "")
-   if policy in ("signal_momentum_liquidity_5_20_paper_v4","signal_momentum_liquidity_5_20_paper_v3"):
-    continue
-   mark=float(prices.get(sym,0) or 0)
-   if mark<=0:continue
-   features["score"]=float(pos.get("score",features.get("score",0)) or 0)
-   features["side"]=int(pos.get("side",features.get("side",0)) or 0)
-   frac=liquidity_margin_fraction(sym,features)
-   frac=max(0.05,min(0.20,float(frac)))
-   target_margin=equity*frac
-   old_margin=float(pos.get("margin",0) or 0);lev=max(1.0,float(pos.get("leverage",TRADE_LEVERAGE)))
-   old_notional=float(pos.get("notional",old_margin*lev) or 0)
-   if target_margin<=old_margin*1.001:
-    features["allocation_policy"]="signal_momentum_liquidity_5_20_paper_v4"
-    with pg() as db:
-     with db.transaction():
-      STORE.fence(db)
-      db.execute("update "+table+" set features=%s::jsonb where symbol=%s",(json.dumps(features,default=str),sym))
-    with LOCK:
-     key="pump_positions" if strategy=="pump_dump" else "whale_positions"
-     if sym in S.get(key,{}):S[key][sym]["features"]=features
-    continue
-   target_notional=target_margin*lev
-   original_entry=float(pos["entry"])
-   features["resized_at"]=now();features["resize_reference_mark"]=mark
-   features["resize_from_margin"]=round(old_margin,8);features["resize_to_margin"]=round(target_margin,8)
-   features["reconstructed_sizing_at_original_entry"]=True
-   features["original_entry_preserved"]=original_entry
-   features["allocation_policy"]="signal_momentum_liquidity_5_20_paper_v4"
-   with pg() as db:
-    with db.transaction():
-     STORE.fence(db)
-     db.execute("update "+table+" set margin=%s,notional=%s,features=%s::jsonb where symbol=%s",
-                (target_margin,target_notional,json.dumps(features,default=str),sym))
-     db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'paper_position_resized',%s::jsonb)",
-                (now(),json.dumps({"strategy":strategy,"symbol":sym,"fraction":frac,"old_margin":old_margin,
-                 "new_margin":target_margin,"old_notional":old_notional,"new_notional":target_notional,
-                 "reference_mark":mark,"entry_preserved":original_entry,
-                 "counterfactual_reconstruction":True},default=str)))
-   with LOCK:
-    key="pump_positions" if strategy=="pump_dump" else "whale_positions"
-    if sym in S.get(key,{}):
-     S[key][sym].update({"entry":original_entry,"margin":target_margin,"notional":target_notional,"features":features})
-   changed+=1
- return changed
+ # Sizing is fixed at each actual entry. Do not resize old trades at their
+ # historical entry price or reconstruct their performance after the fact.
+ return 0
 
 def refresh_market_prices(force=False,max_age=8.0):
  # Emergency refresh keeps scanners live even when the position-checkpoint part
@@ -1487,7 +1445,7 @@ def refresh_market_prices(force=False,max_age=8.0):
     track=S.setdefault("_timeline",{}).setdefault(sym,[])
     if not track or stamp-float(track[-1][0])>=0.5:
      track.append((stamp,px))
-     if len(track)>600:del track[:-600]
+     if len(track)>1800:del track[:-1800]
     hist=S.setdefault("_hist",{}).setdefault(sym,[])
     if not hist or float(hist[-1])!=px:
      hist.append(px)
@@ -1519,34 +1477,48 @@ def _hype_claim(action,side,analysis,price=None):
 @account_mutation
 def hype_swing_open(side,price,analysis):
  if S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or int(side) not in (-1,1):return False
+ if not analysis.get("ready") or int(analysis.get("entry_side") or 0)!=int(side):return False
+ price=current_entry_price(HYPE_SWING_SYMBOL)
+ if price is None:return False
  with LOCK:
   if not S.get("engine_active") or S.get("hype_swing_position"):return False
-  equity=float(S.get("hype_swing_equity",HYPE_SWING_STARTING_EQUITY) or 0)
+  equity=float(S.get("equity",0) or 0)
  if equity<=0:return False
- price=float(price);margin=equity*HYPE_SWING_MARGIN_FRACTION;notional=margin*HYPE_SWING_LEVERAGE
- if margin<=0 or notional<=0:return False
- if not _hype_claim("OPEN",side,analysis,price):return False
- opened=now();epoch=time.time()
- features={**analysis,"policy":HYPE_SWING_POLICY,"allocation_margin_fraction":HYPE_SWING_MARGIN_FRACTION,
-  "leverage":HYPE_SWING_LEVERAGE,"mfe_price_move":0.0,"mae_price_move":0.0,"mfe_roe_pct":0.0,"mae_roe_pct":0.0,
-  "entry_mark":price,"shadow_exit_modes":["opposite_local_extreme","h1_momentum_weakening"]}
- pos={"side":int(side),"entry":price,"notional":notional,"margin":margin,"leverage":HYPE_SWING_LEVERAGE,
-      "opened":opened,"t":epoch,"signal_candle_time":int(analysis.get("signal_candle_time") or 0),"features":features}
- with pg() as db:
-  with db.transaction():
-   STORE.fence(db)
-   row=db.execute("""insert into hype_swing_positions(symbol,side,entry,notional,margin,leverage,opened,opened_epoch,signal_candle_time,features)
-      values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(symbol) do nothing returning symbol""",
-      (HYPE_SWING_SYMBOL,int(side),price,notional,margin,HYPE_SWING_LEVERAGE,opened,epoch,pos["signal_candle_time"],json.dumps(features,default=str))).fetchone()
-   if not row:return False
-   db.execute("""insert into hype_swing_shadow_exits(opened,entry_candle_time,side,entry,context)
-     values(%s,%s,%s,%s,%s::jsonb)""",(opened,pos["signal_candle_time"],int(side),price,json.dumps(features,default=str)))
-   db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'hype_swing_trade_opened',%s::jsonb)",
-     (now(),json.dumps({"strategy":"hype_h1_local_swing_v1","symbol":HYPE_SWING_SYMBOL,"side":int(side),
-      "entry":price,"margin":margin,"notional":notional,"leverage":HYPE_SWING_LEVERAGE,"equity":equity,
-      "pivot_type":analysis.get("pivot_type"),"pivot_price":analysis.get("pivot_price"),"policy":HYPE_SWING_POLICY},default=str)))
- with LOCK:S["hype_swing_position"]=pos
- return True
+ reserved,margin,reason,free=_reserve_shared_entry(HYPE_SWING_SYMBOL,strategy="hype_swing")
+ if not reserved:
+  journal("entry_skipped",None,{"strategy":"hype_h1_local_swing_v1","symbol":HYPE_SWING_SYMBOL,"reason":reason,"free_margin":free})
+  return False
+ try:
+  price=float(price);notional=margin*HYPE_SWING_LEVERAGE
+  opened=now();epoch=time.time()
+  features={**analysis,"policy":HYPE_SWING_POLICY,"allocation_margin_fraction":HYPE_SWING_MARGIN_FRACTION,
+   "leverage":HYPE_SWING_LEVERAGE,"mfe_price_move":0.0,"mae_price_move":0.0,"mfe_roe_pct":0.0,"mae_roe_pct":0.0,
+   "entry_mark":price,"shadow_exit_modes":["opposite_local_extreme","h1_momentum_weakening"]}
+  pos={"side":int(side),"entry":price,"notional":notional,"margin":margin,"leverage":HYPE_SWING_LEVERAGE,
+       "opened":opened,"t":epoch,"signal_candle_time":int(analysis.get("signal_candle_time") or 0),"features":features}
+  with pg() as db:
+   with db.transaction():
+    STORE.fence(db)
+    # Consume the signal and persist its position atomically. A failed INSERT
+    # must roll back the claim so the next poll can retry the same H1 pivot.
+    claim_id="HYPE_H1:OPEN:%s:%s"%(pos["signal_candle_time"],int(side))
+    claim=db.execute("""insert into hype_swing_signal_journal(id,ts,candle_time,action,side,price,features)
+      values(%s,%s,%s,'OPEN',%s,%s,%s::jsonb) on conflict(id) do nothing returning id""",
+      (claim_id,opened,pos["signal_candle_time"],int(side),price,json.dumps(features,default=str))).fetchone()
+    if not claim:return False
+    row=db.execute("""insert into hype_swing_positions(symbol,side,entry,notional,margin,leverage,opened,opened_epoch,signal_candle_time,features)
+       values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(symbol) do nothing returning symbol""",
+       (HYPE_SWING_SYMBOL,int(side),price,notional,margin,HYPE_SWING_LEVERAGE,opened,epoch,pos["signal_candle_time"],json.dumps(features,default=str))).fetchone()
+    if not row:return False
+    db.execute("""insert into hype_swing_shadow_exits(opened,entry_candle_time,side,entry,context)
+      values(%s,%s,%s,%s,%s::jsonb)""",(opened,pos["signal_candle_time"],int(side),price,json.dumps(features,default=str)))
+    db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'hype_swing_trade_opened',%s::jsonb)",
+      (now(),json.dumps({"strategy":"hype_h1_local_swing_v1","symbol":HYPE_SWING_SYMBOL,"side":int(side),
+       "entry":price,"margin":margin,"notional":notional,"leverage":HYPE_SWING_LEVERAGE,"equity":equity,
+       "pivot_type":analysis.get("pivot_type"),"pivot_price":analysis.get("pivot_price"),"policy":HYPE_SWING_POLICY},default=str)))
+  with LOCK:S["hype_swing_position"]=pos
+  return True
+ finally:_release_shared_entry(HYPE_SWING_SYMBOL,strategy="hype_swing")
 
 @account_mutation
 def hype_swing_close(price,reason,analysis=None):
@@ -1563,9 +1535,13 @@ def hype_swing_close(price,reason,analysis=None):
    if not row:return None
    acct=db.execute("""update hype_swing_account_state set equity=equity+%s,realized_pnl=realized_pnl+%s,updated_at=%s
      where id=1 returning equity,realized_pnl""",(pnl,pnl,now())).fetchone()
+   shared=db.execute("update account_state set equity=equity+%s,realized_pnl=realized_pnl+%s,updated_at=%s where id=1 returning equity,realized_pnl",(pnl,pnl,now())).fetchone()
    db.execute("""insert into hype_swing_trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,margin,notional,leverage,features)
      values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
      (pos["opened"],now(),HYPE_SWING_SYMBOL,pos["side"],pos["entry"],price,pnl,reason,pos["margin"],pos["notional"],pos["leverage"],json.dumps(features,default=str)))
+   db.execute("""insert into trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,strategy,features)
+     values(%s,%s,%s,%s,%s,%s,%s,%s,'hype_h1_local_swing_v1',%s::jsonb)""",
+     (pos["opened"],now(),HYPE_SWING_SYMBOL,pos["side"],pos["entry"],price,pnl,reason,json.dumps(features,default=str)))
    db.execute("""update hype_swing_shadow_exits set actual_exit_at=%s,actual_exit_price=%s,actual_exit_reason=%s
      where opened=%s""",(now(),price,reason,pos["opened"]))
    db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'hype_swing_trade_closed',%s::jsonb)",
@@ -1575,6 +1551,7 @@ def hype_swing_close(price,reason,analysis=None):
  with LOCK:
   S["hype_swing_position"]=None;S["hype_swing_equity"]=float(acct["equity"])
   S["hype_swing_realized_pnl"]=float(acct["realized_pnl"]);S["hype_swing_trades"]=int(S.get("hype_swing_trades",0))+1
+  S["equity"]=float(shared["equity"]);S["realized_pnl"]=float(shared["realized_pnl"]);S["trades"]+=1
  return {"pnl":pnl,"equity":float(acct["equity"]),"reason":reason}
 
 def _hype_update_shadows(analysis,mark):
@@ -1684,7 +1661,10 @@ def hype_h1_local_swing_loop():
       "position_open":bool(S.get("hype_swing_position")),"margin_fraction":HYPE_SWING_MARGIN_FRACTION,
       "leverage":HYPE_SWING_LEVERAGE,"last_signal_candle":candle,"pivot_type":analysis.get("pivot_type"),
       "pivot_price":analysis.get("pivot_price"),"entry_side":analysis.get("entry_side"),"long_weak_score":analysis.get("long_weak_score"),
-      "short_weak_score":analysis.get("short_weak_score"),"error":None}
+      "short_weak_score":analysis.get("short_weak_score"),"analysis_ready":bool(analysis.get("ready")),
+      "signal_reason":analysis.get("reason") or ("confirmed_h1_pivot" if analysis.get("entry_side") else "waiting_for_confirmed_h1_pivot"),
+      "signal_candle_close_time":analysis.get("signal_candle_close_time"),"confirmation_right_candles":1,
+      "signal_claim_atomic":True,"error":None}
   except LeaseLost as exc:
    with LOCK:S["sources"]["HypeH1LocalSwing"]={"ok":False,"last_check":now(),"mode":"standby","error":str(exc)[:160]}
   except Exception as exc:
@@ -1693,16 +1673,64 @@ def hype_h1_local_swing_loop():
    except Exception:pass
   SHUTDOWN.wait(30)
 
+@account_mutation
+def emergency_profit_take(prices):
+ stamp=time.time()
+ with LOCK:
+  if not S.get("engine_active") or S.get("mode")!="PAPER_ONLY":return []
+  books=[("news",copy.deepcopy(S.get("positions",{}))),("pump_dump",copy.deepcopy(S.get("pump_positions",{}))),
+         ("whale_liquidation",copy.deepcopy(S.get("whale_positions",{}))),
+         ("whale_liquidation_v2",copy.deepcopy(S.get("whale_v2_positions",{}))),
+         ("hype_h1_local_swing_v1",{"HYPE":copy.deepcopy(S["hype_swing_position"])} if S.get("hype_swing_position") else {})]
+  history={s:list(S.get("_timeline",{}).get(s,[])) for s in ("BTC","ETH","SOL")}
+  pending=copy.deepcopy(S.get("_emergency_pending",[]))
+ shock=emergency_reversal(prices,history,stamp)
+ if not pending and stamp>=float(S.get("_emergency_until",0) or 0):
+  pending=profit_targets(books,prices,shock,FEE)
+  if pending:
+   with LOCK:
+    S["_emergency_until"]=stamp+COOLDOWN_SECONDS;S["_emergency_pending"]=pending
+    S["emergency_profit_guard"]={"enabled":True,"triggered_at":now(),"shock":shock,
+       "targets":pending,"cooldown_until_epoch":stamp+COOLDOWN_SECONDS,"status":"CLOSING"}
+   journal("portfolio_emergency_triggered",None,{"shock":shock,"targets":pending,"cooldown_seconds":COOLDOWN_SECONDS})
+ if not pending:
+  with LOCK:S.setdefault("emergency_profit_guard",{"enabled":True,"status":"ARMED","cooldown_seconds":COOLDOWN_SECONDS})
+  return []
+ callbacks={"news":None,"pump_dump":pump_close,"whale_liquidation":whale_liq_close,
+            "whale_liquidation_v2":whale_v2_close,"hype_h1_local_swing_v1":None}
+ live_books=dict(books);closed=[];remaining=[]
+ for target in pending:
+  strategy=target["strategy"];sym=target["symbol"];pos=live_books.get(strategy,{}).get(sym)
+  if not pos or pos.get("opened")!=target["opened"]:continue
+  price=prices.get(sym)
+  if not price:remaining.append(target);continue
+  if strategy=="news":result=close_news_position(sym,pos,price,"portfolio_emergency_profit_take")
+  elif strategy=="hype_h1_local_swing_v1":result=hype_swing_close(price,"portfolio_emergency_profit_take")
+  else:result=callbacks[strategy](sym,price,"portfolio_emergency_profit_take")
+  if result:closed.append({**target,"exit":price,"pnl":result.get("pnl")})
+  else:remaining.append(target)
+ with LOCK:
+  S["_emergency_pending"]=remaining
+  S["emergency_profit_guard"].update(status="CLOSING" if remaining else "COOLDOWN",last_closed=closed,pending=len(remaining))
+ if closed:journal("portfolio_emergency_profit_taken",None,{"closed":closed,"remaining":remaining})
+ return closed
+
+def confirmed_liquidation_stream():
+ def report(state):
+  with LOCK:S["sources"]["ConfirmedLiquidationStream"]={"last_check":now(),**state}
+ run_liquidation_stream(LIQUIDATION_TAPE,SHUTDOWN,report)
+
 def market():
  while not SHUTDOWN.is_set():
   S["_market_heartbeat"]=time.time()
   try:
    valid=refresh_market_prices(force=True)
-   with LOCK:
-    positions=copy.deepcopy(S["positions"]);active=S["engine_active"]
+   with LOCK:active=S["engine_active"]
    # Network and SQL work never owns the global state lock. Sources, health
    # and the lease heartbeat remain responsive during a slow checkpoint.
    if active and not SHUTDOWN.is_set():
+    emergency_profit_take(valid)
+    with LOCK:positions=copy.deepcopy(S["positions"])
     reconcile_open_paper_sizing(valid)
     for sym,old_pos in positions.items():
      if sym not in valid:continue
@@ -1725,38 +1753,50 @@ def market():
   SHUTDOWN.wait(2)
 
 def impulse_scan():
- last_signal={};streaks={};candidate_queue={}
+ last_signal={};streaks={};candidate_queue={};last_observation=0
+ micro_rejections={}
  pool=concurrent.futures.ThreadPoolExecutor(max_workers=MICRO_ANALYSIS_THREADS,thread_name_prefix="pump-micro")
  def enrich(candidate):
   candidate=dict(candidate);sym=candidate["symbol"];side=int(candidate["side"])
+  def rejected(reason):
+   with LOCK:micro_rejections[reason]=micro_rejections.get(reason,0)+1
+   return None
   try:
    book=_whale_liq_book(sym)
-   if not book or not book.get("bid_depth_complete") or not book.get("ask_depth_complete"):return None
-   if book.get("epoch") is None or not 0<=time.time()-book["epoch"]<=5:return None
+   if not book or not book.get("bid_depth_complete") or not book.get("ask_depth_complete"):return rejected("incomplete_orderbook")
+   if book.get("epoch") is None or not 0<=time.time()-book["epoch"]<=5:return rejected("stale_orderbook")
    bd=book["bid_depth_usd"];ad=book["ask_depth_usd"];imb=book["imbalance"];spread=book["spread_bps"]
    candidate["orderbook_imbalance"]=round(imb,4);candidate["spread_bps"]=round(spread,2)
    candidate["book_depth_usd"]=round(bd+ad,2)
   except Exception as exc:
-   candidate["book_error"]=str(exc)[:100];return None
+   candidate["book_error"]=str(exc)[:100];return rejected("orderbook_error")
   observed=MARKET_OBS.context(sym,time.time())
-  if not observed.get("trade_data_fresh"):return None
+  if not observed.get("trade_data_fresh"):return rejected("missing_observed_trade_flow")
   candidate["cvd_1m"]=observed.get("cvd_1m");candidate["flow_imbalance"]=observed.get("flow_imbalance")
   candidate["flow_coverage"]=observed.get("trade_coverage_seconds");candidate["flow_source"]="hyperliquid_ws_trades"
   imb=float(candidate.get("orderbook_imbalance",0) or 0);flow_imb=float(candidate.get("flow_imbalance",0) or 0)
   spread=float(candidate.get("spread_bps",9999) or 9999);oi=abs(float(candidate.get("oi_delta_60s",0) or 0))
   vol_z=candidate.get("volume_rate_z")
-  book_ok=side*imb>=0.15 and spread<=15
-  flow_ok=side*flow_imb>=0.08
+  continuation=candidate.get("candidate_kind")=="market_continuation"
+  # Aggressive sell flow can consume a bid wall while the static book still
+  # looks bid-heavy. A continuation allows mild opposing depth only with
+  # strong *executed* flow; a wide or strongly opposing book still rejects it.
+  book_ok=spread<=15 and (side*imb>=0.15 or (continuation and side*imb>=-.10 and side*flow_imb>=.25))
+  flow_ok=side*flow_imb>=(.12 if continuation else .08)
   oi_ok=oi>=0.003
   abnormal_ok=(vol_z is not None and float(vol_z)>=3.0) or float(candidate.get("volume_burst_ratio",0) or 0)>=3.0
-  confirmations=sum([book_ok,flow_ok,oi_ok,abnormal_ok])
+  participation_ok=(float(candidate.get("volume_burst_ratio",0) or 0)>=1.2 or
+                    (vol_z is not None and float(vol_z)>=1.0) or oi>=.0025) if continuation else abnormal_ok
+  confirmations=sum([book_ok,flow_ok,oi_ok,participation_ok])
   candidate["book_ok"]=book_ok;candidate["flow_ok"]=flow_ok;candidate["oi_ok"]=oi_ok;candidate["abnormal_volume_ok"]=abnormal_ok
   candidate["micro_confirmations"]=confirmations
   if book_ok:candidate["score"]=min(100,float(candidate["score"])+8)
   if flow_ok:candidate["score"]=min(100,float(candidate["score"])+8)
   if oi_ok:candidate["score"]=min(100,float(candidate["score"])+5)
-  if abnormal_ok:candidate["score"]=min(100,float(candidate["score"])+5)
-  return candidate if confirmations>=3 and book_ok and flow_ok and abnormal_ok and spread<=15 else None
+  candidate["participation_ok"]=participation_ok
+  if participation_ok:candidate["score"]=min(100,float(candidate["score"])+5)
+  if confirmations>=3 and book_ok and flow_ok and participation_ok and spread<=15:return candidate
+  return rejected("book_pressure" if not book_ok else "flow_pressure" if not flow_ok else "participation" if not participation_ok else "insufficient_micro_confirmations")
  def portfolio_counts():
   with LOCK:
    news=len(S.get("positions",{}));pump=len(S.get("pump_positions",{}));whale=len(S.get("whale_positions",{}))
@@ -1777,19 +1817,15 @@ def impulse_scan():
     regime=market_regime(prices,history,volumes,stamp)
     for sym in contexts:contexts[sym].update(MARKET_OBS.context(sym,stamp))
     found=momentum_candidates(prices,history,volumes,stamp,minimum_day_volume=0.0,contexts=contexts)
-    if regime.get("side"):
-     aligned=[];counter=[]
-     for cand in found:
-      if int(cand.get("side",0))==int(regime["side"]):aligned.append(cand)
-      else:
-       # Counter-market impulses are observation-only unless extreme relative move.
-       move=max(abs(float(cand.get("r60_pct",0) or 0)),abs(float(cand.get("r180_pct",0) or 0)))
-       if float(cand.get("score",0) or 0)>=96 and move>=1.25:
-        cand["counter_regime_exception"]=True;counter.append(cand)
-       else:
-        cand["market_regime_rejected"]=regime.get("mode")
-     found=aligned+counter
+    raw_impulses=len(found)
+    continuation=continuation_candidates(prices,history,volumes,stamp,contexts,regime)
+    combined={(x["symbol"],int(x["side"])):x for x in continuation}
+    combined.update({(x["symbol"],int(x["side"])):x for x in found})
+    blocked_counter=sum(int(x["side"])!=int(regime["side"]) for x in combined.values()) if regime.get("side") else 0
+    found=[x for x in combined.values() if not regime.get("side") or int(x["side"])==int(regime["side"])]
+    found.sort(key=lambda x:x["score"],reverse=True)
     for candidate in found:candidate["observed_at_epoch"]=stamp
+    micro_rejections.clear()
     futures=[pool.submit(enrich,x) for x in found[:30]]
     enriched=[]
     for future in concurrent.futures.as_completed(futures):
@@ -1809,7 +1845,9 @@ def impulse_scan():
     for key in list(streaks):
      if key not in now_keys:streaks.pop(key,None)
     for key,row in list(candidate_queue.items()):
-     if row["expires"]<stamp:candidate_queue.pop(key,None)
+     # Queue capacity is not permission to reuse an old signal. Every entry
+     # must still pass this cycle's momentum, breadth, book and flow checks.
+     if row["expires"]<stamp or key not in now_keys:candidate_queue.pop(key,None)
     primary.sort(key=lambda x:x["score"],reverse=True);secondary.sort(key=lambda x:x["score"],reverse=True)
     queued=[row["candidate"] for row in candidate_queue.values()]
     queued.sort(key=lambda x:(0 if x.get("allocation_tier")=="PRIMARY" else 1,-float(x.get("score",0))))
@@ -1836,8 +1874,10 @@ def impulse_scan():
       db.execute("""insert into pump_signal_journal(id,ts,symbol,side,score,action,features)
         values(%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(id) do nothing""",
         (ident,now(),sym,side,float(candidate["score"]),action,json.dumps(candidate,default=str)))
-    if found or qualified:
-     try:save_scanner_observation("pump_dump",{"raw_candidates":found[:30],"micro_confirmed":enriched[:30],"primary":primary[:20],"secondary":secondary[:20],"queue":queued[:20],"opened":opened_this_scan,"scan_epoch":stamp})
+    if found or qualified or stamp-last_observation>=60:
+     try:
+      save_scanner_observation("pump_dump",{"policy":"momentum_breadth_continuation_v5","raw_candidates":found[:30],"micro_confirmed":enriched[:30],"primary":primary[:20],"secondary":secondary[:20],"queue":queued[:20],"opened":opened_this_scan,"market_regime":regime,"micro_rejections":dict(micro_rejections),"counter_market_rejected":blocked_counter,"scan_epoch":stamp})
+      last_observation=stamp
      except Exception as obs_exc:
       with LOCK:S["last_error"]="pump_observation: "+str(obs_exc)[:160]
     total_open,pump_open_count,_=portfolio_counts()
@@ -1845,7 +1885,9 @@ def impulse_scan():
      S["sources"]["PumpDumpScanner"]={"ok":bool(prices and volumes),"last_check":now(),"markets":len(prices),
        "liquid_markets":sum(v>=5_000_000 for v in volumes.values()),"raw_candidates":len(found),"micro_confirmed":len(enriched),
        "qualified_candidates":len(qualified),"primary_candidates":len(primary),"secondary_candidates":len(secondary),
-       "candidate_queue":len(candidate_queue),"top_candidates":qualified[:5],"mode":"portfolio_allocator_paper_v4",
+       "candidate_queue":len(candidate_queue),"top_candidates":qualified[:5],"mode":"breadth_continuation_paper_v5",
+       "raw_impulses":raw_impulses,"continuation_candidates":len(continuation),"counter_market_rejected":blocked_counter,
+       "micro_rejections":dict(micro_rejections),"queue_revalidation":"current_scan_required",
        "scan_seconds":PUMP_SCAN_SECONDS,"actual_scan_seconds":round(time.monotonic()-started,3),"min_day_volume":0,
        "market_scope":"all_hyperliquid_listed_perps","primary_score_min":PUMP_PRIMARY_SCORE,
        "secondary_score_min":PUMP_SECONDARY_SCORE,"primary_confirmation_scans":3,"secondary_confirmation_scans":2,
@@ -1860,6 +1902,37 @@ def impulse_scan():
     streaks={};candidate_queue={}
     with LOCK:S["sources"]["PumpDumpScanner"]={"ok":False,"last_check":now(),"mode":"portfolio_allocator_paper_v4","analysis_threads":MICRO_ANALYSIS_THREADS,"error":str(exc)[:180]}
    SHUTDOWN.wait(max(.05,PUMP_SCAN_SECONDS-(time.monotonic()-started)))
+ finally:pool.shutdown(wait=False,cancel_futures=True)
+
+def market_regime_history():
+ # Restarting a free service must not erase the 5m/15m/30m market context.
+ # Only completed exchange candles seed breadth, never the 15s entry signal.
+ pool=concurrent.futures.ThreadPoolExecutor(max_workers=4,thread_name_prefix="breadth-history")
+ try:
+  while not SHUTDOWN.is_set():
+   with LOCK:
+    active=bool(S.get("engine_active"));volumes=dict(S.get("_day_volumes",{}))
+   symbols=sorted((s for s,v in volumes.items() if v>=5_000_000),key=lambda s:volumes[s],reverse=True)[:24]
+   if not active or not symbols:
+    SHUTDOWN.wait(2);continue
+   stamp=time.time()
+   def fetch(sym):
+    rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":sym,"interval":"1m","startTime":int((stamp-3600)*1000),"endTime":int(stamp*1000)}}))
+    if not isinstance(rows,list):raise ValueError("invalid_candle_history")
+    return [(float(r["T"])/1000,float(r["c"])) for r in rows
+            if isinstance(r,dict) and 0<float(r.get("T",0))/1000<stamp and float(r.get("c",0))>0]
+   jobs={s:pool.submit(fetch,s) for s in symbols};errors={};loaded=0
+   for sym,job in jobs.items():
+    try:
+     rows=job.result()
+     if not rows:raise ValueError("empty_completed_candles")
+     with LOCK:S.setdefault("_regime_candles",{})[sym]=rows[-60:]
+     loaded+=1
+    except Exception as exc:errors[sym]=str(exc)[:90]
+   with LOCK:S["sources"]["MarketBreadthHistory"]={"ok":loaded>=5,"last_check":now(),"loaded_markets":loaded,
+    "requested_markets":len(symbols),"mode":"completed_1m_candles_breadth_only","refresh_seconds":300,
+    "error":None if not errors else errors}
+   SHUTDOWN.wait(300)
  finally:pool.shutdown(wait=False,cancel_futures=True)
 
 def market_trade_stream():
@@ -2318,7 +2391,8 @@ def ingest_with_retry(ident,source,title,published_at=None,source_url=None):
 def x_critical_realtime():
  handles=list(CRITICAL_X_HANDLES)
  poll=max(4.0,float(os.getenv("X_CRITICAL_POLL_SECONDS","4")))
- seen={};primed=set();last_success={};backend_used={};last_error={};inflight={};pending_ingests=set();latest_publication={};poll_intervals={};fetch_started={}
+ seen={};primed=set();last_success={};backend_used={};last_error={};inflight={};pending_ingests={};queued_ids=set();latest_publication={};poll_intervals={};fetch_started={}
+ received_counts={h:{"new_posts_queued":0,"stale_posts_queued":0,"queue_backpressure":0} for h in handles}
  pool=concurrent.futures.ThreadPoolExecutor(max_workers=min(10,len(handles)),thread_name_prefix="x-critical")
  ingest_pool=concurrent.futures.ThreadPoolExecutor(max_workers=4,thread_name_prefix="x-critical-ingest")
  next_due={h:time.monotonic() for h in handles}
@@ -2361,8 +2435,9 @@ def x_critical_realtime():
     inflight[pool.submit(fetch_one,h,backend_used.get(h))]=(h,mono);next_due[h]=mono+poll
    for fut in list(pending_ingests):
     if not fut.done():continue
-    pending_ingests.remove(fut)
-    try:fut.result()
+    handle,post_id=pending_ingests.pop(fut);queued_ids.discard((handle,post_id))
+    try:
+     fut.result();seen.setdefault(handle,set()).add(post_id)
     except Exception as exc:
      with LOCK:S["last_error"]="x_ingestion: "+type(exc).__name__+":"+str(exc)[:160]
    done=[f for f in list(inflight) if f.done()]
@@ -2372,11 +2447,13 @@ def x_critical_realtime():
      posts,backend=fut.result();last_success[h]=time.time();backend_used[h]=backend;last_error.pop(h,None)
      ids=[str(p["id"]) for p in posts]
      if h not in primed:
-      seen[h]=set(ids);primed.add(h)
-      fresh=[p for p in posts if (publication_epoch(p.get("created_at")) or 0)>=START]
+      # Durable event IDs already prevent replay after a deploy. A publication
+      # from 30 seconds before startup is still actionable under the 120s rule.
+      fresh=[p for p in posts if freshness(p.get("created_at"),time.time(),source_freshness_window("XOfficial:"+h))["allowed"]]
+      seen[h]=set(ids)-{str(p["id"]) for p in fresh};primed.add(h)
      else:
-      old=seen.setdefault(h,set());fresh=[p for p in posts if str(p["id"]) not in old];old.update(ids)
-      if len(old)>250:seen[h]=set(ids[:120])
+      old=seen.setdefault(h,set());fresh=[p for p in posts if str(p["id"]) not in old]
+      if len(old)>250:old.intersection_update(ids)
      stamps=[publication_epoch(p.get("created_at")) for p in posts]
      stamps=[t for t in stamps if t is not None and t<=time.time()+10]
      if stamps:latest_publication[h]=max(stamps)
@@ -2387,11 +2464,18 @@ def x_critical_realtime():
       # Its publication age is not a measured delivery delay while watching.
       if age is not None and age>=0 and stamp>=START:
        latencies.append(age);LATENCIES.record("delivery:XOfficial:"+h,age,time.time())
-      if not freshness(p.get("created_at"),time.time(),source_freshness_window("XOfficial:"+h))["allowed"]:continue
+      post_id=str(p["id"])
+      if (h,post_id) in queued_ids:continue
       ident=hashlib.sha256(("XFree:"+h+":"+str(p["id"])).encode()).hexdigest()
       if len(pending_ingests)<32:
-       pending_ingests.add(ingest_pool.submit(ingest_with_retry,ident,"XOfficial:"+h,p["text"],p.get("created_at"),p.get("url")))
+       # New stale posts go through the durable audit path too. The entry guard
+       # rejects them; silently dropping them hid the actual source latency.
+       future=ingest_pool.submit(ingest_with_retry,ident,"XOfficial:"+h,p["text"],p.get("created_at"),p.get("url"))
+       pending_ingests[future]=(h,post_id);queued_ids.add((h,post_id))
+       received_counts[h]["new_posts_queued"]+=1
+       if not freshness(p.get("created_at"),time.time(),source_freshness_window("XOfficial:"+h))["allowed"]:received_counts[h]["stale_posts_queued"]+=1
       else:
+       received_counts[h]["queue_backpressure"]+=1
        with LOCK:S["last_error"]="x_ingestion_queue_full"
      latency=min(latencies) if latencies else None
      with LOCK:S["sources"][src]={"ok":True,"active":True,"mode":backend+"_critical_4s","backend":backend,
@@ -2399,6 +2483,7 @@ def x_critical_realtime():
       "delivery_latency_seconds":round(latency,2) if latency is not None else None,
       "delivery":LATENCIES.summary("delivery:XOfficial:"+h,time.time()),
       "latest_post_age_seconds":round(time.time()-latest_publication[h],2) if h in latest_publication else None,
+      "publication_age_limit_seconds":source_freshness_window("XOfficial:"+h),**received_counts[h],
       "realtime_verified":LATENCIES.summary("delivery:XOfficial:"+h,time.time())["realtime_verified"],"error":None}
     except Exception as exc:
      err=str(exc)[:420];last_error[h]=err
@@ -2411,6 +2496,7 @@ def x_critical_realtime():
                "backend":backend_used.get(h),"last_success_epoch":last_success.get(h),
                "error":last_error.get(h),"observed_poll_interval_seconds":round(poll_intervals[h],3) if h in poll_intervals else None,
                "latest_post_age_seconds":round(wall-latest_publication[h],2) if h in latest_publication else None,
+               **received_counts[h],
                "delivery":LATENCIES.summary("delivery:XOfficial:"+h,wall)} for h in handles}
     ok_count=sum(v["ok"] for v in status.values())
     _xcrit={"ok":ok_count==len(handles),"mode":"dedicated_critical_pool","last_check":now(),
@@ -3026,7 +3112,7 @@ def piq_direct_realtime():
       story=future.result();stamp=publication_epoch(story.get("created_at"))
       if stamp is None:raise ValueError("exact_publication_timestamp_missing")
       last_story_error=None
-      if record["bootstrap"] and stamp<START:
+      if record["bootstrap"] and not freshness(story.get("created_at"),time.time(),source_freshness_window("PiQDirect"))["allowed"]:
        totals["startup_old_filtered"]+=1;finish(url);continue
       if not piq_high_signal(story["text"]):
        totals["filtered_low_signal"]+=1;finish(url);continue
@@ -3049,8 +3135,8 @@ def piq_direct_realtime():
      next_discovery=discovery_started+poll;visible=len(rows);transport_ok=True;err=None;delay=poll
      bootstrap=not primed
      if bootstrap:
-      # Resolve only a small startup sample. Its timestamp must be >= process
-      # start to be traded; already visible older pages are intentionally primed.
+      # Resolve a small startup sample using the same publication-age limit as
+      # normal ingestion. Durable IDs prevent reopening a completed event.
       startup_ignored={item["url"] for item in rows[8:]};primed=True;rows=rows[:8]
      for item in rows:
       url=item["url"]
@@ -3102,8 +3188,10 @@ def news_feed(source,url):
  # fallback; direct publishers have browser-TLS fallback when urllib is blocked.
  candidates=_news_candidates(url)
  base_poll=max(15,NEWS_POLL_SECONDS) if candidates[0][0]=="direct_rss" else max(20,NEWS_POLL_SECONDS)
- delay=base_poll;error_log_at=0
+ delay=base_poll;error_log_at=0;seen=set()
  while not SHUTDOWN.is_set():
+  if not S.get("engine_active"):
+   SHUTDOWN.wait(.5);continue
   errors=[];success=None
   for backend,candidate_url in candidates:
    try:
@@ -3118,7 +3206,7 @@ def news_feed(source,url):
   if success:
    backend,transport,items=success;count=0
    try:
-    for item in reversed(items):
+    for item in sorted(items,key=lambda x:publication_epoch(x.findtext("pubDate") or x.findtext("{*}published")) or 0,reverse=True):
      if SHUTDOWN.is_set():break
      title=(item.findtext("title") or item.findtext("{*}title") or "").strip()
      if not title:continue
@@ -3128,7 +3216,9 @@ def news_feed(source,url):
       node=item.find("{*}link")
       if node is not None:link=node.get("href")
      ident=hashlib.sha256((source+title).encode()).hexdigest()
-     count+=bool(ingest_event(ident,source,title,pub,link))
+     if ident in seen:continue
+     count+=bool(ingest_event(ident,source,title,pub,link));seen.add(ident)
+     if len(seen)>2000:seen={ident}
     with LOCK:S["sources"][source]={"ok":True,"last_check":now(),"new":count,"feed_items":len(items),
       "poll_seconds":base_poll,"mode":backend,"transport":transport,"fallback_used":backend!=candidates[0][0],
       "realtime_verified":False,"error":None}
@@ -3185,11 +3275,11 @@ def build_dashboard_snapshot():
  account_started=min(starts) if starts else now()
  try: account_age_seconds=max(0,int((datetime.datetime.now(datetime.timezone.utc)-datetime.datetime.fromisoformat(account_started.replace("Z","+00:00"))).total_seconds()))
  except Exception: account_age_seconds=0
- contributed=max(PAPER_RESET,float(state.get("contributed_capital",PAPER_RESET)));total=state["equity"]+unreal+pump_unreal+whale_unreal;account_roi=(total/contributed-1)*100;total_pnl_pct=(float(state["equity"])/PAPER_RESET-1)*100;wl2_total=float(state.get("whale_v2_equity",PAPER_RESET))+whale_v2_unreal;wl2_pnl_pct=(wl2_total/PAPER_RESET-1)*100
- used_margin=sum(float(p.get("margin",float(p.get("notional",0))/max(1.0,float(p.get("leverage",TRADE_LEVERAGE))))) for book in (state.get("positions",{}),state.get("pump_positions",{}),state.get("whale_positions",{})) for p in book.values())
+ contributed=max(PAPER_RESET,float(state.get("contributed_capital",PAPER_RESET)));total=state["equity"]+unreal+pump_unreal+whale_unreal+whale_v2_unreal+hype_swing_unreal;account_roi=(total/contributed-1)*100;total_pnl_pct=(float(state["equity"])/PAPER_RESET-1)*100;wl2_total=float(state.get("whale_v2_equity",PAPER_RESET))+whale_v2_unreal;wl2_pnl_pct=(wl2_total/PAPER_RESET-1)*100
+ used_margin=sum(float(p.get("margin",float(p.get("notional",0))/max(1.0,float(p.get("leverage",TRADE_LEVERAGE))))) for book in (state.get("positions",{}),state.get("pump_positions",{}),state.get("whale_positions",{}),state.get("whale_v2_positions",{}),{"HYPE":state["hype_swing_position"]} if state.get("hype_swing_position") else {}) for p in book.values())
  free_margin=max(0.0,float(state["equity"])-used_margin);margin_utilization=(used_margin/float(state["equity"])*100.0) if float(state["equity"])>0 else 0.0
  visible_sources={k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and not k.startswith("XFree:") and k not in SEARCH_INDEX_FEEDS and not v.get("disabled") and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")}
- return {"mode":state["mode"],"balance":round(state["equity"],4),"capital_contributed":round(float(state.get("contributed_capital",PAPER_RESET)),4),"unrealized_pnl":round(unreal+pump_unreal+whale_unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"total_pnl_pct":round(total_pnl_pct,3),"used_margin":round(used_margin,4),"free_margin":round(free_margin,4),"margin_utilization_pct":round(margin_utilization,3),"trade_margin_fraction_pct":round(TRADE_MARGIN_FRACTION*100,3),"trade_leverage":TRADE_LEVERAGE,"positions":positions+pump_positions+whale_positions,"pump_positions":pump_positions,"pump_unrealized_pnl":round(pump_unreal,4),"pump_trades":state.get("pump_trades",0),"whale_liq_positions":whale_positions,"whale_liq_unrealized_pnl":round(whale_unreal,4),"whale_liq_trades":state.get("whale_trades",0),"whale_liq_engine":copy.deepcopy(state.get("sources",{}).get("WhaleLiquidationScanner",{})),"whale_v2_positions":whale_v2_positions,
+ return {"statistics_basis":state.get("statistics_basis","full_recorded_history"),"operator_cleanup":state.get("operator_cleanup",{}),"emergency_profit_guard":state.get("emergency_profit_guard",{}),"daily_activity":state.get("daily_activity",{}),"daily_entry_limit":None,"margin_budget":"shared_all_strategies","mode":state["mode"],"balance":round(state["equity"],4),"capital_contributed":round(float(state.get("contributed_capital",PAPER_RESET)),4),"unrealized_pnl":round(unreal+pump_unreal+whale_unreal+whale_v2_unreal+hype_swing_unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"total_pnl_pct":round(total_pnl_pct,3),"used_margin":round(used_margin,4),"free_margin":round(free_margin,4),"margin_utilization_pct":round(margin_utilization,3),"trade_margin_fraction_pct":round(TRADE_MARGIN_FRACTION*100,3),"trade_leverage":TRADE_LEVERAGE,"positions":positions+pump_positions+whale_positions+whale_v2_positions+([hype_swing_position] if hype_swing_position else []),"pump_positions":pump_positions,"pump_unrealized_pnl":round(pump_unreal,4),"pump_trades":state.get("pump_trades",0),"whale_liq_positions":whale_positions,"whale_liq_unrealized_pnl":round(whale_unreal,4),"whale_liq_trades":state.get("whale_trades",0),"whale_liq_engine":copy.deepcopy(state.get("sources",{}).get("WhaleLiquidationScanner",{})),"whale_v2_positions":whale_v2_positions,
 "whale_v2_unrealized_pnl":round(whale_v2_unreal,4),"whale_v2_balance":round(float(state.get("whale_v2_equity",PAPER_RESET)),4),
 "whale_v2_total_equity":round(wl2_total,4),"whale_v2_pnl_pct":round(wl2_pnl_pct,3),
 "whale_v2_trades":state.get("whale_v2_trades",0),"whale_v2_engine":copy.deepcopy(state.get("sources",{}).get("WhaleLiquidationV2",{})),
@@ -3198,7 +3288,7 @@ def build_dashboard_snapshot():
 "hype_h1_unrealized_pnl":round(hype_swing_unreal,4),"hype_h1_total_equity":round(hype_swing_total,4),
 "hype_h1_pnl_pct":round((hype_swing_total/HYPE_SWING_STARTING_EQUITY-1)*100,3),"hype_h1_realized_pnl":round(float(state.get("hype_swing_realized_pnl",0)),4),
 "hype_h1_trades":state.get("hype_swing_trades",0),"hype_h1_engine":copy.deepcopy(state.get("sources",{}).get("HypeH1LocalSwing",{})),
-"hype_h1_stats":hype_swing_stats(),"hype_h1_policy":HYPE_SWING_POLICY,"account_model":"UNIFIED_PAPER_ACCOUNT","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
+"hype_h1_stats":hype_swing_stats(),"hype_h1_policy":HYPE_SWING_POLICY,"account_model":"UNIFIED_PAPER_ACCOUNT_ALL_STRATEGIES","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
 def dashboard():
  with LOCK:
@@ -3218,7 +3308,7 @@ def dashboard():
    "margin_usd":round(margin,2),"leverage":p.get("leverage",LEV),
    "roe_pct":round(pnl/margin*100,3) if margin else 0,"unrealized_pnl":round(pnl,4),
    "opened":p["opened"],"headline":p.get("headline","")})
- return {"mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),
+ return {"statistics_basis":state.get("statistics_basis","full_recorded_history"),"operator_cleanup":state.get("operator_cleanup",{}),"emergency_profit_guard":state.get("emergency_profit_guard",{}),"daily_activity":state.get("daily_activity",{}),"daily_entry_limit":None,"margin_budget":"shared_all_strategies","mode":state["mode"],"balance":round(state["equity"],4),"unrealized_pnl":round(unreal,4),
   "total_equity":round(state["equity"]+unreal,4),"realized_pnl":round(state["realized_pnl"],4),
   "account_age_seconds":0,"account_roi_pct":round(((state["equity"]+unreal)/PAPER_RESET-1)*100,3),"total_pnl_pct":round(((state["equity"]+unreal)/PAPER_RESET-1)*100,3),
   "positions":positions,"pump_positions":[],"pump_balance":round(state.get("pump_equity",100.0),4),"pump_unrealized_pnl":0.0,"pump_total_equity":round(state.get("pump_equity",100.0),4),"pump_realized_pnl":round(state.get("pump_realized_pnl",0.0),4),"pump_trades":state.get("pump_trades",0),"trades":[],"news":[],"features":[],"sources":{k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and not k.startswith("XFree:") and k not in SEARCH_INDEX_FEEDS and not v.get("disabled") and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")},
@@ -3245,11 +3335,11 @@ def daily_audit_stats():
   return {"error":str(exc)[:180]}
 
 
-CORE_NEWS_SOURCES=("XOfficial:FirstSquawk","XOfficial:realDonaldTrump","XOfficial:federalreserve","XOfficial:SECGov","PiQDirect","FedMonetary","ECBOfficial")
+CORE_NEWS_SOURCES=("XOfficial:FirstSquawk","XOfficial:realDonaldTrump","XOfficial:federalreserve","XOfficial:SECGov","PiQDirect","FedMonetary","ECBOfficial","CoinDesk","Cointelegraph")
 NEWS_SILENCE_WARN_SECONDS=max(300.0,float(os.getenv("NEWS_SILENCE_WARN_SECONDS","1800")))
 
 def news_health_snapshot(daily=None):
- daily=daily or daily_audit_stats()
+ if daily is None:daily=daily_audit_stats()
  try:
   with pg() as c:
    rows=c.execute("""select ts,source,published_at,title,symbol,signal
@@ -3331,7 +3421,7 @@ def operations_diagnostics():
    health=health_state();daily=daily_audit_stats();news_health=news_health_snapshot(daily)
    do_news_health_journal=False
    with LOCK:
-    S["news_health"]=copy.deepcopy(news_health)
+    S["news_health"]=copy.deepcopy(news_health);S["daily_activity"]=copy.deepcopy(daily)
     last_nh=float(S.get("_last_news_health_journal",0) or 0)
     if S.get("engine_active") and time.time()-last_nh>=300:
      S["_last_news_health_journal"]=time.time();do_news_health_journal=True
@@ -3351,7 +3441,7 @@ def operations_diagnostics():
      "pump_engine":copy.deepcopy(S["sources"].get("PumpDumpScanner",{})),
      "pump_positions":len(S.get("pump_positions",{})),"pump_trades":S.get("pump_trades"),"shared_account_equity":S.get("equity"),
      "whale_liq_engine":copy.deepcopy(S["sources"].get("WhaleLiquidationScanner",{})),
-     "whale_liq_positions":len(S.get("whale_positions",{})),"whale_liq_trades":S.get("whale_trades"),"account_model":"UNIFIED_PAPER_ACCOUNT",
+     "whale_liq_positions":len(S.get("whale_positions",{})),"whale_liq_trades":S.get("whale_trades"),"account_model":"UNIFIED_PAPER_ACCOUNT_ALL_STRATEGIES",
      "whale_v2_engine":copy.deepcopy(S["sources"].get("WhaleLiquidationV2",{})),
      "whale_v2_positions":len(S.get("whale_v2_positions",{})),"whale_v2_trades":S.get("whale_v2_trades",0),
      "whale_v2_equity":S.get("whale_v2_equity",PAPER_RESET),"whale_v2_learning":copy.deepcopy(S.get("whale_v2_learning",{})),
@@ -3392,16 +3482,16 @@ def html_dashboard(data):
  wl2_positions=data.get("whale_v2_positions",[]) or []
  wl2_learning=data.get("whale_v2_learning",{}) or {}
  wl2_pnl_pct=float(data.get("whale_v2_pnl_pct",0) or 0)
- wl2_cards='<div class="grid"><b>WL2 STATUS<br>%s</b><b>VIRTUAL EQUITY<br>$ %s</b><b>WL2 P&L<br><span class="%s">%s%%</span></b><b>OPEN POSITIONS<br>%s</b><b>CLOSED TRADES<br>%s</b><b>LEVERAGE<br>%sx</b><b>MARGIN / TRADE<br>%s%%</b><b>LEARNING<br>%s</b></div>'%("OK" if wl2_engine.get("ok") else "ERROR",data.get("whale_v2_total_equity",100),"posv" if wl2_pnl_pct>=0 else "negv",round(wl2_pnl_pct,3),len(wl2_positions),data.get("whale_v2_trades",0),wl2_engine.get("leverage",WL2_LEVERAGE),round(float(wl2_engine.get("margin_fraction",WL2_MARGIN_FRACTION) or WL2_MARGIN_FRACTION)*100,2),esc(wl2_engine.get("learning_mode") or wl2_learning.get("adaptation_mode") or "-"))
+ wl2_cards='<div class="grid"><b>WL2 STATUS<br>%s</b><b>WL2 RESULT (BASE $100)<br>$ %s</b><b>WL2 P&L<br><span class="%s">%s%%</span></b><b>OPEN POSITIONS<br>%s</b><b>CLOSED TRADES<br>%s</b><b>LEVERAGE<br>%sx</b><b>MARGIN / TRADE<br>%s%%</b><b>LEARNING<br>%s</b></div>'%("OK" if wl2_engine.get("ok") else "ERROR",data.get("whale_v2_total_equity",100),"posv" if wl2_pnl_pct>=0 else "negv",round(wl2_pnl_pct,3),len(wl2_positions),data.get("whale_v2_trades",0),wl2_engine.get("leverage",WL2_LEVERAGE),round(float(wl2_engine.get("margin_fraction",WL2_MARGIN_FRACTION) or WL2_MARGIN_FRACTION)*100,2),esc(wl2_engine.get("learning_mode") or wl2_learning.get("adaptation_mode") or "-"))
  wl2_pos_html="".join('<tr><td>%s</td><td>%s</td><td>$%s</td><td>$%s</td><td>%sx</td><td>%s</td><td>%s</td><td class="%s">%s%%</td><td class="%s">$%s</td><td>%s</td></tr>'%(esc(x["symbol"]),x["side"],x["margin_usd"],x["notional_usd"],x["leverage"],x["entry"],x["mark"],"posv" if x["roe_pct"]>=0 else "negv",x["roe_pct"],"posv" if x["unrealized_pnl"]>=0 else "negv",x["unrealized_pnl"],x.get("score",0)) for x in wl2_positions) or '<tr><td colspan=10>No WL2 positions yet</td></tr>'
  wl2_v1=(wl2_learning.get("v1") or {}).get("metrics") or {}
  wl2_v2=(wl2_learning.get("v2") or {}).get("metrics") or {}
- wl2_compare='<div class="muted">A/B week 1 · V1 samples: %s · V2 samples: %s · V2 rejected signals: %s · rules frozen during comparison</div>'%(wl2_v1.get("samples",0),wl2_v2.get("samples",0),sum(int(x.get("n",0) or 0) for x in (wl2_learning.get("v2") or {}).get("signal_actions",[]) if x.get("action")=="REJECTED"))
+ wl2_compare='<div class="muted">A/B week 1 · V1 samples: %s · V2 samples: %s · V2 rejected signals: %s · versioned rules; observe-only learning</div>'%(wl2_v1.get("samples",0),wl2_v2.get("samples",0),sum(int(x.get("n",0) or 0) for x in (wl2_learning.get("v2") or {}).get("signal_actions",[]) if x.get("action")=="REJECTED"))
 
  hype=data.get("hype_h1_position") or {}
  hype_engine=data.get("hype_h1_engine") or {}
  hype_stats=data.get("hype_h1_stats") or {}
- hype_cards='<div class="grid"><b>HYPE H1 ENGINE<br>%s</b><b>VIRTUAL BALANCE<br>$%s</b><b>TOTAL EQUITY<br>$%s</b><b>P&L<br><span class="%s">%s%%</span></b><b>OPEN POSITION<br>%s</b><b>TRADES<br>%s</b><b>MARGIN / LEV<br>25%% / 25x</b><b>LAST PIVOT<br>%s @ %s</b><b>WEEK-1 POLICY<br>FROZEN</b></div>'%("OK" if hype_engine.get("ok") else "ERROR",data.get("hype_h1_balance",100),data.get("hype_h1_total_equity",100),"posv" if data.get("hype_h1_pnl_pct",0)>=0 else "negv",data.get("hype_h1_pnl_pct",0),hype.get("side","FLAT"),data.get("hype_h1_trades",0),esc(hype_engine.get("pivot_type") or "-"),hype_engine.get("pivot_price") or "-")
+ hype_cards='<div class="grid"><b>HYPE H1 ENGINE<br>%s</b><b>H1 RESULT (BASE $100)<br>$%s</b><b>TOTAL EQUITY<br>$%s</b><b>P&L<br><span class="%s">%s%%</span></b><b>OPEN POSITION<br>%s</b><b>TRADES<br>%s</b><b>MARGIN / LEV<br>10%% / 25x</b><b>LAST PIVOT<br>%s @ %s</b><b>WEEK-1 POLICY<br>FROZEN</b></div>'%("OK" if hype_engine.get("ok") else "ERROR",data.get("hype_h1_balance",100),data.get("hype_h1_total_equity",100),"posv" if data.get("hype_h1_pnl_pct",0)>=0 else "negv",data.get("hype_h1_pnl_pct",0),hype.get("side","FLAT"),data.get("hype_h1_trades",0),esc(hype_engine.get("pivot_type") or "-"),hype_engine.get("pivot_price") or "-")
  hype_pos_html=('<tr><td>%s</td><td>%s</td><td>$%s</td><td>$%s</td><td>%sx</td><td>%s</td><td>%s</td><td class="%s">%s%%</td><td class="%s">$%s</td><td>%s / %s</td></tr>'%(esc(hype.get("symbol","HYPE")),esc(hype.get("side","FLAT")),hype.get("margin_usd",0),hype.get("notional_usd",0),hype.get("leverage",25),hype.get("entry","-"),hype.get("mark","-"),"posv" if hype.get("roe_pct",0)>=0 else "negv",hype.get("roe_pct",0),"posv" if hype.get("unrealized_pnl",0)>=0 else "negv",hype.get("unrealized_pnl",0),round(float((hype.get("features") or {}).get("mae_roe_pct",0) or 0),2),round(float((hype.get("features") or {}).get("mfe_roe_pct",0) or 0),2)) if hype else '<tr><td colspan=10>No HYPE H1 position</td></tr>')
  hype_note='<div class="muted">H1 local low → LONG; local high → SHORT. Exit: opposite confirmed H1 extreme or H1 momentum weakening. Shadow comparison records both exit modes. Samples: %s · win rate: %s · avg MAE: %s%% · avg MFE: %s%%</div>'%(hype_stats.get("samples",0),hype_stats.get("win_rate","-"),hype_stats.get("avg_mae_roe_pct","-"),hype_stats.get("avg_mfe_roe_pct","-"))
  pump_pos="".join('<tr><td>%s</td><td>%s</td><td>$%s</td><td>$%s</td><td>%sx</td><td>%s</td><td>%s</td><td class="%s">%s%%</td><td class="%s">$%s</td><td>%s</td></tr>'%(esc(x["symbol"]),x["side"],x["margin_usd"],x["notional_usd"],x["leverage"],x["entry"],x["mark"],"posv" if x["roe_pct"]>=0 else "negv",x["roe_pct"],"posv" if x["unrealized_pnl"]>=0 else "negv",x["unrealized_pnl"],x.get("score",0)) for x in data.get("pump_positions",[])) or '<tr><td colspan=10>No pump/dump positions</td></tr>'
@@ -3583,7 +3673,7 @@ if __name__=="__main__":
    SHUTDOWN.wait(2)
 
  worker_specs=[
-  ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),("market_trades",market_trade_stream),
+  ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),("market_trades",market_trade_stream),("breadth_history",market_regime_history),("confirmed_liquidations",confirmed_liquidation_stream),
   ("telemetry",telemetry),("pump_dump",impulse_scan),("whale_liquidations",whale_liquidation_scan),("hype_h1_local_swing",hype_h1_local_swing_loop),
   ("adapt",adapt),("x_critical_4s",x_critical_realtime),("piq_direct",piq_direct_realtime),
   ("news_recovery",recover_news_processing),
@@ -3603,6 +3693,7 @@ if __name__=="__main__":
  workers=[threading.Thread(target=supervised_worker,args=(label,fn),daemon=True,name=label) for label,fn in worker_specs]
  # Operator action is intentionally one-shot; normal completion is not a health failure.
  workers.append(threading.Thread(target=operator_one_shot_actions,daemon=True,name="operator_actions"))
+ workers.append(threading.Thread(target=authorized_cleanup_worker,daemon=True,name="authorized_cleanup"))
  workers.append(threading.Thread(target=post_lease_historical_restore,daemon=True,name="historical_restore"))
  for worker in workers:worker.start()
  try:server.serve_forever()

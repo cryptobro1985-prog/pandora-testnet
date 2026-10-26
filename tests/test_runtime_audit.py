@@ -172,17 +172,17 @@ class RuntimeAuditTests(unittest.TestCase):
         self.assertEqual(app.TARGET_OPEN_POSITIONS, 10)
         self.assertEqual(app.MAX_OPEN_POSITIONS, 30)
         self.assertEqual(app.PUMP_MAX_POSITIONS, 20)
-        self.assertAlmostEqual(app.TRADE_MARGIN_FRACTION, 0.05)
-        self.assertAlmostEqual(app.PUMP_SECONDARY_MARGIN_FRACTION, 0.05)
-        self.assertAlmostEqual(app.POSITION_MARGIN_MAX, 0.20)
+        self.assertAlmostEqual(app.TRADE_MARGIN_FRACTION, 0.10)
+        self.assertAlmostEqual(app.PUMP_SECONDARY_MARGIN_FRACTION, 0.10)
+        self.assertAlmostEqual(app.POSITION_MARGIN_MAX, 0.10)
 
-    def test_liquidity_ranked_sizing_scales_with_book(self):
+    def test_every_book_uses_user_requested_fixed_ten_percent(self):
         tiny={"book_depth_usd":20_000,"day_volume_usd":100_000,"score":90}
         mid={"book_depth_usd":2_000_000,"day_volume_usd":50_000_000,"score":90}
         deep={"book_depth_usd":60_000_000,"day_volume_usd":1_000_000_000,"score":95}
-        self.assertLess(app.liquidity_margin_fraction("ALT",tiny), app.liquidity_margin_fraction("ALT",mid))
-        self.assertLess(app.liquidity_margin_fraction("ALT",mid), app.liquidity_margin_fraction("BTC",deep))
-        self.assertLessEqual(app.liquidity_margin_fraction("BTC",deep),0.20)
+        self.assertEqual(app.liquidity_margin_fraction("ALT",tiny), 0.10)
+        self.assertEqual(app.liquidity_margin_fraction("ALT",mid), 0.10)
+        self.assertEqual(app.liquidity_margin_fraction("BTC",deep),0.10)
 
     def test_pump_book_respects_hard_test_cap(self):
         app.S["pump_positions"] = {f"P{i}": position(str(i)) for i in range(app.PUMP_MAX_POSITIONS)}

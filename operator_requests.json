@@ -1,0 +1,10 @@
+{
+  "actions": [
+    {
+      "id": "exclude-rez-open-20261025T173549-user-20261026",
+      "type": "EXCLUDE_PUMP_POSITION",
+      "symbol": "REZ",
+      "opened": "2026-10-25T17:35:49.537323+00:00"
+    }
+  ]
+}

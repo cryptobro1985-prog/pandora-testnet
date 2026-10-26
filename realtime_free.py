@@ -26,6 +26,8 @@ except Exception:
     IMPERSONATE_TARGET="chrome146"
 
 _tls=threading.local()
+_nitter_lock=threading.Lock()
+_nitter_state={}
 
 def _truth_session():
     sess=getattr(_tls,"truth_session",None)
@@ -295,7 +297,11 @@ def fetch_x_embed(handle,timeout=6):
     return list(dedup.values())
 
 def fetch_x_nitter(handle,timeout=5):
-    """Last-resort public RSS rotation. Used only after normal X readers fail."""
+    """Reuse a working mirror and periodically compare a second mirror's age.
+
+    HTTP success from a frozen RSS cache is not proof that it is the newest
+    available timeline. Probe at most one extra healthy mirror every 30s.
+    """
     instances=[
         "https://nitter.kareem.one",
         "https://nitter.meowing.monster",
@@ -303,12 +309,21 @@ def fetch_x_nitter(handle,timeout=5):
         "https://nitter.jaydenha.uk",
     ]
     start=sum(ord(ch) for ch in handle)%len(instances)
+    with _nitter_lock:
+        state=dict(_nitter_state.get(handle,{}))
+    preferred=state.get("preferred")
+    order=[instances[(start+n)%len(instances)] for n in range(len(instances))]
+    if preferred in order:order.remove(preferred);order.insert(0,preferred)
     errors=[]
-    for n in range(len(instances)):
-        base=instances[(start+n)%len(instances)]
+    best=None;best_stamp=-1;best_base=None
+    probe_due=time.time()-state.get("probed_at",0)>=30
+    if probe_due and len(order)>2:
+        probe_index=int(state.get("probe_index",0))%(len(order)-1)+1
+        alternate=order.pop(probe_index);order.insert(1,alternate)
+    for base in order:
         url=base+"/"+urllib.parse.quote(handle,safe="")+"/rss"
         try:
-            req=urllib.request.Request(url,headers={"User-Agent":FX_UA,"Accept":"application/rss+xml,application/xml,text/xml"})
+            req=urllib.request.Request(url,headers={"User-Agent":FX_UA,"Accept":"application/rss+xml,application/xml,text/xml","Cache-Control":"no-cache"})
             with urllib.request.urlopen(req,timeout=timeout) as response:
                 raw=response.read(1_500_000)
             root=ET.fromstring(raw)
@@ -316,14 +331,35 @@ def fetch_x_nitter(handle,timeout=5):
             for item in root.findall(".//item")[:20]:
                 link=(item.findtext("link") or "").strip()
                 ident=(item.findtext("guid") or link).strip()
+                status=re.search(r"/status/(\d+)",link or ident)
+                if status:ident=status.group(1)
                 title=_clean(item.findtext("title") or item.findtext("description") or "")
                 created=(item.findtext("pubDate") or "").strip() or None
                 if ident and title:
                     out.append({"id":ident,"text":title,"created_at":created,"url":link or ("https://x.com/"+handle)})
-            if out:return out
+            if out:
+                stamps=[]
+                for post in out:
+                    try:
+                        from email.utils import parsedate_to_datetime
+                        parsed=parsedate_to_datetime(post["created_at"])
+                        if parsed.tzinfo and parsed.timestamp()<=time.time()+10:stamps.append(parsed.timestamp())
+                    except (TypeError,ValueError,OverflowError):pass
+                newest=max(stamps,default=-1)
+                if best is None or newest>best_stamp:best,best_stamp,best_base=out,newest,base
+                if not probe_due or time.time()-newest<=120:
+                    break
+                if base!=order[0]:break
+                continue
             errors.append(base+":empty")
         except Exception as exc:
             errors.append(base+":"+str(exc)[:55])
+            if best is not None:break
+    if best is not None:
+        with _nitter_lock:
+            _nitter_state[handle]={"preferred":best_base,"probed_at":time.time() if probe_due else state.get("probed_at",0),
+                                   "probe_index":int(state.get("probe_index",0))+int(probe_due)}
+        return best
     raise RuntimeError("nitter_all_failed "+" | ".join(errors))
 
 def _truth_get(path,params=None,timeout=6):
