@@ -4750,7 +4750,7 @@ def local_v10_history(limit=100):
 
 def local_v10_today_pnl():
  with pg() as db:
-  row=db.execute("select coalesce(sum(pnl),0) as pnl from local_v12_trade_history where closed >= date_trunc('day',now())").fetchone()
+  row=db.execute("select coalesce(sum(pnl),0) as pnl from local_v12_trade_history where closed::timestamptz >= date_trunc('day',now())").fetchone()
   return float(row["pnl"] or 0)
 
 def dashboard_history_loop():

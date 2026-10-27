@@ -159,3 +159,17 @@ class LocalV11Regressions(unittest.TestCase):
         rows[-1].update(o=92,h=93,l=91,c=91.5)
         r=analyze(rows,9*H+1001)
         self.assertEqual((r['entry_side'],r['pivot_type']),(1,'LOCAL_LOW'))
+
+    def test_today_pnl_accepts_text_iso_times_in_postgres(self):
+        import os
+        import datetime
+        import psycopg
+        if not os.getenv('DATABASE_URL'):
+            self.skipTest('isolated PostgreSQL is provided by release CI')
+        with psycopg.connect(os.environ['DATABASE_URL'],autocommit=True,row_factory=app.dict_row) as db:
+            db.execute('create temporary table local_v12_trade_history (closed text,pnl double precision)')
+            today=datetime.datetime.now(datetime.timezone.utc).replace(hour=0,minute=0,second=0,microsecond=0)
+            db.execute('insert into local_v12_trade_history values (%s,2.5),(%s,-50)',
+                ((today+datetime.timedelta(seconds=1)).isoformat(),(today-datetime.timedelta(seconds=1)).isoformat()))
+            with patch.object(app,'pg',return_value=db):
+                self.assertEqual(app.local_v10_today_pnl(),2.5)
