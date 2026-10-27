@@ -1679,6 +1679,19 @@ def accept_local_candles(data,history=False):
    _LOCAL_CANDLE_CACHE[key]=(stamp,[merged[k] for k in sorted(merged)][-125:],wall_ms)
    if not history:_LOCAL_CANDLE_STREAM[(symbol,interval)]=(stamp,t)
 
+def _local_cached_interval_fresh(cached,interval):
+ if not cached or len(cached[1])<10:return False
+ try:
+  step=3600000 if interval=="1h" else 900000
+  row=cached[1][-1]
+  close_ms=int(row.get("T",int(row["t"])+step-1))
+  # Illiquid markets may legitimately produce no new candle websocket message
+  # for several minutes. The candle is still valid while its exchange interval
+  # is current/recent, so do not turn quiet trading into a REST refresh storm.
+  return close_ms>=int(time.time()*1000)-2*step
+ except (KeyError,TypeError,ValueError,OverflowError):
+  return False
+
 def _local_candles(symbol,interval,hours):
  key=(symbol,interval,hours)
  ttl=45.0 if interval==LOCAL_SWING_M15_INTERVAL else 120.0
@@ -1689,6 +1702,8 @@ def _local_candles(symbol,interval,hours):
   stream=_LOCAL_CANDLE_STREAM.get((symbol,interval))
   if cached and stream and stamp-stream[0]<45 and len(cached[1])>=10:
    return cached[1],int(time.time()*1000)
+  if _local_cached_interval_fresh(cached,interval):
+   return cached[1],int(time.time()*1000)
   if cached and len(cached[1])>=10 and stamp-cached[0]<ttl:return cached[1],int(time.time()*1000)
   if stamp<_LOCAL_CANDLE_BACKOFF.get(key,0):
    if cached and stamp-cached[0]<max_stale:return cached[1],cached[2]
@@ -1698,6 +1713,8 @@ def _local_candles(symbol,interval,hours):
   stamp=time.monotonic()
   with _LOCAL_CANDLE_CACHE_LOCK:
    cached=_LOCAL_CANDLE_CACHE.get(key)
+   if _local_cached_interval_fresh(cached,interval):
+    return cached[1],int(time.time()*1000)
    if cached and len(cached[1])>=10 and stamp-cached[0]<ttl:return cached[1],int(time.time()*1000)
    if stamp<_LOCAL_CANDLE_BACKOFF.get(key,0):
     if cached and stamp-cached[0]<max_stale:return cached[1],cached[2]
