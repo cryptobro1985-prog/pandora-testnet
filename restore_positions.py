@@ -144,11 +144,12 @@ def restore_btc(c,prices):
     return payload
 
 def main():
-    try:prices=mids()
-    except Exception as e:
-        print(json.dumps({"kind":"restore_positions","ok":False,"error":"mids:"+str(e)[:160]}),flush=True);return
+    # Startup restore must never hit Hyperliquid REST before the websocket/budget
+    # layer is online. Persisted positions are authoritative; restore logic can
+    # safely use entry prices until live mids arrive immediately after app start.
+    prices={}
     with psycopg.connect(os.environ["DATABASE_URL"],autocommit=True,row_factory=dict_row,connect_timeout=8) as c:
         c.execute("create table if not exists operator_actions(action_id text primary key,completed_at text not null,payload jsonb not null)")
         whales=restore_whales(c,prices);btc=restore_btc(c,prices)
-    print(json.dumps({"kind":"restore_positions","ok":True,"whales":whales,"btc":btc},default=str),flush=True)
+    print(json.dumps({"kind":"restore_positions","ok":True,"whales":whales,"btc":btc,"price_source":"persisted_entry_until_ws"},default=str),flush=True)
 if __name__=="__main__":main()
