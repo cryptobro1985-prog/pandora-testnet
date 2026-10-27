@@ -7,7 +7,7 @@ import copy
 import datetime
 import math
 
-POLICY = "local_h1_m15_caterpillar_v8"
+POLICY = "local_h1_m15_caterpillar_v9_profit_only_weakening_exit"
 FLOW_THRESHOLD = .12
 
 
@@ -46,16 +46,25 @@ def _threshold(m15, fraction=.15):
 
 
 def pressure_exit(position, m15, mark, fresh_flow_context):
-    """Exit only when M15 counter-pressure, executed flow and recoil agree.
+    """Take a normal caterpillar exit only on confirmed weakening while net-profitable.
 
-    Profit is not a prerequisite: an impulse that fails while losing must also
-    be allowed to return to cash. A wiggle with continuing same-side flow holds.
+    A routine pullback never crystallizes a loss. Exit requires fresh executed
+    counter-flow, strong M15 adverse pressure, a directional recoil from the MFE,
+    and enough favorable move to remain above the position's estimated round-trip
+    execution-cost floor. Catastrophic/thesis-invalidating exits are handled by
+    the caller's separate H1/opposite-pivot and liquidation guards.
     """
     if not position or not m15 or not m15.get("ready"):
         return None
     side = int(position.get("side") or 0)
     entry, mark, flow = _f(position.get("entry")), _f(mark), _flow(fresh_flow_context)
     if side not in (-1, 1) or not entry or not mark or flow is None:
+        return None
+    features = position.get("features") or {}
+    move = side * (mark / entry - 1)
+    cost_floor = max(.0002, _f(features.get("estimated_round_trip_cost_move")) or 0.0)
+    # Routine weakening exits must preserve at least the estimated trading costs.
+    if move <= cost_floor:
         return None
     if side * flow > -FLOW_THRESHOLD:
         return None
@@ -70,11 +79,10 @@ def pressure_exit(position, m15, mark, fresh_flow_context):
     candle_reversal=(int(m15.get("candle_direction") or 0)==-side and (_f(m15.get("body_fraction")) or 0.)>=.50)
     if not candle_reversal and (r15 is None or side * r15 >= 0):
         return None
-    move = side * (mark / entry - 1)
-    peak = max(0., _f((position.get("features") or {}).get("mfe_price_move")) or 0., move)
+    peak = max(0., _f(features.get("mfe_price_move")) or 0., move)
     if peak - move < _threshold(m15):
         return None
-    return "m15_pressure_reversal"
+    return "m15_pressure_reversal_profit_only"
 
 
 def update_watch(watch, mark, m15, flow, now_epoch):
