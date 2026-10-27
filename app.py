@@ -2744,6 +2744,17 @@ def market():
     with LOCK:S["last_checkpoint"]=now()
   except LeaseLost as e:
    S["engine_active"]=False;S["engine_error"]=str(e)
+  except RestDeferred as e:
+   # Shared REST backoff is expected when websocket prices are already fresh.
+   # It must not poison global health or increment the error counter.
+   with LOCK:
+    cached_ok=bool(S.get("_prices")) and float(S.get("_last_poll_epoch",0) or 0)>0 and time.time()-float(S.get("_last_poll_epoch",0) or 0)<=12
+    if cached_ok:
+     S["last_market_error"]=None
+     if str(S.get("last_error") or "").startswith("market: hyperliquid_rest_deferred"):
+      S["last_error"]=None
+    else:
+     S["last_market_error"]=str(e)[:180]
   except Exception as e:
    S["errors"]+=1;S["last_market_error"]=str(e)[:180];S["last_error"]="market: "+str(e)[:180]
   S["_market_heartbeat"]=time.time()
@@ -2953,7 +2964,12 @@ def market_regime_history():
   ready=[sym for sym,rows in snapshot.items() if usable(rows)]
   errors={}
   recovered=[]
-  if len(ready)<5:
+  with LOCK:
+   metadata_ready=bool(S.get("_day_volumes")) and bool(S.get("_max_leverage"))
+   stream=copy.deepcopy(S.get("sources",{}).get("MarketTradeStream",{}))
+  ws_history_ready=bool(stream.get("ok")) and int(stream.get("history_pending",0) or 0)==0
+  # Never compete with metadata/bootstrap. REST breadth recovery is last resort.
+  if len(ready)<5 and metadata_ready and ws_history_ready:
    for sym in REGIME_SEED_SYMBOLS:
     if sym in ready:continue
     try:
