@@ -2220,8 +2220,9 @@ def local_experiment_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=N
  equity,used,free=_local_experiment_margin_state()
  if equity<=0 or free<0.01:return False
  target_notional=equity*LOCAL_EXPERIMENT_MARGIN_FRACTION*25.0
+ max_margin_per_position=equity*LOCAL_EXPERIMENT_MARGIN_FRACTION
  desired_margin=target_notional/max(leverage,1.0)
- margin=min(desired_margin,free)
+ margin=min(desired_margin,max_margin_per_position,free)
  if margin<0.01:return False
  notional=margin*leverage
  exposure_fill_ratio=(notional/target_notional) if target_notional>0 else 0.0
@@ -2233,7 +2234,7 @@ def local_experiment_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=N
   "policy":HYPE_SWING_POLICY,"caterpillar_policy":CATERPILLAR_POLICY,"entry_kind":entry_kind,
   "origin_h1_signal_candle":origin_signal,"swing_reentries":reentries,
   "reference_margin_fraction":LOCAL_EXPERIMENT_MARGIN_FRACTION,"reference_leverage":25.0,
-  "target_notional":target_notional,"desired_margin":desired_margin,"actual_margin":margin,
+  "target_notional":target_notional,"desired_margin":desired_margin,"max_margin_per_position":max_margin_per_position,"actual_margin":margin,
   "exposure_fill_ratio":exposure_fill_ratio,"leverage":leverage,"leverage_source":"hyperliquid_maxLeverage",
   "mfe_price_move":0.0,"mae_price_move":0.0,"mfe_roe_pct":0.0,"mae_roe_pct":0.0,
   "entry_mark":price,"profit_lock_armed":False,"profit_lock_arm_move":0.004,
@@ -2474,7 +2475,7 @@ def local_experiment_loop():
        "equity":equity,"used_margin":used,"free_margin":free,"realized_pnl":S.get("local_experiment_realized_pnl",0),
        "trades":S.get("local_experiment_trades",0),"open_positions":list(S.get("local_v12_positions",{})),
        "watching_for_reentry":list(S.get("local_experiment_watch",{})),"reference_margin_fraction":LOCAL_EXPERIMENT_MARGIN_FRACTION,
-       "reference_leverage":25.0,"sizing":"target_notional_then_exchange_max_leverage_margin",
+       "reference_leverage":25.0,"sizing":"margin_capped_at_20pct_equity_then_exchange_max_leverage",
        "max_positions":LOCAL_EXPERIMENT_MAX_POSITIONS,"compound":True,"details":details,"stats":stats,
        "rest_transport":HL_REST_BUDGET.status(),"error":None if all(x.get("ok") for x in details.values()) else "partial_symbol_scan_failure"}
    except LeaseLost as exc:
@@ -4626,7 +4627,7 @@ def html_dashboard(data):
    "posv" if float(p.get("unrealized_pnl",0) or 0)>=0 else "negv",round(float(p.get("unrealized_pnl",0) or 0),4),
    st.get("trades",0),wr))
  exp_rows_html="".join(exp_rows) or '<tr><td colspan=10>No experiment data yet</td></tr>'
- exp_note='<div class="muted">Unified 12-token PAPER Local account. Start $500. Target gross notional per new trade = current experiment equity × 20%% × 25. Actual leverage = Hyperliquid maxLeverage; required margin = target notional / leverage. If required margin exceeds free equity, the engine uses the maximum real position and records exposure fill %%. Compound sizing is recalculated from current equity after every close.</div>'
+ exp_note='<div class="muted">Unified 12-token PAPER Local account. Start $500. Each new Local trade is hard-capped at 20%% of current experiment equity as margin. Actual leverage = Hyperliquid maxLeverage. If lower leverage cannot reach the old 20%% × 25x reference notional without exceeding the 20%% margin cap, the engine keeps margin at 20%% and accepts the smaller notional. Compound sizing is recalculated from current equity after every close.</div>'
  pump_positions_data=data.get("pump_positions",[]) or []
  pump_total=float(data.get("pump_total_pnl",0) or 0)
  pump_cards='<div class="grid"><b>PUMP/DUMP ENGINE<br>%s</b><b>OPEN POSITIONS<br>%s</b><b>CLOSED TRADES<br>%s</b><b>REALIZED P&L<br><span class="%s">$%s</span></b><b>UNREALIZED P&L<br><span class="%s">$%s</span></b><b>TOTAL P&L<br><span class="%s">$%s</span></b></div>'%(
