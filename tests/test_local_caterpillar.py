@@ -53,7 +53,12 @@ class CaterpillarTests(unittest.TestCase):
         for side in (-1,1):
             pos=dict(side=side,entry=100.,features=dict(mfe_price_move=.02))
             self.assertIsNone(protective_breakeven(pos,100.+side*.7))
-            self.assertEqual(protective_breakeven(pos,100.+side*.1),100.+side*.1)
+            self.assertIsNone(protective_breakeven(pos,100.+side*.1))
+
+    def test_sparse_flow_does_not_trigger_exit(self):
+        pos=dict(side=-1,entry=100.,features=dict(mfe_price_move=.01))
+        sparse=dict(flow(-.5),trade_count_60s=2,observed_notional_60s=46.)
+        self.assertIsNone(pressure_exit(pos,self.m15(-1,True),99.7,sparse))
 
     def test_failed_impulse_can_exit_while_not_profitable(self):
         pos=dict(side=1,entry=100.,features=dict(mfe_price_move=0.))
