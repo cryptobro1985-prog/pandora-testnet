@@ -4,7 +4,7 @@ No candle-score, volume-size, price-extension or profit-only trade gates.
 import copy
 import datetime
 import math
-POLICY="local4_h1_executed_flow_cycle_v1"
+POLICY="Caterpillar 1.0"
 
 def _f(x):
     try:
