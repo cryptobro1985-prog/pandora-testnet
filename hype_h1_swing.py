@@ -288,14 +288,16 @@ def analyze_m15(rows, now_ms, side):
         "return_15m": r1,
         "return_30m": r2,
         "body_fraction": body_fraction,
+        "candle_direction":candle_dir,
+        "open_return":_ret(x["o"],x["c"]),
         "close_location": close_location,
         "volume_ratio": volume_ratio,
         "raw_volume_ratio":raw_volume_ratio,
         "median_range_move":statistics.median((z["h"]-z["l"])/z["c"] for z in candles[-9:-1]),
         "adverse_score": adverse_score,
         "recovery_score": recovery_score,
-        "strong_adverse_pressure": adverse_score >= M15_PRESSURE_MIN_SCORE and side*r1 < 0,
-        "recovery_confirmed": recovery_score >= M15_RECOVERY_MIN_SCORE and side*r1 > 0,
+        "strong_adverse_pressure": adverse_score >= M15_PRESSURE_MIN_SCORE and (side*r1 < 0 or (candle_dir == -side and body_fraction >= .50)),
+        "recovery_confirmed": recovery_score >= M15_RECOVERY_MIN_SCORE and (side*r1 > 0 or (candle_dir == side and body_fraction >= .42)),
     }
 
 

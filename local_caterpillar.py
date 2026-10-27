@@ -62,7 +62,8 @@ def pressure_exit(position, m15, mark, fresh_flow_context):
     if not m15.get("strong_adverse_pressure") or int(m15.get("adverse_score") or 0) < 3:
         return None
     r15 = _f(m15.get("return_15m"))
-    if r15 is None or side * r15 >= 0:
+    candle_reversal=(int(m15.get("candle_direction") or 0)==-side and (_f(m15.get("body_fraction")) or 0.)>=.50)
+    if not candle_reversal and (r15 is None or side * r15 >= 0):
         return None
     move = side * (mark / entry - 1)
     peak = max(0., _f((position.get("features") or {}).get("mfe_price_move")) or 0., move)

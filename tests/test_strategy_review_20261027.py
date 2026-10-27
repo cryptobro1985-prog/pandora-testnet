@@ -1,6 +1,7 @@
 import copy,json,unittest
 from unittest.mock import MagicMock,patch
 import app
+from local_caterpillar import pressure_exit
 from hype_h1_swing import analyze_m15,m15_reentry_ready,update_path,profit_lock_exit
 from market_stream import run_trade_stream
 
@@ -9,6 +10,13 @@ def candles():
     return [dict(t=i*M,T=(i+1)*M-1,o=100+i*.1,h=101+i*.1,l=99+i*.1,c=100.5+i*.1,v=100) for i in range(8)]
 
 class EntryQualityTests(unittest.TestCase):
+    def test_live_counter_pressure_can_exit_before_crossing_previous_m15_close(self):
+        for side in (-1,1):
+            pos=dict(entry=100.,side=side,features=dict(mfe_price_move=.01))
+            m15=dict(ready=True,strong_adverse_pressure=True,adverse_score=3,
+                     return_15m=.005*side,candle_direction=-side,body_fraction=.7)
+            self.assertEqual(pressure_exit(pos,m15,100*(1+.007*side),dict(trade_data_fresh=True,flow_imbalance=-.5*side)), 'm15_pressure_reversal')
+
     def test_strong_opposing_executed_flow_vetoes_both_directions_even_with_max_score(self):
         for side in (-1,1):
             m15=dict(ready=True,recovery_confirmed=True,recovery_score=5)
