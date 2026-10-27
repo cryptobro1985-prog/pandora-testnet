@@ -122,3 +122,28 @@ class LocalV11Regressions(unittest.TestCase):
              patch.object(app,'local_experiment_stats',return_value={}):
             app.local_experiment_loop()
         marks.assert_called_once_with({'HYPE':99.})
+
+    def test_durable_history_is_checkpointed_once_per_closed_bar(self):
+        from tests.test_hyperliquid_transport import CandleTests
+        cache=copy.deepcopy(app._LOCAL_CANDLE_CACHE);seen=dict(app._LOCAL_CANDLE_CHECKPOINTED)
+        try:
+            app._LOCAL_CANDLE_CACHE.clear();app._LOCAL_CANDLE_CHECKPOINTED.clear()
+            rows=CandleTests().rows()
+            app.accept_local_candles(rows,history=True)
+            db=MagicMock();pg=MagicMock();pg.return_value.__enter__.return_value=db
+            with patch.object(app,'pg',pg),patch.object(app.STORE,'fence'):
+                app.checkpoint_local_candles()
+                app.checkpoint_local_candles()
+            writes=[c for c in db.execute.call_args_list if 'insert into local_candle_checkpoints' in c.args[0]]
+            self.assertEqual(len(writes),1)
+            stored=json.loads(writes[0].args[1][2])
+            self.assertEqual(len(stored),12)
+            app._LOCAL_CANDLE_CACHE.clear()
+            app.accept_local_candles(stored,history=True)
+            with patch.object(app,'get') as net:
+                restored,_=app._local_m15_candles('HYPE')
+            net.assert_not_called()
+            self.assertEqual(len(restored),12)
+        finally:
+            app._LOCAL_CANDLE_CACHE.clear();app._LOCAL_CANDLE_CACHE.update(cache)
+            app._LOCAL_CANDLE_CHECKPOINTED.clear();app._LOCAL_CANDLE_CHECKPOINTED.update(seen)

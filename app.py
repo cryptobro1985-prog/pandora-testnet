@@ -299,6 +299,9 @@ def pg():
 STORE=EngineStore(pg,FEE,PAPER_RESET)
 def pinit():
  with pg() as c:
+  c.execute("create table if not exists local_candle_checkpoints (symbol text not null, interval text not null, candles jsonb not null, saved_at timestamptz not null default clock_timestamp(), primary key(symbol,interval))")
+  for seed in c.execute("select symbol,interval,candles from local_candle_checkpoints").fetchall():
+   accept_local_candles(seed["candles"],history=True)
   c.execute("create table if not exists account_state (id integer primary key, equity double precision not null, realized_pnl double precision not null, updated_at text not null)")
   c.execute("alter table account_state add column if not exists contributed_capital double precision not null default 100")
   c.execute("create table if not exists open_positions (symbol text primary key, side integer not null, entry double precision not null, notional double precision not null, opened text not null, opened_epoch double precision not null, headline text, locked boolean not null default false, stop double precision)")
@@ -1753,6 +1756,27 @@ def accept_local_history(rows):
  accept_local_candles(aggregated,history=True)
  return len(aggregated)
 
+_LOCAL_CANDLE_CHECKPOINTED={}
+def checkpoint_local_candles():
+ # Persist once per newly closed interval, rather than every live candle tick.
+ wall_ms=int(time.time()*1000);pending=[]
+ with _LOCAL_CANDLE_CACHE_LOCK:
+  for key,value in _LOCAL_CANDLE_CACHE.items():
+   symbol,interval,_hours=key
+   if len(value[1])<_local_min_history_rows(interval):continue
+   closed=[int(r["t"]) for r in value[1] if int(r["T"])<=wall_ms-1000]
+   token=max(closed) if closed else None
+   if token is None or _LOCAL_CANDLE_CHECKPOINTED.get(key)==token:continue
+   pending.append((key,token,copy.deepcopy(value[1])))
+ if not pending:return
+ with pg() as db:
+  with db.transaction():
+   STORE.fence(db)
+   for key,token,rows in pending:
+    db.execute("insert into local_candle_checkpoints(symbol,interval,candles,saved_at) values(%s,%s,%s::jsonb,clock_timestamp()) on conflict(symbol,interval) do update set candles=excluded.candles,saved_at=excluded.saved_at",
+     (key[0],key[1],json.dumps(rows)))
+ for key,token,_rows in pending:_LOCAL_CANDLE_CHECKPOINTED[key]=token
+
 def _local_min_history_rows(interval):
  return 6 if interval=="1h" else 9
 
@@ -3033,6 +3057,7 @@ def market_history_bootstrap():
    metadata_epoch=float(S.get("_metadata_ready_epoch",0) or 0)
   if not active:
    SHUTDOWN.wait(.5);continue
+  checkpoint_local_candles()
   ready_after=(metadata_epoch+5.0) if metadata_epoch else (activated+70.0)
   quiet_remaining=max(0.0,ready_after-time.time())
   if quiet_remaining>0:
@@ -3050,12 +3075,14 @@ def market_history_bootstrap():
      if SHUTDOWN.is_set():return
      key=("local",sym,interval)
      with _LOCAL_CANDLE_CACHE_LOCK:cached=_LOCAL_CANDLE_CACHE.get((sym,interval,hours))
-     if key in completed and _local_cached_interval_fresh(cached,interval):continue
+     if _local_cached_interval_fresh(cached,interval):
+      completed.add(key);continue
      stamp=time.time()
      rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":sym,"interval":interval,
        "startTime":int((stamp-hours*3600)*1000),"endTime":int(stamp*1000)}}))
      if not isinstance(rows,list) or not rows:raise RuntimeError("empty_local_bootstrap:"+sym+":"+interval)
      accept_local_candles(rows,history=True)
+     checkpoint_local_candles()
      completed.add(key)
      with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":True,"last_check":now(),
        "mode":"paced_native_local_history_before_breadth",
