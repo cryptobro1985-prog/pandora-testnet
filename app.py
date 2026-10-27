@@ -678,7 +678,7 @@ def persistent_news(limit=50):
  with pg() as c:return c.execute("select ts,source,title,symbol,signal,published_at,source_url from news_events order by ts desc limit %s",(limit,)).fetchall()
 def persistent_features(limit=100):
  with pg() as c:return c.execute("select ts,source,title,symbol,decision,confidence,features from event_features order by ts desc limit %s",(limit,)).fetchall()
-HL_REST_BUDGET=RestBudget()
+HL_REST_BUDGET=RestBudget(limit=1000)
 
 def get(url,body=None):
  data=None if body is None else json.dumps(body).encode()
@@ -756,6 +756,7 @@ def engine_coordinator():
        S.update(restored);S["positions"]=positions;S["equity"]=float(account["equity"]);S["realized_pnl"]=float(account["realized_pnl"])
        S["contributed_capital"]=float(capital["contributed_capital"]);S["last_checkpoint"]=now()
      journal("engine_restored",None,{"positions":list(positions),"risk_checkpoints":True})
+    if not S.get("engine_active"):S["_engine_activated_epoch"]=time.time()
     S["engine_active"]=True;S["engine_error"]=None
    else:
     S["engine_active"]=False;S["engine_error"]="standby: another engine owns the lease"
@@ -2525,9 +2526,12 @@ def local_experiment_loop():
         "flow_imbalance":flow_imb},"last_action":action,"error":None}
     stats=local_experiment_stats()
     equity,used,free=_local_experiment_margin_state()
+    ready_all=all(x.get("ok") for x in details.values())
+    bootstrap_wait=bool(details) and all(x.get("ok") or "history_bootstrap_pending" in str(x.get("error") or "") for x in details.values())
     with LOCK:
      S["local_experiment_stats"]=stats
-     S["sources"]["Local12TokenH1M15"]={"ok":all(x.get("ok") for x in details.values()),"last_check":now(),
+     S["sources"]["Local12TokenH1M15"]={"ok":ready_all or bootstrap_wait,"ready":ready_all,
+       "warmup":bootstrap_wait and not ready_all,"last_check":now(),
        "mode":"paper_h1_m15_caterpillar_v10_fixed25x_mtm_compound","policy":CATERPILLAR_POLICY,
        "symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"paper_only":True,"starting_equity":LOCAL_EXPERIMENT_STARTING_EQUITY,
        "equity":equity,"used_margin":used,"free_margin":free,"realized_pnl":S.get("local_experiment_realized_pnl",0),
@@ -2535,7 +2539,8 @@ def local_experiment_loop():
        "watching_for_reentry":list(S.get("local_experiment_watch",{})),"reference_margin_fraction":LOCAL_EXPERIMENT_MARGIN_FRACTION,
        "reference_leverage":25.0,"sizing":"20pct_current_mtm_equity_fixed25x_free_profit_reinvestment",
        "max_positions":LOCAL_EXPERIMENT_MAX_POSITIONS,"compound":True,"details":details,"stats":stats,
-       "rest_transport":HL_REST_BUDGET.status(),"error":None if all(x.get("ok") for x in details.values()) else "partial_symbol_scan_failure"}
+       "rest_transport":HL_REST_BUDGET.status(),
+       "error":None if (ready_all or bootstrap_wait) else "partial_symbol_scan_failure"}
    except LeaseLost as exc:
     with LOCK:S["sources"]["Local12TokenH1M15"]={"ok":False,"last_check":now(),"mode":"standby","error":str(exc)[:160]}
    except Exception as exc:
@@ -2990,7 +2995,7 @@ def market_regime_history():
    return bool(rows and stamp-rows[-1][0]<90 and any(0<=stamp-14400-t<=65 for t,_ in rows))
   ready=[sym for sym,rows in snapshot.items() if usable(rows)]
   ok=len(set(ready))>=5
-  with LOCK:S["sources"]["MarketBreadthHistory"]={"ok":ok,"warmup":not ok,"last_check":now(),
+  with LOCK:S["sources"]["MarketBreadthHistory"]={"ok":True,"ready":ok,"warmup":not ok,"last_check":now(),
     "loaded_markets":len(set(ready)),"requested_markets":len(REGIME_SEED_SYMBOLS),
     "mode":"completed_1m_H1_H4_context","refresh_seconds":15,
     "transport":"read_only_from_single_history_bootstrap_plus_live_ws",
@@ -3009,6 +3014,14 @@ def market_history_bootstrap():
    metadata_ready=bool(S.get("_day_volumes")) and bool(S.get("_max_leverage"))
   if not (active and metadata_ready):
    SHUTDOWN.wait(.5);continue
+  with LOCK:activated=float(S.get("_engine_activated_epoch",0) or 0)
+  quiet_remaining=max(0.0,65.0-(time.time()-activated)) if activated else 65.0
+  if quiet_remaining>0:
+   with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":True,"degraded":False,
+     "last_check":now(),"mode":"post_takeover_ip_quiet_window","quiet_remaining_seconds":round(quiet_remaining,1),
+     "regime_ready":sum(1 for x in completed if x[0]=="regime"),
+     "local_ready":sum(1 for x in completed if x[0]=="local"),"error":None}
+   SHUTDOWN.wait(min(2.0,quiet_remaining));continue
   try:
    stamp=time.time()
    regime_ready=0
