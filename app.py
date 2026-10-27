@@ -1647,6 +1647,13 @@ def refresh_market_prices(force=False,max_age=8.0):
   with LOCK:
    cached=dict(S.get("_prices",{}));last=float(S.get("_last_poll_epoch",0) or 0)
   if not force and cached and time.time()-last<=max_age:return cached
+  if not force and not cached:
+   deadline=time.monotonic()+2.5
+   while time.monotonic()<deadline and not SHUTDOWN.is_set():
+    SHUTDOWN.wait(.1)
+    with LOCK:
+     cached=dict(S.get("_prices",{}));last=float(S.get("_last_poll_epoch",0) or 0)
+    if cached and time.time()-last<=max_age:return cached
   try:
    mids=json.loads(get(API,{"type":"allMids"}))
   except urllib.error.HTTPError as exc:
