@@ -706,7 +706,7 @@ def init():
   c.execute("create table if not exists event_features (id text primary key,ts text,source text,title text,symbol text,decision integer,confidence real,features text)")
 def apply_local4_user_reset():
  # Explicit user-authorized reset, fenced after takeover, exactly once.
- action="user-local4-reset-20261027-flow-v1"
+ action="user-caterpillar-1-0-reset-20261027"
  with pg() as db:
   with db.transaction():
    STORE.fence(db)
@@ -2250,7 +2250,7 @@ def _local_experiment_margin_state():
 def _local_experiment_claim(symbol,action,side,analysis,price=None,extra=None):
  candle=int(analysis.get("signal_candle_time") or 0)
  payload={**analysis,"symbol":symbol,"action":action,"side":int(side or 0),"policy":CATERPILLAR_POLICY,
-   "experiment":"local_12token_h1_m15","paper_leverage":25.0}
+   "experiment":"Caterpillar 1.0","paper_leverage":25.0}
  if extra:payload.update(extra)
  ident="LOCAL_EXP:%s:%s:%s:%s"%(symbol,action,candle,int(side or 0))
  with pg() as db:
@@ -2344,7 +2344,7 @@ def local_experiment_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=N
  reentries=(int(watch.get("reentries") or 0)+1) if entry_kind=="REENTRY" and watch else 0
  origin_signal=int(analysis.get("signal_candle_time") or 0)
  claim_token=int((m15 or {}).get("candle_time") or origin_signal)
- features={**analysis,"symbol":symbol,"strategy_name":"local_12token_h1_m15","experiment":"local_12token_h1_m15",
+ features={**analysis,"symbol":symbol,"strategy_name":"Caterpillar 1.0","experiment":"Caterpillar 1.0",
   "policy":HYPE_SWING_POLICY,"caterpillar_policy":LOCAL4_FLOW_POLICY,"entry_kind":entry_kind,
   "candidate_selection":selection,
   "origin_h1_signal_candle":origin_signal,"swing_reentries":reentries,
@@ -2672,9 +2672,9 @@ def local_experiment_loop():
     bootstrap_wait=bool(details) and all(x.get("ok") or "history_bootstrap_pending" in str(x.get("error") or "") for x in details.values())
     with LOCK:
      S["local_experiment_stats"]=stats
-     S["sources"]["Local12TokenH1M15"]={"ok":ready_all or bootstrap_wait,"ready":ready_all,
+     S["sources"]["Caterpillar 1.0"]={"ok":ready_all or bootstrap_wait,"ready":ready_all,
        "warmup":bootstrap_wait and not ready_all,"last_check":now(),
-       "mode":"paper_local4_h1_executed_flow_20pct_25x","policy":LOCAL4_FLOW_POLICY,
+       "mode":"Caterpillar 1.0 PAPER H1-M15 executed-flow","policy":LOCAL4_FLOW_POLICY,
        "symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"paper_only":True,"starting_equity":LOCAL_EXPERIMENT_STARTING_EQUITY,
        "equity":equity,"used_margin":used,"free_margin":free,"realized_pnl":S.get("local_experiment_realized_pnl",0),
        "trades":S.get("local_experiment_trades",0),"open_positions":list(S.get("local_v12_positions",{})),
@@ -2685,9 +2685,9 @@ def local_experiment_loop():
        "rest_transport":HL_REST_BUDGET.status(),
        "error":None if (ready_all or bootstrap_wait) else "partial_symbol_scan_failure"}
    except LeaseLost as exc:
-    with LOCK:S["sources"]["Local12TokenH1M15"]={"ok":False,"last_check":now(),"mode":"standby","error":str(exc)[:160]}
+    with LOCK:S["sources"]["Caterpillar 1.0"]={"ok":False,"last_check":now(),"mode":"standby","error":str(exc)[:160]}
    except Exception as exc:
-    with LOCK:S["sources"]["Local12TokenH1M15"]={"ok":False,"last_check":now(),"mode":"paper_h1_m15_caterpillar_exchange_max_leverage",
+    with LOCK:S["sources"]["Caterpillar 1.0"]={"ok":False,"last_check":now(),"mode":"paper_h1_m15_caterpillar_exchange_max_leverage",
       "error":type(exc).__name__+":"+str(exc)[:160]}
     try:journal("local_experiment_error",None,{"error":type(exc).__name__+":"+str(exc)[:180]})
     except Exception:pass
@@ -4697,7 +4697,7 @@ def build_dashboard_snapshot(history=None):
 "local_v10_closed_trades":copy.deepcopy((history or {}).get("local_v10_closed_trades",[])),
 "local_v10_today_realized_pnl":float((history or {}).get("local_v10_today_realized_pnl",0) or 0),
 "local_experiment_stats":copy.deepcopy(state.get("local_experiment_stats",{})),
-"local_experiment_engine":copy.deepcopy(state.get("sources",{}).get("Local12TokenH1M15",{})),"module_trading_enabled":{"news":NEWS_NEW_ENTRIES_ENABLED,"whale_liquidation":WHALE_NEW_ENTRIES_ENABLED,"pump_dump":True,"local":True},"account_model":"UNIFIED_PAPER_ACCOUNT_ALL_STRATEGIES","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"decision_learning":copy.deepcopy(state.get("learning_audit",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
+"local_experiment_engine":copy.deepcopy(state.get("sources",{}).get("Caterpillar 1.0",{})),"module_trading_enabled":{"news":NEWS_NEW_ENTRIES_ENABLED,"whale_liquidation":WHALE_NEW_ENTRIES_ENABLED,"pump_dump":True,"local":True},"account_model":"UNIFIED_PAPER_ACCOUNT_ALL_STRATEGIES","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"decision_learning":copy.deepcopy(state.get("learning_audit",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
 def dashboard():
  # Render open positions from current in-memory prices; slow history queries
@@ -4850,7 +4850,7 @@ def operations_diagnostics():
      "trade_stream":copy.deepcopy(S["sources"].get("MarketTradeStream",{})),
      "history_bootstrap":copy.deepcopy(S["sources"].get("MarketHistoryBootstrap",{})),
      "market_metadata":copy.deepcopy(S["sources"].get("MarketMetadata",{})),
-     "local12_source":copy.deepcopy(S["sources"].get("Local12TokenH1M15",{}))}
+     "local12_source":copy.deepcopy(S["sources"].get("Caterpillar 1.0",{}))}
    print(json.dumps(report,ensure_ascii=False,default=str),flush=True)
   except Exception as e:print("diagnostics_error: "+str(e)[:180],flush=True)
   SHUTDOWN.wait(30)
@@ -5223,7 +5223,7 @@ if __name__=="__main__":
  worker_specs=[
   ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),("market_history_bootstrap",market_history_bootstrap),("market_trades",market_trade_stream),("breadth_history",market_regime_history),
   ("telemetry",telemetry),("pump_dump",impulse_scan),
-  ("local_12token_h1_m15",local_experiment_loop),("local_risk",local_experiment_risk_loop),
+  ("Caterpillar 1.0",local_experiment_loop),("local_risk",local_experiment_risk_loop),
   ("adapt",adapt),
   ("decision_learning",learning_shadow_loop),
   ("dashboard_history",dashboard_history_loop),("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)
