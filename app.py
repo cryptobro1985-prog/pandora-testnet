@@ -5528,37 +5528,34 @@ class Handler(BaseHTTPRequestHandler):
    self.send_error(404);return
   # Dashboard database reads are deliberately outside the engine lock.
   if path=="/":
-   try:
-    body=html_dashboard(dashboard()).encode();ctype="text/html; charset=utf-8"
-   except Exception as exc:
-    data=dashboard()
-    with LOCK:
-     s1=copy.deepcopy(S.get("sources",{}).get("Strategy 1 — Restored Caterpillar",{}))
-     s2=copy.deepcopy(S.get("sources",{}).get("Strategy 2 — H1 Pivot Swing",{}))
-    def escv(x):return html.escape(str(x))
-    rows=[]
-    for label,src in (("Strategy 1",s1),("Strategy 2",s2)):
-     details=src.get("details") or {}
-     for sym in LOCAL_EXPERIMENT_SYMBOLS:
-      d=details.get(sym) or {};a=d.get("h1_local") or {}
-      side=d.get("side")
-      rows.append("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(
-       label,sym,"LONG" if side==1 else ("SHORT" if side==-1 else "FLAT"),
-       escv(a.get("pivot_type") or "—"),escv(d.get("last_action") or d.get("error") or "—")))
-    fallback=('''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
-<title>PANDORA LIVE</title><style>body{background:#080b10;color:#e8edf5;font:15px system-ui;padding:16px}a{color:#8bc4ff}
+   with LOCK:
+    engine_active=bool(S.get("engine_active"))
+    s1=copy.deepcopy(S.get("sources",{}).get("Strategy 1 — Restored Caterpillar",{}))
+    s2=copy.deepcopy(S.get("sources",{}).get("Strategy 2 — H1 Pivot Swing",{}))
+    s1book=copy.deepcopy(S.get("local_s1_positions",{}))
+    s2book=copy.deepcopy(S.get("local_s2_positions",{}))
+   def escv(x):return html.escape(str(x))
+   rows=[]
+   for label,src,book in (("S1",s1,s1book),("S2",s2,s2book)):
+    details=src.get("details") or {}
+    for sym in LOCAL_EXPERIMENT_SYMBOLS:
+     p=book.get(sym) or {};d=details.get(sym) or {};a=d.get("h1_local") or {}
+     side=int(p.get("side") or 0)
+     rows.append("<tr><td>%s</td><td>%s</td><td>%s</td><td>$%.2f</td><td>$%.2f</td><td>%sx</td><td>%s</td><td>%s</td></tr>"%(
+      label,escv(sym),"LONG" if side==1 else ("SHORT" if side==-1 else "FLAT"),
+      float(p.get("notional",0) or 0),float(p.get("margin",0) or 0),float(p.get("leverage",0) or 0) if p else "—",
+      escv(a.get("pivot_type") or "—"),escv(d.get("last_action") or d.get("error") or "—")))
+   body=('''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<meta http-equiv="refresh" content="10"><title>PANDORA LIVE</title><style>body{background:#080b10;color:#e8edf5;font:15px system-ui;padding:16px}a{color:#8bc4ff}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.grid b{background:#111722;padding:14px;border-radius:10px}
 table{width:100%%;border-collapse:collapse;margin-top:16px}td,th{padding:9px;border-bottom:1px solid #263042;text-align:left}</style></head>
-<body><h1>PANDORA LIVE — SAFE MONITOR</h1><p>Основной HTML-блок временно деградировал, торговый движок продолжает работать.</p>
-<div class="grid"><b>ENGINE<br>%s</b><b>S1 EQUITY<br>$%s</b><b>S1 OPEN<br>%s</b><b>S2 EQUITY<br>$%s</b><b>S2 OPEN<br>%s</b></div>
-<table><tr><th>Strategy</th><th>Token</th><th>Side</th><th>H1 Local</th><th>Action</th></tr>%s</table>
-<p><a href="/api/dashboard">JSON dashboard</a> · <a href="/health">Health</a></p>
-<p>UI error: %s</p></body></html>'''%(
- "ACTIVE" if data.get("engine_active") else "STANDBY",
- round(float(s1.get("equity",500) or 500),4),len(s1.get("open_positions",[]) or []),
- round(float(s2.get("equity",500) or 500),4),len(s2.get("open_positions",[]) or []),
- "".join(rows),escv(type(exc).__name__)))
-    body=fallback.encode("utf-8");ctype="text/html; charset=utf-8"
+<body><h1>PANDORA LIVE</h1><div class="grid"><b>ENGINE<br>%s</b><b>S1 EQUITY<br>$%.4f</b><b>S1 OPEN<br>%s</b><b>S2 EQUITY<br>$%.4f</b><b>S2 OPEN<br>%s</b></div>
+<h3>LOCAL STRATEGIES · 20%% EQUITY × 25x</h3>
+<table><tr><th>Strategy</th><th>Token</th><th>Side</th><th>Position $</th><th>Margin $</th><th>Lev</th><th>H1 Local</th><th>Action</th></tr>%s</table>
+<p><a href="/api/dashboard">Full JSON dashboard</a> · <a href="/health">Health</a> · auto-refresh 10s</p></body></html>'''%(
+ "ACTIVE" if engine_active else "STANDBY",float(s1.get("equity",500) or 500),len(s1book),
+ float(s2.get("equity",500) or 500),len(s2book),"".join(rows))).encode("utf-8")
+   ctype="text/html; charset=utf-8"
   elif path in ("/status","/api/dashboard"):
    body=json.dumps(dashboard(),ensure_ascii=False).encode();ctype="application/json; charset=utf-8"
   elif path=="/trades":
