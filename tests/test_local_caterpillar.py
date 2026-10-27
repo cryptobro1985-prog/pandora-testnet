@@ -16,7 +16,7 @@ class CaterpillarTests(unittest.TestCase):
         for side in (-1, 1):
             pos=dict(side=side,entry=100.,features=dict(mfe_price_move=.01))
             mark=100.+side*.7
-            self.assertEqual(pressure_exit(pos,self.m15(side,True),mark,flow(-side*.5)),'m15_pressure_reversal')
+            self.assertEqual(pressure_exit(pos,self.m15(side,True),mark,flow(-side*.5)),'m15_pressure_reversal_profit_only')
             self.assertIsNone(pressure_exit(pos,self.m15(side,True),mark,flow(side*.5)))
             self.assertIsNone(pressure_exit(pos,self.m15(side,True),mark,flow(-side*.5,False)))
             self.assertIsNone(pressure_exit(pos,self.m15(side),mark,flow(-side*.5)))
