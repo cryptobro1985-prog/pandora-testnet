@@ -2739,9 +2739,13 @@ def market():
     metadata_ready=bool(S.get("_day_volumes")) and bool(S.get("_max_leverage"))
     cached=dict(S.get("_prices",{}))
     cached_age=time.time()-float(S.get("_last_poll_epoch",0) or 0) if S.get("_last_poll_epoch") else 1e9
-   # Metadata owns the first Hyperliquid REST request after lease takeover.
-   # Before it is ready, the market worker must not hammer allMids every 2s.
-   if active and not metadata_ready:
+   # Standby Render instances must never touch exchange REST. After lease
+   # takeover, metadata owns the first REST request.
+   if not active:
+    SHUTDOWN.wait(.5)
+    continue
+   # Before metadata is ready, the market worker must not hammer allMids.
+   if not metadata_ready:
     with LOCK:
      S["last_market_error"]=None
      if str(S.get("last_error") or "").startswith("market: hyperliquid_rest_deferred"):
