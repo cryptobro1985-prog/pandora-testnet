@@ -147,6 +147,14 @@ class AllocationTests(unittest.TestCase):
         d['local_experiment_engine']={'details':{'HYPE':dict(last_action='M15_ENTRY',candidate_selection=dict(rank=1,recovery_score=5,aligned_flow=.7))}}
         self.assertIn('rank 1 · M15 5 · aligned flow 0.70',app.html_dashboard(d))
 
+    def test_normal_startup_never_runs_historical_trade_repair(self):
+        with patch.dict(app.os.environ,{'PANDORA_RUN_HISTORICAL_REPAIR':'0'}), \
+             patch('restore_positions.main') as repair,patch.object(app,'pg') as database:
+            app.post_lease_historical_restore()
+        repair.assert_not_called()
+        database.assert_not_called()
+        self.assertTrue(app.S['sources']['HistoricalRestore']['disabled'])
+
 
 if __name__=='__main__':
     unittest.main()

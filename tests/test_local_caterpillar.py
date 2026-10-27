@@ -61,8 +61,17 @@ class CaterpillarTests(unittest.TestCase):
         sparse=dict(flow(.5),trade_count_60s=2,observed_notional_60s=46.)
         self.assertIsNone(pressure_exit(pos,self.m15(-1,True),99.7,sparse))
 
-    def test_routine_m15_weakening_does_not_crystallize_a_loss(self):
-        pos=dict(side=1,entry=100.,features=dict(mfe_price_move=0.,estimated_round_trip_cost_move=.001))
-        self.assertIsNone(pressure_exit(pos,self.m15(1,True),99.7,flow(-.4)))
+    def test_confirmed_counter_pressure_exits_a_loss_in_both_directions(self):
+        for side in (-1,1):
+            pos=dict(side=side,entry=100.,features=dict(mfe_price_move=0.,estimated_round_trip_cost_move=.001))
+            self.assertEqual(pressure_exit(pos,self.m15(side,True),100.-side*.3,flow(-side*.4)),
+                             'm15_pressure_reversal')
+
+    def test_loss_alone_never_substitutes_for_confirmed_counter_pressure(self):
+        for side in (-1,1):
+            pos=dict(side=side,entry=100.,features=dict(mfe_price_move=0.,estimated_round_trip_cost_move=.001))
+            self.assertIsNone(pressure_exit(pos,self.m15(side),100.-side*.3,flow(-side*.4)))
+            self.assertIsNone(pressure_exit(pos,self.m15(side,True),100.-side*.3,flow(side*.4)))
+            self.assertIsNone(pressure_exit(pos,self.m15(side,True),100.-side*.3,flow(-side*.4,False)))
 
 if __name__=='__main__':unittest.main()

@@ -7,7 +7,7 @@ import copy
 import datetime
 import math
 
-POLICY = "local_h1_m15_caterpillar_v10_strict_reentry_profit_floor"
+POLICY = "local_h1_m15_caterpillar_v13_pressure_exit_ranked_reentry"
 FLOW_THRESHOLD = .12
 SELECTION_POLICY = "h1_m15_ranked_execution_v1"
 
@@ -98,13 +98,11 @@ def rank_candidates(candidates):
 
 
 def pressure_exit(position, m15, mark, fresh_flow_context):
-    """Take a normal caterpillar exit only on confirmed weakening while net-profitable.
+    """Exit confirmed counter-pressure without waiting for a losing trade to win.
 
-    A routine pullback never crystallizes a loss. Exit requires fresh executed
-    counter-flow, strong M15 adverse pressure, a directional recoil from the MFE,
-    and enough favorable move to remain above the position's estimated round-trip
-    execution-cost floor. Catastrophic/thesis-invalidating exits are handled by
-    the caller's separate H1/opposite-pivot and liquidation guards.
+    Require fresh executed counter-flow, strong M15 adverse pressure and a real
+    directional recoil. PnL labels the exit; it must not veto that signal.
+    H1/opposite-pivot and liquidation guards remain separate.
     """
     if not position or not m15 or not m15.get("ready"):
         return None
@@ -115,9 +113,6 @@ def pressure_exit(position, m15, mark, fresh_flow_context):
     features = position.get("features") or {}
     move = side * (mark / entry - 1)
     cost_floor = max(.0002, _f(features.get("estimated_round_trip_cost_move")) or 0.0)
-    # Routine weakening exits must preserve at least the estimated trading costs.
-    if move <= cost_floor:
-        return None
     if side * flow > -FLOW_THRESHOLD:
         return None
     # Sparse prints are not enough to establish a real reversal.
@@ -134,7 +129,7 @@ def pressure_exit(position, m15, mark, fresh_flow_context):
     peak = max(0., _f(features.get("mfe_price_move")) or 0., move)
     if peak - move < _threshold(m15):
         return None
-    return "m15_pressure_reversal_profit_only"
+    return "m15_pressure_reversal_profit_only" if move > cost_floor else "m15_pressure_reversal"
 
 
 def update_watch(watch, mark, m15, flow, now_epoch):

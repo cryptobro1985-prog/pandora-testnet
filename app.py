@@ -773,6 +773,11 @@ def engine_coordinator():
  except Exception:pass
 
 def post_lease_historical_restore():
+ # Routine deployments must preserve existing trading history and balances.
+ # Historical repairs are a separate, explicitly enabled operator operation.
+ if os.getenv("PANDORA_RUN_HISTORICAL_REPAIR","0")!="1":
+  with LOCK:S["sources"]["HistoricalRestore"]={"ok":True,"disabled":True,"mode":"explicit_operator_repair_only","last_check":now()}
+  return
  # A rolling Render deploy starts before the old instance has released the
  # single-writer lease. Historical repair must therefore run only *after* this
  # instance owns the lease; otherwise the draining instance can overwrite the
@@ -2549,14 +2554,14 @@ def local_experiment_loop():
       h1_exit=hype_position_exit(pos,analysis,float(mark)) if analysis.get("ready") else None
       if h1_exit:
        # Opposite H1 invalidates the trade thesis, regardless of PnL.
-       # Profit-only applies to routine M15 weakening, never to H1 reversal.
+       # M15 exits likewise follow confirmed pressure, independently of PnL.
        closed=local_experiment_close(symbol,float(mark),h1_exit,analysis)
        action="H1_DIRECTION_INVALIDATION_EXIT:"+h1_exit if closed else None
-      elif caterpillar_pressure_exit(pos,m15_live,float(mark),flow):
+      elif pressure_reason:=caterpillar_pressure_exit(pos,m15_live,float(mark),flow):
        watch_context={"m15":m15_live,"h1_context":h1_context,"flow_imbalance":flow_imb,"flow_context":flow,
-         "flow_source":"hyperliquid_ws_trades","observed_at":now(),"reason":"m15_confirmed_weakening_while_net_profitable"}
-       closed=local_experiment_close(symbol,float(mark),"m15_pressure_reversal_profit_only",analysis,watch_context)
-       action="M15_PROFIT_PROTECT_EXIT" if closed else None
+         "flow_source":"hyperliquid_ws_trades","observed_at":now(),"reason":pressure_reason}
+       closed=local_experiment_close(symbol,float(mark),pressure_reason,analysis,watch_context)
+       action="M15_COUNTER_PRESSURE_EXIT" if closed else None
      else:
       if analysis.get("entry_blocked"):action="WAIT_H1_CONFIRMATION:"+str(analysis.get("pending_pivot_type"))
       if watch:watch=_local_experiment_watch_observe(symbol,watch,float(mark),m15_live,flow,time.time())

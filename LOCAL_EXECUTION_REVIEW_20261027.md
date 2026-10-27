@@ -14,9 +14,11 @@ then re-enter only after price and flow resume the H1 direction. Reopening from
 an unchanged pre-exit signal is forbidden. Long and short behavior is symmetric.
 The opposite confirmed H1 pivot invalidates the position and re-entry watch.
 
-The existing routine weakening exit remains **net-profit-only** pending the
-user's answer about taking a small loss on an opposing-pressure signal. H1
-invalidation and the liquidation proxy are separate exits and can lose money.
+Routine weakening exits follow confirmed opposing pressure even at a loss,
+matching the requested exit/pullback/resumption sequence. PnL labels the exit
+but no longer vetoes it. Fresh executed counter-flow, M15 pressure and an
+observed recoil are still mandatory. H1 invalidation and the liquidation proxy
+remain separate exits.
 
 ## Changes
 
@@ -36,10 +38,20 @@ invalidation and the liquidation proxy are separate exits and can lose money.
   scan latency no longer determine the cadence of this price protection.
 - Persist a newly armed profit floor immediately rather than waiting up to
   30 seconds; a failed persistence attempt remains due for retry.
+- Normal Docker startup does not run the legacy history purge. Historical
+  position repair is disabled unless explicitly enabled by an operator through
+  `PANDORA_RUN_HISTORICAL_REPAIR=1`. Deployment preserves existing trade records.
 - Expose candidate ordering and evidence in dashboard JSON and the H1 status
   table. Keep the existing mark-to-market compounding and position sizing.
 
 ## Evidence
+
+The deployment revision incorporates the three newer main-branch fixes for
+durable candle history, structural H1 confirmation independent of candle color,
+and PostgreSQL text-timestamp daily-PnL comparison. With pressure exits allowed
+at a loss and historical repair disabled for normal startup, the current
+release CI command passes **133 tests**. Fixed 25x PAPER leverage is retained
+at the user's request; a Bybit connector is outside this deployment.
 
 The 112-test CI strategy suite plus 15 new allocation/risk/storage regressions
 passed: 127 tests. Storage regressions use real PostgreSQL in a disposable
@@ -82,10 +94,11 @@ retroactively resized.
 Paper fills use observed mids and configured fees. Actual spread, slippage,
 funding and exchange liquidation execution are not fully modeled. An observed
 price gap can cross a protective floor; an estimated cost floor cannot guarantee
-a positive realized exit. The existing loss guard is not a calibrated portfolio
-drawdown limit.
+a positive realized exit. Confirmed-pressure exits can realize losses. The
+existing loss guard is not a calibrated portfolio drawdown limit.
 
 No untouched out-of-sample portfolio backtest or multi-day forward evaluation
 establishes that this candidate ordering improves daily returns. No daily profit
-or compounding rate is guaranteed. Production deployment and production database
-changes were not performed by this review.
+or compounding rate is guaranteed. Production readiness requires the monitor to
+report the deployed commit and a successful `/health/risk` check; local tests
+alone do not establish deployment success.
