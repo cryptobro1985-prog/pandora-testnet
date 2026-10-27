@@ -2410,7 +2410,7 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
    "origin_signal_candle":int(features.get("origin_h1_signal_candle") or pos.get("signal_candle_time") or 0),
    "exit_price":price,"exit_at":now(),"expires_epoch":0.0,
    "reentries":int(features.get("swing_reentries",0) or 0),"context":copy.deepcopy(watch_context or {})}
-  watch["context"].update(phase="WAIT_RESUMPTION" if reason=="executed_flow_counter_dominance" else "WAIT_PULLBACK",counter_pressure_seen=reason in ("m15_pressure_reversal","m15_pressure_reversal_profit_only","executed_flow_counter_dominance"),
+  watch["context"].update(phase="WAIT_PULLBACK",counter_pressure_seen=reason in ("m15_pressure_reversal","m15_pressure_reversal_profit_only","executed_flow_counter_dominance"),
     caterpillar_policy=LOCAL4_FLOW_POLICY)
  with pg() as db:
   with db.transaction():
