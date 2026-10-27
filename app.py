@@ -2344,12 +2344,16 @@ def local_experiment_stats():
    agg=db.execute("""select count(*) as trades,sum(case when pnl>0 then 1 else 0 end) as wins,
       coalesce(sum(pnl),0) as pnl,avg(pnl) as avg_pnl
       from local_experiment_trade_history""").fetchone()
+   cutoff=(datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(hours=24)).isoformat()
+   daily=db.execute("""select count(*) as trades,sum(case when pnl>0 then 1 else 0 end) as wins,
+      coalesce(sum(pnl),0) as pnl from local_experiment_trade_history where closed >= %s""",(cutoff,)).fetchone()
    rows=db.execute("""select symbol,count(*) as trades,sum(case when pnl>0 then 1 else 0 end) as wins,
       coalesce(sum(pnl),0) as pnl,avg(pnl) as avg_pnl,
       avg(coalesce((features->>'exposure_fill_ratio')::double precision,1)) as avg_fill
       from local_experiment_trade_history group by symbol order by symbol""").fetchall()
   n=int(agg["trades"] or 0);w=int(agg["wins"] or 0)
-  return {"trades":n,"wins":w,"win_rate":round(w/n,4) if n else None,"realized_pnl":float(agg["pnl"] or 0),
+  dn=int(daily["trades"] or 0);dw=int(daily["wins"] or 0)
+  return {"rolling_24h":{"trades":dn,"wins":dw,"win_rate":round(dw/dn,4) if dn else None,"realized_pnl":float(daily["pnl"] or 0)},"trades":n,"wins":w,"win_rate":round(w/n,4) if n else None,"realized_pnl":float(agg["pnl"] or 0),
     "avg_pnl":float(agg["avg_pnl"]) if agg["avg_pnl"] is not None else None,
     "by_symbol":{r["symbol"]:{"trades":int(r["trades"] or 0),"wins":int(r["wins"] or 0),
       "win_rate":round(int(r["wins"] or 0)/int(r["trades"]),4) if int(r["trades"] or 0) else None,
@@ -4564,7 +4568,10 @@ def html_dashboard(data):
  exp_pos_by_symbol={x.get("symbol"):x for x in exp_positions}
  exp_stats=data.get("local_experiment_stats") or {}
  exp_by_symbol=exp_stats.get("by_symbol") or {}
+ exp_day=exp_stats.get("rolling_24h") or {}
+ exp_day_wr="—" if exp_day.get("win_rate") is None else str(round(float(exp_day["win_rate"])*100,1))+"%"
  exp_cards='<div class="grid"><b>10-TOKEN LOCAL 24H<br>%s</b><b>START<br>$500</b><b>TOTAL EQUITY<br>$%s</b><b>P&L<br><span class="%s">%s%%</span></b><b>OPEN POSITIONS<br>%s</b><b>CLOSED TRADES<br>%s</b><b>REFERENCE POSITION<br>20%% × 25x</b><b>SIZING<br>REAL MAX LEVERAGE</b></div>'%("OK" if exp_engine.get("ok") else "ERROR",data.get("local_experiment_total_equity",500),"posv" if data.get("local_experiment_pnl_pct",0)>=0 else "negv",data.get("local_experiment_pnl_pct",0),len(exp_positions),data.get("local_experiment_trades",0))
+ exp_cards+='<div class="grid"><b>LOCAL LAST 24H<br>ROLLING</b><b>REALIZED P&L<br>$%s</b><b>TRADES<br>%s</b><b>WIN RATE<br>%s</b></div>'%(round(float(exp_day.get("realized_pnl",0) or 0),4),exp_day.get("trades",0),esc(exp_day_wr))
  exp_rows=[]
  for sym in data.get("local_experiment_symbols",[]):
   d=(exp_engine.get("details") or {}).get(sym,{})
