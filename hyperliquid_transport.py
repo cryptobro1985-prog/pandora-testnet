@@ -32,7 +32,7 @@ class RestBudget:
             return 60
         if kind == 'candleSnapshot':
             req = body.get('req', {})
-            interval = {'1m':60000, '15m':900000, '1h':3600000}.get(req.get('interval'), 60000)
+            interval = {'1m':60000, '3m':180000, '5m':300000, '15m':900000, '1h':3600000}.get(req.get('interval'), 60000)
             count = max(0, (req.get('endTime', 0)-req.get('startTime', 0)) // interval + 1)
             return 20 + math.ceil(count / 60)
         return 20
