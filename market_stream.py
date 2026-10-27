@@ -22,27 +22,12 @@ def run_trade_stream(observations, stop, symbols_provider, report, url, on_mids=
             if on_regime_candles is not None:
                 for symbol in sorted(regime_symbols):
                     ws.send(json.dumps({"method":"subscribe","subscription":{"type":"candle","coin":symbol,"interval":"1m"}}))
-            # Info requests over websocket share exchange limits. Pace history
-            # bootstrap instead of firing all candleSnapshot posts in one burst.
+            # History bootstrap is owned by the app's paced REST worker after
+            # engine lease takeover. Websocket is live-stream only; this avoids
+            # unreliable info-post replies and duplicate startup rate-limit load.
             history_queue=[]
             history_inflight={}
-            history_seq=1000000
             history_completed=history_errors=0
-            def queue_history(route,payload):
-                history_queue.append((route,payload,0))
-            if on_candle_history is not None:
-                end_ms=int(time.time()*1000)
-                for symbol in sorted(candle_symbols):
-                    # One compact 3m snapshot is aggregated by the app into both
-                    # H1 and M15 history. This halves Local bootstrap requests and
-                    # keeps the same causal H1/M15 strategy inputs.
-                    queue_history("local",{"type":"candleSnapshot","req":{"coin":symbol,"interval":"3m",
-                        "startTime":end_ms-9*3600000,"endTime":end_ms}})
-            if on_regime_candles is not None:
-                end_ms=int(time.time()*1000)
-                for symbol in sorted(regime_symbols):
-                    queue_history("regime",{"type":"candleSnapshot","req":{"coin":symbol,"interval":"1m",
-                        "startTime":end_ms-6*3600000,"endTime":end_ms}})
             observations.mark_connected(time.time(), selected)
             last_ping = last_report = 0
             last_history_send = time.time()
