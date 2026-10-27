@@ -33,9 +33,11 @@ def run_trade_stream(observations, stop, symbols_provider, report, url, on_mids=
             if on_candle_history is not None:
                 end_ms=int(time.time()*1000)
                 for symbol in sorted(candle_symbols):
-                    for interval,hours in (("1h",120),("15m",12)):
-                        queue_history("local",{"type":"candleSnapshot","req":{"coin":symbol,"interval":interval,
-                            "startTime":end_ms-hours*3600000,"endTime":end_ms}})
+                    # One compact 3m snapshot is aggregated by the app into both
+                    # H1 and M15 history. This halves Local bootstrap requests and
+                    # keeps the same causal H1/M15 strategy inputs.
+                    queue_history("local",{"type":"candleSnapshot","req":{"coin":symbol,"interval":"3m",
+                        "startTime":end_ms-9*3600000,"endTime":end_ms}})
             if on_regime_candles is not None:
                 end_ms=int(time.time()*1000)
                 for symbol in sorted(regime_symbols):
