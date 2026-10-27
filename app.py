@@ -1103,7 +1103,7 @@ def pump_mark_positions(prices):
 
 @account_mutation
 def whale_liq_open(symbol,side,price,score,features,margin_fraction=None):
-  if not WHALE_NEW_ENTRIES_ENABLED:return False
+ if not WHALE_NEW_ENTRIES_ENABLED:return False
  if S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or side not in (-1,1) or not price:return False
  if features.get("observed_at_epoch") and not 0<=time.time()-features["observed_at_epoch"]<=10:return False
  price=current_entry_price(symbol)
@@ -3096,7 +3096,7 @@ def record_event(ident,source,title,sym,base_side,prices,published_at=None):
 
 @account_mutation
 def open_signal(sym,side,title,prices,event_id=None,published_at=None,source=""):
-  if not NEWS_NEW_ENTRIES_ENABLED:return False
+ if not NEWS_NEW_ENTRIES_ENABLED:return False
  fresh_window=source_freshness_window(source)
  fresh=freshness(published_at,time.time(),fresh_window)
  reason=None
