@@ -1825,6 +1825,13 @@ def _local_cached_interval_fresh(cached,interval):
  if not cached or len(cached[1])<_local_min_history_rows(interval):return False
  try:
   step=3600000 if interval=="1h" else 900000
+  # H1 pivots require six consecutive COMPLETED candles; the newest
+  # websocket candle alone cannot establish that history is intact.
+  if interval=="1h":
+   wall_ms=int(time.time()*1000)
+   closed=sorted({int(r["t"]) for r in cached[1] if int(r.get("T",int(r["t"])+step-1))<=wall_ms-1000})
+   if len(closed)<6 or any(b-a!=step for a,b in zip(closed[-6:],closed[-5:])):
+    return False
   row=cached[1][-1]
   close_ms=int(row.get("T",int(row["t"])+step-1))
   # Illiquid markets may legitimately produce no new candle websocket message
@@ -1842,11 +1849,11 @@ def _local_candles(symbol,interval,hours):
  with _LOCAL_CANDLE_CACHE_LOCK:
   cached=_LOCAL_CANDLE_CACHE.get(key)
   stream=_LOCAL_CANDLE_STREAM.get((symbol,interval))
-  if cached and stream and stamp-stream[0]<45 and len(cached[1])>=_local_min_history_rows(interval):
+  if cached and stream and stamp-stream[0]<45 and _local_cached_interval_fresh(cached,interval):
    return cached[1],int(time.time()*1000)
   if _local_cached_interval_fresh(cached,interval):
    return cached[1],int(time.time()*1000)
-  if cached and len(cached[1])>=_local_min_history_rows(interval) and stamp-cached[0]<ttl:return cached[1],int(time.time()*1000)
+  if cached and _local_cached_interval_fresh(cached,interval) and stamp-cached[0]<ttl:return cached[1],int(time.time()*1000)
   with LOCK:
    stream_state=copy.deepcopy(S.get("sources",{}).get("MarketTradeStream",{}))
    active_engine=bool(S.get("engine_active"))
@@ -1863,7 +1870,7 @@ def _local_candles(symbol,interval,hours):
    cached=_LOCAL_CANDLE_CACHE.get(key)
    if _local_cached_interval_fresh(cached,interval):
     return cached[1],int(time.time()*1000)
-   if cached and len(cached[1])>=_local_min_history_rows(interval) and stamp-cached[0]<ttl:return cached[1],int(time.time()*1000)
+   if cached and _local_cached_interval_fresh(cached,interval) and stamp-cached[0]<ttl:return cached[1],int(time.time()*1000)
    with LOCK:
     stream_state=copy.deepcopy(S.get("sources",{}).get("MarketTradeStream",{}))
     active_engine=bool(S.get("engine_active"))
