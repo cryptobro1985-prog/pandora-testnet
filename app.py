@@ -2509,8 +2509,9 @@ def local_experiment_risk_loop():
     prices=dict(S.get("_prices",{}))
    if active and 0<=age<=8 and prices:
     local_experiment_mark_positions(prices)
-    local4_fast_entries(prices)
-    with LOCK:S["sources"]["LocalRisk"]={"ok":True,"last_check":now(),"mode":"executed_buy_sell_dominance"}
+    # H1 -> M15 entries/reentries belong exclusively to local_experiment_loop.
+    # Never submit orders from this price-only risk loop without M15 candles.
+    with LOCK:S["sources"]["LocalRisk"]={"ok":True,"last_check":now(),"mode":"M15_entries_only_risk_price_monitor"}
   except LeaseLost as exc:
    with LOCK:
     S["engine_active"]=False;S["engine_error"]=str(exc)
