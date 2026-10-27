@@ -2558,6 +2558,43 @@ def local_experiment_stats():
       "avg_exposure_fill_ratio":float(r["avg_fill"]) if r["avg_fill"] is not None else None} for r in rows}}
  except Exception as exc:return {"error":type(exc).__name__+":"+str(exc)[:160]}
 
+def _local_persisted_anchor(symbol):
+ # During H1 bootstrap/restart keep trading the last confirmed local regime.
+ # The regime remains valid until a newly completed H1 pivot confirms the opposite side.
+ with LOCK:
+  pos=copy.deepcopy(S.get("local_v12_positions",{}).get(symbol))
+  watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
+ for source in (pos,watch):
+  if not source:continue
+  features=copy.deepcopy(source.get("features") or source.get("context") or {})
+  side=int(source.get("side") or features.get("entry_side") or 0)
+  if side not in (-1,1):continue
+  pivot_type=features.get("pivot_type") or ("LOCAL_HIGH" if side<0 else "LOCAL_LOW")
+  pivot_price=features.get("pivot_price")
+  candle=int(features.get("signal_candle_time") or features.get("origin_h1_signal_candle") or source.get("signal_candle_time") or source.get("origin_signal_candle") or 0)
+  return {"ready":True,"persisted":True,"anchor_confirmed":True,"h1_direction_anchor":True,
+    "pivot_type":pivot_type,"pivot_price":pivot_price,"entry_side":side,
+    "signal_candle_time":candle,"pivot_candle_time":candle,
+    "entry_blocked":False,"pending_pivot_type":None,"pending_pivot_price":None,
+    "entry_block_reason":None,"reason":"persisted_confirmed_h1_local"}
+ try:
+  with pg() as db:
+   row=db.execute("""select side,candle_time,features from local_v12_signal_journal
+     where features->>'symbol'=%s and action in ('OBSERVE','OPEN','REENTRY')
+     order by ts desc limit 1""",(symbol,)).fetchone()
+  if not row:return None
+  features=copy.deepcopy(row.get("features") or {})
+  side=int(features.get("entry_side") or row.get("side") or 0)
+  if side not in (-1,1):return None
+  candle=int(features.get("signal_candle_time") or features.get("origin_h1_signal_candle") or row.get("candle_time") or 0)
+  return {"ready":True,"persisted":True,"anchor_confirmed":True,"h1_direction_anchor":True,
+    "pivot_type":features.get("pivot_type") or ("LOCAL_HIGH" if side<0 else "LOCAL_LOW"),
+    "pivot_price":features.get("pivot_price"),"entry_side":side,
+    "signal_candle_time":candle,"pivot_candle_time":int(features.get("pivot_candle_time") or candle),
+    "entry_blocked":False,"pending_pivot_type":None,"pending_pivot_price":None,
+    "entry_block_reason":None,"reason":"persisted_confirmed_h1_local"}
+ except Exception:return None
+
 def local_experiment_loop():
  last_observed={};pool=concurrent.futures.ThreadPoolExecutor(max_workers=24,thread_name_prefix="local-exp-m15")
  try:
@@ -2581,15 +2618,27 @@ def local_experiment_loop():
     details={};entry_queue=[]
     for symbol in LOCAL_EXPERIMENT_SYMBOLS:
      mark=prices.get(symbol)
-     if (symbol,"h1") in fetch_errors or not mark:
-      with LOCK:S.setdefault("_local4_analysis",{}).pop(symbol,None)
-      details[symbol]={"ok":False,"error":fetch_errors.get((symbol,"h1")) or "mark_unavailable","max_leverage":market_max_leverage(symbol)}
+     if not mark:
+      details[symbol]={"ok":False,"error":"mark_unavailable","max_leverage":market_max_leverage(symbol)}
       continue
-     h1_rows,h1_ms=fetched[(symbol,"h1")]
+     h1_error=fetch_errors.get((symbol,"h1"))
+     persisted=None
+     if h1_error:persisted=_local_persisted_anchor(symbol)
+     if h1_error and not persisted:
+      with LOCK:S.setdefault("_local4_analysis",{}).pop(symbol,None)
+      details[symbol]={"ok":False,"error":h1_error,"max_leverage":market_max_leverage(symbol)}
+      continue
      m15_rows,m15_ms=fetched.get((symbol,"m15"),([],int(time.time()*1000)))
-     analysis=local_h1_direction(h1_rows,h1_ms,symbol)
+     if persisted:
+      analysis=persisted
+      h1_rows=[];h1_ms=int(time.time()*1000)
+     else:
+      h1_rows,h1_ms=fetched[(symbol,"h1")]
+      analysis=local_h1_direction(h1_rows,h1_ms,symbol)
      with LOCK:S.setdefault("_local4_analysis",{})[symbol]=copy.deepcopy(analysis)
-     h1_context=analyze_local_h1_context(h1_rows,h1_ms,symbol)
+     h1_context=({"ready":True,"persisted":True,"entry_side":analysis.get("entry_side"),
+       "pivot_type":analysis.get("pivot_type"),"pivot_price":analysis.get("pivot_price")}
+       if persisted else analyze_local_h1_context(h1_rows,h1_ms,symbol))
      with LOCK:
       pos=copy.deepcopy(S.get("local_v12_positions",{}).get(symbol))
       watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
