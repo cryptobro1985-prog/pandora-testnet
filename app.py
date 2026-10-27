@@ -133,7 +133,7 @@ API=os.getenv("HYPERLIQUID_INFO_API","https://api.hyperliquid.xyz/info").strip()
 DB="/tmp/pandora.sqlite3"
 START=time.time()
 S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0,"pump_positions":{},"pump_equity":100.0,"pump_realized_pnl":0.0,"pump_trades":0,"pump_history_baseline":{},"whale_positions":{},"whale_equity":100.0,"whale_realized_pnl":0.0,"whale_trades":0,"local_swing_positions":{},"local_swing_watch":{},"hype_swing_position":None,"hype_swing_equity":100.0,"hype_swing_realized_pnl":0.0,"hype_swing_trades":0,"hype_swing_started_at":None,
-"local_experiment_positions":{},"local_experiment_watch":{},"local_experiment_equity":LOCAL_EXPERIMENT_STARTING_EQUITY,
+"local_v12_positions":{},"local_experiment_watch":{},"local_experiment_equity":LOCAL_EXPERIMENT_STARTING_EQUITY,
 "local_experiment_realized_pnl":0.0,"local_experiment_trades":0,"local_experiment_started_at":None,
 "local_experiment_stats":{},"news_health":{}}
 LOCK=threading.RLock()
@@ -352,26 +352,26 @@ def pinit():
     symbol text primary key, side integer not null, origin_signal_candle bigint, exit_price double precision,
     exit_at text not null, expires_epoch double precision not null, reentries integer not null default 0,
     context jsonb not null default '{}'::jsonb)""")
-  c.execute("""create table if not exists local_experiment_account_state (
+  c.execute("""create table if not exists local_v12_account_state (
     id integer primary key, equity double precision not null, realized_pnl double precision not null,
     started_at text not null, updated_at text not null)""")
-  c.execute("""create table if not exists local_experiment_positions (
+  c.execute("""create table if not exists local_v12_positions (
     symbol text primary key, side integer not null, entry double precision not null, notional double precision not null,
     margin double precision not null, leverage double precision not null, opened text not null, opened_epoch double precision not null,
     signal_candle_time bigint, features jsonb not null default '{}'::jsonb)""")
-  c.execute("""create table if not exists local_experiment_trade_history (
+  c.execute("""create table if not exists local_v12_trade_history (
     id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision,
     pnl double precision, reason text, margin double precision, notional double precision, leverage double precision,
     features jsonb not null default '{}'::jsonb)""")
-  c.execute("""create table if not exists local_experiment_watchlist (
+  c.execute("""create table if not exists local_v12_watchlist (
     symbol text primary key, side integer not null, origin_signal_candle bigint, exit_price double precision,
     exit_at text not null, expires_epoch double precision not null default 0, reentries integer not null default 0,
     context jsonb not null default '{}'::jsonb)""")
-  c.execute("""create table if not exists local_experiment_signal_journal (
+  c.execute("""create table if not exists local_v12_signal_journal (
     id text primary key, ts text not null, candle_time bigint, action text not null, side integer, price double precision,
     features jsonb not null default '{}'::jsonb)""")
-  c.execute("create index if not exists local_experiment_trade_closed_idx on local_experiment_trade_history(closed desc)")
-  c.execute("create index if not exists local_experiment_signal_time_idx on local_experiment_signal_journal(ts desc)")
+  c.execute("create index if not exists local_experiment_trade_closed_idx on local_v12_trade_history(closed desc)")
+  c.execute("create index if not exists local_experiment_signal_time_idx on local_v12_signal_journal(ts desc)")
   c.execute("create index if not exists hype_swing_trade_closed_idx on hype_swing_trade_history(closed desc)")
   c.execute("create index if not exists hype_swing_signal_time_idx on hype_swing_signal_journal(ts desc)")
   c.execute("create index if not exists hype_swing_shadow_open_idx on hype_swing_shadow_exits(status,opened)")
@@ -437,24 +437,24 @@ def pinit():
   S["local_swing_watch"]=watches
   S["hype_swing_trades"]=c.execute("select count(*) as n from hype_swing_trade_history").fetchone()["n"]
 
-  c.execute("""insert into local_experiment_account_state(id,equity,realized_pnl,started_at,updated_at)
+  c.execute("""insert into local_v12_account_state(id,equity,realized_pnl,started_at,updated_at)
     values(1,%s,0,%s,%s) on conflict(id) do nothing""",(LOCAL_EXPERIMENT_STARTING_EQUITY,now(),now()))
-  exacct=c.execute("select equity,realized_pnl,started_at from local_experiment_account_state where id=1").fetchone()
+  exacct=c.execute("select equity,realized_pnl,started_at from local_v12_account_state where id=1").fetchone()
   S["local_experiment_equity"]=float(exacct["equity"]);S["local_experiment_realized_pnl"]=float(exacct["realized_pnl"])
   S["local_experiment_started_at"]=exacct["started_at"]
   expos={}
-  for r in c.execute("select * from local_experiment_positions").fetchall():
+  for r in c.execute("select * from local_v12_positions").fetchall():
    expos[r["symbol"]]={"symbol":r["symbol"],"side":int(r["side"]),"entry":float(r["entry"]),"notional":float(r["notional"]),
     "margin":float(r["margin"]),"leverage":float(r["leverage"]),"opened":r["opened"],"t":float(r["opened_epoch"]),
     "signal_candle_time":int(r["signal_candle_time"] or 0),"features":r["features"] or {}}
-  S["local_experiment_positions"]=expos
+  S["local_v12_positions"]=expos
   exwatches={}
-  for r in c.execute("select * from local_experiment_watchlist").fetchall():
+  for r in c.execute("select * from local_v12_watchlist").fetchall():
    exwatches[r["symbol"]]={"symbol":r["symbol"],"side":int(r["side"]),"origin_signal_candle":int(r["origin_signal_candle"] or 0),
     "exit_price":float(r["exit_price"] or 0),"exit_at":r["exit_at"],"expires_epoch":float(r["expires_epoch"] or 0),
     "reentries":int(r["reentries"] or 0),"context":r["context"] or {}}
   S["local_experiment_watch"]=exwatches
-  S["local_experiment_trades"]=int(c.execute("select count(*) as n from local_experiment_trade_history").fetchone()["n"])
+  S["local_experiment_trades"]=int(c.execute("select count(*) as n from local_v12_trade_history").fetchone()["n"])
  STORE.migrate()
  _,positions=STORE.load(recover_legacy=False)
  S["positions"]=positions
@@ -1877,6 +1877,7 @@ def _local_watch_observe(symbol,watch,mark,m15,flow,stamp):
 
 @account_mutation
 def local_swing_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=None):
+ if symbol in LOCAL_EXPERIMENT_SYMBOLS:return False  # legacy HYPE/NEAR book is exit-only
  if symbol in LOCAL_EXPERIMENT_SYMBOLS:return False  # legacy book is exit-only
  if symbol not in LOCAL_SWING_SYMBOLS:return False
  if S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or int(side) not in (-1,1):return False
@@ -2144,7 +2145,7 @@ def local_h1_direction(rows,now_ms,symbol):
 def _local_experiment_margin_state():
  with LOCK:
   equity=float(S.get("local_experiment_equity",LOCAL_EXPERIMENT_STARTING_EQUITY) or 0)
-  positions=copy.deepcopy(S.get("local_experiment_positions",{}))
+  positions=copy.deepcopy(S.get("local_v12_positions",{}))
  used=sum(max(0.0,float(p.get("margin",0) or 0)) for p in positions.values())
  return equity,used,max(0.0,equity-used)
 
@@ -2157,7 +2158,7 @@ def _local_experiment_claim(symbol,action,side,analysis,price=None,extra=None):
  with pg() as db:
   with db.transaction():
    STORE.fence(db)
-   row=db.execute("""insert into local_experiment_signal_journal(id,ts,candle_time,action,side,price,features)
+   row=db.execute("""insert into local_v12_signal_journal(id,ts,candle_time,action,side,price,features)
      values(%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(id) do nothing returning id""",
      (ident,now(),candle,action,int(side or 0),price,json.dumps(payload,default=str))).fetchone()
    if row and action=="OBSERVE":
@@ -2171,7 +2172,7 @@ def _local_experiment_watch_clear(symbol,reason):
  with pg() as db:
   with db.transaction():
    STORE.fence(db)
-   db.execute("delete from local_experiment_watchlist where symbol=%s",(symbol,))
+   db.execute("delete from local_v12_watchlist where symbol=%s",(symbol,))
    db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'local_experiment_watch_cleared',%s::jsonb)",
      (now(),json.dumps({"symbol":symbol,"reason":reason,"watch":watch},default=str)))
  with LOCK:S.setdefault("local_experiment_watch",{}).pop(symbol,None)
@@ -2187,7 +2188,7 @@ def _local_experiment_watch_observe(symbol,watch,mark,m15,flow,stamp):
   with pg() as db:
    with db.transaction():
     STORE.fence(db)
-    db.execute("update local_experiment_watchlist set context=%s::jsonb where symbol=%s and exit_at=%s",
+    db.execute("update local_v12_watchlist set context=%s::jsonb where symbol=%s and exit_at=%s",
       (json.dumps(context,default=str),symbol,watch.get("exit_at")))
     if changed:
      db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'local_experiment_caterpillar_phase',%s::jsonb)",
@@ -2210,9 +2211,9 @@ def local_experiment_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=N
  if price is None:return False
  leverage=market_max_leverage(symbol)
  with LOCK:
-  if not S.get("engine_active") or symbol in S.get("local_experiment_positions",{}):return False
+  if not S.get("engine_active") or symbol in S.get("local_v12_positions",{}):return False
   if symbol in S.get("local_swing_positions",{}):return False
-  if len(S.get("local_experiment_positions",{}))>=LOCAL_EXPERIMENT_MAX_POSITIONS:return False
+  if len(S.get("local_v12_positions",{}))>=LOCAL_EXPERIMENT_MAX_POSITIONS:return False
  equity,used,free=_local_experiment_margin_state()
  if equity<=0 or free<0.01:return False
  target_notional=equity*LOCAL_EXPERIMENT_MARGIN_FRACTION*25.0
@@ -2245,27 +2246,27 @@ def local_experiment_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=N
  with pg() as db:
   with db.transaction():
    STORE.fence(db)
-   claim=db.execute("""insert into local_experiment_signal_journal(id,ts,candle_time,action,side,price,features)
+   claim=db.execute("""insert into local_v12_signal_journal(id,ts,candle_time,action,side,price,features)
      values(%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(id) do nothing returning id""",
      (claim_id,opened,claim_token,"REENTRY" if entry_kind=="REENTRY" else "OPEN",int(side),price,json.dumps(features,default=str))).fetchone()
    if not claim:return False
-   row=db.execute("""insert into local_experiment_positions(symbol,side,entry,notional,margin,leverage,opened,opened_epoch,signal_candle_time,features)
+   row=db.execute("""insert into local_v12_positions(symbol,side,entry,notional,margin,leverage,opened,opened_epoch,signal_candle_time,features)
      values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(symbol) do nothing returning symbol""",
      (symbol,int(side),price,notional,margin,leverage,opened,epoch,origin_signal,json.dumps(features,default=str))).fetchone()
    if not row:return False
-   if entry_kind=="REENTRY":db.execute("delete from local_experiment_watchlist where symbol=%s",(symbol,))
+   if entry_kind=="REENTRY":db.execute("delete from local_v12_watchlist where symbol=%s",(symbol,))
    db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'local_experiment_trade_opened',%s::jsonb)",
     (now(),json.dumps({"strategy":"local_12token_h1_m15","symbol":symbol,"side":int(side),"entry_kind":entry_kind,
       "entry":price,"margin":margin,"notional":notional,"target_notional":target_notional,
       "exposure_fill_ratio":exposure_fill_ratio,"leverage":leverage,"equity":equity,"free_margin_before":free},default=str)))
  with LOCK:
-  S.setdefault("local_experiment_positions",{})[symbol]=pos
+  S.setdefault("local_v12_positions",{})[symbol]=pos
   if entry_kind=="REENTRY":S.setdefault("local_experiment_watch",{}).pop(symbol,None)
  return True
 
 @account_mutation
 def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None):
- with LOCK:pos=copy.deepcopy(S.get("local_experiment_positions",{}).get(symbol))
+ with LOCK:pos=copy.deepcopy(S.get("local_v12_positions",{}).get(symbol))
  if not pos:return None
  price=float(price);pnl=paper_pnl(pos["notional"],pos["entry"],price,pos["side"],FEE)
  features=copy.deepcopy(pos.get("features") or {})
@@ -2284,18 +2285,18 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
  with pg() as db:
   with db.transaction():
    STORE.fence(db)
-   row=db.execute("delete from local_experiment_positions where symbol=%s and opened=%s returning symbol",
+   row=db.execute("delete from local_v12_positions where symbol=%s and opened=%s returning symbol",
      (symbol,pos["opened"])).fetchone()
    if not row:return None
-   acct=db.execute("""update local_experiment_account_state
+   acct=db.execute("""update local_v12_account_state
      set equity=equity+%s,realized_pnl=realized_pnl+%s,updated_at=%s where id=1 returning equity,realized_pnl""",
      (pnl,pnl,now())).fetchone()
-   db.execute("""insert into local_experiment_trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,margin,notional,leverage,features)
+   db.execute("""insert into local_v12_trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,margin,notional,leverage,features)
      values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
      (pos["opened"],now(),symbol,pos["side"],pos["entry"],price,pnl,reason,pos["margin"],pos["notional"],
       pos["leverage"],json.dumps(features,default=str)))
    if watch:
-    db.execute("""insert into local_experiment_watchlist(symbol,side,origin_signal_candle,exit_price,exit_at,expires_epoch,reentries,context)
+    db.execute("""insert into local_v12_watchlist(symbol,side,origin_signal_candle,exit_price,exit_at,expires_epoch,reentries,context)
       values(%s,%s,%s,%s,%s,%s,%s,%s::jsonb)
       on conflict(symbol) do update set side=excluded.side,origin_signal_candle=excluded.origin_signal_candle,
       exit_price=excluded.exit_price,exit_at=excluded.exit_at,expires_epoch=excluded.expires_epoch,
@@ -2307,7 +2308,7 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
        "exit":price,"pnl":pnl,"reason":reason,"equity":float(acct["equity"]),"watch_armed":bool(watch),
        "leverage":pos["leverage"],"exposure_fill_ratio":features.get("exposure_fill_ratio")},default=str)))
  with LOCK:
-  S.setdefault("local_experiment_positions",{}).pop(symbol,None)
+  S.setdefault("local_v12_positions",{}).pop(symbol,None)
   if watch:S.setdefault("local_experiment_watch",{})[symbol]=watch
   S["local_experiment_equity"]=float(acct["equity"])
   S["local_experiment_realized_pnl"]=float(acct["realized_pnl"])
@@ -2316,7 +2317,7 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
 
 @account_mutation
 def local_experiment_mark_positions(prices):
- with LOCK:positions=copy.deepcopy(S.get("local_experiment_positions",{}))
+ with LOCK:positions=copy.deepcopy(S.get("local_v12_positions",{}))
  for symbol,pos in positions.items():
   mark=prices.get(symbol)
   if not mark:continue
@@ -2329,13 +2330,13 @@ def local_experiment_mark_positions(prices):
   lock_fill=caterpillar_breakeven(updated,float(mark))
   if lock_fill is not None:
    with LOCK:
-    live=S.get("local_experiment_positions",{}).get(symbol)
-    if live and live.get("opened")==pos.get("opened"):S["local_experiment_positions"][symbol]=updated
+    live=S.get("local_v12_positions",{}).get(symbol)
+    if live and live.get("opened")==pos.get("opened"):S["local_v12_positions"][symbol]=updated
    local_experiment_close(symbol,float(lock_fill),"caterpillar_breakeven")
    continue
   with LOCK:
-   live=S.get("local_experiment_positions",{}).get(symbol)
-   if live and live.get("opened")==pos.get("opened"):S["local_experiment_positions"][symbol]=updated
+   live=S.get("local_v12_positions",{}).get(symbol)
+   if live and live.get("opened")==pos.get("opened"):S["local_v12_positions"][symbol]=updated
   if liq:
    local_experiment_close(symbol,float(mark),"paper_liquidation_proxy");continue
   stamp=time.time()
@@ -2345,7 +2346,7 @@ def local_experiment_mark_positions(prices):
   with pg() as db:
    with db.transaction():
     STORE.fence(db)
-    db.execute("update local_experiment_positions set features=%s::jsonb where symbol=%s and opened=%s",
+    db.execute("update local_v12_positions set features=%s::jsonb where symbol=%s and opened=%s",
       (json.dumps(updated.get("features",{}),default=str),symbol,pos["opened"]))
 
 def local_experiment_stats():
@@ -2353,14 +2354,14 @@ def local_experiment_stats():
   with pg() as db:
    agg=db.execute("""select count(*) as trades,sum(case when pnl>0 then 1 else 0 end) as wins,
       coalesce(sum(pnl),0) as pnl,avg(pnl) as avg_pnl
-      from local_experiment_trade_history""").fetchone()
+      from local_v12_trade_history""").fetchone()
    cutoff=(datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(hours=24)).isoformat()
    daily=db.execute("""select count(*) as trades,sum(case when pnl>0 then 1 else 0 end) as wins,
-      coalesce(sum(pnl),0) as pnl from local_experiment_trade_history where closed >= %s""",(cutoff,)).fetchone()
+      coalesce(sum(pnl),0) as pnl from local_v12_trade_history where closed >= %s""",(cutoff,)).fetchone()
    rows=db.execute("""select symbol,count(*) as trades,sum(case when pnl>0 then 1 else 0 end) as wins,
       coalesce(sum(pnl),0) as pnl,avg(pnl) as avg_pnl,
       avg(coalesce((features->>'exposure_fill_ratio')::double precision,1)) as avg_fill
-      from local_experiment_trade_history group by symbol order by symbol""").fetchall()
+      from local_v12_trade_history group by symbol order by symbol""").fetchall()
   n=int(agg["trades"] or 0);w=int(agg["wins"] or 0)
   dn=int(daily["trades"] or 0);dw=int(daily["wins"] or 0)
   return {"rolling_24h":{"trades":dn,"wins":dw,"win_rate":round(dw/dn,4) if dn else None,"realized_pnl":float(daily["pnl"] or 0)},"trades":n,"wins":w,"win_rate":round(w/n,4) if n else None,"realized_pnl":float(agg["pnl"] or 0),
@@ -2399,7 +2400,7 @@ def local_experiment_loop():
      analysis=local_h1_direction(h1_rows,h1_ms,symbol)
      h1_context=analyze_local_h1_context(h1_rows,h1_ms,symbol)
      with LOCK:
-      pos=copy.deepcopy(S.get("local_experiment_positions",{}).get(symbol))
+      pos=copy.deepcopy(S.get("local_v12_positions",{}).get(symbol))
       watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
      target_side=int((pos or watch or {}).get("side") or analysis.get("entry_side") or 1)
      m15_live=analyze_local_m15(m15_rows,m15_ms,target_side)
@@ -2436,7 +2437,7 @@ def local_experiment_loop():
           and local_m15_reentry_ready(int(analysis["entry_side"]),m15_live,flow_imb)):
        if local_experiment_open(symbol,int(analysis["entry_side"]),analysis,"M15",m15_live):action="M15_ENTRY"
      with LOCK:
-      live=copy.deepcopy(S.get("local_experiment_positions",{}).get(symbol))
+      live=copy.deepcopy(S.get("local_v12_positions",{}).get(symbol))
       live_watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
      equity,used,free=_local_experiment_margin_state()
      ref_notional=equity*LOCAL_EXPERIMENT_MARGIN_FRACTION*25.0
@@ -2461,7 +2462,7 @@ def local_experiment_loop():
        "mode":"paper_h1_m15_caterpillar_exchange_max_leverage","policy":CATERPILLAR_POLICY,
        "symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"paper_only":True,"starting_equity":LOCAL_EXPERIMENT_STARTING_EQUITY,
        "equity":equity,"used_margin":used,"free_margin":free,"realized_pnl":S.get("local_experiment_realized_pnl",0),
-       "trades":S.get("local_experiment_trades",0),"open_positions":list(S.get("local_experiment_positions",{})),
+       "trades":S.get("local_experiment_trades",0),"open_positions":list(S.get("local_v12_positions",{})),
        "watching_for_reentry":list(S.get("local_experiment_watch",{})),"reference_margin_fraction":LOCAL_EXPERIMENT_MARGIN_FRACTION,
        "reference_leverage":25.0,"sizing":"target_notional_then_exchange_max_leverage_margin",
        "max_positions":LOCAL_EXPERIMENT_MAX_POSITIONS,"compound":True,"details":details,"stats":stats,
@@ -2602,9 +2603,9 @@ def emergency_profit_take(prices):
  stamp=time.time()
  with LOCK:
   if not S.get("engine_active") or S.get("mode")!="PAPER_ONLY":return []
-  books=[("news",copy.deepcopy(S.get("positions",{}))),("pump_dump",copy.deepcopy(S.get("pump_positions",{}))),
-         ("whale_liquidation",copy.deepcopy(S.get("whale_positions",{}))),
-         ("local_h1_m15_swing_v5",copy.deepcopy(S.get("local_swing_positions",{})))]
+  books=[("pump_dump",copy.deepcopy(S.get("pump_positions",{}))),
+         ("local_12token_h1_m15",copy.deepcopy(S.get("local_v12_positions",{}))),
+         ("local_legacy_exit_only",copy.deepcopy(S.get("local_swing_positions",{})))]
   history={s:list(S.get("_timeline",{}).get(s,[])) for s in ("BTC","ETH","SOL")}
   pending=copy.deepcopy(S.get("_emergency_pending",[]))
  shock=emergency_reversal(prices,history,stamp)
@@ -2621,16 +2622,14 @@ def emergency_profit_take(prices):
    state=S.setdefault("emergency_profit_guard",{"enabled":True,"cooldown_seconds":COOLDOWN_SECONDS})
    state["status"]="MONITORING" if stamp<float(S.get("_emergency_until",0) or 0) else "ARMED"
   return []
- callbacks={"news":None,"pump_dump":pump_close,"whale_liquidation":whale_liq_close,"local_h1_m15_swing_v5":None}
+ callbacks={"pump_dump":pump_close,"local_12token_h1_m15":local_experiment_close,"local_legacy_exit_only":local_swing_close}
  live_books=dict(books);closed=[];remaining=[]
  for target in pending:
   strategy=target["strategy"];sym=target["symbol"];pos=live_books.get(strategy,{}).get(sym)
   if not pos or pos.get("opened")!=target["opened"]:continue
   price=prices.get(sym)
   if not price:remaining.append(target);continue
-  if strategy=="news":result=close_news_position(sym,pos,price,"portfolio_emergency_profit_take")
-  elif strategy=="local_h1_m15_swing_v5":result=local_swing_close(sym,price,"portfolio_emergency_profit_take")
-  else:result=callbacks[strategy](sym,price,"portfolio_emergency_profit_take")
+  result=callbacks[strategy](sym,price,"portfolio_emergency_profit_take")
   if result:closed.append({**target,"exit":price,"pnl":result.get("pnl")})
   else:remaining.append(target)
  with LOCK:
@@ -4328,7 +4327,7 @@ def build_dashboard_snapshot(history=None):
   local_swing_positions.append(card)
   if lsym==HYPE_SWING_SYMBOL:hype_swing_position=card
  experiment_positions=[];experiment_unreal=0.0
- for esym,epos in state.get("local_experiment_positions",{}).items():
+ for esym,epos in state.get("local_v12_positions",{}).items():
   emark=prices.get(esym,epos["entry"]);epnl=paper_pnl(epos["notional"],epos["entry"],emark,epos["side"],FEE);experiment_unreal+=epnl
   experiment_positions.append({"strategy":"LOCAL_10TOKEN_24H","symbol":esym,"side":"LONG" if epos["side"]>0 else "SHORT",
    "entry":epos["entry"],"mark":emark,"margin_usd":round(epos["margin"],2),"notional_usd":round(epos["notional"],2),
@@ -4359,7 +4358,7 @@ def build_dashboard_snapshot(history=None):
 "hype_h1_pnl_pct":round((hype_swing_total/HYPE_SWING_STARTING_EQUITY-1)*100,3),"hype_h1_realized_pnl":round(float(state.get("hype_swing_realized_pnl",0)),4),
 "hype_h1_trades":state.get("hype_swing_trades",0),"hype_h1_engine":copy.deepcopy(state.get("sources",{}).get("HypeH1LocalSwing",{})),
 "hype_h1_stats":history.get("hype_stats",{}) if history is not None else hype_swing_stats(),"hype_h1_policy":CATERPILLAR_POLICY,
-"local_experiment_symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"local_experiment_positions":experiment_positions,
+"local_experiment_symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"local_v12_positions":experiment_positions,
 "local_experiment_watch":copy.deepcopy(state.get("local_experiment_watch",{})),
 "local_experiment_balance":round(float(state.get("local_experiment_equity",LOCAL_EXPERIMENT_STARTING_EQUITY)),4),
 "local_experiment_unrealized_pnl":round(experiment_unreal,4),"local_experiment_total_equity":round(experiment_total,4),
@@ -4583,7 +4582,7 @@ def html_dashboard(data):
  hype_note='<div class="muted">HYPE + NEAR: H1 local low → LONG; H1 local high → SHORT. Leverage is the current Hyperliquid maxLeverage. Sizing preserves the old reference gross exposure (25%% margin × 25x) by increasing required margin when exchange leverage is lower; if shared free margin is insufficient, notional is capped to the real available margin. M15 manages protective exits, WAIT_PULLBACK → WAIT_RESUMPTION and same-direction re-entry. Samples: %s · win rate: %s · avg MAE: %s%% · avg MFE: %s%%</div>'%(hype_stats.get("samples",0),hype_stats.get("win_rate","-"),hype_stats.get("avg_mae_roe_pct","-"),hype_stats.get("avg_mfe_roe_pct","-"))
 
  exp_engine=data.get("local_experiment_engine") or {}
- exp_positions=data.get("local_experiment_positions") or []
+ exp_positions=data.get("local_v12_positions") or []
  exp_pos_by_symbol={x.get("symbol"):x for x in exp_positions}
  exp_stats=data.get("local_experiment_stats") or {}
  exp_by_symbol=exp_stats.get("by_symbol") or {}
@@ -4635,6 +4634,7 @@ def html_dashboard(data):
  # Historical News/Whale data remains in the database and archive APIs.
  page=re.sub(r'<h2>News — статистика</h2>.*?(?=<h2>Open positions</h2>)','',page,flags=re.S)
  page=re.sub(r'<h2>Price to Value Liquidation</h2>.*?(?=<h2>LOCAL H1 / M15)','',page,flags=re.S)
+ page=re.sub(r'<h2>LOCAL H1 / M15 — HYPE \\+ NEAR</h2>.*?(?=<h2>LOCAL H1/M15 · 12 TOKENS · \\$500</h2>)','',page,flags=re.S)
  page=re.sub(r'<h2>News Scanner Health</h2>.*?(?=<h2>Sources</h2>)','',page,flags=re.S)
  page=re.sub(r'<h2>Latest news</h2>.*?(?=<p>Errors:)','',page,flags=re.S)
  page=page.replace(' · <a href="/news">News</a>','')
@@ -4644,9 +4644,9 @@ def html_dashboard(data):
 @account_mutation
 def manual_close(symbol=None,reason_override=None):
  with LOCK:
-  books=[("news",copy.deepcopy(S.get("positions",{}))),("pump_dump",copy.deepcopy(S.get("pump_positions",{}))),
-         ("whale_liquidation",copy.deepcopy(S.get("whale_positions",{}))),
-         ("local_h1_m15_swing_v5",copy.deepcopy(S.get("local_swing_positions",{})))]
+  books=[("pump_dump",copy.deepcopy(S.get("pump_positions",{}))),
+         ("local_12token_h1_m15",copy.deepcopy(S.get("local_v12_positions",{}))),
+         ("local_legacy_exit_only",copy.deepcopy(S.get("local_swing_positions",{})))]
  targets=[(strategy,sym,pos) for strategy,book in books for sym,pos in book.items() if symbol is None or sym==symbol]
  if not targets and symbol:return {"ok":False,"results":[{"symbol":symbol,"ok":False,"error":"position_not_found"}]}
  results=[]
@@ -4657,9 +4657,8 @@ def manual_close(symbol=None,reason_override=None):
   if not fresh or not price:
    results.append({"symbol":sym,"ok":False,"error":"fresh_market_price_and_active_engine_required"});continue
   reason=reason_override or ("manual_close_all" if symbol is None else "manual_close")
-  if strategy=="news":result=close_news_position(sym,pos,price,reason)
-  elif strategy=="pump_dump":result=pump_close(sym,price,reason)
-  elif strategy=="whale_liquidation":result=whale_liq_close(sym,price,reason)
+  if strategy=="pump_dump":result=pump_close(sym,price,reason)
+  elif strategy=="local_12token_h1_m15":result=local_experiment_close(sym,price,reason)
   else:result=local_swing_close(sym,price,reason)
   if result is None:results.append({"symbol":sym,"ok":False,"error":"close_not_committed"});continue
   results.append({"symbol":sym,"strategy":strategy,"ok":True,"price":price,"pnl":result.get("pnl")})
@@ -4825,7 +4824,7 @@ if __name__=="__main__":
  worker_specs=[
   ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),("market_trades",market_trade_stream),("breadth_history",market_regime_history),
   ("telemetry",telemetry),("pump_dump",impulse_scan),
-  ("hype_h1_local_swing",hype_h1_local_swing_loop),("local_12token_h1_m15",local_experiment_loop),
+  ("hype_h1_local_legacy_exit_only",hype_h1_local_swing_loop),("local_12token_h1_m15",local_experiment_loop),
   ("adapt",adapt),
   ("decision_learning",learning_shadow_loop),
   ("dashboard_history",dashboard_history_loop),("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)
