@@ -2163,6 +2163,10 @@ def _local_experiment_claim(symbol,action,side,analysis,price=None,extra=None):
    if row and action=="OBSERVE":
     db.execute("insert into scanner_observations(ts,module,payload) values(%s,%s,%s::jsonb)",
       (now(),"local_12token_h1_m15",json.dumps(payload,default=str)))
+ if row:
+  log_learning_decision("LOCAL12:%s:%s:%s:%s"%(symbol,action,candle,int(side or 0)),
+    "local_12token_h1_m15",symbol,side,action,"local_signal_observed",price,None,
+    market_max_leverage(symbol),payload)
  return bool(row)
 
 def _local_experiment_watch_clear(symbol,reason):
@@ -2261,6 +2265,9 @@ def local_experiment_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=N
  with LOCK:
   S.setdefault("local_v12_positions",{})[symbol]=pos
   if entry_kind=="REENTRY":S.setdefault("local_experiment_watch",{}).pop(symbol,None)
+ log_learning_decision("LOCAL12:%s:%s:%s:%s"%(symbol,entry_kind,claim_token,int(side)),
+   "local_12token_h1_m15",symbol,side,"OPEN" if entry_kind!="REENTRY" else "REENTRY",
+   "confirmed_local_entry",price,None,leverage,features,opened)
  return True
 
 @account_mutation
@@ -2312,6 +2319,9 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
   S["local_experiment_equity"]=float(acct["equity"])
   S["local_experiment_realized_pnl"]=float(acct["realized_pnl"])
   S["local_experiment_trades"]=int(S.get("local_experiment_trades",0) or 0)+1
+ log_learning_decision("LOCAL12:CLOSE:%s:%s"%(symbol,pos.get("opened")),
+   "local_12token_h1_m15",symbol,pos["side"],"CLOSED",reason,pos["entry"],None,
+   pos["leverage"],features,pos.get("opened"))
  return {"symbol":symbol,"pnl":pnl,"reason":reason,"equity":float(acct["equity"])}
 
 @account_mutation
@@ -2407,7 +2417,8 @@ def local_experiment_loop():
      flow_imb=flow.get("flow_imbalance") if flow.get("trade_data_fresh") else None
      candle=analysis.get("signal_candle_time")
      if analysis.get("ready") and candle!=last_observed.get(symbol):
-      _local_experiment_claim(symbol,"OBSERVE",analysis.get("entry_side",0),analysis,float(mark))
+      _local_experiment_claim(symbol,"OBSERVE",analysis.get("entry_side",0),analysis,float(mark),
+        {"m15":m15_live,"flow":flow,"flow_imbalance":flow_imb,"h1_context":h1_context})
       last_observed[symbol]=candle
      action=None
      if pos:
