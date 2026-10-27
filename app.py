@@ -2435,7 +2435,7 @@ def local_experiment_stats():
  except Exception as exc:return {"error":type(exc).__name__+":"+str(exc)[:160]}
 
 def local_experiment_loop():
- last_observed={};pool=concurrent.futures.ThreadPoolExecutor(max_workers=10,thread_name_prefix="local-exp-m15")
+ last_observed={};pool=concurrent.futures.ThreadPoolExecutor(max_workers=24,thread_name_prefix="local-exp-m15")
  try:
   while not SHUTDOWN.is_set():
    try:
