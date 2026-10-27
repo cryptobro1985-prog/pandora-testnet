@@ -5236,8 +5236,12 @@ if __name__=="__main__":
  # Trading ingestion is intentionally minimal: FirstSquawk on X + PiQ Direct.
  # Unused X/RSS/Truth sources stay out of the live path so their transport failures
  # cannot create false scanner alarms or add unnecessary request load.
+ # Source scanners are monitoring infrastructure and must stay alive even when
+ # news-triggered entries are disabled. Trade eligibility remains gated inside
+ # ingest/entry logic by NEWS_NEW_ENTRIES_ENABLED.
+ worker_specs.extend([("x_critical_4s",x_critical_realtime),("piq_direct",piq_direct_realtime)])
  if NEWS_NEW_ENTRIES_ENABLED:
-  worker_specs.extend([("x_critical_4s",x_critical_realtime),("piq_direct",piq_direct_realtime),("news_recovery",recover_news_processing)])
+  worker_specs.append(("news_recovery",recover_news_processing))
   for name,url in FEEDS.items():
    if not name.startswith("XIndex:") and name not in SEARCH_INDEX_FEEDS:
     worker_specs.append(("feed:"+name,lambda n=name,u=url:news_feed(n,u)))
