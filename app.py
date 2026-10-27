@@ -56,6 +56,8 @@ from hype_h1_swing import (POLICY as HYPE_SWING_POLICY, SYMBOL as HYPE_SWING_SYM
 # per-market maxLeverage metadata; validated fallbacks are only for metadata outages.
 LOCAL_EXPERIMENT_SYMBOLS=("INIT","USELESS","GRASS","APT","TAO","CHIP","BABY","SPX","LIT","CASHCAT")
 LOCAL_EXPERIMENT_STARTING_EQUITY=500.0
+NEWS_NEW_ENTRIES_ENABLED=False
+WHALE_NEW_ENTRIES_ENABLED=False
 LOCAL_EXPERIMENT_MARGIN_FRACTION=0.20
 LOCAL_EXPERIMENT_MAX_POSITIONS=5
 VALIDATED_MAX_LEVERAGE={"HYPE":10.0,"NEAR":10.0,"APT":10.0,"TAO":5.0,"SPX":5.0,"LIT":5.0,
@@ -1101,6 +1103,7 @@ def pump_mark_positions(prices):
 
 @account_mutation
 def whale_liq_open(symbol,side,price,score,features,margin_fraction=None):
+  if not WHALE_NEW_ENTRIES_ENABLED:return False
  if S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or side not in (-1,1) or not price:return False
  if features.get("observed_at_epoch") and not 0<=time.time()-features["observed_at_epoch"]<=10:return False
  price=current_entry_price(symbol)
@@ -3089,6 +3092,7 @@ def record_event(ident,source,title,sym,base_side,prices,published_at=None):
 
 @account_mutation
 def open_signal(sym,side,title,prices,event_id=None,published_at=None,source=""):
+  if not NEWS_NEW_ENTRIES_ENABLED:return False
  fresh_window=source_freshness_window(source)
  fresh=freshness(published_at,time.time(),fresh_window)
  reason=None
@@ -4340,7 +4344,7 @@ def build_dashboard_snapshot(history=None):
 "local_experiment_realized_pnl":round(float(state.get("local_experiment_realized_pnl",0) or 0),4),
 "local_experiment_trades":int(state.get("local_experiment_trades",0) or 0),
 "local_experiment_stats":copy.deepcopy(state.get("local_experiment_stats",{})),
-"local_experiment_engine":copy.deepcopy(state.get("sources",{}).get("Local10Token24h",{})),"account_model":"UNIFIED_PAPER_ACCOUNT_ALL_STRATEGIES","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"decision_learning":copy.deepcopy(state.get("learning_audit",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
+"local_experiment_engine":copy.deepcopy(state.get("sources",{}).get("Local10Token24h",{})),"module_trading_enabled":{"news":NEWS_NEW_ENTRIES_ENABLED,"whale_liquidation":WHALE_NEW_ENTRIES_ENABLED,"pump_dump":True,"local":True},"account_model":"UNIFIED_PAPER_ACCOUNT_ALL_STRATEGIES","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"decision_learning":copy.deepcopy(state.get("learning_audit",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
 def dashboard():
  # Render open positions from current in-memory prices; slow history queries
@@ -4789,8 +4793,8 @@ if __name__=="__main__":
   ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),("market_trades",market_trade_stream),("breadth_history",market_regime_history),("confirmed_liquidations",confirmed_liquidation_stream),
   ("telemetry",telemetry),("pump_dump",impulse_scan),("whale_liquidations",whale_liquidation_scan),
   ("hype_h1_local_swing",hype_h1_local_swing_loop),("local_10token_24h",local_experiment_loop),
-  ("adapt",adapt),("x_critical_4s",x_critical_realtime),("piq_direct",piq_direct_realtime),
-  ("news_recovery",recover_news_processing),("decision_learning",learning_shadow_loop),
+  ("adapt",adapt),
+  ("decision_learning",learning_shadow_loop),
   ("dashboard_history",dashboard_history_loop),("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)
  ]
  # Trading ingestion is intentionally minimal: four high-signal X accounts,
@@ -4798,10 +4802,12 @@ if __name__=="__main__":
  # the live trading path because its public endpoints and US relays return 403/502;
  # Trump coverage remains through his X account plus PiQ/FirstSquawk reposts.
  # Broad media/search/research mirrors stay out of the trading path.
- for name,url in FEEDS.items():
-  if not name.startswith("XIndex:") and name not in SEARCH_INDEX_FEEDS:
-   worker_specs.append(("feed:"+name,lambda n=name,u=url:news_feed(n,u)))
- for name,url in RESEARCH_PAGES.items():worker_specs.append(("research:"+name,lambda n=name,u=url:research_page_monitor(n,u)))
+ if NEWS_NEW_ENTRIES_ENABLED:
+  worker_specs.extend([("x_critical_4s",x_critical_realtime),("piq_direct",piq_direct_realtime),("news_recovery",recover_news_processing)])
+  for name,url in FEEDS.items():
+   if not name.startswith("XIndex:") and name not in SEARCH_INDEX_FEEDS:
+    worker_specs.append(("feed:"+name,lambda n=name,u=url:news_feed(n,u)))
+  for name,url in RESEARCH_PAGES.items():worker_specs.append(("research:"+name,lambda n=name,u=url:research_page_monitor(n,u)))
  if os.getenv("ENABLE_PUBLIC_X_HTML","0")=="1":
   for handle in WATCH:worker_specs.append(("public-x:"+handle,lambda h=handle:public_social_reader("x",h)))
  workers=[threading.Thread(target=supervised_worker,args=(label,fn),daemon=True,name=label) for label,fn in worker_specs]
