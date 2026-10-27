@@ -22,30 +22,46 @@ def run_trade_stream(observations, stop, symbols_provider, report, url, on_mids=
             if on_regime_candles is not None:
                 for symbol in sorted(regime_symbols):
                     ws.send(json.dumps({"method":"subscribe","subscription":{"type":"candle","coin":symbol,"interval":"1m"}}))
-            history_ids={}
+            # Info requests over websocket share exchange limits. Pace history
+            # bootstrap instead of firing all candleSnapshot posts in one burst.
+            history_queue=[]
+            history_inflight={}
+            history_seq=1000000
+            history_completed=history_errors=0
+            def queue_history(route,payload):
+                history_queue.append((route,payload,0))
             if on_candle_history is not None:
                 end_ms=int(time.time()*1000)
                 for symbol in sorted(candle_symbols):
                     for interval,hours in (("1h",120),("15m",12)):
-                        ident=1000000+len(history_ids);history_ids[ident]="local"
-                        ws.send(json.dumps({"method":"post","id":ident,"request":{"type":"info","payload":{
-                            "type":"candleSnapshot","req":{"coin":symbol,"interval":interval,
-                            "startTime":end_ms-hours*3600000,"endTime":end_ms}}}}))
+                        queue_history("local",{"type":"candleSnapshot","req":{"coin":symbol,"interval":interval,
+                            "startTime":end_ms-hours*3600000,"endTime":end_ms}})
             if on_regime_candles is not None:
                 end_ms=int(time.time()*1000)
                 for symbol in sorted(regime_symbols):
-                    ident=1000000+len(history_ids);history_ids[ident]="regime"
-                    ws.send(json.dumps({"method":"post","id":ident,"request":{"type":"info","payload":{
-                        "type":"candleSnapshot","req":{"coin":symbol,"interval":"1m",
-                        "startTime":end_ms-6*3600000,"endTime":end_ms}}}}))
+                    queue_history("regime",{"type":"candleSnapshot","req":{"coin":symbol,"interval":"1m",
+                        "startTime":end_ms-6*3600000,"endTime":end_ms}})
             observations.mark_connected(time.time(), selected)
-            last_ping = last_report = 0
+            last_ping = last_report = last_history_send = 0
             last_refresh = last_received = time.time()
             while not stop.is_set():
                 epoch = time.time()
                 if epoch-last_ping >= 5:
                     ws.send('{"method":"ping"}')
                     last_ping = epoch
+                # Keep at most four history requests in flight and space new posts.
+                # Failed/timeout snapshots are retried on the same websocket.
+                if history_queue and len(history_inflight)<4 and epoch-last_history_send>=0.30:
+                    route,payload,attempts=history_queue.pop(0)
+                    ident=history_seq;history_seq+=1
+                    ws.send(json.dumps({"method":"post","id":ident,"request":{"type":"info","payload":payload}}))
+                    history_inflight[ident]=(route,payload,attempts,epoch)
+                    last_history_send=epoch
+                for ident,item in list(history_inflight.items()):
+                    route,payload,attempts,sent_at=item
+                    if epoch-sent_at>15:
+                        history_inflight.pop(ident,None);history_errors+=1
+                        if attempts<6:history_queue.append((route,payload,attempts+1))
                 try:
                     raw = ws.recv()
                     if not raw:
@@ -66,13 +82,20 @@ def run_trade_stream(observations, stop, symbols_provider, report, url, on_mids=
                             on_candles(data)
                     elif message.get("channel") == "post":
                         reply=message.get("data") or {}
-                        if reply.get("id") in history_ids:
-                            route=history_ids.pop(reply["id"])
+                        item=history_inflight.pop(reply.get("id"),None)
+                        if item is not None:
+                            route,request_payload,attempts,_sent_at=item
                             response=reply.get("response") or {}
                             payload=response.get("payload") or {}
-                            if response.get("type")=="info" and isinstance(payload,dict) and payload.get("type")=="candleSnapshot" and isinstance(payload.get("data"),list):
+                            ok=(response.get("type")=="info" and isinstance(payload,dict)
+                                and payload.get("type")=="candleSnapshot" and isinstance(payload.get("data"),list))
+                            if ok:
                                 callback=on_regime_candles if route=="regime" else on_candle_history
                                 if callback is not None:callback(payload["data"])
+                                history_completed+=1
+                            else:
+                                history_errors+=1
+                                if attempts<6:history_queue.append((route,request_payload,attempts+1))
                     elif message.get("channel") == "error":
                         raise RuntimeError("exchange_subscription_error")
                 except websocket.WebSocketTimeoutException:
@@ -89,6 +112,8 @@ def run_trade_stream(observations, stop, symbols_provider, report, url, on_mids=
                 if epoch-last_report >= 5:
                     report({"ok": True, "mode": "exchange_websocket_trades", "symbols": len(selected),
                             "heartbeat_age_seconds": epoch-last_received, "warmup_seconds": 60,
+                            "history_pending":len(history_queue)+len(history_inflight),
+                            "history_completed":history_completed,"history_errors":history_errors,
                             "stats": observations.stats(), "coverage": "hyperliquid_only", "error": None})
                     last_report = epoch
         except Exception as exc:
