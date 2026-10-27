@@ -7,7 +7,7 @@ import copy
 import datetime
 import math
 
-POLICY = "local_h1_m15_caterpillar_v9_profit_only_weakening_exit"
+POLICY = "local_h1_m15_caterpillar_v10_strict_reentry_profit_floor"
 FLOW_THRESHOLD = .12
 
 
@@ -114,13 +114,27 @@ def update_watch(watch, mark, m15, flow, now_epoch):
 
 
 def reentry_ready(side, m15, mark, watch, flow, now_epoch):
-    """Re-enter on resumed H1-side pressure, even at a better than exit price."""
+    """Re-enter only after a strong, fresh resumption of the H1-side move.
+
+    Historical HYPE/NEAR paper data showed score-3 reentries were the weak class.
+    Reentries therefore require score >= 4, zero adverse score, and a candle
+    closing in the favorable quartile of its range. First entries are unaffected.
+    """
     side = int(side or 0)
     if side not in (-1, 1) or not watch or int(watch.get("side") or 0) != side:
         return False
-    if not m15 or not m15.get("ready") or not m15.get("recovery_confirmed") or int(m15.get("recovery_score") or 0) < 3:
+    if not m15 or not m15.get("ready") or not m15.get("recovery_confirmed"):
+        return False
+    if int(m15.get("recovery_score") or 0) < 4 or int(m15.get("adverse_score") or 0) != 0:
         return False
     if m15.get("side") is not None and int(m15["side"]) != side:
+        return False
+    close_location = _f(m15.get("close_location"))
+    if close_location is None:
+        return False
+    if side > 0 and close_location < .75:
+        return False
+    if side < 0 and close_location > .25:
         return False
     context = watch.get("context") or {}
     if context.get("phase") != "WAIT_RESUMPTION" or not context.get("counter_pressure_seen"):
@@ -138,9 +152,36 @@ def reentry_ready(side, m15, mark, watch, flow, now_epoch):
 
 
 def protective_breakeven(position, mark):
-    """Legacy API. No fixed 0.4% arming threshold or percentage-based profit exit.
+    """Cost-aware profit floor derived from the saved HYPE/NEAR paper history.
 
-    Directional exits are driven by H1 reversal and M15 pressure; the separate
-    emergency portfolio guard remains responsible for catastrophic risk.
+    Arm after a 0.20% favorable underlying move. Once armed, if price gives back
+    to +0.16% gross move, close at the *observed* mark only while still above the
+    stored round-trip cost floor. This does not invent a stop fill and therefore
+    cannot guarantee positive execution through gaps.
     """
+    if not position:
+        return None
+    side = int(position.get("side") or 0)
+    entry, mark = _f(position.get("entry")), _f(mark)
+    if side not in (-1, 1) or not entry or not mark:
+        return None
+    features = position.setdefault("features", {})
+    move = side * (mark / entry - 1.0)
+    peak = max(0.0, _f(features.get("mfe_price_move")) or 0.0, move)
+    arm_move = .0020
+    lock_move = .0016
+    cost_floor = max(.0002, _f(features.get("estimated_round_trip_cost_move")) or 0.0)
+    armed = bool(features.get("profit_lock_armed")) or peak >= arm_move
+    features["profit_lock_armed"] = armed
+    features["profit_lock_arm_move"] = arm_move
+    features["profit_lock_buffer_move"] = lock_move
+    features["profit_lock_arm_move_pct"] = arm_move * 100.0
+    features["profit_lock_buffer_move_pct"] = lock_move * 100.0
+    features["profit_lock_mode"] = "historical_v10_cost_aware_profit_floor"
+    if not armed:
+        return None
+    # Do not manufacture a theoretical stop fill. Only close on the live mark,
+    # and only if it still leaves more than the modeled round-trip cost.
+    if move <= lock_move and move > cost_floor:
+        return mark
     return None
