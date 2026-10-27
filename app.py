@@ -2449,11 +2449,6 @@ def local_experiment_loop():
      metadata_ready=bool(S.get("_day_volumes")) and bool(S.get("_max_leverage"))
     if not active:
      SHUTDOWN.wait(1);continue
-    if not metadata_ready:
-     with LOCK:S["sources"]["Local12TokenH1M15"]={"ok":True,"ready":False,"warmup":True,"last_check":now(),
-       "mode":"waiting_for_market_metadata","policy":CATERPILLAR_POLICY,"symbols":list(LOCAL_EXPERIMENT_SYMBOLS),
-       "paper_only":True,"starting_equity":LOCAL_EXPERIMENT_STARTING_EQUITY,"error":None}
-     SHUTDOWN.wait(1);continue
     prices=refresh_market_prices(max_age=8.0)
     local_experiment_mark_positions(prices)
     jobs={}
@@ -3028,20 +3023,18 @@ def market_regime_history():
   SHUTDOWN.wait(15)
 
 def market_history_bootstrap():
- # Single owner, paced startup recovery. Runs only after engine lease + metadata.
- # Five regime seeds are loaded first so Pump/Dump leaves WARMUP quickly, then
- # one compact 3m snapshot per Local symbol warms both H1 and M15.
+ # One paced history owner. Local's fixed PAPER sizing and known symbols do
+ # not require a successful optional universe/metadata HTTP request.
  completed=set()
  while not SHUTDOWN.is_set():
   with LOCK:
    active=bool(S.get("engine_active"))
-   metadata_ready=bool(S.get("_day_volumes")) and bool(S.get("_max_leverage"))
-  if not (active and metadata_ready):
+   activated=float(S.get("_engine_activated_epoch",0) or 0)
+   metadata_epoch=float(S.get("_metadata_ready_epoch",0) or 0)
+  if not active:
    SHUTDOWN.wait(.5);continue
-  with LOCK:activated=float(S.get("_engine_activated_epoch",0) or 0)
-  metadata_source=copy.deepcopy(S.get("sources",{}).get("MarketMetadata",{}))
-  metadata_epoch=float(S.get("_metadata_ready_epoch",0) or 0)
-  quiet_remaining=max(0.0,5.0-(time.time()-metadata_epoch)) if metadata_epoch else 5.0
+  ready_after=(metadata_epoch+5.0) if metadata_epoch else (activated+70.0)
+  quiet_remaining=max(0.0,ready_after-time.time())
   if quiet_remaining>0:
    with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":True,"degraded":False,
      "last_check":now(),"mode":"post_takeover_ip_quiet_window","quiet_remaining_seconds":round(quiet_remaining,1),
@@ -3105,14 +3098,11 @@ def market_history_bootstrap():
 
 
 def market_trade_stream():
- # During Render rolling deploy the standby instance must not touch exchange
- # metadata/history while the old lease owner is still live. Wait for this
- # process to own the engine lease, then require metadata before subscribing.
+ # Websocket requires the engine lease, never REST metadata. Known Local and
+ # held symbols are immediately available; expand to the universe when loaded.
  while not SHUTDOWN.is_set():
-  with LOCK:
-   active=bool(S.get("engine_active"))
-   metadata_ready=bool(S.get("_day_volumes")) and bool(S.get("_max_leverage"))
-  if active and metadata_ready:break
+  with LOCK:active=bool(S.get("engine_active"))
+  if active:break
   SHUTDOWN.wait(.25)
  def symbols():
   # Pump/dump coverage is whole-market: subscribe to every currently listed
@@ -3122,7 +3112,7 @@ def market_trade_stream():
   with LOCK:
    volumes=dict(S.get("_day_volumes",{}));prices=set(S.get("_prices",{}));held=set(S["positions"])|set(S["pump_positions"])|set(S["whale_positions"])
   listed=set(volumes)&prices if prices else set(volumes)
-  return listed|LIQ_WHALE_SYMBOLS|held
+  return listed|LIQ_WHALE_SYMBOLS|held|set(ALL_LOCAL_CANDLE_SYMBOLS)
  def report(status):
   with LOCK:S["sources"]["MarketTradeStream"]={"last_check":now(),**status}
  run_trade_stream(MARKET_OBS,SHUTDOWN,symbols,report,os.getenv("HYPERLIQUID_WS_API","wss://api.hyperliquid.xyz/ws"),on_mids=accept_market_prices,on_candles=accept_local_candles,candle_symbols=ALL_LOCAL_CANDLE_SYMBOLS,on_candle_history=accept_local_history,regime_symbols=REGIME_SEED_SYMBOLS,on_regime_candles=accept_regime_candles)

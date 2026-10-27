@@ -102,3 +102,23 @@ class LocalV11Regressions(unittest.TestCase):
         self.assertIn('SHORT ONLY',page)
         self.assertIn('LOCAL_HIGH @ 79.439',page)
         self.assertIn('confirmation time Samara UTC+4',page)
+
+    def test_websocket_starts_for_known_local_symbols_during_metadata_429(self):
+        app.S.update(_day_volumes={},_max_leverage={})
+        stop=MagicMock();stop.is_set.return_value=False
+        with patch.object(app,'SHUTDOWN',stop),patch.object(app,'run_trade_stream') as stream:
+            app.market_trade_stream()
+        stream.assert_called_once()
+        subscribed=stream.call_args.args[2]()
+        self.assertTrue(set(app.LOCAL_EXPERIMENT_SYMBOLS).issubset(subscribed))
+        stop.wait.assert_not_called()
+
+    def test_local_position_protection_does_not_wait_for_metadata(self):
+        app.S.update(_day_volumes={},_max_leverage={})
+        stop=MagicMock();stop.is_set.side_effect=[False,True]
+        with patch.object(app,'SHUTDOWN',stop),patch.object(app,'LOCAL_EXPERIMENT_SYMBOLS',()), \
+             patch.object(app,'refresh_market_prices',return_value={'HYPE':99.}), \
+             patch.object(app,'local_experiment_mark_positions') as marks, \
+             patch.object(app,'local_experiment_stats',return_value={}):
+            app.local_experiment_loop()
+        marks.assert_called_once_with({'HYPE':99.})
