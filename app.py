@@ -2456,8 +2456,8 @@ def hype_h1_local_swing_loop():
      with LOCK:
       live=copy.deepcopy(S.get("local_swing_positions",{}).get(symbol))
       live_watch=copy.deepcopy(S.get("local_swing_watch",{}).get(symbol))
-     details[symbol]={"ok":True,"symbol":symbol,"mark":float(mark),"position_open":bool(live),
-      "side":int(live.get("side")) if live else None,"watching_for_reentry":bool(live_watch),
+     details[symbol]={"ok":True,"symbol":symbol,"mark":float(mark),"max_leverage":market_max_leverage(symbol),
+      "position_open":bool(live),"side":int(live.get("side")) if live else None,"watching_for_reentry":bool(live_watch),
       "watch_side":int(live_watch.get("side")) if live_watch else None,
       "watch_expires_epoch":live_watch.get("expires_epoch") if live_watch else None,
       "watch_reentries":int(live_watch.get("reentries",0)) if live_watch else None,
@@ -2480,8 +2480,9 @@ def hype_h1_local_swing_loop():
        "h1_context_interval":LOCAL_SWING_H1_CONTEXT_INTERVAL,"protection_interval":LOCAL_SWING_M15_INTERVAL,
        "paper_only":True,"equity":S.get("hype_swing_equity"),"trades":S.get("hype_swing_trades",0),
        "open_positions":list(open_positions.keys()),"watching_for_reentry":list(watches.keys()),
-       "position_count":len(open_positions),"watch_count":len(watches),"margin_fraction":HYPE_SWING_MARGIN_FRACTION,
-       "leverage":HYPE_SWING_LEVERAGE,"compound_from_shared_equity":True,"h1_blocks_entries":True,
+       "position_count":len(open_positions),"watch_count":len(watches),"reference_margin_fraction":HYPE_SWING_MARGIN_FRACTION,
+       "reference_leverage":HYPE_SWING_LEVERAGE,"exchange_max_leverage":{sym:market_max_leverage(sym) for sym in LOCAL_SWING_SYMBOLS},
+       "sizing":"preserve_reference_notional_then_cap_to_free_margin","compound_from_shared_equity":True,"h1_blocks_entries":True,
        "profit_lock":{"enabled":True,"mode":"fixed_breakeven_not_peak_trailing","arm_move_pct":.4,
         "buffer_move_pct":.16},
        "m15_profit_protection":True,"m15_reentry":True,"reentry_watch_seconds":LOCAL_REENTRY_WATCH_SECONDS or None,
