@@ -3604,7 +3604,7 @@ def market_history_bootstrap():
    stamp=time.time()
    # Native intervals avoid losing older H1 anchors in a nine-hour 3m seed.
    # Load active Local books before optional market breadth.
-   for sym in (LOCAL_S3_SYMBOLS if key=="local_s3" else LOCAL_EXPERIMENT_SYMBOLS):
+   for sym in ALL_LOCAL_CANDLE_SYMBOLS:
     for interval,hours in (("1h",120),("15m",12)):
      if SHUTDOWN.is_set():return
      key=("local",sym,interval)
@@ -5498,7 +5498,7 @@ def html_dashboard(data):
    block.get("pnl_pct",0),stats.get("realized_pnl",0),block.get("unrealized_pnl",0),stats.get("trades",0),esc(wr),len(positions_cmp))
   details=engine.get("details") or {};posmap={p.get("symbol"):p for p in positions_cmp}
   rows=[]
-  for sym in LOCAL_EXPERIMENT_SYMBOLS:
+  for sym in (LOCAL_S3_SYMBOLS if key=="local_s3" else LOCAL_EXPERIMENT_SYMBOLS):
    d=details.get(sym,{}) or {};anchor=d.get("h1_local") or {};p=posmap.get(sym) or {}
    side=p.get("side") or "—";pnl=float(p.get("unrealized_pnl",0) or 0)
    rows.append('<tr><td>%s</td><td>%s @ %s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td class="%s">$%s</td><td>%s</td></tr>'%(
