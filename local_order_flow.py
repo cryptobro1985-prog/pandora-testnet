@@ -4,7 +4,7 @@ No candle-score, volume-size, price-extension or profit-only trade gates.
 import copy
 import datetime
 import math
-POLICY="Caterpillar 1.0"
+POLICY="Caterpillar 1.0 flow-confirmed v1.1"
 
 def _f(x):
     try:
@@ -40,10 +40,28 @@ def entry_candidate(symbol,analysis,m15,flow,stamp):
                 aligned_flow=side*imbalance if imbalance is not None else None)
 
 def pressure_exit(position,m15,mark,flow):
+    """Avoid fee-generating churn on a single noisy 60-second flow reversal.
+
+    A genuine H1 opposite pivot and the liquidation guard remain independent.
+    """
     side=int((position or {}).get("side") or 0)
-    if side in (-1,1) and dominance(flow)==-side:
-        return "executed_flow_counter_dominance"
-    return None
+    if side not in (-1,1) or dominance(flow)!=-side:
+        return None
+    imbalance=_f((flow or {}).get("flow_imbalance"))
+    count=_f((flow or {}).get("trade_count_60s"))
+    notional=_f((flow or {}).get("observed_notional_60s"))
+    coverage=_f((flow or {}).get("trade_coverage_seconds"))
+    if (imbalance is None or side*imbalance>-.20 or count is None or count<8
+            or notional is None or notional<250 or coverage is None or coverage<45):
+        return None
+    opened=_epoch((position or {}).get("opened"))
+    observed=_f((flow or {}).get("observed_at_epoch"))
+    if observed is None:
+        import time
+        observed=time.time()
+    if opened is not None and observed-opened<30:
+        return None
+    return "executed_flow_counter_dominance"
 
 def _epoch(value):
     n=_f(value)
@@ -67,4 +85,7 @@ def reentry_ready(side,m15,mark,watch,flow,stamp):
     context=watch.get("context") or {}
     exited=_epoch(watch.get("exit_at"))
     return bool(exited is not None and stamp>exited and context.get("counter_pressure_seen")
-                and context.get("phase")=="WAIT_RESUMPTION" and dominance(flow)==int(side))
+                and context.get("phase")=="WAIT_RESUMPTION" and dominance(flow)==int(side)
+                and (_f((flow or {}).get("flow_imbalance")) is not None)
+                and int(side)*_f((flow or {}).get("flow_imbalance"))>=.20
+                and stamp-exited>=20)
