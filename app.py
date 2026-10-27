@@ -4206,6 +4206,14 @@ def build_dashboard_snapshot(history=None):
    "unrealized_pnl":round(lspnl,4),"opened":hspos["opened"],"features":hspos.get("features",{})}
   local_swing_positions.append(card)
   if lsym==HYPE_SWING_SYMBOL:hype_swing_position=card
+ experiment_positions=[];experiment_unreal=0.0
+ for esym,epos in state.get("local_experiment_positions",{}).items():
+  emark=prices.get(esym,epos["entry"]);epnl=paper_pnl(epos["notional"],epos["entry"],emark,epos["side"],FEE);experiment_unreal+=epnl
+  experiment_positions.append({"strategy":"LOCAL_10TOKEN_24H","symbol":esym,"side":"LONG" if epos["side"]>0 else "SHORT",
+   "entry":epos["entry"],"mark":emark,"margin_usd":round(epos["margin"],2),"notional_usd":round(epos["notional"],2),
+   "leverage":epos["leverage"],"roe_pct":round(epnl/epos["margin"]*100,3) if epos["margin"] else 0,
+   "unrealized_pnl":round(epnl,4),"opened":epos["opened"],"features":epos.get("features",{})})
+ experiment_total=float(state.get("local_experiment_equity",LOCAL_EXPERIMENT_STARTING_EQUITY))+experiment_unreal
  hype_swing_total=float(state.get("hype_swing_equity",HYPE_SWING_STARTING_EQUITY))+hype_swing_unreal
  for sym,p in state.get("whale_positions",{}).items():
   px=prices.get(sym,p["entry"]);move=(px/p["entry"]-1)*p["side"];gross=p["notional"]*move;fees=p["notional"]*FEE*2;pnl=paper_pnl(p["notional"],p["entry"],px,p["side"],FEE);whale_unreal+=pnl
@@ -4229,7 +4237,16 @@ def build_dashboard_snapshot(history=None):
 "hype_h1_unrealized_pnl":round(hype_swing_unreal,4),"hype_h1_total_equity":round(hype_swing_total,4),
 "hype_h1_pnl_pct":round((hype_swing_total/HYPE_SWING_STARTING_EQUITY-1)*100,3),"hype_h1_realized_pnl":round(float(state.get("hype_swing_realized_pnl",0)),4),
 "hype_h1_trades":state.get("hype_swing_trades",0),"hype_h1_engine":copy.deepcopy(state.get("sources",{}).get("HypeH1LocalSwing",{})),
-"hype_h1_stats":history.get("hype_stats",{}) if history is not None else hype_swing_stats(),"hype_h1_policy":CATERPILLAR_POLICY,"account_model":"UNIFIED_PAPER_ACCOUNT_ALL_STRATEGIES","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"decision_learning":copy.deepcopy(state.get("learning_audit",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
+"hype_h1_stats":history.get("hype_stats",{}) if history is not None else hype_swing_stats(),"hype_h1_policy":CATERPILLAR_POLICY,
+"local_experiment_symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"local_experiment_positions":experiment_positions,
+"local_experiment_watch":copy.deepcopy(state.get("local_experiment_watch",{})),
+"local_experiment_balance":round(float(state.get("local_experiment_equity",LOCAL_EXPERIMENT_STARTING_EQUITY)),4),
+"local_experiment_unrealized_pnl":round(experiment_unreal,4),"local_experiment_total_equity":round(experiment_total,4),
+"local_experiment_pnl_pct":round((experiment_total/LOCAL_EXPERIMENT_STARTING_EQUITY-1)*100,3),
+"local_experiment_realized_pnl":round(float(state.get("local_experiment_realized_pnl",0) or 0),4),
+"local_experiment_trades":int(state.get("local_experiment_trades",0) or 0),
+"local_experiment_stats":copy.deepcopy(state.get("local_experiment_stats",{})),
+"local_experiment_engine":copy.deepcopy(state.get("sources",{}).get("Local10Token24h",{})),"account_model":"UNIFIED_PAPER_ACCOUNT_ALL_STRATEGIES","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"decision_learning":copy.deepcopy(state.get("learning_audit",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
 def dashboard():
  # Render open positions from current in-memory prices; slow history queries
