@@ -3004,6 +3004,82 @@ def market_regime_history():
   SHUTDOWN.wait(300 if ok else 15)
 
 
+def market_history_bootstrap():
+ # Single owner, paced startup recovery. Runs only after engine lease + metadata.
+ # Five regime seeds are loaded first so Pump/Dump leaves WARMUP quickly, then
+ # one compact 3m snapshot per Local symbol warms both H1 and M15.
+ completed=set()
+ while not SHUTDOWN.is_set():
+  with LOCK:
+   active=bool(S.get("engine_active"))
+   metadata_ready=bool(S.get("_day_volumes")) and bool(S.get("_max_leverage"))
+  if not (active and metadata_ready):
+   SHUTDOWN.wait(.5);continue
+  try:
+   stamp=time.time()
+   regime_ready=0
+   for sym in REGIME_SEED_SYMBOLS:
+    if SHUTDOWN.is_set():return
+    key=("regime",sym)
+    if key in completed:
+     regime_ready+=1
+     continue
+    rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":sym,"interval":"1m",
+      "startTime":int((stamp-6*3600)*1000),"endTime":int(stamp*1000)}}))
+    if not isinstance(rows,list) or not rows:raise RuntimeError("empty_regime_bootstrap:"+sym)
+    accept_regime_candles(rows);completed.add(key);regime_ready+=1
+    with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":True,"last_check":now(),
+      "mode":"paced_rest_after_lease","regime_ready":regime_ready,"local_ready":sum(1 for x in completed if x[0]=="local"),
+      "error":None}
+    if regime_ready>=5:break
+    SHUTDOWN.wait(3.0)
+   for sym in LOCAL_EXPERIMENT_SYMBOLS:
+    if SHUTDOWN.is_set():return
+    key=("local",sym)
+    if key in completed:continue
+    stamp=time.time()
+    rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":sym,"interval":"3m",
+      "startTime":int((stamp-9*3600)*1000),"endTime":int(stamp*1000)}}))
+    if not isinstance(rows,list) or not rows:raise RuntimeError("empty_local_bootstrap:"+sym)
+    accept_local_history(rows);completed.add(key)
+    with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":True,"last_check":now(),
+      "mode":"paced_rest_after_lease","regime_ready":sum(1 for x in completed if x[0]=="regime"),
+      "local_ready":sum(1 for x in completed if x[0]=="local"),"error":None}
+    SHUTDOWN.wait(3.0)
+   # Optional sixth regime seed after Local is ready.
+   for sym in REGIME_SEED_SYMBOLS:
+    key=("regime",sym)
+    if key in completed:continue
+    stamp=time.time()
+    rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":sym,"interval":"1m",
+      "startTime":int((stamp-6*3600)*1000),"endTime":int(stamp*1000)}}))
+    if isinstance(rows,list) and rows:
+     accept_regime_candles(rows);completed.add(key)
+    SHUTDOWN.wait(3.0)
+   with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":False,"last_check":now(),
+     "mode":"paced_rest_after_lease","regime_ready":sum(1 for x in completed if x[0]=="regime"),
+     "local_ready":sum(1 for x in completed if x[0]=="local"),"error":None}
+   SHUTDOWN.wait(300)
+  except RestDeferred:
+   with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":True,"degraded":False,"last_check":now(),
+     "mode":"rest_budget_wait","regime_ready":sum(1 for x in completed if x[0]=="regime"),
+     "local_ready":sum(1 for x in completed if x[0]=="local"),"error":None}
+   SHUTDOWN.wait(3)
+  except urllib.error.HTTPError as exc:
+   if exc.code==429:
+    with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":True,"degraded":False,"last_check":now(),
+      "mode":"exchange_429_backoff","regime_ready":sum(1 for x in completed if x[0]=="regime"),
+      "local_ready":sum(1 for x in completed if x[0]=="local"),"error":None}
+    SHUTDOWN.wait(max(10.0,float(HL_REST_BUDGET.status().get("cooldown_seconds",0) or 0)))
+   else:
+    with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":False,"last_check":now(),"error":str(exc)[:140]}
+    SHUTDOWN.wait(5)
+  except Exception as exc:
+   with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":False,"last_check":now(),
+     "error":type(exc).__name__+":"+str(exc)[:140]}
+   SHUTDOWN.wait(5)
+
+
 def market_trade_stream():
  # During Render rolling deploy the standby instance must not touch exchange
  # metadata/history while the old lease owner is still live. Wait for this
@@ -4923,7 +4999,7 @@ if __name__=="__main__":
    SHUTDOWN.wait(2)
 
  worker_specs=[
-  ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),("market_trades",market_trade_stream),("breadth_history",market_regime_history),
+  ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),("market_history_bootstrap",market_history_bootstrap),("market_trades",market_trade_stream),("breadth_history",market_regime_history),
   ("telemetry",telemetry),("pump_dump",impulse_scan),
   ("local_12token_h1_m15",local_experiment_loop),
   ("adapt",adapt),
