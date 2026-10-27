@@ -7,7 +7,7 @@ import copy
 import datetime
 import math
 
-POLICY = "local_h1_m15_caterpillar_v7"
+POLICY = "local_h1_m15_caterpillar_v8"
 FLOW_THRESHOLD = .12
 
 
@@ -58,6 +58,11 @@ def pressure_exit(position, m15, mark, fresh_flow_context):
     if side not in (-1, 1) or not entry or not mark or flow is None:
         return None
     if side * flow > -FLOW_THRESHOLD:
+        return None
+    # Sparse prints are not enough to establish a real reversal.
+    count = _f((fresh_flow_context or {}).get("trade_count_60s"))
+    notional = _f((fresh_flow_context or {}).get("observed_notional_60s"))
+    if (count is not None and count < 5) or (notional is not None and notional < 100):
         return None
     if not m15.get("strong_adverse_pressure") or int(m15.get("adverse_score") or 0) < 3:
         return None
@@ -125,19 +130,9 @@ def reentry_ready(side, m15, mark, watch, flow, now_epoch):
 
 
 def protective_breakeven(position, mark):
-    """Optional fixed earned-profit safety floor; never a percentage-of-peak trail.
+    """Legacy API. No fixed 0.4% arming threshold or percentage-based profit exit.
 
-    The normal exit is pressure_exit. Once a 0.4% favorable move was observed,
-    this floor protects the entry plus the configured transaction-cost buffer.
-    Fills are always the current mark, including gaps through the floor.
+    Directional exits are driven by H1 reversal and M15 pressure; the separate
+    emergency portfolio guard remains responsible for catastrophic risk.
     """
-    if not position:
-        return None
-    side = int(position.get("side") or 0)
-    entry, mark = _f(position.get("entry")), _f(mark)
-    features = position.get("features") or {}
-    peak = _f(features.get("mfe_price_move")) or 0.
-    if side not in (-1, 1) or not entry or not mark or peak < .004:
-        return None
-    floor = max(.0016, _f(features.get("profit_lock_buffer_move")) or 0.)
-    return mark if side * (mark / entry - 1) <= floor else None
+    return None
