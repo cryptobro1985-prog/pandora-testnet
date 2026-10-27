@@ -2704,8 +2704,22 @@ def market():
  while not SHUTDOWN.is_set():
   S["_market_heartbeat"]=time.time()
   try:
-   valid=refresh_market_prices(force=False,max_age=8.0)
-   with LOCK:active=S["engine_active"]
+   with LOCK:
+    active=bool(S.get("engine_active"))
+    metadata_ready=bool(S.get("_day_volumes")) and bool(S.get("_max_leverage"))
+    cached=dict(S.get("_prices",{}))
+    cached_age=time.time()-float(S.get("_last_poll_epoch",0) or 0) if S.get("_last_poll_epoch") else 1e9
+   # Metadata owns the first Hyperliquid REST request after lease takeover.
+   # Before it is ready, the market worker must not hammer allMids every 2s.
+   if active and not metadata_ready:
+    with LOCK:
+     S["last_market_error"]=None
+     if str(S.get("last_error") or "").startswith("market: hyperliquid_rest_deferred"):
+      S["last_error"]=None
+    SHUTDOWN.wait(.5)
+    continue
+   # Once websocket has delivered fresh allMids, use it and avoid REST entirely.
+   valid=cached if cached and cached_age<=8.0 else refresh_market_prices(force=False,max_age=8.0)
    # Network and SQL work never owns the global state lock. Sources, health
    # and the lease heartbeat remain responsive during a slow checkpoint.
    if active and not SHUTDOWN.is_set():
