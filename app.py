@@ -94,8 +94,9 @@ def choose(db_path,current=(-0.10,0.20)):
  return {"stop":cand[0],"take":cand[1],"samples":len(xs),"validation_pnl":sum(valid),"changed":cand!=current}
 
 WATCH_GROUPS={
- # Deliberately small high-signal X core. PiQ is scanned directly from its public site, not X.
- "critical":["FirstSquawk","realDonaldTrump","federalreserve","SECGov"]
+ # Live news path is intentionally minimal: FirstSquawk on X + PiQ Direct.
+ # Other accounts are not required for health and cannot turn the scanner red.
+ "critical":["FirstSquawk"]
 }
 WATCH=[];WATCH_CATEGORY={}
 for _category,_handles in WATCH_GROUPS.items():
@@ -193,12 +194,8 @@ if not math.isfinite(NEWS_MAX_AGE_SECONDS) or NEWS_MAX_AGE_SECONDS<=0:raise Valu
 if not math.isfinite(NEWS_POLL_SECONDS) or NEWS_POLL_SECONDS<1:raise ValueError("invalid news poll interval")
 S.update({"engine_active":False,"engine_error":None,"last_checkpoint":None,"last_market_error":None})
 FEEDS={
- # Only high-signal official macro feeds remain. Broad media coverage is supplied
- # by PiQ Direct and FirstSquawk, so duplicate crypto/general-news RSS is removed.
- "FedMonetary":"https://www.federalreserve.gov/feeds/press_monetary.xml",
- "ECBOfficial":"https://www.ecb.europa.eu/rss/press.html",
- "CoinDesk":"https://www.coindesk.com/arc/outboundfeeds/rss/",
- "Cointelegraph":"https://cointelegraph.com/rss",
+ # Trading news ingestion is restricted to FirstSquawk + PiQ Direct.
+ # Optional RSS feeds are disabled so stale/blocked feeds cannot degrade live health.
 }
 SEARCH_INDEX_FEEDS=set()
 RESEARCH_PAGES={}
@@ -4730,7 +4727,7 @@ def daily_audit_stats():
   return {"error":str(exc)[:180]}
 
 
-CORE_NEWS_SOURCES=("XOfficial:FirstSquawk","XOfficial:realDonaldTrump","XOfficial:federalreserve","XOfficial:SECGov","PiQDirect","FedMonetary","ECBOfficial","CoinDesk","Cointelegraph")
+CORE_NEWS_SOURCES=("XOfficial:FirstSquawk","PiQDirect")
 NEWS_SILENCE_WARN_SECONDS=max(300.0,float(os.getenv("NEWS_SILENCE_WARN_SECONDS","1800")))
 
 def news_health_snapshot(daily=None):
@@ -5236,11 +5233,9 @@ if __name__=="__main__":
   ("decision_learning",learning_shadow_loop),
   ("dashboard_history",dashboard_history_loop),("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)
  ]
- # Trading ingestion is intentionally minimal: four high-signal X accounts,
- # PiQ Direct and two official macro feeds. Direct Truth Social is excluded from
- # the live trading path because its public endpoints and US relays return 403/502;
- # Trump coverage remains through his X account plus PiQ/FirstSquawk reposts.
- # Broad media/search/research mirrors stay out of the trading path.
+ # Trading ingestion is intentionally minimal: FirstSquawk on X + PiQ Direct.
+ # Unused X/RSS/Truth sources stay out of the live path so their transport failures
+ # cannot create false scanner alarms or add unnecessary request load.
  if NEWS_NEW_ENTRIES_ENABLED:
   worker_specs.extend([("x_critical_4s",x_critical_realtime),("piq_direct",piq_direct_realtime),("news_recovery",recover_news_processing)])
   for name,url in FEEDS.items():
