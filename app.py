@@ -2151,7 +2151,7 @@ def local_h1_direction(rows,now_ms,symbol):
  analysis=analyze_hype_h1(rows,now_ms,symbol)
  if not analysis.get("ready"):return analysis
  with LOCK:prior=copy.deepcopy(S.get("local_h1_direction",{}).get(symbol))
- if prior and (not analysis.get("anchor_confirmed") or int(prior.get("signal_candle_time") or 0)>int(analysis.get("signal_candle_time") or 0)):
+ if prior and not analysis.get("anchor_confirmed") and int(prior.get("signal_candle_time") or 0)>=int(analysis.get("signal_candle_time") or 0):
   return {**prior,"ready":True,"last_candle_time":analysis.get("last_candle_time")}
  if analysis.get("entry_side") not in (-1,1):return analysis
  if not prior or analysis.get("signal_candle_time")!=prior.get("signal_candle_time"):
