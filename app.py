@@ -29,7 +29,8 @@ from accounting import paper_pnl
 from strategy_stats import performance as strategy_performance, cards_html as strategy_cards_html, with_capital_basis as strategy_capital_basis
 from local_caterpillar import (POLICY as CATERPILLAR_POLICY,pressure_exit as caterpillar_pressure_exit,
  update_watch as caterpillar_update_watch,reentry_ready as caterpillar_reentry_ready,
- protective_breakeven as caterpillar_breakeven)
+ protective_breakeven as caterpillar_breakeven, entry_candidate as local_entry_candidate,
+ rank_candidates as rank_local_candidates, SELECTION_POLICY as LOCAL_SELECTION_POLICY)
 from learning_audit import (ensure_schema as ensure_learning_schema,
                             record_decision as record_learning_decision,
                             update_labels as update_learning_labels,
@@ -2266,11 +2267,23 @@ def local_experiment_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=N
  if S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or not analysis.get("ready"):return False
  if not analysis.get("h1_direction_anchor") or int(analysis.get("entry_side") or 0)!=int(side):return False
  if analysis.get("entry_blocked"):return False
+ # Recheck at allocation time: scanning 12 markets and database writes take time.
+ # A previously ranked candidate cannot bypass fresh flow or M15 confirmation.
+ stamp=time.time()
+ flow=MARKET_OBS.context(symbol,stamp)
+ selection=local_entry_candidate(symbol,analysis,m15,flow,stamp)
+ if not selection["eligible"]:return False
+ with LOCK:current_anchor=copy.deepcopy(S.get("local_h1_direction",{}).get(symbol))
+ if current_anchor and (int(current_anchor.get("entry_side") or 0)!=int(side) or
+     int(current_anchor.get("signal_candle_time") or 0)!=int(analysis.get("signal_candle_time") or 0)):return False
+ price=current_entry_price(symbol)
+ if price is None:return False
  if entry_kind=="REENTRY":
   if not watch or int(watch.get("side") or 0)!=int(side):return False
   if int(analysis.get("entry_side") or 0)==-int(side):return False
- price=current_entry_price(symbol)
- if price is None:return False
+  with LOCK:live_watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
+  if not live_watch or live_watch.get("exit_at")!=watch.get("exit_at"):return False
+  if not caterpillar_reentry_ready(side,m15,price,live_watch,flow,stamp):return False
  leverage=25.0
  with LOCK:
   if not S.get("engine_active") or symbol in S.get("local_v12_positions",{}):return False
@@ -2293,6 +2306,7 @@ def local_experiment_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=N
  claim_token=int((m15 or {}).get("candle_time") or origin_signal)
  features={**analysis,"symbol":symbol,"strategy_name":"local_12token_h1_m15","experiment":"local_12token_h1_m15",
   "policy":HYPE_SWING_POLICY,"caterpillar_policy":CATERPILLAR_POLICY,"entry_kind":entry_kind,
+  "candidate_selection":selection,
   "origin_h1_signal_candle":origin_signal,"swing_reentries":reentries,
   "reference_margin_fraction":LOCAL_EXPERIMENT_MARGIN_FRACTION,"reference_leverage":25.0,
   "target_notional":target_notional,"desired_margin":desired_margin,"max_margin_per_position":max_margin_per_position,
@@ -2319,12 +2333,13 @@ def local_experiment_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=N
    row=db.execute("""insert into local_v12_positions(symbol,side,entry,notional,margin,leverage,opened,opened_epoch,signal_candle_time,features)
      values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(symbol) do nothing returning symbol""",
      (symbol,int(side),price,notional,margin,leverage,opened,epoch,origin_signal,json.dumps(features,default=str))).fetchone()
-   if not row:return False
+   if not row:raise psycopg.Rollback()
    if entry_kind=="REENTRY":db.execute("delete from local_v12_watchlist where symbol=%s",(symbol,))
    db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'local_experiment_trade_opened',%s::jsonb)",
     (now(),json.dumps({"strategy":"local_12token_h1_m15","symbol":symbol,"side":int(side),"entry_kind":entry_kind,
       "entry":price,"margin":margin,"notional":notional,"target_notional":target_notional,
       "exposure_fill_ratio":exposure_fill_ratio,"leverage":leverage,"equity":equity,"free_margin_before":free},default=str)))
+ if not row:return False
  with LOCK:
   S.setdefault("local_v12_positions",{})[symbol]=pos
   if entry_kind=="REENTRY":S.setdefault("local_experiment_watch",{}).pop(symbol,None)
@@ -2398,8 +2413,10 @@ def local_experiment_mark_positions(prices):
    features["profit_lock_armed"]=False
    features.update(caterpillar_policy=CATERPILLAR_POLICY,profit_lock_mode="fixed_cost_aware_breakeven",
      profit_lock_arm_move=.004,profit_lock_buffer_move=.0016)
+  was_armed=bool(features.get("profit_lock_armed"))
   updated,liq=hype_update_path(pos,float(mark))
   lock_fill=caterpillar_breakeven(updated,float(mark))
+  newly_armed=not was_armed and bool((updated.get("features") or {}).get("profit_lock_armed"))
   if lock_fill is not None and paper_pnl(updated["notional"],updated["entry"],float(lock_fill),updated["side"],FEE)>0:
    with LOCK:
     live=S.get("local_v12_positions",{}).get(symbol)
@@ -2413,13 +2430,35 @@ def local_experiment_mark_positions(prices):
    local_experiment_close(symbol,float(mark),"paper_liquidation_proxy");continue
   stamp=time.time()
   with LOCK:last=float(S.setdefault("_local_experiment_path_persist_epoch",{}).get(symbol,0) or 0)
-  if stamp-last<30:continue
-  with LOCK:S["_local_experiment_path_persist_epoch"][symbol]=stamp
+  if stamp-last<30 and not newly_armed:continue
+  # Keep retries due if persisting a newly armed floor fails.
+  with LOCK:S["_local_experiment_path_persist_epoch"][symbol]=0
   with pg() as db:
    with db.transaction():
     STORE.fence(db)
     db.execute("update local_v12_positions set features=%s::jsonb where symbol=%s and opened=%s",
       (json.dumps(updated.get("features",{}),default=str),symbol,pos["opened"]))
+  with LOCK:S["_local_experiment_path_persist_epoch"][symbol]=stamp
+
+
+def local_experiment_risk_loop():
+ # Protect observed peaks even while H1/M15 history fetches or scans are slow.
+ # Use only fresh streamed/cached marks; never spend additional REST budget.
+ while not SHUTDOWN.is_set():
+  try:
+   with LOCK:
+    active=bool(S.get("engine_active")) and S.get("mode")=="PAPER_ONLY" and not S.get("orders_enabled")
+    age=time.time()-float(S.get("_last_poll_epoch",0) or 0)
+    prices=dict(S.get("_prices",{}))
+   if active and 0<=age<=8 and prices:
+    local_experiment_mark_positions(prices)
+    with LOCK:S["sources"]["LocalRisk"]={"ok":True,"last_check":now(),"mode":"fresh_mark_profit_floor"}
+  except LeaseLost as exc:
+   with LOCK:
+    S["engine_active"]=False;S["engine_error"]=str(exc)
+  except Exception as exc:
+   with LOCK:S["sources"]["LocalRisk"]={"ok":False,"last_check":now(),"error":type(exc).__name__+":"+str(exc)[:160]}
+  SHUTDOWN.wait(.5)
 
 def local_experiment_cancel_oversized_positions(prices):
  # One-time/routine guard for legacy PAPER positions created before the 20% cap.
@@ -2483,7 +2522,7 @@ def local_experiment_loop():
     for key,fut in jobs.items():
      try:fetched[key]=fut.result(timeout=12)
      except Exception as exc:fetch_errors[key]=type(exc).__name__+":"+str(exc)[:120]
-    details={}
+    details={};entry_queue=[]
     for symbol in LOCAL_EXPERIMENT_SYMBOLS:
      mark=prices.get(symbol)
      if (symbol,"h1") in fetch_errors or not mark:
@@ -2525,15 +2564,16 @@ def local_experiment_loop():
        if analysis.get("ready") and int(analysis.get("entry_side") or 0)==-int(watch.get("side") or 0):
         _local_experiment_watch_clear(symbol,"opposite_h1_pivot_invalidated_watch");watch=None;action="WATCH_INVALIDATED_BY_H1"
        elif not analysis.get("entry_blocked") and caterpillar_reentry_ready(int(watch.get("side") or 0),m15_live,float(mark),watch,flow,time.time()):
-        if local_experiment_open(symbol,int(watch["side"]),analysis,"REENTRY",m15_live,watch):
-         action="M15_RECOVERY_REENTRY"
-      if (not watch and not action and analysis.get("ready") and int(analysis.get("entry_side") or 0) in (-1,1)
-          and flow.get("trade_data_fresh") and flow_imb is not None
-          and (flow.get("trade_count_60s") is None or float(flow.get("trade_count_60s") or 0)>=5)
-          and (flow.get("observed_notional_60s") is None or float(flow.get("observed_notional_60s") or 0)>=100)
-          and int(analysis["entry_side"])*float(flow_imb)>=.12
-          and local_m15_reentry_ready(int(analysis["entry_side"]),m15_live,flow_imb)):
-       if local_experiment_open(symbol,int(analysis["entry_side"]),analysis,"M15",m15_live):action="M15_ENTRY"
+        selection=local_entry_candidate(symbol,analysis,m15_live,flow,time.time())
+        if selection["eligible"]:
+         entry_queue.append({**selection,"analysis":analysis,"m15":m15_live,"watch":watch,"entry_kind":"REENTRY"})
+         action="CANDIDATE_REENTRY"
+      if not watch and not action:
+       selection=local_entry_candidate(symbol,analysis,m15_live,flow,time.time())
+       if selection["eligible"]:
+        entry_queue.append({**selection,"analysis":analysis,"m15":m15_live,"watch":None,"entry_kind":"M15"})
+        action="CANDIDATE_ENTRY"
+       else:action="WAIT:"+selection["reason"]
      with LOCK:
       live=copy.deepcopy(S.get("local_v12_positions",{}).get(symbol))
       live_watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
@@ -2556,6 +2596,23 @@ def local_experiment_loop():
         "adverse_score":m15_live.get("adverse_score"),"recovery_score":m15_live.get("recovery_score"),
         "flow_imbalance":flow_imb},"last_action":action,
        "error":fetch_errors.get((symbol,"m15")) or (analysis.get("reason") if not analysis.get("ready") else (m15_live.get("reason") if not m15_live.get("ready") else None))}
+    # Complete risk management for every symbol before allocating scarce margin.
+    # The configured token order must never decide which signal receives capital.
+    ranked=rank_local_candidates(entry_queue)
+    for rank,candidate in enumerate(ranked,1):
+     symbol=candidate["symbol"]
+     selection={k:v for k,v in candidate.items() if k not in ("analysis","m15","watch")}
+     details[symbol]["candidate_selection"]={**selection,"rank":rank}
+     opened=local_experiment_open(symbol,candidate["side"],candidate["analysis"],candidate["entry_kind"],candidate["m15"],candidate["watch"])
+     details[symbol]["last_action"]=("M15_RECOVERY_REENTRY" if candidate["entry_kind"]=="REENTRY" else "M15_ENTRY") if opened else "WAIT_ALLOCATION_OR_REVALIDATION"
+     with LOCK:
+      live=copy.deepcopy(S.get("local_v12_positions",{}).get(symbol))
+      live_watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
+     phase="IN_POSITION" if live else ((live_watch.get("context") or {}).get("phase","WAIT_ENTRY") if live_watch else "WAIT_ENTRY")
+     details[symbol].update(position_open=bool(live),side=live.get("side") if live else None,
+      actual_margin=live.get("margin") if live else None,actual_notional=live.get("notional") if live else None,
+      exposure_fill_ratio=(live.get("features") or {}).get("exposure_fill_ratio") if live else None,
+      watching_for_reentry=bool(live_watch),caterpillar_phase=phase)
     stats=local_experiment_stats()
     equity,used,free=_local_experiment_margin_state()
     ready_all=all(x.get("ok") for x in details.values())
@@ -2571,6 +2628,7 @@ def local_experiment_loop():
        "watching_for_reentry":list(S.get("local_experiment_watch",{})),"reference_margin_fraction":LOCAL_EXPERIMENT_MARGIN_FRACTION,
        "reference_leverage":25.0,"sizing":"20pct_current_mtm_equity_fixed25x_free_profit_reinvestment",
        "max_positions":LOCAL_EXPERIMENT_MAX_POSITIONS,"compound":True,"details":details,"stats":stats,
+       "selection_policy":LOCAL_SELECTION_POLICY,"ranked_candidates":[c["symbol"] for c in ranked],
        "rest_transport":HL_REST_BUDGET.status(),
        "error":None if (ready_all or bootstrap_wait) else "partial_symbol_scan_failure"}
    except LeaseLost as exc:
@@ -4844,9 +4902,13 @@ def html_dashboard(data):
   signal_time=anchor.get("signal_candle_time")
   confirmed_at=(datetime.datetime.fromtimestamp((float(signal_time)+3600000)/1000,datetime.timezone(datetime.timedelta(hours=4))).strftime("%d.%m %H:%M") if signal_time else "—")
   allowed="WAIT CONFIRMATION" if anchor.get("entry_blocked") else ("LONG ONLY" if side==1 else ("SHORT ONLY" if side==-1 else "WAIT H1 DATA"))
+  current_action=detail.get("last_action") or detail.get("error") or detail.get("caterpillar_phase") or "WAIT DATA"
+  selection=detail.get("candidate_selection") or {}
+  if selection.get("rank"):
+   current_action+=" · rank %s · M15 %s · aligned flow %.2f"%(selection["rank"],selection.get("recovery_score","—"),float(selection.get("aligned_flow",0)))
   direction_rows.append('<tr><td>%s</td><td>%s @ %s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'%(
    esc(sym),esc(anchor.get("pivot_type") or "—"),esc(anchor.get("pivot_price") or "—"),esc(confirmed_at),esc(allowed),
-   esc(anchor.get("pending_pivot_type") or "—"),esc(detail.get("last_action") or detail.get("error") or detail.get("caterpillar_phase") or "WAIT DATA")))
+   esc(anchor.get("pending_pivot_type") or "—"),esc(current_action)))
  direction_table='<h3>H1 direction and execution status · confirmation time Samara UTC+4</h3><table><tr><th>Token</th><th>Confirmed H1 anchor</th><th>Confirmed at</th><th>Allowed entry</th><th>Pending opposite extreme</th><th>Current action</th></tr>'+"".join(direction_rows)+'</table>'
  exp_rows=[]
  for sym in data.get("local_experiment_symbols",[]):
@@ -5108,7 +5170,7 @@ if __name__=="__main__":
  worker_specs=[
   ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),("market_history_bootstrap",market_history_bootstrap),("market_trades",market_trade_stream),("breadth_history",market_regime_history),
   ("telemetry",telemetry),("pump_dump",impulse_scan),
-  ("local_12token_h1_m15",local_experiment_loop),
+  ("local_12token_h1_m15",local_experiment_loop),("local_risk",local_experiment_risk_loop),
   ("adapt",adapt),
   ("decision_learning",learning_shadow_loop),
   ("dashboard_history",dashboard_history_loop),("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)

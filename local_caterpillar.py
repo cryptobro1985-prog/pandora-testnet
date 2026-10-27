@@ -9,6 +9,7 @@ import math
 
 POLICY = "local_h1_m15_caterpillar_v10_strict_reentry_profit_floor"
 FLOW_THRESHOLD = .12
+SELECTION_POLICY = "h1_m15_ranked_execution_v1"
 
 
 def _f(value):
@@ -43,6 +44,57 @@ def _flow(context):
 def _threshold(m15, fraction=.15):
     typical = _f((m15 or {}).get("median_range_move"))
     return max(.0006, min(.0015, (typical or .008) * fraction))
+
+
+def entry_candidate(symbol, analysis, m15, flow, now_epoch):
+    """Validate observable entry evidence; ranking is not a profit prediction.
+
+    Compare M15 recovery first, then aligned executed flow and observed liquidity.
+    Missing observations must not silently pass a minimum-liquidity check.
+    """
+    result = dict(symbol=symbol, eligible=False, policy=SELECTION_POLICY)
+    side = (analysis or {}).get("entry_side")
+    reason = None
+    stamp = _f(now_epoch)
+    observed = _f((m15 or {}).get("observed_at_ms"))
+    imbalance = _flow(flow)
+    count = _f((flow or {}).get("trade_count_60s"))
+    notional = _f((flow or {}).get("observed_notional_60s"))
+    coverage = _f((flow or {}).get("trade_coverage_seconds"))
+    age = _f((flow or {}).get("latest_trade_age_seconds"))
+    score = _f((m15 or {}).get("recovery_score"))
+    adverse = _f((m15 or {}).get("adverse_score"))
+    if not analysis or not analysis.get("ready") or not analysis.get("h1_direction_anchor") or side not in (-1, 1):
+        reason = "h1_direction_unavailable"
+    elif analysis.get("entry_blocked"):
+        reason = "opposite_h1_confirmation_pending"
+    elif not m15 or not m15.get("ready") or m15.get("side") != side:
+        reason = "m15_direction_unavailable"
+    elif stamp is None or observed is None or not 0 <= stamp * 1000 - observed <= 10000:
+        reason = "stale_m15_observation"
+    elif imbalance is None or age is None or coverage is None or coverage < 60:
+        reason = "fresh_executed_flow_unavailable"
+    elif count is None or notional is None or count < 5 or notional < 100:
+        reason = "insufficient_executed_liquidity"
+    elif side * imbalance < FLOW_THRESHOLD:
+        reason = "flow_not_aligned_with_h1"
+    elif not m15.get("recovery_confirmed") or score is None or score < 3 or adverse is None or m15.get("strong_adverse_pressure"):
+        reason = "m15_recovery_unconfirmed"
+    if reason:
+        result["reason"] = reason
+        return result
+    result.update(eligible=True, reason="confirmed_h1_m15_flow", side=side,
+                  recovery_score=score, adverse_score=adverse,
+                  aligned_flow=side * imbalance, observed_notional_60s=notional,
+                  trade_count_60s=count, observed_at_ms=observed,
+                  rank_key=[score, -adverse, side * imbalance, notional])
+    return result
+
+
+def rank_candidates(candidates):
+    """Deterministic order independent of the configured symbol enumeration."""
+    return sorted((c for c in candidates if c.get("eligible")),
+                  key=lambda c: tuple(-v for v in c["rank_key"]) + (c["symbol"],))
 
 
 def pressure_exit(position, m15, mark, fresh_flow_context):
