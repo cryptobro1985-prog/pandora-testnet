@@ -5289,6 +5289,22 @@ def html_dashboard(data):
    "OK" if s1.get("ok") else "WARMUP/ERROR",float(s1.get("equity",500) or 500),len(s1.get("open_positions",[]) or []),int(s1stats.get("trades",0) or 0),float(s1stats.get("realized_pnl",0) or 0),
    "OK" if s2.get("ok") else "WARMUP/ERROR",float(s2.get("equity",500) or 500),len(s2.get("open_positions",[]) or []),int(s2stats.get("trades",0) or 0),float(s2stats.get("realized_pnl",0) or 0))
  comparison+='<div class="muted">S1: H1 direction + M15 weakening/profit floor + pullback/resumption re-entry. S2: LOCAL HIGH → SHORT until confirmed LOCAL LOW; LOCAL LOW → LONG until confirmed LOCAL HIGH. Both: INIT / NEAR / GRASS / HYPE · 20%% margin · 25x paper reference · compounding.</div>'
+ with LOCK:
+  s1_positions=copy.deepcopy(S.get("local_s1_positions",{}))
+  s2_positions=copy.deepcopy(S.get("local_s2_positions",{}))
+ comparison_rows=[]
+ for label,book in (("S1",s1_positions),("S2",s2_positions)):
+  for sym in LOCAL_EXPERIMENT_SYMBOLS:
+   p=book.get(sym) or {}
+   raw_side=int(p.get("side",0) or 0)
+   side_txt="LONG" if raw_side==1 else ("SHORT" if raw_side==-1 else "—")
+   notional=float(p.get("notional",0) or 0)
+   margin=float(p.get("margin",0) or 0)
+   lev=float(p.get("leverage",0) or 0)
+   entry=float(p.get("entry",0) or 0)
+   comparison_rows.append('<tr><td>%s</td><td>%s</td><td>%s</td><td>$%.2f</td><td>$%.2f</td><td>%sx</td><td>%s</td></tr>'%(
+    label,esc(sym),esc(side_txt),notional,margin,round(lev,2) if lev else "—",round(entry,8) if entry else "—"))
+ comparison+='<h3>OPEN POSITIONS · POSITION SIZE</h3><table><tr><th>Strategy</th><th>Token</th><th>Side</th><th>Position $</th><th>Margin $</th><th>Leverage</th><th>Entry</th></tr>'+''.join(comparison_rows)+'</table>'
  exp_cards=comparison+exp_cards
  exp_realized=float(data.get("local_experiment_realized_pnl",0) or 0)
  exp_open=float(data.get("local_experiment_unrealized_pnl",0) or 0)
