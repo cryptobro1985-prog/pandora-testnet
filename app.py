@@ -1295,10 +1295,21 @@ def whale_liq_mark_positions(prices):
        where symbol=%s and opened=%s""",updates)
 
 def _whale_liq_book(symbol):
+ stamp=time.time()
+ with LOCK:cached=copy.deepcopy(S.setdefault("_l2_book_cache",{}).get(symbol))
+ if cached and stamp-float(cached.get("_cached_epoch",0) or 0)<=2.0:
+  cached.pop("_cached_epoch",None);return cached
  try:
   book=json.loads(get(API,{"type":"l2Book","coin":symbol,"nSigFigs":4}))
-  return summarize_book(book,depth_bps=10)
- except Exception:return None
+  summary=summarize_book(book,depth_bps=10)
+  if summary:
+   stored=copy.deepcopy(summary);stored["_cached_epoch"]=stamp
+   with LOCK:S.setdefault("_l2_book_cache",{})[symbol]=stored
+  return summary
+ except Exception:
+  if cached and stamp-float(cached.get("_cached_epoch",0) or 0)<=5.0:
+   cached.pop("_cached_epoch",None);return cached
+  return None
 
 def _whale_liq_cvd(symbol):
  observed=MARKET_OBS.context(symbol,time.time())
@@ -2618,7 +2629,7 @@ def market():
  while not SHUTDOWN.is_set():
   S["_market_heartbeat"]=time.time()
   try:
-   valid=refresh_market_prices(force=False,max_age=2.0)
+   valid=refresh_market_prices(force=False,max_age=8.0)
    with LOCK:active=S["engine_active"]
    # Network and SQL work never owns the global state lock. Sources, health
    # and the lease heartbeat remain responsive during a slow checkpoint.
@@ -2985,10 +2996,13 @@ def deep_context(sym,prices):
   out["premium"]=cached_market.get("premium")
   out["day_volume"]=cached_market.get("day_volume")
  try:
-  book=json.loads(get(API,{"type":"l2Book","coin":sym}));levels=book.get("levels",[])
-  if len(levels)>=2:
-   b=sum(float(x.get("sz",0)) for x in levels[0][:10]);a=sum(float(x.get("sz",0)) for x in levels[1][:10]);out["orderbook_imbalance"]=(b-a)/(b+a) if b+a else 0
-   out["liquidation_map"]={"type":"estimated_pressure_not_confirmed_liquidations","bid_depth_top10":b,"ask_depth_top10":a,"imbalance":out["orderbook_imbalance"],"data_source":"hyperliquid_l2_book"}
+  book=_whale_liq_book(sym)
+  if book:
+   out["orderbook_imbalance"]=book.get("imbalance")
+   out["spread_bps"]=book.get("spread_bps")
+   out["liquidation_map"]={"type":"estimated_pressure_not_confirmed_liquidations",
+    "bid_depth_usd":book.get("bid_depth_usd"),"ask_depth_usd":book.get("ask_depth_usd"),
+    "imbalance":book.get("imbalance"),"data_source":"hyperliquid_l2_book_cached"}
  except Exception:pass
  hist=S.get("_hist",{}).get(sym,[])
  if len(hist)>=3:out["market_momentum"]=hist[-1]/hist[max(0,len(hist)-3)]-1
