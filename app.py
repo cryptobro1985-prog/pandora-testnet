@@ -5236,9 +5236,13 @@ def dashboard_cache_loop():
  while not SHUTDOWN.is_set():
   try:
    value=dashboard()
-   with LOCK:S["_dashboard_cache"]=value
+   rendered=html_dashboard(value)
+   with LOCK:
+    S["_dashboard_cache"]=value
+    S["_dashboard_html_cache"]=rendered
+    S["_dashboard_html_cache_at"]=now()
   except Exception as exc:
-   with LOCK:S["last_error"]="dashboard_cache: "+str(exc)[:150]
+   with LOCK:S["last_error"]="dashboard_cache: "+type(exc).__name__+":"+str(exc)[:150]
   SHUTDOWN.wait(2)
 
 def html_dashboard(data):
@@ -5254,11 +5258,7 @@ def html_dashboard(data):
  cards+='<p class="muted">History updated: %s%s</p>'%(esc(history_at or "loading")," · "+esc(history_error) if history_error else "")
 
  pos="".join('<tr><td>%s</td><td>%s</td><td>$%s</td><td>$%s</td><td>%sx</td><td>%s</td><td>%s</td><td class="%s">%s%%</td><td class="%s">$%s</td><td>%s</td><td><button onclick="closePos(this.dataset.sym)" data-sym="%s">Close</button></td></tr>'%(esc(x["symbol"]),x["side"],x.get("margin_usd",0),x.get("notional_usd",0),x.get("leverage",LEV),x["entry"],x["mark"],"posv" if x.get("roe_pct",0)>=0 else "negv",x.get("roe_pct",0),"posv" if x["unrealized_pnl"]>=0 else "negv",x["unrealized_pnl"],esc(x.get("headline") or x.get("strategy") or x.get("features",{}).get("engine") or "PAPER_SIGNAL"),esc(x["symbol"])) for x in data["positions"]) or '<tr><td colspan=11>No open positions</td></tr>'
- try:
-  data=dict(data)
-  data["local_v10_closed_trades"]=local_v10_history(100)
- except Exception:
-  pass
+ data=dict(data)
  trs="".join('<tr><td>%s</td><td>%s</td><td>%s</td><td class="%s">$%s</td><td>%s</td></tr>'%(esc(x["closed"]),esc(x["symbol"]),"LONG" if x["side"]>0 else ("SHORT" if x["side"]<0 else "MIXED"),"posv" if float(x["pnl"] or 0)>=0 else "negv",round(float(x["pnl"] or 0),4),esc(x["reason"])) for x in data.get("local_v10_closed_trades",[])) or '<tr><td colspan=5>No Local v10 closed trades yet</td></tr>'
  whale_engine=data.get("whale_liq_engine",{}) or {}
  whale_positions=data.get("whale_liq_positions",[]) or []
@@ -5540,7 +5540,9 @@ class Handler(BaseHTTPRequestHandler):
   # Dashboard database reads are deliberately outside the engine lock.
   if path=="/":
    try:
-    body=html_dashboard(dashboard()).encode("utf-8");ctype="text/html; charset=utf-8"
+    with LOCK:cached_html=S.get("_dashboard_html_cache")
+    if not cached_html:raise RuntimeError("dashboard_cache_warming")
+    body=cached_html.encode("utf-8");ctype="text/html; charset=utf-8"
    except Exception as exc:
     with LOCK:
      engine_active=bool(S.get("engine_active"))
