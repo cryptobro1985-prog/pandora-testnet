@@ -4651,7 +4651,8 @@ if __name__=="__main__":
 
  worker_specs=[
   ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),("market_trades",market_trade_stream),("breadth_history",market_regime_history),("confirmed_liquidations",confirmed_liquidation_stream),
-  ("telemetry",telemetry),("pump_dump",impulse_scan),("whale_liquidations",whale_liquidation_scan),("hype_h1_local_swing",hype_h1_local_swing_loop),
+  ("telemetry",telemetry),("pump_dump",impulse_scan),("whale_liquidations",whale_liquidation_scan),
+  ("hype_h1_local_swing",hype_h1_local_swing_loop),("local_10token_24h",local_experiment_loop),
   ("adapt",adapt),("x_critical_4s",x_critical_realtime),("piq_direct",piq_direct_realtime),
   ("news_recovery",recover_news_processing),("decision_learning",learning_shadow_loop),
   ("dashboard_history",dashboard_history_loop),("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)
