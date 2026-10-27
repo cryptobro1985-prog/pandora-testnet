@@ -2677,7 +2677,7 @@ def market():
       elif not STORE.save(sym,pos):
        with LOCK:
         if S["positions"].get(sym,{}).get("opened")==pos["opened"]:S["positions"].pop(sym,None)
-    whale_liq_mark_positions(valid);hype_swing_mark_positions(valid)
+    hype_swing_mark_positions(valid)
     with LOCK:S["last_checkpoint"]=now()
   except LeaseLost as e:
    S["engine_active"]=False;S["engine_error"]=str(e)
