@@ -9,7 +9,7 @@ A mature partial M15 candle plus live flow can protect earned profit before the 
 import math
 import statistics
 
-POLICY = "local_swing_h1_bias_m15_execution_v11_pending_extreme_guard"
+POLICY = "local_swing_h1_fractal_m15_execution_v12"
 SYMBOL = "HYPE"  # backwards-compatible primary symbol
 SYMBOLS = ("HYPE", "NEAR")
 INTERVAL = "1h"
@@ -95,14 +95,10 @@ def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL):
     local_low = (
         p["l"] <= min(prior_lows)
         and x["l"] > p["l"]
-        and x["c"] > p["c"]
-        and x["c"] > x["o"]
     )
     local_high = (
         p["h"] >= max(prior_highs)
         and x["h"] < p["h"]
-        and x["c"] < p["c"]
-        and x["c"] < x["o"]
     )
 
     closes = [z["c"] for z in candles]

@@ -147,3 +147,15 @@ class LocalV11Regressions(unittest.TestCase):
         finally:
             app._LOCAL_CANDLE_CACHE.clear();app._LOCAL_CANDLE_CACHE.update(cache)
             app._LOCAL_CANDLE_CHECKPOINTED.clear();app._LOCAL_CANDLE_CHECKPOINTED.update(seen)
+
+    def test_h1_high_is_confirmed_by_lower_high_even_on_green_confirmation(self):
+        rows=self.pending_rows(1)
+        rows[-1].update(o=108,h=109,l=107,c=108.5)
+        r=analyze(rows,9*H+1001)
+        self.assertEqual((r['entry_side'],r['pivot_type']),(-1,'LOCAL_HIGH'))
+
+    def test_h1_low_is_confirmed_by_higher_low_even_on_red_confirmation(self):
+        rows=self.pending_rows(-1)
+        rows[-1].update(o=92,h=93,l=91,c=91.5)
+        r=analyze(rows,9*H+1001)
+        self.assertEqual((r['entry_side'],r['pivot_type']),(1,'LOCAL_LOW'))
