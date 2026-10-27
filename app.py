@@ -2788,6 +2788,234 @@ def local_experiment_loop():
  finally:
   pool.shutdown(wait=False,cancel_futures=True)
 
+
+def _comparison_mtm(state_name,prices):
+ with LOCK:
+  realized=float(S.get(state_name+"_equity",500.0) or 0)
+  positions=copy.deepcopy(S.get(state_name+"_positions",{}))
+ unreal=0.0;used=0.0
+ for symbol,pos in positions.items():
+  mark=float(prices.get(symbol,pos["entry"]))
+  unreal+=paper_pnl(pos["notional"],pos["entry"],mark,pos["side"],FEE)
+  used+=float(pos.get("margin",0) or 0)
+ total=realized+unreal
+ return total,used,max(0.0,total-used),unreal
+
+def _comparison_anchor(state_name,symbol):
+ with LOCK:
+  pos=copy.deepcopy(S.get(state_name+"_positions",{}).get(symbol))
+  watch=copy.deepcopy(S.get(state_name+"_watch",{}).get(symbol)) if state_name=="local_s1" else None
+ source=pos or watch
+ if source:
+  features=copy.deepcopy(source.get("features") or (source.get("context") or {}).get("anchor") or {})
+  side=int(source.get("side") or features.get("entry_side") or 0)
+  if side in (-1,1):
+   candle=int(features.get("signal_candle_time") or features.get("origin_h1_signal_candle") or source.get("signal_candle_time") or source.get("origin_signal_candle") or 0)
+   return {"ready":True,"persisted":True,"anchor_confirmed":True,"h1_direction_anchor":True,
+    "pivot_type":features.get("pivot_type") or ("LOCAL_HIGH" if side<0 else "LOCAL_LOW"),
+    "pivot_price":features.get("pivot_price"),"entry_side":side,"signal_candle_time":candle,
+    "pivot_candle_time":int(features.get("pivot_candle_time") or candle),"entry_blocked":False,
+    "pending_pivot_type":None,"pending_pivot_price":None,"entry_block_reason":None,
+    "reason":"comparison_persisted_h1_anchor"}
+ return _local_persisted_anchor(symbol)
+
+@account_mutation
+def _comparison_open(prefix,state_name,symbol,side,analysis,mark,entry_kind):
+ if side not in (-1,1):return False
+ with LOCK:
+  if not S.get("engine_active") or symbol in S.get(state_name+"_positions",{}):return False
+ prices=dict(S.get("_prices",{}))
+ equity,used,free,_=_comparison_mtm(state_name,prices)
+ margin=max(.01,equity*.20)
+ if free+1e-9<margin:return False
+ leverage=25.0;notional=margin*leverage;opened=now();epoch=time.time()
+ features={**copy.deepcopy(analysis),"strategy_name":state_name,"entry_kind":entry_kind,
+   "reference_margin_fraction":.20,"reference_leverage":25.0,"estimated_round_trip_cost_move":2*FEE+.0004,
+   "origin_h1_signal_candle":int(analysis.get("signal_candle_time") or 0)}
+ pos={"symbol":symbol,"side":int(side),"entry":float(mark),"notional":notional,"margin":margin,"leverage":leverage,
+      "opened":opened,"t":epoch,"signal_candle_time":int(analysis.get("signal_candle_time") or 0),"features":features}
+ with pg() as db:
+  with db.transaction():
+   STORE.fence(db)
+   row=db.execute(f"""insert into {prefix}_positions(symbol,side,entry,notional,margin,leverage,opened,opened_epoch,signal_candle_time,features)
+     values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(symbol) do nothing returning symbol""",
+     (symbol,int(side),float(mark),notional,margin,leverage,opened,epoch,pos["signal_candle_time"],json.dumps(features,default=str))).fetchone()
+   if not row:return False
+   if prefix=="local_s1":db.execute("delete from local_s1_watchlist where symbol=%s",(symbol,))
+ with LOCK:
+  S.setdefault(state_name+"_positions",{})[symbol]=pos
+  if state_name=="local_s1":S.setdefault("local_s1_watch",{}).pop(symbol,None)
+ return True
+
+@account_mutation
+def _comparison_close(prefix,state_name,symbol,mark,reason,arm_watch=False):
+ with LOCK:pos=copy.deepcopy(S.get(state_name+"_positions",{}).get(symbol))
+ if not pos:return None
+ pnl=paper_pnl(pos["notional"],pos["entry"],float(mark),pos["side"],FEE)
+ features=copy.deepcopy(pos.get("features") or {});features["actual_exit_reason"]=reason;features["actual_exit_mark"]=float(mark)
+ watch=None
+ if arm_watch and state_name=="local_s1":
+  watch={"symbol":symbol,"side":int(pos["side"]),"origin_signal_candle":int(pos.get("signal_candle_time") or 0),
+   "exit_price":float(mark),"exit_at":now(),"reentries":int(features.get("swing_reentries",0) or 0),
+   "context":{"phase":"WAIT_PULLBACK","counter_pressure_seen":True,"anchor":copy.deepcopy(features)}}
+ with pg() as db:
+  with db.transaction():
+   STORE.fence(db)
+   row=db.execute(f"delete from {prefix}_positions where symbol=%s and opened=%s returning symbol",(symbol,pos["opened"])).fetchone()
+   if not row:return None
+   acct=db.execute(f"""update {prefix}_account_state set equity=equity+%s,realized_pnl=realized_pnl+%s,updated_at=%s
+     where id=1 returning equity,realized_pnl""",(pnl,pnl,now())).fetchone()
+   db.execute(f"""insert into {prefix}_trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,margin,notional,leverage,features)
+     values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
+     (pos["opened"],now(),symbol,pos["side"],pos["entry"],float(mark),pnl,reason,pos["margin"],pos["notional"],pos["leverage"],json.dumps(features,default=str)))
+   if watch:
+    db.execute("""insert into local_s1_watchlist(symbol,side,origin_signal_candle,exit_price,exit_at,reentries,context)
+      values(%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(symbol) do update set side=excluded.side,
+      origin_signal_candle=excluded.origin_signal_candle,exit_price=excluded.exit_price,exit_at=excluded.exit_at,
+      reentries=excluded.reentries,context=excluded.context""",
+      (symbol,watch["side"],watch["origin_signal_candle"],watch["exit_price"],watch["exit_at"],watch["reentries"],json.dumps(watch["context"],default=str)))
+ with LOCK:
+  S.setdefault(state_name+"_positions",{}).pop(symbol,None)
+  S[state_name+"_equity"]=float(acct["equity"]);S[state_name+"_realized_pnl"]=float(acct["realized_pnl"])
+  S[state_name+"_trades"]=int(S.get(state_name+"_trades",0) or 0)+1
+  if watch:S.setdefault("local_s1_watch",{})[symbol]=watch
+ return {"pnl":pnl,"equity":float(acct["equity"]),"reason":reason}
+
+@account_mutation
+def _s1_watch_update(symbol,watch,mark,m15,flow):
+ updated=caterpillar_update_watch(watch,float(mark),m15,flow,time.time())
+ with pg() as db:
+  with db.transaction():
+   STORE.fence(db)
+   db.execute("update local_s1_watchlist set context=%s::jsonb where symbol=%s",
+    (json.dumps(updated.get("context") or {},default=str),symbol))
+ with LOCK:
+  if symbol in S.get("local_s1_watch",{}):S["local_s1_watch"][symbol]=copy.deepcopy(updated)
+ return updated
+
+def _comparison_stats(prefix):
+ try:
+  with pg() as db:
+   row=db.execute(f"""select count(*) n,coalesce(sum(pnl),0) pnl,
+     sum(case when pnl>0 then 1 else 0 end) wins from {prefix}_trade_history""").fetchone()
+  n=int(row["n"] or 0);wins=int(row["wins"] or 0)
+  return {"trades":n,"wins":wins,"win_rate":round(wins/n,4) if n else None,"realized_pnl":float(row["pnl"] or 0)}
+ except Exception as exc:return {"error":type(exc).__name__+":"+str(exc)[:120]}
+
+def comparison_strategies_loop():
+ pool=concurrent.futures.ThreadPoolExecutor(max_workers=16,thread_name_prefix="local-compare")
+ while not SHUTDOWN.is_set():
+  try:
+   with LOCK:
+    if not S.get("engine_active"):
+     SHUTDOWN.wait(1);continue
+   prices=refresh_market_prices(max_age=8.0)
+   jobs={}
+   for symbol in LOCAL_EXPERIMENT_SYMBOLS:
+    jobs[(symbol,"h1")]=pool.submit(_local_h1_candles,symbol)
+    jobs[(symbol,"m15")]=pool.submit(_local_m15_candles,symbol)
+   fetched={};errors={}
+   for key,fut in jobs.items():
+    try:fetched[key]=fut.result(timeout=12)
+    except Exception as exc:errors[key]=type(exc).__name__+":"+str(exc)[:120]
+   s1_details={};s2_details={}
+   for symbol in LOCAL_EXPERIMENT_SYMBOLS:
+    mark=prices.get(symbol)
+    if not mark:
+     s1_details[symbol]={"ok":False,"error":"mark_unavailable"};s2_details[symbol]={"ok":False,"error":"mark_unavailable"};continue
+    h1_error=errors.get((symbol,"h1"))
+    anchor1=_comparison_anchor("local_s1",symbol) if h1_error else None
+    anchor2=_comparison_anchor("local_s2",symbol) if h1_error else None
+    if h1_error and not anchor1 and not anchor2:
+     s1_details[symbol]={"ok":False,"error":h1_error};s2_details[symbol]={"ok":False,"error":h1_error};continue
+    if h1_error:
+     a1=anchor1 or anchor2;a2=anchor2 or anchor1
+    else:
+     h1_rows,h1_ms=fetched[(symbol,"h1")]
+     live=local_h1_direction(h1_rows,h1_ms,symbol)
+     a1=copy.deepcopy(live);a2=copy.deepcopy(live)
+    m15_rows,m15_ms=fetched.get((symbol,"m15"),([],int(time.time()*1000)))
+    flow=MARKET_OBS.flow_context(symbol,time.time())
+
+    # Strategy 1: restored profitable H1->M15 Caterpillar with cost-aware profit floor.
+    with LOCK:
+     p1=copy.deepcopy(S.get("local_s1_positions",{}).get(symbol));w1=copy.deepcopy(S.get("local_s1_watch",{}).get(symbol))
+    side1=int((p1 or w1 or {}).get("side") or a1.get("entry_side") or 1)
+    m15=analyze_local_m15(m15_rows,m15_ms,side1)
+    act1=None
+    if p1:
+     h1exit=hype_position_exit(p1,a1,float(mark)) if a1.get("ready") else None
+     entry=float(p1["entry"]);favorable=int(p1["side"])*(float(mark)/entry-1.0)
+     floor=max(.0002,float((p1.get("features") or {}).get("estimated_round_trip_cost_move",0) or 0))
+     be=caterpillar_breakeven(p1,float(mark))
+     if h1exit and favorable>floor:
+      if _comparison_close("local_s1","local_s1",symbol,float(mark),h1exit+"_profit_only"):act1="H1_OPPOSITE_EXIT"
+     elif be is not None:
+      if _comparison_close("local_s1","local_s1",symbol,float(mark),"v10_cost_aware_profit_floor",True):act1="PROFIT_FLOOR_EXIT"
+     elif caterpillar_pressure_exit(p1,m15,float(mark),flow) and favorable>floor:
+      if _comparison_close("local_s1","local_s1",symbol,float(mark),"m15_pressure_reversal_profit_only",True):act1="M15_WEAKENING_EXIT"
+    else:
+     if w1:
+      if a1.get("ready") and int(a1.get("entry_side") or 0)==-int(w1.get("side") or 0):
+       with pg() as db:
+        with db.transaction():STORE.fence(db);db.execute("delete from local_s1_watchlist where symbol=%s",(symbol,))
+       with LOCK:S.setdefault("local_s1_watch",{}).pop(symbol,None)
+       w1=None;act1="WATCH_INVALIDATED_BY_H1"
+      else:w1=_s1_watch_update(symbol,w1,float(mark),m15,flow)
+     if w1 and caterpillar_reentry_ready(int(w1["side"]),m15,float(mark),w1,flow,time.time()):
+      if _comparison_open("local_s1","local_s1",symbol,int(w1["side"]),a1,float(mark),"REENTRY"):act1="M15_RECOVERY_REENTRY"
+     elif not w1 and a1.get("ready") and not a1.get("entry_blocked"):
+      imbalance=flow.get("flow_imbalance") if flow.get("trade_data_fresh") else None
+      side=int(a1.get("entry_side") or 0)
+      if side in (-1,1) and imbalance is not None and side*float(imbalance)>=.12 and local_m15_reentry_ready(side,m15,imbalance):
+       if _comparison_open("local_s1","local_s1",symbol,side,a1,float(mark),"M15"):act1="M15_ENTRY"
+    with LOCK:p1=copy.deepcopy(S.get("local_s1_positions",{}).get(symbol));w1=copy.deepcopy(S.get("local_s1_watch",{}).get(symbol))
+    s1_details[symbol]={"ok":bool(a1.get("ready")),"h1_local":{"pivot_type":a1.get("pivot_type"),"pivot_price":a1.get("pivot_price"),
+      "entry_side":a1.get("entry_side"),"signal_candle_time":a1.get("signal_candle_time"),"persisted":a1.get("persisted",False)},
+      "position_open":bool(p1),"side":p1.get("side") if p1 else None,"watching_for_reentry":bool(w1),
+      "m15":{"ready":m15.get("ready"),"adverse_score":m15.get("adverse_score"),"recovery_score":m15.get("recovery_score")},
+      "last_action":act1 or ("IN_POSITION" if p1 else ("WAIT_RESUMPTION" if w1 else "WAIT_ENTRY")),"error":None}
+
+    # Strategy 2: pure H1 pivot-to-pivot. Never exits on M15/flow.
+    with LOCK:p2=copy.deepcopy(S.get("local_s2_positions",{}).get(symbol))
+    desired=int(a2.get("entry_side") or 0);act2=None
+    if p2 and a2.get("ready") and desired in (-1,1) and desired==-int(p2["side"]):
+     closed=_comparison_close("local_s2","local_s2",symbol,float(mark),"opposite_confirmed_h1_local")
+     if closed and _comparison_open("local_s2","local_s2",symbol,desired,a2,float(mark),"H1_FLIP"):act2="H1_FLIP"
+    elif not p2 and a2.get("ready") and desired in (-1,1) and not a2.get("entry_blocked"):
+     if _comparison_open("local_s2","local_s2",symbol,desired,a2,float(mark),"H1_ANCHOR"):act2="H1_ENTRY"
+    with LOCK:p2=copy.deepcopy(S.get("local_s2_positions",{}).get(symbol))
+    s2_details[symbol]={"ok":bool(a2.get("ready")),"h1_local":{"pivot_type":a2.get("pivot_type"),"pivot_price":a2.get("pivot_price"),
+      "entry_side":a2.get("entry_side"),"signal_candle_time":a2.get("signal_candle_time"),"persisted":a2.get("persisted",False)},
+      "position_open":bool(p2),"side":p2.get("side") if p2 else None,
+      "last_action":act2 or ("HOLD_TO_OPPOSITE_H1" if p2 else "WAIT_H1"),"error":None}
+   s1_total,s1_used,s1_free,s1_unreal=_comparison_mtm("local_s1",prices)
+   s2_total,s2_used,s2_free,s2_unreal=_comparison_mtm("local_s2",prices)
+   s1stats=_comparison_stats("local_s1");s2stats=_comparison_stats("local_s2")
+   with LOCK:
+    S["sources"]["Strategy 1 — Restored Caterpillar"]={"ok":all(x.get("ok") for x in s1_details.values()),"ready":all(x.get("ok") for x in s1_details.values()),
+      "last_check":now(),"mode":"paper_restored_v10_h1_m15_profit_floor","symbols":list(LOCAL_EXPERIMENT_SYMBOLS),
+      "starting_equity":500.0,"equity":s1_total,"realized_equity":S.get("local_s1_equity",500.0),"unrealized_pnl":s1_unreal,
+      "used_margin":s1_used,"free_margin":s1_free,"reference_margin_fraction":.20,"reference_leverage":25.0,
+      "compound":True,"open_positions":list(S.get("local_s1_positions",{})),"details":s1_details,"stats":s1stats,"error":None}
+    S["sources"]["Strategy 2 — H1 Pivot Swing"]={"ok":all(x.get("ok") for x in s2_details.values()),"ready":all(x.get("ok") for x in s2_details.values()),
+      "last_check":now(),"mode":"paper_h1_local_high_to_low_and_low_to_high","symbols":list(LOCAL_EXPERIMENT_SYMBOLS),
+      "starting_equity":500.0,"equity":s2_total,"realized_equity":S.get("local_s2_equity",500.0),"unrealized_pnl":s2_unreal,
+      "used_margin":s2_used,"free_margin":s2_free,"reference_margin_fraction":.20,"reference_leverage":25.0,
+      "compound":True,"open_positions":list(S.get("local_s2_positions",{})),"details":s2_details,"stats":s2stats,
+      "exit_rule":"LOCAL_HIGH short -> LOCAL_LOW close+long; LOCAL_LOW long -> LOCAL_HIGH close+short","error":None}
+  except LeaseLost as exc:
+   with LOCK:
+    S["sources"]["Strategy 1 — Restored Caterpillar"]={"ok":False,"error":str(exc)[:160],"last_check":now()}
+    S["sources"]["Strategy 2 — H1 Pivot Swing"]={"ok":False,"error":str(exc)[:160],"last_check":now()}
+  except Exception as exc:
+   err=type(exc).__name__+":"+str(exc)[:160]
+   with LOCK:
+    S["sources"]["Strategy 1 — Restored Caterpillar"]={"ok":False,"error":err,"last_check":now()}
+    S["sources"]["Strategy 2 — H1 Pivot Swing"]={"ok":False,"error":err,"last_check":now()}
+  SHUTDOWN.wait(5)
+ pool.shutdown(wait=False,cancel_futures=True)
+
 def hype_h1_local_swing_loop():
  last_observed={};last_observation=0.;pool=concurrent.futures.ThreadPoolExecutor(max_workers=4,thread_name_prefix="local-m15-swing")
  try:
