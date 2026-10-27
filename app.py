@@ -2868,8 +2868,14 @@ def impulse_scan():
   while not SHUTDOWN.is_set():
    started=time.monotonic()
    try:
-    with LOCK:active=S["engine_active"]
+    with LOCK:
+     active=bool(S.get("engine_active"))
+     metadata_ready=bool(S.get("_day_volumes")) and bool(S.get("_max_leverage"))
     if not active:
+     SHUTDOWN.wait(0.5);continue
+    if not metadata_ready:
+     with LOCK:S["sources"]["PumpDumpScanner"]={"ok":True,"ready":False,"warmup":True,"last_check":now(),
+       "mode":"waiting_for_market_metadata","error":None}
      SHUTDOWN.wait(0.5);continue
     prices=refresh_market_prices(max_age=8.0)
     with LOCK:
