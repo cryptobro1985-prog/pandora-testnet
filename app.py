@@ -4816,7 +4816,7 @@ if __name__=="__main__":
    SHUTDOWN.wait(2)
 
  worker_specs=[
-  ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),("market_trades",market_trade_stream),("breadth_history",market_regime_history),("confirmed_liquidations",confirmed_liquidation_stream),
+  ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),("market_trades",market_trade_stream),("breadth_history",market_regime_history),
   ("telemetry",telemetry),("pump_dump",impulse_scan),
   ("hype_h1_local_swing",hype_h1_local_swing_loop),("local_12token_h1_m15",local_experiment_loop),
   ("adapt",adapt),
