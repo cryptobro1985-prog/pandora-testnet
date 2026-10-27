@@ -45,7 +45,10 @@ class RestBudget:
             weight = self.weight(body)
             # Reserve capacity for critical live-state calls before optional recovery.
             # Metadata must be able to bootstrap Pump/Dump before any candle recovery.
-            priority = body.get('type') in ('allMids','metaAndAssetCtxs') or (body.get('type') == 'candleSnapshot' and body.get('req',{}).get('interval') in ('1h','15m'))
+            priority = body.get('type') in ('allMids','metaAndAssetCtxs')
+            # Historical candle recovery is important but bursty. Keep it behind the
+            # reserved ceiling so concurrent H1/M15 bootstrap cannot exhaust the
+            # exchange-wide REST allowance during deploy/takeover.
             ceiling = self.limit if priority else max(1, self.limit-min(100, max(2, self.limit-60)))
             if now < self.until or sum(w for _,w in self.used)+weight > ceiling:
                 self.deferred += 1
