@@ -1679,8 +1679,48 @@ def accept_local_candles(data,history=False):
    _LOCAL_CANDLE_CACHE[key]=(stamp,[merged[k] for k in sorted(merged)][-125:],wall_ms)
    if not history:_LOCAL_CANDLE_STREAM[(symbol,interval)]=(stamp,t)
 
+def accept_local_history(rows):
+ # Local bootstrap arrives as one compact 3m snapshot per market. Aggregate
+ # only complete 3m buckets into the exact H1/M15 OHLCV shapes consumed by
+ # the existing strategy; live H1/M15 subscriptions overwrite current candles.
+ if not isinstance(rows,list):return 0
+ direct=[r for r in rows if isinstance(r,dict) and r.get("i") in ("1h","15m")]
+ if direct:return accept_local_candles(direct,history=True) or len(direct)
+ by_symbol={}
+ for row in rows:
+  if not isinstance(row,dict) or row.get("i")!="3m" or row.get("s") not in ALL_LOCAL_CANDLE_SYMBOLS:continue
+  try:
+   t,T=int(row["t"]),int(row["T"])
+   vals=[float(row[k]) for k in ("o","h","l","c","v")]
+   if not all(math.isfinite(x) for x in vals) or min(vals[:4])<=0 or vals[4]<0:continue
+   if not 179000<=T-t<=180000:continue
+  except (KeyError,TypeError,ValueError,OverflowError):continue
+  by_symbol.setdefault(row["s"],[]).append(dict(row))
+ aggregated=[]
+ for symbol,source in by_symbol.items():
+  indexed={int(r["t"]):r for r in source}
+  for interval,step,parts in (("15m",900000,5),("1h",3600000,20)):
+   starts=sorted({(t//step)*step for t in indexed})
+   for start in starts:
+    required=[start+i*180000 for i in range(parts)]
+    if not all(t in indexed for t in required):continue
+    group=[indexed[t] for t in required]
+    try:
+     o=float(group[0]["o"]);c=float(group[-1]["c"])
+     h=max(float(r["h"]) for r in group);l=min(float(r["l"]) for r in group)
+     v=sum(float(r.get("v",0) or 0) for r in group)
+     n=sum(int(r.get("n",0) or 0) for r in group)
+    except (TypeError,ValueError,OverflowError):continue
+    aggregated.append({"s":symbol,"i":interval,"t":start,"T":start+step-1,
+      "o":str(o),"h":str(h),"l":str(l),"c":str(c),"v":str(v),"n":n})
+ accept_local_candles(aggregated,history=True)
+ return len(aggregated)
+
+def _local_min_history_rows(interval):
+ return 6 if interval=="1h" else 9
+
 def _local_cached_interval_fresh(cached,interval):
- if not cached or len(cached[1])<10:return False
+ if not cached or len(cached[1])<_local_min_history_rows(interval):return False
  try:
   step=3600000 if interval=="1h" else 900000
   row=cached[1][-1]
@@ -1700,11 +1740,11 @@ def _local_candles(symbol,interval,hours):
  with _LOCAL_CANDLE_CACHE_LOCK:
   cached=_LOCAL_CANDLE_CACHE.get(key)
   stream=_LOCAL_CANDLE_STREAM.get((symbol,interval))
-  if cached and stream and stamp-stream[0]<45 and len(cached[1])>=10:
+  if cached and stream and stamp-stream[0]<45 and len(cached[1])>=_local_min_history_rows(interval):
    return cached[1],int(time.time()*1000)
   if _local_cached_interval_fresh(cached,interval):
    return cached[1],int(time.time()*1000)
-  if cached and len(cached[1])>=10 and stamp-cached[0]<ttl:return cached[1],int(time.time()*1000)
+  if cached and len(cached[1])>=_local_min_history_rows(interval) and stamp-cached[0]<ttl:return cached[1],int(time.time()*1000)
   with LOCK:stream_state=copy.deepcopy(S.get("sources",{}).get("MarketTradeStream",{}))
   if stream_state.get("ok") and int(stream_state.get("history_pending",0) or 0)>0:
    raise RuntimeError("local_swing_candle_ws_history_warmup:"+symbol+":"+interval)
@@ -1718,7 +1758,7 @@ def _local_candles(symbol,interval,hours):
    cached=_LOCAL_CANDLE_CACHE.get(key)
    if _local_cached_interval_fresh(cached,interval):
     return cached[1],int(time.time()*1000)
-   if cached and len(cached[1])>=10 and stamp-cached[0]<ttl:return cached[1],int(time.time()*1000)
+   if cached and len(cached[1])>=_local_min_history_rows(interval) and stamp-cached[0]<ttl:return cached[1],int(time.time()*1000)
    with LOCK:stream_state=copy.deepcopy(S.get("sources",{}).get("MarketTradeStream",{}))
    if stream_state.get("ok") and int(stream_state.get("history_pending",0) or 0)>0:
     raise RuntimeError("local_swing_candle_ws_history_warmup:"+symbol+":"+interval)
@@ -1726,7 +1766,7 @@ def _local_candles(symbol,interval,hours):
     if cached and stamp-cached[0]<max_stale:return cached[1],cached[2]
     raise RuntimeError("local_swing_candle_rate_limit_backoff:"+symbol+":"+interval)
   end_ms=int(time.time()*1000);start_ms=end_ms-int(max(12,hours)*3600*1000)
-  if cached and len(cached[1])>=10:
+  if cached and len(cached[1])>=_local_min_history_rows(interval):
    step=3600000 if interval=="1h" else 900000
    start_ms=max(start_ms,int(cached[1][-1]["t"])-step)
   try:
@@ -2863,7 +2903,7 @@ def market_trade_stream():
   return listed|LIQ_WHALE_SYMBOLS|held
  def report(status):
   with LOCK:S["sources"]["MarketTradeStream"]={"last_check":now(),**status}
- run_trade_stream(MARKET_OBS,SHUTDOWN,symbols,report,os.getenv("HYPERLIQUID_WS_API","wss://api.hyperliquid.xyz/ws"),on_mids=accept_market_prices,on_candles=accept_local_candles,candle_symbols=ALL_LOCAL_CANDLE_SYMBOLS,on_candle_history=lambda rows:accept_local_candles(rows,history=True),regime_symbols=REGIME_SEED_SYMBOLS,on_regime_candles=accept_regime_candles)
+ run_trade_stream(MARKET_OBS,SHUTDOWN,symbols,report,os.getenv("HYPERLIQUID_WS_API","wss://api.hyperliquid.xyz/ws"),on_mids=accept_market_prices,on_candles=accept_local_candles,candle_symbols=ALL_LOCAL_CANDLE_SYMBOLS,on_candle_history=accept_local_history,regime_symbols=REGIME_SEED_SYMBOLS,on_regime_candles=accept_regime_candles)
 
 def market_metadata():
  while not SHUTDOWN.is_set():
