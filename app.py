@@ -2964,59 +2964,27 @@ def impulse_scan():
  finally:pool.shutdown(wait=False,cancel_futures=True)
 
 def market_regime_history():
- # Websocket 1m seed is the primary H1/H4 breadth history. REST is recovery
- # only for the minimum missing seed market, never a 24-market startup fan-out.
+ # Read-only health view. MarketHistoryBootstrap is the sole REST owner for
+ # historical seed candles; this worker never competes for exchange budget.
  while not SHUTDOWN.is_set():
   with LOCK:
    active=bool(S.get("engine_active"))
    snapshot={sym:list(S.get("_regime_candles",{}).get(sym,[])) for sym in REGIME_SEED_SYMBOLS}
+   bootstrap=copy.deepcopy(S.get("sources",{}).get("MarketHistoryBootstrap",{}))
   if not active:
    SHUTDOWN.wait(2);continue
   stamp=time.time()
   def usable(rows):
    return bool(rows and stamp-rows[-1][0]<90 and any(0<=stamp-14400-t<=65 for t,_ in rows))
   ready=[sym for sym,rows in snapshot.items() if usable(rows)]
-  errors={}
-  recovered=[]
-  with LOCK:
-   metadata_ready=bool(S.get("_day_volumes")) and bool(S.get("_max_leverage"))
-   stream=copy.deepcopy(S.get("sources",{}).get("MarketTradeStream",{}))
-  ws_history_ready=bool(stream.get("ok")) and int(stream.get("history_pending",0) or 0)==0
-  # Never compete with metadata/bootstrap. REST breadth recovery is last resort.
-  if len(ready)<5 and metadata_ready and ws_history_ready:
-   for sym in REGIME_SEED_SYMBOLS:
-    if sym in ready:continue
-    try:
-     status=HL_REST_BUDGET.status()
-     if float(status.get("cooldown_seconds",0) or 0)>0:
-      raise RestDeferred("shared_rest_cooldown")
-     prior=snapshot.get(sym,[])
-     start=max(stamp-6*3600,prior[-1][0]-120) if prior else stamp-6*3600
-     rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":sym,"interval":"1m",
-       "startTime":int(start*1000),"endTime":int(stamp*1000)}}))
-     if not isinstance(rows,list):raise ValueError("invalid_candle_history")
-     parsed=[(float(r["T"])/1000,float(r["c"])) for r in rows
-       if isinstance(r,dict) and 0<float(r.get("T",0))/1000<stamp and float(r.get("c",0))>0]
-     if not parsed:raise ValueError("empty_completed_candles")
-     with LOCK:
-      prior_live=S.setdefault("_regime_candles",{}).get(sym,[])
-      merged=dict(prior_live);merged.update(dict(parsed))
-      S["_regime_candles"][sym]=sorted(merged.items())[-360:]
-      current=list(S["_regime_candles"][sym])
-     if usable(current):
-      ready.append(sym);recovered.append(sym)
-     if len(ready)>=5:break
-    except Exception as exc:
-     errors[sym]=type(exc).__name__+":"+str(exc)[:80]
   ok=len(set(ready))>=5
-  with LOCK:S["sources"]["MarketBreadthHistory"]={"ok":ok,"last_check":now(),
+  with LOCK:S["sources"]["MarketBreadthHistory"]={"ok":ok,"warmup":not ok,"last_check":now(),
     "loaded_markets":len(set(ready)),"requested_markets":len(REGIME_SEED_SYMBOLS),
-    "mode":"completed_1m_H1_H4_context","refresh_seconds":300 if ok else 15,
-    "transport":"websocket_seed_primary_single_rest_recovery",
-    "seed_symbols":list(REGIME_SEED_SYMBOLS),"recovered_via_rest":recovered,
-    "error":None if ok else errors}
-  SHUTDOWN.wait(300 if ok else 15)
-
+    "mode":"completed_1m_H1_H4_context","refresh_seconds":15,
+    "transport":"read_only_from_single_history_bootstrap_plus_live_ws",
+    "seed_symbols":list(REGIME_SEED_SYMBOLS),"bootstrap":bootstrap,
+    "error":None if ok else "waiting_for_single_history_bootstrap"}
+  SHUTDOWN.wait(15)
 
 def market_history_bootstrap():
  # Single owner, paced startup recovery. Runs only after engine lease + metadata.
@@ -4698,7 +4666,11 @@ def operations_diagnostics():
      "decision_learning_source":copy.deepcopy(S["sources"].get("DecisionLearning",{})),
      "daily_audit":daily,"news_health":copy.deepcopy(S.get("news_health",{})),
      "learning":{"samples":S.get("adaptive",{}).get("samples",0),"generated_at":S.get("adaptive",{}).get("generated_at"),"policy":S.get("adaptive",{}).get("policy")},
-     "risk_ready":health["risk_ready"],"latency_metrics":LATENCIES.snapshot(time.time()),"trade_stream":copy.deepcopy(S["sources"].get("MarketTradeStream",{}))}
+     "risk_ready":health["risk_ready"],"latency_metrics":LATENCIES.snapshot(time.time()),
+     "trade_stream":copy.deepcopy(S["sources"].get("MarketTradeStream",{})),
+     "history_bootstrap":copy.deepcopy(S["sources"].get("MarketHistoryBootstrap",{})),
+     "market_metadata":copy.deepcopy(S["sources"].get("MarketMetadata",{})),
+     "local12_source":copy.deepcopy(S["sources"].get("Local12TokenH1M15",{}))}
    print(json.dumps(report,ensure_ascii=False,default=str),flush=True)
   except Exception as e:print("diagnostics_error: "+str(e)[:180],flush=True)
   SHUTDOWN.wait(30)
