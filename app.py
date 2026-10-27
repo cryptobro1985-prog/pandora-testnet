@@ -3006,10 +3006,11 @@ def deep_context(sym,prices):
  except Exception:pass
  hist=S.get("_hist",{}).get(sym,[])
  if len(hist)>=3:out["market_momentum"]=hist[-1]/hist[max(0,len(hist)-3)]-1
- try:
-  of=hyperdata("/v1/orderflow/"+urllib.parse.quote(sym));fr=hyperdata("/v1/funding-rates/"+urllib.parse.quote(sym));ob=hyperdata("/v1/orderbook/"+urllib.parse.quote(sym));ls=hyperdata("/v1/long-short-ratio");liq=hyperdata("/v1/liquidations/stats?include_estimated=false");wh=hyperdata("/v1/whales");dz=hyperdata("/v1/positions/danger-zone")
-  out["cross_exchange_orderflow"]=of;out["cross_exchange_funding"]=fr;out["cross_exchange_orderbook"]=ob;out["long_short_ratio"]=ls;out["confirmed_liquidations"]=liq;out["whale_positions"]=wh;out["liquidation_danger_zone"]=dz
- except Exception:pass
+ # Heavy HyperData wallet/history endpoints are intentionally not polled from
+ # generic telemetry. WhaleLiquidationScanner owns the danger-zone feed; Local,
+ # Pump and News use direct websocket/cache inputs. This keeps advisory logging
+ # from consuming the exchange REST budget.
+ out["hyperdata_telemetry"]="owned_by_specialized_workers"
  return out
 
 def decide(title,sym,base_side,prices):
