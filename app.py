@@ -5545,6 +5545,7 @@ if __name__=="__main__":
   ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),("market_history_bootstrap",market_history_bootstrap),("market_trades",market_trade_stream),("breadth_history",market_regime_history),
   ("telemetry",telemetry),("pump_dump",impulse_scan),
   ("Caterpillar 1.0",local_experiment_loop),("local_risk",local_experiment_risk_loop),
+  ("local_strategy_comparison",comparison_strategies_loop),
   ("adapt",adapt),
   ("decision_learning",learning_shadow_loop),
   ("dashboard_history",dashboard_history_loop),("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)
