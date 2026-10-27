@@ -298,6 +298,40 @@ class RollingMarketData:
                         "volume_window_end_epoch": end * self.bucket_seconds})
             return out
 
+    def flow_context(self, symbol, epoch=None):
+        """Executed aggressive buy/sell notional, including the forming bucket.
+        One-minute dominance is the trading input; five-minute flow is context.
+        A full observed minute and a fresh trade are required for data validity.
+        """
+        epoch=time.time() if epoch is None else float(epoch)
+        out={"trade_data_fresh":False,"flow_imbalance":None,"buy_volume_60s":None,
+             "sell_volume_60s":None,"latest_trade_age_seconds":None,"window_seconds":60}
+        with self._lock:
+            state=self._symbols.get(str(symbol))
+            if state is None or not self._connected or self._heartbeat_at is None:return out
+            if state.get("dedup_overflow_until") is not None:return out
+            if not -1<=epoch-self._heartbeat_at<=self.freshness_seconds:return out
+            self._prune(state,epoch)
+            coverage=max(0.,epoch-state["since"])
+            out["trade_coverage_seconds"]=coverage
+            age=epoch-state["latest_trade"] if state["latest_trade"] is not None else None
+            out["latest_trade_age_seconds"]=age
+            if coverage<60 or age is None or not -1<=age<=self.freshness_seconds:return out
+            end=int(epoch//self.bucket_seconds)
+            buckets=state["buckets"]
+            def volumes(seconds):
+                rows=[buckets.get(i,(0.,0.,0)) for i in range(end-seconds//self.bucket_seconds+1,end+1)]
+                return sum(x[0] for x in rows),sum(x[1] for x in rows),sum(x[2] for x in rows)
+            buy,sell,count=volumes(60)
+            out.update(trade_data_fresh=True,buy_volume_60s=buy,sell_volume_60s=sell,
+                       flow_imbalance=(buy-sell)/(buy+sell) if buy+sell else 0.,
+                       trade_count_60s=count,observed_notional_60s=buy+sell,
+                       volume_window_end_epoch=epoch,volume_source="hyperliquid_ws_executed_trades")
+            if coverage>=300:
+                b5,s5,c5=volumes(300)
+                out.update(buy_volume_300s=b5,sell_volume_300s=s5,trade_count_300s=c5)
+            return out
+
     def stats(self):
         with self._lock:
             return {**self._counters, "connected": self._connected,

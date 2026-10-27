@@ -31,6 +31,8 @@ from local_caterpillar import (POLICY as CATERPILLAR_POLICY,pressure_exit as cat
  update_watch as caterpillar_update_watch,reentry_ready as caterpillar_reentry_ready,
  protective_breakeven as caterpillar_breakeven, entry_candidate as local_entry_candidate,
  rank_candidates as rank_local_candidates, SELECTION_POLICY as LOCAL_SELECTION_POLICY)
+from local_order_flow import (POLICY as LOCAL4_FLOW_POLICY, entry_candidate as local4_entry_candidate,
+ pressure_exit as local4_pressure_exit, update_watch as local4_update_watch, reentry_ready as local4_reentry_ready)
 from learning_audit import (ensure_schema as ensure_learning_schema,
                             record_decision as record_learning_decision,
                             update_labels as update_learning_labels,
@@ -56,12 +58,12 @@ from hype_h1_swing import (POLICY as HYPE_SWING_POLICY, SYMBOL as HYPE_SWING_SYM
 
 # Separate 24h Local paper experiment. Leverage follows Hyperliquid's live
 # per-market maxLeverage metadata; validated fallbacks are only for metadata outages.
-LOCAL_EXPERIMENT_SYMBOLS=("HYPE","NEAR","INIT","USELESS","GRASS","APT","TAO","CHIP","BABY","SPX","LIT","CASHCAT")
+LOCAL_EXPERIMENT_SYMBOLS=("INIT","NEAR","GRASS","HYPE")
 LOCAL_EXPERIMENT_STARTING_EQUITY=500.0
 NEWS_NEW_ENTRIES_ENABLED=False
 WHALE_NEW_ENTRIES_ENABLED=False
 LOCAL_EXPERIMENT_MARGIN_FRACTION=0.20
-LOCAL_EXPERIMENT_MAX_POSITIONS=12
+LOCAL_EXPERIMENT_MAX_POSITIONS=4
 # Legacy HYPE/NEAR book remains exit-only until its existing paper positions close.
 VALIDATED_MAX_LEVERAGE={"HYPE":10.0,"NEAR":10.0,"APT":10.0,"TAO":5.0,"SPX":5.0,"LIT":5.0,
  "INIT":3.0,"USELESS":3.0,"GRASS":3.0,"CHIP":3.0,"BABY":3.0,"CASHCAT":3.0}
@@ -702,6 +704,38 @@ def init():
   c.execute("create table if not exists trades (id integer primary key autoincrement,opened text,closed text,symbol text,side integer,entry real,exit real,pnl real,reason text,headline text)")
   c.execute("create table if not exists snapshots (ts text,markets integer,equity real,positions integer)")
   c.execute("create table if not exists event_features (id text primary key,ts text,source text,title text,symbol text,decision integer,confidence real,features text)")
+def apply_local4_user_reset():
+ # Explicit user-authorized reset, fenced after takeover, exactly once.
+ action="user-local4-reset-20261027-flow-v1"
+ with pg() as db:
+  with db.transaction():
+   STORE.fence(db)
+   if db.execute("select 1 from operator_actions where action_id=%s",(action,)).fetchone():return False
+   cleared={}
+   for table in ["hype_swing_positions","hype_swing_shadow_exits","hype_swing_signal_journal","hype_swing_trade_history","local_swing_watchlist","local_experiment_positions","local_experiment_signal_journal","local_experiment_trade_history","local_experiment_watchlist","local_v12_positions","local_v12_signal_journal","local_v12_trade_history","local_v12_watchlist","local_h1_direction","local_v12_learning_pre_v10_20261027","local_v12_positions_pre_v10_20261027","local_v12_signal_journal_pre_v10_20261027","local_v12_trade_history_pre_v10_20261027","local_v12_watchlist_pre_v10_20261027"]:
+    if not db.execute("select to_regclass(%s) as name",(table,)).fetchone()["name"]:continue
+    result=db.execute("delete from "+table)
+    cleared[table]=result.rowcount
+   db.execute("delete from trade_history where strategy like 'local%%' or strategy like 'hype%%'")
+   db.execute("delete from decision_learning_log where strategy like 'local%%' or strategy like 'hype%%'")
+   db.execute("delete from position_snapshots where strategy like 'local%%' or strategy like 'hype%%'")
+   db.execute("delete from scanner_observations where module like 'local%%' or module like 'hype%%'")
+   db.execute("""delete from audit_journal where kind like 'local%%' or kind like 'hype%%'
+     or payload->>'strategy' like 'local%%' or payload->>'strategy' like 'hype%%'""")
+   stamp=now()
+   for table in ("local_v12_account_state","local_experiment_account_state"):
+    db.execute("update "+table+" set equity=500,realized_pnl=0,started_at=%s,updated_at=%s where id=1",(stamp,stamp))
+   db.execute("update hype_swing_account_state set equity=100,realized_pnl=0,started_at=%s,updated_at=%s where id=1",(stamp,stamp))
+   db.execute("delete from local_candle_checkpoints where symbol not in ('INIT','NEAR','GRASS','HYPE')")
+   payload={"symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"starting_equity":500,"margin_fraction":.20,
+            "leverage":25,"policy":LOCAL4_FLOW_POLICY,"cleared":cleared}
+   db.execute("insert into operator_actions(action_id,completed_at,payload) values(%s,%s,%s::jsonb)",(action,stamp,json.dumps(payload)))
+ with LOCK:
+  S["local_experiment_stats"]={};S["_dashboard_history"]={}
+  S["_local4_analysis"]={};S["_local_experiment_path_persist_epoch"]={}
+  S["local_swing_positions"]={};S["local_swing_watch"]={}
+ return True
+
 def engine_coordinator():
  # On the first rollout the previous release has no lease support. Its Render
  # drain lasts 60s; wait 120s after starting the web listener before taking over.
@@ -723,6 +757,7 @@ def engine_coordinator():
    if STORE.claim():
     if not S["engine_active"]:
      with ACCOUNT_LOCK:
+      if apply_local4_user_reset():pinit()
       account,positions=STORE.load()
       # Render keeps the previous instance alive briefly during a deploy. A
       # pre-start restoration can therefore be overwritten by the draining
@@ -2247,7 +2282,7 @@ def _local_experiment_watch_clear(symbol,reason):
 
 @account_mutation
 def _local_experiment_watch_observe(symbol,watch,mark,m15,flow,stamp):
- updated=caterpillar_update_watch(watch,mark,m15,flow,stamp)
+ updated=local4_update_watch(watch,mark,m15,flow,stamp)
  before=(watch or {}).get("context") or {};context=updated.get("context") or {}
  changed=before.get("phase")!=context.get("phase")
  with LOCK:last=float(S.setdefault("_local_experiment_watch_persist_epoch",{}).get(symbol,0) or 0)
@@ -2275,8 +2310,8 @@ def local_experiment_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=N
  # Recheck at allocation time: scanning 12 markets and database writes take time.
  # A previously ranked candidate cannot bypass fresh flow or M15 confirmation.
  stamp=time.time()
- flow=MARKET_OBS.context(symbol,stamp)
- selection=local_entry_candidate(symbol,analysis,m15,flow,stamp)
+ flow=MARKET_OBS.flow_context(symbol,stamp)
+ selection=local4_entry_candidate(symbol,analysis,m15,flow,stamp)
  if not selection["eligible"]:return False
  with LOCK:current_anchor=copy.deepcopy(S.get("local_h1_direction",{}).get(symbol))
  if current_anchor and (int(current_anchor.get("entry_side") or 0)!=int(side) or
@@ -2288,7 +2323,7 @@ def local_experiment_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=N
   if int(analysis.get("entry_side") or 0)==-int(side):return False
   with LOCK:live_watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
   if not live_watch or live_watch.get("exit_at")!=watch.get("exit_at"):return False
-  if not caterpillar_reentry_ready(side,m15,price,live_watch,flow,stamp):return False
+  if not local4_reentry_ready(side,m15,price,live_watch,flow,stamp):return False
  leverage=25.0
  with LOCK:
   if not S.get("engine_active") or symbol in S.get("local_v12_positions",{}):return False
@@ -2310,7 +2345,7 @@ def local_experiment_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=N
  origin_signal=int(analysis.get("signal_candle_time") or 0)
  claim_token=int((m15 or {}).get("candle_time") or origin_signal)
  features={**analysis,"symbol":symbol,"strategy_name":"local_12token_h1_m15","experiment":"local_12token_h1_m15",
-  "policy":HYPE_SWING_POLICY,"caterpillar_policy":CATERPILLAR_POLICY,"entry_kind":entry_kind,
+  "policy":HYPE_SWING_POLICY,"caterpillar_policy":LOCAL4_FLOW_POLICY,"entry_kind":entry_kind,
   "candidate_selection":selection,
   "origin_h1_signal_candle":origin_signal,"swing_reentries":reentries,
   "reference_margin_fraction":LOCAL_EXPERIMENT_MARGIN_FRACTION,"reference_leverage":25.0,
@@ -2318,9 +2353,8 @@ def local_experiment_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=N
   "actual_margin":margin,"free_margin_before":free,"mark_to_market_equity_at_entry":equity,
   "exposure_fill_ratio":exposure_fill_ratio,"leverage":leverage,"leverage_source":"paper_fixed_25x",
   "mfe_price_move":0.0,"mae_price_move":0.0,"mfe_roe_pct":0.0,"mae_roe_pct":0.0,
-  "entry_mark":price,"profit_lock_armed":False,"profit_lock_arm_move":0.004,
-  "profit_lock_buffer_move":max(HYPE_PROFIT_LOCK_BUFFER_MOVE,2*FEE+0.0004+0.0003),
-  "profit_lock_mode":"fixed_cost_aware_breakeven","m15_entry_context":m15,
+  "entry_mark":price,"profit_lock_armed":False,
+  "profit_lock_mode":"executed_flow_reversal_only","m15_entry_context":m15,
   "m15_reentry_context":m15 if entry_kind=="REENTRY" else None,
   "reentry_watch":copy.deepcopy(watch) if entry_kind=="REENTRY" else None,
   "estimated_round_trip_cost_move":2*FEE+0.0004,"execution_cost_budget_only":True}
@@ -2364,13 +2398,13 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
  features["actual_exit_reason"]=reason;features["actual_exit_mark"]=price
  watch=None
  if reason in ("m15_adverse_pressure_profit_protect","profit_lock_stop","m15_momentum_weakening",
-               "m15_pressure_reversal","m15_pressure_reversal_profit_only","caterpillar_breakeven"):
+               "m15_pressure_reversal","m15_pressure_reversal_profit_only","caterpillar_breakeven","executed_flow_counter_dominance"):
   watch={"symbol":symbol,"side":int(pos["side"]),
    "origin_signal_candle":int(features.get("origin_h1_signal_candle") or pos.get("signal_candle_time") or 0),
    "exit_price":price,"exit_at":now(),"expires_epoch":0.0,
    "reentries":int(features.get("swing_reentries",0) or 0),"context":copy.deepcopy(watch_context or {})}
-  watch["context"].update(phase="WAIT_PULLBACK",counter_pressure_seen=reason in ("m15_pressure_reversal","m15_pressure_reversal_profit_only"),
-    caterpillar_policy=CATERPILLAR_POLICY)
+  watch["context"].update(phase="WAIT_RESUMPTION" if reason=="executed_flow_counter_dominance" else "WAIT_PULLBACK",counter_pressure_seen=reason in ("m15_pressure_reversal","m15_pressure_reversal_profit_only","executed_flow_counter_dominance"),
+    caterpillar_policy=LOCAL4_FLOW_POLICY)
  with pg() as db:
   with db.transaction():
    STORE.fence(db)
@@ -2413,38 +2447,49 @@ def local_experiment_mark_positions(prices):
  for symbol,pos in positions.items():
   mark=prices.get(symbol)
   if not mark:continue
-  features=pos.setdefault("features",{})
-  if features.get("caterpillar_policy")!=CATERPILLAR_POLICY:
-   features["profit_lock_armed"]=False
-   features.update(caterpillar_policy=CATERPILLAR_POLICY,profit_lock_mode="fixed_cost_aware_breakeven",
-     profit_lock_arm_move=.004,profit_lock_buffer_move=.0016)
-  was_armed=bool(features.get("profit_lock_armed"))
   updated,liq=hype_update_path(pos,float(mark))
-  lock_fill=caterpillar_breakeven(updated,float(mark))
-  newly_armed=not was_armed and bool((updated.get("features") or {}).get("profit_lock_armed"))
-  if lock_fill is not None and paper_pnl(updated["notional"],updated["entry"],float(lock_fill),updated["side"],FEE)>0:
-   with LOCK:
-    live=S.get("local_v12_positions",{}).get(symbol)
-    if live and live.get("opened")==pos.get("opened"):S["local_v12_positions"][symbol]=updated
-   local_experiment_close(symbol,float(lock_fill),"caterpillar_breakeven")
-   continue
+  updated.setdefault("features",{}).update(caterpillar_policy=LOCAL4_FLOW_POLICY,
+    profit_lock_armed=False,profit_lock_mode="executed_flow_reversal_only")
+  updated["features"].pop("profit_lock_stop",None)
   with LOCK:
    live=S.get("local_v12_positions",{}).get(symbol)
    if live and live.get("opened")==pos.get("opened"):S["local_v12_positions"][symbol]=updated
+  flow=MARKET_OBS.flow_context(symbol,time.time())
+  reason=local4_pressure_exit(updated,None,float(mark),flow)
+  if reason:
+   local_experiment_close(symbol,float(mark),reason,watch_context={"flow_context":flow,"observed_at":now()})
+   continue
   if liq:
    local_experiment_close(symbol,float(mark),"paper_liquidation_proxy");continue
   stamp=time.time()
   with LOCK:last=float(S.setdefault("_local_experiment_path_persist_epoch",{}).get(symbol,0) or 0)
-  if stamp-last<30 and not newly_armed:continue
-  # Keep retries due if persisting a newly armed floor fails.
-  with LOCK:S["_local_experiment_path_persist_epoch"][symbol]=0
+  if stamp-last<30:continue
   with pg() as db:
    with db.transaction():
     STORE.fence(db)
     db.execute("update local_v12_positions set features=%s::jsonb where symbol=%s and opened=%s",
-      (json.dumps(updated.get("features",{}),default=str),symbol,pos["opened"]))
+      (json.dumps(updated["features"]),symbol,pos["opened"]))
   with LOCK:S["_local_experiment_path_persist_epoch"][symbol]=stamp
 
+@account_mutation
+def local4_fast_entries(prices):
+ for symbol in LOCAL_EXPERIMENT_SYMBOLS:
+  with LOCK:
+   if symbol in S.get("local_v12_positions",{}):continue
+   analysis=copy.deepcopy(S.get("_local4_analysis",{}).get(symbol))
+   watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
+  mark=prices.get(symbol)
+  if not analysis or not mark:continue
+  side=int(analysis.get("entry_side") or 0)
+  if watch and int(watch.get("side") or 0)==-side:
+   _local_experiment_watch_clear(symbol,"opposite_h1_pivot_invalidated_watch");watch=None
+  flow=MARKET_OBS.flow_context(symbol,time.time())
+  if watch:
+   watch=_local_experiment_watch_observe(symbol,watch,float(mark),None,flow,time.time())
+   if local4_reentry_ready(side,None,mark,watch,flow,time.time()):
+    local_experiment_open(symbol,side,analysis,"REENTRY",None,watch)
+  elif local4_entry_candidate(symbol,analysis,None,flow,time.time())["eligible"]:
+   local_experiment_open(symbol,side,analysis,"ORDER_FLOW")
 
 def local_experiment_risk_loop():
  # Protect observed peaks even while H1/M15 history fetches or scans are slow.
@@ -2457,7 +2502,8 @@ def local_experiment_risk_loop():
     prices=dict(S.get("_prices",{}))
    if active and 0<=age<=8 and prices:
     local_experiment_mark_positions(prices)
-    with LOCK:S["sources"]["LocalRisk"]={"ok":True,"last_check":now(),"mode":"fresh_mark_profit_floor"}
+    local4_fast_entries(prices)
+    with LOCK:S["sources"]["LocalRisk"]={"ok":True,"last_check":now(),"mode":"executed_buy_sell_dominance"}
   except LeaseLost as exc:
    with LOCK:
     S["engine_active"]=False;S["engine_error"]=str(exc)
@@ -2531,18 +2577,20 @@ def local_experiment_loop():
     for symbol in LOCAL_EXPERIMENT_SYMBOLS:
      mark=prices.get(symbol)
      if (symbol,"h1") in fetch_errors or not mark:
+      with LOCK:S.setdefault("_local4_analysis",{}).pop(symbol,None)
       details[symbol]={"ok":False,"error":fetch_errors.get((symbol,"h1")) or "mark_unavailable","max_leverage":market_max_leverage(symbol)}
       continue
      h1_rows,h1_ms=fetched[(symbol,"h1")]
      m15_rows,m15_ms=fetched.get((symbol,"m15"),([],int(time.time()*1000)))
      analysis=local_h1_direction(h1_rows,h1_ms,symbol)
+     with LOCK:S.setdefault("_local4_analysis",{})[symbol]=copy.deepcopy(analysis)
      h1_context=analyze_local_h1_context(h1_rows,h1_ms,symbol)
      with LOCK:
       pos=copy.deepcopy(S.get("local_v12_positions",{}).get(symbol))
       watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
      target_side=int((pos or watch or {}).get("side") or analysis.get("entry_side") or 1)
      m15_live=analyze_local_m15(m15_rows,m15_ms,target_side)
-     flow=MARKET_OBS.context(symbol,time.time())
+     flow=MARKET_OBS.flow_context(symbol,time.time())
      flow_imb=flow.get("flow_imbalance") if flow.get("trade_data_fresh") else None
      candle=analysis.get("signal_candle_time")
      if analysis.get("ready") and candle!=last_observed.get(symbol):
@@ -2557,7 +2605,7 @@ def local_experiment_loop():
        # M15 exits likewise follow confirmed pressure, independently of PnL.
        closed=local_experiment_close(symbol,float(mark),h1_exit,analysis)
        action="H1_DIRECTION_INVALIDATION_EXIT:"+h1_exit if closed else None
-      elif pressure_reason:=caterpillar_pressure_exit(pos,m15_live,float(mark),flow):
+      elif pressure_reason:=local4_pressure_exit(pos,m15_live,float(mark),flow):
        watch_context={"m15":m15_live,"h1_context":h1_context,"flow_imbalance":flow_imb,"flow_context":flow,
          "flow_source":"hyperliquid_ws_trades","observed_at":now(),"reason":pressure_reason}
        closed=local_experiment_close(symbol,float(mark),pressure_reason,analysis,watch_context)
@@ -2568,15 +2616,15 @@ def local_experiment_loop():
       if watch:
        if analysis.get("ready") and int(analysis.get("entry_side") or 0)==-int(watch.get("side") or 0):
         _local_experiment_watch_clear(symbol,"opposite_h1_pivot_invalidated_watch");watch=None;action="WATCH_INVALIDATED_BY_H1"
-       elif not analysis.get("entry_blocked") and caterpillar_reentry_ready(int(watch.get("side") or 0),m15_live,float(mark),watch,flow,time.time()):
-        selection=local_entry_candidate(symbol,analysis,m15_live,flow,time.time())
+       elif not analysis.get("entry_blocked") and local4_reentry_ready(int(watch.get("side") or 0),m15_live,float(mark),watch,flow,time.time()):
+        selection=local4_entry_candidate(symbol,analysis,m15_live,flow,time.time())
         if selection["eligible"]:
          entry_queue.append({**selection,"analysis":analysis,"m15":m15_live,"watch":watch,"entry_kind":"REENTRY"})
          action="CANDIDATE_REENTRY"
       if not watch and not action:
-       selection=local_entry_candidate(symbol,analysis,m15_live,flow,time.time())
+       selection=local4_entry_candidate(symbol,analysis,m15_live,flow,time.time())
        if selection["eligible"]:
-        entry_queue.append({**selection,"analysis":analysis,"m15":m15_live,"watch":None,"entry_kind":"M15"})
+        entry_queue.append({**selection,"analysis":analysis,"m15":m15_live,"watch":None,"entry_kind":"ORDER_FLOW"})
         action="CANDIDATE_ENTRY"
        else:action="WAIT:"+selection["reason"]
      with LOCK:
@@ -2585,7 +2633,7 @@ def local_experiment_loop():
      equity,used,free=_local_experiment_margin_state()
      ref_notional=equity*LOCAL_EXPERIMENT_MARGIN_FRACTION*25.0
      lev=25.0;required_margin=ref_notional/25.0
-     details[symbol]={"ok":bool(analysis.get("ready") and m15_live.get("ready")),"symbol":symbol,"mark":float(mark),"max_leverage":lev,
+     details[symbol]={"ok":bool(analysis.get("ready")),"symbol":symbol,"mark":float(mark),"max_leverage":lev,
        "target_notional":round(ref_notional,4),"required_margin_for_full_target":round(required_margin,4),
        "position_open":bool(live),"side":int(live.get("side")) if live else None,
        "actual_margin":float(live.get("margin")) if live else None,"actual_notional":float(live.get("notional")) if live else None,
@@ -2600,10 +2648,10 @@ def local_experiment_loop():
        "m15_live":{"ready":bool(m15_live.get("ready")),"partial":m15_live.get("partial"),
         "adverse_score":m15_live.get("adverse_score"),"recovery_score":m15_live.get("recovery_score"),
         "flow_imbalance":flow_imb},"last_action":action,
-       "error":fetch_errors.get((symbol,"m15")) or (analysis.get("reason") if not analysis.get("ready") else (m15_live.get("reason") if not m15_live.get("ready") else None))}
+       "error":analysis.get("reason") if not analysis.get("ready") else None}
     # Complete risk management for every symbol before allocating scarce margin.
     # The configured token order must never decide which signal receives capital.
-    ranked=rank_local_candidates(entry_queue)
+    ranked=entry_queue
     for rank,candidate in enumerate(ranked,1):
      symbol=candidate["symbol"]
      selection={k:v for k,v in candidate.items() if k not in ("analysis","m15","watch")}
@@ -2626,14 +2674,14 @@ def local_experiment_loop():
      S["local_experiment_stats"]=stats
      S["sources"]["Local12TokenH1M15"]={"ok":ready_all or bootstrap_wait,"ready":ready_all,
        "warmup":bootstrap_wait and not ready_all,"last_check":now(),
-       "mode":"paper_h1_m15_caterpillar_v10_fixed25x_mtm_compound","policy":CATERPILLAR_POLICY,
+       "mode":"paper_local4_h1_executed_flow_20pct_25x","policy":LOCAL4_FLOW_POLICY,
        "symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"paper_only":True,"starting_equity":LOCAL_EXPERIMENT_STARTING_EQUITY,
        "equity":equity,"used_margin":used,"free_margin":free,"realized_pnl":S.get("local_experiment_realized_pnl",0),
        "trades":S.get("local_experiment_trades",0),"open_positions":list(S.get("local_v12_positions",{})),
        "watching_for_reentry":list(S.get("local_experiment_watch",{})),"reference_margin_fraction":LOCAL_EXPERIMENT_MARGIN_FRACTION,
        "reference_leverage":25.0,"sizing":"20pct_current_mtm_equity_fixed25x_free_profit_reinvestment",
        "max_positions":LOCAL_EXPERIMENT_MAX_POSITIONS,"compound":True,"details":details,"stats":stats,
-       "selection_policy":LOCAL_SELECTION_POLICY,"ranked_candidates":[c["symbol"] for c in ranked],
+       "selection_policy":LOCAL4_FLOW_POLICY,"ranked_candidates":[c["symbol"] for c in ranked],
        "rest_transport":HL_REST_BUDGET.status(),
        "error":None if (ready_all or bootstrap_wait) else "partial_symbol_scan_failure"}
    except LeaseLost as exc:
@@ -4891,7 +4939,7 @@ def html_dashboard(data):
  exp_by_symbol=exp_stats.get("by_symbol") or {}
  exp_day=exp_stats.get("rolling_24h") or {}
  exp_day_wr="—" if exp_day.get("win_rate") is None else str(round(float(exp_day["win_rate"])*100,1))+"%"
- exp_cards='<div class="grid"><b>12-TOKEN LOCAL v10<br>%s</b><b>START<br>$500</b><b>MTM EQUITY<br>$%s</b><b>P&L<br><span class="%s">%s%%</span></b><b>OPEN POSITIONS<br>%s</b><b>CLOSED TRADES<br>%s</b><b>POSITION<br>20%% MTM EQUITY</b><b>LEVERAGE<br>FIXED 25x PAPER</b></div>'%("OK" if exp_engine.get("ok") else "ERROR",data.get("local_experiment_total_equity",500),"posv" if data.get("local_experiment_pnl_pct",0)>=0 else "negv",data.get("local_experiment_pnl_pct",0),len(exp_positions),data.get("local_experiment_trades",0))
+ exp_cards='<div class="grid"><b>4-TOKEN LOCAL · ORDER FLOW<br>%s</b><b>START<br>$500</b><b>MTM EQUITY<br>$%s</b><b>P&L<br><span class="%s">%s%%</span></b><b>OPEN POSITIONS<br>%s</b><b>CLOSED TRADES<br>%s</b><b>POSITION<br>20%% MTM EQUITY</b><b>LEVERAGE<br>FIXED 25x PAPER</b></div>'%("OK" if exp_engine.get("ok") else "ERROR",data.get("local_experiment_total_equity",500),"posv" if data.get("local_experiment_pnl_pct",0)>=0 else "negv",data.get("local_experiment_pnl_pct",0),len(exp_positions),data.get("local_experiment_trades",0))
  exp_realized=float(data.get("local_experiment_realized_pnl",0) or 0)
  exp_open=float(data.get("local_experiment_unrealized_pnl",0) or 0)
  exp_total_pnl=exp_realized+exp_open
@@ -4939,7 +4987,7 @@ def html_dashboard(data):
    "posv" if float(p.get("unrealized_pnl",0) or 0)>=0 else "negv",round(float(p.get("unrealized_pnl",0) or 0),4),
    st.get("trades",0),wr))
  exp_rows_html="".join(exp_rows) or '<tr><td colspan=10>No experiment data yet</td></tr>'
- exp_note=direction_table+'<div class="muted">Unified 12-token PAPER Local v10. Start $500. Every new position uses up to 20%% of current mark-to-market equity at fixed 25x PAPER leverage. Five full positions can use the original capital; realized and unrealized profit immediately increases MTM equity/free margin and can fund additional token entries. Open positions are never retroactively resized merely because equity changes. H1 owns direction; strict M15 pullback/resumption re-entry and the cost-aware profit floor are shared by all 12 tokens.</div>'
+ exp_note=direction_table+'<div class="muted">Four-token PAPER Local: INIT, NEAR, GRASS, HYPE. Start $500. Every new position uses up to 20%% of current mark-to-market equity at fixed 25x PAPER leverage. Only INIT, NEAR, GRASS and HYPE are traded. Open positions are never retroactively resized merely because equity changes. H1 owns direction. Fresh executed buys versus sells over one minute trigger exit and same-direction re-entry; five-minute flow is context. No M15 candle score or candle-close wait is used.</div>'
  pump_positions_data=data.get("pump_positions",[]) or []
  pump_total=float(data.get("pump_total_pnl",0) or 0)
  pump_cards='<div class="grid"><b>PUMP/DUMP ENGINE<br>%s</b><b>OPEN POSITIONS<br>%s</b><b>CLOSED TRADES<br>%s</b><b>REALIZED P&L<br><span class="%s">$%s</span></b><b>UNREALIZED P&L<br><span class="%s">$%s</span></b><b>TOTAL P&L<br><span class="%s">$%s</span></b></div>'%(
@@ -4961,7 +5009,7 @@ def html_dashboard(data):
  news_health_rows="".join('<tr><td>%s</td><td class="%s">%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'%(esc(k),"posv" if v.get("status")=="ACTIVE" else ("negv" if v.get("status")=="ERROR" else "warnv"),esc(v.get("status","-")),esc(v.get("latest_post_age_seconds","-")),esc(v.get("ingest_lag_seconds","-")),esc(v.get("realtime_verified",False))) for k,v in nh_sources.items()) or '<tr><td colspan=5>No news health data yet</td></tr>'
  news_health_note='<div class="muted">Last fresh: %s · %s · %s</div>'%(esc(nh.get("last_fresh_received_at") or "-"),esc(nh.get("last_fresh_source") or "-"),esc(nh.get("last_fresh_headline") or "-"))
  news="".join('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'%(esc(x["ts"]),esc(x["source"]),esc(x["symbol"]),esc(x["signal"]),esc(x["title"])) for x in data["news"][:12])
- page='''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>PANDORA LIVE</title><style>body{font-family:system-ui;background:#080b10;color:#e8edf5;margin:24px}h1{margin:0}.muted{color:#8b98aa}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:18px 0}.grid b{background:#111722;padding:16px;border-radius:12px}table{width:100%%;border-collapse:collapse;background:#0e141e;margin-bottom:22px}td,th{padding:9px;border-bottom:1px solid #202938;text-align:left;font-size:13px}th{color:#91a2b8}.posv{color:#49d17d;font-weight:700}.negv{color:#ff6262;font-weight:700}.warnv{color:#f6c453;font-weight:700}a{color:#8bc4ff}</style></head><body><p id="refreshStatus" class="muted">Connecting live updates…</p><main id="dashboardContent" data-poll="__MARKET_POLL__"><h1>PANDORA LIVE</h1><div class="muted">Paper engine · automatic updates every 5s · last market poll %s</div>%s<h2>News — статистика</h2>__NEWS_PERFORMANCE__<h2>Open positions</h2><button onclick="closePos(null)">Close Everything</button><button onclick="location.reload()">Refresh</button><p id="actionResult"></p><table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Trigger</th><th>Action</th></tr>%s</table><h2>Pump/Dump PAPER positions</h2>%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h2>Price to Value Liquidation</h2>%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h3>Whale liquidation candidates</h3><table><tr><th>Token</th><th>Trade side</th><th>Whale size</th><th>Distance</th><th>Score</th><th>Victim</th><th>Liq price</th></tr>%s</table><h2>LOCAL H1 / M15 — HYPE + NEAR</h2>%s%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>MAE / MFE ROE</th></tr>%s</table><p><a href="/local-v10/history">OPEN LOCAL v10 CLOSED TRADE HISTORY — LIVE DATABASE</a></p><h2>LOCAL H1/M15 · 12 TOKENS · $500</h2>%s%s<table><tr><th>Token</th><th>Side</th><th>Max lev</th><th>Phase</th><th>Entry kind</th><th>Entry</th><th>Mark</th><th>ROE</th><th>Target position</th><th>Required margin</th><th>Actual margin</th><th>Actual position</th><th>Exposure fill</th><th>Open P&L</th><th>Trades / WR</th></tr>%s</table><h2>LOCAL v10 — Closed trades only</h2><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>PnL</th><th>Reason</th></tr>%s</table><h2>News Scanner Health</h2>%s%s<table><tr><th>Source</th><th>Freshness</th><th>Latest post age (s)</th><th>Ingest lag (s)</th><th>Realtime verified</th></tr>%s</table><h2>Sources</h2><table><tr><th>Source</th><th>Status</th><th>Checked</th><th>Error</th></tr>%s</table><h2>Latest news</h2><table><tr><th>Time</th><th>Source</th><th>Token</th><th>Raw signal</th><th>Headline</th></tr>%s</table><p>Errors: %s · Last error: %s</p><p><a href="/api/dashboard">JSON dashboard</a> · <a href="/features">Features</a> · <a href="/trades">Trades</a> · <a href="/news">News</a></p></main><script>let closing=false,refreshing=false,refreshTimer=null;async function refreshDashboard(){clearTimeout(refreshTimer);if(refreshing||closing||document.visibilityState!=="visible"){if(document.visibilityState==="visible")refreshTimer=setTimeout(refreshDashboard,5000);return;}refreshing=true;const indicator=document.getElementById("refreshStatus");const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),10000);try{const response=await fetch("/?refresh="+Date.now(),{cache:"no-store",credentials:"same-origin",signal:controller.signal});if(!response.ok)throw new Error("HTTP "+response.status);const doc=new DOMParser().parseFromString(await response.text(),"text/html");const incoming=doc.getElementById("dashboardContent");if(!incoming)throw new Error("Invalid dashboard response");if(closing)return;const current=document.getElementById("dashboardContent");const top=window.scrollY;current.replaceWith(document.importNode(incoming,true));window.scrollTo(0,top);const marketAt=Date.parse(incoming.dataset.poll);const age=Number.isFinite(marketAt)?Math.max(0,(Date.now()-marketAt)/1000):null;indicator.textContent="Updated "+new Date().toLocaleTimeString()+(age===null?" · market freshness unavailable":" · market age "+age.toFixed(1)+"s")+(age!==null&&age>20?" · MARKET DATA STALE":"");indicator.style.color=age!==null&&age<=20?"#49d17d":"#f6c453"}catch(error){indicator.textContent="Update failed; retrying automatically · "+String(error);indicator.style.color="#ff6262"}finally{clearTimeout(timeout);refreshing=false;if(document.visibilityState==="visible")refreshTimer=setTimeout(refreshDashboard,5000)}}document.addEventListener("visibilitychange",()=>{clearTimeout(refreshTimer);if(document.visibilityState==="visible")refreshDashboard()});refreshTimer=setTimeout(refreshDashboard,5000);async function closePos(sym){if(closing||!confirm(sym?"Close "+sym+"?":"Close ALL positions?"))return;closing=true;const status=document.getElementById("actionResult");status.textContent="Processing close request...";try{const r=await fetch("/api/positions/close",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(sym?{symbol:sym}:{all:true})});const result=await r.json();status.textContent=r.ok?"Close confirmed: "+JSON.stringify(result):(r.status===401?"Controls locked: open the control-access link once, then retry.":"Close failed ("+r.status+"): "+JSON.stringify(result));if(r.ok){location.reload();return}}catch(e){status.textContent="Close request failed: "+String(e)}finally{closing=false}}</script></body></html>'''%(esc(data["last_poll"]),cards,pos,pump_cards,pump_pos,whale_cards,whale_pos_html,whale_candidates_html,hype_cards,hype_note,hype_pos_html,exp_cards,exp_note,exp_rows_html,trs,news_health_cards,news_health_note,news_health_rows,src,news,data["errors"],esc(data["last_error"]))
+ page='''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>PANDORA LIVE</title><style>body{font-family:system-ui;background:#080b10;color:#e8edf5;margin:24px}h1{margin:0}.muted{color:#8b98aa}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:18px 0}.grid b{background:#111722;padding:16px;border-radius:12px}table{width:100%%;border-collapse:collapse;background:#0e141e;margin-bottom:22px}td,th{padding:9px;border-bottom:1px solid #202938;text-align:left;font-size:13px}th{color:#91a2b8}.posv{color:#49d17d;font-weight:700}.negv{color:#ff6262;font-weight:700}.warnv{color:#f6c453;font-weight:700}a{color:#8bc4ff}</style></head><body><p id="refreshStatus" class="muted">Connecting live updates…</p><main id="dashboardContent" data-poll="__MARKET_POLL__"><h1>PANDORA LIVE</h1><div class="muted">Paper engine · automatic updates every 5s · last market poll %s</div>%s<h2>News — статистика</h2>__NEWS_PERFORMANCE__<h2>Open positions</h2><button onclick="closePos(null)">Close Everything</button><button onclick="location.reload()">Refresh</button><p id="actionResult"></p><table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Trigger</th><th>Action</th></tr>%s</table><h2>Pump/Dump PAPER positions</h2>%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h2>Price to Value Liquidation</h2>%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h3>Whale liquidation candidates</h3><table><tr><th>Token</th><th>Trade side</th><th>Whale size</th><th>Distance</th><th>Score</th><th>Victim</th><th>Liq price</th></tr>%s</table><h2>LOCAL H1 / M15 — HYPE + NEAR</h2>%s%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>MAE / MFE ROE</th></tr>%s</table><p><a href="/local-v10/history">OPEN LOCAL v10 CLOSED TRADE HISTORY — LIVE DATABASE</a></p><h2>LOCAL · INIT / NEAR / GRASS / HYPE · $500</h2>%s%s<table><tr><th>Token</th><th>Side</th><th>Max lev</th><th>Phase</th><th>Entry kind</th><th>Entry</th><th>Mark</th><th>ROE</th><th>Target position</th><th>Required margin</th><th>Actual margin</th><th>Actual position</th><th>Exposure fill</th><th>Open P&L</th><th>Trades / WR</th></tr>%s</table><h2>LOCAL v10 — Closed trades only</h2><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>PnL</th><th>Reason</th></tr>%s</table><h2>News Scanner Health</h2>%s%s<table><tr><th>Source</th><th>Freshness</th><th>Latest post age (s)</th><th>Ingest lag (s)</th><th>Realtime verified</th></tr>%s</table><h2>Sources</h2><table><tr><th>Source</th><th>Status</th><th>Checked</th><th>Error</th></tr>%s</table><h2>Latest news</h2><table><tr><th>Time</th><th>Source</th><th>Token</th><th>Raw signal</th><th>Headline</th></tr>%s</table><p>Errors: %s · Last error: %s</p><p><a href="/api/dashboard">JSON dashboard</a> · <a href="/features">Features</a> · <a href="/trades">Trades</a> · <a href="/news">News</a></p></main><script>let closing=false,refreshing=false,refreshTimer=null;async function refreshDashboard(){clearTimeout(refreshTimer);if(refreshing||closing||document.visibilityState!=="visible"){if(document.visibilityState==="visible")refreshTimer=setTimeout(refreshDashboard,5000);return;}refreshing=true;const indicator=document.getElementById("refreshStatus");const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),10000);try{const response=await fetch("/?refresh="+Date.now(),{cache:"no-store",credentials:"same-origin",signal:controller.signal});if(!response.ok)throw new Error("HTTP "+response.status);const doc=new DOMParser().parseFromString(await response.text(),"text/html");const incoming=doc.getElementById("dashboardContent");if(!incoming)throw new Error("Invalid dashboard response");if(closing)return;const current=document.getElementById("dashboardContent");const top=window.scrollY;current.replaceWith(document.importNode(incoming,true));window.scrollTo(0,top);const marketAt=Date.parse(incoming.dataset.poll);const age=Number.isFinite(marketAt)?Math.max(0,(Date.now()-marketAt)/1000):null;indicator.textContent="Updated "+new Date().toLocaleTimeString()+(age===null?" · market freshness unavailable":" · market age "+age.toFixed(1)+"s")+(age!==null&&age>20?" · MARKET DATA STALE":"");indicator.style.color=age!==null&&age<=20?"#49d17d":"#f6c453"}catch(error){indicator.textContent="Update failed; retrying automatically · "+String(error);indicator.style.color="#ff6262"}finally{clearTimeout(timeout);refreshing=false;if(document.visibilityState==="visible")refreshTimer=setTimeout(refreshDashboard,5000)}}document.addEventListener("visibilitychange",()=>{clearTimeout(refreshTimer);if(document.visibilityState==="visible")refreshDashboard()});refreshTimer=setTimeout(refreshDashboard,5000);async function closePos(sym){if(closing||!confirm(sym?"Close "+sym+"?":"Close ALL positions?"))return;closing=true;const status=document.getElementById("actionResult");status.textContent="Processing close request...";try{const r=await fetch("/api/positions/close",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(sym?{symbol:sym}:{all:true})});const result=await r.json();status.textContent=r.ok?"Close confirmed: "+JSON.stringify(result):(r.status===401?"Controls locked: open the control-access link once, then retry.":"Close failed ("+r.status+"): "+JSON.stringify(result));if(r.ok){location.reload();return}}catch(e){status.textContent="Close request failed: "+String(e)}finally{closing=false}}</script></body></html>'''%(esc(data["last_poll"]),cards,pos,pump_cards,pump_pos,whale_cards,whale_pos_html,whale_candidates_html,hype_cards,hype_note,hype_pos_html,exp_cards,exp_note,exp_rows_html,trs,news_health_cards,news_health_note,news_health_rows,src,news,data["errors"],esc(data["last_error"]))
  page=page.replace("__NEWS_PERFORMANCE__",strategy_cards_html(data.get("strategy_performance"),"news",(data.get("strategy_open_pnl") or {}).get("news",0),"News",data.get("capital_contributed"))+'<p class="muted">Win rate = прибыльные / все закрытые сделки. Последние 8 часов — по времени закрытия; открытый PnL отдельно. Суммы в USDT, с учётом настроенных комиссий.</p>')
  # Explicit visible Local v10 closed-trade section, anchored for direct navigation.
  page=page.replace('<h2>LOCAL v10 — Closed trades only</h2>','<h2 id="local-v10-history">LOCAL v10 — CLOSED TRADES · %s records · REALIZED $%.4f</h2>'%(len(data.get("local_v10_closed_trades",[])),float((data.get("local_experiment_stats") or {}).get("realized_pnl",0) or 0)))

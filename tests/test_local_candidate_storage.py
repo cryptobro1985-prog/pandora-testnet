@@ -44,7 +44,7 @@ class LocalEntryStorageTests(unittest.TestCase):
                 (symbol,side,entry,notional,margin,leverage,opened,opened_epoch,signal_candle_time,features)
                 VALUES ('HYPE',1,100,250,10,25,'existing',0,1,'{}')""")
         a,m,f=evidence(stamp=app.time.time())
-        with patch.object(app.MARKET_OBS,'context',return_value=f),patch.object(app,'log_learning_decision'):
+        with patch.object(app.MARKET_OBS,'flow_context',return_value=f),patch.object(app,'log_learning_decision'):
             self.assertFalse(app.local_experiment_open('HYPE',1,a,m15=m))
             self.assertNotIn('HYPE',app.S['local_v12_positions'])
             with self.connect() as db:
@@ -59,7 +59,7 @@ class LocalEntryStorageTests(unittest.TestCase):
 
     def test_next_entry_compounds_current_equity_without_resizing_open_position(self):
         a,m,f=evidence(stamp=app.time.time())
-        with patch.object(app.MARKET_OBS,'context',return_value=f),patch.object(app,'log_learning_decision'):
+        with patch.object(app.MARKET_OBS,'flow_context',return_value=f),patch.object(app,'log_learning_decision'):
             self.assertTrue(app.local_experiment_open('HYPE',1,a,m15=m))
             first=copy.deepcopy(app.S['local_v12_positions']['HYPE'])
             self.assertEqual(first['margin'],100.)

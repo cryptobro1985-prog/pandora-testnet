@@ -17,10 +17,10 @@ class TradingModuleGates(unittest.TestCase):
 
     def test_local_experiment_is_isolated_paper_500(self):
         self.assertEqual(app.LOCAL_EXPERIMENT_STARTING_EQUITY, 500.0)
-        self.assertEqual(len(app.LOCAL_EXPERIMENT_SYMBOLS), 12)
+        self.assertEqual(len(app.LOCAL_EXPERIMENT_SYMBOLS), 4)
         self.assertIn("HYPE", app.LOCAL_EXPERIMENT_SYMBOLS)
         self.assertIn("NEAR", app.LOCAL_EXPERIMENT_SYMBOLS)
-        self.assertEqual(len(set(app.LOCAL_EXPERIMENT_SYMBOLS)),12)
+        self.assertEqual(len(set(app.LOCAL_EXPERIMENT_SYMBOLS)),4)
         self.assertEqual(app.LOCAL_EXPERIMENT_MARGIN_FRACTION, 0.20)
 
     def test_legacy_local_book_is_exit_only(self):

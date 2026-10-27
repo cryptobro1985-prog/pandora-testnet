@@ -71,18 +71,18 @@ class AllocationTests(unittest.TestCase):
 
     def test_flow_must_still_be_aligned_at_position_mutation(self):
         a,m,f=evidence(stamp=app.time.time());f['flow_imbalance']=-.7
-        with patch.object(app.MARKET_OBS,'context',return_value=f),patch.object(app,'pg') as db:
+        with patch.object(app.MARKET_OBS,'flow_context',return_value=f),patch.object(app,'pg') as db:
             self.assertFalse(app.local_experiment_open('HYPE',1,a,m15=m))
         db.assert_not_called()
 
     def test_newer_persisted_h1_anchor_rejects_old_ranked_candidate(self):
         a,m,f=evidence(stamp=app.time.time())
         app.S['local_h1_direction']={'HYPE':dict(entry_side=-1,signal_candle_time=2)}
-        with patch.object(app.MARKET_OBS,'context',return_value=f),patch.object(app,'pg') as db:
+        with patch.object(app.MARKET_OBS,'flow_context',return_value=f),patch.object(app,'pg') as db:
             self.assertFalse(app.local_experiment_open('HYPE',1,a,m15=m))
         db.assert_not_called()
 
-    def test_scan_allocates_best_candidate_before_first_configured_symbol(self):
+    def test_flow_entries_do_not_rank_by_m15_candle_scores(self):
         stop=MagicMock();stop.is_set.side_effect=[False,True]
         stamp=app.time.time();a,_,f=evidence(stamp=stamp)
         def m15(rows,observed,side):
@@ -94,11 +94,11 @@ class AllocationTests(unittest.TestCase):
              patch.object(app,'local_experiment_mark_positions'),patch.object(app,'_local_h1_candles',return_value=([],int(stamp*1000))), \
              patch.object(app,'_local_m15_candles',side_effect=candles),patch.object(app,'local_h1_direction',return_value=a), \
              patch.object(app,'analyze_local_h1_context',return_value={}),patch.object(app,'analyze_local_m15',side_effect=m15), \
-             patch.object(app.MARKET_OBS,'context',return_value=f),patch.object(app,'_local_experiment_claim'), \
+             patch.object(app.MARKET_OBS,'flow_context',return_value=f),patch.object(app,'_local_experiment_claim'), \
              patch.object(app,'local_experiment_stats',return_value={}),patch.object(app,'local_experiment_open',return_value=True) as opening:
             app.local_experiment_loop()
-        self.assertEqual([c.args[0] for c in opening.call_args_list],['TAO','HYPE'])
-        self.assertEqual(app.S['sources']['Local12TokenH1M15']['ranked_candidates'],['TAO','HYPE'])
+        self.assertEqual([c.args[0] for c in opening.call_args_list],['HYPE','TAO'])
+        self.assertEqual(app.S['sources']['Local12TokenH1M15']['ranked_candidates'],['HYPE','TAO'])
 
     def test_risk_worker_runs_without_metadata_or_candle_requests(self):
         app.S.update(_last_poll_epoch=app.time.time(),_prices={'HYPE':101.},_day_volumes={},_max_leverage={})
@@ -117,29 +117,20 @@ class AllocationTests(unittest.TestCase):
                 app.local_experiment_risk_loop()
             protect.assert_not_called()
 
-    def test_newly_armed_floor_is_persisted_before_periodic_checkpoint(self):
-        for side in (-1,1):
-            stamp=app.time.time()
-            app.S['local_v12_positions']={'HYPE':dict(side=side,entry=100.,notional=250.,margin=10.,leverage=25.,opened='fixture',
-                features=dict(caterpillar_policy=app.CATERPILLAR_POLICY,estimated_round_trip_cost_move=.0013))}
-            app.S['_local_experiment_path_persist_epoch']={'HYPE':stamp}
-            with patch.object(app,'pg') as pg,patch.object(app.STORE,'fence'):
-                app.local_experiment_mark_positions({'HYPE':100.+side*.3})
-            db=pg.return_value.__enter__.return_value
-            self.assertTrue(db.execute.called)
-            self.assertTrue(app.S['local_v12_positions']['HYPE']['features']['profit_lock_armed'])
+    def test_flow_exit_works_without_candle_data_or_profit_threshold(self):
+        app.S['local_v12_positions']={'HYPE':dict(side=-1,entry=100.,notional=250.,margin=10.,leverage=25.,opened='fixture',features={})}
+        f=dict(trade_data_fresh=True,latest_trade_age_seconds=1,flow_imbalance=.01)
+        with patch.object(app.MARKET_OBS,'flow_context',return_value=f),patch.object(app,'local_experiment_close') as close:
+            app.local_experiment_mark_positions({'HYPE':101.})
+        self.assertEqual(close.call_args.args[2],'executed_flow_counter_dominance')
 
-    def test_failed_floor_checkpoint_is_retried_on_next_observation(self):
-        app.S['local_v12_positions']={'HYPE':dict(side=1,entry=100.,notional=250.,margin=10.,leverage=25.,opened='fixture',
-            features=dict(caterpillar_policy=app.CATERPILLAR_POLICY,estimated_round_trip_cost_move=.0013))}
-        app.S['_local_experiment_path_persist_epoch']={'HYPE':app.time.time()}
-        with patch.object(app,'pg') as pg,patch.object(app.STORE,'fence'):
-            db=pg.return_value.__enter__.return_value
-            db.execute.side_effect=[RuntimeError('checkpoint unavailable'),None]
-            with self.assertRaises(RuntimeError):
-                app.local_experiment_mark_positions({'HYPE':100.3})
-            app.local_experiment_mark_positions({'HYPE':100.3})
-        self.assertEqual(db.execute.call_count,2)
+    def test_no_fixed_floor_closes_a_position_while_original_flow_continues(self):
+        app.S['local_v12_positions']={'HYPE':dict(side=1,entry=100.,notional=250.,margin=10.,leverage=25.,opened='fixture',features=dict(mfe_price_move=.02))}
+        f=dict(trade_data_fresh=True,latest_trade_age_seconds=1,flow_imbalance=.01)
+        with patch.object(app.MARKET_OBS,'flow_context',return_value=f),patch.object(app,'pg'),patch.object(app.STORE,'fence'),patch.object(app,'local_experiment_close') as close:
+            app.local_experiment_mark_positions({'HYPE':100.1})
+        close.assert_not_called()
+        self.assertFalse(app.S['local_v12_positions']['HYPE']['features']['profit_lock_armed'])
 
     def test_monitor_displays_candidate_rank_and_observable_evidence(self):
         with patch.object(app,'pg',side_effect=RuntimeError('offline')):
