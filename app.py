@@ -59,6 +59,7 @@ from hype_h1_swing import (POLICY as HYPE_SWING_POLICY, SYMBOL as HYPE_SWING_SYM
 # Separate 24h Local paper experiment. Leverage follows Hyperliquid's live
 # per-market maxLeverage metadata; validated fallbacks are only for metadata outages.
 LOCAL_EXPERIMENT_SYMBOLS=("INIT","NEAR","GRASS","HYPE")
+LOCAL_S3_SYMBOLS=("HYPE","NEAR","INIT","USELESS","GRASS","APT","TAO","CHIP","BABY","SPX","LIT","CASHCAT")
 LOCAL_EXPERIMENT_STARTING_EQUITY=500.0
 NEWS_NEW_ENTRIES_ENABLED=False
 WHALE_NEW_ENTRIES_ENABLED=False
@@ -67,7 +68,7 @@ LOCAL_EXPERIMENT_MAX_POSITIONS=4
 # Legacy HYPE/NEAR book remains exit-only until its existing paper positions close.
 VALIDATED_MAX_LEVERAGE={"HYPE":10.0,"NEAR":10.0,"APT":10.0,"TAO":5.0,"SPX":5.0,"LIT":5.0,
  "INIT":3.0,"USELESS":3.0,"GRASS":3.0,"CHIP":3.0,"BABY":3.0,"CASHCAT":3.0}
-ALL_LOCAL_CANDLE_SYMBOLS=tuple(dict.fromkeys(tuple(LOCAL_SWING_SYMBOLS)+LOCAL_EXPERIMENT_SYMBOLS))
+ALL_LOCAL_CANDLE_SYMBOLS=tuple(dict.fromkeys(tuple(LOCAL_SWING_SYMBOLS)+LOCAL_EXPERIMENT_SYMBOLS+LOCAL_S3_SYMBOLS))
 
 def market_max_leverage(symbol):
  with LOCK:
@@ -143,6 +144,7 @@ S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled"
 "local_experiment_stats":{},
 "local_s1_positions":{},"local_s1_watch":{},"local_s1_equity":500.0,"local_s1_realized_pnl":0.0,"local_s1_trades":0,
 "local_s2_positions":{},"local_s2_equity":500.0,"local_s2_realized_pnl":0.0,"local_s2_trades":0,
+"local_s3_positions":{},"local_s3_watch":{},"local_s3_equity":500.0,"local_s3_realized_pnl":0.0,"local_s3_trades":0,
 "news_health":{}}
 LOCK=threading.RLock()
 ACCOUNT_LOCK=threading.RLock()
@@ -379,7 +381,7 @@ def pinit():
     features jsonb not null default '{}'::jsonb)""")
   # Two independent $500 paper comparison accounts.
   # Strategy 1 restores the profitable H1->M15 Caterpillar rules; Strategy 2 is pure H1 pivot-to-pivot.
-  for prefix in ("local_s1","local_s2"):
+  for prefix in ("local_s1","local_s2","local_s3"):
    c.execute(f"""create table if not exists {prefix}_account_state (
      id integer primary key, equity double precision not null, realized_pnl double precision not null,
      started_at text not null, updated_at text not null)""")
@@ -394,8 +396,12 @@ def pinit():
   c.execute("""create table if not exists local_s1_watchlist (
     symbol text primary key, side integer not null, origin_signal_candle bigint, exit_price double precision,
     exit_at text not null, reentries integer not null default 0, context jsonb not null default '{}'::jsonb)""")
+  c.execute("""create table if not exists local_s3_watchlist (
+    symbol text primary key, side integer not null, origin_signal_candle bigint, exit_price double precision,
+    exit_at text not null, reentries integer not null default 0, context jsonb not null default '{}'::jsonb)""")
   c.execute("create index if not exists local_s1_trade_closed_idx on local_s1_trade_history(closed desc)")
   c.execute("create index if not exists local_s2_trade_closed_idx on local_s2_trade_history(closed desc)")
+  c.execute("create index if not exists local_s3_trade_closed_idx on local_s3_trade_history(closed desc)")
   c.execute("create index if not exists local_experiment_trade_closed_idx on local_v12_trade_history(closed desc)")
   c.execute("create index if not exists local_experiment_signal_time_idx on local_v12_signal_journal(ts desc)")
   c.execute("create index if not exists hype_swing_trade_closed_idx on hype_swing_trade_history(closed desc)")
@@ -481,7 +487,7 @@ def pinit():
     "reentries":int(r["reentries"] or 0),"context":r["context"] or {}}
   S["local_experiment_watch"]=exwatches
   S["local_experiment_trades"]=int(c.execute("select count(*) as n from local_v12_trade_history").fetchone()["n"])
-  for prefix,state_name in (("local_s1","local_s1"),("local_s2","local_s2")):
+  for prefix,state_name in (("local_s1","local_s1"),("local_s2","local_s2"),("local_s3","local_s3")):
    c.execute(f"""insert into {prefix}_account_state(id,equity,realized_pnl,started_at,updated_at)
      values(1,500,0,%s,%s) on conflict(id) do nothing""",(now(),now()))
    acct=c.execute(f"select equity,realized_pnl from {prefix}_account_state where id=1").fetchone()
@@ -498,6 +504,11 @@ def pinit():
    s1w[rr["symbol"]]={"symbol":rr["symbol"],"side":int(rr["side"]),"origin_signal_candle":int(rr["origin_signal_candle"] or 0),
      "exit_price":float(rr["exit_price"] or 0),"exit_at":rr["exit_at"],"reentries":int(rr["reentries"] or 0),"context":rr["context"] or {}}
   S["local_s1_watch"]=s1w
+  s3w={}
+  for rr in c.execute("select * from local_s3_watchlist").fetchall():
+   s3w[rr["symbol"]]={"symbol":rr["symbol"],"side":int(rr["side"]),"origin_signal_candle":int(rr["origin_signal_candle"] or 0),
+     "exit_price":float(rr["exit_price"] or 0),"exit_at":rr["exit_at"],"reentries":int(rr["reentries"] or 0),"context":rr["context"] or {}}
+  S["local_s3_watch"]=s3w
  STORE.migrate()
  _,positions=STORE.load(recover_legacy=False)
  S["positions"]=positions
@@ -2804,7 +2815,7 @@ def _comparison_mtm(state_name,prices):
 def _comparison_anchor(state_name,symbol):
  with LOCK:
   pos=copy.deepcopy(S.get(state_name+"_positions",{}).get(symbol))
-  watch=copy.deepcopy(S.get(state_name+"_watch",{}).get(symbol)) if state_name=="local_s1" else None
+  watch=copy.deepcopy(S.get(state_name+"_watch",{}).get(symbol)) if state_name in ("local_s1","local_s3") else None
  source=pos or watch
  if source:
   features=copy.deepcopy(source.get("features") or (source.get("context") or {}).get("anchor") or {})
@@ -2841,10 +2852,10 @@ def _comparison_open(prefix,state_name,symbol,side,analysis,mark,entry_kind):
      values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(symbol) do nothing returning symbol""",
      (symbol,int(side),float(mark),notional,margin,leverage,opened,epoch,pos["signal_candle_time"],json.dumps(features,default=str))).fetchone()
    if not row:return False
-   if prefix=="local_s1":db.execute("delete from local_s1_watchlist where symbol=%s",(symbol,))
+   if state_name in ("local_s1","local_s3"):db.execute(f"delete from {prefix}_watchlist where symbol=%s",(symbol,))
  with LOCK:
   S.setdefault(state_name+"_positions",{})[symbol]=pos
-  if state_name=="local_s1":S.setdefault("local_s1_watch",{}).pop(symbol,None)
+  if state_name in ("local_s1","local_s3"):S.setdefault(state_name+"_watch",{}).pop(symbol,None)
  return True
 
 @account_mutation
@@ -2854,7 +2865,7 @@ def _comparison_close(prefix,state_name,symbol,mark,reason,arm_watch=False):
  pnl=paper_pnl(pos["notional"],pos["entry"],float(mark),pos["side"],FEE)
  features=copy.deepcopy(pos.get("features") or {});features["actual_exit_reason"]=reason;features["actual_exit_mark"]=float(mark)
  watch=None
- if arm_watch and state_name=="local_s1":
+ if arm_watch and state_name in ("local_s1","local_s3"):
   watch={"symbol":symbol,"side":int(pos["side"]),"origin_signal_candle":int(pos.get("signal_candle_time") or 0),
    "exit_price":float(mark),"exit_at":now(),"reentries":int(features.get("swing_reentries",0) or 0),
    "context":{"phase":"WAIT_PULLBACK","counter_pressure_seen":True,"anchor":copy.deepcopy(features)}}
@@ -2869,7 +2880,7 @@ def _comparison_close(prefix,state_name,symbol,mark,reason,arm_watch=False):
      values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
      (pos["opened"],now(),symbol,pos["side"],pos["entry"],float(mark),pnl,reason,pos["margin"],pos["notional"],pos["leverage"],json.dumps(features,default=str)))
    if watch:
-    db.execute("""insert into local_s1_watchlist(symbol,side,origin_signal_candle,exit_price,exit_at,reentries,context)
+    db.execute(f"""insert into {prefix}_watchlist(symbol,side,origin_signal_candle,exit_price,exit_at,reentries,context)
       values(%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(symbol) do update set side=excluded.side,
       origin_signal_candle=excluded.origin_signal_candle,exit_price=excluded.exit_price,exit_at=excluded.exit_at,
       reentries=excluded.reentries,context=excluded.context""",
@@ -2878,19 +2889,19 @@ def _comparison_close(prefix,state_name,symbol,mark,reason,arm_watch=False):
   S.setdefault(state_name+"_positions",{}).pop(symbol,None)
   S[state_name+"_equity"]=float(acct["equity"]);S[state_name+"_realized_pnl"]=float(acct["realized_pnl"])
   S[state_name+"_trades"]=int(S.get(state_name+"_trades",0) or 0)+1
-  if watch:S.setdefault("local_s1_watch",{})[symbol]=watch
+  if watch:S.setdefault(state_name+"_watch",{})[symbol]=watch
  return {"pnl":pnl,"equity":float(acct["equity"]),"reason":reason}
 
 @account_mutation
-def _s1_watch_update(symbol,watch,mark,m15,flow):
+def _comparison_watch_update(prefix,state_name,symbol,watch,mark,m15,flow):
  updated=caterpillar_update_watch(watch,float(mark),m15,flow,time.time())
  with pg() as db:
   with db.transaction():
    STORE.fence(db)
-   db.execute("update local_s1_watchlist set context=%s::jsonb where symbol=%s",
+   db.execute(f"update {prefix}_watchlist set context=%s::jsonb where symbol=%s",
     (json.dumps(updated.get("context") or {},default=str),symbol))
  with LOCK:
-  if symbol in S.get("local_s1_watch",{}):S["local_s1_watch"][symbol]=copy.deepcopy(updated)
+  if symbol in S.get(state_name+"_watch",{}):S[state_name+"_watch"][symbol]=copy.deepcopy(updated)
  return updated
 
 def _comparison_stats(prefix):
@@ -2961,7 +2972,7 @@ def comparison_strategies_loop():
         with db.transaction():STORE.fence(db);db.execute("delete from local_s1_watchlist where symbol=%s",(symbol,))
        with LOCK:S.setdefault("local_s1_watch",{}).pop(symbol,None)
        w1=None;act1="WATCH_INVALIDATED_BY_H1"
-      else:w1=_s1_watch_update(symbol,w1,float(mark),m15,flow)
+      else:w1=_comparison_watch_update("local_s1","local_s1",symbol,w1,float(mark),m15,flow)
      if w1 and caterpillar_reentry_ready(int(w1["side"]),m15,float(mark),w1,flow,time.time()):
       if _comparison_open("local_s1","local_s1",symbol,int(w1["side"]),a1,float(mark),"REENTRY"):act1="M15_RECOVERY_REENTRY"
      elif not w1 and a1.get("ready") and not a1.get("entry_blocked"):
