@@ -2452,8 +2452,21 @@ def local_experiment_loop():
      if pos:
       h1_exit=hype_position_exit(pos,analysis,float(mark)) if analysis.get("ready") else None
       if h1_exit:
-       closed=local_experiment_close(symbol,float(mark),h1_exit,analysis)
-       action="H1_EXIT:"+h1_exit if closed else None
+       entry=float(pos.get("entry") or 0);side=int(pos.get("side") or 0)
+       favorable=(side*(float(mark)/entry-1.0)) if entry>0 and side in (-1,1) else -1.0
+       cost_floor=max(.0002,float((pos.get("features") or {}).get("estimated_round_trip_cost_move",0) or 0))
+       if favorable>cost_floor:
+        closed=local_experiment_close(symbol,float(mark),h1_exit+"_profit_only",analysis)
+        action="H1_EXIT_PROFIT_ONLY:"+h1_exit if closed else None
+       else:
+        action="H1_OPPOSITE_PIVOT_HELD_UNTIL_NET_PROFIT"
+        with LOCK:
+         live_pos=S.get("local_v12_positions",{}).get(symbol)
+         if live_pos:
+          live_pos.setdefault("features",{})["opposite_h1_pivot_pending"]={
+           "reason":h1_exit,"detected_at":now(),"mark":float(mark),
+           "current_move":favorable,"cost_floor":cost_floor
+          }
       elif caterpillar_pressure_exit(pos,m15_live,float(mark),flow):
        watch_context={"m15":m15_live,"h1_context":h1_context,"flow_imbalance":flow_imb,"flow_context":flow,
          "flow_source":"hyperliquid_ws_trades","observed_at":now(),"reason":"m15_confirmed_weakening_while_net_profitable"}
