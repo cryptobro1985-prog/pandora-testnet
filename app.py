@@ -2371,7 +2371,7 @@ def local_experiment_mark_positions(prices):
      profit_lock_arm_move=.004,profit_lock_buffer_move=.0016)
   updated,liq=hype_update_path(pos,float(mark))
   lock_fill=caterpillar_breakeven(updated,float(mark))
-  if lock_fill is not None:
+  if lock_fill is not None and paper_pnl(updated["notional"],updated["entry"],float(lock_fill),updated["side"],FEE)>0:
    with LOCK:
     live=S.get("local_v12_positions",{}).get(symbol)
     if live and live.get("opened")==pos.get("opened"):S["local_v12_positions"][symbol]=updated
