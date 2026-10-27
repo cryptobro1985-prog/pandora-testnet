@@ -2983,6 +2983,15 @@ def market_regime_history():
 
 
 def market_trade_stream():
+ # Startup ordering: market metadata is required by PumpDump to classify
+ # liquid markets. Give the single metaAndAssetCtxs bootstrap request a short
+ # head start before websocket candle-history recovery starts consuming the
+ # shared Hyperliquid REST budget.
+ metadata_deadline=time.time()+15.0
+ while not SHUTDOWN.is_set():
+  with LOCK:metadata_ready=bool(S.get("_day_volumes")) and bool(S.get("_max_leverage"))
+  if metadata_ready or time.time()>=metadata_deadline:break
+  SHUTDOWN.wait(.25)
  def symbols():
   # Pump/dump coverage is whole-market: subscribe to every currently listed
   # Hyperliquid perp with metadata, not only the high-volume subset. Deep
