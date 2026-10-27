@@ -2595,9 +2595,9 @@ def emergency_profit_take(prices):
  stamp=time.time()
  with LOCK:
   if not S.get("engine_active") or S.get("mode")!="PAPER_ONLY":return []
-  books=[("news",copy.deepcopy(S.get("positions",{}))),("pump_dump",copy.deepcopy(S.get("pump_positions",{}))),
-         ("whale_liquidation",copy.deepcopy(S.get("whale_positions",{}))),
-         ("local_h1_m15_swing_v5",copy.deepcopy(S.get("local_swing_positions",{})))]
+  books=[("pump_dump",copy.deepcopy(S.get("pump_positions",{}))),
+         ("local_12token_h1_m15",copy.deepcopy(S.get("local_v12_positions",{}))),
+         ("local_legacy_exit_only",copy.deepcopy(S.get("local_swing_positions",{})))]
   history={s:list(S.get("_timeline",{}).get(s,[])) for s in ("BTC","ETH","SOL")}
   pending=copy.deepcopy(S.get("_emergency_pending",[]))
  shock=emergency_reversal(prices,history,stamp)
@@ -4628,6 +4628,7 @@ def html_dashboard(data):
  # Historical News/Whale data remains in the database and archive APIs.
  page=re.sub(r'<h2>News — статистика</h2>.*?(?=<h2>Open positions</h2>)','',page,flags=re.S)
  page=re.sub(r'<h2>Price to Value Liquidation</h2>.*?(?=<h2>LOCAL H1 / M15)','',page,flags=re.S)
+ page=re.sub(r'<h2>LOCAL H1 / M15 — HYPE \\+ NEAR</h2>.*?(?=<h2>LOCAL H1/M15 · 12 TOKENS · \\$500</h2>)','',page,flags=re.S)
  page=re.sub(r'<h2>News Scanner Health</h2>.*?(?=<h2>Sources</h2>)','',page,flags=re.S)
  page=re.sub(r'<h2>Latest news</h2>.*?(?=<p>Errors:)','',page,flags=re.S)
  page=page.replace(' · <a href="/news">News</a>','')
@@ -4650,9 +4651,8 @@ def manual_close(symbol=None,reason_override=None):
   if not fresh or not price:
    results.append({"symbol":sym,"ok":False,"error":"fresh_market_price_and_active_engine_required"});continue
   reason=reason_override or ("manual_close_all" if symbol is None else "manual_close")
-  if strategy=="news":result=close_news_position(sym,pos,price,reason)
-  elif strategy=="pump_dump":result=pump_close(sym,price,reason)
-  elif strategy=="whale_liquidation":result=whale_liq_close(sym,price,reason)
+  if strategy=="pump_dump":result=pump_close(sym,price,reason)
+  elif strategy=="local_12token_h1_m15":result=local_experiment_close(sym,price,reason)
   else:result=local_swing_close(sym,price,reason)
   if result is None:results.append({"symbol":sym,"ok":False,"error":"close_not_committed"});continue
   results.append({"symbol":sym,"strategy":strategy,"ok":True,"price":price,"pnl":result.get("pnl")})
