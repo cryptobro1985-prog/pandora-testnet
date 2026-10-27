@@ -45,7 +45,7 @@ from hype_h1_swing import (POLICY as HYPE_SWING_POLICY, SYMBOL as HYPE_SWING_SYM
                            PROFIT_LOCK_BUFFER_MOVE as HYPE_PROFIT_LOCK_BUFFER_MOVE,
                            REENTRY_WATCH_SECONDS as LOCAL_REENTRY_WATCH_SECONDS,
                            REENTRY_MAX_PER_SWING as LOCAL_REENTRY_MAX_PER_SWING,
-                           analyze as analyze_hype_h1, analyze_h1_context as analyze_local_h1_context,
+                           analyze as analyze_hype_h1, pending_extreme as local_pending_extreme, analyze_h1_context as analyze_local_h1_context,
                            analyze_m15 as analyze_local_m15,
                            m15_profit_protection as local_m15_profit_protection,
                            m15_reentry_ready as local_m15_reentry_ready,
@@ -1905,6 +1905,7 @@ def local_swing_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=None):
  if S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or int(side) not in (-1,1):return False
  if not analysis.get("ready"):return False
  if not analysis.get("h1_direction_anchor") or int(analysis.get("entry_side") or 0)!=int(side):return False
+ if analysis.get("entry_blocked"):return False
  if entry_kind=="M15" and int(analysis.get("entry_side") or 0)!=int(side):return False
  if entry_kind=="REENTRY":
   if not watch or int(watch.get("side") or 0)!=int(side):return False
@@ -1999,12 +2000,12 @@ def local_swing_close(symbol,price,reason,analysis=None,watch_context=None):
  if watch_context:features["m15_profit_protection"]=watch_context
  features["actual_exit_reason"]=reason;features["actual_exit_mark"]=price
  watch=None
- if reason in ("m15_adverse_pressure_profit_protect","profit_lock_stop","m15_momentum_weakening","m15_pressure_reversal","caterpillar_breakeven"):
+ if reason in ("m15_adverse_pressure_profit_protect","profit_lock_stop","m15_momentum_weakening","m15_pressure_reversal","m15_pressure_reversal_profit_only","caterpillar_breakeven"):
   watch={"symbol":symbol,"side":int(pos["side"]),
    "origin_signal_candle":int(features.get("origin_h1_signal_candle") or features.get("origin_m15_signal_candle") or pos.get("signal_candle_time") or 0),
    "exit_price":price,"exit_at":now(),"expires_epoch":0.0,
    "reentries":int(features.get("swing_reentries",0) or 0),"context":watch_context or {}}
-  watch["context"].update(phase="WAIT_PULLBACK",counter_pressure_seen=reason=="m15_pressure_reversal",caterpillar_policy=CATERPILLAR_POLICY)
+  watch["context"].update(phase="WAIT_PULLBACK",counter_pressure_seen=reason in ("m15_pressure_reversal","m15_pressure_reversal_profit_only"),caterpillar_policy=CATERPILLAR_POLICY)
  with pg() as db:
   with db.transaction():
    STORE.fence(db)
@@ -2151,8 +2152,10 @@ def local_h1_direction(rows,now_ms,symbol):
  analysis=analyze_hype_h1(rows,now_ms,symbol)
  if not analysis.get("ready"):return analysis
  with LOCK:prior=copy.deepcopy(S.get("local_h1_direction",{}).get(symbol))
- if prior and not analysis.get("anchor_confirmed") and int(prior.get("signal_candle_time") or 0)>=int(analysis.get("signal_candle_time") or 0):
-  return {**prior,"ready":True,"last_candle_time":analysis.get("last_candle_time")}
+ if prior and int(prior.get("signal_candle_time") or 0)>int(analysis.get("signal_candle_time") or 0):
+  # A shorter restart cache must never roll a newer persisted H1 anchor back.
+  analysis={**prior,"ready":True,"last_candle_time":analysis.get("last_candle_time"),
+    **local_pending_extreme(rows,now_ms,int(prior.get("entry_side") or 0))}
  if analysis.get("entry_side") not in (-1,1):return analysis
  if not prior or analysis.get("signal_candle_time")!=prior.get("signal_candle_time"):
   with pg() as db:
@@ -2238,6 +2241,7 @@ def local_experiment_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=N
  if symbol not in LOCAL_EXPERIMENT_SYMBOLS or int(side or 0) not in (-1,1):return False
  if S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or not analysis.get("ready"):return False
  if not analysis.get("h1_direction_anchor") or int(analysis.get("entry_side") or 0)!=int(side):return False
+ if analysis.get("entry_blocked"):return False
  if entry_kind=="REENTRY":
   if not watch or int(watch.get("side") or 0)!=int(side):return False
   if int(analysis.get("entry_side") or 0)==-int(side):return False
@@ -2316,12 +2320,12 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
  features["actual_exit_reason"]=reason;features["actual_exit_mark"]=price
  watch=None
  if reason in ("m15_adverse_pressure_profit_protect","profit_lock_stop","m15_momentum_weakening",
-               "m15_pressure_reversal","caterpillar_breakeven"):
+               "m15_pressure_reversal","m15_pressure_reversal_profit_only","caterpillar_breakeven"):
   watch={"symbol":symbol,"side":int(pos["side"]),
    "origin_signal_candle":int(features.get("origin_h1_signal_candle") or pos.get("signal_candle_time") or 0),
    "exit_price":price,"exit_at":now(),"expires_epoch":0.0,
    "reentries":int(features.get("swing_reentries",0) or 0),"context":copy.deepcopy(watch_context or {})}
-  watch["context"].update(phase="WAIT_PULLBACK",counter_pressure_seen=reason=="m15_pressure_reversal",
+  watch["context"].update(phase="WAIT_PULLBACK",counter_pressure_seen=reason in ("m15_pressure_reversal","m15_pressure_reversal_profit_only"),
     caterpillar_policy=CATERPILLAR_POLICY)
  with pg() as db:
   with db.transaction():
@@ -2459,14 +2463,15 @@ def local_experiment_loop():
     fetched={};fetch_errors={}
     for key,fut in jobs.items():
      try:fetched[key]=fut.result(timeout=12)
-     except Exception as exc:fetch_errors[key[0]]=type(exc).__name__+":"+str(exc)[:120]
+     except Exception as exc:fetch_errors[key]=type(exc).__name__+":"+str(exc)[:120]
     details={}
     for symbol in LOCAL_EXPERIMENT_SYMBOLS:
      mark=prices.get(symbol)
-     if symbol in fetch_errors or not mark:
-      details[symbol]={"ok":False,"error":fetch_errors.get(symbol) or "mark_unavailable","max_leverage":market_max_leverage(symbol)}
+     if (symbol,"h1") in fetch_errors or not mark:
+      details[symbol]={"ok":False,"error":fetch_errors.get((symbol,"h1")) or "mark_unavailable","max_leverage":market_max_leverage(symbol)}
       continue
-     h1_rows,h1_ms=fetched[(symbol,"h1")];m15_rows,m15_ms=fetched[(symbol,"m15")]
+     h1_rows,h1_ms=fetched[(symbol,"h1")]
+     m15_rows,m15_ms=fetched.get((symbol,"m15"),([],int(time.time()*1000)))
      analysis=local_h1_direction(h1_rows,h1_ms,symbol)
      h1_context=analyze_local_h1_context(h1_rows,h1_ms,symbol)
      with LOCK:
@@ -2485,32 +2490,22 @@ def local_experiment_loop():
      if pos:
       h1_exit=hype_position_exit(pos,analysis,float(mark)) if analysis.get("ready") else None
       if h1_exit:
-       entry=float(pos.get("entry") or 0);side=int(pos.get("side") or 0)
-       favorable=(side*(float(mark)/entry-1.0)) if entry>0 and side in (-1,1) else -1.0
-       cost_floor=max(.0002,float((pos.get("features") or {}).get("estimated_round_trip_cost_move",0) or 0))
-       if favorable>cost_floor:
-        closed=local_experiment_close(symbol,float(mark),h1_exit+"_profit_only",analysis)
-        action="H1_EXIT_PROFIT_ONLY:"+h1_exit if closed else None
-       else:
-        action="H1_OPPOSITE_PIVOT_HELD_UNTIL_NET_PROFIT"
-        with LOCK:
-         live_pos=S.get("local_v12_positions",{}).get(symbol)
-         if live_pos:
-          live_pos.setdefault("features",{})["opposite_h1_pivot_pending"]={
-           "reason":h1_exit,"detected_at":now(),"mark":float(mark),
-           "current_move":favorable,"cost_floor":cost_floor
-          }
+       # Opposite H1 invalidates the trade thesis, regardless of PnL.
+       # Profit-only applies to routine M15 weakening, never to H1 reversal.
+       closed=local_experiment_close(symbol,float(mark),h1_exit,analysis)
+       action="H1_DIRECTION_INVALIDATION_EXIT:"+h1_exit if closed else None
       elif caterpillar_pressure_exit(pos,m15_live,float(mark),flow):
        watch_context={"m15":m15_live,"h1_context":h1_context,"flow_imbalance":flow_imb,"flow_context":flow,
          "flow_source":"hyperliquid_ws_trades","observed_at":now(),"reason":"m15_confirmed_weakening_while_net_profitable"}
        closed=local_experiment_close(symbol,float(mark),"m15_pressure_reversal_profit_only",analysis,watch_context)
        action="M15_PROFIT_PROTECT_EXIT" if closed else None
      else:
+      if analysis.get("entry_blocked"):action="WAIT_H1_CONFIRMATION:"+str(analysis.get("pending_pivot_type"))
       if watch:watch=_local_experiment_watch_observe(symbol,watch,float(mark),m15_live,flow,time.time())
       if watch:
        if analysis.get("ready") and int(analysis.get("entry_side") or 0)==-int(watch.get("side") or 0):
         _local_experiment_watch_clear(symbol,"opposite_h1_pivot_invalidated_watch");watch=None;action="WATCH_INVALIDATED_BY_H1"
-       elif caterpillar_reentry_ready(int(watch.get("side") or 0),m15_live,float(mark),watch,flow,time.time()):
+       elif not analysis.get("entry_blocked") and caterpillar_reentry_ready(int(watch.get("side") or 0),m15_live,float(mark),watch,flow,time.time()):
         if local_experiment_open(symbol,int(watch["side"]),analysis,"REENTRY",m15_live,watch):
          action="M15_RECOVERY_REENTRY"
       if (not watch and not action and analysis.get("ready") and int(analysis.get("entry_side") or 0) in (-1,1)
@@ -2526,7 +2521,7 @@ def local_experiment_loop():
      equity,used,free=_local_experiment_margin_state()
      ref_notional=equity*LOCAL_EXPERIMENT_MARGIN_FRACTION*25.0
      lev=25.0;required_margin=ref_notional/25.0
-     details[symbol]={"ok":True,"symbol":symbol,"mark":float(mark),"max_leverage":lev,
+     details[symbol]={"ok":bool(analysis.get("ready") and m15_live.get("ready")),"symbol":symbol,"mark":float(mark),"max_leverage":lev,
        "target_notional":round(ref_notional,4),"required_margin_for_full_target":round(required_margin,4),
        "position_open":bool(live),"side":int(live.get("side")) if live else None,
        "actual_margin":float(live.get("margin")) if live else None,"actual_notional":float(live.get("notional")) if live else None,
@@ -2534,10 +2529,14 @@ def local_experiment_loop():
        "watching_for_reentry":bool(live_watch),"watch_reentries":int(live_watch.get("reentries",0)) if live_watch else None,
        "caterpillar_phase":(live_watch.get("context") or {}).get("phase") if live_watch else ("IN_POSITION" if live else "WAIT_ENTRY"),
        "h1_local":{"ready":bool(analysis.get("ready")),"pivot_type":analysis.get("pivot_type"),
-        "pivot_price":analysis.get("pivot_price"),"entry_side":analysis.get("entry_side"),"signal_candle_time":candle},
+        "pivot_price":analysis.get("pivot_price"),"entry_side":analysis.get("entry_side"),"signal_candle_time":candle,
+        "anchor_confirmed":analysis.get("anchor_confirmed"),"pivot_candle_time":analysis.get("pivot_candle_time"),
+        "entry_blocked":analysis.get("entry_blocked",False),"pending_pivot_type":analysis.get("pending_pivot_type"),
+        "pending_pivot_price":analysis.get("pending_pivot_price"),"entry_block_reason":analysis.get("entry_block_reason")},
        "m15_live":{"ready":bool(m15_live.get("ready")),"partial":m15_live.get("partial"),
         "adverse_score":m15_live.get("adverse_score"),"recovery_score":m15_live.get("recovery_score"),
-        "flow_imbalance":flow_imb},"last_action":action,"error":None}
+        "flow_imbalance":flow_imb},"last_action":action,
+       "error":fetch_errors.get((symbol,"m15")) or (analysis.get("reason") if not analysis.get("ready") else (m15_live.get("reason") if not m15_live.get("ready") else None))}
     stats=local_experiment_stats()
     equity,used,free=_local_experiment_margin_state()
     ready_all=all(x.get("ok") for x in details.values())
@@ -2582,14 +2581,15 @@ def hype_h1_local_swing_loop():
     fetched={};fetch_errors={}
     for key,fut in jobs.items():
      try:fetched[key]=fut.result(timeout=12)
-     except Exception as exc:fetch_errors[key[0]]=type(exc).__name__+":"+str(exc)[:120]
+     except Exception as exc:fetch_errors[key]=type(exc).__name__+":"+str(exc)[:120]
     details={}
     for symbol in LOCAL_SWING_SYMBOLS:
      mark=prices.get(symbol)
      if symbol in fetch_errors or not mark:
       details[symbol]={"ok":False,"error":fetch_errors.get(symbol) or "mark_unavailable","position_open":symbol in S.get("local_swing_positions",{})}
       continue
-     h1_rows,h1_ms=fetched[(symbol,"h1")];m15_rows,m15_ms=fetched[(symbol,"m15")]
+     h1_rows,h1_ms=fetched[(symbol,"h1")]
+     m15_rows,m15_ms=fetched.get((symbol,"m15"),([],int(time.time()*1000)))
      analysis=local_h1_direction(h1_rows,h1_ms,symbol)
      h1_context=analyze_local_h1_context(h1_rows,h1_ms,symbol)
      with LOCK:
@@ -2628,7 +2628,7 @@ def hype_h1_local_swing_loop():
         if local_swing_open(symbol,side,analysis,"M15",m15_live):
          _local_watch_clear(symbol,"new_same_side_h1_pivot")
          action="REENTER_NEW_H1_PIVOT";watch=None
-       elif caterpillar_reentry_ready(int(watch.get("side") or 0),m15_live,float(mark),watch,flow,time.time()):
+       elif not analysis.get("entry_blocked") and caterpillar_reentry_ready(int(watch.get("side") or 0),m15_live,float(mark),watch,flow,time.time()):
         if local_swing_open(symbol,int(watch["side"]),analysis,"REENTRY",m15_live,watch):action="M15_RECOVERY_REENTRY"
       if (not watch and not action and analysis.get("ready") and int(analysis.get("entry_side") or 0) in (-1,1)
           and flow.get("trade_data_fresh") and flow_imb is not None and int(analysis["entry_side"])*float(flow_imb)>=.12
@@ -3046,39 +3046,30 @@ def market_history_bootstrap():
    with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":True,"degraded":False,
      "last_check":now(),"mode":"post_takeover_ip_quiet_window","quiet_remaining_seconds":round(quiet_remaining,1),
      "regime_ready":sum(1 for x in completed if x[0]=="regime"),
-     "local_ready":sum(1 for x in completed if x[0]=="local"),"error":None}
+     "local_ready":sum(1 for x in LOCAL_EXPERIMENT_SYMBOLS if ("local",x,"1h") in completed and ("local",x,"15m") in completed),"error":None}
    SHUTDOWN.wait(min(2.0,quiet_remaining));continue
   try:
    stamp=time.time()
-   regime_ready=0
-   for sym in REGIME_SEED_SYMBOLS:
-    if SHUTDOWN.is_set():return
-    key=("regime",sym)
-    if key in completed:
-     regime_ready+=1
-     continue
-    rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":sym,"interval":"1m",
-      "startTime":int((stamp-6*3600)*1000),"endTime":int(stamp*1000)}}))
-    if not isinstance(rows,list) or not rows:raise RuntimeError("empty_regime_bootstrap:"+sym)
-    accept_regime_candles(rows);completed.add(key);regime_ready+=1
-    with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":True,"last_check":now(),
-      "mode":"paced_rest_after_lease","regime_ready":regime_ready,"local_ready":sum(1 for x in completed if x[0]=="local"),
-      "error":None}
-    if regime_ready>=5:break
-    SHUTDOWN.wait(3.0)
+   # Native intervals avoid losing older H1 anchors in a nine-hour 3m seed.
+   # Load active Local books before optional market breadth.
    for sym in LOCAL_EXPERIMENT_SYMBOLS:
-    if SHUTDOWN.is_set():return
-    key=("local",sym)
-    if key in completed:continue
-    stamp=time.time()
-    rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":sym,"interval":"3m",
-      "startTime":int((stamp-9*3600)*1000),"endTime":int(stamp*1000)}}))
-    if not isinstance(rows,list) or not rows:raise RuntimeError("empty_local_bootstrap:"+sym)
-    accept_local_history(rows);completed.add(key)
-    with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":True,"last_check":now(),
-      "mode":"paced_rest_after_lease","regime_ready":sum(1 for x in completed if x[0]=="regime"),
-      "local_ready":sum(1 for x in completed if x[0]=="local"),"error":None}
-    SHUTDOWN.wait(3.0)
+    for interval,hours in (("1h",120),("15m",12)):
+     if SHUTDOWN.is_set():return
+     key=("local",sym,interval)
+     with _LOCAL_CANDLE_CACHE_LOCK:cached=_LOCAL_CANDLE_CACHE.get((sym,interval,hours))
+     if key in completed and _local_cached_interval_fresh(cached,interval):continue
+     stamp=time.time()
+     rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":sym,"interval":interval,
+       "startTime":int((stamp-hours*3600)*1000),"endTime":int(stamp*1000)}}))
+     if not isinstance(rows,list) or not rows:raise RuntimeError("empty_local_bootstrap:"+sym+":"+interval)
+     accept_local_candles(rows,history=True)
+     completed.add(key)
+     with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":True,"last_check":now(),
+       "mode":"paced_native_local_history_before_breadth",
+       "regime_ready":sum(1 for x in completed if x[0]=="regime"),
+       "local_ready":sum(1 for x in LOCAL_EXPERIMENT_SYMBOLS if ("local",x,"1h") in completed and ("local",x,"15m") in completed),
+       "error":None}
+     SHUTDOWN.wait(3.0)
    # Optional sixth regime seed after Local is ready.
    for sym in REGIME_SEED_SYMBOLS:
     key=("regime",sym)
@@ -3091,18 +3082,18 @@ def market_history_bootstrap():
     SHUTDOWN.wait(3.0)
    with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":False,"last_check":now(),
      "mode":"paced_rest_after_lease","regime_ready":sum(1 for x in completed if x[0]=="regime"),
-     "local_ready":sum(1 for x in completed if x[0]=="local"),"error":None}
-   SHUTDOWN.wait(300)
+     "local_ready":sum(1 for x in LOCAL_EXPERIMENT_SYMBOLS if ("local",x,"1h") in completed and ("local",x,"15m") in completed),"error":None}
+   SHUTDOWN.wait(30)
   except RestDeferred:
    with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":True,"degraded":False,"last_check":now(),
      "mode":"rest_budget_wait","regime_ready":sum(1 for x in completed if x[0]=="regime"),
-     "local_ready":sum(1 for x in completed if x[0]=="local"),"error":None}
+     "local_ready":sum(1 for x in LOCAL_EXPERIMENT_SYMBOLS if ("local",x,"1h") in completed and ("local",x,"15m") in completed),"error":None}
    SHUTDOWN.wait(3)
   except urllib.error.HTTPError as exc:
    if exc.code==429:
     with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":True,"degraded":False,"last_check":now(),
       "mode":"exchange_429_backoff","regime_ready":sum(1 for x in completed if x[0]=="regime"),
-      "local_ready":sum(1 for x in completed if x[0]=="local"),"error":None}
+      "local_ready":sum(1 for x in LOCAL_EXPERIMENT_SYMBOLS if ("local",x,"1h") in completed and ("local",x,"15m") in completed),"error":None}
     SHUTDOWN.wait(max(10.0,float(HL_REST_BUDGET.status().get("cooldown_seconds",0) or 0)))
    else:
     with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":False,"last_check":now(),"error":str(exc)[:140]}
@@ -4828,6 +4819,18 @@ def html_dashboard(data):
  exp_today_open=exp_today+exp_open
  exp_cards+='<div class="grid"><b>V10 REALIZED P&L<br><span class="%s">$%.4f</span></b><b>V10 OPEN P&L<br><span class="%s">$%.4f</span></b><b>V10 TOTAL P&L<br><span class="%s">$%.4f</span></b><b>V10 TOTAL RETURN<br><span class="%s">%.3f%%</span></b><b>TODAY REALIZED P&L (UTC)<br><span class="%s">$%.4f</span></b><b>TODAY INCLUDING OPEN P&L<br><span class="%s">$%.4f</span></b><b>TODAY INCLUDING OPEN RETURN<br><span class="%s">%.3f%%</span></b></div>'%("posv" if exp_realized>=0 else "negv",exp_realized,"posv" if exp_open>=0 else "negv",exp_open,"posv" if exp_total_pnl>=0 else "negv",exp_total_pnl,"posv" if exp_total_pnl>=0 else "negv",exp_total_pnl/500*100,"posv" if exp_today>=0 else "negv",exp_today,"posv" if exp_today_open>=0 else "negv",exp_today_open,"posv" if exp_today_open>=0 else "negv",exp_today_open/500*100)
  exp_cards+='<div class="grid"><b>LOCAL LAST 24H<br>ROLLING</b><b>REALIZED P&L<br>$%s</b><b>TRADES<br>%s</b><b>WIN RATE<br>%s</b></div>'%(round(float(exp_day.get("realized_pnl",0) or 0),4),exp_day.get("trades",0),esc(exp_day_wr))
+ direction_rows=[]
+ for sym in data.get("local_experiment_symbols",[]):
+  detail=(exp_engine.get("details") or {}).get(sym,{})
+  anchor=detail.get("h1_local") or {}
+  side=int(anchor.get("entry_side") or 0)
+  signal_time=anchor.get("signal_candle_time")
+  confirmed_at=(datetime.datetime.fromtimestamp((float(signal_time)+3600000)/1000,datetime.timezone(datetime.timedelta(hours=4))).strftime("%d.%m %H:%M") if signal_time else "—")
+  allowed="WAIT CONFIRMATION" if anchor.get("entry_blocked") else ("LONG ONLY" if side==1 else ("SHORT ONLY" if side==-1 else "WAIT H1 DATA"))
+  direction_rows.append('<tr><td>%s</td><td>%s @ %s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'%(
+   esc(sym),esc(anchor.get("pivot_type") or "—"),esc(anchor.get("pivot_price") or "—"),esc(confirmed_at),esc(allowed),
+   esc(anchor.get("pending_pivot_type") or "—"),esc(detail.get("last_action") or detail.get("error") or detail.get("caterpillar_phase") or "WAIT DATA")))
+ direction_table='<h3>H1 direction and execution status · confirmation time Samara UTC+4</h3><table><tr><th>Token</th><th>Confirmed H1 anchor</th><th>Confirmed at</th><th>Allowed entry</th><th>Pending opposite extreme</th><th>Current action</th></tr>'+"".join(direction_rows)+'</table>'
  exp_rows=[]
  for sym in data.get("local_experiment_symbols",[]):
   d=(exp_engine.get("details") or {}).get(sym,{})
@@ -4852,7 +4855,7 @@ def html_dashboard(data):
    "posv" if float(p.get("unrealized_pnl",0) or 0)>=0 else "negv",round(float(p.get("unrealized_pnl",0) or 0),4),
    st.get("trades",0),wr))
  exp_rows_html="".join(exp_rows) or '<tr><td colspan=10>No experiment data yet</td></tr>'
- exp_note='<div class="muted">Unified 12-token PAPER Local v10. Start $500. Every new position uses up to 20%% of current mark-to-market equity at fixed 25x PAPER leverage. Five full positions can use the original capital; realized and unrealized profit immediately increases MTM equity/free margin and can fund additional token entries. Open positions are never retroactively resized merely because equity changes. H1 owns direction; strict M15 pullback/resumption re-entry and the cost-aware profit floor are shared by all 12 tokens.</div>'
+ exp_note=direction_table+'<div class="muted">Unified 12-token PAPER Local v10. Start $500. Every new position uses up to 20%% of current mark-to-market equity at fixed 25x PAPER leverage. Five full positions can use the original capital; realized and unrealized profit immediately increases MTM equity/free margin and can fund additional token entries. Open positions are never retroactively resized merely because equity changes. H1 owns direction; strict M15 pullback/resumption re-entry and the cost-aware profit floor are shared by all 12 tokens.</div>'
  pump_positions_data=data.get("pump_positions",[]) or []
  pump_total=float(data.get("pump_total_pnl",0) or 0)
  pump_cards='<div class="grid"><b>PUMP/DUMP ENGINE<br>%s</b><b>OPEN POSITIONS<br>%s</b><b>CLOSED TRADES<br>%s</b><b>REALIZED P&L<br><span class="%s">$%s</span></b><b>UNREALIZED P&L<br><span class="%s">$%s</span></b><b>TOTAL P&L<br><span class="%s">$%s</span></b></div>'%(

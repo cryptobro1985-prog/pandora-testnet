@@ -10,7 +10,8 @@ class CaterpillarTests(unittest.TestCase):
     def m15(self, side, adverse=False):
         return dict(ready=True, side=side, strong_adverse_pressure=adverse, adverse_score=4 if adverse else 0,
                     return_15m=-side*.003 if adverse else side*.003,
-                    recovery_confirmed=not adverse, recovery_score=0 if adverse else 4, median_range_move=.008)
+                    recovery_confirmed=not adverse, recovery_score=0 if adverse else 4, median_range_move=.008,
+                    close_location=.9 if side>0 else .1)
 
     def test_exit_requires_weakened_m15_and_opposite_actual_flow_and_recoil(self):
         for side in (-1, 1):
@@ -51,7 +52,7 @@ class CaterpillarTests(unittest.TestCase):
 
     def test_fixed_safety_floor_does_not_trail_fifty_percent_of_peak(self):
         for side in (-1,1):
-            pos=dict(side=side,entry=100.,features=dict(mfe_price_move=.02))
+            pos=dict(side=side,entry=100.,features=dict(mfe_price_move=.02,estimated_round_trip_cost_move=.0013))
             self.assertIsNone(protective_breakeven(pos,100.+side*.7))
             self.assertIsNone(protective_breakeven(pos,100.+side*.1))
 

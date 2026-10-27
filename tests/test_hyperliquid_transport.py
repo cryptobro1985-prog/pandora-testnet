@@ -14,7 +14,7 @@ class BudgetTests(unittest.TestCase):
     def test_all_threads_share_budget_and_priority_reserve(self):
         budget=RestBudget(limit=200,clock=lambda:0)
         def request(_):
-            try:budget.acquire({'type':'metaAndAssetCtxs'});return True
+            try:budget.acquire({'type':'spotMeta'});return True
             except RestDeferred:return False
         with ThreadPoolExecutor(max_workers=20) as pool:
             self.assertEqual(sum(pool.map(request,range(40))),5)
@@ -117,9 +117,10 @@ class SidecarTests(unittest.TestCase):
             with patch.object(app,'HL_REST_BUDGET',budget),patch.object(app.urllib.request,'urlopen',side_effect=network):
                 req=urllib.request.Request(url,data=b'{"type":"metaAndAssetCtxs"}',headers={'Content-Type':'application/json'})
                 with original(req,timeout=2) as reply:self.assertEqual(reply.status,200)
-                with self.assertRaises(RestDeferred):app.get(app.API,{'type':'metaAndAssetCtxs'})
+                # Metadata is a priority call and must not deadlock startup.
+                app.get(app.API,{'type':'metaAndAssetCtxs'})
                 app.get(app.API,{'type':'allMids'})
-            self.assertEqual(budget.status()['sent'],2)
+            self.assertEqual(budget.status()['sent'],3)
         finally:server.shutdown();server.server_close()
 
 class AdaptiveBudgetTests(unittest.TestCase):
@@ -137,15 +138,13 @@ class HistoryBootstrapTests(CandleTests):
         with patch.object(app,'get') as network:result,_=app._local_m15_candles('HYPE')
         network.assert_not_called();self.assertEqual(len(result),12);self.assertEqual(result[-1]['c'],'101.7')
 
-    def test_socket_bootstraps_history_via_documented_info_post(self):
+    def test_socket_leaves_history_to_single_paced_rest_owner(self):
         stop=MagicMock();stop.is_set.side_effect=[False]*24+[True]*8
         ws=MagicMock();rows=self.rows()
         ws.recv.return_value=json.dumps({'channel':'post','data':{'id':1000000,'response':{'type':'info','payload':{'type':'candleSnapshot','data':rows}}}})
         callback=MagicMock();clock=iter(range(1,200))
         with patch('market_stream.websocket.create_connection',return_value=ws),patch('market_stream.time.time',side_effect=lambda: next(clock)):
             run_trade_stream(MagicMock(),stop,lambda:set(),lambda _:None,'wss://test',candle_symbols=('HYPE','NEAR'),on_candle_history=callback)
-        self.assertGreaterEqual(callback.call_count,1)
+        callback.assert_not_called()
         posts=[json.loads(c.args[0]) for c in ws.send.call_args_list if json.loads(c.args[0]).get('method')=='post']
-        self.assertGreaterEqual(len(posts),1)
-        self.assertTrue(all(p['request']['payload']['type']=='candleSnapshot' for p in posts))
-        self.assertTrue(all(p['request']['payload']['req']['interval']=='3m' for p in posts))
+        self.assertEqual(posts,[])

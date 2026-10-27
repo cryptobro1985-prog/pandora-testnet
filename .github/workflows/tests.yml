@@ -46,6 +46,7 @@ jobs:
             tests.test_h1_direction_m15_execution \
             tests.test_hyperliquid_transport \
             tests.test_local_caterpillar \
+            tests.test_local_v11_regressions \
             tests.test_market_data \
             tests.test_momentum_audit \
             tests.test_regime_v6 \

@@ -46,7 +46,7 @@ class RestBudget:
             # Reserve capacity for critical live-state calls before optional recovery.
             # Metadata must be able to bootstrap Pump/Dump before any candle recovery.
             priority = body.get('type') in ('allMids','metaAndAssetCtxs') or (body.get('type') == 'candleSnapshot' and body.get('req',{}).get('interval') in ('1h','15m'))
-            ceiling = self.limit if priority else max(1, self.limit-100)
+            ceiling = self.limit if priority else max(1, self.limit-min(100, max(2, self.limit-60)))
             if now < self.until or sum(w for _,w in self.used)+weight > ceiling:
                 self.deferred += 1
                 raise RestDeferred('hyperliquid_rest_deferred:shared_budget_or_cooldown')

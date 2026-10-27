@@ -9,7 +9,7 @@ A mature partial M15 candle plus live flow can protect earned profit before the 
 import math
 import statistics
 
-POLICY = "local_swing_h1_bias_m15_execution_v6_data_quality"
+POLICY = "local_swing_h1_bias_m15_execution_v11_pending_extreme_guard"
 SYMBOL = "HYPE"  # backwards-compatible primary symbol
 SYMBOLS = ("HYPE", "NEAR")
 INTERVAL = "1h"
@@ -183,6 +183,34 @@ def analyze(rows, now_ms, symbol=SYMBOL):
     result.update(last_candle_time=candles[-1]["t"], closed_candles=len(candles),
                   h1_direction_anchor=True, execution_interval=M15_INTERVAL,
                   anchor_confirmed=bool(anchor))
+    result.update(pending_extreme(rows, now_ms, result.get("entry_side", 0)))
+    return result
+
+
+def pending_extreme(rows, now_ms, side):
+    """Pause old-side entries at a possible opposite H1 extreme, never flip early.
+
+    The last closed H1 bar must set an extreme against its four predecessors.
+    A live following bar must preserve that extreme and recoil by at least
+    0.15%. Its final close is still required to confirm a new direction.
+    """
+    result = {"entry_blocked": False, "pending_pivot_type": None}
+    candles = completed_candles(rows, now_ms)
+    if side not in (-1, 1) or len(candles) < PIVOT_LOOKBACK + 1:
+        return result
+    p = candles[-1]
+    prior = candles[-1-PIVOT_LOOKBACK:-1]
+    current = _completed(rows, float(now_ms) + 3_600_001, 3_600_000)
+    current = [x for x in current if x["t"] == p["t"] + 3_600_000 and x["t"] <= now_ms < x["T"] + 1001]
+    if not current:
+        return result
+    x = current[-1]
+    high = side > 0 and p["h"] >= max(z["h"] for z in prior) and x["h"] < p["h"] and (p["h"]-x["c"])/p["h"] >= .0015
+    low = side < 0 and p["l"] <= min(z["l"] for z in prior) and x["l"] > p["l"] and (x["c"]-p["l"])/p["l"] >= .0015
+    if high or low:
+        result.update(entry_blocked=True, pending_pivot_type="LOCAL_HIGH" if high else "LOCAL_LOW",
+                      pending_pivot_price=p["h"] if high else p["l"], pending_pivot_candle_time=p["t"],
+                      entry_block_reason="opposite_h1_extreme_awaiting_closed_confirmation")
     return result
 
 
