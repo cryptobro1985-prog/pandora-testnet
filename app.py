@@ -4985,6 +4985,22 @@ def build_dashboard_snapshot(history=None):
    "unrealized_pnl":round(epnl,4),"opened":epos["opened"],"features":epos.get("features",{})})
  experiment_total=float(state.get("local_experiment_equity",LOCAL_EXPERIMENT_STARTING_EQUITY))+experiment_unreal
  hype_swing_total=float(state.get("hype_swing_equity",HYPE_SWING_STARTING_EQUITY))+hype_swing_unreal
+ comparison={}
+ for state_name,label in (("local_s1","Strategy 1 — Restored Caterpillar"),("local_s2","Strategy 2 — H1 Pivot Swing")):
+  rows=[];unreal_cmp=0.0
+  for csym,cpos in state.get(state_name+"_positions",{}).items():
+   cmark=prices.get(csym,cpos["entry"])
+   cpnl=paper_pnl(cpos["notional"],cpos["entry"],cmark,cpos["side"],FEE);unreal_cmp+=cpnl
+   rows.append({"symbol":csym,"side":"LONG" if cpos["side"]>0 else "SHORT","entry":cpos["entry"],"mark":cmark,
+     "margin_usd":round(cpos["margin"],2),"notional_usd":round(cpos["notional"],2),"leverage":cpos["leverage"],
+     "roe_pct":round(cpnl/cpos["margin"]*100,3) if cpos["margin"] else 0,"unrealized_pnl":round(cpnl,4),
+     "opened":cpos["opened"],"features":cpos.get("features",{})})
+  src=copy.deepcopy(state.get("sources",{}).get(label,{}))
+  realized_equity=float(state.get(state_name+"_equity",500.0) or 500.0)
+  comparison[state_name]={"label":label,"positions":rows,"unrealized_pnl":round(unreal_cmp,4),
+   "realized_equity":round(realized_equity,4),"total_equity":round(realized_equity+unreal_cmp,4),
+   "pnl_pct":round((realized_equity+unreal_cmp)/500.0*100-100,3),"engine":src,
+   "stats":copy.deepcopy(src.get("stats") or {}),"watch":copy.deepcopy(state.get(state_name+"_watch",{}))}
  for sym,p in state.get("whale_positions",{}).items():
   px=prices.get(sym,p["entry"]);move=(px/p["entry"]-1)*p["side"];gross=p["notional"]*move;fees=p["notional"]*FEE*2;pnl=paper_pnl(p["notional"],p["entry"],px,p["side"],FEE);whale_unreal+=pnl
   whale_positions.append({"strategy":"WHALE_LIQ","symbol":sym,"side":"LONG" if p["side"]>0 else "SHORT","entry":p["entry"],"mark":px,"notional_usd":round(p["notional"],2),"margin_usd":round(p["margin"],2),"leverage":p["leverage"],"roe_pct":round(pnl/p["margin"]*100,3) if p["margin"] else 0,"unrealized_pnl":round(pnl,4),"opened":p["opened"],"score":round(float(p.get("score",0)),2),"features":p.get("features",{})})
@@ -5018,7 +5034,8 @@ def build_dashboard_snapshot(history=None):
 "local_v10_closed_trades":copy.deepcopy((history or {}).get("local_v10_closed_trades",[])),
 "local_v10_today_realized_pnl":float((history or {}).get("local_v10_today_realized_pnl",0) or 0),
 "local_experiment_stats":copy.deepcopy(state.get("local_experiment_stats",{})),
-"local_experiment_engine":copy.deepcopy(state.get("sources",{}).get("Caterpillar 1.0",{})),"module_trading_enabled":{"news":NEWS_NEW_ENTRIES_ENABLED,"whale_liquidation":WHALE_NEW_ENTRIES_ENABLED,"pump_dump":True,"local":True},"account_model":"UNIFIED_PAPER_ACCOUNT_ALL_STRATEGIES","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"decision_learning":copy.deepcopy(state.get("learning_audit",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
+"local_experiment_engine":copy.deepcopy(state.get("sources",{}).get("Caterpillar 1.0",{})),
+"comparison_strategies":comparison,"module_trading_enabled":{"news":NEWS_NEW_ENTRIES_ENABLED,"whale_liquidation":WHALE_NEW_ENTRIES_ENABLED,"pump_dump":True,"local":True},"account_model":"UNIFIED_PAPER_ACCOUNT_ALL_STRATEGIES","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"decision_learning":copy.deepcopy(state.get("learning_audit",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
 def dashboard():
  # Render open positions from current in-memory prices; slow history queries
