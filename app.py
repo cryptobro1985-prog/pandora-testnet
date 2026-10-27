@@ -1769,7 +1769,13 @@ def local_swing_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=None):
   if not S.get("engine_active") or symbol in S.get("local_swing_positions",{}) or _symbol_open_anywhere(symbol):return False
   equity=float(S.get("equity",0) or 0)
  if equity<=0:return False
- reserved,margin,reason,free=_reserve_shared_entry(symbol,HYPE_SWING_MARGIN_FRACTION,strategy="local_swing")
+ # Preserve the old Local gross-exposure target (25% margin at 25x) while
+ # respecting the exchange's real max leverage. Lower leverage therefore uses
+ # more margin; if the shared account lacks it, the fill is capped to free margin.
+ target_notional=equity*HYPE_SWING_MARGIN_FRACTION*HYPE_SWING_LEVERAGE
+ desired_margin=target_notional/max(leverage,1.0)
+ desired_fraction=desired_margin/equity
+ reserved,margin,reason,free=_reserve_shared_entry(symbol,desired_fraction,strategy="local_swing")
  if not reserved:
   journal("entry_skipped",None,{"strategy":"local_h1_m15_swing_v5","symbol":symbol,"reason":reason,"free_margin":free,"entry_kind":entry_kind})
   log_learning_decision("LOCAL_SKIP:"+symbol+":"+str(int(time.time()//15))+":"+str(int(side)),
@@ -1777,6 +1783,7 @@ def local_swing_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=None):
   return False
  try:
   price=float(price);notional=margin*leverage
+  exposure_fill_ratio=(notional/target_notional) if target_notional>0 else 0.0
   opened=now();epoch=time.time()
   reentries=(int(watch.get("reentries") or 0)+1) if entry_kind=="REENTRY" and watch else 0
   origin_signal=int(analysis.get("signal_candle_time") or 0)
@@ -1785,8 +1792,10 @@ def local_swing_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=None):
     if entry_kind=="REENTRY" else "LOCAL_H1:%s:%s:%s"%(symbol,origin_signal,int(side)))
   features={**analysis,"symbol":symbol,"policy":HYPE_SWING_POLICY,"strategy_name":"local_h1_m15_swing_v5",
    "learning_decision_id":learning_decision_id,"entry_kind":entry_kind,"origin_h1_signal_candle":origin_signal,
-   "swing_reentries":reentries,"allocation_margin_fraction":HYPE_SWING_MARGIN_FRACTION,
-   "leverage":leverage,"mfe_price_move":0.0,"mae_price_move":0.0,"mfe_roe_pct":0.0,"mae_roe_pct":0.0,
+   "swing_reentries":reentries,"allocation_margin_fraction":margin/equity,
+   "reference_margin_fraction":HYPE_SWING_MARGIN_FRACTION,"reference_leverage":HYPE_SWING_LEVERAGE,
+   "target_notional":target_notional,"desired_margin":desired_margin,"exposure_fill_ratio":exposure_fill_ratio,
+   "leverage":leverage,"leverage_source":"hyperliquid_maxLeverage","mfe_price_move":0.0,"mae_price_move":0.0,"mfe_roe_pct":0.0,"mae_roe_pct":0.0,
    "entry_mark":price,"profit_lock_armed":False,"profit_lock_arm_move_pct":HYPE_PROFIT_LOCK_ARM_MOVE*100.0,
    "profit_lock_buffer_move_pct":max(HYPE_PROFIT_LOCK_BUFFER_MOVE,2*FEE+0.0004+0.0003)*100.0,
    "m15_entry_context":m15,"m15_reentry_context":m15 if entry_kind=="REENTRY" else None,
