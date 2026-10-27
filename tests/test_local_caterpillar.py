@@ -16,7 +16,7 @@ class CaterpillarTests(unittest.TestCase):
         for side in (-1, 1):
             pos=dict(side=side,entry=100.,features=dict(mfe_price_move=.01))
             mark=100.+side*.7
-            self.assertEqual(pressure_exit(pos,self.m15(side,True),mark,flow(-side*.5)),'m15_pressure_reversal')
+            self.assertEqual(pressure_exit(pos,self.m15(side,True),mark,flow(-side*.5)),'m15_pressure_reversal_profit_only')
             self.assertIsNone(pressure_exit(pos,self.m15(side,True),mark,flow(side*.5)))
             self.assertIsNone(pressure_exit(pos,self.m15(side,True),mark,flow(-side*.5,False)))
             self.assertIsNone(pressure_exit(pos,self.m15(side),mark,flow(-side*.5)))
@@ -60,8 +60,8 @@ class CaterpillarTests(unittest.TestCase):
         sparse=dict(flow(.5),trade_count_60s=2,observed_notional_60s=46.)
         self.assertIsNone(pressure_exit(pos,self.m15(-1,True),99.7,sparse))
 
-    def test_failed_impulse_can_exit_while_not_profitable(self):
-        pos=dict(side=1,entry=100.,features=dict(mfe_price_move=0.))
-        self.assertEqual(pressure_exit(pos,self.m15(1,True),99.7,flow(-.4)),'m15_pressure_reversal')
+    def test_routine_m15_weakening_does_not_crystallize_a_loss(self):
+        pos=dict(side=1,entry=100.,features=dict(mfe_price_move=0.,estimated_round_trip_cost_move=.001))
+        self.assertIsNone(pressure_exit(pos,self.m15(1,True),99.7,flow(-.4)))
 
 if __name__=='__main__':unittest.main()
