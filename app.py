@@ -5302,9 +5302,9 @@ def html_dashboard(data):
    margin=float(p.get("margin",0) or 0)
    lev=float(p.get("leverage",0) or 0)
    entry=float(p.get("entry",0) or 0)
-   comparison_rows.append('<tr><td>%s</td><td>%s</td><td>%s</td><td>$%.2f</td><td>$%.2f</td><td>%sx</td><td>%s</td></tr>'%(
+   comparison_rows.append('<tr><td>%s</td><td>%s</td><td>%s</td><td>20%% equity</td><td>25x</td><td>$%.2f</td><td>$%.2f</td><td>%sx</td><td>%s</td></tr>'%(
     label,esc(sym),esc(side_txt),notional,margin,round(lev,2) if lev else "—",round(entry,8) if entry else "—"))
- comparison+='<h3>OPEN POSITIONS · POSITION SIZE</h3><table><tr><th>Strategy</th><th>Token</th><th>Side</th><th>Position $</th><th>Margin $</th><th>Leverage</th><th>Entry</th></tr>'+''.join(comparison_rows)+'</table>'
+ comparison+='<h3>OPEN POSITIONS · FIXED RULE: 20% EQUITY × 25x</h3><table><tr><th>Strategy</th><th>Token</th><th>Side</th><th>Margin Rule</th><th>Target Lev</th><th>Position $</th><th>Margin $</th><th>Actual Lev</th><th>Entry</th></tr>'+''.join(comparison_rows)+'</table>'
  exp_cards=comparison+exp_cards
  exp_realized=float(data.get("local_experiment_realized_pnl",0) or 0)
  exp_open=float(data.get("local_experiment_unrealized_pnl",0) or 0)
