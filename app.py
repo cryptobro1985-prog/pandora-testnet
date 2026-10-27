@@ -1768,7 +1768,7 @@ def _local_candles(symbol,interval,hours):
    return cached[1],int(time.time()*1000)
   if cached and len(cached[1])>=_local_min_history_rows(interval) and stamp-cached[0]<ttl:return cached[1],int(time.time()*1000)
   with LOCK:stream_state=copy.deepcopy(S.get("sources",{}).get("MarketTradeStream",{}))
-  if stream_state.get("ok") and int(stream_state.get("history_pending",0) or 0)>0:
+  if stream_state.get("ok"):
    raise RuntimeError("local_swing_candle_ws_history_warmup:"+symbol+":"+interval)
   if stamp<_LOCAL_CANDLE_BACKOFF.get(key,0):
    if cached and stamp-cached[0]<max_stale:return cached[1],cached[2]
@@ -1782,7 +1782,10 @@ def _local_candles(symbol,interval,hours):
     return cached[1],int(time.time()*1000)
    if cached and len(cached[1])>=_local_min_history_rows(interval) and stamp-cached[0]<ttl:return cached[1],int(time.time()*1000)
    with LOCK:stream_state=copy.deepcopy(S.get("sources",{}).get("MarketTradeStream",{}))
-   if stream_state.get("ok") and int(stream_state.get("history_pending",0) or 0)>0:
+   # When the exchange websocket is healthy, LOCAL must never fall back to
+   # candleSnapshot REST. Missing/failed bootstrap stays in warmup and is
+   # recovered by websocket reconnect/history posts, avoiding 429 storms.
+   if stream_state.get("ok"):
     raise RuntimeError("local_swing_candle_ws_history_warmup:"+symbol+":"+interval)
    if stamp<_LOCAL_CANDLE_BACKOFF.get(key,0):
     if cached and stamp-cached[0]<max_stale:return cached[1],cached[2]
