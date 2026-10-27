@@ -4975,8 +4975,11 @@ class HyperliquidBudgetProxy(BaseHTTPRequestHandler):
 if __name__=="__main__":
  budget_proxy=ThreadingHTTPServer(("127.0.0.1",8421),HyperliquidBudgetProxy)
  threading.Thread(target=budget_proxy.serve_forever,daemon=True,name="shared-hl-rest-budget").start()
- try:subprocess.Popen([os.sys.executable,"hyperdata_runner.py"],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
- except Exception as e:S["sources"]["HyperData"]={"ok":False,"error":str(e)[:120]}
+ if WHALE_NEW_ENTRIES_ENABLED:
+  try:subprocess.Popen([os.sys.executable,"hyperdata_runner.py"],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+  except Exception as e:S["sources"]["HyperData"]={"ok":False,"error":str(e)[:120]}
+ else:
+  S["sources"]["HyperData"]={"ok":True,"disabled":True,"mode":"disabled_with_whale_entries","last_check":now(),"error":None}
  init();pinit()
  S["sources"]["PersistentPostgres"]={"ok":True,"last_check":now(),"mode":"primary_state_and_trade_history"}
  server=ThreadingHTTPServer(("0.0.0.0",int(os.getenv("PORT","10000"))),Handler)
