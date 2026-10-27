@@ -140,7 +140,10 @@ START=time.time()
 S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0,"pump_positions":{},"pump_equity":100.0,"pump_realized_pnl":0.0,"pump_trades":0,"pump_history_baseline":{},"whale_positions":{},"whale_equity":100.0,"whale_realized_pnl":0.0,"whale_trades":0,"local_swing_positions":{},"local_swing_watch":{},"hype_swing_position":None,"hype_swing_equity":100.0,"hype_swing_realized_pnl":0.0,"hype_swing_trades":0,"hype_swing_started_at":None,
 "local_v12_positions":{},"local_experiment_watch":{},"local_experiment_equity":LOCAL_EXPERIMENT_STARTING_EQUITY,
 "local_experiment_realized_pnl":0.0,"local_experiment_trades":0,"local_experiment_started_at":None,
-"local_experiment_stats":{},"news_health":{}}
+"local_experiment_stats":{},
+"local_s1_positions":{},"local_s1_watch":{},"local_s1_equity":500.0,"local_s1_realized_pnl":0.0,"local_s1_trades":0,
+"local_s2_positions":{},"local_s2_equity":500.0,"local_s2_realized_pnl":0.0,"local_s2_trades":0,
+"news_health":{}}
 LOCK=threading.RLock()
 ACCOUNT_LOCK=threading.RLock()
 MARKET_REFRESH_LOCK=threading.Lock()
@@ -374,6 +377,25 @@ def pinit():
   c.execute("""create table if not exists local_v12_signal_journal (
     id text primary key, ts text not null, candle_time bigint, action text not null, side integer, price double precision,
     features jsonb not null default '{}'::jsonb)""")
+  # Two independent $500 paper comparison accounts.
+  # Strategy 1 restores the profitable H1->M15 Caterpillar rules; Strategy 2 is pure H1 pivot-to-pivot.
+  for prefix in ("local_s1","local_s2"):
+   c.execute(f"""create table if not exists {prefix}_account_state (
+     id integer primary key, equity double precision not null, realized_pnl double precision not null,
+     started_at text not null, updated_at text not null)""")
+   c.execute(f"""create table if not exists {prefix}_positions (
+     symbol text primary key, side integer not null, entry double precision not null, notional double precision not null,
+     margin double precision not null, leverage double precision not null, opened text not null, opened_epoch double precision not null,
+     signal_candle_time bigint, features jsonb not null default '{{}}'::jsonb)""")
+   c.execute(f"""create table if not exists {prefix}_trade_history (
+     id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision,
+     pnl double precision, reason text, margin double precision, notional double precision, leverage double precision,
+     features jsonb not null default '{{}}'::jsonb)""")
+  c.execute("""create table if not exists local_s1_watchlist (
+    symbol text primary key, side integer not null, origin_signal_candle bigint, exit_price double precision,
+    exit_at text not null, reentries integer not null default 0, context jsonb not null default '{}'::jsonb)""")
+  c.execute("create index if not exists local_s1_trade_closed_idx on local_s1_trade_history(closed desc)")
+  c.execute("create index if not exists local_s2_trade_closed_idx on local_s2_trade_history(closed desc)")
   c.execute("create index if not exists local_experiment_trade_closed_idx on local_v12_trade_history(closed desc)")
   c.execute("create index if not exists local_experiment_signal_time_idx on local_v12_signal_journal(ts desc)")
   c.execute("create index if not exists hype_swing_trade_closed_idx on hype_swing_trade_history(closed desc)")
@@ -459,6 +481,23 @@ def pinit():
     "reentries":int(r["reentries"] or 0),"context":r["context"] or {}}
   S["local_experiment_watch"]=exwatches
   S["local_experiment_trades"]=int(c.execute("select count(*) as n from local_v12_trade_history").fetchone()["n"])
+  for prefix,state_name in (("local_s1","local_s1"),("local_s2","local_s2")):
+   c.execute(f"""insert into {prefix}_account_state(id,equity,realized_pnl,started_at,updated_at)
+     values(1,500,0,%s,%s) on conflict(id) do nothing""",(now(),now()))
+   acct=c.execute(f"select equity,realized_pnl from {prefix}_account_state where id=1").fetchone()
+   S[state_name+"_equity"]=float(acct["equity"]);S[state_name+"_realized_pnl"]=float(acct["realized_pnl"])
+   book={}
+   for rr in c.execute(f"select * from {prefix}_positions").fetchall():
+    book[rr["symbol"]]={"symbol":rr["symbol"],"side":int(rr["side"]),"entry":float(rr["entry"]),"notional":float(rr["notional"]),
+      "margin":float(rr["margin"]),"leverage":float(rr["leverage"]),"opened":rr["opened"],"t":float(rr["opened_epoch"]),
+      "signal_candle_time":int(rr["signal_candle_time"] or 0),"features":rr["features"] or {}}
+   S[state_name+"_positions"]=book
+   S[state_name+"_trades"]=int(c.execute(f"select count(*) as n from {prefix}_trade_history").fetchone()["n"])
+  s1w={}
+  for rr in c.execute("select * from local_s1_watchlist").fetchall():
+   s1w[rr["symbol"]]={"symbol":rr["symbol"],"side":int(rr["side"]),"origin_signal_candle":int(rr["origin_signal_candle"] or 0),
+     "exit_price":float(rr["exit_price"] or 0),"exit_at":rr["exit_at"],"reentries":int(rr["reentries"] or 0),"context":rr["context"] or {}}
+  S["local_s1_watch"]=s1w
  STORE.migrate()
  _,positions=STORE.load(recover_legacy=False)
  S["positions"]=positions
