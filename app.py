@@ -3005,14 +3005,14 @@ def market_regime_history():
 
 
 def market_trade_stream():
- # Startup ordering: market metadata is required by PumpDump to classify
- # liquid markets. Give the single metaAndAssetCtxs bootstrap request a short
- # head start before websocket candle-history recovery starts consuming the
- # shared Hyperliquid REST budget.
- metadata_deadline=time.time()+15.0
+ # During Render rolling deploy the standby instance must not touch exchange
+ # metadata/history while the old lease owner is still live. Wait for this
+ # process to own the engine lease, then require metadata before subscribing.
  while not SHUTDOWN.is_set():
-  with LOCK:metadata_ready=bool(S.get("_day_volumes")) and bool(S.get("_max_leverage"))
-  if metadata_ready or time.time()>=metadata_deadline:break
+  with LOCK:
+   active=bool(S.get("engine_active"))
+   metadata_ready=bool(S.get("_day_volumes")) and bool(S.get("_max_leverage"))
+  if active and metadata_ready:break
   SHUTDOWN.wait(.25)
  def symbols():
   # Pump/dump coverage is whole-market: subscribe to every currently listed
@@ -3029,6 +3029,13 @@ def market_trade_stream():
 
 def market_metadata():
  while not SHUTDOWN.is_set():
+  # Do not duplicate REST traffic from a standby Render instance during
+  # blue/green rollout. Bootstrap metadata only after this process owns lease.
+  with LOCK:active=bool(S.get("engine_active"))
+  if not active:
+   with LOCK:S["sources"]["MarketMetadata"]={"ok":False,"standby":True,"last_check":now(),"mode":"waiting_for_engine_lease","error":None}
+   SHUTDOWN.wait(.5)
+   continue
   try:
    raw=json.loads(get(API,{"type":"metaAndAssetCtxs"}))
    universe=raw[0].get("universe",[]);ctxs=raw[1]
@@ -3052,11 +3059,12 @@ def market_metadata():
   except Exception as e:
    with LOCK:
     cached=bool(S.get("_day_volumes")) and bool(S.get("_max_leverage"))
-    S["sources"]["MarketMetadata"]={"ok":cached,"degraded":True,"last_check":now(),
-     "mode":"cached_metadata_rest_backoff","markets":len(S.get("_day_volumes",{})),
+    S["sources"]["MarketMetadata"]={"ok":cached,"degraded":bool(cached),"warmup":not cached,"last_check":now(),
+     "mode":"cached_metadata_rest_backoff" if cached else "metadata_bootstrap_retry",
+     "markets":len(S.get("_day_volumes",{})),
      "max_leverage_markets":len(S.get("_max_leverage",{})),"error":str(e)[:140]}
    if not cached and isinstance(e,RestDeferred):
-    SHUTDOWN.wait(8)
+    SHUTDOWN.wait(2)
     continue
    if isinstance(e,urllib.error.HTTPError) and e.code==429:
     SHUTDOWN.wait(MARKET_METADATA_SECONDS if cached else 35.0)
