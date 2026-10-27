@@ -167,7 +167,7 @@ NEWS_MAX_AGE_SECONDS=float(os.getenv("NEWS_MAX_AGE_SECONDS","120"))
 NEWS_POLL_SECONDS=float(os.getenv("NEWS_POLL_SECONDS","15"))
 WHITEHOUSE_POLL_SECONDS=max(10.0,float(os.getenv("WHITEHOUSE_POLL_SECONDS","15")))
 PUMP_SCAN_SECONDS=max(1.0,float(os.getenv("PUMP_SCAN_SECONDS","2")))
-MARKET_METADATA_SECONDS=max(3.0,float(os.getenv("MARKET_METADATA_SECONDS","5")))
+MARKET_METADATA_SECONDS=max(10.0,float(os.getenv("MARKET_METADATA_SECONDS","15")))
 MICRO_ANALYSIS_THREADS=max(1,min(10,int(os.getenv("MICRO_ANALYSIS_THREADS","10"))))
 LIQ_WHALE_SCAN_SECONDS=max(3.0,float(os.getenv("LIQ_WHALE_SCAN_SECONDS","3")))
 LIQ_WHALE_MAX_DISTANCE_PCT=max(0.5,float(os.getenv("LIQ_WHALE_MAX_DISTANCE_PCT","1.5")))
@@ -2853,43 +2853,54 @@ def impulse_scan():
  finally:pool.shutdown(wait=False,cancel_futures=True)
 
 def market_regime_history():
- # Restarting a free service must not erase the 5m/15m/30m market context.
- # Only completed exchange candles seed breadth, never the 15s entry signal.
- pool=concurrent.futures.ThreadPoolExecutor(max_workers=4,thread_name_prefix="breadth-history")
- try:
-  while not SHUTDOWN.is_set():
-   with LOCK:
-    active=bool(S.get("engine_active"));volumes=dict(S.get("_day_volumes",{}))
-   liquid=sorted((s for s,v in volumes.items() if v>=5_000_000),key=lambda s:volumes[s],reverse=True)
-   symbols=list(dict.fromkeys([s for s in REGIME_SEED_SYMBOLS if s in volumes]+liquid))[:24]
-   if not active or not symbols:
-    SHUTDOWN.wait(2);continue
-   stamp=time.time()
-   def fetch(sym):
-    with LOCK:prior=list(S.get("_regime_candles",{}).get(sym,[]))
-    if prior and stamp-prior[-1][0]<90 and any(0<=stamp-14400-t<=65 for t,_ in prior):return prior
-    start=max(stamp-6*3600,prior[-1][0]-120) if prior else stamp-6*3600
-    rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":sym,"interval":"1m","startTime":int(start*1000),"endTime":int(stamp*1000)}}))
-    if not isinstance(rows,list):raise ValueError("invalid_candle_history")
-    return [(float(r["T"])/1000,float(r["c"])) for r in rows
-            if isinstance(r,dict) and 0<float(r.get("T",0))/1000<stamp and float(r.get("c",0))>0]
-   jobs={s:pool.submit(fetch,s) for s in symbols};errors={};loaded=0
-   for sym,job in jobs.items():
+ # Websocket 1m seed is the primary H1/H4 breadth history. REST is recovery
+ # only for the minimum missing seed market, never a 24-market startup fan-out.
+ while not SHUTDOWN.is_set():
+  with LOCK:
+   active=bool(S.get("engine_active"))
+   snapshot={sym:list(S.get("_regime_candles",{}).get(sym,[])) for sym in REGIME_SEED_SYMBOLS}
+  if not active:
+   SHUTDOWN.wait(2);continue
+  stamp=time.time()
+  def usable(rows):
+   return bool(rows and stamp-rows[-1][0]<90 and any(0<=stamp-14400-t<=65 for t,_ in rows))
+  ready=[sym for sym,rows in snapshot.items() if usable(rows)]
+  errors={}
+  recovered=[]
+  if len(ready)<5:
+   for sym in REGIME_SEED_SYMBOLS:
+    if sym in ready:continue
     try:
-     rows=job.result()
-     if not rows:raise ValueError("empty_completed_candles")
+     status=HL_REST_BUDGET.status()
+     if float(status.get("cooldown_seconds",0) or 0)>0:
+      raise RestDeferred("shared_rest_cooldown")
+     prior=snapshot.get(sym,[])
+     start=max(stamp-6*3600,prior[-1][0]-120) if prior else stamp-6*3600
+     rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":sym,"interval":"1m",
+       "startTime":int(start*1000),"endTime":int(stamp*1000)}}))
+     if not isinstance(rows,list):raise ValueError("invalid_candle_history")
+     parsed=[(float(r["T"])/1000,float(r["c"])) for r in rows
+       if isinstance(r,dict) and 0<float(r.get("T",0))/1000<stamp and float(r.get("c",0))>0]
+     if not parsed:raise ValueError("empty_completed_candles")
      with LOCK:
-      prior=S.setdefault("_regime_candles",{}).get(sym,[])
-      merged=dict(prior);merged.update(dict(rows))
+      prior_live=S.setdefault("_regime_candles",{}).get(sym,[])
+      merged=dict(prior_live);merged.update(dict(parsed))
       S["_regime_candles"][sym]=sorted(merged.items())[-360:]
-     loaded+=1
-    except Exception as exc:errors[sym]=str(exc)[:90]
-   with LOCK:S["sources"]["MarketBreadthHistory"]={"ok":loaded>=5,"last_check":now(),"loaded_markets":loaded,
-    "requested_markets":len(symbols),"mode":"completed_1m_H1_H4_context","refresh_seconds":300,
-    "transport":"websocket_seed_with_rest_recovery","seed_symbols":list(REGIME_SEED_SYMBOLS),
-    "error":None if not errors else errors}
-   SHUTDOWN.wait(300)
- finally:pool.shutdown(wait=False,cancel_futures=True)
+      current=list(S["_regime_candles"][sym])
+     if usable(current):
+      ready.append(sym);recovered.append(sym)
+     if len(ready)>=5:break
+    except Exception as exc:
+     errors[sym]=type(exc).__name__+":"+str(exc)[:80]
+  ok=len(set(ready))>=5
+  with LOCK:S["sources"]["MarketBreadthHistory"]={"ok":ok,"last_check":now(),
+    "loaded_markets":len(set(ready)),"requested_markets":len(REGIME_SEED_SYMBOLS),
+    "mode":"completed_1m_H1_H4_context","refresh_seconds":300 if ok else 15,
+    "transport":"websocket_seed_primary_single_rest_recovery",
+    "seed_symbols":list(REGIME_SEED_SYMBOLS),"recovered_via_rest":recovered,
+    "error":None if ok else errors}
+  SHUTDOWN.wait(300 if ok else 15)
+
 
 def market_trade_stream():
  def symbols():
