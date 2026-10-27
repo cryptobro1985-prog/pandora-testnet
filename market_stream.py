@@ -44,7 +44,9 @@ def run_trade_stream(observations, stop, symbols_provider, report, url, on_mids=
                     queue_history("regime",{"type":"candleSnapshot","req":{"coin":symbol,"interval":"1m",
                         "startTime":end_ms-6*3600000,"endTime":end_ms}})
             observations.mark_connected(time.time(), selected)
-            last_ping = last_report = last_history_send = 0
+            last_ping = last_report = 0
+            last_history_send = time.time()
+            history_start_after = last_history_send + 5.0
             last_refresh = last_received = time.time()
             while not stop.is_set():
                 epoch = time.time()
@@ -53,7 +55,7 @@ def run_trade_stream(observations, stop, symbols_provider, report, url, on_mids=
                     last_ping = epoch
                 # Keep at most four history requests in flight and space new posts.
                 # Failed/timeout snapshots are retried on the same websocket.
-                if history_queue and len(history_inflight)<4 and epoch-last_history_send>=0.30:
+                if history_queue and epoch>=history_start_after and len(history_inflight)<1 and epoch-last_history_send>=1.00:
                     route,payload,attempts=history_queue.pop(0)
                     ident=history_seq;history_seq+=1
                     ws.send(json.dumps({"method":"post","id":ident,"request":{"type":"info","payload":payload}}))
