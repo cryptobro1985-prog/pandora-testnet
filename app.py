@@ -61,7 +61,7 @@ from hype_h1_swing import (POLICY as HYPE_SWING_POLICY, SYMBOL as HYPE_SWING_SYM
 LOCAL_EXPERIMENT_SYMBOLS=("INIT","NEAR","GRASS","HYPE")
 LOCAL_S3_SYMBOLS=("HYPE","NEAR","INIT","USELESS","GRASS","APT","TAO","CHIP","BABY","SPX","LIT","CASHCAT")
 LOCAL_EXPERIMENT_STARTING_EQUITY=500.0
-NEWS_NEW_ENTRIES_ENABLED=False
+NEWS_NEW_ENTRIES_ENABLED=True
 WHALE_NEW_ENTRIES_ENABLED=False
 LOCAL_EXPERIMENT_MARGIN_FRACTION=0.20
 LOCAL_EXPERIMENT_MAX_POSITIONS=4
@@ -3602,8 +3602,18 @@ def market_history_bootstrap():
    SHUTDOWN.wait(min(2.0,quiet_remaining));continue
   try:
    stamp=time.time()
-   # Native intervals avoid losing older H1 anchors in a nine-hour 3m seed.
-   # Load active Local books before optional market breadth.
+   # Bootstrap H1/H4 market-regime context first so Pump/Dump becomes trade-ready
+   # before the larger Local candle fan-out completes.
+   for sym in REGIME_SEED_SYMBOLS:
+    key=("regime",sym)
+    if key in completed:continue
+    stamp=time.time()
+    rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":sym,"interval":"1m",
+      "startTime":int((stamp-6*3600)*1000),"endTime":int(stamp*1000)}}))
+    if isinstance(rows,list) and rows:
+     accept_regime_candles(rows);completed.add(key)
+    SHUTDOWN.wait(2.0)
+   # Native intervals avoid losing older H1 anchors.
    for sym in ALL_LOCAL_CANDLE_SYMBOLS:
     for interval,hours in (("1h",120),("15m",12)):
      if SHUTDOWN.is_set():return
@@ -3624,16 +3634,6 @@ def market_history_bootstrap():
        "local_ready":sum(1 for x in LOCAL_EXPERIMENT_SYMBOLS if ("local",x,"1h") in completed and ("local",x,"15m") in completed),
        "error":None}
      SHUTDOWN.wait(3.0)
-   # Optional sixth regime seed after Local is ready.
-   for sym in REGIME_SEED_SYMBOLS:
-    key=("regime",sym)
-    if key in completed:continue
-    stamp=time.time()
-    rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":sym,"interval":"1m",
-      "startTime":int((stamp-6*3600)*1000),"endTime":int(stamp*1000)}}))
-    if isinstance(rows,list) and rows:
-     accept_regime_candles(rows);completed.add(key)
-    SHUTDOWN.wait(3.0)
    with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":False,"last_check":now(),
      "mode":"paced_rest_after_lease","regime_ready":sum(1 for x in completed if x[0]=="regime"),
      "local_ready":sum(1 for x in LOCAL_EXPERIMENT_SYMBOLS if ("local",x,"1h") in completed and ("local",x,"15m") in completed),"error":None}
@@ -5777,11 +5777,9 @@ if __name__=="__main__":
  # ingest/entry logic by NEWS_NEW_ENTRIES_ENABLED.
  worker_specs.extend([("x_critical_4s",x_critical_realtime),("piq_direct",piq_direct_realtime)])
  if NEWS_NEW_ENTRIES_ENABLED:
+  # Trading news path remains intentionally minimal: FirstSquawk + PiQ Direct.
+  # Their dedicated workers are always running above; recovery only processes durable queued events.
   worker_specs.append(("news_recovery",recover_news_processing))
-  for name,url in FEEDS.items():
-   if not name.startswith("XIndex:") and name not in SEARCH_INDEX_FEEDS:
-    worker_specs.append(("feed:"+name,lambda n=name,u=url:news_feed(n,u)))
-  for name,url in RESEARCH_PAGES.items():worker_specs.append(("research:"+name,lambda n=name,u=url:research_page_monitor(n,u)))
  if os.getenv("ENABLE_PUBLIC_X_HTML","0")=="1":
   for handle in WATCH:worker_specs.append(("public-x:"+handle,lambda h=handle:public_social_reader("x",h)))
  workers=[threading.Thread(target=supervised_worker,args=(label,fn),daemon=True,name=label) for label,fn in worker_specs]
