@@ -51,6 +51,26 @@ from hype_h1_swing import (POLICY as HYPE_SWING_POLICY, SYMBOL as HYPE_SWING_SYM
                            m15_reentry_after_exit as local_m15_reentry_after_exit,
                            position_exit as hype_position_exit, update_path as hype_update_path,
                            profit_lock_exit as hype_profit_lock_exit, shadow_triggers as hype_shadow_triggers)
+
+# Separate 24h Local paper experiment. Leverage follows Hyperliquid's live
+# per-market maxLeverage metadata; validated fallbacks are only for metadata outages.
+LOCAL_EXPERIMENT_SYMBOLS=("INIT","USELESS","GRASS","APT","TAO","CHIP","BABY","SPX","LIT","CASHCAT")
+LOCAL_EXPERIMENT_STARTING_EQUITY=500.0
+LOCAL_EXPERIMENT_MARGIN_FRACTION=0.20
+LOCAL_EXPERIMENT_MAX_POSITIONS=5
+VALIDATED_MAX_LEVERAGE={"HYPE":10.0,"NEAR":10.0,"APT":10.0,"TAO":5.0,"SPX":5.0,"LIT":5.0,
+ "INIT":3.0,"USELESS":3.0,"GRASS":3.0,"CHIP":3.0,"BABY":3.0,"CASHCAT":3.0}
+ALL_LOCAL_CANDLE_SYMBOLS=tuple(dict.fromkeys(tuple(LOCAL_SWING_SYMBOLS)+LOCAL_EXPERIMENT_SYMBOLS))
+
+def market_max_leverage(symbol):
+ with LOCK:
+  raw=(S.get("_max_leverage") or {}).get(symbol)
+ try:
+  lev=float(raw)
+  if math.isfinite(lev) and lev>=1:return lev
+ except (TypeError,ValueError,OverflowError):pass
+ return float(VALIDATED_MAX_LEVERAGE.get(symbol,1.0))
+
 LATENCIES=LatencyMetrics()
 MARKET_OBS=RollingMarketData(max_symbols=512)
 LIQUIDATION_TAPE=LiquidationTape()
@@ -109,7 +129,10 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 API=os.getenv("HYPERLIQUID_INFO_API","https://api.hyperliquid.xyz/info").strip() or "https://api.hyperliquid.xyz/info"
 DB="/tmp/pandora.sqlite3"
 START=time.time()
-S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0,"pump_positions":{},"pump_equity":100.0,"pump_realized_pnl":0.0,"pump_trades":0,"pump_history_baseline":{},"whale_positions":{},"whale_equity":100.0,"whale_realized_pnl":0.0,"whale_trades":0,"local_swing_positions":{},"local_swing_watch":{},"hype_swing_position":None,"hype_swing_equity":100.0,"hype_swing_realized_pnl":0.0,"hype_swing_trades":0,"hype_swing_started_at":None,"news_health":{}}
+S={"adaptive":{"samples":0,"changed":False},"mode":"PAPER_ONLY","orders_enabled":False,"last_poll":None,"market_count":0,"news_seen":0,"trades":0,"errors":0,"last_error":None,"sources":{},"positions":{},"equity":100.0,"realized_pnl":0.0,"pump_positions":{},"pump_equity":100.0,"pump_realized_pnl":0.0,"pump_trades":0,"pump_history_baseline":{},"whale_positions":{},"whale_equity":100.0,"whale_realized_pnl":0.0,"whale_trades":0,"local_swing_positions":{},"local_swing_watch":{},"hype_swing_position":None,"hype_swing_equity":100.0,"hype_swing_realized_pnl":0.0,"hype_swing_trades":0,"hype_swing_started_at":None,
+"local_experiment_positions":{},"local_experiment_watch":{},"local_experiment_equity":LOCAL_EXPERIMENT_STARTING_EQUITY,
+"local_experiment_realized_pnl":0.0,"local_experiment_trades":0,"local_experiment_started_at":None,
+"local_experiment_stats":{},"news_health":{}}
 LOCK=threading.RLock()
 ACCOUNT_LOCK=threading.RLock()
 MARKET_REFRESH_LOCK=threading.Lock()
@@ -1598,7 +1621,7 @@ def accept_local_candles(data,history=False):
   for row in rows:
    if not isinstance(row,dict):continue
    symbol,interval=row.get("s"),row.get("i")
-   if symbol not in LOCAL_SWING_SYMBOLS or interval not in ("1h","15m"):continue
+   if symbol not in ALL_LOCAL_CANDLE_SYMBOLS or interval not in ("1h","15m"):continue
    try:
     t,T=int(row["t"]),int(row["T"])
     values=[float(row[k]) for k in ("o","h","l","c","v")]
@@ -1741,6 +1764,7 @@ def local_swing_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=None):
   if int(analysis.get("entry_side") or 0)==-int(side):return False
  price=current_entry_price(symbol)
  if price is None:return False
+ leverage=market_max_leverage(symbol)
  with LOCK:
   if not S.get("engine_active") or symbol in S.get("local_swing_positions",{}) or _symbol_open_anywhere(symbol):return False
   equity=float(S.get("equity",0) or 0)
@@ -1749,10 +1773,10 @@ def local_swing_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=None):
  if not reserved:
   journal("entry_skipped",None,{"strategy":"local_h1_m15_swing_v5","symbol":symbol,"reason":reason,"free_margin":free,"entry_kind":entry_kind})
   log_learning_decision("LOCAL_SKIP:"+symbol+":"+str(int(time.time()//15))+":"+str(int(side)),
-   "local_h1_m15_swing_v5",symbol,int(side),"SKIPPED",reason,price,None,HYPE_SWING_LEVERAGE,{**analysis,"entry_kind":entry_kind})
+   "local_h1_m15_swing_v5",symbol,int(side),"SKIPPED",reason,price,None,leverage,{**analysis,"entry_kind":entry_kind})
   return False
  try:
-  price=float(price);notional=margin*HYPE_SWING_LEVERAGE
+  price=float(price);notional=margin*leverage
   opened=now();epoch=time.time()
   reentries=(int(watch.get("reentries") or 0)+1) if entry_kind=="REENTRY" and watch else 0
   origin_signal=int(analysis.get("signal_candle_time") or 0)
@@ -1762,7 +1786,7 @@ def local_swing_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=None):
   features={**analysis,"symbol":symbol,"policy":HYPE_SWING_POLICY,"strategy_name":"local_h1_m15_swing_v5",
    "learning_decision_id":learning_decision_id,"entry_kind":entry_kind,"origin_h1_signal_candle":origin_signal,
    "swing_reentries":reentries,"allocation_margin_fraction":HYPE_SWING_MARGIN_FRACTION,
-   "leverage":HYPE_SWING_LEVERAGE,"mfe_price_move":0.0,"mae_price_move":0.0,"mfe_roe_pct":0.0,"mae_roe_pct":0.0,
+   "leverage":leverage,"mfe_price_move":0.0,"mae_price_move":0.0,"mfe_roe_pct":0.0,"mae_roe_pct":0.0,
    "entry_mark":price,"profit_lock_armed":False,"profit_lock_arm_move_pct":HYPE_PROFIT_LOCK_ARM_MOVE*100.0,
    "profit_lock_buffer_move_pct":max(HYPE_PROFIT_LOCK_BUFFER_MOVE,2*FEE+0.0004+0.0003)*100.0,
    "m15_entry_context":m15,"m15_reentry_context":m15 if entry_kind=="REENTRY" else None,
@@ -1771,7 +1795,7 @@ def local_swing_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=None):
    "profit_lock_arm_move":0.004,"profit_lock_mode":"fixed_cost_aware_breakeven","caterpillar_policy":CATERPILLAR_POLICY,
    "profit_lock_buffer_move":max(HYPE_PROFIT_LOCK_BUFFER_MOVE,2*FEE+0.0004+0.0003),
    "shadow_exit_modes":["opposite_h1_local_extreme","m15_momentum_weakening","profit_lock_stop","m15_adverse_pressure_profit_protect"]}
-  pos={"symbol":symbol,"side":int(side),"entry":price,"notional":notional,"margin":margin,"leverage":HYPE_SWING_LEVERAGE,
+  pos={"symbol":symbol,"side":int(side),"entry":price,"notional":notional,"margin":margin,"leverage":leverage,
        "opened":opened,"t":epoch,"signal_candle_time":origin_signal,"features":features}
   with pg() as db:
    with db.transaction():
@@ -1784,14 +1808,14 @@ def local_swing_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=None):
     if not claim:return False
     row=db.execute("""insert into hype_swing_positions(symbol,side,entry,notional,margin,leverage,opened,opened_epoch,signal_candle_time,features)
        values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(symbol) do nothing returning symbol""",
-       (symbol,int(side),price,notional,margin,HYPE_SWING_LEVERAGE,opened,epoch,origin_signal,json.dumps(features,default=str))).fetchone()
+       (symbol,int(side),price,notional,margin,leverage,opened,epoch,origin_signal,json.dumps(features,default=str))).fetchone()
     if not row:return False
     db.execute("""insert into hype_swing_shadow_exits(opened,entry_candle_time,side,entry,context,symbol)
       values(%s,%s,%s,%s,%s::jsonb,%s)""",(opened,origin_signal,int(side),price,json.dumps(features,default=str),symbol))
     if entry_kind=="REENTRY":db.execute("delete from local_swing_watchlist where symbol=%s",(symbol,))
     db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'local_swing_trade_opened',%s::jsonb)",
       (now(),json.dumps({"strategy":"local_h1_m15_swing_v5","symbol":symbol,"side":int(side),"entry_kind":entry_kind,
-       "entry":price,"margin":margin,"notional":notional,"leverage":HYPE_SWING_LEVERAGE,"equity":equity,
+       "entry":price,"margin":margin,"notional":notional,"leverage":leverage,"equity":equity,
        "origin_h1_signal_candle":origin_signal,"reentries":reentries,"pivot_type":analysis.get("pivot_type"),
        "pivot_price":analysis.get("pivot_price"),"policy":HYPE_SWING_POLICY},default=str)))
   with LOCK:
@@ -1799,7 +1823,7 @@ def local_swing_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=None):
    if symbol==HYPE_SWING_SYMBOL:S["hype_swing_position"]=pos
    if entry_kind=="REENTRY":S.setdefault("local_swing_watch",{}).pop(symbol,None)
   log_learning_decision(learning_decision_id,"local_h1_m15_swing_v5",symbol,int(side),"OPENED",
-   "m15_recovery_reentry" if entry_kind=="REENTRY" else "h1_anchor_m15_entry",price,None,HYPE_SWING_LEVERAGE,features)
+   "m15_recovery_reentry" if entry_kind=="REENTRY" else "h1_anchor_m15_entry",price,None,leverage,features)
   return True
  finally:_release_shared_entry(symbol,strategy="local_swing")
 
@@ -2437,17 +2461,19 @@ def market_trade_stream():
   return listed|LIQ_WHALE_SYMBOLS|held
  def report(status):
   with LOCK:S["sources"]["MarketTradeStream"]={"last_check":now(),**status}
- run_trade_stream(MARKET_OBS,SHUTDOWN,symbols,report,os.getenv("HYPERLIQUID_WS_API","wss://api.hyperliquid.xyz/ws"),on_mids=accept_market_prices,on_candles=accept_local_candles,candle_symbols=LOCAL_SWING_SYMBOLS,on_candle_history=lambda rows:accept_local_candles(rows,history=True),regime_symbols=REGIME_SEED_SYMBOLS,on_regime_candles=accept_regime_candles)
+ run_trade_stream(MARKET_OBS,SHUTDOWN,symbols,report,os.getenv("HYPERLIQUID_WS_API","wss://api.hyperliquid.xyz/ws"),on_mids=accept_market_prices,on_candles=accept_local_candles,candle_symbols=ALL_LOCAL_CANDLE_SYMBOLS,on_candle_history=lambda rows:accept_local_candles(rows,history=True),regime_symbols=REGIME_SEED_SYMBOLS,on_regime_candles=accept_regime_candles)
 
 def market_metadata():
  while not SHUTDOWN.is_set():
   try:
    raw=json.loads(get(API,{"type":"metaAndAssetCtxs"}))
    universe=raw[0].get("universe",[]);ctxs=raw[1]
-   volumes={};pump_ctx={};stamp=time.time()
+   volumes={};pump_ctx={};max_leverage={};stamp=time.time()
    for asset,ctx in zip(universe,ctxs):
     try:
      name=asset["name"];v=float(ctx.get("dayNtlVlm",0) or 0);oi=float(ctx.get("openInterest",0) or 0)
+     lev=float(asset.get("maxLeverage",0) or 0)
+     if math.isfinite(lev) and lev>=1:max_leverage[name]=lev
      funding=float(ctx.get("funding",0) or 0);premium=float(ctx.get("premium",0) or 0)
      mark=float(ctx.get("markPx",0) or 0);oracle=float(ctx.get("oraclePx",0) or 0)
      if math.isfinite(v) and v>=0:volumes[name]=v
@@ -2456,8 +2482,9 @@ def market_metadata():
        "mark_price":mark,"oracle_price":oracle,**MARKET_OBS.context(name,stamp)}
     except (TypeError,ValueError,KeyError,ZeroDivisionError):continue
    with LOCK:
-    S["_day_volumes"]=volumes;S["_pump_ctx"]=pump_ctx
-    S["sources"]["MarketMetadata"]={"ok":True,"last_check":now(),"markets":len(volumes)}
+    S["_day_volumes"]=volumes;S["_pump_ctx"]=pump_ctx;S["_max_leverage"]=max_leverage
+    S["sources"]["MarketMetadata"]={"ok":True,"last_check":now(),"markets":len(volumes),"max_leverage_markets":len(max_leverage),
+      "local_max_leverage":{sym:max_leverage.get(sym,VALIDATED_MAX_LEVERAGE.get(sym)) for sym in ALL_LOCAL_CANDLE_SYMBOLS}}
   except Exception as e:
    with LOCK:S["sources"]["MarketMetadata"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
   SHUTDOWN.wait(MARKET_METADATA_SECONDS)
