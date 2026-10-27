@@ -5261,6 +5261,16 @@ def html_dashboard(data):
  exp_day=exp_stats.get("rolling_24h") or {}
  exp_day_wr="—" if exp_day.get("win_rate") is None else str(round(float(exp_day["win_rate"])*100,1))+"%"
  exp_cards='<div class="grid"><b>4-TOKEN LOCAL · ORDER FLOW<br>%s</b><b>START<br>$500</b><b>MTM EQUITY<br>$%s</b><b>P&L<br><span class="%s">%s%%</span></b><b>OPEN POSITIONS<br>%s</b><b>CLOSED TRADES<br>%s</b><b>POSITION<br>20%% MTM EQUITY</b><b>LEVERAGE<br>FIXED 25x PAPER</b></div>'%("OK" if exp_engine.get("ok") else "ERROR",data.get("local_experiment_total_equity",500),"posv" if data.get("local_experiment_pnl_pct",0)>=0 else "negv",data.get("local_experiment_pnl_pct",0),len(exp_positions),data.get("local_experiment_trades",0))
+ s1=(data.get("sources") or {}).get("Strategy 1 — Restored Caterpillar",{}) or {}
+ s2=(data.get("sources") or {}).get("Strategy 2 — H1 Pivot Swing",{}) or {}
+ s1stats=s1.get("stats") or {};s2stats=s2.get("stats") or {}
+ comparison='<h2>LOCAL STRATEGY COMPARISON · FRESH $500 + $500</h2><div class="grid">'+\
+   '<b>STRATEGY 1 · RESTORED CATERPILLAR<br>%s</b><b>S1 EQUITY<br>$%.4f</b><b>S1 OPEN<br>%s</b><b>S1 CLOSED<br>%s</b><b>S1 REALIZED<br>$%.4f</b>'+\
+   '<b>STRATEGY 2 · H1 PIVOT→PIVOT<br>%s</b><b>S2 EQUITY<br>$%.4f</b><b>S2 OPEN<br>%s</b><b>S2 CLOSED<br>%s</b><b>S2 REALIZED<br>$%.4f</b></div>'%(\
+    "OK" if s1.get("ok") else "WARMUP/ERROR",float(s1.get("equity",500) or 500),len(s1.get("open_positions",[]) or []),int(s1stats.get("trades",0) or 0),float(s1stats.get("realized_pnl",0) or 0),\
+    "OK" if s2.get("ok") else "WARMUP/ERROR",float(s2.get("equity",500) or 500),len(s2.get("open_positions",[]) or []),int(s2stats.get("trades",0) or 0),float(s2stats.get("realized_pnl",0) or 0))
+ comparison+='<div class="muted">S1: H1 direction + M15 weakening/profit floor + pullback/resumption re-entry. S2: LOCAL HIGH → SHORT until confirmed LOCAL LOW; LOCAL LOW → LONG until confirmed LOCAL HIGH. Both: INIT / NEAR / GRASS / HYPE · 20%% margin · 25x paper reference · compounding.</div>'
+ exp_cards=comparison+exp_cards
  exp_realized=float(data.get("local_experiment_realized_pnl",0) or 0)
  exp_open=float(data.get("local_experiment_unrealized_pnl",0) or 0)
  exp_total_pnl=exp_realized+exp_open
