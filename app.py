@@ -4575,6 +4575,7 @@ def build_dashboard_snapshot(history=None):
 "local_experiment_realized_pnl":round(float(state.get("local_experiment_realized_pnl",0) or 0),4),
 "local_experiment_trades":int(state.get("local_experiment_trades",0) or 0),
 "local_v10_closed_trades":copy.deepcopy((history or {}).get("local_v10_closed_trades",[])),
+"local_v10_today_realized_pnl":float((history or {}).get("local_v10_today_realized_pnl",0) or 0),
 "local_experiment_stats":copy.deepcopy(state.get("local_experiment_stats",{})),
 "local_experiment_engine":copy.deepcopy(state.get("sources",{}).get("Local12TokenH1M15",{})),"module_trading_enabled":{"news":NEWS_NEW_ENTRIES_ENABLED,"whale_liquidation":WHALE_NEW_ENTRIES_ENABLED,"pump_dump":True,"local":True},"account_model":"UNIFIED_PAPER_ACCOUNT_ALL_STRATEGIES","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"decision_learning":copy.deepcopy(state.get("learning_audit",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
@@ -4738,6 +4739,11 @@ def local_v10_history(limit=100):
  with pg() as db:
   return [dict(x) for x in db.execute("select closed,symbol,side,pnl,reason from local_v12_trade_history order by closed desc limit %s",(limit,)).fetchall()]
 
+def local_v10_today_pnl():
+ with pg() as db:
+  row=db.execute("select coalesce(sum(pnl),0) as pnl from local_v12_trade_history where closed >= date_trunc('day',now())").fetchone()
+  return float(row["pnl"] or 0)
+
 def dashboard_history_loop():
  while not SHUTDOWN.is_set():
   try:
@@ -4748,6 +4754,7 @@ def dashboard_history_loop():
     "timezone":"UTC","basis":"deduplicated_realized_closed_trades"}
    value={"strategy_performance":stats,"trades":[dict(x) for x in persistent_trades(100)],
           "local_v10_closed_trades":local_v10_history(100),
+          "local_v10_today_realized_pnl":local_v10_today_pnl(),
           "news":[dict(x) for x in persistent_news(20)],
           "features":[dict(x) for x in persistent_features(10)],
           "today_pnl":today,"hype_stats":hype_swing_stats(),
@@ -4808,6 +4815,12 @@ def html_dashboard(data):
  exp_day=exp_stats.get("rolling_24h") or {}
  exp_day_wr="—" if exp_day.get("win_rate") is None else str(round(float(exp_day["win_rate"])*100,1))+"%"
  exp_cards='<div class="grid"><b>12-TOKEN LOCAL v10<br>%s</b><b>START<br>$500</b><b>MTM EQUITY<br>$%s</b><b>P&L<br><span class="%s">%s%%</span></b><b>OPEN POSITIONS<br>%s</b><b>CLOSED TRADES<br>%s</b><b>POSITION<br>20%% MTM EQUITY</b><b>LEVERAGE<br>FIXED 25x PAPER</b></div>'%("OK" if exp_engine.get("ok") else "ERROR",data.get("local_experiment_total_equity",500),"posv" if data.get("local_experiment_pnl_pct",0)>=0 else "negv",data.get("local_experiment_pnl_pct",0),len(exp_positions),data.get("local_experiment_trades",0))
+ exp_realized=float(data.get("local_experiment_realized_pnl",0) or 0)
+ exp_open=float(data.get("local_experiment_unrealized_pnl",0) or 0)
+ exp_total_pnl=exp_realized+exp_open
+ exp_today=float(data.get("local_v10_today_realized_pnl",0) or 0)
+ exp_today_open=exp_today+exp_open
+ exp_cards+='<div class="grid"><b>V10 REALIZED P&L<br><span class="%s">$%.4f</span></b><b>V10 OPEN P&L<br><span class="%s">$%.4f</span></b><b>V10 TOTAL P&L<br><span class="%s">$%.4f</span></b><b>V10 TOTAL RETURN<br><span class="%s">%.3f%%</span></b><b>TODAY REALIZED P&L (UTC)<br><span class="%s">$%.4f</span></b><b>TODAY INCLUDING OPEN P&L<br><span class="%s">$%.4f</span></b><b>TODAY INCLUDING OPEN RETURN<br><span class="%s">%.3f%%</span></b></div>'%("posv" if exp_realized>=0 else "negv",exp_realized,"posv" if exp_open>=0 else "negv",exp_open,"posv" if exp_total_pnl>=0 else "negv",exp_total_pnl,"posv" if exp_total_pnl>=0 else "negv",exp_total_pnl/500*100,"posv" if exp_today>=0 else "negv",exp_today,"posv" if exp_today_open>=0 else "negv",exp_today_open,"posv" if exp_today_open>=0 else "negv",exp_today_open/500*100)
  exp_cards+='<div class="grid"><b>LOCAL LAST 24H<br>ROLLING</b><b>REALIZED P&L<br>$%s</b><b>TRADES<br>%s</b><b>WIN RATE<br>%s</b></div>'%(round(float(exp_day.get("realized_pnl",0) or 0),4),exp_day.get("trades",0),esc(exp_day_wr))
  exp_rows=[]
  for sym in data.get("local_experiment_symbols",[]):
