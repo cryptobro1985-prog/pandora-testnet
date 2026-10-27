@@ -2423,6 +2423,8 @@ def local_experiment_loop():
          action="M15_RECOVERY_REENTRY"
       if (not watch and not action and analysis.get("ready") and int(analysis.get("entry_side") or 0) in (-1,1)
           and flow.get("trade_data_fresh") and flow_imb is not None
+          and (flow.get("trade_count_60s") is None or float(flow.get("trade_count_60s") or 0)>=5)
+          and (flow.get("observed_notional_60s") is None or float(flow.get("observed_notional_60s") or 0)>=100)
           and int(analysis["entry_side"])*float(flow_imb)>=.12
           and local_m15_reentry_ready(int(analysis["entry_side"]),m15_live,flow_imb)):
        if local_experiment_open(symbol,int(analysis["entry_side"]),analysis,"M15",m15_live):action="M15_ENTRY"
