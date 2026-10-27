@@ -349,6 +349,26 @@ def pinit():
     symbol text primary key, side integer not null, origin_signal_candle bigint, exit_price double precision,
     exit_at text not null, expires_epoch double precision not null, reentries integer not null default 0,
     context jsonb not null default '{}'::jsonb)""")
+  c.execute("""create table if not exists local_experiment_account_state (
+    id integer primary key, equity double precision not null, realized_pnl double precision not null,
+    started_at text not null, updated_at text not null)""")
+  c.execute("""create table if not exists local_experiment_positions (
+    symbol text primary key, side integer not null, entry double precision not null, notional double precision not null,
+    margin double precision not null, leverage double precision not null, opened text not null, opened_epoch double precision not null,
+    signal_candle_time bigint, features jsonb not null default '{}'::jsonb)""")
+  c.execute("""create table if not exists local_experiment_trade_history (
+    id bigserial primary key, opened text, closed text, symbol text, side integer, entry double precision, exit double precision,
+    pnl double precision, reason text, margin double precision, notional double precision, leverage double precision,
+    features jsonb not null default '{}'::jsonb)""")
+  c.execute("""create table if not exists local_experiment_watchlist (
+    symbol text primary key, side integer not null, origin_signal_candle bigint, exit_price double precision,
+    exit_at text not null, expires_epoch double precision not null default 0, reentries integer not null default 0,
+    context jsonb not null default '{}'::jsonb)""")
+  c.execute("""create table if not exists local_experiment_signal_journal (
+    id text primary key, ts text not null, candle_time bigint, action text not null, side integer, price double precision,
+    features jsonb not null default '{}'::jsonb)""")
+  c.execute("create index if not exists local_experiment_trade_closed_idx on local_experiment_trade_history(closed desc)")
+  c.execute("create index if not exists local_experiment_signal_time_idx on local_experiment_signal_journal(ts desc)")
   c.execute("create index if not exists hype_swing_trade_closed_idx on hype_swing_trade_history(closed desc)")
   c.execute("create index if not exists hype_swing_signal_time_idx on hype_swing_signal_journal(ts desc)")
   c.execute("create index if not exists hype_swing_shadow_open_idx on hype_swing_shadow_exits(status,opened)")
@@ -413,6 +433,25 @@ def pinit():
    else:c.execute("delete from local_swing_watchlist where symbol=%s",(wr["symbol"],))
   S["local_swing_watch"]=watches
   S["hype_swing_trades"]=c.execute("select count(*) as n from hype_swing_trade_history").fetchone()["n"]
+
+  c.execute("""insert into local_experiment_account_state(id,equity,realized_pnl,started_at,updated_at)
+    values(1,%s,0,%s,%s) on conflict(id) do nothing""",(LOCAL_EXPERIMENT_STARTING_EQUITY,now(),now()))
+  exacct=c.execute("select equity,realized_pnl,started_at from local_experiment_account_state where id=1").fetchone()
+  S["local_experiment_equity"]=float(exacct["equity"]);S["local_experiment_realized_pnl"]=float(exacct["realized_pnl"])
+  S["local_experiment_started_at"]=exacct["started_at"]
+  expos={}
+  for r in c.execute("select * from local_experiment_positions").fetchall():
+   expos[r["symbol"]]={"symbol":r["symbol"],"side":int(r["side"]),"entry":float(r["entry"]),"notional":float(r["notional"]),
+    "margin":float(r["margin"]),"leverage":float(r["leverage"]),"opened":r["opened"],"t":float(r["opened_epoch"]),
+    "signal_candle_time":int(r["signal_candle_time"] or 0),"features":r["features"] or {}}
+  S["local_experiment_positions"]=expos
+  exwatches={}
+  for r in c.execute("select * from local_experiment_watchlist").fetchall():
+   exwatches[r["symbol"]]={"symbol":r["symbol"],"side":int(r["side"]),"origin_signal_candle":int(r["origin_signal_candle"] or 0),
+    "exit_price":float(r["exit_price"] or 0),"exit_at":r["exit_at"],"expires_epoch":float(r["expires_epoch"] or 0),
+    "reentries":int(r["reentries"] or 0),"context":r["context"] or {}}
+  S["local_experiment_watch"]=exwatches
+  S["local_experiment_trades"]=int(c.execute("select count(*) as n from local_experiment_trade_history").fetchone()["n"])
  STORE.migrate()
  _,positions=STORE.load(recover_legacy=False)
  S["positions"]=positions
