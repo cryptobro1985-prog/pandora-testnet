@@ -44,7 +44,7 @@ class RestBudget:
                 self.used.popleft()
             weight = self.weight(body)
             # Reserve capacity for LOCAL history/price recovery over bulk research.
-            priority = body.get('type') in ('allMids','metaAndAssetCtxs') or (body.get('type') == 'candleSnapshot' and body.get('req',{}).get('interval') in ('1h','15m'))
+            priority = body.get('type') == 'allMids' or (body.get('type') == 'candleSnapshot' and body.get('req',{}).get('interval') in ('1h','15m'))
             ceiling = self.limit if priority else max(1, self.limit-100)
             if now < self.until or sum(w for _,w in self.used)+weight > ceiling:
                 self.deferred += 1
