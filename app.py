@@ -59,7 +59,7 @@ LOCAL_EXPERIMENT_STARTING_EQUITY=500.0
 NEWS_NEW_ENTRIES_ENABLED=False
 WHALE_NEW_ENTRIES_ENABLED=False
 LOCAL_EXPERIMENT_MARGIN_FRACTION=0.20
-LOCAL_EXPERIMENT_MAX_POSITIONS=5
+LOCAL_EXPERIMENT_MAX_POSITIONS=12
 # Legacy HYPE/NEAR book remains exit-only until its existing paper positions close.
 VALIDATED_MAX_LEVERAGE={"HYPE":10.0,"NEAR":10.0,"APT":10.0,"TAO":5.0,"SPX":5.0,"LIT":5.0,
  "INIT":3.0,"USELESS":3.0,"GRASS":3.0,"CHIP":3.0,"BABY":3.0,"CASHCAT":3.0}
@@ -2144,7 +2144,7 @@ def _local_experiment_margin_state():
 def _local_experiment_claim(symbol,action,side,analysis,price=None,extra=None):
  candle=int(analysis.get("signal_candle_time") or 0)
  payload={**analysis,"symbol":symbol,"action":action,"side":int(side or 0),"policy":CATERPILLAR_POLICY,
-   "experiment":"local_10token_24h","max_leverage":market_max_leverage(symbol)}
+   "experiment":"local_12token_h1_m15","max_leverage":market_max_leverage(symbol)}
  if extra:payload.update(extra)
  ident="LOCAL_EXP:%s:%s:%s:%s"%(symbol,action,candle,int(side or 0))
  with pg() as db:
@@ -2155,7 +2155,7 @@ def _local_experiment_claim(symbol,action,side,analysis,price=None,extra=None):
      (ident,now(),candle,action,int(side or 0),price,json.dumps(payload,default=str))).fetchone()
    if row and action=="OBSERVE":
     db.execute("insert into scanner_observations(ts,module,payload) values(%s,%s,%s::jsonb)",
-      (now(),"local_10token_24h",json.dumps(payload,default=str)))
+      (now(),"local_12token_h1_m15",json.dumps(payload,default=str)))
  return bool(row)
 
 def _local_experiment_watch_clear(symbol,reason):
@@ -2218,7 +2218,7 @@ def local_experiment_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=N
  reentries=(int(watch.get("reentries") or 0)+1) if entry_kind=="REENTRY" and watch else 0
  origin_signal=int(analysis.get("signal_candle_time") or 0)
  claim_token=int((m15 or {}).get("candle_time") or origin_signal)
- features={**analysis,"symbol":symbol,"strategy_name":"local_10token_24h","experiment":"local_10token_24h",
+ features={**analysis,"symbol":symbol,"strategy_name":"local_12token_h1_m15","experiment":"local_12token_h1_m15",
   "policy":HYPE_SWING_POLICY,"caterpillar_policy":CATERPILLAR_POLICY,"entry_kind":entry_kind,
   "origin_h1_signal_candle":origin_signal,"swing_reentries":reentries,
   "reference_margin_fraction":LOCAL_EXPERIMENT_MARGIN_FRACTION,"reference_leverage":25.0,
@@ -2248,7 +2248,7 @@ def local_experiment_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=N
    if not row:return False
    if entry_kind=="REENTRY":db.execute("delete from local_experiment_watchlist where symbol=%s",(symbol,))
    db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'local_experiment_trade_opened',%s::jsonb)",
-    (now(),json.dumps({"strategy":"local_10token_24h","symbol":symbol,"side":int(side),"entry_kind":entry_kind,
+    (now(),json.dumps({"strategy":"local_12token_h1_m15","symbol":symbol,"side":int(side),"entry_kind":entry_kind,
       "entry":price,"margin":margin,"notional":notional,"target_notional":target_notional,
       "exposure_fill_ratio":exposure_fill_ratio,"leverage":leverage,"equity":equity,"free_margin_before":free},default=str)))
  with LOCK:
@@ -2296,7 +2296,7 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
       (symbol,watch["side"],watch["origin_signal_candle"],watch["exit_price"],watch["exit_at"],0.0,
        watch["reentries"],json.dumps(watch["context"],default=str)))
    db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'local_experiment_trade_closed',%s::jsonb)",
-     (now(),json.dumps({"strategy":"local_10token_24h","symbol":symbol,"side":pos["side"],"entry":pos["entry"],
+     (now(),json.dumps({"strategy":"local_12token_h1_m15","symbol":symbol,"side":pos["side"],"entry":pos["entry"],
        "exit":price,"pnl":pnl,"reason":reason,"equity":float(acct["equity"]),"watch_armed":bool(watch),
        "leverage":pos["leverage"],"exposure_fill_ratio":features.get("exposure_fill_ratio")},default=str)))
  with LOCK:
@@ -2448,7 +2448,7 @@ def local_experiment_loop():
     equity,used,free=_local_experiment_margin_state()
     with LOCK:
      S["local_experiment_stats"]=stats
-     S["sources"]["Local10Token24h"]={"ok":all(x.get("ok") for x in details.values()),"last_check":now(),
+     S["sources"]["Local12TokenH1M15"]={"ok":all(x.get("ok") for x in details.values()),"last_check":now(),
        "mode":"paper_h1_m15_caterpillar_exchange_max_leverage","policy":CATERPILLAR_POLICY,
        "symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"paper_only":True,"starting_equity":LOCAL_EXPERIMENT_STARTING_EQUITY,
        "equity":equity,"used_margin":used,"free_margin":free,"realized_pnl":S.get("local_experiment_realized_pnl",0),
@@ -2458,9 +2458,9 @@ def local_experiment_loop():
        "max_positions":LOCAL_EXPERIMENT_MAX_POSITIONS,"compound":True,"details":details,"stats":stats,
        "rest_transport":HL_REST_BUDGET.status(),"error":None if all(x.get("ok") for x in details.values()) else "partial_symbol_scan_failure"}
    except LeaseLost as exc:
-    with LOCK:S["sources"]["Local10Token24h"]={"ok":False,"last_check":now(),"mode":"standby","error":str(exc)[:160]}
+    with LOCK:S["sources"]["Local12TokenH1M15"]={"ok":False,"last_check":now(),"mode":"standby","error":str(exc)[:160]}
    except Exception as exc:
-    with LOCK:S["sources"]["Local10Token24h"]={"ok":False,"last_check":now(),"mode":"paper_h1_m15_caterpillar_exchange_max_leverage",
+    with LOCK:S["sources"]["Local12TokenH1M15"]={"ok":False,"last_check":now(),"mode":"paper_h1_m15_caterpillar_exchange_max_leverage",
       "error":type(exc).__name__+":"+str(exc)[:160]}
     try:journal("local_experiment_error",None,{"error":type(exc).__name__+":"+str(exc)[:180]})
     except Exception:pass
@@ -4358,7 +4358,7 @@ def build_dashboard_snapshot(history=None):
 "local_experiment_realized_pnl":round(float(state.get("local_experiment_realized_pnl",0) or 0),4),
 "local_experiment_trades":int(state.get("local_experiment_trades",0) or 0),
 "local_experiment_stats":copy.deepcopy(state.get("local_experiment_stats",{})),
-"local_experiment_engine":copy.deepcopy(state.get("sources",{}).get("Local10Token24h",{})),"module_trading_enabled":{"news":NEWS_NEW_ENTRIES_ENABLED,"whale_liquidation":WHALE_NEW_ENTRIES_ENABLED,"pump_dump":True,"local":True},"account_model":"UNIFIED_PAPER_ACCOUNT_ALL_STRATEGIES","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"decision_learning":copy.deepcopy(state.get("learning_audit",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
+"local_experiment_engine":copy.deepcopy(state.get("sources",{}).get("Local12TokenH1M15",{})),"module_trading_enabled":{"news":NEWS_NEW_ENTRIES_ENABLED,"whale_liquidation":WHALE_NEW_ENTRIES_ENABLED,"pump_dump":True,"local":True},"account_model":"UNIFIED_PAPER_ACCOUNT_ALL_STRATEGIES","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"decision_learning":copy.deepcopy(state.get("learning_audit",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
 def dashboard():
  # Render open positions from current in-memory prices; slow history queries
@@ -4816,7 +4816,7 @@ if __name__=="__main__":
  worker_specs=[
   ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),("market_trades",market_trade_stream),("breadth_history",market_regime_history),("confirmed_liquidations",confirmed_liquidation_stream),
   ("telemetry",telemetry),("pump_dump",impulse_scan),("whale_liquidations",whale_liquidation_scan),
-  ("hype_h1_local_swing",hype_h1_local_swing_loop),("local_10token_24h",local_experiment_loop),
+  ("hype_h1_local_swing",hype_h1_local_swing_loop),("local_12token_h1_m15",local_experiment_loop),
   ("adapt",adapt),
   ("decision_learning",learning_shadow_loop),
   ("dashboard_history",dashboard_history_loop),("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)
