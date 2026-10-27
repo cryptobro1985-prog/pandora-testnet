@@ -2366,6 +2366,25 @@ def local_experiment_mark_positions(prices):
     db.execute("update local_v12_positions set features=%s::jsonb where symbol=%s and opened=%s",
       (json.dumps(updated.get("features",{}),default=str),symbol,pos["opened"]))
 
+def local_experiment_cancel_oversized_positions(prices):
+ # One-time/routine guard for legacy PAPER positions created before the 20% cap.
+ # Close at the current live mark so accounting/history remain truthful.
+ equity,used,free=_local_experiment_margin_state()
+ max_margin=max(0.0,equity*LOCAL_EXPERIMENT_MARGIN_FRACTION)
+ with LOCK:items=[(sym,copy.deepcopy(pos)) for sym,pos in S.get("local_v12_positions",{}).items()]
+ closed=[]
+ for sym,pos in items:
+  margin=float(pos.get("margin",0) or 0)
+  mark=prices.get(sym)
+  if margin<=max_margin+1e-9 or not mark:continue
+  result=local_experiment_close(sym,float(mark),"operator_cancel_oversized_margin")
+  if result:
+   closed.append({"symbol":sym,"margin":margin,"max_margin":max_margin,"mark":float(mark)})
+ if closed:
+  try:journal("local_experiment_oversized_cleanup",None,{"closed":closed,"equity":equity,"limit_fraction":LOCAL_EXPERIMENT_MARGIN_FRACTION})
+  except Exception:pass
+ return closed
+
 def local_experiment_stats():
  try:
   with pg() as db:
@@ -2398,6 +2417,7 @@ def local_experiment_loop():
     if not active:
      SHUTDOWN.wait(1);continue
     prices=refresh_market_prices(max_age=8.0)
+    local_experiment_cancel_oversized_positions(prices)
     local_experiment_mark_positions(prices)
     jobs={}
     for symbol in LOCAL_EXPERIMENT_SYMBOLS:
@@ -4621,7 +4641,8 @@ def html_dashboard(data):
   fill_txt=("-" if fill is None else round(float(fill)*100,1))
   phase=d.get("caterpillar_phase","WAIT_ENTRY")
   entry_kind=(p.get("features") or {}).get("entry_kind","-")
-  raw_side=int(p.get("side",0) or 0) if p else 0
+  raw_side_value=(p.get("side",0) if p else 0)
+  raw_side=(1 if str(raw_side_value).upper()=="LONG" else (-1 if str(raw_side_value).upper()=="SHORT" else int(raw_side_value or 0)))
   side_txt="LONG" if raw_side==1 else ("SHORT" if raw_side==-1 else "—")
   side_class="posv" if raw_side==1 else ("negv" if raw_side==-1 else "")
   entry_txt=("-" if not p else round(float(p.get("entry",0) or 0),8))
