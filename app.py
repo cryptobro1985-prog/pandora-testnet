@@ -2146,15 +2146,23 @@ def local_h1_direction(rows,now_ms,symbol):
 
 def _local_experiment_margin_state():
  with LOCK:
-  equity=float(S.get("local_experiment_equity",LOCAL_EXPERIMENT_STARTING_EQUITY) or 0)
+  realized_equity=float(S.get("local_experiment_equity",LOCAL_EXPERIMENT_STARTING_EQUITY) or 0)
   positions=copy.deepcopy(S.get("local_v12_positions",{}))
+  prices=dict(S.get("_prices",{}))
  used=sum(max(0.0,float(p.get("margin",0) or 0)) for p in positions.values())
+ unrealized=0.0
+ for sym,p in positions.items():
+  mark=prices.get(sym)
+  if not mark:continue
+  try:unrealized+=paper_pnl(float(p.get("notional",0) or 0),float(p.get("entry",0) or 0),float(mark),int(p.get("side",0) or 0),FEE)
+  except Exception:pass
+ equity=max(0.0,realized_equity+unrealized)
  return equity,used,max(0.0,equity-used)
 
 def _local_experiment_claim(symbol,action,side,analysis,price=None,extra=None):
  candle=int(analysis.get("signal_candle_time") or 0)
  payload={**analysis,"symbol":symbol,"action":action,"side":int(side or 0),"policy":CATERPILLAR_POLICY,
-   "experiment":"local_12token_h1_m15","max_leverage":market_max_leverage(symbol)}
+   "experiment":"local_12token_h1_m15","paper_leverage":25.0}
  if extra:payload.update(extra)
  ident="LOCAL_EXP:%s:%s:%s:%s"%(symbol,action,candle,int(side or 0))
  with pg() as db:
@@ -2169,7 +2177,7 @@ def _local_experiment_claim(symbol,action,side,analysis,price=None,extra=None):
  if row:
   log_learning_decision("LOCAL12:%s:%s:%s:%s"%(symbol,action,candle,int(side or 0)),
     "local_12token_h1_m15",symbol,side,action,"local_signal_observed",price,None,
-    market_max_leverage(symbol),payload)
+    25.0,payload)
  return bool(row)
 
 def _local_experiment_watch_clear(symbol,reason):
@@ -2215,23 +2223,19 @@ def local_experiment_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=N
   if int(analysis.get("entry_side") or 0)==-int(side):return False
  price=current_entry_price(symbol)
  if price is None:return False
- leverage=market_max_leverage(symbol)
+ leverage=25.0
  with LOCK:
   if not S.get("engine_active") or symbol in S.get("local_v12_positions",{}):return False
-  if symbol in S.get("local_swing_positions",{}):return False
   if len(S.get("local_v12_positions",{}))>=LOCAL_EXPERIMENT_MAX_POSITIONS:return False
  equity,used,free=_local_experiment_margin_state()
  if equity<=0 or free<0.01:return False
- with LOCK:active_count=len(S.get("local_v12_positions",{}))
- slots_left=max(1,LOCAL_EXPERIMENT_MAX_POSITIONS-active_count)
- target_notional=equity*LOCAL_EXPERIMENT_MARGIN_FRACTION*25.0
+ target_notional=equity*LOCAL_EXPERIMENT_MARGIN_FRACTION*leverage
  max_margin_per_position=equity*LOCAL_EXPERIMENT_MARGIN_FRACTION
- desired_margin=target_notional/max(leverage,1.0)
- # Never consume more than 20% equity in one position. Also reserve equal
- # capacity for every still-available Local slot so early signals cannot starve
- # later LONG/SHORT opportunities merely by exhausting PAPER margin.
- reserved_slot_margin=free/slots_left
- margin=min(desired_margin,max_margin_per_position,reserved_slot_margin,free)
+ desired_margin=max_margin_per_position
+ # Each new position receives 20% of CURRENT mark-to-market equity at 25x.
+ # Five full positions can consume the initial $500. Further positions become
+ # possible only when realized/unrealized profits create additional free equity.
+ margin=min(desired_margin,free)
  if margin<0.01:return False
  notional=margin*leverage
  exposure_fill_ratio=(notional/target_notional) if target_notional>0 else 0.0
@@ -2244,8 +2248,8 @@ def local_experiment_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=N
   "origin_h1_signal_candle":origin_signal,"swing_reentries":reentries,
   "reference_margin_fraction":LOCAL_EXPERIMENT_MARGIN_FRACTION,"reference_leverage":25.0,
   "target_notional":target_notional,"desired_margin":desired_margin,"max_margin_per_position":max_margin_per_position,
-  "reserved_slot_margin":reserved_slot_margin,"slots_left_before_entry":slots_left,"actual_margin":margin,
-  "exposure_fill_ratio":exposure_fill_ratio,"leverage":leverage,"leverage_source":"hyperliquid_maxLeverage",
+  "actual_margin":margin,"free_margin_before":free,"mark_to_market_equity_at_entry":equity,
+  "exposure_fill_ratio":exposure_fill_ratio,"leverage":leverage,"leverage_source":"paper_fixed_25x",
   "mfe_price_move":0.0,"mae_price_move":0.0,"mfe_roe_pct":0.0,"mae_roe_pct":0.0,
   "entry_mark":price,"profit_lock_armed":False,"profit_lock_arm_move":0.004,
   "profit_lock_buffer_move":max(HYPE_PROFIT_LOCK_BUFFER_MOVE,2*FEE+0.0004+0.0003),
@@ -2420,7 +2424,6 @@ def local_experiment_loop():
     if not active:
      SHUTDOWN.wait(1);continue
     prices=refresh_market_prices(max_age=8.0)
-    local_experiment_cancel_oversized_positions(prices)
     local_experiment_mark_positions(prices)
     jobs={}
     for symbol in LOCAL_EXPERIMENT_SYMBOLS:
@@ -2495,7 +2498,7 @@ def local_experiment_loop():
       live_watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
      equity,used,free=_local_experiment_margin_state()
      ref_notional=equity*LOCAL_EXPERIMENT_MARGIN_FRACTION*25.0
-     lev=market_max_leverage(symbol);required_margin=ref_notional/max(lev,1.0)
+     lev=25.0;required_margin=ref_notional/25.0
      details[symbol]={"ok":True,"symbol":symbol,"mark":float(mark),"max_leverage":lev,
        "target_notional":round(ref_notional,4),"required_margin_for_full_target":round(required_margin,4),
        "position_open":bool(live),"side":int(live.get("side")) if live else None,
@@ -2513,12 +2516,12 @@ def local_experiment_loop():
     with LOCK:
      S["local_experiment_stats"]=stats
      S["sources"]["Local12TokenH1M15"]={"ok":all(x.get("ok") for x in details.values()),"last_check":now(),
-       "mode":"paper_h1_m15_caterpillar_exchange_max_leverage","policy":CATERPILLAR_POLICY,
+       "mode":"paper_h1_m15_caterpillar_v10_fixed25x_mtm_compound","policy":CATERPILLAR_POLICY,
        "symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"paper_only":True,"starting_equity":LOCAL_EXPERIMENT_STARTING_EQUITY,
        "equity":equity,"used_margin":used,"free_margin":free,"realized_pnl":S.get("local_experiment_realized_pnl",0),
        "trades":S.get("local_experiment_trades",0),"open_positions":list(S.get("local_v12_positions",{})),
        "watching_for_reentry":list(S.get("local_experiment_watch",{})),"reference_margin_fraction":LOCAL_EXPERIMENT_MARGIN_FRACTION,
-       "reference_leverage":25.0,"sizing":"max_20pct_per_position_with_slot_reservation",
+       "reference_leverage":25.0,"sizing":"20pct_current_mtm_equity_fixed25x_free_profit_reinvestment",
        "max_positions":LOCAL_EXPERIMENT_MAX_POSITIONS,"compound":True,"details":details,"stats":stats,
        "rest_transport":HL_REST_BUDGET.status(),"error":None if all(x.get("ok") for x in details.values()) else "partial_symbol_scan_failure"}
    except LeaseLost as exc:
@@ -4654,7 +4657,7 @@ def html_dashboard(data):
  exp_by_symbol=exp_stats.get("by_symbol") or {}
  exp_day=exp_stats.get("rolling_24h") or {}
  exp_day_wr="—" if exp_day.get("win_rate") is None else str(round(float(exp_day["win_rate"])*100,1))+"%"
- exp_cards='<div class="grid"><b>12-TOKEN LOCAL 24H<br>%s</b><b>START<br>$500</b><b>TOTAL EQUITY<br>$%s</b><b>P&L<br><span class="%s">%s%%</span></b><b>OPEN POSITIONS<br>%s</b><b>CLOSED TRADES<br>%s</b><b>REFERENCE POSITION<br>20%% × 25x</b><b>SIZING<br>REAL MAX LEVERAGE</b></div>'%("OK" if exp_engine.get("ok") else "ERROR",data.get("local_experiment_total_equity",500),"posv" if data.get("local_experiment_pnl_pct",0)>=0 else "negv",data.get("local_experiment_pnl_pct",0),len(exp_positions),data.get("local_experiment_trades",0))
+ exp_cards='<div class="grid"><b>12-TOKEN LOCAL v10<br>%s</b><b>START<br>$500</b><b>MTM EQUITY<br>$%s</b><b>P&L<br><span class="%s">%s%%</span></b><b>OPEN POSITIONS<br>%s</b><b>CLOSED TRADES<br>%s</b><b>POSITION<br>20%% MTM EQUITY</b><b>LEVERAGE<br>FIXED 25x PAPER</b></div>'%("OK" if exp_engine.get("ok") else "ERROR",data.get("local_experiment_total_equity",500),"posv" if data.get("local_experiment_pnl_pct",0)>=0 else "negv",data.get("local_experiment_pnl_pct",0),len(exp_positions),data.get("local_experiment_trades",0))
  exp_cards+='<div class="grid"><b>LOCAL LAST 24H<br>ROLLING</b><b>REALIZED P&L<br>$%s</b><b>TRADES<br>%s</b><b>WIN RATE<br>%s</b></div>'%(round(float(exp_day.get("realized_pnl",0) or 0),4),exp_day.get("trades",0),esc(exp_day_wr))
  exp_rows=[]
  for sym in data.get("local_experiment_symbols",[]):
@@ -4674,13 +4677,13 @@ def html_dashboard(data):
   mark_txt=("-" if not p else round(float(p.get("mark",0) or 0),8))
   roe_txt=("-" if not p else round(float(p.get("roe_pct",0) or 0),2))
   exp_rows.append('<tr><td>%s</td><td class="%s">%s</td><td>%sx</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s%%</td><td>$%s</td><td>$%s</td><td>$%s</td><td>$%s</td><td>%s%%</td><td class="%s">$%s</td><td>%s / %s%%</td></tr>'%(
-   esc(sym),side_class,esc(side_txt),d.get("max_leverage",market_max_leverage(sym)),esc(phase),esc(entry_kind),entry_txt,mark_txt,roe_txt,round(float(d.get("target_notional",0) or 0),2),
+   esc(sym),side_class,esc(side_txt),25,esc(phase),esc(entry_kind),entry_txt,mark_txt,roe_txt,round(float(d.get("target_notional",0) or 0),2),
    round(float(d.get("required_margin_for_full_target",0) or 0),2),round(float(p.get("margin_usd",0) or 0),2),
    round(float(p.get("notional_usd",0) or 0),2),fill_txt,
    "posv" if float(p.get("unrealized_pnl",0) or 0)>=0 else "negv",round(float(p.get("unrealized_pnl",0) or 0),4),
    st.get("trades",0),wr))
  exp_rows_html="".join(exp_rows) or '<tr><td colspan=10>No experiment data yet</td></tr>'
- exp_note='<div class="muted">Unified 12-token PAPER Local account. Start $500. Each Local trade is hard-capped at 20%% of current equity. Free PAPER margin is also reserved across remaining Local slots so early trades cannot consume all capital and block later LONG/SHORT signals. Actual leverage = Hyperliquid maxLeverage; lower leverage simply means smaller notional rather than more than 20%% margin. Compound sizing is recalculated from current equity after every close.</div>'
+ exp_note='<div class="muted">Unified 12-token PAPER Local v10. Start $500. Every new position uses up to 20%% of current mark-to-market equity at fixed 25x PAPER leverage. Five full positions can use the original capital; realized and unrealized profit immediately increases MTM equity/free margin and can fund additional token entries. Open positions are never retroactively resized merely because equity changes. H1 owns direction; strict M15 pullback/resumption re-entry and the cost-aware profit floor are shared by all 12 tokens.</div>'
  pump_positions_data=data.get("pump_positions",[]) or []
  pump_total=float(data.get("pump_total_pnl",0) or 0)
  pump_cards='<div class="grid"><b>PUMP/DUMP ENGINE<br>%s</b><b>OPEN POSITIONS<br>%s</b><b>CLOSED TRADES<br>%s</b><b>REALIZED P&L<br><span class="%s">$%s</span></b><b>UNREALIZED P&L<br><span class="%s">$%s</span></b><b>TOTAL P&L<br><span class="%s">$%s</span></b></div>'%(
@@ -4898,7 +4901,7 @@ if __name__=="__main__":
  worker_specs=[
   ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),("market_trades",market_trade_stream),("breadth_history",market_regime_history),
   ("telemetry",telemetry),("pump_dump",impulse_scan),
-  ("hype_h1_local_legacy_exit_only",hype_h1_local_swing_loop),("local_12token_h1_m15",local_experiment_loop),
+  ("local_12token_h1_m15",local_experiment_loop),
   ("adapt",adapt),
   ("decision_learning",learning_shadow_loop),
   ("dashboard_history",dashboard_history_loop),("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)
