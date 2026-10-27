@@ -1705,6 +1705,9 @@ def _local_candles(symbol,interval,hours):
   if _local_cached_interval_fresh(cached,interval):
    return cached[1],int(time.time()*1000)
   if cached and len(cached[1])>=10 and stamp-cached[0]<ttl:return cached[1],int(time.time()*1000)
+  with LOCK:stream_state=copy.deepcopy(S.get("sources",{}).get("MarketTradeStream",{}))
+  if stream_state.get("ok") and int(stream_state.get("history_pending",0) or 0)>0:
+   raise RuntimeError("local_swing_candle_ws_history_warmup:"+symbol+":"+interval)
   if stamp<_LOCAL_CANDLE_BACKOFF.get(key,0):
    if cached and stamp-cached[0]<max_stale:return cached[1],cached[2]
    raise RuntimeError("local_swing_candle_rate_limit_backoff:"+symbol+":"+interval)
@@ -1716,6 +1719,9 @@ def _local_candles(symbol,interval,hours):
    if _local_cached_interval_fresh(cached,interval):
     return cached[1],int(time.time()*1000)
    if cached and len(cached[1])>=10 and stamp-cached[0]<ttl:return cached[1],int(time.time()*1000)
+   with LOCK:stream_state=copy.deepcopy(S.get("sources",{}).get("MarketTradeStream",{}))
+   if stream_state.get("ok") and int(stream_state.get("history_pending",0) or 0)>0:
+    raise RuntimeError("local_swing_candle_ws_history_warmup:"+symbol+":"+interval)
    if stamp<_LOCAL_CANDLE_BACKOFF.get(key,0):
     if cached and stamp-cached[0]<max_stale:return cached[1],cached[2]
     raise RuntimeError("local_swing_candle_rate_limit_backoff:"+symbol+":"+interval)
