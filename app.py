@@ -1642,6 +1642,13 @@ def refresh_market_prices(force=False,max_age=8.0):
  # Network I/O is serialized but never holds the global state lock.
  with LOCK:
   cached=dict(S.get("_prices",{}));last=float(S.get("_last_poll_epoch",0) or 0)
+  active=bool(S.get("engine_active"))
+  metadata_ready=bool(S.get("_day_volumes")) and bool(S.get("_max_leverage"))
+ # Hard startup barrier: no caller is allowed to spend REST budget on allMids
+ # before the one metadata bootstrap request succeeds.
+ if active and not metadata_ready:
+  if cached and time.time()-last<=max_age:return cached
+  raise RestDeferred("metadata_bootstrap_required_before_allMids")
  if not force and cached and time.time()-last<=max_age:return cached
  with MARKET_REFRESH_LOCK:
   with LOCK:
