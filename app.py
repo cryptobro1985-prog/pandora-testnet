@@ -2983,6 +2983,9 @@ def market_metadata():
     S["sources"]["MarketMetadata"]={"ok":cached,"degraded":True,"last_check":now(),
      "mode":"cached_metadata_rest_backoff","markets":len(S.get("_day_volumes",{})),
      "max_leverage_markets":len(S.get("_max_leverage",{})),"error":str(e)[:140]}
+   if not cached and isinstance(e,RestDeferred):
+    SHUTDOWN.wait(8)
+    continue
    if isinstance(e,urllib.error.HTTPError) and e.code==429:
     SHUTDOWN.wait(max(60,MARKET_METADATA_SECONDS))
     continue
