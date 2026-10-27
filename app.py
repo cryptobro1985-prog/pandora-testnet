@@ -2428,8 +2428,8 @@ def local_experiment_loop():
        action="H1_EXIT:"+h1_exit if closed else None
       elif caterpillar_pressure_exit(pos,m15_live,float(mark),flow):
        watch_context={"m15":m15_live,"h1_context":h1_context,"flow_imbalance":flow_imb,"flow_context":flow,
-         "flow_source":"hyperliquid_ws_trades","observed_at":now(),"reason":"m15_counter_pressure_while_profitable"}
-       closed=local_experiment_close(symbol,float(mark),"m15_pressure_reversal",analysis,watch_context)
+         "flow_source":"hyperliquid_ws_trades","observed_at":now(),"reason":"m15_confirmed_weakening_while_net_profitable"}
+       closed=local_experiment_close(symbol,float(mark),"m15_pressure_reversal_profit_only",analysis,watch_context)
        action="M15_PROFIT_PROTECT_EXIT" if closed else None
      else:
       if watch:watch=_local_experiment_watch_observe(symbol,watch,float(mark),m15_live,flow,time.time())
