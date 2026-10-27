@@ -79,7 +79,11 @@ def _epoch(value):
 
 def update_watch(watch,mark,m15,flow,stamp):
     """Require a real M15-price pullback before watching for continuation."""
-    return m15_update_watch(watch,mark,m15,flow,stamp)
+    normalized=copy.deepcopy(watch or {})
+    context=normalized.setdefault("context",{})
+    if context.get("phase")=="WAIT_RESUMPTION" and not context.get("pullback_confirmed_epoch"):
+        context["phase"]="WAIT_PULLBACK"
+    return m15_update_watch(normalized,mark,m15,flow,stamp)
 
 def reentry_ready(side,m15,mark,watch,flow,stamp):
     """A fresh M15 recovery, completed pullback and aligned executed flow."""
