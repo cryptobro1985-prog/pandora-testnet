@@ -682,7 +682,7 @@ def persistent_news(limit=50):
  with pg() as c:return c.execute("select ts,source,title,symbol,signal,published_at,source_url from news_events order by ts desc limit %s",(limit,)).fetchall()
 def persistent_features(limit=100):
  with pg() as c:return c.execute("select ts,source,title,symbol,decision,confidence,features from event_features order by ts desc limit %s",(limit,)).fetchall()
-HL_REST_BUDGET=RestBudget(limit=1000)
+HL_REST_BUDGET=RestBudget(limit=250)
 
 def get(url,body=None):
  data=None if body is None else json.dumps(body).encode()
