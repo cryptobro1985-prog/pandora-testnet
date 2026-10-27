@@ -4,7 +4,8 @@ No candle-score, volume-size, price-extension or profit-only trade gates.
 import copy
 import datetime
 import math
-POLICY="Caterpillar 1.0 flow-confirmed v1.1"
+from local_caterpillar import update_watch as m15_update_watch, reentry_ready as m15_reentry_ready
+POLICY="Caterpillar 1.0 H1-M15 cycle v1.2"
 
 def _f(x):
     try:
@@ -31,7 +32,10 @@ def entry_candidate(symbol,analysis,m15,flow,stamp):
     side=int((analysis or {}).get("entry_side") or 0)
     dom=dominance(flow)
     eligible=bool((analysis or {}).get("ready") and (analysis or {}).get("h1_direction_anchor")
-                  and not (analysis or {}).get("entry_blocked") and side in (-1,1) and dom==side)
+                  and not (analysis or {}).get("entry_blocked") and side in (-1,1) and dom==side
+                  and (m15 or {}).get("ready") and (m15 or {}).get("recovery_confirmed")
+                  and int((m15 or {}).get("recovery_score") or 0)>=3
+                  and int((m15 or {}).get("adverse_score") or 0)==0)
     imbalance=_f((flow or {}).get("flow_imbalance"))
     return dict(symbol=symbol,side=side,eligible=eligible,reason="h1_aligned_executed_flow" if eligible else
                 ("waiting_for_fresh_executed_flow" if dom is None else "waiting_for_h1_side_dominance"),
@@ -46,6 +50,10 @@ def pressure_exit(position,m15,mark,flow):
     """
     side=int((position or {}).get("side") or 0)
     if side not in (-1,1) or dominance(flow)!=-side:
+        return None
+    if not (m15 or {}).get("ready") or not (m15 or {}).get("strong_adverse_pressure"):
+        return None
+    if int((m15 or {}).get("adverse_score") or 0)<3:
         return None
     imbalance=_f((flow or {}).get("flow_imbalance"))
     count=_f((flow or {}).get("trade_count_60s"))
@@ -70,22 +78,10 @@ def _epoch(value):
     except (ValueError,TypeError):return None
 
 def update_watch(watch,mark,m15,flow,stamp):
-    result=copy.deepcopy(watch or {})
-    side=int(result.get("side") or 0)
-    context=result.setdefault("context",{})
-    if side not in (-1,1):return result
-    dom=dominance(flow)
-    if dom==-side:
-        context.update(counter_pressure_seen=True,phase="WAIT_RESUMPTION",last_opposite_flow_epoch=stamp)
-    context.update(last_observed_epoch=stamp,last_observed_mark=mark,dominant_side=dom,policy=POLICY)
-    return result
+    """Require a real M15-price pullback before watching for continuation."""
+    return m15_update_watch(watch,mark,m15,flow,stamp)
 
 def reentry_ready(side,m15,mark,watch,flow,stamp):
-    if not watch or int(watch.get("side") or 0)!=int(side):return False
-    context=watch.get("context") or {}
-    exited=_epoch(watch.get("exit_at"))
-    return bool(exited is not None and stamp>exited and context.get("counter_pressure_seen")
-                and context.get("phase")=="WAIT_RESUMPTION" and dominance(flow)==int(side)
-                and (_f((flow or {}).get("flow_imbalance")) is not None)
-                and int(side)*_f((flow or {}).get("flow_imbalance"))>=.20
-                and stamp-exited>=20)
+    """A fresh M15 recovery, completed pullback and aligned executed flow."""
+    return bool(m15_reentry_ready(side,m15,mark,watch,flow,stamp)
+                and dominance(flow)==int(side))
