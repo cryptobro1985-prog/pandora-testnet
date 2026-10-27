@@ -238,7 +238,7 @@ class RollingMarketData:
             out = {"volume_burst_ratio": None, "volume_rate_z": None,
                    "volume_baseline_samples": 0, "volume_rate_usd_per_sec": None,
                    "buy_volume_60s": None, "sell_volume_60s": None,
-                   "flow_imbalance": None, "cvd_1m": None,
+                   "flow_imbalance": None, "cvd_1m": None,"trade_count_60s":None,"observed_notional_60s":None,
                    "volume_source": "hyperliquid_ws_trades",
                    "trade_coverage_seconds": 0.0, "trade_data_fresh": False,
                    "latest_trade_age_seconds": None,
@@ -292,6 +292,8 @@ class RollingMarketData:
                         "buy_volume_60s": buys, "sell_volume_60s": sells,
                         "flow_imbalance": (buys - sells) / (buys + sells) if buys + sells else 0.0,
                         "cvd_1m": buys - sells,
+                        "trade_count_60s":sum(buckets.get(i,(0.0,0.0,0))[2] for i in last_minute),
+                        "observed_notional_60s":buys+sells,
                         "trade_data_fresh": True,
                         "volume_window_end_epoch": end * self.bucket_seconds})
             return out

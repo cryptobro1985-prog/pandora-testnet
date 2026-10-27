@@ -30,7 +30,9 @@ class LocalReentryWatchTests(unittest.TestCase):
                     self.assertTrue(any('insert into local_swing_watchlist' in c.args[0] for c in db.execute.call_args_list))
 
     def run_scan(self,candle,opened):
-        watch=dict(side=1,origin_signal_candle=123,expires_epoch=app.time.time()+1000,reentries=0,exit_price=99.9)
+        watch=dict(side=1,origin_signal_candle=123,expires_epoch=app.time.time()+1000,reentries=0,exit_price=99.9,
+                   context=dict(phase='WAIT_RESUMPTION',counter_pressure_seen=True,pullback_extreme=99.7,
+                                pullback_confirmed_epoch=app.time.time()-30,last_observed_epoch=app.time.time()-1))
         app.S['local_swing_watch']={'HYPE':watch}
         stop=MagicMock();stop.is_set.side_effect=[False,True]
         analysis=dict(ready=True,entry_side=1,signal_candle_time=candle)
@@ -42,7 +44,8 @@ class LocalReentryWatchTests(unittest.TestCase):
              patch.object(app,'analyze_local_h1_context',return_value={}), \
              patch.object(app,'analyze_local_m15',return_value={'ready':True,'recovery_confirmed':True,'recovery_score':4}), \
              patch.object(app,'_local_claim'),patch.object(app,'_local_update_shadows'), \
-             patch.object(app.MARKET_OBS,'context',return_value={'flow_imbalance':.5}), \
+             patch.object(app,'_local_watch_observe',side_effect=lambda symbol,watch,*args:watch), \
+             patch.object(app.MARKET_OBS,'context',return_value={'flow_imbalance':.5,'trade_data_fresh':True}), \
              patch.object(app,'local_swing_open',return_value=opened) as enter, \
              patch.object(app,'_local_watch_clear') as clear:
             app.hype_h1_local_swing_loop()

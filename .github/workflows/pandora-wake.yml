@@ -11,7 +11,7 @@ jobs:
       - name: Wake and health-check PANDORA
         run: |
           set -e
-          URL="https://pandora-testnet-monitor.onrender.com/health"
+          URL="https://pandora-testnet-monitor-nfoc.onrender.com/health"
           for i in 1 2 3 4 5 6; do
             if curl -fsS --max-time 25 "$URL"; then
               echo

@@ -4,7 +4,7 @@ import time
 import websocket
 
 
-def run_trade_stream(observations, stop, symbols_provider, report, url, on_mids=None, on_candles=None, candle_symbols=(), on_candle_history=None):
+def run_trade_stream(observations, stop, symbols_provider, report, url, on_mids=None, on_candles=None, candle_symbols=(), on_candle_history=None, regime_symbols=(), on_regime_candles=None):
     while not stop.is_set():
         ws = None
         try:
@@ -19,15 +19,25 @@ def run_trade_stream(observations, stop, symbols_provider, report, url, on_mids=
                 for symbol in sorted(candle_symbols):
                     for interval in ("1h", "15m"):
                         ws.send(json.dumps({"method":"subscribe","subscription":{"type":"candle","coin":symbol,"interval":interval}}))
-            history_ids=set()
+            if on_regime_candles is not None:
+                for symbol in sorted(regime_symbols):
+                    ws.send(json.dumps({"method":"subscribe","subscription":{"type":"candle","coin":symbol,"interval":"1m"}}))
+            history_ids={}
             if on_candle_history is not None:
                 end_ms=int(time.time()*1000)
                 for symbol in sorted(candle_symbols):
                     for interval,hours in (("1h",120),("15m",12)):
-                        ident=1000000+len(history_ids);history_ids.add(ident)
+                        ident=1000000+len(history_ids);history_ids[ident]="local"
                         ws.send(json.dumps({"method":"post","id":ident,"request":{"type":"info","payload":{
                             "type":"candleSnapshot","req":{"coin":symbol,"interval":interval,
                             "startTime":end_ms-hours*3600000,"endTime":end_ms}}}}))
+            if on_regime_candles is not None:
+                end_ms=int(time.time()*1000)
+                for symbol in sorted(regime_symbols):
+                    ident=1000000+len(history_ids);history_ids[ident]="regime"
+                    ws.send(json.dumps({"method":"post","id":ident,"request":{"type":"info","payload":{
+                        "type":"candleSnapshot","req":{"coin":symbol,"interval":"1m",
+                        "startTime":end_ms-6*3600000,"endTime":end_ms}}}}))
             observations.mark_connected(time.time(), selected)
             last_ping = last_report = 0
             last_refresh = last_received = time.time()
@@ -48,16 +58,21 @@ def run_trade_stream(observations, stop, symbols_provider, report, url, on_mids=
                     elif message.get("channel") == "allMids" and on_mids is not None:
                         data=message.get("data") or {}
                         on_mids(data.get("mids",{}))
-                    elif message.get("channel") == "candle" and on_candles is not None:
-                        on_candles(message.get("data"))
-                    elif message.get("channel") == "post" and on_candle_history is not None:
+                    elif message.get("channel") == "candle":
+                        data=message.get("data") or {}
+                        if data.get("i")=="1m" and on_regime_candles is not None:
+                            on_regime_candles(data)
+                        elif on_candles is not None:
+                            on_candles(data)
+                    elif message.get("channel") == "post":
                         reply=message.get("data") or {}
                         if reply.get("id") in history_ids:
-                            history_ids.discard(reply["id"])
+                            route=history_ids.pop(reply["id"])
                             response=reply.get("response") or {}
                             payload=response.get("payload") or {}
                             if response.get("type")=="info" and isinstance(payload,dict) and payload.get("type")=="candleSnapshot" and isinstance(payload.get("data"),list):
-                                on_candle_history(payload["data"])
+                                callback=on_regime_candles if route=="regime" else on_candle_history
+                                if callback is not None:callback(payload["data"])
                     elif message.get("channel") == "error":
                         raise RuntimeError("exchange_subscription_error")
                 except websocket.WebSocketTimeoutException:

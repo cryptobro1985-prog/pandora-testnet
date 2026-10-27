@@ -1,5 +1,7 @@
 """Read-only, deduplicated PAPER performance for dashboard history worker."""
 import datetime as dt
+import copy
+import math
 
 KEYS=('news','whale_liquidation','pump_dump','local')
 CLOSED_CTE="""WITH closed AS (
@@ -71,16 +73,55 @@ def performance(pg,baseline=None,as_of=None):
                 local_last_8h=[{**dict(r),'realized_pnl':round(float(r['realized_pnl']),4)} for r in local],error=None)
 
 
-def cards_html(stats,key,unrealized=0.,label=''):
+def contribution_pct(pnl,base_capital):
+    """Contribution to shared contributed capital, never a position ROI."""
+    try:
+        capital=float(base_capital);value=float(pnl)
+    except (TypeError,ValueError,OverflowError):
+        return None
+    if not math.isfinite(capital) or capital<=0 or not math.isfinite(value):
+        return None
+    return round(100.*value/capital,4)
+
+
+def with_capital_basis(stats,base_capital,unrealized_by_strategy=None):
+    """Add percentage fields to a copy; periods contain closed PnL only.
+
+    Current open PnL is deliberately separate: it is not an eight-hour return.
+    """
+    out=copy.deepcopy(stats or {})
+    valid=contribution_pct(0.,base_capital) is not None
+    out['capital_contributed']=float(base_capital) if valid else None
+    out['percentage_basis']='strategy_pnl_divided_by_shared_contributed_capital'
+    out['percentage_label']='Вклад в доходность общего капитала'
+    for period in out.get('periods',{}).values():
+        for row in period.values():
+            row['realized_pnl_pct']=contribution_pct(row.get('realized_pnl'),base_capital)
+    opens=unrealized_by_strategy or {};out['strategy_pnl_pct']={}
+    for key in KEYS:
+        closed=out.get('periods',{}).get('all_time',{}).get(key,{}).get('realized_pnl',0.)
+        open_pnl=opens.get(key)
+        out['strategy_pnl_pct'][key]={
+            'realized_pct':contribution_pct(closed,base_capital),
+            'unrealized_pct':contribution_pct(open_pnl,base_capital),
+            'total_pct':contribution_pct(float(closed)+float(open_pnl),base_capital) if open_pnl is not None else None}
+    return out
+
+
+def cards_html(stats,key,unrealized=0.,label='',base_capital=None):
     """Two comparable periods beside every strategy; open PnL is separate."""
     import html
-    if not stats or stats.get('error'):
+    if not stats or stats.get('error') or not stats.get('periods') or not stats.get('window_start'):
         return '<p class="muted">Статистика: '+html.escape(str((stats or {}).get('error') or 'загрузка'))+'</p>'
     zone=dt.timezone(dt.timedelta(hours=4))
     start=dt.datetime.fromisoformat(stats['window_start']).astimezone(zone)
     end=dt.datetime.fromisoformat(stats['window_end']).astimezone(zone)
     window='<p class="muted">8 часов: %s — %s (Самара). Обновлено: %s.</p>'%(start.strftime('%d.%m %H:%M'),end.strftime('%d.%m %H:%M'),end.strftime('%H:%M:%S'))
     blocks=[]
+    capital=base_capital if base_capital is not None else stats.get('capital_contributed')
+    def pct(value):
+        result=contribution_pct(value,capital)
+        return '—' if result is None else '%+.2f%%'%result
     for period,title in [('all_time','За всё время'),('last_8h','Последние 8 часов')]:
         r=stats['periods'][period][key];wr=r.get('win_rate_pct')
         rate='—' if wr is None else '%.2f%%'%wr
@@ -88,9 +129,12 @@ def cards_html(stats,key,unrealized=0.,label=''):
             known=r.get('known_win_rate_pct');rate=('%.2f%% по %d известным'%(known,r['known_trades'])) if known is not None else '—'
         pnl=float(r['realized_pnl']);color='posv' if pnl>=0 else 'negv'
         unknown=('<br><small>%d архивных сделок без исходов; общий WR неизвестен</small>'%r['unknown_outcomes']) if r.get('unknown_outcomes') else ''
-        blocks.append('<b>%s · %s<br>Закрыто: %d · +%d / −%d / 0: %d<br>Win rate: %s<br>Закрытый PnL: <span class="%s">%+.4f USDT</span>%s</b>'%
-                      (html.escape(label),title,r['trades'],r['wins'],r['losses'],r['breakeven'],rate,color,pnl,unknown))
-    blocks.append('<b>Открытый PnL<br><span class="%s">%+.4f USDT</span></b>'%('posv' if unrealized>=0 else 'negv',unrealized))
+        blocks.append('<b>%s · %s<br>Закрыто: %d · +%d / −%d / 0: %d<br>Win rate: %s<br>Закрытый PnL: <span class="%s">%+.4f USDT · %s</span>%s</b>'%
+                      (html.escape(label),title,r['trades'],r['wins'],r['losses'],r['breakeven'],rate,color,pnl,pct(pnl),unknown))
+    blocks.append('<b>Открытый PnL<br><span class="%s">%+.4f USDT · %s</span></b>'%('posv' if unrealized>=0 else 'negv',unrealized,pct(unrealized)))
     total=float(stats['periods']['all_time'][key]['realized_pnl'])+unrealized
-    blocks.append('<b>Итого за всё время + открытые<br><span class="%s">%+.4f USDT</span></b>'%('posv' if total>=0 else 'negv',total))
-    return window+'<div class="grid strategy-performance" data-strategy="'+html.escape(key)+'">'+''.join(blocks)+'</div>'
+    blocks.append('<b>Итого за всё время + открытые<br><span class="%s">%+.4f USDT · %s</span></b>'%('posv' if total>=0 else 'negv',total,pct(total)))
+    basis='Вклад в доходность общего капитала: PnL стратегии / внесённый капитал'
+    if contribution_pct(0.,capital) is not None:basis+=' $%.2f'%float(capital)
+    else:basis+=' (база неизвестна)'
+    return window+'<p class="muted">'+basis+'.</p><div class="grid strategy-performance" data-strategy="'+html.escape(key)+'">'+''.join(blocks)+'</div>'

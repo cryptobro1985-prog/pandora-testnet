@@ -25,7 +25,10 @@ from whale_signals import (MIN_NOTIONAL_USD, cluster_positions, summarize_book, 
                            PriceToValueTracker, price_to_value_entry, PRICE_TO_VALUE_POLICY)
 from news_logic import analyze_headline, is_non_market_news as semantic_non_market
 from accounting import paper_pnl
-from strategy_stats import performance as strategy_performance, cards_html as strategy_cards_html
+from strategy_stats import performance as strategy_performance, cards_html as strategy_cards_html, with_capital_basis as strategy_capital_basis
+from local_caterpillar import (POLICY as CATERPILLAR_POLICY,pressure_exit as caterpillar_pressure_exit,
+ update_watch as caterpillar_update_watch,reentry_ready as caterpillar_reentry_ready,
+ protective_breakeven as caterpillar_breakeven)
 from learning_audit import (ensure_schema as ensure_learning_schema,
                             record_decision as record_learning_decision,
                             update_labels as update_learning_labels,
@@ -1493,6 +1496,33 @@ def market_regime(prices,history,volumes,stamp):
  with LOCK:candles=copy.deepcopy(S.get("_regime_candles",{}))
  return breadth_regime(prices,history,volumes,stamp,candles,require_trend_context=True)
 
+# A fixed liquid seed set makes H1/H4 context independent of REST fan-out.
+# Five markets remain mandatory; missing history must not become a flat regime.
+REGIME_SEED_SYMBOLS=("BTC","ETH","SOL","HYPE","NEAR","DOGE")
+
+def accept_regime_candles(rows):
+ if isinstance(rows,dict):rows=[rows]
+ if not isinstance(rows,list):return 0
+ stamp=time.time();accepted=0
+ with LOCK:
+  for row in rows:
+   if not isinstance(row,dict) or row.get("s") not in REGIME_SEED_SYMBOLS or row.get("i")!="1m":continue
+   try:
+    t,T,close=float(row["t"]),float(row["T"]),float(row["c"])
+    if not all(math.isfinite(v) for v in (t,T,close)) or close<=0 or not 59000<=T-t<=60000 or t/1000>stamp+1:continue
+   except (ValueError,TypeError,KeyError,OverflowError):continue
+   symbol=row["s"];prior=S.setdefault("_regime_candles",{}).get(symbol,[])
+   merged=dict(prior);pending=S.setdefault("_regime_pending_candles",{}).get(symbol)
+   if pending and pending[0]<stamp:
+    merged[pending[0]]=pending[1];S["_regime_pending_candles"].pop(symbol,None);accepted+=1
+   if T/1000<stamp:merged[T/1000]=close;accepted+=1
+   else:
+    pending=S["_regime_pending_candles"].get(symbol)
+    if not pending or T/1000>=pending[0]:S["_regime_pending_candles"][symbol]=(T/1000,close)
+   S["_regime_candles"][symbol]=sorted(merged.items())[-361:]
+  if accepted:S["_regime_ws_last_update"]=stamp
+ return accepted
+
 @account_mutation
 def close_news_position(sym,pos,price,reason):
  result=STORE.close(sym,pos,price,reason)
@@ -1678,6 +1708,27 @@ def _local_watch_clear(symbol,reason):
  return True
 
 @account_mutation
+def _local_watch_observe(symbol,watch,mark,m15,flow,stamp):
+ updated=caterpillar_update_watch(watch,mark,m15,flow,stamp)
+ before=(watch or {}).get("context") or {};context=updated.get("context") or {}
+ with LOCK:last=float(S.setdefault("_local_watch_persist_epoch",{}).get(symbol,0) or 0)
+ changed=before.get("phase")!=context.get("phase")
+ if changed or stamp-last>=30:
+  with pg() as db:
+   with db.transaction():
+    STORE.fence(db)
+    db.execute("update local_swing_watchlist set context=%s::jsonb where symbol=%s and exit_at=%s",
+     (json.dumps(context,default=str),symbol,watch.get("exit_at")))
+    if changed:
+     db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'local_caterpillar_phase',%s::jsonb)",
+      (now(),json.dumps({"symbol":symbol,"side":watch.get("side"),"phase":context.get("phase"),"context":context},default=str)))
+  with LOCK:S["_local_watch_persist_epoch"][symbol]=stamp
+ with LOCK:
+  live=S.get("local_swing_watch",{}).get(symbol)
+  if live and live.get("exit_at")==watch.get("exit_at"):S["local_swing_watch"][symbol]=copy.deepcopy(updated)
+ return updated
+
+@account_mutation
 def local_swing_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=None):
  if symbol not in LOCAL_SWING_SYMBOLS:return False
  if S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or int(side) not in (-1,1):return False
@@ -1713,8 +1764,12 @@ def local_swing_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=None):
    "swing_reentries":reentries,"allocation_margin_fraction":HYPE_SWING_MARGIN_FRACTION,
    "leverage":HYPE_SWING_LEVERAGE,"mfe_price_move":0.0,"mae_price_move":0.0,"mfe_roe_pct":0.0,"mae_roe_pct":0.0,
    "entry_mark":price,"profit_lock_armed":False,"profit_lock_arm_move_pct":HYPE_PROFIT_LOCK_ARM_MOVE*100.0,
-   "profit_lock_buffer_move_pct":HYPE_PROFIT_LOCK_BUFFER_MOVE*100.0,
-   "m15_reentry_context":m15 if entry_kind=="REENTRY" else None,
+   "profit_lock_buffer_move_pct":max(HYPE_PROFIT_LOCK_BUFFER_MOVE,2*FEE+0.0004+0.0003)*100.0,
+   "m15_entry_context":m15,"m15_reentry_context":m15 if entry_kind=="REENTRY" else None,
+   "reentry_watch":copy.deepcopy(watch) if entry_kind=="REENTRY" else None,
+   "estimated_round_trip_cost_move":2*FEE+0.0004,"execution_cost_budget_only":True,
+   "profit_lock_arm_move":0.004,"profit_lock_mode":"fixed_cost_aware_breakeven","caterpillar_policy":CATERPILLAR_POLICY,
+   "profit_lock_buffer_move":max(HYPE_PROFIT_LOCK_BUFFER_MOVE,2*FEE+0.0004+0.0003),
    "shadow_exit_modes":["opposite_h1_local_extreme","m15_momentum_weakening","profit_lock_stop","m15_adverse_pressure_profit_protect"]}
   pos={"symbol":symbol,"side":int(side),"entry":price,"notional":notional,"margin":margin,"leverage":HYPE_SWING_LEVERAGE,
        "opened":opened,"t":epoch,"signal_candle_time":origin_signal,"features":features}
@@ -1763,11 +1818,12 @@ def local_swing_close(symbol,price,reason,analysis=None,watch_context=None):
  if watch_context:features["m15_profit_protection"]=watch_context
  features["actual_exit_reason"]=reason;features["actual_exit_mark"]=price
  watch=None
- if reason in ("m15_adverse_pressure_profit_protect","profit_lock_stop","m15_momentum_weakening"):
+ if reason in ("m15_adverse_pressure_profit_protect","profit_lock_stop","m15_momentum_weakening","m15_pressure_reversal","caterpillar_breakeven"):
   watch={"symbol":symbol,"side":int(pos["side"]),
    "origin_signal_candle":int(features.get("origin_h1_signal_candle") or features.get("origin_m15_signal_candle") or pos.get("signal_candle_time") or 0),
    "exit_price":price,"exit_at":now(),"expires_epoch":0.0,
    "reentries":int(features.get("swing_reentries",0) or 0),"context":watch_context or {}}
+  watch["context"].update(phase="WAIT_PULLBACK",counter_pressure_seen=reason=="m15_pressure_reversal",caterpillar_policy=CATERPILLAR_POLICY)
  with pg() as db:
   with db.transaction():
    STORE.fence(db)
@@ -1838,10 +1894,16 @@ def hype_swing_mark_positions(prices):
  for symbol,pos in positions.items():
   mark=prices.get(symbol)
   if not mark:continue
-  was_armed=bool((pos.get("features") or {}).get("profit_lock_armed"))
+  features=pos.setdefault("features",{})
+  if features.get("caterpillar_policy")!=CATERPILLAR_POLICY:
+   features["previous_profit_lock_stop"]=features.pop("profit_lock_stop",None)
+   features["profit_lock_armed"]=False
+   features.update(caterpillar_policy=CATERPILLAR_POLICY,profit_lock_mode="fixed_cost_aware_breakeven",
+    profit_lock_arm_move=.004,profit_lock_buffer_move=.0016)
+  was_armed=bool(features.get("profit_lock_armed"))
   updated,liq=hype_update_path(pos,float(mark))
   newly_armed=(not was_armed) and bool((updated.get("features") or {}).get("profit_lock_armed"))
-  lock_fill=hype_profit_lock_exit(updated,float(mark))
+  lock_fill=caterpillar_breakeven(updated,float(mark))
   if lock_fill is not None:
    features=updated.setdefault("features",{})
    features["profit_lock_trigger_mark"]=float(mark);features["profit_lock_exit_price"]=float(lock_fill);features["profit_lock_triggered_at"]=now()
@@ -1850,7 +1912,7 @@ def hype_swing_mark_positions(prices):
     if live and live.get("opened")==pos.get("opened"):
      S["local_swing_positions"][symbol]=updated
      if symbol==HYPE_SWING_SYMBOL:S["hype_swing_position"]=updated
-   local_swing_close(symbol,float(lock_fill),"profit_lock_stop")
+   local_swing_close(symbol,float(lock_fill),"caterpillar_breakeven")
    continue
   with LOCK:
    live=S.get("local_swing_positions",{}).get(symbol)
@@ -1872,7 +1934,7 @@ def hype_swing_mark_positions(prices):
      db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'local_swing_profit_lock_armed',%s::jsonb)",
        (now(),json.dumps({"strategy":"local_h1_m15_swing_v5","symbol":symbol,"side":updated["side"],
         "entry":updated["entry"],"mark":float(mark),"stop":(updated.get("features") or {}).get("profit_lock_stop"),
-        "arm_move_pct":HYPE_PROFIT_LOCK_ARM_MOVE*100.0,"buffer_move_pct":HYPE_PROFIT_LOCK_BUFFER_MOVE*100.0},default=str)))
+        "arm_move_pct":(updated.get("features") or {}).get("profit_lock_arm_move_pct",HYPE_PROFIT_LOCK_ARM_MOVE*100.0),"buffer_move_pct":(updated.get("features") or {}).get("profit_lock_buffer_move_pct",HYPE_PROFIT_LOCK_BUFFER_MOVE*100.0)},default=str)))
     pnl=paper_pnl(updated["notional"],updated["entry"],float(mark),updated["side"],FEE)
     db.execute("""insert into position_snapshots(ts,strategy,symbol,opened,side,entry,mark,margin,notional,leverage,unrealized_pnl,roe_pct,features)
        values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
@@ -1921,7 +1983,7 @@ def local_h1_direction(rows,now_ms,symbol):
  return analysis
 
 def hype_h1_local_swing_loop():
- last_observed={};pool=concurrent.futures.ThreadPoolExecutor(max_workers=4,thread_name_prefix="local-m15-swing")
+ last_observed={};last_observation=0.;pool=concurrent.futures.ThreadPoolExecutor(max_workers=4,thread_name_prefix="local-m15-swing")
  try:
   while not SHUTDOWN.is_set():
    try:
@@ -1952,7 +2014,7 @@ def hype_h1_local_swing_loop():
      target_side=int((pos or watch or {}).get("side") or analysis.get("entry_side") or 1)
      m15_live=analyze_local_m15(m15_rows,m15_ms,target_side)
      flow=MARKET_OBS.context(symbol,time.time())
-     flow_imb=flow.get("flow_imbalance")
+     flow_imb=flow.get("flow_imbalance") if flow.get("trade_data_fresh") else None
      candle=analysis.get("signal_candle_time")
      if analysis.get("ready") and candle!=last_observed.get(symbol):
       _local_claim(symbol,"OBSERVE",analysis.get("entry_side",0),analysis,float(mark))
@@ -1965,27 +2027,29 @@ def hype_h1_local_swing_loop():
       if h1_exit:
        closed=local_swing_close(symbol,float(mark),h1_exit,analysis)
        action="H1_EXIT:"+h1_exit if closed else None
-      elif local_m15_profit_protection(pos,m15_live,float(mark),flow_imb):
-       watch_context={"m15":m15_live,"h1_context":h1_context,"flow_imbalance":flow_imb,
+      elif caterpillar_pressure_exit(pos,m15_live,float(mark),flow):
+       watch_context={"m15":m15_live,"h1_context":h1_context,"flow_imbalance":flow_imb,"flow_context":flow,
         "flow_source":"hyperliquid_ws_trades","observed_at":now(),"reason":"m15_counter_pressure_while_profitable"}
-       closed=local_swing_close(symbol,float(mark),"m15_adverse_pressure_profit_protect",analysis,watch_context)
+       closed=local_swing_close(symbol,float(mark),"m15_pressure_reversal",analysis,watch_context)
        action="M15_PROFIT_PROTECT_EXIT" if closed else None
      else:
+      if watch:watch=_local_watch_observe(symbol,watch,float(mark),m15_live,flow,time.time())
       if watch:
        if analysis.get("ready") and int(analysis.get("entry_side") or 0)==-int(watch.get("side") or 0):
         _local_watch_clear(symbol,"opposite_h1_pivot_invalidated_watch");watch=None;action="WATCH_INVALIDATED_BY_H1"
        elif (analysis.get("ready") and int(analysis.get("entry_side") or 0)==int(watch.get("side") or 0)
              and int(analysis.get("signal_candle_time") or 0)>int(watch.get("origin_signal_candle") or 0)
-             and local_m15_reentry_after_exit(int(watch.get("side") or 0),m15_live,float(mark),watch,flow_imb)):
+             and caterpillar_reentry_ready(int(watch.get("side") or 0),m15_live,float(mark),watch,flow,time.time())):
         side=int(watch["side"])
-        if local_swing_open(symbol,side,analysis,"M15"):
+        if local_swing_open(symbol,side,analysis,"M15",m15_live):
          _local_watch_clear(symbol,"new_same_side_h1_pivot")
          action="REENTER_NEW_H1_PIVOT";watch=None
-       elif local_m15_reentry_after_exit(int(watch.get("side") or 0),m15_live,float(mark),watch,flow_imb):
+       elif caterpillar_reentry_ready(int(watch.get("side") or 0),m15_live,float(mark),watch,flow,time.time()):
         if local_swing_open(symbol,int(watch["side"]),analysis,"REENTRY",m15_live,watch):action="M15_RECOVERY_REENTRY"
       if (not watch and not action and analysis.get("ready") and int(analysis.get("entry_side") or 0) in (-1,1)
+          and flow.get("trade_data_fresh") and flow_imb is not None and int(analysis["entry_side"])*float(flow_imb)>=.12
           and local_m15_reentry_ready(int(analysis["entry_side"]),m15_live,flow_imb)):
-       if local_swing_open(symbol,int(analysis["entry_side"]),analysis,"M15"):action="M15_ENTRY"
+       if local_swing_open(symbol,int(analysis["entry_side"]),analysis,"M15",m15_live):action="M15_ENTRY"
 
      with LOCK:
       live=copy.deepcopy(S.get("local_swing_positions",{}).get(symbol))
@@ -1995,6 +2059,7 @@ def hype_h1_local_swing_loop():
       "watch_side":int(live_watch.get("side")) if live_watch else None,
       "watch_expires_epoch":live_watch.get("expires_epoch") if live_watch else None,
       "watch_reentries":int(live_watch.get("reentries",0)) if live_watch else None,
+      "caterpillar_phase":(live_watch.get("context") or {}).get("phase") if live_watch else ("IN_POSITION" if live else "WAIT_ENTRY"),
       "h1_local":{"ready":bool(analysis.get("ready")),"pivot_type":analysis.get("pivot_type"),
        "pivot_price":analysis.get("pivot_price"),"entry_side":analysis.get("entry_side"),
        "signal_candle_time":candle,"long_weak_score":analysis.get("long_weak_score"),
@@ -2008,19 +2073,24 @@ def hype_h1_local_swing_loop():
      open_positions=copy.deepcopy(S.get("local_swing_positions",{}));watches=copy.deepcopy(S.get("local_swing_watch",{}))
      S["hype_swing_position"]=open_positions.get(HYPE_SWING_SYMBOL)
      S["sources"]["HypeH1LocalSwing"]={"ok":all(x.get("ok") for x in details.values()),"last_check":now(),
-       "mode":"paper_h1_direction_m15_protection_reentry","policy":HYPE_SWING_POLICY,
+       "mode":"paper_h1_m15_caterpillar","policy":CATERPILLAR_POLICY,
        "symbols":list(LOCAL_SWING_SYMBOLS),"signal_interval":HYPE_SWING_INTERVAL,
        "h1_context_interval":LOCAL_SWING_H1_CONTEXT_INTERVAL,"protection_interval":LOCAL_SWING_M15_INTERVAL,
        "paper_only":True,"equity":S.get("hype_swing_equity"),"trades":S.get("hype_swing_trades",0),
        "open_positions":list(open_positions.keys()),"watching_for_reentry":list(watches.keys()),
        "position_count":len(open_positions),"watch_count":len(watches),"margin_fraction":HYPE_SWING_MARGIN_FRACTION,
        "leverage":HYPE_SWING_LEVERAGE,"compound_from_shared_equity":True,"h1_blocks_entries":True,
-       "profit_lock":{"enabled":True,"arm_move_pct":HYPE_PROFIT_LOCK_ARM_MOVE*100.0,
-        "buffer_move_pct":HYPE_PROFIT_LOCK_BUFFER_MOVE*100.0},
+       "profit_lock":{"enabled":True,"mode":"fixed_breakeven_not_peak_trailing","arm_move_pct":.4,
+        "buffer_move_pct":.16},
        "m15_profit_protection":True,"m15_reentry":True,"reentry_watch_seconds":LOCAL_REENTRY_WATCH_SECONDS or None,
        "max_reentries_per_swing":LOCAL_REENTRY_MAX_PER_SWING or None,"parallel_scan_workers":4,"details":details,"rest_transport":HL_REST_BUDGET.status(),
        "candle_transport":"websocket_with_incremental_rest_recovery",
        "error":None if all(x.get("ok") for x in details.values()) else "partial_symbol_scan_failure"}
+    if time.time()-last_observation>=30:
+     try:save_scanner_observation(CATERPILLAR_POLICY,{"details":details,"policy":CATERPILLAR_POLICY,"observed_at":now()})
+     except Exception as exc:
+      with LOCK:S["sources"]["HypeH1LocalSwing"]["history_recording_error"]=str(exc)[:120]
+     last_observation=time.time()
    except LeaseLost as exc:
     with LOCK:S["sources"]["HypeH1LocalSwing"]={"ok":False,"last_check":now(),"mode":"standby","symbols":list(LOCAL_SWING_SYMBOLS),"error":str(exc)[:160]}
    except Exception as exc:
@@ -2150,7 +2220,11 @@ def impulse_scan():
    candidate["book_error"]=str(exc)[:100];return rejected("orderbook_error")
   observed=MARKET_OBS.context(sym,time.time())
   if not observed.get("trade_data_fresh"):return rejected("missing_observed_trade_flow")
+  base_score=float(candidate.get("score",0) or 0)
   candidate["cvd_1m"]=observed.get("cvd_1m");candidate["flow_imbalance"]=observed.get("flow_imbalance")
+  candidate["trade_count_60s"]=observed.get("trade_count_60s")
+  candidate["observed_notional_60s"]=observed.get("observed_notional_60s")
+  candidate["volume_baseline_samples"]=observed.get("volume_baseline_samples")
   candidate["flow_coverage"]=observed.get("trade_coverage_seconds");candidate["flow_source"]="hyperliquid_ws_trades"
   imb=float(candidate.get("orderbook_imbalance",0) or 0);flow_imb=float(candidate.get("flow_imbalance",0) or 0)
   spread=float(candidate.get("spread_bps",9999) or 9999);oi=abs(float(candidate.get("oi_delta_60s",0) or 0))
@@ -2173,6 +2247,9 @@ def impulse_scan():
   if oi_ok:candidate["score"]=min(100,float(candidate["score"])+5)
   candidate["participation_ok"]=participation_ok
   if participation_ok:candidate["score"]=min(100,float(candidate["score"])+5)
+  candidate["base_signal_score"]=base_score
+  candidate["rank_score"]=round(base_score+8*book_ok+8*flow_ok+5*oi_ok+5*participation_ok,2)
+  candidate["estimated_round_trip_cost_bps"]=round(2*FEE*10000+spread+4,3)
   if confirmations>=3 and book_ok and flow_ok and participation_ok and spread<=15:return candidate
   return rejected("book_pressure" if not book_ok else "flow_pressure" if not flow_ok else "participation" if not participation_ok else "insufficient_micro_confirmations")
  def portfolio_counts():
@@ -2226,9 +2303,9 @@ def impulse_scan():
      # Queue capacity is not permission to reuse an old signal. Every entry
      # must still pass this cycle's momentum, breadth, book and flow checks.
      if row["expires"]<stamp or key not in now_keys:candidate_queue.pop(key,None)
-    primary.sort(key=lambda x:x["score"],reverse=True);secondary.sort(key=lambda x:x["score"],reverse=True)
+    primary.sort(key=lambda x:x.get("rank_score",x["score"]),reverse=True);secondary.sort(key=lambda x:x.get("rank_score",x["score"]),reverse=True)
     queued=[row["candidate"] for row in candidate_queue.values()]
-    queued.sort(key=lambda x:(0 if x.get("allocation_tier")=="PRIMARY" else 1,-float(x.get("score",0))))
+    queued.sort(key=lambda x:(0 if x.get("allocation_tier")=="PRIMARY" else 1,-float(x.get("rank_score",x.get("score",0)))))
     opened_this_scan=[];qualified=primary+secondary
     pump_bucket=int(stamp//15)
     qualified_keys={(x["symbol"],int(x["side"])) for x in qualified}
@@ -2317,12 +2394,14 @@ def market_regime_history():
   while not SHUTDOWN.is_set():
    with LOCK:
     active=bool(S.get("engine_active"));volumes=dict(S.get("_day_volumes",{}))
-   symbols=sorted((s for s,v in volumes.items() if v>=5_000_000),key=lambda s:volumes[s],reverse=True)[:24]
+   liquid=sorted((s for s,v in volumes.items() if v>=5_000_000),key=lambda s:volumes[s],reverse=True)
+   symbols=list(dict.fromkeys([s for s in REGIME_SEED_SYMBOLS if s in volumes]+liquid))[:24]
    if not active or not symbols:
     SHUTDOWN.wait(2);continue
    stamp=time.time()
    def fetch(sym):
     with LOCK:prior=list(S.get("_regime_candles",{}).get(sym,[]))
+    if prior and stamp-prior[-1][0]<90 and any(0<=stamp-14400-t<=65 for t,_ in prior):return prior
     start=max(stamp-6*3600,prior[-1][0]-120) if prior else stamp-6*3600
     rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":sym,"interval":"1m","startTime":int(start*1000),"endTime":int(stamp*1000)}}))
     if not isinstance(rows,list):raise ValueError("invalid_candle_history")
@@ -2341,6 +2420,7 @@ def market_regime_history():
     except Exception as exc:errors[sym]=str(exc)[:90]
    with LOCK:S["sources"]["MarketBreadthHistory"]={"ok":loaded>=5,"last_check":now(),"loaded_markets":loaded,
     "requested_markets":len(symbols),"mode":"completed_1m_H1_H4_context","refresh_seconds":300,
+    "transport":"websocket_seed_with_rest_recovery","seed_symbols":list(REGIME_SEED_SYMBOLS),
     "error":None if not errors else errors}
    SHUTDOWN.wait(300)
  finally:pool.shutdown(wait=False,cancel_futures=True)
@@ -2357,7 +2437,7 @@ def market_trade_stream():
   return listed|LIQ_WHALE_SYMBOLS|held
  def report(status):
   with LOCK:S["sources"]["MarketTradeStream"]={"last_check":now(),**status}
- run_trade_stream(MARKET_OBS,SHUTDOWN,symbols,report,os.getenv("HYPERLIQUID_WS_API","wss://api.hyperliquid.xyz/ws"),on_mids=accept_market_prices,on_candles=accept_local_candles,candle_symbols=LOCAL_SWING_SYMBOLS,on_candle_history=lambda rows:accept_local_candles(rows,history=True))
+ run_trade_stream(MARKET_OBS,SHUTDOWN,symbols,report,os.getenv("HYPERLIQUID_WS_API","wss://api.hyperliquid.xyz/ws"),on_mids=accept_market_prices,on_candles=accept_local_candles,candle_symbols=LOCAL_SWING_SYMBOLS,on_candle_history=lambda rows:accept_local_candles(rows,history=True),regime_symbols=REGIME_SEED_SYMBOLS,on_regime_candles=accept_regime_candles)
 
 def market_metadata():
  while not SHUTDOWN.is_set():
@@ -3736,7 +3816,7 @@ def build_dashboard_snapshot(history=None):
  used_margin=sum(float(p.get("margin",float(p.get("notional",0))/max(1.0,float(p.get("leverage",TRADE_LEVERAGE))))) for book in (state.get("positions",{}),state.get("pump_positions",{}),state.get("whale_positions",{}),local_book) for p in book.values())
  free_margin=max(0.0,float(state["equity"])-used_margin);margin_utilization=(used_margin/float(state["equity"])*100.0) if float(state["equity"])>0 else 0.0
  visible_sources={k:v for k,v in state["sources"].items() if not k.startswith("XIndex:") and k!="XIndexMonitor" and not k.startswith("XFree:") and k not in SEARCH_INDEX_FEEDS and not v.get("disabled") and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")}
- return {"strategy_performance":copy.deepcopy((history or {}).get("strategy_performance",{})),"strategy_open_pnl":{"news":round(unreal,4),"pump_dump":round(pump_unreal,4),"whale_liquidation":round(whale_unreal,4),"local":round(hype_swing_unreal,4)},"snapshot_at":now(),"history_updated_at":(history or {}).get("updated_at"),"history_error":(history or {}).get("error"),"today_pnl":history.get("today_pnl",{}) if history is not None else today_realized_pnl_utc(),"statistics_basis":state.get("statistics_basis","full_recorded_history"),"operator_cleanup":state.get("operator_cleanup",{}),"emergency_profit_guard":state.get("emergency_profit_guard",{}),"daily_activity":state.get("daily_activity",{}),"daily_entry_limit":None,"margin_budget":"shared_all_strategies","mode":state["mode"],"balance":round(state["equity"],4),"capital_contributed":round(float(state.get("contributed_capital",PAPER_RESET)),4),"unrealized_pnl":round(unreal+pump_unreal+whale_unreal+hype_swing_unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"account_pnl_pct":round(account_pnl_pct,3),"realized_pnl_pct":round(realized_pnl_pct,3),"total_pnl_pct":round(total_pnl_pct,3),"used_margin":round(used_margin,4),"free_margin":round(free_margin,4),"margin_utilization_pct":round(margin_utilization,3),"trade_margin_fraction_pct":round(TRADE_MARGIN_FRACTION*100,3),"trade_leverage":TRADE_LEVERAGE,"positions":positions+pump_positions+whale_positions+local_swing_positions,"pump_positions":pump_positions,
+ return {"strategy_performance":strategy_capital_basis((history or {}).get("strategy_performance",{}),state.get("contributed_capital",PAPER_RESET),{"news":unreal,"pump_dump":pump_unreal,"whale_liquidation":whale_unreal,"local":hype_swing_unreal}),"strategy_open_pnl":{"news":round(unreal,4),"pump_dump":round(pump_unreal,4),"whale_liquidation":round(whale_unreal,4),"local":round(hype_swing_unreal,4)},"snapshot_at":now(),"history_updated_at":(history or {}).get("updated_at"),"history_error":(history or {}).get("error"),"today_pnl":history.get("today_pnl",{}) if history is not None else today_realized_pnl_utc(),"statistics_basis":state.get("statistics_basis","full_recorded_history"),"operator_cleanup":state.get("operator_cleanup",{}),"emergency_profit_guard":state.get("emergency_profit_guard",{}),"daily_activity":state.get("daily_activity",{}),"daily_entry_limit":None,"margin_budget":"shared_all_strategies","mode":state["mode"],"balance":round(state["equity"],4),"capital_contributed":round(float(state.get("contributed_capital",PAPER_RESET)),4),"unrealized_pnl":round(unreal+pump_unreal+whale_unreal+hype_swing_unreal,4),"total_equity":round(total,4),"realized_pnl":round(state["realized_pnl"],4),"account_started":account_started,"account_age_seconds":account_age_seconds,"account_roi_pct":round(account_roi,3),"account_pnl_pct":round(account_pnl_pct,3),"realized_pnl_pct":round(realized_pnl_pct,3),"total_pnl_pct":round(total_pnl_pct,3),"used_margin":round(used_margin,4),"free_margin":round(free_margin,4),"margin_utilization_pct":round(margin_utilization,3),"trade_margin_fraction_pct":round(TRADE_MARGIN_FRACTION*100,3),"trade_leverage":TRADE_LEVERAGE,"positions":positions+pump_positions+whale_positions+local_swing_positions,"pump_positions":pump_positions,
 "pump_unrealized_pnl":round(pump_unreal,4),"pump_realized_pnl":round(float(state.get("pump_realized_pnl",0) or 0),4),
 "pump_total_pnl":round(float(state.get("pump_realized_pnl",0) or 0)+pump_unreal,4),
 "pump_history_baseline":copy.deepcopy(state.get("pump_history_baseline",{})),"pump_trades":state.get("pump_trades",0),"whale_liq_positions":whale_positions,"whale_liq_unrealized_pnl":round(whale_unreal,4),"whale_liq_trades":state.get("whale_trades",0),"whale_liq_engine":copy.deepcopy(state.get("sources",{}).get("WhaleLiquidationScanner",{})),"hype_h1_position":hype_swing_position,"local_swing_positions":local_swing_positions,"local_swing_watch":copy.deepcopy(state.get("local_swing_watch",{})),
@@ -3744,7 +3824,7 @@ def build_dashboard_snapshot(history=None):
 "hype_h1_unrealized_pnl":round(hype_swing_unreal,4),"hype_h1_total_equity":round(hype_swing_total,4),
 "hype_h1_pnl_pct":round((hype_swing_total/HYPE_SWING_STARTING_EQUITY-1)*100,3),"hype_h1_realized_pnl":round(float(state.get("hype_swing_realized_pnl",0)),4),
 "hype_h1_trades":state.get("hype_swing_trades",0),"hype_h1_engine":copy.deepcopy(state.get("sources",{}).get("HypeH1LocalSwing",{})),
-"hype_h1_stats":history.get("hype_stats",{}) if history is not None else hype_swing_stats(),"hype_h1_policy":HYPE_SWING_POLICY,"account_model":"UNIFIED_PAPER_ACCOUNT_ALL_STRATEGIES","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"decision_learning":copy.deepcopy(state.get("learning_audit",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
+"hype_h1_stats":history.get("hype_stats",{}) if history is not None else hype_swing_stats(),"hype_h1_policy":CATERPILLAR_POLICY,"account_model":"UNIFIED_PAPER_ACCOUNT_ALL_STRATEGIES","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"decision_learning":copy.deepcopy(state.get("learning_audit",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
 def dashboard():
  # Render open positions from current in-memory prices; slow history queries
@@ -3945,7 +4025,7 @@ def html_dashboard(data):
  whale_positions=data.get("whale_liq_positions",[]) or []
  whale_candidates=whale_engine.get("top_candidates",[]) or []
  whale_cards='<div class="grid"><b>PRICE TO VALUE<br>%s</b><b>DANGER ZONE<br>%s</b><b>EVALUATED<br>%s</b><b>QUALIFIED<br>%s</b><b>OPEN WHALE POS<br>%s</b><b>SCAN<br>%ss</b></div>'%("OK" if whale_engine.get("ok") else "ERROR",whale_engine.get("danger_positions",0),whale_engine.get("eligible_candidates",0),whale_engine.get("qualified_candidates",0),len(whale_positions),whale_engine.get("scan_seconds","-"))
- whale_cards+=strategy_cards_html(data.get("strategy_performance"),"whale_liquidation",data.get("whale_liq_unrealized_pnl",0),"Whale Liquidation")
+ whale_cards+=strategy_cards_html(data.get("strategy_performance"),"whale_liquidation",data.get("whale_liq_unrealized_pnl",0),"Whale Liquidation",data.get("capital_contributed"))
  whale_pos_html="".join('<tr><td>%s</td><td>%s</td><td>$%s</td><td>$%s</td><td>%sx</td><td>%s</td><td>%s</td><td class="%s">%s%%</td><td class="%s">$%s</td><td>%s</td></tr>'%(esc(x["symbol"]),x["side"],x["margin_usd"],x["notional_usd"],x["leverage"],x["entry"],x["mark"],"posv" if x["roe_pct"]>=0 else "negv",x["roe_pct"],"posv" if x["unrealized_pnl"]>=0 else "negv",x["unrealized_pnl"],x.get("score",0)) for x in whale_positions) or '<tr><td colspan=10>No whale liquidation positions</td></tr>'
  whale_candidates_html="".join('<tr><td>%s</td><td>%s</td><td>$%s</td><td>%s%%</td><td>%s</td><td>%s</td><td>%s</td></tr>'%(esc(x.get("symbol","")),("LONG" if int(x.get("side",0))>0 else "SHORT"),round(float(x.get("whale_size_usd",0) or 0),2),round(float(x.get("distance_pct",0) or 0),4),round(float(x.get("ptv_quality_score",x.get("score",0)) or 0),2),esc(x.get("victim_side","")),esc(x.get("liquidation_price",""))) for x in whale_candidates) or '<tr><td colspan=7>No active Price-to-Value candidates now</td></tr>'
 
@@ -3954,9 +4034,9 @@ def html_dashboard(data):
  hype_stats=data.get("hype_h1_stats") or {}
  local_symbols=data.get("local_swing_symbols",["HYPE","NEAR"])
  hype_cards='<div class="grid"><b>LOCAL H1 / M15 ENGINE<br>%s</b><b>TOKENS<br>%s</b><b>TOTAL EQUITY<br>$%s</b><b>P&L<br><span class="%s">%s%%</span></b><b>OPEN POSITIONS<br>%s</b><b>TRADES<br>%s</b><b>MARGIN / LEV<br>25%% / 25x</b><b>H1 DIRECTION<br>LOCAL HIGH / LOCAL LOW</b></div>'%("OK" if hype_engine.get("ok") else "ERROR",esc(" + ".join(local_symbols)),data.get("hype_h1_total_equity",100),"posv" if data.get("hype_h1_pnl_pct",0)>=0 else "negv",data.get("hype_h1_pnl_pct",0),len(local_positions),data.get("hype_h1_trades",0))
- hype_cards+=strategy_cards_html(data.get("strategy_performance"),"local",data.get("hype_h1_unrealized_pnl",0),"Local H1/M15")
+ hype_cards+=strategy_cards_html(data.get("strategy_performance"),"local",data.get("hype_h1_unrealized_pnl",0),"Local H1/M15",data.get("capital_contributed"))
  hype_pos_html="".join('<tr><td>%s</td><td>%s</td><td>$%s</td><td>$%s</td><td>%sx</td><td>%s</td><td>%s</td><td class="%s">%s%%</td><td class="%s">$%s</td><td>%s / %s</td></tr>'%(esc(x.get("symbol","")),esc(x.get("side","FLAT")),x.get("margin_usd",0),x.get("notional_usd",0),x.get("leverage",25),x.get("entry","-"),x.get("mark","-"),"posv" if x.get("roe_pct",0)>=0 else "negv",x.get("roe_pct",0),"posv" if x.get("unrealized_pnl",0)>=0 else "negv",x.get("unrealized_pnl",0),round(float((x.get("features") or {}).get("mae_roe_pct",0) or 0),2),round(float((x.get("features") or {}).get("mfe_roe_pct",0) or 0),2)) for x in local_positions) or '<tr><td colspan=10>No HYPE / NEAR M15 position</td></tr>'
- hype_note='<div class="muted">HYPE + NEAR: H1 local low → LONG; H1 local high → SHORT. M15 manages protective exits and same-direction recovery re-entry. Target margin is 25%% of total PAPER balance; if free margin is lower, the strategy uses all remaining free margin. Exit: opposite M15 local, momentum weakening or profit protection. Samples: %s · win rate: %s · avg MAE: %s%% · avg MFE: %s%%</div>'%(hype_stats.get("samples",0),hype_stats.get("win_rate","-"),hype_stats.get("avg_mae_roe_pct","-"),hype_stats.get("avg_mfe_roe_pct","-"))
+ hype_note='<div class="muted">HYPE + NEAR: H1 local low → LONG; H1 local high → SHORT. M15 manages protective exits and same-direction recovery re-entry. Target margin is 25%% of total PAPER balance; if free margin is lower, the strategy uses all remaining free margin. Exit: opposite H1 local or M15 weakening + opposite executed flow; wait for pullback and resume H1 direction. Fixed cost-aware breakeven protection; no peak-percent trailing. Samples: %s · win rate: %s · avg MAE: %s%% · avg MFE: %s%%</div>'%(hype_stats.get("samples",0),hype_stats.get("win_rate","-"),hype_stats.get("avg_mae_roe_pct","-"),hype_stats.get("avg_mfe_roe_pct","-"))
  pump_positions_data=data.get("pump_positions",[]) or []
  pump_total=float(data.get("pump_total_pnl",0) or 0)
  pump_cards='<div class="grid"><b>PUMP/DUMP ENGINE<br>%s</b><b>OPEN POSITIONS<br>%s</b><b>CLOSED TRADES<br>%s</b><b>REALIZED P&L<br><span class="%s">$%s</span></b><b>UNREALIZED P&L<br><span class="%s">$%s</span></b><b>TOTAL P&L<br><span class="%s">$%s</span></b></div>'%(
@@ -3964,7 +4044,7 @@ def html_dashboard(data):
   data.get("pump_trades",0),"posv" if float(data.get("pump_realized_pnl",0) or 0)>=0 else "negv",data.get("pump_realized_pnl",0),
   "posv" if float(data.get("pump_unrealized_pnl",0) or 0)>=0 else "negv",data.get("pump_unrealized_pnl",0),
   "posv" if pump_total>=0 else "negv",pump_total)
- pump_cards+=strategy_cards_html(data.get("strategy_performance"),"pump_dump",data.get("pump_unrealized_pnl",0),"Pump/Dump")
+ pump_cards+=strategy_cards_html(data.get("strategy_performance"),"pump_dump",data.get("pump_unrealized_pnl",0),"Pump/Dump",data.get("capital_contributed"))
  pump_pos="".join('<tr><td>%s</td><td>%s</td><td>$%s</td><td>$%s</td><td>%sx</td><td>%s</td><td>%s</td><td class="%s">%s%%</td><td class="%s">$%s</td><td>%s</td></tr>'%(esc(x["symbol"]),x["side"],x["margin_usd"],x["notional_usd"],x["leverage"],x["entry"],x["mark"],"posv" if x["roe_pct"]>=0 else "negv",x["roe_pct"],"posv" if x["unrealized_pnl"]>=0 else "negv",x["unrealized_pnl"],x.get("score",0)) for x in pump_positions_data) or '<tr><td colspan=10>No pump/dump positions</td></tr>'
  src="".join('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'%(esc(k),(esc(v.get("scan_label")) if k=="XMonitor" and v.get("scan_label") else ("OK" if v.get("ok") else "ERROR")),esc(v.get("last_check","")),esc(v.get("error",""))) for k,v in data["sources"].items())
 
@@ -3979,7 +4059,7 @@ def html_dashboard(data):
  news_health_note='<div class="muted">Last fresh: %s · %s · %s</div>'%(esc(nh.get("last_fresh_received_at") or "-"),esc(nh.get("last_fresh_source") or "-"),esc(nh.get("last_fresh_headline") or "-"))
  news="".join('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'%(esc(x["ts"]),esc(x["source"]),esc(x["symbol"]),esc(x["signal"]),esc(x["title"])) for x in data["news"][:12])
  page='''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>PANDORA LIVE</title><style>body{font-family:system-ui;background:#080b10;color:#e8edf5;margin:24px}h1{margin:0}.muted{color:#8b98aa}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:18px 0}.grid b{background:#111722;padding:16px;border-radius:12px}table{width:100%%;border-collapse:collapse;background:#0e141e;margin-bottom:22px}td,th{padding:9px;border-bottom:1px solid #202938;text-align:left;font-size:13px}th{color:#91a2b8}.posv{color:#49d17d;font-weight:700}.negv{color:#ff6262;font-weight:700}.warnv{color:#f6c453;font-weight:700}a{color:#8bc4ff}</style></head><body><p id="refreshStatus" class="muted">Connecting live updates…</p><main id="dashboardContent" data-poll="__MARKET_POLL__"><h1>PANDORA LIVE</h1><div class="muted">Paper engine · automatic updates every 5s · last market poll %s</div>%s<h2>News — статистика</h2>__NEWS_PERFORMANCE__<h2>Open positions</h2><button onclick="closePos(null)">Close Everything</button><button onclick="location.reload()">Refresh</button><p id="actionResult"></p><table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Trigger</th><th>Action</th></tr>%s</table><h2>Pump/Dump PAPER positions</h2>%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h2>Price to Value Liquidation</h2>%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>Score</th></tr>%s</table><h3>Whale liquidation candidates</h3><table><tr><th>Token</th><th>Trade side</th><th>Whale size</th><th>Distance</th><th>Score</th><th>Victim</th><th>Liq price</th></tr>%s</table><h2>LOCAL H1 / M15 — HYPE + NEAR</h2>%s%s<table><tr><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROI%%</th><th>P&L</th><th>MAE / MFE ROE</th></tr>%s</table><h2>Closed trades</h2><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>PnL</th><th>Reason</th></tr>%s</table><h2>News Scanner Health</h2>%s%s<table><tr><th>Source</th><th>Freshness</th><th>Latest post age (s)</th><th>Ingest lag (s)</th><th>Realtime verified</th></tr>%s</table><h2>Sources</h2><table><tr><th>Source</th><th>Status</th><th>Checked</th><th>Error</th></tr>%s</table><h2>Latest news</h2><table><tr><th>Time</th><th>Source</th><th>Token</th><th>Raw signal</th><th>Headline</th></tr>%s</table><p>Errors: %s · Last error: %s</p><p><a href="/api/dashboard">JSON dashboard</a> · <a href="/features">Features</a> · <a href="/trades">Trades</a> · <a href="/news">News</a></p></main><script>let closing=false,refreshing=false,refreshTimer=null;async function refreshDashboard(){clearTimeout(refreshTimer);if(refreshing||closing||document.visibilityState!=="visible"){if(document.visibilityState==="visible")refreshTimer=setTimeout(refreshDashboard,5000);return;}refreshing=true;const indicator=document.getElementById("refreshStatus");const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),10000);try{const response=await fetch("/?refresh="+Date.now(),{cache:"no-store",credentials:"same-origin",signal:controller.signal});if(!response.ok)throw new Error("HTTP "+response.status);const doc=new DOMParser().parseFromString(await response.text(),"text/html");const incoming=doc.getElementById("dashboardContent");if(!incoming)throw new Error("Invalid dashboard response");if(closing)return;const current=document.getElementById("dashboardContent");const top=window.scrollY;current.replaceWith(document.importNode(incoming,true));window.scrollTo(0,top);const marketAt=Date.parse(incoming.dataset.poll);const age=Number.isFinite(marketAt)?Math.max(0,(Date.now()-marketAt)/1000):null;indicator.textContent="Updated "+new Date().toLocaleTimeString()+(age===null?" · market freshness unavailable":" · market age "+age.toFixed(1)+"s")+(age!==null&&age>20?" · MARKET DATA STALE":"");indicator.style.color=age!==null&&age<=20?"#49d17d":"#f6c453"}catch(error){indicator.textContent="Update failed; retrying automatically · "+String(error);indicator.style.color="#ff6262"}finally{clearTimeout(timeout);refreshing=false;if(document.visibilityState==="visible")refreshTimer=setTimeout(refreshDashboard,5000)}}document.addEventListener("visibilitychange",()=>{clearTimeout(refreshTimer);if(document.visibilityState==="visible")refreshDashboard()});refreshTimer=setTimeout(refreshDashboard,5000);async function closePos(sym){if(closing||!confirm(sym?"Close "+sym+"?":"Close ALL positions?"))return;closing=true;const status=document.getElementById("actionResult");status.textContent="Processing close request...";try{const r=await fetch("/api/positions/close",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(sym?{symbol:sym}:{all:true})});const result=await r.json();status.textContent=r.ok?"Close confirmed: "+JSON.stringify(result):(r.status===401?"Controls locked: open the control-access link once, then retry.":"Close failed ("+r.status+"): "+JSON.stringify(result));if(r.ok){location.reload();return}}catch(e){status.textContent="Close request failed: "+String(e)}finally{closing=false}}</script></body></html>'''%(esc(data["last_poll"]),cards,pos,pump_cards,pump_pos,whale_cards,whale_pos_html,whale_candidates_html,hype_cards,hype_note,hype_pos_html,trs,news_health_cards,news_health_note,news_health_rows,src,news,data["errors"],esc(data["last_error"]))
- page=page.replace("__NEWS_PERFORMANCE__",strategy_cards_html(data.get("strategy_performance"),"news",(data.get("strategy_open_pnl") or {}).get("news",0),"News")+'<p class="muted">Win rate = прибыльные / все закрытые сделки. Последние 8 часов — по времени закрытия; открытый PnL отдельно. Суммы в USDT, с учётом настроенных комиссий.</p>')
+ page=page.replace("__NEWS_PERFORMANCE__",strategy_cards_html(data.get("strategy_performance"),"news",(data.get("strategy_open_pnl") or {}).get("news",0),"News",data.get("capital_contributed"))+'<p class="muted">Win rate = прибыльные / все закрытые сделки. Последние 8 часов — по времени закрытия; открытый PnL отдельно. Суммы в USDT, с учётом настроенных комиссий.</p>')
  return page.replace("__MARKET_POLL__",esc(data.get("last_poll") or ""))
 
 

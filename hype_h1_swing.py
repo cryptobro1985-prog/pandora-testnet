@@ -7,8 +7,9 @@ A mature partial M15 candle plus live flow can protect earned profit before the 
 """
 
 import math
+import statistics
 
-POLICY = "local_swing_h1_bias_m15_execution_v5"
+POLICY = "local_swing_h1_bias_m15_execution_v6_data_quality"
 SYMBOL = "HYPE"  # backwards-compatible primary symbol
 SYMBOLS = ("HYPE", "NEAR")
 INTERVAL = "1h"
@@ -230,6 +231,11 @@ def analyze_m15(rows, now_ms, side):
         return {"ready": False, "reason": "insufficient_m15_data", "side": side,
                 "closed_or_mature_candles": len(candles), "policy": POLICY}
     x = candles[-1]
+    if float(now_ms)-x["T"]>900000+120000:
+        return {"ready":False,"reason":"stale_m15_history","side":side,"policy":POLICY}
+    recent=candles[-5:]
+    if any(abs(b["t"]-a["t"]-900000)>1000 for a,b in zip(recent,recent[1:])):
+        return {"ready":False,"reason":"gapped_m15_history","side":side,"policy":POLICY}
     prev = candles[-2]
     r1 = _ret(prev["c"], x["c"])
     r2 = _ret(candles[-3]["c"], x["c"])
@@ -239,7 +245,11 @@ def analyze_m15(rows, now_ms, side):
     close_location = (x["c"]-x["l"]) / rng
     prior_volumes = [z.get("v",0.0) for z in candles[-9:-1] if z.get("v",0.0) > 0]
     avg_v = sum(prior_volumes)/len(prior_volumes) if prior_volumes else 0.0
-    volume_ratio = (x.get("v",0.0)/avg_v) if avg_v > 0 else None
+    raw_volume_ratio = (x.get("v",0.0)/avg_v) if avg_v > 0 else None
+    # Compare rates when only part of the current candle has elapsed.
+    # A three-minute candle must not be treated as a completed fifteen-minute volume.
+    elapsed_fraction=min(1.,max(.001,float(x.get("age_ms",900000))/900000.))
+    volume_ratio=raw_volume_ratio/elapsed_fraction if raw_volume_ratio is not None else None
 
     adverse_score = 0
     if side*r1 <= -0.0015:
@@ -272,6 +282,7 @@ def analyze_m15(rows, now_ms, side):
         "side": side,
         "candle_time": x["t"],
         "candle_close_time": x["T"],
+        "observed_at_ms":int(now_ms),
         "partial": bool(x.get("partial")),
         "partial_age_seconds": round(float(x.get("age_ms",0))/1000.0,1) if x.get("partial") else None,
         "return_15m": r1,
@@ -279,6 +290,8 @@ def analyze_m15(rows, now_ms, side):
         "body_fraction": body_fraction,
         "close_location": close_location,
         "volume_ratio": volume_ratio,
+        "raw_volume_ratio":raw_volume_ratio,
+        "median_range_move":statistics.median((z["h"]-z["l"])/z["c"] for z in candles[-9:-1]),
         "adverse_score": adverse_score,
         "recovery_score": recovery_score,
         "strong_adverse_pressure": adverse_score >= M15_PRESSURE_MIN_SCORE and side*r1 < 0,
@@ -295,7 +308,8 @@ def m15_profit_protection(position, m15, mark, flow_imbalance=None):
     if side not in (-1,1) or entry is None or mark is None:
         return False
     favorable = side*(mark/entry-1.0)
-    if favorable < M15_PROFIT_EXIT_MIN_MOVE:
+    minimum=max(M15_PROFIT_EXIT_MIN_MOVE,_f((position.get("features") or {}).get("profit_lock_buffer_move")) or 0.)
+    if favorable < minimum:
         return False
     adverse = bool(m15.get("strong_adverse_pressure"))
     flow_confirms = False
@@ -311,6 +325,9 @@ def m15_reentry_ready(side, m15, flow_imbalance=None):
     if not bool(m15.get("recovery_confirmed")):
         return False
     fi = _f(flow_imbalance)
+    # Candle scores must not override fresh executed flow strongly against entry.
+    if fi is not None and int(side)*fi<=-0.10:
+        return False
     return int(m15.get("recovery_score",0)) >= 4 or fi is None or int(side)*fi >= 0.06
 
 
@@ -362,11 +379,16 @@ def update_path(position, mark):
     features["mae_price_move"] = min(float(features.get("mae_price_move", 0.0) or 0.0), move)
     features["mfe_roe_pct"] = max(float(features.get("mfe_roe_pct", 0.0) or 0.0), roe * 100.0)
     features["mae_roe_pct"] = min(float(features.get("mae_roe_pct", 0.0) or 0.0), roe * 100.0)
-    if bool(features.get("profit_lock_armed")) or peak_move >= PROFIT_LOCK_ARM_MOVE:
+    arm=_f(features.get("profit_lock_arm_move")) or PROFIT_LOCK_ARM_MOVE
+    buffer=_f(features.get("profit_lock_buffer_move")) or PROFIT_LOCK_BUFFER_MOVE
+    if bool(features.get("profit_lock_armed")) or peak_move >= arm:
         features["profit_lock_armed"] = True
-        features["profit_lock_stop"] = entry * (1.0 + side * max(PROFIT_LOCK_BUFFER_MOVE, peak_move * 0.50))
-        features["profit_lock_arm_move_pct"] = PROFIT_LOCK_ARM_MOVE * 100.0
-        features["profit_lock_buffer_move_pct"] = PROFIT_LOCK_BUFFER_MOVE * 100.0
+        lock_move=buffer if features.get("profit_lock_mode")=="fixed_cost_aware_breakeven" else max(buffer, peak_move * 0.50)
+        candidate=entry * (1.0 + side * lock_move)
+        old=_f(features.get("profit_lock_stop"))
+        features["profit_lock_stop"]=max(old,candidate) if old is not None and side>0 else min(old,candidate) if old is not None else candidate
+        features["profit_lock_arm_move_pct"] = arm * 100.0
+        features["profit_lock_buffer_move_pct"] = buffer * 100.0
     else:
         features["profit_lock_armed"] = False
     features["last_mark"] = mark
