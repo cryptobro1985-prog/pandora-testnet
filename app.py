@@ -1327,8 +1327,14 @@ def whale_liquidation_scan():
   while not SHUTDOWN.is_set():
    started=time.monotonic()
    try:
-    with LOCK:active=S["engine_active"]
+    with LOCK:
+     active=bool(S.get("engine_active"))
+     metadata_ready=bool(S.get("_day_volumes")) and bool(S.get("_max_leverage"))
     if not active:
+     SHUTDOWN.wait(0.5);continue
+    if not metadata_ready:
+     with LOCK:S["sources"]["PumpDumpScanner"]={"ok":True,"ready":False,"warmup":True,"last_check":now(),
+       "mode":"waiting_for_market_metadata","error":None}
      SHUTDOWN.wait(0.5);continue
     prices=refresh_market_prices(max_age=8.0)
     with LOCK:
@@ -2433,8 +2439,15 @@ def local_experiment_loop():
  try:
   while not SHUTDOWN.is_set():
    try:
-    with LOCK:active=bool(S.get("engine_active"))
+    with LOCK:
+     active=bool(S.get("engine_active"))
+     metadata_ready=bool(S.get("_day_volumes")) and bool(S.get("_max_leverage"))
     if not active:
+     SHUTDOWN.wait(1);continue
+    if not metadata_ready:
+     with LOCK:S["sources"]["Local12TokenH1M15"]={"ok":True,"ready":False,"warmup":True,"last_check":now(),
+       "mode":"waiting_for_market_metadata","policy":CATERPILLAR_POLICY,"symbols":list(LOCAL_EXPERIMENT_SYMBOLS),
+       "paper_only":True,"starting_equity":LOCAL_EXPERIMENT_STARTING_EQUITY,"error":None}
      SHUTDOWN.wait(1);continue
     prices=refresh_market_prices(max_age=8.0)
     local_experiment_mark_positions(prices)
@@ -3015,7 +3028,9 @@ def market_history_bootstrap():
   if not (active and metadata_ready):
    SHUTDOWN.wait(.5);continue
   with LOCK:activated=float(S.get("_engine_activated_epoch",0) or 0)
-  quiet_remaining=max(0.0,65.0-(time.time()-activated)) if activated else 65.0
+  metadata_source=copy.deepcopy(S.get("sources",{}).get("MarketMetadata",{}))
+  metadata_epoch=float(S.get("_metadata_ready_epoch",0) or 0)
+  quiet_remaining=max(0.0,5.0-(time.time()-metadata_epoch)) if metadata_epoch else 5.0
   if quiet_remaining>0:
    with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":True,"degraded":False,
      "last_check":now(),"mode":"post_takeover_ip_quiet_window","quiet_remaining_seconds":round(quiet_remaining,1),
@@ -3114,10 +3129,18 @@ def market_metadata():
  while not SHUTDOWN.is_set():
   # Do not duplicate REST traffic from a standby Render instance during
   # blue/green rollout. Bootstrap metadata only after this process owns lease.
-  with LOCK:active=bool(S.get("engine_active"))
+  with LOCK:
+   active=bool(S.get("engine_active"))
+   activated=float(S.get("_engine_activated_epoch",0) or 0)
   if not active:
-   with LOCK:S["sources"]["MarketMetadata"]={"ok":False,"standby":True,"last_check":now(),"mode":"waiting_for_engine_lease","error":None}
+   with LOCK:S["sources"]["MarketMetadata"]={"ok":True,"ready":False,"standby":True,"last_check":now(),"mode":"waiting_for_engine_lease","error":None}
    SHUTDOWN.wait(.5)
+   continue
+  quiet_remaining=max(0.0,65.0-(time.time()-activated)) if activated else 65.0
+  if quiet_remaining>0:
+   with LOCK:S["sources"]["MarketMetadata"]={"ok":True,"ready":False,"warmup":True,"last_check":now(),
+     "mode":"post_takeover_ip_quiet_window","quiet_remaining_seconds":round(quiet_remaining,1),"error":None}
+   SHUTDOWN.wait(min(2.0,quiet_remaining))
    continue
   try:
    raw=json.loads(get(API,{"type":"metaAndAssetCtxs"}))
@@ -3136,7 +3159,7 @@ def market_metadata():
        "mark_price":mark,"oracle_price":oracle,**MARKET_OBS.context(name,stamp)}
     except (TypeError,ValueError,KeyError,ZeroDivisionError):continue
    with LOCK:
-    S["_day_volumes"]=volumes;S["_pump_ctx"]=pump_ctx;S["_max_leverage"]=max_leverage
+    S["_day_volumes"]=volumes;S["_pump_ctx"]=pump_ctx;S["_max_leverage"]=max_leverage;S["_metadata_ready_epoch"]=time.time()
     S["sources"]["MarketMetadata"]={"ok":True,"last_check":now(),"markets":len(volumes),"max_leverage_markets":len(max_leverage),
       "local_max_leverage":{sym:max_leverage.get(sym,VALIDATED_MAX_LEVERAGE.get(sym)) for sym in ALL_LOCAL_CANDLE_SYMBOLS}}
   except Exception as e:
