@@ -69,13 +69,13 @@ class CandleTests(unittest.TestCase):
         with patch.object(app,'get',return_value=json.dumps(rows).encode()) as net:
             result,_=app._local_m15_candles('HYPE')
         net.assert_called_once();self.assertEqual(len(result),12)
-    def test_rest_recovery_fetches_overlap_and_retains_history(self):
+    def test_fresh_exchange_interval_cache_avoids_redundant_rest_recovery(self):
         rows=self.rows();key=('HYPE','15m',12)
         app._LOCAL_CANDLE_CACHE[key]=(0,rows,1)
-        with patch.object(app,'get',return_value=json.dumps(rows[-2:]).encode()) as net:
+        with patch.object(app,'get') as net:
             result,_=app._local_m15_candles('HYPE')
         self.assertEqual(len(result),12)
-        self.assertEqual(net.call_args.args[1]['req']['startTime'],rows[-1]['t']-900000)
+        net.assert_not_called()
     def test_invalid_ws_data_does_not_refresh_cache(self):
         row=self.rows()[-1];row['c']='nan';app.accept_local_candles(row)
         self.assertFalse(app._LOCAL_CANDLE_CACHE)
@@ -146,5 +146,6 @@ class HistoryBootstrapTests(CandleTests):
             run_trade_stream(MagicMock(),stop,lambda:set(),lambda _:None,'wss://test',candle_symbols=('HYPE','NEAR'),on_candle_history=callback)
         callback.assert_called_once_with(rows)
         posts=[json.loads(c.args[0]) for c in ws.send.call_args_list if json.loads(c.args[0]).get('method')=='post']
-        self.assertEqual(len(posts),4)
-        self.assertTrue(all(p['request']['payload']['type']=='candleSnapshot' for p in posts))
+        self.assertEqual(len(posts),1)  # bootstrap is deliberately paced, not burst
+        self.assertEqual(posts[0]['request']['payload']['type'],'candleSnapshot')
+        self.assertEqual(posts[0]['request']['payload']['req']['interval'],'3m')
