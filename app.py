@@ -167,7 +167,7 @@ NEWS_MAX_AGE_SECONDS=float(os.getenv("NEWS_MAX_AGE_SECONDS","120"))
 NEWS_POLL_SECONDS=float(os.getenv("NEWS_POLL_SECONDS","15"))
 WHITEHOUSE_POLL_SECONDS=max(10.0,float(os.getenv("WHITEHOUSE_POLL_SECONDS","15")))
 PUMP_SCAN_SECONDS=max(1.0,float(os.getenv("PUMP_SCAN_SECONDS","2")))
-MARKET_METADATA_SECONDS=max(10.0,float(os.getenv("MARKET_METADATA_SECONDS","15")))
+MARKET_METADATA_SECONDS=max(20.0,float(os.getenv("MARKET_METADATA_SECONDS","30")))
 MICRO_ANALYSIS_THREADS=max(1,min(10,int(os.getenv("MICRO_ANALYSIS_THREADS","10"))))
 LIQ_WHALE_SCAN_SECONDS=max(3.0,float(os.getenv("LIQ_WHALE_SCAN_SECONDS","3")))
 LIQ_WHALE_MAX_DISTANCE_PCT=max(0.5,float(os.getenv("LIQ_WHALE_MAX_DISTANCE_PCT","1.5")))
@@ -2974,12 +2974,16 @@ def hyperdata(path):
 
 def deep_context(sym,prices):
  out={"symbol":sym,"price":prices.get(sym),"open_interest":None,"oi_delta":None,"funding":None,"premium":None,"day_volume":None,"orderbook_imbalance":None,"spread_bps":None,"market_momentum":None,"market_regime":None,"breadth":None,"liquidation_map":"unavailable","whale_onchain":"unavailable","tokenomics":"unlock" if False else "unknown"}
- try:
-  raw=json.loads(get(API,{"type":"metaAndAssetCtxs"}));meta,ctxs=raw[0],raw[1]
-  names=[x.get("name") for x in meta.get("universe",[])]
-  if sym in names:
-   z=ctxs[names.index(sym)];out["open_interest"]=float(z.get("openInterest",0) or 0);out["funding"]=float(z.get("funding",0) or 0);out["premium"]=float(z.get("premium",0) or 0);out["day_volume"]=float(z.get("dayNtlVlm",0) or 0)
- except Exception:pass
+ # MarketMetadata already refreshes metaAndAssetCtxs for the whole exchange.
+ # Reuse that last-good snapshot instead of issuing the same heavy request once
+ # per telemetry position every 30 seconds.
+ with LOCK:cached_market=copy.deepcopy((S.get("_pump_ctx") or {}).get(sym) or {})
+ if cached_market:
+  out["open_interest"]=cached_market.get("open_interest")
+  out["oi_delta"]=cached_market.get("oi_delta_60s") if cached_market.get("oi_delta_60s") is not None else cached_market.get("oi_delta")
+  out["funding"]=cached_market.get("funding")
+  out["premium"]=cached_market.get("premium")
+  out["day_volume"]=cached_market.get("day_volume")
  try:
   book=json.loads(get(API,{"type":"l2Book","coin":sym}));levels=book.get("levels",[])
   if len(levels)>=2:
