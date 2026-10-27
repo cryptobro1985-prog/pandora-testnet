@@ -3027,6 +3027,97 @@ def comparison_strategies_loop():
   SHUTDOWN.wait(5)
  pool.shutdown(wait=False,cancel_futures=True)
 
+def strategy3_local12_loop():
+ pool=concurrent.futures.ThreadPoolExecutor(max_workers=24,thread_name_prefix="local-s3-v10")
+ try:
+  while not SHUTDOWN.is_set():
+   try:
+    with LOCK:
+     if not S.get("engine_active"):
+      SHUTDOWN.wait(1);continue
+    prices=refresh_market_prices(max_age=8.0)
+    jobs={}
+    for symbol in LOCAL_S3_SYMBOLS:
+     jobs[(symbol,"h1")]=pool.submit(_local_h1_candles,symbol)
+     jobs[(symbol,"m15")]=pool.submit(_local_m15_candles,symbol)
+    fetched={};errors={}
+    for key,fut in jobs.items():
+     try:fetched[key]=fut.result(timeout=12)
+     except Exception as exc:errors[key]=type(exc).__name__+":"+str(exc)[:120]
+    details={}
+    for symbol in LOCAL_S3_SYMBOLS:
+     mark=prices.get(symbol)
+     h1err=errors.get((symbol,"h1"))
+     if not mark:
+      details[symbol]={"ok":False,"error":"mark_unavailable"};continue
+     if h1err:
+      analysis=_comparison_anchor("local_s3",symbol)
+      if not analysis:
+       details[symbol]={"ok":False,"error":h1err};continue
+     else:
+      h1_rows,h1_ms=fetched[(symbol,"h1")]
+      analysis=local_h1_direction(h1_rows,h1_ms,symbol)
+     m15_rows,m15_ms=fetched.get((symbol,"m15"),([],int(time.time()*1000)))
+     with LOCK:
+      pos=copy.deepcopy(S.get("local_s3_positions",{}).get(symbol))
+      watch=copy.deepcopy(S.get("local_s3_watch",{}).get(symbol))
+     side=int((pos or watch or {}).get("side") or analysis.get("entry_side") or 1)
+     m15=analyze_local_m15(m15_rows,m15_ms,side)
+     flow=MARKET_OBS.flow_context(symbol,time.time())
+     action=None
+     if pos:
+      h1exit=hype_position_exit(pos,analysis,float(mark)) if analysis.get("ready") else None
+      entry=float(pos["entry"]);favorable=int(pos["side"])*(float(mark)/entry-1.0)
+      floor=max(.0002,float((pos.get("features") or {}).get("estimated_round_trip_cost_move",0) or 0))
+      be=caterpillar_breakeven(pos,float(mark))
+      if h1exit and favorable>floor:
+       if _comparison_close("local_s3","local_s3",symbol,float(mark),h1exit+"_profit_only"):action="H1_OPPOSITE_EXIT"
+      elif be is not None:
+       if _comparison_close("local_s3","local_s3",symbol,float(mark),"v10_cost_aware_profit_floor",True):action="PROFIT_FLOOR_EXIT"
+      elif caterpillar_pressure_exit(pos,m15,float(mark),flow) and favorable>floor:
+       if _comparison_close("local_s3","local_s3",symbol,float(mark),"m15_pressure_reversal_profit_only",True):action="M15_WEAKENING_EXIT"
+     else:
+      if watch:
+       if analysis.get("ready") and int(analysis.get("entry_side") or 0)==-int(watch.get("side") or 0):
+        with pg() as db:
+         with db.transaction():
+          STORE.fence(db);db.execute("delete from local_s3_watchlist where symbol=%s",(symbol,))
+        with LOCK:S.setdefault("local_s3_watch",{}).pop(symbol,None)
+        watch=None;action="WATCH_INVALIDATED_BY_H1"
+       else:watch=_comparison_watch_update("local_s3","local_s3",symbol,watch,float(mark),m15,flow)
+      if watch and caterpillar_reentry_ready(int(watch["side"]),m15,float(mark),watch,flow,time.time()):
+       if _comparison_open("local_s3","local_s3",symbol,int(watch["side"]),analysis,float(mark),"REENTRY"):action="M15_RECOVERY_REENTRY"
+      elif not watch and analysis.get("ready") and not analysis.get("entry_blocked"):
+       imbalance=flow.get("flow_imbalance") if flow.get("trade_data_fresh") else None
+       wanted=int(analysis.get("entry_side") or 0)
+       if wanted in (-1,1) and imbalance is not None and wanted*float(imbalance)>=.12 and local_m15_reentry_ready(wanted,m15,imbalance):
+        if _comparison_open("local_s3","local_s3",symbol,wanted,analysis,float(mark),"M15"):action="M15_ENTRY"
+     with LOCK:
+      live=copy.deepcopy(S.get("local_s3_positions",{}).get(symbol))
+      live_watch=copy.deepcopy(S.get("local_s3_watch",{}).get(symbol))
+     details[symbol]={"ok":bool(analysis.get("ready")),"h1_local":{"pivot_type":analysis.get("pivot_type"),
+       "pivot_price":analysis.get("pivot_price"),"entry_side":analysis.get("entry_side"),
+       "signal_candle_time":analysis.get("signal_candle_time"),"persisted":analysis.get("persisted",False)},
+       "position_open":bool(live),"side":live.get("side") if live else None,"watching_for_reentry":bool(live_watch),
+       "m15":{"ready":m15.get("ready"),"adverse_score":m15.get("adverse_score"),"recovery_score":m15.get("recovery_score")},
+       "last_action":action or ("IN_POSITION" if live else ("WAIT_RESUMPTION" if live_watch else "WAIT_ENTRY")),"error":None}
+    total,used,free,unreal=_comparison_mtm("local_s3",prices)
+    stats=_comparison_stats("local_s3")
+    with LOCK:
+     S["sources"]["Strategy 3 — Local12 v10"]={"ok":all(x.get("ok") for x in details.values()),"ready":all(x.get("ok") for x in details.values()),
+       "last_check":now(),"mode":"paper_local12_v10_h1_m15_profit_floor","policy":"local_h1_m15_caterpillar_v10_strict_reentry_profit_floor",
+       "symbols":list(LOCAL_S3_SYMBOLS),"starting_equity":500.0,"equity":total,
+       "realized_equity":S.get("local_s3_equity",500.0),"unrealized_pnl":unreal,"used_margin":used,"free_margin":free,
+       "reference_margin_fraction":.20,"reference_leverage":25.0,"compound":True,
+       "open_positions":list(S.get("local_s3_positions",{})),"details":details,"stats":stats,"error":None}
+   except LeaseLost as exc:
+    with LOCK:S["sources"]["Strategy 3 — Local12 v10"]={"ok":False,"error":str(exc)[:160],"last_check":now()}
+   except Exception as exc:
+    with LOCK:S["sources"]["Strategy 3 — Local12 v10"]={"ok":False,"error":type(exc).__name__+":"+str(exc)[:160],"last_check":now()}
+   SHUTDOWN.wait(5)
+ finally:
+  pool.shutdown(wait=False,cancel_futures=True)
+
 def hype_h1_local_swing_loop():
  last_observed={};last_observation=0.;pool=concurrent.futures.ThreadPoolExecutor(max_workers=4,thread_name_prefix="local-m15-swing")
  try:
@@ -4997,7 +5088,7 @@ def build_dashboard_snapshot(history=None):
  experiment_total=float(state.get("local_experiment_equity",LOCAL_EXPERIMENT_STARTING_EQUITY))+experiment_unreal
  hype_swing_total=float(state.get("hype_swing_equity",HYPE_SWING_STARTING_EQUITY))+hype_swing_unreal
  comparison={}
- for state_name,label in (("local_s1","Strategy 1 — Restored Caterpillar"),("local_s2","Strategy 2 — H1 Pivot Swing")):
+ for state_name,label in (("local_s1","Strategy 1 — Restored Caterpillar"),("local_s2","Strategy 2 — H1 Pivot Swing"),("local_s3","Strategy 3 — Local12 v10")):
   rows=[];unreal_cmp=0.0
   for csym,cpos in state.get(state_name+"_positions",{}).items():
    cmark=prices.get(csym,cpos["entry"])
@@ -5214,7 +5305,7 @@ def local_v10_today_pnl():
   return float(row["pnl"] or 0)
 
 def local_compare_history(prefix,limit=100):
- table="local_s1_trade_history" if prefix=="local_s1" else "local_s2_trade_history"
+ table={"local_s1":"local_s1_trade_history","local_s2":"local_s2_trade_history","local_s3":"local_s3_trade_history"}[prefix]
  with pg() as db:
   return [dict(x) for x in db.execute(f"""select opened,closed,symbol,side,entry,exit,pnl,reason,margin,notional,leverage
    from {table} order by closed desc limit %s""",(int(limit),)).fetchall()]
@@ -5231,6 +5322,7 @@ def dashboard_history_loop():
           "local_v10_closed_trades":local_v10_history(100),
           "local_s1_closed_trades":local_compare_history("local_s1",100),
           "local_s2_closed_trades":local_compare_history("local_s2",100),
+          "local_s3_closed_trades":local_compare_history("local_s3",100),
           "local_v10_today_realized_pnl":local_v10_today_pnl(),
           "news":[dict(x) for x in persistent_news(20)],
           "features":[dict(x) for x in persistent_features(10)],
@@ -5668,6 +5760,7 @@ if __name__=="__main__":
   ("telemetry",telemetry),("pump_dump",impulse_scan),
   ("Caterpillar 1.0",local_experiment_loop),("local_risk",local_experiment_risk_loop),
   ("local_strategy_comparison",comparison_strategies_loop),
+  ("local_strategy_3_local12",strategy3_local12_loop),
   ("adapt",adapt),
   ("decision_learning",learning_shadow_loop),
   ("dashboard_history",dashboard_history_loop),("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)
