@@ -2987,7 +2987,7 @@ def market_metadata():
     SHUTDOWN.wait(8)
     continue
    if isinstance(e,urllib.error.HTTPError) and e.code==429:
-    SHUTDOWN.wait(max(60,MARKET_METADATA_SECONDS))
+    SHUTDOWN.wait(MARKET_METADATA_SECONDS if cached else 35.0)
     continue
   SHUTDOWN.wait(MARKET_METADATA_SECONDS)
 
