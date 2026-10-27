@@ -2957,7 +2957,14 @@ def market_metadata():
     S["sources"]["MarketMetadata"]={"ok":True,"last_check":now(),"markets":len(volumes),"max_leverage_markets":len(max_leverage),
       "local_max_leverage":{sym:max_leverage.get(sym,VALIDATED_MAX_LEVERAGE.get(sym)) for sym in ALL_LOCAL_CANDLE_SYMBOLS}}
   except Exception as e:
-   with LOCK:S["sources"]["MarketMetadata"]={"ok":False,"last_check":now(),"error":str(e)[:140]}
+   with LOCK:
+    cached=bool(S.get("_day_volumes")) and bool(S.get("_max_leverage"))
+    S["sources"]["MarketMetadata"]={"ok":cached,"degraded":True,"last_check":now(),
+     "mode":"cached_metadata_rest_backoff","markets":len(S.get("_day_volumes",{})),
+     "max_leverage_markets":len(S.get("_max_leverage",{})),"error":str(e)[:140]}
+   if isinstance(e,urllib.error.HTTPError) and e.code==429:
+    SHUTDOWN.wait(max(60,MARKET_METADATA_SECONDS))
+    continue
   SHUTDOWN.wait(MARKET_METADATA_SECONDS)
 
 def telemetry():
