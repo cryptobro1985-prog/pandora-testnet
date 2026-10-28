@@ -5701,20 +5701,6 @@ def html_strategy1_only(data):
    esc(x.get("closed","")),esc(x.get("symbol","")),"LONG" if int(x.get("side",0) or 0)>0 else "SHORT",
    float(x.get("margin",0) or 0),float(x.get("notional",0) or 0),float(x.get("leverage",0) or 0),
    esc(x.get("entry","—")),esc(x.get("exit","—")),"pos" if pnl>=0 else "neg",pnl,esc(x.get("reason",""))))
- hist_status=hist.get("status","idle")
- hist_summary=("Historical causal replay is "+esc(hist_status))
- if hr:
-  hist_summary=("CAUSAL HISTORICAL: $%.2f → $%.2f · PnL %+.2f · %+.2f%%%% · trades %s · WR %s · max DD %.2f%%%%"%(
-   float(hr.get("starting_equity",500) or 500),float(hr.get("final_equity",500) or 500),
-   float(hr.get("final_equity",500) or 500)-float(hr.get("starting_equity",500) or 500),
-   float(hr.get("return_pct",0) or 0),int(hr.get("closed_trades",0) or 0),
-   ("—" if hr.get("win_rate") is None else "%.1f%%"%(float(hr.get("win_rate"))*100)),
-   float(hr.get("max_drawdown_pct",0) or 0)))
- bench=data.get("strategy1_historical_benchmark") or {}
- historical_start=float(hr.get("starting_equity",500) or 500) if hr else None
- historical_final=float(hr.get("final_equity",500) or 500) if hr else None
- historical_net=(historical_final-historical_start) if hr else None
- historical_label=("$%+.2f"%historical_net) if historical_net is not None else "NOT AVAILABLE"
  paper_total=realized+unreal
  # Per-market totals are derived from actual PAPER closed rows and open marks only.
  token_stats={sym:{"closed":0.0,"open":0.0,"margin":0.0,"trades":0,"wins":0,"active":0} for sym in LOCAL_EXPERIMENT_SYMBOLS}
@@ -5740,13 +5726,7 @@ def html_strategy1_only(data):
    "pos" if item["closed"]>=0 else "neg",item["closed"],"pos" if item["open"]>=0 else "neg",item["open"],
    "pos" if total>=0 else "neg",total,"pos" if total>=0 else "neg",
    "%.2f%%"%pct if pct is not None else "—",margin))
- # One visible history table; non-executed research rows remain explicitly labelled.
  history_rows=list(actual_rows)
- if hr:
-  history_rows.append("<tr><td><b>BACKTEST SUMMARY</b></td><td>Historical replay</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>$%.2f</td><td>$%.2f</td><td class='%s'>$%+.2f</td><td>Causal replay; %s closed trades; not PAPER executed</td></tr>"%(
-   historical_start,historical_final,"pos" if historical_net>=0 else "neg",historical_net,int(hr.get("closed_trades",0) or 0)))
- history_rows.append("<tr><td><b>MFE OPPORTUNITY</b></td><td>Hindsight ceiling</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>$%.2f</td><td>$%.2f</td><td class='warn'>+$%.2f</td><td>Upper bound only; not realized, not added to PAPER balance</td></tr>"%(
-  float(bench.get("starting_equity",500) or 500),float(bench.get("mfe_upper_equity",877.36) or 877.36),float(bench.get("mfe_opportunity_pnl",377.36) or 377.36)))
  css="""*{box-sizing:border-box}html{scroll-behavior:smooth}body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;color:#e9f1ff;margin:0;padding:26px;background:radial-gradient(ellipse at 14%% 0%%,#152e49 0,transparent 42%%),radial-gradient(ellipse at 90%% 8%%,#222044 0,transparent 34%%),#080d17;max-width:1650px;margin-inline:auto;min-height:100vh}h1{font-size:clamp(27px,4vw,42px);letter-spacing:-1.6px;margin:0;font-weight:850}h1:before{content:'◈';color:#66e6d0;margin-right:12px}.sub{color:#96a9c5;margin:8px 0 20px;line-height:1.55;font-size:13px}.hero{border:1px solid #344865;background:linear-gradient(135deg,rgba(21,36,59,.94),rgba(13,20,34,.94));border-radius:22px;padding:22px;box-shadow:0 16px 46px #0005}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}.card{background:linear-gradient(145deg,#1c2940,#111c2d);border:1px solid #30405a;padding:17px;border-radius:15px;color:#a9bbd4;font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;box-shadow:0 6px 15px #0002}.big{font-size:clamp(20px,2.8vw,29px);font-weight:850;color:#f3f7ff;letter-spacing:-.6px;margin-top:8px;font-variant-numeric:tabular-nums}.pos{color:#55e4ad!important;font-weight:800}.neg{color:#ff7887!important;font-weight:800}.warn{color:#ffd37c!important;font-weight:800}.scroll{overflow-x:auto;border:1px solid #2c3b53;border-radius:16px;background:#111a2a;margin:12px 0 26px;box-shadow:0 12px 30px #0003}table{width:100%%;border-collapse:collapse}th,td{padding:13px 14px;border-bottom:1px solid #25344a;text-align:left;white-space:nowrap;font-size:12px;font-variant-numeric:tabular-nums}th{color:#a4b8d1;background:#1b2940;position:sticky;top:0;text-transform:uppercase;letter-spacing:.5px;font-size:10px}tr:hover td{background:#1e2c41}h2{margin-top:30px;font-size:20px;letter-spacing:-.5px}.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0 24px}.action{display:inline-flex;align-items:center;justify-content:center;gap:7px;background:#1b2b43;color:#d4e5ff;border:1px solid #375071;border-radius:12px;padding:11px 17px;text-decoration:none;font-size:13px;font-weight:750;transition:background .15s,transform .15s}.action:hover{background:#294363;transform:translateY(-1px)}.action.primary{background:#426cff;border-color:#5d80ff;color:white}.live-dot{display:inline-block;width:8px;height:8px;border-radius:100%%;background:#59daa8;box-shadow:0 0 14px #59daa8;margin-right:6px}@media(max-width:700px){body{padding:13px}.hero{padding:13px}.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.card{padding:12px;min-width:0}.big{font-size:19px}th,td{font-size:11px;padding:10px}.action{padding:10px 12px}h2{font-size:18px}}"""
  htmlout="""<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width'><meta http-equiv='refresh' content='5'><title>PANDORA · STRATEGY 1</title><style>%s</style></head><body>
  <h1>PANDORA · STRATEGY 1</h1><div class='sub'>LIVE PAPER · INIT / NEAR / GRASS / HYPE / BTC / ETH / SOL · H1 direction → M15 executed-flow exit / pullback / re-entry</div>
@@ -5757,7 +5737,6 @@ def html_strategy1_only(data):
  <div class='card'>REALIZED PnL<div class='big %s'>$%+.4f</div></div>
  <div class='card'>OPEN PnL<div class='big %s'>$%+.4f</div></div>
  <div class='card'>TOTAL PAPER PnL (CLOSED + OPEN)<div class='big %s'>$%+.4f</div></div>
- <div class='card'>HISTORICAL CAUSAL PnL (SEPARATE)<div class='big'>%s</div></div>
  <div class='card'>MTM EQUITY<div class='big'>$%.4f</div></div>
  <div class='card'>CLOSED TRADES<div class='big'>%s</div></div>
  <div class='card'>WIN RATE<div class='big'>%s</div></div>
@@ -5768,10 +5747,10 @@ def html_strategy1_only(data):
  </div></section>
  <h2 id='positions'>Открытые позиции и сигналы</h2><div class='scroll'><table><tr><th>Token</th><th>Side</th><th>Phase</th><th>H1 Local</th><th>Pivot</th><th>Margin</th><th>Position</th><th>Leverage</th><th>Entry</th><th>Mark</th><th>Open PnL</th></tr>%s</table></div>
  <h2 id='tokens'>Статистика по каждому токену</h2><p class='sub'>PnL %% = (закрытый + открытый PAPER PnL) / суммарная маржа отображённых закрытых сделок и открытых позиций. Исследовательские сделки не учитываются.</p><div class='scroll'><table><tr><th>Токен</th><th>Закрыто</th><th>Открыто</th><th>Win rate</th><th>Closed PnL</th><th>Open PnL</th><th>Total PnL</th><th>PnL %%</th><th>Маржа</th></tr>%s</table></div>
- <h2 id='history'>Единая история · PAPER и исследование</h2><p class='sub'>PAPER CLOSED is actually executed in the paper engine. BACKTEST and MFE are research-only and never credited to PAPER equity. %s</p><div class='scroll'><table><tr><th>Source</th><th>Closed / Period</th><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry / Start</th><th>Exit / Final</th><th>PnL</th><th>Reason</th></tr>%s</table></div>
+ <h2 id='history'>История закрытых PAPER-сделок</h2><p class='sub'>Только фактически закрытые сделки бумажной торговли.</p><div class='scroll'><table><tr><th>Source</th><th>Closed / Period</th><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry / Start</th><th>Exit / Final</th><th>PnL</th><th>Reason</th></tr>%s</table></div>
  </body></html>"""%(css,float(p.get("realized_equity",500) or 500),"pos" if realized>=0 else "neg",realized,
-   "pos" if unreal>=0 else "neg",unreal,"pos" if paper_total>=0 else "neg",paper_total,esc(historical_label),eq,int(stats.get("trades",len(actual)) or len(actual)),esc(wrtxt),
-   len(positions),len(watch),"".join(rows),"".join(token_rows),hist_summary,"".join(history_rows))
+   "pos" if unreal>=0 else "neg",unreal,"pos" if paper_total>=0 else "neg",paper_total,eq,int(stats.get("trades",len(actual)) or len(actual)),esc(wrtxt),
+   len(positions),len(watch),"".join(rows),"".join(token_rows),"".join(history_rows))
  return htmlout
 
 def html_dashboard(data):
