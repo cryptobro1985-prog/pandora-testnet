@@ -5705,6 +5705,17 @@ def html_strategy1_only(data):
  dream_reference=377.36  # historical hindsight MFE opportunity; display-only, never account equity
  dream_total=paper_total+dream_reference
  dream_total_pct=100*dream_total/500.0
+ strategy_age="—"
+ try:
+  with pg() as strategy_db:
+   strategy_start=strategy_db.execute("select started_at from local_s1_account_state where id=1").fetchone()
+  if strategy_start and strategy_start.get("started_at"):
+   start_text=str(strategy_start["started_at"])
+   start_dt=datetime.datetime.fromisoformat(start_text.replace("Z","+00:00"))
+   if start_dt.tzinfo is None:start_dt=start_dt.replace(tzinfo=datetime.timezone.utc)
+   secs=max(0,int((datetime.datetime.now(datetime.timezone.utc)-start_dt).total_seconds()))
+   strategy_age="%d д %02d ч %02d мин"%(secs//86400,(secs%86400)//3600,(secs%3600)//60)
+ except Exception:pass
  # Per-market totals are derived from actual PAPER closed rows and open marks only.
  token_stats={sym:{"closed":0.0,"open":0.0,"margin":0.0,"trades":0,"wins":0,"active":0} for sym in LOCAL_EXPERIMENT_SYMBOLS}
  for trade in actual:
@@ -5734,7 +5745,7 @@ def html_strategy1_only(data):
  htmlout="""<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width'><meta http-equiv='refresh' content='5'><title>PANDORA · STRATEGY 1</title><style>%s</style></head><body>
  <h1>PANDORA · STRATEGY 1</h1><div class='sub'>LIVE PAPER · INIT / NEAR / GRASS / HYPE / BTC / ETH / SOL · H1 direction → M15 executed-flow exit / pullback / re-entry</div>
  <nav class='toolbar'><a class='action primary' href='#overview'>◉ Обзор</a><a class='action' href='#positions'>↗ Позиции</a><a class='action' href='#tokens'>▥ Токены</a><a class='action' href='#history'>▤ История</a><a class='action' href='javascript:location.reload()'>↻ Обновить</a></nav><section class='hero' id='overview'><div class='grid'>
- <div class='card pepe-card'>Total PNL<div class='big %s'>$%+.2f <span class='total-percent'>(%+.2f%%%%)</span></div><div class='sub'>PAPER + исторический расчётный потенциал · сценарий, не исполненная прибыль</div></div>
+ <div class='card pepe-card'>Total PNL<div class='big %s'>$%+.2f <span class='total-percent'>(%+.2f%%)</span></div><div class='sub'>Время работы стратегии: %s · PAPER + исторический расчётный потенциал · сценарий, не исполненная прибыль</div></div>
  <div class='card'>MODE<div class='big pos'>S1 ONLY LIVE</div></div>
  <div class='card'>START<div class='big'>$500.00</div></div>
  <div class='card'>REALIZED EQUITY<div class='big'>$%.4f</div></div>
@@ -5749,7 +5760,7 @@ def html_strategy1_only(data):
  <h2 id='positions'>Открытые позиции и сигналы</h2><div class='scroll'><table><tr><th>Token</th><th>Side</th><th>Phase</th><th>H1 Local</th><th>Pivot</th><th>Margin</th><th>Position</th><th>Leverage</th><th>Entry</th><th>Mark</th><th>Open PnL</th></tr>%s</table></div>
  <h2 id='tokens'>Статистика по каждому токену</h2><p class='sub'>PnL %% = (закрытый + открытый PAPER PnL) / суммарная маржа отображённых закрытых сделок и открытых позиций. Исследовательские сделки не учитываются.</p><div class='scroll'><table><tr><th>Токен</th><th>Закрыто</th><th>Открыто</th><th>Win rate</th><th>Closed PnL</th><th>Open PnL</th><th>Total PnL</th><th>PnL %%</th><th>Маржа</th></tr>%s</table></div>
  <h2 id='history'>История закрытых PAPER-сделок</h2><p class='sub'>Только фактически закрытые сделки бумажной торговли.</p><div class='scroll'><table><tr><th>Source</th><th>Closed / Period</th><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry / Start</th><th>Exit / Final</th><th>PnL</th><th>Reason</th></tr>%s</table></div>
- </body></html>"""%(css,"pos" if dream_total>=0 else "neg",dream_total,dream_total_pct,float(p.get("realized_equity",500) or 500),eq,int(stats.get("trades",len(actual)) or len(actual)),esc(wrtxt),
+ </body></html>"""%(css,"pos" if dream_total>=0 else "neg",dream_total,dream_total_pct,esc(strategy_age),float(p.get("realized_equity",500) or 500),eq,int(stats.get("trades",len(actual)) or len(actual)),esc(wrtxt),
    len(positions),len(watch),"".join(rows),"".join(token_rows),"".join(history_rows))
  return htmlout
 
