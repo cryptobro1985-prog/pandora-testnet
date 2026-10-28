@@ -2859,7 +2859,7 @@ def _comparison_open(prefix,state_name,symbol,side,analysis,mark,entry_kind):
  return True
 
 @account_mutation
-def _comparison_close(prefix,state_name,symbol,mark,reason,arm_watch=False):
+def _comparison_close(prefix,state_name,symbol,mark,reason,arm_watch=False,watch_phase="WAIT_PULLBACK"):
  with LOCK:pos=copy.deepcopy(S.get(state_name+"_positions",{}).get(symbol))
  if not pos:return None
  pnl=paper_pnl(pos["notional"],pos["entry"],float(mark),pos["side"],FEE)
@@ -2868,7 +2868,7 @@ def _comparison_close(prefix,state_name,symbol,mark,reason,arm_watch=False):
  if arm_watch and state_name in ("local_s1","local_s3"):
   watch={"symbol":symbol,"side":int(pos["side"]),"origin_signal_candle":int(pos.get("signal_candle_time") or 0),
    "exit_price":float(mark),"exit_at":now(),"reentries":int(features.get("swing_reentries",0) or 0),
-   "context":{"phase":"WAIT_PULLBACK","counter_pressure_seen":True,"anchor":copy.deepcopy(features)}}
+   "context":{"phase":watch_phase,"counter_pressure_seen":True,"pullback_extreme":float(mark),"anchor":copy.deepcopy(features)}}
  with pg() as db:
   with db.transaction():
    STORE.fence(db)
@@ -2913,6 +2913,58 @@ def _comparison_stats(prefix):
   return {"trades":n,"wins":wins,"win_rate":round(wins/n,4) if n else None,"realized_pnl":float(row["pnl"] or 0)}
  except Exception as exc:return {"error":type(exc).__name__+":"+str(exc)[:120]}
 
+@account_mutation
+def _comparison_update_path(prefix,state_name,symbol,position,mark):
+ updated,_=hype_update_path(position,float(mark))
+ oldf=(position or {}).get("features") or {};newf=updated.get("features") or {}
+ if newf==oldf:return updated
+ with pg() as db:
+  with db.transaction():
+   STORE.fence(db)
+   db.execute(f"update {prefix}_positions set features=%s::jsonb where symbol=%s and opened=%s",
+    (json.dumps(newf,default=str),symbol,position.get("opened")))
+ with LOCK:
+  if symbol in S.get(state_name+"_positions",{}):S[state_name+"_positions"][symbol]=copy.deepcopy(updated)
+ return updated
+
+def _s1_weakening_exit(position,m15,mark,flow):
+ if not position or not m15 or not m15.get("ready"):return False
+ side=int(position.get("side") or 0);entry=float(position.get("entry") or 0);mark=float(mark or 0)
+ if side not in (-1,1) or entry<=0 or mark<=0:return False
+ features=position.get("features") or {}
+ favorable=side*(mark/entry-1.0)
+ floor=max(.0002,float(features.get("estimated_round_trip_cost_move",0) or 0))
+ if favorable<=floor:return False
+ if not (flow or {}).get("trade_data_fresh"):return False
+ try:imb=float((flow or {}).get("flow_imbalance"))
+ except (TypeError,ValueError):return False
+ if side*imb>-0.12:return False
+ adverse=int(m15.get("adverse_score") or 0)
+ candle_reversal=(int(m15.get("candle_direction") or 0)==-side and float(m15.get("body_fraction") or 0)>=.42)
+ if adverse<2 and not candle_reversal:return False
+ peak=max(0.0,float(features.get("mfe_price_move",0) or 0),favorable)
+ typical=float(m15.get("median_range_move") or .008)
+ recoil_floor=max(.0006,min(.0015,typical*.15))
+ return (peak-favorable)>=recoil_floor
+
+def _s1_reentry_ready(side,m15,mark,watch,flow):
+ side=int(side or 0)
+ if side not in (-1,1) or not m15 or not m15.get("ready") or not watch:return False
+ ctx=watch.get("context") or {}
+ if ctx.get("phase")!="WAIT_RESUMPTION":return False
+ if not (flow or {}).get("trade_data_fresh"):return False
+ try:imb=float((flow or {}).get("flow_imbalance"))
+ except (TypeError,ValueError):return False
+ if side*imb<.12:return False
+ recovery=int(m15.get("recovery_score") or 0);adverse=int(m15.get("adverse_score") or 0)
+ if recovery<2 or adverse>1:return False
+ extreme=float(ctx.get("pullback_extreme") or watch.get("exit_price") or 0)
+ mark=float(mark or 0)
+ if extreme<=0 or mark<=0:return False
+ typical=float(m15.get("median_range_move") or .008)
+ resume=max(.0005,min(.0012,typical*.10))
+ return side*(mark/extreme-1.0)>=resume
+
 def comparison_strategies_loop():
  pool=concurrent.futures.ThreadPoolExecutor(max_workers=16,thread_name_prefix="local-compare")
  while not SHUTDOWN.is_set():
@@ -2955,16 +3007,18 @@ def comparison_strategies_loop():
     m15=analyze_local_m15(m15_rows,m15_ms,side1)
     act1=None
     if p1:
+     p1=_comparison_update_path("local_s1","local_s1",symbol,p1,float(mark))
      h1exit=hype_position_exit(p1,a1,float(mark)) if a1.get("ready") else None
      entry=float(p1["entry"]);favorable=int(p1["side"])*(float(mark)/entry-1.0)
      floor=max(.0002,float((p1.get("features") or {}).get("estimated_round_trip_cost_move",0) or 0))
      be=caterpillar_breakeven(p1,float(mark))
+     weakening=_s1_weakening_exit(p1,m15,float(mark),flow)
      if h1exit and favorable>floor:
       if _comparison_close("local_s1","local_s1",symbol,float(mark),h1exit+"_profit_only"):act1="H1_OPPOSITE_EXIT"
+     elif weakening or (caterpillar_pressure_exit(p1,m15,float(mark),flow) and favorable>floor):
+      if _comparison_close("local_s1","local_s1",symbol,float(mark),"m15_weakening_profit_exit",True,"WAIT_RESUMPTION"):act1="M15_WEAKENING_EXIT"
      elif be is not None:
-      if _comparison_close("local_s1","local_s1",symbol,float(mark),"v10_cost_aware_profit_floor",True):act1="PROFIT_FLOOR_EXIT"
-     elif caterpillar_pressure_exit(p1,m15,float(mark),flow) and favorable>floor:
-      if _comparison_close("local_s1","local_s1",symbol,float(mark),"m15_pressure_reversal_profit_only",True):act1="M15_WEAKENING_EXIT"
+      if _comparison_close("local_s1","local_s1",symbol,float(mark),"v10_cost_aware_profit_floor",True,"WAIT_RESUMPTION"):act1="PROFIT_FLOOR_EXIT"
     else:
      if w1:
       if a1.get("ready") and int(a1.get("entry_side") or 0)==-int(w1.get("side") or 0):
@@ -2973,7 +3027,7 @@ def comparison_strategies_loop():
        with LOCK:S.setdefault("local_s1_watch",{}).pop(symbol,None)
        w1=None;act1="WATCH_INVALIDATED_BY_H1"
       else:w1=_comparison_watch_update("local_s1","local_s1",symbol,w1,float(mark),m15,flow)
-     if w1 and caterpillar_reentry_ready(int(w1["side"]),m15,float(mark),w1,flow,time.time()):
+     if w1 and (caterpillar_reentry_ready(int(w1["side"]),m15,float(mark),w1,flow,time.time()) or _s1_reentry_ready(int(w1["side"]),m15,float(mark),w1,flow)):
       if _comparison_open("local_s1","local_s1",symbol,int(w1["side"]),a1,float(mark),"REENTRY"):act1="M15_RECOVERY_REENTRY"
      elif not w1 and a1.get("ready") and not a1.get("entry_blocked"):
       imbalance=flow.get("flow_imbalance") if flow.get("trade_data_fresh") else None
@@ -2984,7 +3038,9 @@ def comparison_strategies_loop():
     s1_details[symbol]={"ok":bool(a1.get("ready")),"h1_local":{"pivot_type":a1.get("pivot_type"),"pivot_price":a1.get("pivot_price"),
       "entry_side":a1.get("entry_side"),"signal_candle_time":a1.get("signal_candle_time"),"persisted":a1.get("persisted",False)},
       "position_open":bool(p1),"side":p1.get("side") if p1 else None,"watching_for_reentry":bool(w1),
-      "m15":{"ready":m15.get("ready"),"adverse_score":m15.get("adverse_score"),"recovery_score":m15.get("recovery_score")},
+      "m15":{"ready":m15.get("ready"),"adverse_score":m15.get("adverse_score"),"recovery_score":m15.get("recovery_score"),
+       "flow_imbalance":flow.get("flow_imbalance"),"return_15m":m15.get("return_15m"),
+       "strong_adverse_pressure":m15.get("strong_adverse_pressure"),"recovery_confirmed":m15.get("recovery_confirmed")},
       "last_action":act1 or ("IN_POSITION" if p1 else ("WAIT_RESUMPTION" if w1 else "WAIT_ENTRY")),"error":None}
 
     # Strategy 2: pure H1 pivot-to-pivot. Never exits on M15/flow.
