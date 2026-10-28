@@ -5697,7 +5697,7 @@ def html_strategy1_only(data):
  actual_rows=[]
  for x in actual:
   pnl=float(x.get("pnl",0) or 0)
-  actual_rows.append("<tr><td>%s</td><td>%s</td><td>%s</td><td>$%.2f</td><td>$%.2f</td><td>%sx</td><td>%s</td><td>%s</td><td class='%s'>$%.4f</td><td>%s</td></tr>"%(
+  actual_rows.append("<tr><td><b>PAPER CLOSED</b></td><td>%s</td><td>%s</td><td>%s</td><td>$%.2f</td><td>$%.2f</td><td>%sx</td><td>%s</td><td>%s</td><td class='%s'>$%.4f</td><td>%s</td></tr>"%(
    esc(x.get("closed","")),esc(x.get("symbol","")),"LONG" if int(x.get("side",0) or 0)>0 else "SHORT",
    float(x.get("margin",0) or 0),float(x.get("notional",0) or 0),float(x.get("leverage",0) or 0),
    esc(x.get("entry","—")),esc(x.get("exit","—")),"pos" if pnl>=0 else "neg",pnl,esc(x.get("reason",""))))
@@ -5716,6 +5716,13 @@ def html_strategy1_only(data):
  historical_net=(historical_final-historical_start) if hr else None
  historical_label=("$%+.2f"%historical_net) if historical_net is not None else "NOT AVAILABLE"
  paper_total=realized+unreal
+ # One visible history table; non-executed research rows remain explicitly labelled.
+ history_rows=list(actual_rows)
+ if hr:
+  history_rows.append("<tr><td><b>BACKTEST SUMMARY</b></td><td>Historical replay</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>$%.2f</td><td>$%.2f</td><td class='%s'>$%+.2f</td><td>Causal replay; %s closed trades; not PAPER executed</td></tr>"%(
+   historical_start,historical_final,"pos" if historical_net>=0 else "neg",historical_net,int(hr.get("closed_trades",0) or 0)))
+ history_rows.append("<tr><td><b>MFE OPPORTUNITY</b></td><td>Hindsight ceiling</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>$%.2f</td><td>$%.2f</td><td class='warn'>+$%.2f</td><td>Upper bound only; not realized, not added to PAPER balance</td></tr>"%(
+  float(bench.get("starting_equity",500) or 500),float(bench.get("mfe_upper_equity",877.36) or 877.36),float(bench.get("mfe_opportunity_pnl",377.36) or 377.36)))
  css="body{font-family:system-ui;background:#070a0f;color:#eaf0f7;margin:0;padding:16px;max-width:1800px}h1{font-size:30px;margin:0}.sub{color:#8fa0b5;margin:6px 0 18px}.hero{border:2px solid #3977d6;background:#0c1420;border-radius:16px;padding:18px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.card{background:#121b28;padding:14px;border-radius:12px}.big{font-size:25px;font-weight:800}.pos{color:#51da84;font-weight:800}.neg{color:#ff6b6b;font-weight:800}.warn{color:#f2c75c;font-weight:800}.bench{border:1px solid #2c6c45;background:#0c1c13;border-radius:12px;padding:14px;margin:14px 0}.scroll{overflow-x:auto}table{width:100%%;border-collapse:collapse;background:#0d141e;margin:10px 0 24px}th,td{padding:9px;border-bottom:1px solid #202c3b;text-align:left;white-space:nowrap;font-size:13px}th{color:#9fb0c4}h2{margin-top:28px}@media(max-width:700px){body{padding:9px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}th,td{font-size:11px;padding:7px}}"
  htmlout="""<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width'><meta http-equiv='refresh' content='5'><title>PANDORA · STRATEGY 1</title><style>%s</style></head><body>
  <h1>PANDORA · STRATEGY 1 ONLY</h1><div class='sub'>LIVE PAPER · INIT / NEAR / GRASS / HYPE / BTC / ETH / SOL · H1 direction → M15 executed-flow exit / pullback / re-entry</div>
@@ -5735,15 +5742,11 @@ def html_strategy1_only(data):
  <div class='card'>SIZING<div class='big'>20%%%% equity</div></div>
  <div class='card'>REFERENCE LEV<div class='big'>25x</div></div>
  </div></section>
- <div class='bench'><b>SIMULATED EXECUTION / REPLAY · NOT PAPER EXECUTED</b><div class='big'>$%.2f → $%.2f</div><div class='pos'>MFE hindsight opportunity ceiling +$%.2f</div><div class='sub'>This +$377.36 was a hindsight maximum favorable excursion ceiling, NOT a realized backtest or paper profit. Historical replay results and PAPER PnL stay separate; neither this ceiling nor reconstructed trades increase account equity.</div></div>
  <h2>LIVE STATE</h2><div class='scroll'><table><tr><th>Token</th><th>Side</th><th>Phase</th><th>H1 Local</th><th>Pivot</th><th>Margin</th><th>Position</th><th>Leverage</th><th>Entry</th><th>Mark</th><th>Open PnL</th></tr>%s</table></div>
- <h2>ACTUAL CLOSED PAPER TRADES</h2><div class='scroll'><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Reason</th></tr>%s</table></div>
- <h2>HISTORICAL REPLAY SUMMARY</h2><p class='sub'>%s. Detailed reconstructed trade rows are intentionally hidden from this monitor; only the compact replay/pro-forma result is shown above.</p>
+ <h2>ONE HISTORY · PAPER + RESEARCH</h2><p class='sub'>PAPER CLOSED is actually executed in the paper engine. BACKTEST and MFE are research-only and never credited to PAPER equity. %s</p><div class='scroll'><table><tr><th>Source</th><th>Closed / Period</th><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry / Start</th><th>Exit / Final</th><th>PnL</th><th>Reason</th></tr>%s</table></div>
  </body></html>"""%(css,float(p.get("realized_equity",500) or 500),"pos" if realized>=0 else "neg",realized,
    "pos" if unreal>=0 else "neg",unreal,"pos" if paper_total>=0 else "neg",paper_total,esc(historical_label),eq,int(stats.get("trades",len(actual)) or len(actual)),esc(wrtxt),
-   len(positions),len(watch),float(bench.get("starting_equity",500) or 500),float(bench.get("mfe_upper_equity",877.36) or 877.36),
-   float(bench.get("mfe_opportunity_pnl",377.36) or 377.36),"".join(rows),"".join(actual_rows) or "<tr><td colspan='10'>No actual closes</td></tr>",
-   hist_summary)
+   len(positions),len(watch),"".join(rows),hist_summary,"".join(history_rows))
  return htmlout
 
 def html_dashboard(data):
