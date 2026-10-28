@@ -5690,9 +5690,9 @@ def html_strategy1_only(data):
   side=x.get("side") or d.get("side") or w.get("side")
   side_txt="LONG" if side in (1,"LONG") else ("SHORT" if side in (-1,"SHORT") else "FLAT")
   phase=((w.get("context") or {}).get("phase") if w else None) or d.get("last_action") or ("IN_POSITION" if x else "WAIT_ENTRY")
-  rows.append("<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>$%.2f</td><td>$%.2f</td><td>%s</td><td>%s</td><td class='%s'>$%.4f</td></tr>"%(
+  rows.append("<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>$%.2f</td><td>$%.2f</td><td>%.1fx</td><td>%s</td><td>%s</td><td class='%s'>$%.4f</td></tr>"%(
    esc(sym),esc(side_txt),esc(phase),esc(a.get("pivot_type") or "—"),esc(a.get("pivot_price") or "—"),
-   float(x.get("margin_usd",0) or 0),float(x.get("notional_usd",0) or 0),esc(x.get("entry","—")),esc(x.get("mark","—")),
+   float(x.get("margin_usd",0) or 0),float(x.get("notional_usd",0) or 0),float(x.get("leverage",0) or 0),esc(x.get("entry","—")),esc(x.get("mark","—")),
    "pos" if float(x.get("unrealized_pnl",0) or 0)>=0 else "neg",float(x.get("unrealized_pnl",0) or 0)))
  actual_rows=[]
  for x in actual:
@@ -5713,7 +5713,7 @@ def html_strategy1_only(data):
  bench=data.get("strategy1_historical_benchmark") or {}
  css="body{font-family:system-ui;background:#070a0f;color:#eaf0f7;margin:0;padding:16px;max-width:1800px}h1{font-size:30px;margin:0}.sub{color:#8fa0b5;margin:6px 0 18px}.hero{border:2px solid #3977d6;background:#0c1420;border-radius:16px;padding:18px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.card{background:#121b28;padding:14px;border-radius:12px}.big{font-size:25px;font-weight:800}.pos{color:#51da84;font-weight:800}.neg{color:#ff6b6b;font-weight:800}.warn{color:#f2c75c;font-weight:800}.bench{border:1px solid #2c6c45;background:#0c1c13;border-radius:12px;padding:14px;margin:14px 0}.scroll{overflow-x:auto}table{width:100%%;border-collapse:collapse;background:#0d141e;margin:10px 0 24px}th,td{padding:9px;border-bottom:1px solid #202c3b;text-align:left;white-space:nowrap;font-size:13px}th{color:#9fb0c4}h2{margin-top:28px}@media(max-width:700px){body{padding:9px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}th,td{font-size:11px;padding:7px}}"
  htmlout="""<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width'><meta http-equiv='refresh' content='5'><title>PANDORA · STRATEGY 1</title><style>%s</style></head><body>
- <h1>PANDORA · STRATEGY 1 ONLY</h1><div class='sub'>LIVE PAPER · INIT / NEAR / GRASS / HYPE · H1 direction → M15 executed-flow exit / pullback / re-entry</div>
+ <h1>PANDORA · STRATEGY 1 ONLY</h1><div class='sub'>LIVE PAPER · INIT / NEAR / GRASS / HYPE / BTC / ETH / SOL · H1 direction → M15 executed-flow exit / pullback / re-entry</div>
  <section class='hero'><div class='grid'>
  <div class='card'>MODE<div class='big pos'>S1 ONLY LIVE</div></div>
  <div class='card'>START<div class='big'>$500.00</div></div>
@@ -5729,7 +5729,7 @@ def html_strategy1_only(data):
  <div class='card'>REFERENCE LEV<div class='big'>25x</div></div>
  </div></section>
  <div class='bench'><b>SIMULATED EXECUTION / REPLAY · NOT PAPER EXECUTED</b><div class='big'>$%.2f → $%.2f</div><div class='pos'>Pro forma opportunity +$%.2f</div><div class='sub'>Historical/reconstructed results are shown for strategy evaluation only and are never written into actual PAPER execution history or realized PnL.</div></div>
- <h2>LIVE STATE</h2><div class='scroll'><table><tr><th>Token</th><th>Side</th><th>Phase</th><th>H1 Local</th><th>Pivot</th><th>Margin</th><th>Position</th><th>Entry</th><th>Mark</th><th>Open PnL</th></tr>%s</table></div>
+ <h2>LIVE STATE</h2><div class='scroll'><table><tr><th>Token</th><th>Side</th><th>Phase</th><th>H1 Local</th><th>Pivot</th><th>Margin</th><th>Position</th><th>Leverage</th><th>Entry</th><th>Mark</th><th>Open PnL</th></tr>%s</table></div>
  <h2>ACTUAL CLOSED PAPER TRADES</h2><div class='scroll'><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Reason</th></tr>%s</table></div>
  <h2>HISTORICAL REPLAY SUMMARY</h2><p class='sub'>%s. Detailed reconstructed trade rows are intentionally hidden from this monitor; only the compact replay/pro-forma result is shown above.</p>
  </body></html>"""%(css,float(p.get("realized_equity",500) or 500),"pos" if realized>=0 else "neg",realized,
