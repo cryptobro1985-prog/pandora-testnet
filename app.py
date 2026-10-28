@@ -6580,4 +6580,4 @@ if __name__=="__main__":
   SHUTDOWN.set();server.server_close()
   for worker in workers:worker.join(timeout=0.5)
   try:STORE.release()
-  except Exception:pass,",".join((S.get("strategy1_discovery") or {}).get("hot_symbols") or []) or "—","OK" if (S.get("strategy1_discovery") or {}).get("ok") else "WARMUP"
+  except Exception:pass
