@@ -3030,7 +3030,10 @@ def _s1_adaptive_stop(position,m15,mark,flow):
  hard_stop=max(.0150,min(.0250,typical*1.75))
  if adverse>=hard_stop:
   return {"reason":"s1_hard_catastrophe_stop","adverse_move":adverse,"stop_move":hard_stop,
-    "leverage":levedef comparison_strategies_loop():
+    "leverage":leverage,"approx_gross_roe_pct":-adverse*leverage*100.0}
+ return None
+
+def comparison_strategies_loop():
  pool=concurrent.futures.ThreadPoolExecutor(max_workers=16,thread_name_prefix="local-compare")
  while not SHUTDOWN.is_set():
   try:
@@ -3100,20 +3103,18 @@ def _s1_adaptive_stop(position,m15,mark,flow):
      elif weakening:
       if _comparison_close("local_s1","local_s1",symbol,float(mark),"m15_weakening_profit_exit",True,"WAIT_PULLBACK"):act1="M15_WEAKENING_EXIT"
     else:
-     # For a fresh H1 regime, first observe the M15 counter-move (pullback).
-     # A negative M15 candle alone is never a fresh SHORT entry.
-     # Reentries continue to use the separately persisted exit watch.
+     # Fresh entries need an observed opposite M15 pullback before renewed H1-side movement.
      with LOCK:
-      initial=S.setdefault("_s1_initial_pullback",{})
+      pullbacks=S.setdefault("_s1_initial_pullback",{})
       anchor_key=(int(a1.get("signal_candle_time") or 0),int(a1.get("entry_side") or 0))
-      state=initial.get(symbol)
+      state=pullbacks.get(symbol)
       if not state or tuple(state.get("anchor",()))!=anchor_key:
-       state={"anchor":anchor_key,"counter_seen":False,"last_counter_mark":None}
-       initial[symbol]=state
-      if local4_m15_direction(m15)==-anchor_key[1] and anchor_key[1] in (-1,1):
+       state={"anchor":anchor_key,"counter_seen":False}
+       pullbacks[symbol]=state
+      direction=local4_m15_direction(m15)
+      if anchor_key[1] in (-1,1) and direction==-anchor_key[1]:
        state["counter_seen"]=True
-       state["last_counter_mark"]=float(mark)
-      initial_ready=bool(state.get("counter_seen")) and local4_m15_direction(m15)==anchor_key[1]
+      initial_ready=bool(state.get("counter_seen")) and direction==anchor_key[1]
      if w1:
       if a1.get("ready") and int(a1.get("entry_side") or 0)==-int(w1.get("side") or 0):
        with pg() as db:
@@ -3163,9 +3164,6 @@ def _s1_adaptive_stop(position,m15,mark,flow):
    with LOCK:
     S["sources"]["Strategy 1 — Restored Caterpillar"]={"ok":False,"error":err,"last_check":now()}
     S["sources"]["Strategy 2 — H1 Pivot Swing"]={"ok":False,"error":err,"last_check":now()}
-  SHUTDOWN.wait(5)
- pool.shutdown(wait=False,cancel_futures=True)
-
   SHUTDOWN.wait(5)
  pool.shutdown(wait=False,cancel_futures=True)
 
