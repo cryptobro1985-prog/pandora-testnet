@@ -5706,7 +5706,7 @@ def html_strategy1_only(data):
    esc(x.get("entry") if x else "—"),
    esc(mark) if mark_valid else "DATA WAIT",
    "pos" if pnl>=0 else "neg","$%+.4f"%pnl if x and mark_valid else "DATA WAIT" if x else "—",
-   "pos" if pnl>=0 else "neg","%+.2f%%%%"%roe if roe is not None and mark_valid else "DATA WAIT" if x else "—"))
+   "pos" if pnl>=0 else "neg","%+.2f%%"%roe if roe is not None and mark_valid else "DATA WAIT" if x else "—"))
  actual_rows=[]
  for x in actual:
   pnl=float(x.get("pnl",0) or 0)
