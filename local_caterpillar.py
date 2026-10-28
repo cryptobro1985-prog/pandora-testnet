@@ -7,7 +7,7 @@ import copy
 import datetime
 import math
 
-POLICY = "local_h1_multihorizon_flow_caterpillar_v14_universal"
+POLICY = "local_h1_multihorizon_flow_caterpillar_v15_pullback_first"
 FLOW_THRESHOLD = .12
 SELECTION_POLICY = "h1_multihorizon_flow_ranked_execution_v2"
 
@@ -109,9 +109,13 @@ def entry_candidate(symbol, analysis, m15, flow, now_epoch):
         reason = "fresh_executed_flow_unavailable"
     elif count is None or notional is None or count < 5 or notional < 100:
         reason = "insufficient_executed_liquidity"
-    elif profile is None or not profile.get("resumed"):
-        reason = "flow_not_aligned_with_h1"
-    elif not m15.get("recovery_confirmed") or score is None or score < 3 or adverse is None or m15.get("strong_adverse_pressure"):
+    elif not m15.get("pullback_observed"):
+        reason = "m15_pullback_not_observed"
+    elif not m15.get("pullback_exhausted"):
+        reason = "m15_pullback_not_exhausted"
+    elif profile is None or not profile.get("strong_resumed"):
+        reason = "flow_not_resumed_after_pullback"
+    elif not m15.get("recovery_confirmed") or score is None or score < 3 or adverse is None or adverse > 1 or m15.get("strong_adverse_pressure"):
         reason = "m15_recovery_unconfirmed"
     if reason:
         result["reason"] = reason
