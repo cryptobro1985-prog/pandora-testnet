@@ -60,7 +60,8 @@ from hype_h1_swing import (POLICY as HYPE_SWING_POLICY, SYMBOL as HYPE_SWING_SYM
 
 # Separate 24h Local paper experiment. Leverage follows Hyperliquid's live
 # per-market maxLeverage metadata; validated fallbacks are only for metadata outages.
-LOCAL_EXPERIMENT_SYMBOLS=("INIT","NEAR","GRASS","HYPE","BTC","ETH","SOL","AR","APT","ZEC","WLD")
+LOCAL_EXPERIMENT_SYMBOLS=("INIT","NEAR","GRASS","HYPE","BTC","ETH","SOL","AR","APT","ZEC","WLD",
+ "USELESS","TAO","CHIP","BABY","SPX","LIT","CASHCAT")
 LOCAL_S3_SYMBOLS=("HYPE","NEAR","INIT","USELESS","GRASS","APT","TAO","CHIP","BABY","SPX","LIT","CASHCAT")
 LOCAL_EXPERIMENT_STARTING_EQUITY=500.0
 S1_ONLY_MODE=True
