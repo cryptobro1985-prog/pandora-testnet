@@ -307,6 +307,20 @@ STORE=EngineStore(pg,FEE,PAPER_RESET)
 def pinit():
  with pg() as c:
   c.execute("create table if not exists local_candle_checkpoints (symbol text not null, interval text not null, candles jsonb not null, saved_at timestamptz not null default clock_timestamp(), primary key(symbol,interval))")
+  c.execute("""create table if not exists local_s1_research_runs (
+    run_id text primary key, created_at timestamptz not null default clock_timestamp(),
+    start_date text not null, end_exclusive text not null, starting_equity double precision not null,
+    final_equity double precision not null, realized_pnl double precision not null, open_pnl double precision not null,
+    return_pct double precision not null, max_drawdown_pct double precision, closed_trades integer not null,
+    wins integer not null, win_rate double precision, profit_factor double precision, policy text,
+    research_only boolean not null default true, result jsonb not null default '{}'::jsonb)""")
+  c.execute("""create table if not exists local_s1_research_trades (
+    run_id text not null references local_s1_research_runs(run_id) on delete cascade, seq integer not null,
+    opened timestamptz, closed timestamptz, symbol text not null, side integer not null,
+    entry double precision not null, exit double precision not null, margin double precision not null,
+    notional double precision not null, leverage double precision not null, pnl double precision not null,
+    reason text, mfe_price_move double precision, mae_price_move double precision, equity_after double precision,
+    research_only boolean not null default true, primary key(run_id,seq))""")
   for seed in c.execute("select symbol,interval,candles from local_candle_checkpoints").fetchall():
    accept_local_candles(seed["candles"],history=True)
   c.execute("create table if not exists account_state (id integer primary key, equity double precision not null, realized_pnl double precision not null, updated_at text not null)")
@@ -5397,6 +5411,10 @@ def operations_diagnostics():
      "market_metadata":copy.deepcopy(S["sources"].get("MarketMetadata",{})),
      "local12_source":copy.deepcopy(S["sources"].get("Caterpillar 1.0",{}))}
    print(json.dumps(report,ensure_ascii=False,default=str),flush=True)
+   with LOCK:s1src=copy.deepcopy(S.get("sources",{}).get("Strategy 1 — Restored Caterpillar",{}))
+   print("S1_ONLINE_STATE "+json.dumps({"ok":s1src.get("ok"),"ready":s1src.get("ready"),
+    "error":s1src.get("error"),"equity":s1src.get("equity"),"realized_equity":s1src.get("realized_equity"),
+    "open_positions":s1src.get("open_positions"),"details":s1src.get("details")},ensure_ascii=False,default=str),flush=True)
   except Exception as e:print("diagnostics_error: "+str(e)[:180],flush=True)
   SHUTDOWN.wait(30)
 
@@ -5548,6 +5566,48 @@ def strategy1_counterfactual_replay_12h():
   return {"window_hours":12,"basis":"replay_unavailable","not_executed":True,"events":[],"realized_pnl":0.0,
    "return_on_500_pct":0.0,"error":type(exc).__name__+":"+str(exc)[:120]}
 
+def latest_s1_research_run():
+ try:
+  with pg() as c:
+   run=c.execute("select * from local_s1_research_runs order by created_at desc limit 1").fetchone()
+   if not run:return None
+   trades=c.execute("""select seq,opened,closed,symbol,side,entry,exit,margin,notional,leverage,pnl,reason,
+     mfe_price_move,mae_price_move,equity_after,research_only
+     from local_s1_research_trades where run_id=%s order by seq""",(run["run_id"],)).fetchall()
+  out=dict(run);out["trades"]=[dict(x) for x in trades];out["status"]="done";out["durable"]=True
+  return out
+ except Exception as exc:
+  return {"status":"error","error":type(exc).__name__+":"+str(exc)[:140]}
+
+def persist_s1_research_result(result):
+ if not result:return False
+ run_id="s1:%s:%s:%s"%(result.get("start"),result.get("end_exclusive"),result.get("policy"))
+ with pg() as db:
+  with db.transaction():
+   STORE.fence(db)
+   db.execute("""insert into local_s1_research_runs
+    (run_id,start_date,end_exclusive,starting_equity,final_equity,realized_pnl,open_pnl,return_pct,
+     max_drawdown_pct,closed_trades,wins,win_rate,profit_factor,policy,research_only,result)
+    values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,true,%s::jsonb)
+    on conflict(run_id) do update set created_at=clock_timestamp(),final_equity=excluded.final_equity,
+      realized_pnl=excluded.realized_pnl,open_pnl=excluded.open_pnl,return_pct=excluded.return_pct,
+      max_drawdown_pct=excluded.max_drawdown_pct,closed_trades=excluded.closed_trades,wins=excluded.wins,
+      win_rate=excluded.win_rate,profit_factor=excluded.profit_factor,result=excluded.result""",
+    (run_id,result.get("start"),result.get("end_exclusive"),result.get("starting_equity",500),
+     result.get("final_equity",500),result.get("realized_pnl",0),result.get("open_pnl",0),result.get("return_pct",0),
+     result.get("max_drawdown_pct"),result.get("closed_trades",0),result.get("wins",0),result.get("win_rate"),
+     result.get("profit_factor"),result.get("policy"),json.dumps(result,default=str)))
+   db.execute("delete from local_s1_research_trades where run_id=%s",(run_id,))
+   for seq,x in enumerate(result.get("trades") or [],1):
+    db.execute("""insert into local_s1_research_trades
+     (run_id,seq,opened,closed,symbol,side,entry,exit,margin,notional,leverage,pnl,reason,
+      mfe_price_move,mae_price_move,equity_after,research_only)
+     values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,true)""",
+     (run_id,seq,x.get("opened"),x.get("closed"),x.get("symbol"),x.get("side"),x.get("entry"),x.get("exit"),
+      x.get("margin"),x.get("notional"),x.get("leverage"),x.get("pnl"),x.get("reason"),
+      x.get("mfe_price_move"),x.get("mae_price_move"),x.get("equity_after")))
+ return True
+
 def dashboard_history_loop():
  while not SHUTDOWN.is_set():
   try:
@@ -5561,8 +5621,8 @@ def dashboard_history_loop():
           "local_s1_closed_trades":local_compare_history("local_s1",300),
           "local_s2_closed_trades":local_compare_history("local_s2",300),
           "local_s3_closed_trades":local_compare_history("local_s3",300),
-          "local_s1_replay_12h":strategy1_counterfactual_replay_12h(),
-          "local_s1_causal_history":s1_week_backtest_status(),
+          "local_s1_replay_12h":None if S1_ONLY_MODE else strategy1_counterfactual_replay_12h(),
+          "local_s1_causal_history":latest_s1_research_run() or s1_week_backtest_status(),
           "local_v10_today_realized_pnl":local_v10_today_pnl(),
           "news":[dict(x) for x in persistent_news(20)],
           "features":[dict(x) for x in persistent_features(10)],
@@ -6291,9 +6351,17 @@ if __name__=="__main__":
    if not active:
     SHUTDOWN.wait(1);continue
    try:
-    # Latest fully completed UTC day, current canonical causal S1 logic.
     completed=(datetime.datetime.now(datetime.timezone.utc).date()-datetime.timedelta(days=1)).isoformat()
     start_s1_week_backtest(completed,1)
+    while not SHUTDOWN.is_set():
+     st=s1_week_backtest_status()
+     if st.get("status")=="done":
+      persist_s1_research_result(st.get("result"))
+      print("S1_RESEARCH_DURABLE persisted",flush=True)
+      return
+     if st.get("status")=="error":
+      return
+     SHUTDOWN.wait(2)
    except Exception as exc:
     with LOCK:S["last_error"]="s1_historical_autostart: "+type(exc).__name__+":"+str(exc)[:120]
    return
