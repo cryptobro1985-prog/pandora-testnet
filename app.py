@@ -5704,7 +5704,7 @@ def html_strategy1_only(data):
    "$%.2f"%margin if x else "—","$%.2f"%notional if x else "—",
    "%.1fx"%float(x.get("leverage",0) or 0) if x else "—",
    esc(x.get("entry") if x else "—"),
-   esc(mark) if mark_valid else "DATA WAIT",
+   esc(mark) if mark_valid else ("DATA WAIT" if x else "—"),
    "pos" if pnl>=0 else "neg","$%+.4f"%pnl if x and mark_valid else "DATA WAIT" if x else "—",
    "pos" if pnl>=0 else "neg","%+.2f%%"%roe if roe is not None and mark_valid else "DATA WAIT" if x else "—"))
  actual_rows=[]
