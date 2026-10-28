@@ -62,8 +62,9 @@ from hype_h1_swing import (POLICY as HYPE_SWING_POLICY, SYMBOL as HYPE_SWING_SYM
 LOCAL_EXPERIMENT_SYMBOLS=("INIT","NEAR","GRASS","HYPE")
 LOCAL_S3_SYMBOLS=("HYPE","NEAR","INIT","USELESS","GRASS","APT","TAO","CHIP","BABY","SPX","LIT","CASHCAT")
 LOCAL_EXPERIMENT_STARTING_EQUITY=500.0
-NEWS_NEW_ENTRIES_ENABLED=True
-WHALE_NEW_ENTRIES_ENABLED=True
+S1_ONLY_MODE=True
+NEWS_NEW_ENTRIES_ENABLED=False
+WHALE_NEW_ENTRIES_ENABLED=False
 LOCAL_EXPERIMENT_MARGIN_FRACTION=0.20
 LOCAL_EXPERIMENT_MAX_POSITIONS=4
 # Legacy HYPE/NEAR book remains exit-only until its existing paper positions close.
@@ -3088,29 +3089,18 @@ def comparison_strategies_loop():
        "strong_adverse_pressure":m15.get("strong_adverse_pressure"),"recovery_confirmed":m15.get("recovery_confirmed")},
       "last_action":act1 or ("IN_POSITION" if p1 else ("WAIT_RESUMPTION" if w1 else "WAIT_ENTRY")),"error":None}
 
-    # Strategy 2: pure H1 pivot-to-pivot. Never exits on M15/flow.
-    with LOCK:p2=copy.deepcopy(S.get("local_s2_positions",{}).get(symbol))
-    desired=int(a2.get("entry_side") or 0);act2=None
-    if p2 and a2.get("ready") and desired in (-1,1) and desired==-int(p2["side"]):
-     closed=_comparison_close("local_s2","local_s2",symbol,float(mark),"opposite_confirmed_h1_local")
-     if closed and _comparison_open("local_s2","local_s2",symbol,desired,a2,float(mark),"H1_FLIP"):act2="H1_FLIP"
-    elif not p2 and a2.get("ready") and desired in (-1,1) and not a2.get("entry_blocked"):
-     if _comparison_open("local_s2","local_s2",symbol,desired,a2,float(mark),"H1_ANCHOR"):act2="H1_ENTRY"
-    with LOCK:p2=copy.deepcopy(S.get("local_s2_positions",{}).get(symbol))
-    s2_details[symbol]={"ok":bool(a2.get("ready")),"h1_local":{"pivot_type":a2.get("pivot_type"),"pivot_price":a2.get("pivot_price"),
-      "entry_side":a2.get("entry_side"),"signal_candle_time":a2.get("signal_candle_time"),"persisted":a2.get("persisted",False)},
-      "position_open":bool(p2),"side":p2.get("side") if p2 else None,
-      "last_action":act2 or ("HOLD_TO_OPPOSITE_H1" if p2 else "WAIT_H1"),"error":None}
+    # Strategy 2 frozen in S1_ONLY_MODE.
+    s2_details[symbol]={"ok":False,"disabled":True,"last_action":"FROZEN_S1_ONLY","error":None}
    s1_total,s1_used,s1_free,s1_unreal=_comparison_mtm("local_s1",prices)
-   s2_total,s2_used,s2_free,s2_unreal=_comparison_mtm("local_s2",prices)
-   s1stats=_comparison_stats("local_s1");s2stats=_comparison_stats("local_s2")
+   s2_total,s2_used,s2_free,s2_unreal=500.0,0.0,500.0,0.0
+   s1stats=_comparison_stats("local_s1");s2stats={"trades":0,"wins":0,"win_rate":None,"realized_pnl":0.0}
    with LOCK:
     S["sources"]["Strategy 1 — Restored Caterpillar"]={"ok":all(x.get("ok") for x in s1_details.values()),"ready":all(x.get("ok") for x in s1_details.values()),
       "last_check":now(),"mode":"paper_universal_h1_m15_flow_weakening_reentry_25x_protective_stop","symbols":list(LOCAL_EXPERIMENT_SYMBOLS),
       "starting_equity":500.0,"equity":s1_total,"realized_equity":S.get("local_s1_equity",500.0),"unrealized_pnl":s1_unreal,
       "used_margin":s1_used,"free_margin":s1_free,"reference_margin_fraction":.20,"reference_leverage":25.0,
       "compound":True,"open_positions":list(S.get("local_s1_positions",{})),"details":s1_details,"stats":s1stats,"error":None}
-    S["sources"]["Strategy 2 — H1 Pivot Swing"]={"ok":all(x.get("ok") for x in s2_details.values()),"ready":all(x.get("ok") for x in s2_details.values()),
+    S["sources"]["Strategy 2 — H1 Pivot Swing"]={"ok":True,"ready":False,"disabled":True,
       "last_check":now(),"mode":"paper_h1_local_high_to_low_and_low_to_high","symbols":list(LOCAL_EXPERIMENT_SYMBOLS),
       "starting_equity":500.0,"equity":s2_total,"realized_equity":S.get("local_s2_equity",500.0),"unrealized_pnl":s2_unreal,
       "used_margin":s2_used,"free_margin":s2_free,"reference_margin_fraction":.20,"reference_leverage":25.0,
@@ -5251,7 +5241,7 @@ def build_dashboard_snapshot(history=None):
 "watch":copy.deepcopy(state.get("local_s1_watch",{})),
 "stats":copy.deepcopy((comparison.get("local_s1") or {}).get("stats",{})),
 "engine":copy.deepcopy((comparison.get("local_s1") or {}).get("engine",{}))},
-"strategy1_historical_benchmark":{"starting_equity":500.0,"mfe_upper_equity":877.36,"mfe_opportunity_pnl":377.36,"basis":"historical favorable-excursion upper bound from prior actual-entry analysis","executed":False,"causal":False,"label":"HISTORICAL MFE BENCHMARK — NOT EXECUTED"},"module_trading_enabled":{"news":NEWS_NEW_ENTRIES_ENABLED,"whale_liquidation":WHALE_NEW_ENTRIES_ENABLED,"pump_dump":True,"local":True},"account_model":"UNIFIED_PAPER_ACCOUNT_ALL_STRATEGIES","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"decision_learning":copy.deepcopy(state.get("learning_audit",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
+"strategy1_historical_benchmark":{"starting_equity":500.0,"mfe_upper_equity":877.36,"mfe_opportunity_pnl":377.36,"basis":"historical favorable-excursion upper bound from prior actual-entry analysis","executed":False,"causal":False,"label":"HISTORICAL MFE BENCHMARK — NOT EXECUTED"},"module_trading_enabled":{"strategy1":True,"news":False,"whale_liquidation":False,"pump_dump":False,"strategy2":False,"strategy3":False,"legacy_local":False},"account_model":"UNIFIED_PAPER_ACCOUNT_ALL_STRATEGIES","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"decision_learning":copy.deepcopy(state.get("learning_audit",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
 def dashboard():
  # Render open positions from current in-memory prices; slow history queries
@@ -6186,14 +6176,17 @@ if __name__=="__main__":
    SHUTDOWN.wait(2)
 
  worker_specs=[
-  ("engine_coordinator",engine_coordinator),("market",market),("market_metadata",market_metadata),("market_history_bootstrap",market_history_bootstrap),("market_trades",market_trade_stream),("breadth_history",market_regime_history),
-  ("telemetry",telemetry),("pump_dump",impulse_scan),
-  ("Caterpillar 1.0",local_experiment_loop),("local_risk",local_experiment_risk_loop),
+  ("engine_coordinator",engine_coordinator),
+  ("market",market),
+  ("market_metadata",market_metadata),
+  ("market_history_bootstrap",market_history_bootstrap),
+  ("market_trades",market_trade_stream),
+  ("breadth_history",market_regime_history),
+  ("telemetry",telemetry),
   ("local_strategy_comparison",comparison_strategies_loop),
-  ("local_strategy_3_local12",strategy3_local12_loop),
-  ("adapt",adapt),
-  ("decision_learning",learning_shadow_loop),
-  ("dashboard_history",dashboard_history_loop),("dashboard_cache",dashboard_cache_loop),("diagnostics",operations_diagnostics)
+  ("dashboard_history",dashboard_history_loop),
+  ("dashboard_cache",dashboard_cache_loop),
+  ("diagnostics",operations_diagnostics)
  ]
  # Trading ingestion is intentionally minimal: FirstSquawk on X + PiQ Direct.
  # Unused X/RSS/Truth sources stay out of the live path so their transport failures
@@ -6201,18 +6194,32 @@ if __name__=="__main__":
  # Source scanners are monitoring infrastructure and must stay alive even when
  # news-triggered entries are disabled. Trade eligibility remains gated inside
  # ingest/entry logic by NEWS_NEW_ENTRIES_ENABLED.
- worker_specs.extend([("x_critical_4s",x_critical_realtime),("piq_direct",piq_direct_realtime)])
- if NEWS_NEW_ENTRIES_ENABLED:
+ if not S1_ONLY_MODE:
+  worker_specs.extend([("x_critical_4s",x_critical_realtime),("piq_direct",piq_direct_realtime)])
+ if NEWS_NEW_ENTRIES_ENABLED and not S1_ONLY_MODE:
   # Trading news path remains intentionally minimal: FirstSquawk + PiQ Direct.
   # Their dedicated workers are always running above; recovery only processes durable queued events.
   worker_specs.append(("news_recovery",recover_news_processing))
  if os.getenv("ENABLE_PUBLIC_X_HTML","0")=="1":
   for handle in WATCH:worker_specs.append(("public-x:"+handle,lambda h=handle:public_social_reader("x",h)))
+ def s1_historical_autostart():
+  while not SHUTDOWN.is_set():
+   with LOCK:active=bool(S.get("engine_active"))
+   if not active:
+    SHUTDOWN.wait(1);continue
+   try:
+    # Latest fully completed UTC day, current canonical causal S1 logic.
+    completed=(datetime.datetime.now(datetime.timezone.utc).date()-datetime.timedelta(days=1)).isoformat()
+    start_s1_week_backtest(completed,1)
+   except Exception as exc:
+    with LOCK:S["last_error"]="s1_historical_autostart: "+type(exc).__name__+":"+str(exc)[:120]
+   return
  workers=[threading.Thread(target=supervised_worker,args=(label,fn),daemon=True,name=label) for label,fn in worker_specs]
  # Operator action is intentionally one-shot; normal completion is not a health failure.
  workers.append(threading.Thread(target=operator_one_shot_actions,daemon=True,name="operator_actions"))
  workers.append(threading.Thread(target=authorized_cleanup_worker,daemon=True,name="authorized_cleanup"))
  workers.append(threading.Thread(target=post_lease_historical_restore,daemon=True,name="historical_restore"))
+ workers.append(threading.Thread(target=s1_historical_autostart,daemon=True,name="s1_historical_backtest"))
  for worker in workers:worker.start()
  try:server.serve_forever()
  finally:
