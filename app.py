@@ -2587,9 +2587,19 @@ def local_experiment_mark_positions(prices):
   mark=prices.get(symbol)
   if not mark:continue
   updated,liq=hype_update_path(pos,float(mark))
-  updated.setdefault("features",{}).update(caterpillar_policy=LOCAL4_FLOW_POLICY,
-    profit_lock_armed=False,profit_lock_mode="executed_flow_reversal_only")
-  updated["features"].pop("profit_lock_stop",None)
+  f=updated.setdefault("features",{})
+  # Strategy 1 MFE protection: preserve large trend profits without turning one noisy M15 into an exit.
+  entry=float(updated.get("entry") or 0);side=int(updated.get("side") or 0);markf=float(mark)
+  move=side*(markf/entry-1.0) if entry>0 and side in (-1,1) else 0.0
+  mfe=max(float(f.get("mfe_price_move",0) or 0),move)
+  f["mfe_price_move"]=mfe;f["mfe_roe_pct"]=mfe*float(updated.get("leverage") or 25.0)*100.0
+  arm=mfe>=0.02
+  # Adaptive giveback: once a move is large, protect a meaningful fraction of the best excursion.
+  floor=(mfe*0.55 if mfe>=0.05 else mfe*0.40) if arm else None
+  giveback=max(0.0,mfe-move)
+  f.update(caterpillar_policy=LOCAL4_FLOW_POLICY,profit_lock_armed=arm,
+    profit_lock_mode="mfe_persistent_m15_confirmation",profit_lock_floor_move=floor,
+    current_price_move=move,mfe_giveback_move=giveback)
   with LOCK:
    live=S.get("local_v12_positions",{}).get(symbol)
    if live and live.get("opened")==pos.get("opened"):S["local_v12_positions"][symbol]=updated
@@ -2797,10 +2807,28 @@ def local_experiment_loop():
        closed=local_experiment_close(symbol,float(mark),h1_exit,analysis)
        action="H1_DIRECTION_INVALIDATION_EXIT:"+h1_exit if closed else None
       elif pressure_reason:=local4_pressure_exit(pos,m15_live,float(mark),flow):
-       watch_context={"m15":m15_live,"h1_context":h1_context,"flow_imbalance":flow_imb,"flow_context":flow,
-         "flow_source":"hyperliquid_ws_trades","observed_at":now(),"reason":pressure_reason}
-       closed=local_experiment_close(symbol,float(mark),pressure_reason,analysis,watch_context)
-       action="M15_COUNTER_PRESSURE_EXIT" if closed else None
+       pf=pos.get("features") or {};armed=bool(pf.get("profit_lock_armed"))
+       bucket=int((m15_live or {}).get("candle_time") or 0)
+       key="_s1_adverse_m15"
+       with LOCK:
+        st=copy.deepcopy(S.setdefault(key,{}).get(symbol) or {})
+       if int(st.get("bucket") or 0)!=bucket:
+        st={"bucket":bucket,"count":int(st.get("count") or 0)+1}
+        with LOCK:S.setdefault(key,{})[symbol]=st
+       confirmations=int(st.get("count") or 0)
+       # Large-MFE trades need two distinct adverse M15 confirmations. This avoids surrendering
+       # a strong INIT-like trend to a single counter candle while still protecting accumulated profit.
+       if armed and confirmations<2:
+        action="MFE_PROTECT_WAIT_CONFIRMATION"
+       else:
+        watch_context={"m15":m15_live,"h1_context":h1_context,"flow_imbalance":flow_imb,"flow_context":flow,
+          "flow_source":"hyperliquid_ws_trades","observed_at":now(),"reason":pressure_reason,
+          "mfe_protection_armed":armed,"adverse_m15_confirmations":confirmations,
+          "mfe_price_move":pf.get("mfe_price_move"),"mfe_giveback_move":pf.get("mfe_giveback_move")}
+        closed=local_experiment_close(symbol,float(mark),pressure_reason,analysis,watch_context)
+        action="M15_COUNTER_PRESSURE_EXIT" if closed else None
+      else:
+       with LOCK:S.setdefault("_s1_adverse_m15",{}).pop(symbol,None)
      else:
       if analysis.get("entry_blocked"):action="WAIT_H1_CONFIRMATION:"+str(analysis.get("pending_pivot_type"))
       if watch:watch=_local_experiment_watch_observe(symbol,watch,float(mark),m15_live,flow,time.time())
