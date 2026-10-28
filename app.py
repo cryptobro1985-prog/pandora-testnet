@@ -28,8 +28,6 @@ from news_logic import analyze_headline, is_non_market_news as semantic_non_mark
 from accounting import paper_pnl
 from strategy_stats import performance as strategy_performance, cards_html as strategy_cards_html, with_capital_basis as strategy_capital_basis
 from strategy1_week_backtest import start as start_s1_week_backtest, status as s1_week_backtest_status
-from strategy1_universal_optimizer import start as start_s1_optimizer, status as s1_optimizer_status
-from strategy1_algo_12h_compare import start as start_s1_algo12h, status as s1_algo12h_status
 from local_caterpillar import (POLICY as CATERPILLAR_POLICY,pressure_exit as caterpillar_pressure_exit,
  update_watch as caterpillar_update_watch,reentry_ready as caterpillar_reentry_ready,
  protective_breakeven as caterpillar_breakeven, entry_candidate as local_entry_candidate,
@@ -5911,31 +5909,6 @@ class Handler(BaseHTTPRequestHandler):
     body=json.dumps({"ok":False,"error":type(exc).__name__+":"+str(exc)[:160]}).encode();self.send_response(500)
    self.send_header("Content-Type","application/json; charset=utf-8");self.send_header("Cache-Control","no-store")
    self.send_header("Content-Length",str(len(body)));self.end_headers();self.wfile.write(body);return
-  if path=="/api/research/strategy1-algo12h/start":
-   body=json.dumps(start_s1_algo12h(),ensure_ascii=False,default=str).encode()
-   self.send_response(202);self.send_header("Content-Type","application/json; charset=utf-8")
-   self.send_header("Cache-Control","no-store");self.send_header("Content-Length",str(len(body)))
-   self.end_headers();self.wfile.write(body);return
-  if path=="/api/research/strategy1-algo12h/status":
-   body=json.dumps(s1_algo12h_status(),ensure_ascii=False,default=str).encode()
-   self.send_response(200);self.send_header("Content-Type","application/json; charset=utf-8")
-   self.send_header("Cache-Control","no-store");self.send_header("Content-Length",str(len(body)))
-   self.end_headers();self.wfile.write(body);return
-  if path=="/api/research/strategy1-opt/start":
-   try:
-    args=urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-    days=min(14,max(3,int(args.get("days",["7"])[0])))
-    body=json.dumps(start_s1_optimizer(days),ensure_ascii=False,default=str).encode()
-    self.send_response(202)
-   except Exception as exc:
-    body=json.dumps({"ok":False,"error":type(exc).__name__+":"+str(exc)[:160]}).encode();self.send_response(500)
-   self.send_header("Content-Type","application/json; charset=utf-8");self.send_header("Cache-Control","no-store")
-   self.send_header("Content-Length",str(len(body)));self.end_headers();self.wfile.write(body);return
-  if path=="/api/research/strategy1-opt/status":
-   body=json.dumps(s1_optimizer_status(),ensure_ascii=False,default=str).encode()
-   self.send_response(200);self.send_header("Content-Type","application/json; charset=utf-8")
-   self.send_header("Cache-Control","no-store");self.send_header("Content-Length",str(len(body)))
-   self.end_headers();self.wfile.write(body);return
   if path=="/api/research/strategy1-week/status":
    body=json.dumps(s1_week_backtest_status(),ensure_ascii=False,default=str).encode()
    self.send_response(200);self.send_header("Content-Type","application/json; charset=utf-8")
@@ -6093,34 +6066,6 @@ if __name__=="__main__":
  workers.append(threading.Thread(target=operator_one_shot_actions,daemon=True,name="operator_actions"))
  workers.append(threading.Thread(target=authorized_cleanup_worker,daemon=True,name="authorized_cleanup"))
  workers.append(threading.Thread(target=post_lease_historical_restore,daemon=True,name="historical_restore"))
- def strategy1_week_research_autostart():
-  while not SHUTDOWN.is_set():
-   with LOCK:active=bool(S.get("engine_active"))
-   if active:
-    try:
-     start_s1_week_backtest(None,7)
-    except Exception as exc:
-     print("S1_WEEK_AUTOSTART_ERROR",type(exc).__name__+":"+str(exc)[:160],flush=True)
-    return
-   SHUTDOWN.wait(1)
- workers.append(threading.Thread(target=strategy1_week_research_autostart,daemon=True,name="strategy1_week_research"))
- def strategy1_optimizer_autostart():
-  # Avoid competing downloads/CPU with the base weekly replay. Start optimizer
-  # only after the active instance has completed or failed that first research pass.
-  while not SHUTDOWN.is_set():
-   with LOCK:active=bool(S.get("engine_active"))
-   st=s1_week_backtest_status().get("status")
-   if active and st in ("done","error"):
-    try:start_s1_optimizer(7)
-    except Exception as exc:print("S1_OPT_AUTOSTART_ERROR",type(exc).__name__+":"+str(exc)[:160],flush=True)
-    return
-   SHUTDOWN.wait(2)
- workers.append(threading.Thread(target=strategy1_optimizer_autostart,daemon=True,name="strategy1_optimizer"))
- def strategy1_algo12h_autostart():
-  # Research-only: no PAPER mutation, so it can run on standby during rolling deploy.
-  try:start_s1_algo12h()
-  except Exception as exc:print("S1_ALGO_12H_AUTOSTART_ERROR",type(exc).__name__+":"+str(exc)[:160],flush=True)
- workers.append(threading.Thread(target=strategy1_algo12h_autostart,daemon=True,name="strategy1_algo12h"))
  for worker in workers:worker.start()
  try:server.serve_forever()
  finally:
