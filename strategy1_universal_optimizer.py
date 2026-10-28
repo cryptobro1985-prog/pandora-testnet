@@ -191,13 +191,13 @@ def _simulate(data,start_epoch,end_epoch,p,symbols=SYMBOLS,start_equity=500.0):
                     watches.pop(s,None);watch=None
                 else:
                     watch=_watch_update(watch,mark,m15,flow,t,p);watches[s]=watch
-                if watch and _reentry_ok(watch,m15,flow,mark,t,p):
+                if watch and _reentry_ok(watch,m15,flow,mark,t,p,fp,peer):
                     equity=eq();used=sum(x["margin"] for x in positions.values());margin=max(.01,equity*MF)
                     if equity-used+1e-9>=margin:
                         positions[s]={"side":watch["side"],"entry":mark,"margin":margin,"notional":margin*LEV,"mfe":0.0}
                         watches.pop(s,None)
                 continue
-            if _entry_ok(a,m15,flow,mark,p):
+            if _entry_ok(a,m15,flow,mark,p,fp,peer):
                 equity=eq();used=sum(x["margin"] for x in positions.values());margin=max(.01,equity*MF)
                 if equity-used+1e-9>=margin:
                     positions[s]={"side":int(a["entry_side"]),"entry":mark,"margin":margin,"notional":margin*LEV,"mfe":0.0}
@@ -347,7 +347,7 @@ def _simulate_series(series,start_epoch,end_epoch,p,start_equity=500.0):
         if side not in (-1,1):continue
         if pos:
             move=pos["side"]*(mark/pos["entry"]-1);pos["mfe"]=max(pos.get("mfe",0),move)
-            reason="h1_flip" if int(a.get("entry_side") or 0)==-pos["side"] else _exit_reason(pos,m15,flow,mark,p)
+            reason="h1_flip" if int(a.get("entry_side") or 0)==-pos["side"] else _exit_reason(pos,m15,flow,mark,p,fp,peer)
             if reason:
                 v=_pnl(pos,mark);cash+=v;trades.append(v)
                 watch={"side":pos["side"],"exit_price":mark,"extreme":mark,"phase":"WAIT_PULLBACK","counter_seen":False,"confirmed_t":None}
