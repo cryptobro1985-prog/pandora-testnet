@@ -5677,7 +5677,6 @@ def html_strategy1_only(data):
  watch=p.get("watch") or {}
  hist=data.get("local_s1_causal_history") or {}
  hr=(hist.get("result") or {}) if hist.get("status")=="done" else {}
- htrades=hr.get("trades") or []
  eq=float(p.get("total_equity",p.get("realized_equity",500)) or 500)
  realized=float(p.get("realized_pnl",0) or 0)
  unreal=float(p.get("unrealized_pnl",0) or 0)
@@ -5700,13 +5699,6 @@ def html_strategy1_only(data):
   pnl=float(x.get("pnl",0) or 0)
   actual_rows.append("<tr><td>%s</td><td>%s</td><td>%s</td><td>$%.2f</td><td>$%.2f</td><td>%sx</td><td>%s</td><td>%s</td><td class='%s'>$%.4f</td><td>%s</td></tr>"%(
    esc(x.get("closed","")),esc(x.get("symbol","")),"LONG" if int(x.get("side",0) or 0)>0 else "SHORT",
-   float(x.get("margin",0) or 0),float(x.get("notional",0) or 0),float(x.get("leverage",0) or 0),
-   esc(x.get("entry","—")),esc(x.get("exit","—")),"pos" if pnl>=0 else "neg",pnl,esc(x.get("reason",""))))
- hist_rows=[]
- for x in htrades:
-  pnl=float(x.get("pnl",0) or 0)
-  hist_rows.append("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>$%.2f</td><td>$%.2f</td><td>%sx</td><td>%s</td><td>%s</td><td class='%s'>$%.4f</td><td>%s</td></tr>"%(
-   esc(x.get("opened","")),esc(x.get("closed","")),esc(x.get("symbol","")),"LONG" if int(x.get("side",0) or 0)>0 else "SHORT",
    float(x.get("margin",0) or 0),float(x.get("notional",0) or 0),float(x.get("leverage",0) or 0),
    esc(x.get("entry","—")),esc(x.get("exit","—")),"pos" if pnl>=0 else "neg",pnl,esc(x.get("reason",""))))
  hist_status=hist.get("status","idle")
@@ -5739,12 +5731,12 @@ def html_strategy1_only(data):
  <div class='bench'><b>SIMULATED EXECUTION / REPLAY · NOT PAPER EXECUTED</b><div class='big'>$%.2f → $%.2f</div><div class='pos'>Pro forma opportunity +$%.2f</div><div class='sub'>Historical/reconstructed results are shown for strategy evaluation only and are never written into actual PAPER execution history or realized PnL.</div></div>
  <h2>LIVE STATE</h2><div class='scroll'><table><tr><th>Token</th><th>Side</th><th>Phase</th><th>H1 Local</th><th>Pivot</th><th>Margin</th><th>Position</th><th>Entry</th><th>Mark</th><th>Open PnL</th></tr>%s</table></div>
  <h2>ACTUAL CLOSED PAPER TRADES</h2><div class='scroll'><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Reason</th></tr>%s</table></div>
- <h2>SIMULATED EXECUTION LEDGER · UPDATED STRATEGY 1</h2><p class='sub'>%s. Reconstructed/backtest fills are displayed as simulated executions for analysis; they are not exchange/PAPER fills and are never mixed into actual realized PnL.</p><div class='scroll'><table><tr><th>Opened</th><th>Closed</th><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Reason</th></tr>%s</table></div>
+ <h2>HISTORICAL REPLAY SUMMARY</h2><p class='sub'>%s. Detailed reconstructed trade rows are intentionally hidden from this monitor; only the compact replay/pro-forma result is shown above.</p>
  </body></html>"""%(css,float(p.get("realized_equity",500) or 500),"pos" if realized>=0 else "neg",realized,
    "pos" if unreal>=0 else "neg",unreal,eq,int(stats.get("trades",len(actual)) or len(actual)),esc(wrtxt),
    len(positions),len(watch),float(bench.get("starting_equity",500) or 500),float(bench.get("mfe_upper_equity",877.36) or 877.36),
    float(bench.get("mfe_opportunity_pnl",377.36) or 377.36),"".join(rows),"".join(actual_rows) or "<tr><td colspan='10'>No actual closes</td></tr>",
-   hist_summary,"".join(hist_rows) or "<tr><td colspan='11'>Historical causal replay is running</td></tr>")
+   hist_summary)
  return htmlout
 
 def html_dashboard(data):
