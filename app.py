@@ -2844,6 +2844,17 @@ def _comparison_anchor(state_name,symbol):
     "pivot_candle_time":int(features.get("pivot_candle_time") or candle),"entry_blocked":False,
     "pending_pivot_type":None,"pending_pivot_price":None,"entry_block_reason":None,
     "reason":"comparison_persisted_h1_anchor"}
+ # Canonical Strategy 1 H1 regime is durable independently of any legacy
+ # local_v12 book. A confirmed H1 local remains the structural side until a
+ # later confirmed opposite H1 local replaces it.
+ with LOCK:
+  durable=copy.deepcopy(S.get("local_h1_direction",{}).get(symbol))
+ if durable and durable.get("ready") and int(durable.get("entry_side") or 0) in (-1,1):
+  durable["persisted"]=True
+  durable["h1_direction_anchor"]=True
+  durable["anchor_confirmed"]=True
+  durable["reason"]="durable_local_h1_direction_fallback"
+  return durable
  return _local_persisted_anchor(symbol)
 
 @account_mutation
