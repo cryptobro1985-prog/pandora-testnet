@@ -29,6 +29,7 @@ from accounting import paper_pnl
 from strategy_stats import performance as strategy_performance, cards_html as strategy_cards_html, with_capital_basis as strategy_capital_basis
 from strategy1_week_backtest import start as start_s1_week_backtest, status as s1_week_backtest_status
 from strategy1_universal_optimizer import start as start_s1_optimizer, status as s1_optimizer_status
+from strategy1_algo_12h_compare import start as start_s1_algo12h, status as s1_algo12h_status
 from local_caterpillar import (POLICY as CATERPILLAR_POLICY,pressure_exit as caterpillar_pressure_exit,
  update_watch as caterpillar_update_watch,reentry_ready as caterpillar_reentry_ready,
  protective_breakeven as caterpillar_breakeven, entry_candidate as local_entry_candidate,
@@ -6105,6 +6106,15 @@ if __name__=="__main__":
     return
    SHUTDOWN.wait(2)
  workers.append(threading.Thread(target=strategy1_optimizer_autostart,daemon=True,name="strategy1_optimizer"))
+ def strategy1_algo12h_autostart():
+  while not SHUTDOWN.is_set():
+   with LOCK:active=bool(S.get("engine_active"))
+   if active:
+    try:start_s1_algo12h()
+    except Exception as exc:print("S1_ALGO_12H_AUTOSTART_ERROR",type(exc).__name__+":"+str(exc)[:160],flush=True)
+    return
+   SHUTDOWN.wait(1)
+ workers.append(threading.Thread(target=strategy1_algo12h_autostart,daemon=True,name="strategy1_algo12h"))
  for worker in workers:worker.start()
  try:server.serve_forever()
  finally:
