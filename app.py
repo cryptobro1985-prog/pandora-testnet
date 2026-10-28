@@ -3111,10 +3111,18 @@ def comparison_strategies_loop():
       turn=turns.setdefault(symbol,{"since":None,"side":int(p1["side"])})
       if turn["side"]!=int(p1["side"]):
        turn={"since":None,"side":int(p1["side"])};turns[symbol]=turn
-      if raw_pressure:
-       if turn["since"] is None:turn["since"]=time.time()
-      else:turn["since"]=None
-      pressure_reason=raw_pressure if turn["since"] is not None and time.time()-turn["since"]>=30 else None
+      # Repeated polls of the SAME partial candle do not confirm a real reversal.
+      # Demand two distinct completed M15 candles with opposite control.
+      candle=int(m15.get("candle_time") or 0)
+      if raw_pressure and not m15.get("partial") and candle:
+       if candle!=turn.get("last_confirmed_candle"):
+        turn["last_confirmed_candle"]=candle
+        turn["confirmed_candles"]=int(turn.get("confirmed_candles") or 0)+1
+      elif not raw_pressure:
+       turn["since"]=None
+       turn["confirmed_candles"]=0
+       turn["last_confirmed_candle"]=None
+      pressure_reason=raw_pressure if int(turn.get("confirmed_candles") or 0)>=2 else None
      stop_hit=_s1_adaptive_stop(p1,m15,float(mark),flow)
      if h1exit:
       # A confirmed opposite H1 local invalidates the old thesis regardless of PnL.
