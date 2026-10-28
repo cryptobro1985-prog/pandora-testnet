@@ -5920,15 +5920,8 @@ def html_strategy1_only(data):
    "%.2f%%"%pct if pct is not None else "—",margin))
  history_rows=list(actual_rows)
 
- # New visible history starts here. Original trades remain in persistent audit storage.
- history_epoch=datetime.datetime(2026,10,28,12,26,tzinfo=datetime.timezone.utc)
- fresh=[]
- for trade in actual:
-  try:
-   ct=datetime.datetime.fromisoformat(str(trade.get("closed") or "").replace("Z","+00:00"))
-   if ct.tzinfo is None:ct=ct.replace(tzinfo=datetime.timezone.utc)
-   if ct>=history_epoch:fresh.append(trade)
-  except Exception:continue
+ # Visible history is the complete executed PAPER Strategy 1 ledger from PostgreSQL.
+ fresh=list(actual)
  fresh.sort(key=lambda t:str(t.get("closed") or ""))
  fresh_rows=[]
  for trade in reversed(fresh):
@@ -5938,8 +5931,8 @@ def html_strategy1_only(data):
    "LONG" if int(trade.get("side",0) or 0)>0 else "SHORT",
    float(trade.get("entry",0) or 0),float(trade.get("exit",0) or 0),float(trade.get("margin",0) or 0),
    float(trade.get("notional",0) or 0),"pos" if gain>=0 else "neg",gain,esc(trade.get("reason",""))))
- # Graph shows actual post-reset realized PnL path, shifted by displayed scenario baseline.
- graph_points=[377.36];cumulative=377.36
+ # Graph shows actual post-reset realized PnL path, from the executed Strategy 1 ledger only.
+ graph_points=[0.0];cumulative=0.0
  for trade in fresh:
   cumulative+=float(trade.get("pnl",0) or 0)
   graph_points.append(cumulative)
