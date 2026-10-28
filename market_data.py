@@ -182,9 +182,13 @@ class RollingMarketData:
                 state["seen"].add(key)
                 state["seen_queue"].append((received, key))
                 index = int(stamp // self.bucket_seconds)
-                bucket = state["buckets"].setdefault(index, [0.0, 0.0, 0])
+                bucket = state["buckets"].setdefault(index, [0.0, 0.0, 0, None, None, None, None])
                 bucket[0 if side == "B" else 1] += notional
                 bucket[2] += 1
+                if bucket[3] is None or stamp < bucket[3]:
+                    bucket[3], bucket[4] = stamp, price
+                if bucket[5] is None or stamp > bucket[5]:
+                    bucket[5], bucket[6] = stamp, price
                 state["latest_trade"] = max(stamp, state["latest_trade"] or stamp)
                 accepted += 1
             for symbol in touched:
@@ -339,8 +343,16 @@ class RollingMarketData:
             if coverage>=300:
                 b5,s5,c5=volumes(300)
                 i300=imbalance(b5,s5)
+                start_i=end-300//self.bucket_seconds+1
+                price_rows=[buckets.get(i) for i in range(start_i,end+1)]
+                price_rows=[x for x in price_rows if x and len(x)>=7 and x[3] is not None and x[5] is not None]
+                price_start=price_rows[0][4] if price_rows else None
+                price_end=price_rows[-1][6] if price_rows else None
+                price_return=((price_end/price_start)-1.0) if price_start and price_end else None
                 out.update(buy_volume_300s=b5,sell_volume_300s=s5,trade_count_300s=c5,
-                           flow_imbalance_300s=i300,flow_delta_60_300=i60-i300)
+                           flow_imbalance_300s=i300,flow_delta_60_300=i60-i300,
+                           price_start_300s=price_start,price_end_300s=price_end,
+                           price_return_300s=price_return)
             return out
 
     def stats(self):
