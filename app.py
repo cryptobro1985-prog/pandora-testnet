@@ -5708,7 +5708,7 @@ def html_strategy1_only(data):
    float(hr.get("starting_equity",500) or 500),float(hr.get("final_equity",500) or 500),
    float(hr.get("final_equity",500) or 500)-float(hr.get("starting_equity",500) or 500),
    float(hr.get("return_pct",0) or 0),int(hr.get("closed_trades",0) or 0),
-   ("—" if hr.get("win_rate") is None else "%.1f%%%%"%(float(hr.get("win_rate"))*100)),
+   ("—" if hr.get("win_rate") is None else "%.1f%%"%(float(hr.get("win_rate"))*100)),
    float(hr.get("max_drawdown_pct",0) or 0)))
  bench=data.get("strategy1_historical_benchmark") or {}
  historical_start=float(hr.get("starting_equity",500) or 500) if hr else None
@@ -5736,10 +5736,10 @@ def html_strategy1_only(data):
   pct=100*total/margin if margin>0 else None
   win=100*item["wins"]/item["trades"] if item["trades"] else None
   token_rows.append("<tr><td><b>%s</b></td><td>%d</td><td>%d</td><td>%s</td><td class='%s'>$%+.2f</td><td class='%s'>$%+.2f</td><td class='%s'>$%+.2f</td><td class='%s'>%s</td><td>$%.2f</td></tr>"%(
-   esc(sym),item["trades"],item["active"],"%.1f%%%%"%win if win is not None else "—",
+   esc(sym),item["trades"],item["active"],"%.1f%%"%win if win is not None else "—",
    "pos" if item["closed"]>=0 else "neg",item["closed"],"pos" if item["open"]>=0 else "neg",item["open"],
    "pos" if total>=0 else "neg",total,"pos" if total>=0 else "neg",
-   "%.2f%%%%"%pct if pct is not None else "—",margin))
+   "%.2f%%"%pct if pct is not None else "—",margin))
  # One visible history table; non-executed research rows remain explicitly labelled.
  history_rows=list(actual_rows)
  if hr:
