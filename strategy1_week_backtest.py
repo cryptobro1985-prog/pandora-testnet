@@ -368,8 +368,11 @@ def run_backtest(start_date=None,days=7):
                     reason=pressure_exit(pos,m15,mark,flow) or _stop(pos,m15,mark,flow)
                 if reason:
                     pnl=_pnl(pos,mark);cash+=pnl
-                    trades.append({"t":t,"symbol":s,"side":pos["side"],"entry":pos["entry"],"exit":mark,
-                                   "pnl":pnl,"reason":reason,"equity_after":cash})
+                    trades.append({"opened_t":pos.get("opened"),"closed_t":t,"symbol":s,"side":pos["side"],
+                                   "entry":pos["entry"],"exit":mark,"margin":pos["margin"],"notional":pos["notional"],
+                                   "leverage":pos["leverage"],"pnl":pnl,"reason":reason,"equity_after":cash,
+                                   "mfe_price_move":float(f.get("mfe_price_move",0) or 0),
+                                   "mae_price_move":float(f.get("mae_price_move",0) or 0)})
                     per[s]["pnl"]+=pnl;per[s]["trades"]+=1;per[s]["wins"]+=int(pnl>0)
                     watches[s]={"symbol":s,"side":pos["side"],"origin_signal_candle":pos.get("signal_candle_time",0),
                                 "exit_price":mark,"exit_at":dt.datetime.fromtimestamp(t,dt.timezone.utc).isoformat(),
@@ -419,6 +422,12 @@ def run_backtest(start_date=None,days=7):
     pf=(sum(gains)/sum(losses)) if losses else (float("inf") if gains else None)
     for s in SYMBOLS:
         per[s]["win_rate"]=per[s]["wins"]/per[s]["trades"] if per[s]["trades"] else None
+    history_rows=[]
+    for x in trades:
+        y=dict(x)
+        y["opened"]=dt.datetime.fromtimestamp(float(x["opened_t"]),dt.timezone.utc).isoformat() if x.get("opened_t") else None
+        y["closed"]=dt.datetime.fromtimestamp(float(x["closed_t"]),dt.timezone.utc).isoformat() if x.get("closed_t") else None
+        history_rows.append(y)
     return {"research_only":True,"causal":True,"source":"official_bybit_public_trade_archives",
             "start":start.isoformat(),"end_exclusive":end_date.isoformat(),"starting_equity":500.0,
             "final_equity":final_equity,"return_pct":(final_equity/500-1)*100,
@@ -427,7 +436,7 @@ def run_backtest(start_date=None,days=7):
             "max_drawdown_pct":max_dd*100,"closed_trades":len(trades),
             "wins":wins,"win_rate":wins/len(trades) if trades else None,"profit_factor":pf,
             "per_symbol":per,"open_positions":positions,"coverage":coverage,
-            "trades":trades[-500:],"policy":"h1_multihorizon_flow_caterpillar_v14_universal_25x"}
+            "trades":history_rows[-500:],"policy":"h1_multihorizon_flow_caterpillar_v14_universal_25x"}
 
 
 def _worker(start_date,days):
