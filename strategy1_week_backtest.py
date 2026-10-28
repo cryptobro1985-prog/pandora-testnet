@@ -62,17 +62,27 @@ def _download_day(symbol,date):
     name=f"{pair}{date.isoformat()}.csv.gz"
     url=f"https://public.bybit.com/trading/{pair}/{name}"
     req=urllib.request.Request(url,headers={"User-Agent":"PANDORA-research/1.0","Accept":"*/*"})
-    with urllib.request.urlopen(req,timeout=45) as r:
-        raw=r.read()
-    if len(raw)<50:
-        raise RuntimeError("archive_too_small")
-    return raw,url
+    spool=tempfile.SpooledTemporaryFile(max_size=16*1024*1024,mode="w+b")
+    total=0
+    try:
+        with urllib.request.urlopen(req,timeout=60) as r:
+            while True:
+                chunk=r.read(1024*1024)
+                if not chunk:break
+                spool.write(chunk);total+=len(chunk)
+        if total<50:raise RuntimeError("archive_too_small")
+        spool.seek(0)
+        return spool,total,url
+    except Exception:
+        spool.close()
+        raise
 
 
-def _parse_day(raw,start_epoch,end_epoch):
+def _parse_day(spool,start_epoch,end_epoch):
     out={}
     accepted=0
-    with gzip.GzipFile(fileobj=io.BytesIO(raw),mode="rb") as gz:
+    spool.seek(0)
+    with gzip.GzipFile(fileobj=spool,mode="rb") as gz:
         text=io.TextIOWrapper(gz,encoding="utf-8",errors="replace",newline="")
         reader=csv.DictReader(text)
         for row in reader:
@@ -268,12 +278,18 @@ def run_backtest(start_date=None,days=7):
         d=warm
         while d<end_date:
             try:
-                raw,url=_download_day(symbol,d)
-                part,n=_parse_day(raw,warm_epoch,end_epoch)
+                spool,nbytes,url=_download_day(symbol,d)
+                try:
+                    part,n=_parse_day(spool,warm_epoch,end_epoch)
+                finally:
+                    spool.close()
                 _merge_buckets(buckets,part);trades+=n
-                files.append({"date":d.isoformat(),"url":url,"ok":True,"bytes":len(raw),"trades":n})
+                files.append({"date":d.isoformat(),"url":url,"ok":True,"bytes":nbytes,"trades":n})
+                print("S1_WEEK_ARCHIVE",json.dumps({"symbol":symbol,"date":d.isoformat(),"bytes":nbytes,"trades":n},separators=(",",":")),flush=True)
             except Exception as exc:
-                files.append({"date":d.isoformat(),"ok":False,"error":type(exc).__name__+":"+str(exc)[:100]})
+                err=type(exc).__name__+":"+str(exc)[:100]
+                files.append({"date":d.isoformat(),"ok":False,"error":err})
+                print("S1_WEEK_ARCHIVE_ERROR",json.dumps({"symbol":symbol,"date":d.isoformat(),"error":err},separators=(",",":")),flush=True)
             d+=dt.timedelta(days=1)
         data[symbol]={"buckets":buckets,"m15":_bars(buckets,900),"h1":_bars(buckets,3600),
                       "events":_h1_events(_bars(buckets,3600))}
@@ -393,10 +409,15 @@ def _worker(start_date,days):
                      finished_at=None,result=None,error=None)
     try:
         result=run_backtest(start_date,days)
+        summary={k:result.get(k) for k in ("start","end_exclusive","starting_equity","final_equity","return_pct","realized_pnl","open_pnl","max_drawdown_pct","closed_trades","wins","win_rate","profit_factor")}
+        summary["per_symbol"]=result.get("per_symbol")
+        print("S1_WEEK_BACKTEST_RESULT",json.dumps(summary,default=str,separators=(",",":")),flush=True)
         with LOCK:STATE.update(status="done",finished_at=dt.datetime.now(dt.timezone.utc).isoformat(),result=result)
     except Exception as exc:
+        err=type(exc).__name__+":"+str(exc)
+        print("S1_WEEK_BACKTEST_ERROR",err,flush=True)
         with LOCK:STATE.update(status="error",finished_at=dt.datetime.now(dt.timezone.utc).isoformat(),
-                               error=type(exc).__name__+":"+str(exc))
+                               error=err)
 
 
 def start(start_date=None,days=7):
