@@ -144,7 +144,9 @@ def update_watch(watch, mark, m15, flow, stamp):
     ctx.update(last_observed_epoch=_f(stamp), policy=POLICY)
     profile = flow_profile(flow, side)
     if profile:
-        ctx.update(flow_300s=profile["300s"], flow_60s=profile["60s"],\n                   aligned_price_300s=profile["aligned_price_300s"],\n                   failed_counterflow=profile["failed_counterflow"])
+        ctx.update(flow_300s=profile["300s"], flow_60s=profile["60s"],
+                   aligned_price_300s=profile["aligned_price_300s"],
+                   failed_counterflow=profile["failed_counterflow"])
         if profile["counter_takeover"]:
             ctx["counter_pressure_seen"] = True
             ctx["phase"] = "WAIT_RESUMPTION"
