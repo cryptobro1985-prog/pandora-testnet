@@ -6117,13 +6117,9 @@ if __name__=="__main__":
    SHUTDOWN.wait(2)
  workers.append(threading.Thread(target=strategy1_optimizer_autostart,daemon=True,name="strategy1_optimizer"))
  def strategy1_algo12h_autostart():
-  while not SHUTDOWN.is_set():
-   with LOCK:active=bool(S.get("engine_active"))
-   if active:
-    try:start_s1_algo12h()
-    except Exception as exc:print("S1_ALGO_12H_AUTOSTART_ERROR",type(exc).__name__+":"+str(exc)[:160],flush=True)
-    return
-   SHUTDOWN.wait(1)
+  # Research-only: no PAPER mutation, so it can run on standby during rolling deploy.
+  try:start_s1_algo12h()
+  except Exception as exc:print("S1_ALGO_12H_AUTOSTART_ERROR",type(exc).__name__+":"+str(exc)[:160],flush=True)
  workers.append(threading.Thread(target=strategy1_algo12h_autostart,daemon=True,name="strategy1_algo12h"))
  for worker in workers:worker.start()
  try:server.serve_forever()
