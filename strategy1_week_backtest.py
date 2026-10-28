@@ -301,16 +301,23 @@ def run_backtest(start_date=None,days=7):
                 part,n=_parse_day(spool,warm_epoch,end_epoch)
             finally:
                 spool.close()
-            return d,part,n,nbytes,url,None
+            return symbol,d,part,n,nbytes,url,None
         except Exception as exc:
-            return d,{},0,0,None,type(exc).__name__+":"+str(exc)[:100]
+            return symbol,d,{},0,0,None,type(exc).__name__+":"+str(exc)[:100]
+
+    # Load all symbol/day archives concurrently instead of serializing symbols.
+    # This is research-only and does not mutate the live PAPER state.
+    max_workers=max(4,min(32,int(os.getenv("S1_ARCHIVE_WORKERS","16"))))
+    grouped={s:[] for s in SYMBOLS}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers,thread_name_prefix="bybit-archive") as pool:
+        futures=[pool.submit(load_one,symbol,d) for symbol in SYMBOLS for d in days_list]
+        for future in concurrent.futures.as_completed(futures):
+            symbol,d,part,n,nbytes,url,err=future.result()
+            grouped[symbol].append((d,part,n,nbytes,url,err))
 
     for symbol in SYMBOLS:
         buckets={};files=[];trades=0
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4,thread_name_prefix="bybit-archive") as pool:
-            futures=[pool.submit(load_one,symbol,d) for d in days_list]
-            results=[f.result() for f in concurrent.futures.as_completed(futures)]
-        for d,part,n,nbytes,url,err in sorted(results,key=lambda x:x[0]):
+        for d,part,n,nbytes,url,err in sorted(grouped[symbol],key=lambda x:x[0]):
             if err:
                 files.append({"date":d.isoformat(),"ok":False,"error":err})
                 print("S1_WEEK_ARCHIVE_ERROR",json.dumps({"symbol":symbol,"date":d.isoformat(),"error":err},separators=(",",":")),flush=True)
@@ -320,7 +327,8 @@ def run_backtest(start_date=None,days=7):
             print("S1_WEEK_ARCHIVE",json.dumps({"symbol":symbol,"date":d.isoformat(),"bytes":nbytes,"trades":n},separators=(",",":")),flush=True)
         data[symbol]={"buckets":buckets,"m15":_bars(buckets,900),"h1":_bars(buckets,3600),
                       "events":_h1_events(_bars(buckets,3600))}
-        coverage[symbol]={"files":files,"trade_rows":trades,"bucket15s":len(buckets)}
+        coverage[symbol]={"files":files,"trade_rows":trades,"bucket15s":len(buckets),
+                          "archive_workers":max_workers}
 
     missing={s:[x["date"] for x in coverage[s]["files"] if not x.get("ok")] for s in SYMBOLS}
     if any(len(v)>1 for v in missing.values()):
