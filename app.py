@@ -34,6 +34,7 @@ from local_caterpillar import (POLICY as CATERPILLAR_POLICY,pressure_exit as cat
  rank_candidates as rank_local_candidates, SELECTION_POLICY as LOCAL_SELECTION_POLICY)
 from local_order_flow import m15_direction as local4_m15_direction
 from local_order_flow import (POLICY as LOCAL4_FLOW_POLICY, entry_candidate as local4_entry_candidate,
+ initial_entry_candidate as local4_initial_entry_candidate,
  pressure_exit as local4_pressure_exit, update_watch as local4_update_watch, reentry_ready as local4_reentry_ready)
 from learning_audit import (ensure_schema as ensure_learning_schema,
                             record_decision as record_learning_decision,
@@ -2382,7 +2383,8 @@ def local_experiment_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=N
  # A previously ranked candidate cannot bypass fresh flow or M15 confirmation.
  stamp=time.time()
  flow=MARKET_OBS.flow_context(symbol,stamp)
- selection=local4_entry_candidate(symbol,analysis,m15,flow,stamp)
+ selection=(local4_entry_candidate(symbol,analysis,m15,flow,stamp) if entry_kind=="REENTRY"
+            else local4_initial_entry_candidate(symbol,analysis,m15,flow,stamp))
  if not selection["eligible"]:return False
  with LOCK:current_anchor=copy.deepcopy(S.get("local_h1_direction",{}).get(symbol))
  if current_anchor and (int(current_anchor.get("entry_side") or 0)!=int(side) or
@@ -2745,7 +2747,7 @@ def local_experiment_loop():
          entry_queue.append({**selection,"analysis":analysis,"m15":m15_live,"watch":watch,"entry_kind":"REENTRY"})
          action="CANDIDATE_REENTRY"
       if not watch and not action:
-       selection=local4_entry_candidate(symbol,analysis,m15_live,flow,time.time())
+       selection=local4_initial_entry_candidate(symbol,analysis,m15_live,flow,time.time())
        if selection["eligible"]:
         entry_queue.append({**selection,"analysis":analysis,"m15":m15_live,"watch":None,"entry_kind":"ORDER_FLOW"})
         action="CANDIDATE_ENTRY"
