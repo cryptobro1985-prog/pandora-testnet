@@ -27,6 +27,7 @@ from whale_signals import (MIN_NOTIONAL_USD, cluster_positions, summarize_book, 
 from news_logic import analyze_headline, is_non_market_news as semantic_non_market
 from accounting import paper_pnl
 from strategy_stats import performance as strategy_performance, cards_html as strategy_cards_html, with_capital_basis as strategy_capital_basis
+from strategy1_week_backtest import start as start_s1_week_backtest, status as s1_week_backtest_status
 from local_caterpillar import (POLICY as CATERPILLAR_POLICY,pressure_exit as caterpillar_pressure_exit,
  update_watch as caterpillar_update_watch,reentry_ready as caterpillar_reentry_ready,
  protective_breakeven as caterpillar_breakeven, entry_candidate as local_entry_candidate,
@@ -2869,7 +2870,7 @@ def _comparison_close(prefix,state_name,symbol,mark,reason,arm_watch=False,watch
  if arm_watch and state_name in ("local_s1","local_s3"):
   watch={"symbol":symbol,"side":int(pos["side"]),"origin_signal_candle":int(pos.get("signal_candle_time") or 0),
    "exit_price":float(mark),"exit_at":now(),"reentries":int(features.get("swing_reentries",0) or 0),
-   "context":{"phase":watch_phase,"counter_pressure_seen":True,"pullback_extreme":float(mark),"anchor":copy.deepcopy(features)}}
+   "context":{"phase":watch_phase,"counter_pressure_seen":False,"pullback_extreme":float(mark),"anchor":copy.deepcopy(features)}}
  with pg() as db:
   with db.transaction():
    STORE.fence(db)
@@ -3049,7 +3050,6 @@ def comparison_strategies_loop():
      h1exit=hype_position_exit(p1,a1,float(mark)) if a1.get("ready") else None
      entry=float(p1["entry"]);favorable=int(p1["side"])*(float(mark)/entry-1.0)
      floor=max(.0002,float((p1.get("features") or {}).get("estimated_round_trip_cost_move",0) or 0))
-     be=caterpillar_breakeven(p1,float(mark))
      weakening=_s1_weakening_exit(p1,m15,float(mark),flow)
      pressure_reason=caterpillar_pressure_exit(p1,m15,float(mark),flow)
      stop_hit=_s1_adaptive_stop(p1,m15,float(mark),flow)
@@ -3064,8 +3064,6 @@ def comparison_strategies_loop():
       if _comparison_close("local_s1","local_s1",symbol,float(mark),stop_hit["reason"],True,"WAIT_PULLBACK"):act1="ADAPTIVE_STOP_EXIT"
      elif weakening:
       if _comparison_close("local_s1","local_s1",symbol,float(mark),"m15_weakening_profit_exit",True,"WAIT_PULLBACK"):act1="M15_WEAKENING_EXIT"
-     elif be is not None:
-      if _comparison_close("local_s1","local_s1",symbol,float(mark),"v10_cost_aware_profit_floor",True,"WAIT_PULLBACK"):act1="PROFIT_FLOOR_EXIT"
     else:
      if w1:
       if a1.get("ready") and int(a1.get("entry_side") or 0)==-int(w1.get("side") or 0):
@@ -5900,6 +5898,22 @@ class Handler(BaseHTTPRequestHandler):
     self.send_response(503)
    self.send_header("Content-Type","text/html; charset=utf-8");self.send_header("Cache-Control","no-store")
    self.send_header("Content-Length",str(len(body)));self.end_headers();self.wfile.write(body);return
+  if path=="/api/research/strategy1-week/start":
+   try:
+    args=urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+    start_date=args.get("start",[None])[0]
+    days=min(14,max(1,int(args.get("days",["7"])[0])))
+    body=json.dumps(start_s1_week_backtest(start_date,days),ensure_ascii=False,default=str).encode()
+    self.send_response(202)
+   except Exception as exc:
+    body=json.dumps({"ok":False,"error":type(exc).__name__+":"+str(exc)[:160]}).encode();self.send_response(500)
+   self.send_header("Content-Type","application/json; charset=utf-8");self.send_header("Cache-Control","no-store")
+   self.send_header("Content-Length",str(len(body)));self.end_headers();self.wfile.write(body);return
+  if path=="/api/research/strategy1-week/status":
+   body=json.dumps(s1_week_backtest_status(),ensure_ascii=False,default=str).encode()
+   self.send_response(200);self.send_header("Content-Type","application/json; charset=utf-8")
+   self.send_header("Cache-Control","no-store");self.send_header("Content-Length",str(len(body)))
+   self.end_headers();self.wfile.write(body);return
   if path in ("/health","/health/risk"):
    data=health_state()
    code=200 if (data["healthy"] if path=="/health" else data["risk_ready"]) else 503
