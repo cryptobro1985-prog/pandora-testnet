@@ -6066,6 +6066,17 @@ if __name__=="__main__":
  workers.append(threading.Thread(target=operator_one_shot_actions,daemon=True,name="operator_actions"))
  workers.append(threading.Thread(target=authorized_cleanup_worker,daemon=True,name="authorized_cleanup"))
  workers.append(threading.Thread(target=post_lease_historical_restore,daemon=True,name="historical_restore"))
+ def strategy1_week_research_autostart():
+  while not SHUTDOWN.is_set():
+   with LOCK:active=bool(S.get("engine_active"))
+   if active:
+    try:
+     start_s1_week_backtest(None,7)
+    except Exception as exc:
+     print("S1_WEEK_AUTOSTART_ERROR",type(exc).__name__+":"+str(exc)[:160],flush=True)
+    return
+   SHUTDOWN.wait(1)
+ workers.append(threading.Thread(target=strategy1_week_research_autostart,daemon=True,name="strategy1_week_research"))
  for worker in workers:worker.start()
  try:server.serve_forever()
  finally:
