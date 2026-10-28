@@ -5911,6 +5911,16 @@ class Handler(BaseHTTPRequestHandler):
     body=json.dumps({"ok":False,"error":type(exc).__name__+":"+str(exc)[:160]}).encode();self.send_response(500)
    self.send_header("Content-Type","application/json; charset=utf-8");self.send_header("Cache-Control","no-store")
    self.send_header("Content-Length",str(len(body)));self.end_headers();self.wfile.write(body);return
+  if path=="/api/research/strategy1-algo12h/start":
+   body=json.dumps(start_s1_algo12h(),ensure_ascii=False,default=str).encode()
+   self.send_response(202);self.send_header("Content-Type","application/json; charset=utf-8")
+   self.send_header("Cache-Control","no-store");self.send_header("Content-Length",str(len(body)))
+   self.end_headers();self.wfile.write(body);return
+  if path=="/api/research/strategy1-algo12h/status":
+   body=json.dumps(s1_algo12h_status(),ensure_ascii=False,default=str).encode()
+   self.send_response(200);self.send_header("Content-Type","application/json; charset=utf-8")
+   self.send_header("Cache-Control","no-store");self.send_header("Content-Length",str(len(body)))
+   self.end_headers();self.wfile.write(body);return
   if path=="/api/research/strategy1-opt/start":
    try:
     args=urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
