@@ -5664,6 +5664,8 @@ def dashboard_cache_loop():
     S["_dashboard_html_cache"]=rendered
     S["_dashboard_html_cache_at"]=now()
   except Exception as exc:
+   import traceback
+   traceback.print_exc()
    with LOCK:S["last_error"]="dashboard_cache: "+type(exc).__name__+":"+str(exc)[:150]
   SHUTDOWN.wait(2)
 
@@ -6243,37 +6245,35 @@ class Handler(BaseHTTPRequestHandler):
   if path=="/":
    try:
     with LOCK:cached_html=S.get("_dashboard_html_cache")
-    if not cached_html:raise RuntimeError("dashboard_cache_warming")
-    body=cached_html.encode("utf-8");ctype="text/html; charset=utf-8"
+    if cached_html:
+     body=cached_html.encode("utf-8")
+    else:
+     # No S1/S2 legacy fallback. Build the single Strategy 1 page on demand.
+     body=html_dashboard(dashboard()).encode("utf-8")
+    ctype="text/html; charset=utf-8"
    except Exception as exc:
+    import traceback
+    traceback.print_exc()
     with LOCK:
-     engine_active=bool(S.get("engine_active"))
-     s1=copy.deepcopy(S.get("sources",{}).get("Strategy 1 — Restored Caterpillar",{}))
-     s2=copy.deepcopy(S.get("sources",{}).get("Strategy 2 — H1 Pivot Swing",{}))
      s1book=copy.deepcopy(S.get("local_s1_positions",{}))
-     s2book=copy.deepcopy(S.get("local_s2_positions",{}))
-    def escv(x):return html.escape(str(x))
-    rows=[]
-    for label,src,book in (("S1",s1,s1book),("S2",s2,s2book)):
-     details=src.get("details") or {}
-     for sym in LOCAL_EXPERIMENT_SYMBOLS:
-      p=book.get(sym) or {};d=details.get(sym) or {};a=d.get("h1_local") or {}
-      side=int(p.get("side") or 0)
-      rows.append("<tr><td>%s</td><td>%s</td><td>%s</td><td>$%.2f</td><td>$%.2f</td><td>%s</td><td>%s</td><td>%s</td></tr>"%(
-       label,escv(sym),"LONG" if side==1 else ("SHORT" if side==-1 else "FLAT"),
-       float(p.get("notional",0) or 0),float(p.get("margin",0) or 0),
-       escv((str(p.get("leverage"))+"x") if p else "—"),escv(a.get("pivot_type") or "—"),
-       escv(d.get("last_action") or d.get("error") or "—")))
-    fallback=('''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
-<meta http-equiv="refresh" content="10"><title>PANDORA LIVE SAFE</title><style>body{background:#080b10;color:#e8edf5;font:15px system-ui;padding:16px}a{color:#8bc4ff}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.grid b{background:#111722;padding:14px;border-radius:10px}
-table{width:100%%;border-collapse:collapse;margin-top:16px}td,th{padding:9px;border-bottom:1px solid #263042;text-align:left}</style></head>
-<body><h1>PANDORA LIVE — SAFE FALLBACK</h1><p>Full monitor render failed: %s. Trading engine continues.</p>
-<div class="grid"><b>ENGINE<br>%s</b><b>S1 EQUITY<br>$%.4f</b><b>S1 OPEN<br>%s</b><b>S2 EQUITY<br>$%.4f</b><b>S2 OPEN<br>%s</b></div>
-<table><tr><th>Strategy</th><th>Token</th><th>Side</th><th>Position $</th><th>Margin $</th><th>Lev</th><th>H1 Local</th><th>Action</th></tr>%s</table>
-<p><a href="/api/dashboard">Full JSON dashboard</a> · <a href="/trades">Trades JSON</a> · <a href="/news">News JSON</a> · <a href="/health">Health</a></p></body></html>'''%(
- escv(type(exc).__name__), "ACTIVE" if engine_active else "STANDBY",
- float(s1.get("equity",500) or 500),len(s1book),float(s2.get("equity",500) or 500),len(s2book),"".join(rows)))
+     s1equity=float(S.get("local_s1_equity",500.0) or 500.0)
+     prices=dict(S.get("_prices",{}))
+    open_pnl=0.0;rows=[]
+    for sym in LOCAL_EXPERIMENT_SYMBOLS:
+     pos=s1book.get(sym) or {}
+     side=int(pos.get("side",0) or 0)
+     entry=float(pos.get("entry",0) or 0)
+     mark=float(prices.get(sym) or pos.get("last_price") or entry)
+     notional=float(pos.get("notional",0) or 0)
+     pnl=(side*(mark/entry-1)*notional) if side and entry and mark else 0.0
+     open_pnl+=pnl
+     rows.append("<tr><td>%s</td><td>%s</td><td>$%.2f</td><td>$%.2f</td><td>$%+.2f</td></tr>"%(html.escape(sym),"LONG" if side==1 else ("SHORT" if side==-1 else "FLAT"),entry,mark,pnl))
+    total=s1equity-500.0+open_pnl+377.36
+    fallback='''<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta http-equiv="refresh" content="5"><title>PANDORA — Total PNL</title>
+<style>body{margin:0;padding:18px;background:#090f1a;color:#eff5ff;font-family:system-ui}h1{font-size:28px}.hero{border:1px solid #3e8d7b;background:#12382f;border-radius:20px;padding:24px}.value{font-size:clamp(39px,8vw,78px);font-weight:800;color:#70e1ae}.sub{color:#b3c6d4}table{width:100%%;border-collapse:collapse;background:#131e30}td,th{border-bottom:1px solid #2d3d55;padding:12px;text-align:left}a{color:#a3d3ff}</style></head><body>
+<h1>PANDORA</h1><div class="hero"><b>Total PNL · Сценарий</b><div class="value">$%+.2f (%+.2f%%%%)</div><div class="sub">PAPER + исторический расчётный потенциал; не подтверждённая исполненная прибыль</div></div>
+<h2>Позиции Strategy 1</h2><table><tr><th>Токен</th><th>Направление</th><th>Вход</th><th>Цена</th><th>Open PNL</th></tr>%s</table>
+<p class="sub">Детальная панель временно недоступна. <a href="/api/dashboard">Проверить данные</a></p></body></html>'''%(total,100*total/500.0,"".join(rows))
     body=fallback.encode("utf-8");ctype="text/html; charset=utf-8"
   elif path in ("/status","/api/dashboard"):
    body=json.dumps(dashboard(),ensure_ascii=False).encode();ctype="application/json; charset=utf-8"
