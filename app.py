@@ -2839,9 +2839,10 @@ def _comparison_open(prefix,state_name,symbol,side,analysis,mark,entry_kind):
  equity,used,free,_=_comparison_mtm(state_name,prices)
  margin=max(.01,equity*.20)
  if free+1e-9<margin:return False
- leverage=25.0;notional=margin*leverage;opened=now();epoch=time.time()
+ leverage=float(S1_RISK_LEVERAGE.get(symbol,25.0)) if state_name=="local_s1" else 25.0
+ notional=margin*leverage;opened=now();epoch=time.time()
  features={**copy.deepcopy(analysis),"strategy_name":state_name,"entry_kind":entry_kind,
-   "reference_margin_fraction":.20,"reference_leverage":25.0,"estimated_round_trip_cost_move":2*FEE+.0004,
+   "reference_margin_fraction":.20,"reference_leverage":leverage,"estimated_round_trip_cost_move":2*FEE+.0004,
    "origin_h1_signal_candle":int(analysis.get("signal_candle_time") or 0)}
  pos={"symbol":symbol,"side":int(side),"entry":float(mark),"notional":notional,"margin":margin,"leverage":leverage,
       "opened":opened,"t":epoch,"signal_candle_time":int(analysis.get("signal_candle_time") or 0),"features":features}
@@ -2960,21 +2961,26 @@ def _s1_entry_not_chased(analysis,m15,mark):
  limit=max(.004,min(.020,typical*2.0))
  return abs(mark/ref-1.0)<=limit
 
+S1_RISK_LEVERAGE={"HYPE":25.0,"NEAR":25.0,"GRASS":20.0,"INIT":15.0}
+
 def _s1_adaptive_stop(position,m15,mark):
  if not position or not m15 or not m15.get("ready"):return None
  try:
   side=int(position.get("side") or 0);entry=float(position.get("entry") or 0);mark=float(mark or 0)
   typical=float(m15.get("median_range_move") or .008)
+  leverage=max(1.0,float(position.get("leverage") or 25.0))
  except (TypeError,ValueError):return None
  if side not in (-1,1) or entry<=0 or mark<=0:return None
- # Catastrophe guard is defined on the underlying price move, not leveraged ROE.
- # It adapts to M15 noise but is hard-capped so 25x paper positions cannot sit
- # through -40/-50% ROE solely because H1 direction has not flipped yet.
- stop_move=max(.0080,min(.0140,typical*1.75))
+ # Volatility stop: outside normal M15 noise. Risk cap: roughly 30% gross ROE.
+ # Lower leverage on the most volatile symbols lets the price stop breathe
+ # without accepting -40/-50% leveraged drawdowns.
+ volatility_stop=max(.0080,min(.0200,typical*1.75))
+ roe_cap_stop=.30/leverage
+ stop_move=min(volatility_stop,roe_cap_stop)
  adverse=max(0.0,-side*(mark/entry-1.0))
  if adverse<stop_move:return None
  return {"reason":"s1_adaptive_volatility_stop","adverse_move":adverse,"stop_move":stop_move,
-   "approx_gross_roe_pct":-adverse*25.0*100.0}
+   "leverage":leverage,"approx_gross_roe_pct":-adverse*leverage*100.0}
 
 def comparison_strategies_loop():
  pool=concurrent.futures.ThreadPoolExecutor(max_workers=16,thread_name_prefix="local-compare")
