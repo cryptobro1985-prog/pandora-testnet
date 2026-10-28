@@ -28,18 +28,27 @@ def dominance(flow):
         return None
     return 1 if imbalance > 0 else (-1 if imbalance < 0 else 0)
 
+def m15_direction(m15):
+    """Use the observed M15 move, independent of the trade WebSocket."""
+    if not isinstance(m15, dict) or not m15.get("ready"):
+        return None
+    ret = _f(m15.get("return_15m"))
+    if ret is not None and ret != 0:
+        return 1 if ret > 0 else -1
+    candle = int(m15.get("candle_direction") or 0)
+    return candle if candle in (-1, 1) else None
+
 def entry_candidate(symbol, analysis, m15, flow, stamp):
     side = int((analysis or {}).get("entry_side") or 0)
     dom = dominance(flow)
     h1 = bool((analysis or {}).get("ready") and (analysis or {}).get("h1_direction_anchor")
               and not (analysis or {}).get("entry_blocked") and side in (-1, 1))
     m15_ready = bool((m15 or {}).get("ready"))
-    eligible = h1 and m15_ready and dom == side
+    eligible = h1 and m15_ready and m15_direction(m15) == side
     reason = ("h1_local_m15_direction" if eligible else
               "waiting_for_h1_local" if not h1 else
               "waiting_for_m15_data" if not m15_ready else
-              "waiting_for_fresh_executed_flow" if dom is None else
-              "waiting_for_h1_direction")
+              "waiting_for_m15_direction")
     imbalance = _f((flow or {}).get("flow_imbalance"))
     return dict(symbol=symbol, side=side, eligible=eligible, reason=reason,
                 policy=POLICY, dominant_side=dom,
@@ -52,7 +61,7 @@ def pressure_exit(position, m15, mark, flow):
     side = int((position or {}).get("side") or 0)
     if side not in (-1, 1) or not (m15 or {}).get("ready"):
         return None
-    if dominance(flow) != -side:
+    if m15_direction(m15) != -side:
         return None
     # Opposite executed-flow control accompanied by an M15 adverse turn.
     adverse_turn = (bool(m15.get("strong_adverse_pressure")) or
@@ -73,7 +82,7 @@ def update_watch(watch, mark, m15, flow, stamp):
     extreme = _f(ctx.get("pullback_extreme"))
     if extreme is None:
         extreme = exit_price if exit_price is not None else mark
-    if dominance(flow) == -side:
+    if m15_direction(m15) == -side:
         ctx["counter_pressure_seen"] = True
         ctx["phase"] = "WAIT_RESUMPTION"
         extreme = min(extreme, mark) if side > 0 else max(extreme, mark)
@@ -93,7 +102,7 @@ def reentry_ready(side, m15, mark, watch, flow, stamp):
     if not (m15 or {}).get("ready"):
         return False
     ctx = watch.get("context") or {}
-    if not ctx.get("counter_pressure_seen") or dominance(flow) != side:
+    if not ctx.get("counter_pressure_seen") or m15_direction(m15) != side:
         return False
     mark = _f(mark)
     extreme = _f(ctx.get("pullback_extreme"))
