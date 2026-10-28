@@ -7,7 +7,7 @@ import copy
 import datetime
 import math
 
-POLICY = "local_h1_multihorizon_flow_caterpillar_v15_pullback_first"
+POLICY = "local_h1_multihorizon_flow_caterpillar_v16_h1_immediate_initial"
 FLOW_THRESHOLD = .12
 SELECTION_POLICY = "h1_multihorizon_flow_ranked_execution_v2"
 
@@ -76,6 +76,39 @@ def _flow_profile(context, side):
 def _threshold(m15, fraction=.15):
     typical = _f((m15 or {}).get("median_range_move"))
     return max(.0006, min(.0015, (typical or .008) * fraction))
+
+
+def initial_h1_entry_candidate(symbol, analysis, m15, flow, now_epoch):
+    """Immediate first entry on a newly confirmed H1 local.
+
+    The H1 local itself is the initial trigger. Pullback/exhaustion is deliberately
+    NOT required here; those gates belong only to re-entry after an M15/flow exit.
+    Fresh price/flow observations and H1 invalidation guards still apply.
+    """
+    result = dict(symbol=symbol, eligible=False, policy="confirmed_h1_local_immediate_initial_v1")
+    side = (analysis or {}).get("entry_side")
+    stamp = _f(now_epoch)
+    observed = _f((m15 or {}).get("observed_at_ms"))
+    profile = _flow_profile(flow, side)
+    count = _f((flow or {}).get("trade_count_60s"))
+    notional = _f((flow or {}).get("observed_notional_60s"))
+    coverage = _f((flow or {}).get("trade_coverage_seconds"))
+    if not analysis or not analysis.get("ready") or not analysis.get("anchor_confirmed") or not analysis.get("h1_direction_anchor") or side not in (-1, 1):
+        result["reason"] = "confirmed_h1_local_unavailable"; return result
+    if analysis.get("entry_blocked"):
+        result["reason"] = "opposite_h1_confirmation_pending"; return result
+    if not m15 or not m15.get("ready") or stamp is None or observed is None or not 0 <= stamp * 1000 - observed <= 10000:
+        result["reason"] = "fresh_m15_observation_unavailable"; return result
+    if profile is None or coverage is None or coverage < 60 or count is None or notional is None or count < 5 or notional < 100:
+        result["reason"] = "fresh_executed_flow_unavailable"; return result
+    result.update(eligible=True, reason="confirmed_h1_local_immediate_initial", side=side,
+                  recovery_score=_f(m15.get("recovery_score")) or 0,
+                  adverse_score=_f(m15.get("adverse_score")) or 0,
+                  aligned_flow=profile["60s"], aligned_flow_15s=profile["15s"],
+                  aligned_flow_30s=profile["30s"], observed_notional_60s=notional,
+                  trade_count_60s=count, observed_at_ms=observed,
+                  rank_key=[1, profile["15s"], profile["30s"], notional])
+    return result
 
 
 def entry_candidate(symbol, analysis, m15, flow, now_epoch):
