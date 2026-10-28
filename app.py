@@ -2924,7 +2924,7 @@ def _comparison_close(prefix,state_name,symbol,mark,reason,arm_watch=False,watch
 
 @account_mutation
 def _comparison_watch_update(prefix,state_name,symbol,watch,mark,m15,flow):
- updated=caterpillar_update_watch(watch,float(mark),m15,flow,time.time())
+ updated=(local4_update_watch if state_name=="local_s1" else caterpillar_update_watch)(watch,float(mark),m15,flow,time.time())
  with pg() as db:
   with db.transaction():
    STORE.fence(db)
@@ -3083,11 +3083,12 @@ def comparison_strategies_loop():
     act1=None
     if p1:
      p1=_comparison_update_path("local_s1","local_s1",symbol,p1,float(mark))
-     h1exit=hype_position_exit(p1,a1,float(mark)) if a1.get("ready") else None
+     h1exit=("opposite_h1_local_emergency_exit" if a1.get("ready") and a1.get("anchor_confirmed") and int(a1.get("entry_side") or 0)==-int(p1.get("side") or 0) else None)
+     if not h1exit:h1exit=hype_position_exit(p1,a1,float(mark)) if a1.get("ready") else None
      entry=float(p1["entry"]);favorable=int(p1["side"])*(float(mark)/entry-1.0)
      floor=max(.0002,float((p1.get("features") or {}).get("estimated_round_trip_cost_move",0) or 0))
      weakening=_s1_weakening_exit(p1,m15,float(mark),flow)
-     pressure_reason=caterpillar_pressure_exit(p1,m15,float(mark),flow)
+     pressure_reason=local4_pressure_exit(p1,m15,float(mark),flow)
      stop_hit=_s1_adaptive_stop(p1,m15,float(mark),flow)
      if h1exit:
       # A confirmed opposite H1 local invalidates the old thesis regardless of PnL.
@@ -3108,12 +3109,12 @@ def comparison_strategies_loop():
        with LOCK:S.setdefault("local_s1_watch",{}).pop(symbol,None)
        w1=None;act1="WATCH_INVALIDATED_BY_H1"
       else:w1=_comparison_watch_update("local_s1","local_s1",symbol,w1,float(mark),m15,flow)
-     if w1 and caterpillar_reentry_ready(int(w1["side"]),m15,float(mark),w1,flow,time.time()):
+     if w1 and local4_reentry_ready(int(w1["side"]),m15,float(mark),w1,flow,time.time()):
       if _comparison_open("local_s1","local_s1",symbol,int(w1["side"]),a1,float(mark),"REENTRY"):act1="M15_RECOVERY_REENTRY"
      elif not w1 and a1.get("ready") and not a1.get("entry_blocked"):
       side=int(a1.get("entry_side") or 0)
-      candidate=local_entry_candidate(symbol,a1,m15,flow,time.time())
-      if side in (-1,1) and candidate.get("eligible") and _s1_entry_not_chased(a1,m15,float(mark)):
+      candidate=local4_entry_candidate(symbol,a1,m15,flow,time.time())
+      if side in (-1,1) and candidate.get("eligible"):
        if _comparison_open("local_s1","local_s1",symbol,side,a1,float(mark),"M15"):act1="M15_ENTRY"
     with LOCK:p1=copy.deepcopy(S.get("local_s1_positions",{}).get(symbol));w1=copy.deepcopy(S.get("local_s1_watch",{}).get(symbol))
     s1_details[symbol]={"ok":bool(a1.get("ready")),"h1_local":{"pivot_type":a1.get("pivot_type"),"pivot_price":a1.get("pivot_price"),
