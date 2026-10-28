@@ -5736,10 +5736,10 @@ def html_strategy1_only(data):
  <div class='card'>SIZING<div class='big'>20%%%% equity</div></div>
  <div class='card'>REFERENCE LEV<div class='big'>25x</div></div>
  </div></section>
- <div class='bench'><b>OPTIMIZATION BENCHMARK · NOT EXECUTED</b><div class='big'>$%.2f → $%.2f</div><div class='pos'>Opportunity +$%.2f</div></div>
+ <div class='bench'><b>SIMULATED EXECUTION / REPLAY · NOT PAPER EXECUTED</b><div class='big'>$%.2f → $%.2f</div><div class='pos'>Pro forma opportunity +$%.2f</div><div class='sub'>Historical/reconstructed results are shown for strategy evaluation only and are never written into actual PAPER execution history or realized PnL.</div></div>
  <h2>LIVE STATE</h2><div class='scroll'><table><tr><th>Token</th><th>Side</th><th>Phase</th><th>H1 Local</th><th>Pivot</th><th>Margin</th><th>Position</th><th>Entry</th><th>Mark</th><th>Open PnL</th></tr>%s</table></div>
  <h2>ACTUAL CLOSED PAPER TRADES</h2><div class='scroll'><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Reason</th></tr>%s</table></div>
- <h2>UPDATED STRATEGY · HISTORICAL CAUSAL TRADES</h2><p class='sub'>%s. These are reconstructed/backtest trades and are never mixed with actual PAPER PnL.</p><div class='scroll'><table><tr><th>Opened</th><th>Closed</th><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Reason</th></tr>%s</table></div>
+ <h2>SIMULATED EXECUTION LEDGER · UPDATED STRATEGY 1</h2><p class='sub'>%s. Reconstructed/backtest fills are displayed as simulated executions for analysis; they are not exchange/PAPER fills and are never mixed into actual realized PnL.</p><div class='scroll'><table><tr><th>Opened</th><th>Closed</th><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Reason</th></tr>%s</table></div>
  </body></html>"""%(css,float(p.get("realized_equity",500) or 500),"pos" if realized>=0 else "neg",realized,
    "pos" if unreal>=0 else "neg",unreal,eq,int(stats.get("trades",len(actual)) or len(actual)),esc(wrtxt),
    len(positions),len(watch),float(bench.get("starting_equity",500) or 500),float(bench.get("mfe_upper_equity",877.36) or 877.36),
