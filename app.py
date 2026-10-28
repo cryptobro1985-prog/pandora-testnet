@@ -2397,7 +2397,7 @@ def local_experiment_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=N
  leverage=25.0
  with LOCK:
   if not S.get("engine_active") or symbol in S.get("local_v12_positions",{}):return False
-  if len(S.get("local_v12_positions",{}))>=LOCAL_EXPERIMENT_MAX_POSITIONS:return False
+   # No arbitrary cap on sequential entries; one active position per symbol remains.
  equity,used,free=_local_experiment_margin_state()
  if equity<=0 or free<0.01:return False
  target_notional=equity*LOCAL_EXPERIMENT_MARGIN_FRACTION*leverage
@@ -2468,12 +2468,12 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
  features["actual_exit_reason"]=reason;features["actual_exit_mark"]=price
  watch=None
  if reason in ("m15_adverse_pressure_profit_protect","profit_lock_stop","m15_momentum_weakening",
-               "m15_pressure_reversal","m15_pressure_reversal_profit_only","caterpillar_breakeven","executed_flow_counter_dominance"):
+               "m15_pressure_reversal","m15_pressure_reversal_profit_only","caterpillar_breakeven","executed_flow_counter_dominance","m15_opposite_control_exit"):
   watch={"symbol":symbol,"side":int(pos["side"]),
    "origin_signal_candle":int(features.get("origin_h1_signal_candle") or pos.get("signal_candle_time") or 0),
    "exit_price":price,"exit_at":now(),"expires_epoch":0.0,
    "reentries":int(features.get("swing_reentries",0) or 0),"context":copy.deepcopy(watch_context or {})}
-  watch["context"].update(phase="WAIT_PULLBACK",counter_pressure_seen=reason in ("m15_pressure_reversal","m15_pressure_reversal_profit_only","executed_flow_counter_dominance"),
+  watch["context"].update(phase="WAIT_PULLBACK",counter_pressure_seen=False,
     caterpillar_policy=LOCAL4_FLOW_POLICY)
  with pg() as db:
   with db.transaction():
@@ -2719,7 +2719,9 @@ def local_experiment_loop():
       last_observed[symbol]=candle
      action=None
      if pos:
-      h1_exit=hype_position_exit(pos,analysis,float(mark)) if analysis.get("ready") else None
+      h1_exit=("opposite_h1_local_emergency_exit" if analysis.get("ready") and analysis.get("anchor_confirmed") and int(analysis.get("entry_side") or 0)==-int(pos.get("side") or 0) else None)
+      if not h1_exit:
+       h1_exit=hype_position_exit(pos,analysis,float(mark)) if analysis.get("ready") else None
       if h1_exit:
        # Opposite H1 invalidates the trade thesis, regardless of PnL.
        # M15 exits likewise follow confirmed pressure, independently of PnL.
@@ -2800,7 +2802,7 @@ def local_experiment_loop():
        "trades":S.get("local_experiment_trades",0),"open_positions":list(S.get("local_v12_positions",{})),
        "watching_for_reentry":list(S.get("local_experiment_watch",{})),"reference_margin_fraction":LOCAL_EXPERIMENT_MARGIN_FRACTION,
        "reference_leverage":25.0,"sizing":"20pct_current_mtm_equity_fixed25x_free_profit_reinvestment",
-       "max_positions":LOCAL_EXPERIMENT_MAX_POSITIONS,"compound":True,"details":details,"stats":stats,
+       "max_positions":"free_margin_and_one_active_position_per_symbol","compound":True,"details":details,"stats":stats,
        "selection_policy":LOCAL4_FLOW_POLICY,"ranked_candidates":[c["symbol"] for c in ranked],
        "rest_transport":HL_REST_BUDGET.status(),
        "error":None if (ready_all or bootstrap_wait) else "partial_symbol_scan_failure"}
