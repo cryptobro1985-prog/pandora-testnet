@@ -3089,7 +3089,7 @@ def _comparison_update_path(prefix,state_name,symbol,position,mark):
  return updated
 
 def _s1_weakening_exit(position,m15,mark,flow):
- if not position or not m15 or not m15.get("ready"):return False
+ if not position or not m15 or not m15.get("ready") or m15.get("partial"):return False
  side=int(position.get("side") or 0);entry=float(position.get("entry") or 0);mark=float(mark or 0)
  if side not in (-1,1) or entry<=0 or mark<=0:return False
  features=position.get("features") or {}
@@ -3122,46 +3122,6 @@ def _s1_entry_not_chased(analysis,m15,mark):
  return abs(mark/ref-1.0)<=limit
 
 S1_REFERENCE_LEVERAGE=25.0
-
-def _s1_adaptive_stop(position,m15,mark,flow):
- """Universal protective stop for every Strategy 1 symbol.
-
- H1 decides direction. M15/flow decide whether we should remain in the trade.
- The stop is a last-resort guard, not the normal exit. It scales from each
- symbol's observed M15 range, so the same logic can be used for BTC/ETH/SOL
- and volatile alts without symbol-specific thresholds.
- """
- if not position or not m15 or not m15.get("ready"):return None
- try:
-  side=int(position.get("side") or 0);entry=float(position.get("entry") or 0);mark=float(mark or 0)
-  typical=max(.0005,float(m15.get("median_range_move") or .008))
-  leverage=max(1.0,float(position.get("leverage") or S1_REFERENCE_LEVERAGE))
- except (TypeError,ValueError):return None
- if side not in (-1,1) or entry<=0 or mark<=0:return None
- adverse=max(0.0,-side*(mark/entry-1.0))
-
- # Soft protective level sits outside ordinary M15 noise. It only executes
- # when the adverse candle/flow confirms that this is not a random wick.
- soft_stop=max(.0075,min(.0180,typical*1.35))
-
- fresh=bool((flow or {}).get("trade_data_fresh"))
- try:imb=float((flow or {}).get("flow_imbalance")) if fresh else None
- except (TypeError,ValueError):imb=None
- counter_flow=(imb is not None and side*imb<=-.12)
- candle_adverse=(int(m15.get("candle_direction") or 0)==-side and float(m15.get("body_fraction") or 0)>=.45)
- strong_adverse=bool(m15.get("strong_adverse_pressure")) and int(m15.get("adverse_score") or 0)>=3
-
- if adverse>=soft_stop and candle_adverse and (counter_flow or strong_adverse):
-  return {"reason":"s1_confirmed_protective_stop","adverse_move":adverse,"stop_move":soft_stop,
-    "leverage":leverage,"approx_gross_roe_pct":-adverse*leverage*100.0}
-
- # Catastrophe level is wider than normal noise and also volatility-scaled.
- # This prevents a runaway loss when data/flow confirmation arrives late.
- hard_stop=max(.0150,min(.0250,typical*1.75))
- if adverse>=hard_stop:
-  return {"reason":"s1_hard_catastrophe_stop","adverse_move":adverse,"stop_move":hard_stop,
-    "leverage":leverage,"approx_gross_roe_pct":-adverse*leverage*100.0}
- return None
 
 def comparison_strategies_loop():
  pool=concurrent.futures.ThreadPoolExecutor(max_workers=16,thread_name_prefix="local-compare")
@@ -3219,25 +3179,10 @@ def comparison_strategies_loop():
      entry=float(p1["entry"]);favorable=int(p1["side"])*(float(mark)/entry-1.0)
      floor=max(.0002,float((p1.get("features") or {}).get("estimated_round_trip_cost_move",0) or 0))
      weakening=_s1_weakening_exit(p1,m15,float(mark),flow)
-     # A single M15 reversal is not established buyer control: confirm persistence.
      raw_pressure=local4_pressure_exit(p1,m15,float(mark),flow)
-     with LOCK:
-      turns=S.setdefault("_s1_counter_turns",{})
-      turn=turns.setdefault(symbol,{"since":None,"side":int(p1["side"])})
-      if turn["side"]!=int(p1["side"]):
-       turn={"since":None,"side":int(p1["side"])};turns[symbol]=turn
-      # Repeated polls of the SAME partial candle do not confirm a real reversal.
-      # Demand two distinct completed M15 candles with opposite control.
-      candle=int(m15.get("candle_time") or 0)
-      if raw_pressure and not m15.get("partial") and candle:
-       if candle!=turn.get("last_confirmed_candle"):
-        turn["last_confirmed_candle"]=candle
-        turn["confirmed_candles"]=int(turn.get("confirmed_candles") or 0)+1
-      elif not raw_pressure:
-       turn["since"]=None
-       turn["confirmed_candles"]=0
-       turn["last_confirmed_candle"]=None
-      pressure_reason=raw_pressure if int(turn.get("confirmed_candles") or 0)>=2 else None
+     # The first COMPLETED M15 control flip is the causal profit/loss exit.
+     # Partial candles cannot trigger it, and a second M15 would surrender MFE.
+     pressure_reason=raw_pressure if raw_pressure and not m15.get("partial") else None
      if h1exit:
       # A confirmed opposite H1 local invalidates the old thesis regardless of PnL.
       if _comparison_close("local_s1","local_s1",symbol,float(mark),h1exit):act1="H1_OPPOSITE_EXIT"
@@ -6618,3 +6563,4 @@ if __name__=="__main__":
   for worker in workers:worker.join(timeout=0.5)
   try:STORE.release()
   except Exception:pass
+
