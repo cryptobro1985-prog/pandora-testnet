@@ -2836,26 +2836,15 @@ def local_experiment_loop():
        closed=local_experiment_close(symbol,float(mark),h1_exit,analysis)
        action="H1_DIRECTION_INVALIDATION_EXIT:"+h1_exit if closed else None
       elif pressure_reason:=local4_pressure_exit(pos,m15_live,float(mark),flow):
-       pf=pos.get("features") or {};armed=bool(pf.get("profit_lock_armed"))
-       bucket=int((m15_live or {}).get("candle_time") or 0)
-       key="_s1_adverse_m15"
-       with LOCK:
-        st=copy.deepcopy(S.setdefault(key,{}).get(symbol) or {})
-       if int(st.get("bucket") or 0)!=bucket:
-        st={"bucket":bucket,"count":int(st.get("count") or 0)+1}
-        with LOCK:S.setdefault(key,{})[symbol]=st
-       confirmations=int(st.get("count") or 0)
-       # Large-MFE trades need two distinct adverse M15 confirmations. This avoids surrendering
-       # a strong INIT-like trend to a single counter candle while still protecting accumulated profit.
-       if armed and confirmations<2:
-        action="MFE_PROTECT_WAIT_CONFIRMATION"
-       else:
-        watch_context={"m15":m15_live,"h1_context":h1_context,"flow_imbalance":flow_imb,"flow_context":flow,
-          "flow_source":"hyperliquid_ws_trades","observed_at":now(),"reason":pressure_reason,
-          "mfe_protection_armed":armed,"adverse_m15_confirmations":confirmations,
-          "mfe_price_move":pf.get("mfe_price_move"),"mfe_giveback_move":pf.get("mfe_giveback_move")}
-        closed=local_experiment_close(symbol,float(mark),pressure_reason,analysis,watch_context)
-        action="M15_COUNTER_PRESSURE_EXIT" if closed else None
+       pf=pos.get("features") or {}
+       # Strategy 1 rule: once M15 control flips against the position, bank the move.
+       # Do not require a second adverse M15 and do not wait for H1 to reverse.
+       watch_context={"m15":m15_live,"h1_context":h1_context,"flow_imbalance":flow_imb,"flow_context":flow,
+         "flow_source":"hyperliquid_ws_trades","observed_at":now(),"reason":pressure_reason,
+         "exit_policy":"M15_CONTROL_FLIP_IMMEDIATE","mfe_price_move":pf.get("mfe_price_move"),
+         "mfe_giveback_move":pf.get("mfe_giveback_move")}
+       closed=local_experiment_close(symbol,float(mark),pressure_reason,analysis,watch_context)
+       action="M15_CONTROL_FLIP_EXIT" if closed else None
       else:
        with LOCK:S.setdefault("_s1_adverse_m15",{}).pop(symbol,None)
      else:
