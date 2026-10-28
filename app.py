@@ -3104,7 +3104,17 @@ def comparison_strategies_loop():
      entry=float(p1["entry"]);favorable=int(p1["side"])*(float(mark)/entry-1.0)
      floor=max(.0002,float((p1.get("features") or {}).get("estimated_round_trip_cost_move",0) or 0))
      weakening=_s1_weakening_exit(p1,m15,float(mark),flow)
-     pressure_reason=local4_pressure_exit(p1,m15,float(mark),flow)
+     # A single M15 reversal is not established buyer control: confirm persistence.
+     raw_pressure=local4_pressure_exit(p1,m15,float(mark),flow)
+     with LOCK:
+      turns=S.setdefault("_s1_counter_turns",{})
+      turn=turns.setdefault(symbol,{"since":None,"side":int(p1["side"])})
+      if turn["side"]!=int(p1["side"]):
+       turn={"since":None,"side":int(p1["side"])};turns[symbol]=turn
+      if raw_pressure:
+       if turn["since"] is None:turn["since"]=time.time()
+      else:turn["since"]=None
+      pressure_reason=raw_pressure if turn["since"] is not None and time.time()-turn["since"]>=30 else None
      stop_hit=_s1_adaptive_stop(p1,m15,float(mark),flow)
      if h1exit:
       # A confirmed opposite H1 local invalidates the old thesis regardless of PnL.
@@ -3124,12 +3134,16 @@ def comparison_strategies_loop():
       anchor_key=(int(a1.get("signal_candle_time") or 0),int(a1.get("entry_side") or 0))
       state=pullbacks.get(symbol)
       if not state or tuple(state.get("anchor",()))!=anchor_key:
-       state={"anchor":anchor_key,"counter_seen":False}
+       state={"anchor":anchor_key,"counter_seen":False,"recovery_since":None}
        pullbacks[symbol]=state
       direction=local4_m15_direction(m15)
       if anchor_key[1] in (-1,1) and direction==-anchor_key[1]:
        state["counter_seen"]=True
-      initial_ready=bool(state.get("counter_seen")) and direction==anchor_key[1]
+      # Do not chase first red/green tick: wait for observed pullback exhaustion.
+      if state.get("counter_seen") and direction==anchor_key[1]:
+       if state.get("recovery_since") is None:state["recovery_since"]=time.time()
+      else:state["recovery_since"]=None
+      initial_ready=bool(state.get("recovery_since") is not None and time.time()-state["recovery_since"]>=30)
      if w1:
       if a1.get("ready") and int(a1.get("entry_side") or 0)==-int(w1.get("side") or 0):
        with pg() as db:
