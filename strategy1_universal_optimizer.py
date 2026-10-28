@@ -14,6 +14,7 @@ import threading
 import time
 
 import strategy1_week_backtest as bt
+from strategy1_algo_footprints import footprint, append_recent
 
 STATE={"status":"idle","started_at":None,"finished_at":None,"result":None,"error":None}
 LOCK=threading.RLock()
@@ -27,6 +28,9 @@ BASE={
  "soft_mult":1.35,"soft_floor":.0075,"soft_cap":.018,
  "hard_mult":1.75,"hard_floor":.015,"hard_cap":.025,
  "chase_mult":2.0,
+ "algo_entry_persistence":.08,"algo_entry_intensity":-.25,
+ "algo_reentry_persistence":.10,"algo_reentry_intensity":0.0,
+ "algo_peer_min":-.10,"algo_exit_enabled":True,
 }
 SYMBOLS=bt.SYMBOLS
 FEE=bt.FEE
@@ -42,7 +46,7 @@ def _aligned(flow,side,key):
     return side*float(flow.get(key) or 0.0)
 
 
-def _entry_ok(anchor,m15,flow,mark,p):
+def _entry_ok(anchor,m15,flow,mark,p,fp=None,peer=None):
     side=int(anchor.get("entry_side") or 0)
     if side not in (-1,1) or not m15.get("ready") or int(m15.get("side") or 0)!=side:return False
     if not flow.get("trade_data_fresh") or int(flow.get("trade_count_60s") or 0)<5 or float(flow.get("observed_notional_60s") or 0)<100:return False
@@ -51,13 +55,20 @@ def _entry_ok(anchor,m15,flow,mark,p):
     if _aligned(flow,side,"flow_imbalance_15s")<p["entry15"]:return False
     if _aligned(flow,side,"flow_imbalance_30s")<p["entry30"]:return False
     if _aligned(flow,side,"flow_imbalance")<p["entry60"]:return False
+    fp=fp or {};peer=peer or {}
+    if fp:
+        if fp.get("absorption"):return False
+        if float(fp.get("persistence") or 0)<p.get("algo_entry_persistence",-.99):return False
+        intensity=max(float(fp.get("trade_intensity_z") or 0),float(fp.get("notional_intensity_z") or 0))
+        if intensity<p.get("algo_entry_intensity",-99) and not fp.get("burst"):return False
+    if peer and float(peer.get("aligned_peer_lag15") or 0)<p.get("algo_peer_min",-99):return False
     ref=float(anchor.get("confirmation_close") or anchor.get("pivot_price") or 0)
     if ref<=0:return False
     lim=max(.004,min(.025,float(m15.get("median_range_move") or .008)*p["chase_mult"]))
     return abs(mark/ref-1)<=lim
 
 
-def _exit_reason(pos,m15,flow,mark,p):
+def _exit_reason(pos,m15,flow,mark,p,fp=None,peer=None):
     side=pos["side"];entry=pos["entry"]
     move=side*(mark/entry-1)
     peak=max(float(pos.get("mfe",0) or 0),move,0)
@@ -70,6 +81,12 @@ def _exit_reason(pos,m15,flow,mark,p):
     price_confirm=candle or side*float(m15.get("return_15m") or 0)<0 or int(m15.get("adverse_score") or 0)>=2
     weakening=(a15<p["weak15"] and a30<p["weak30"] and a15<=a60-p["weak_drop"])
     counter=(a15<=p["counter15"] and a30<=p["counter30"])
+    fp=fp or {};peer=peer or {}
+    if p.get("algo_exit_enabled",True) and move>2*FEE+.0004 and price_confirm:
+        if (fp.get("exhaustion") or fp.get("absorption")) and recoil>=_threshold(m15,max(.06,p["exit_recoil_mult"]*.60)):
+            return "algo_exhaustion"
+        if peer and float(peer.get("aligned_peer_now") or 0)<-.16 and recoil>=_threshold(m15,max(.06,p["exit_recoil_mult"]*.60)):
+            return "peer_flow_reversal"
     if recoil>=_threshold(m15,p["exit_recoil_mult"]) and move>2*FEE+.0004 and weakening and price_confirm:
         return "weakening"
     if counter and (int(m15.get("adverse_score") or 0)>=3 or candle):
@@ -77,7 +94,7 @@ def _exit_reason(pos,m15,flow,mark,p):
     adverse=max(0.0,-side*(mark/entry-1))
     soft=max(p["soft_floor"],min(p["soft_cap"],typical*p["soft_mult"]))
     strong=bool(m15.get("strong_adverse_pressure")) and int(m15.get("adverse_score") or 0)>=3
-    if adverse>=soft and candle and (counter or strong):return "soft_stop"
+    if adverse>=soft and candle and (counter or strong) and not fp.get("counter_absorption"):return "soft_stop"
     hard=max(p["hard_floor"],min(p["hard_cap"],typical*p["hard_mult"]))
     if adverse>=hard:return "hard_stop"
     return None
@@ -96,7 +113,7 @@ def _watch_update(watch,mark,m15,flow,t,p):
     return watch
 
 
-def _reentry_ok(watch,m15,flow,mark,t,p):
+def _reentry_ok(watch,m15,flow,mark,t,p,fp=None,peer=None):
     side=watch["side"]
     if watch.get("phase")!="WAIT_RESUMPTION" or not watch.get("counter_seen"):return False
     if t<=watch.get("confirmed_t",t):return False
@@ -105,6 +122,13 @@ def _reentry_ok(watch,m15,flow,mark,t,p):
     if _aligned(flow,side,"flow_imbalance_15s")<p["reentry15"]:return False
     if _aligned(flow,side,"flow_imbalance_30s")<p["reentry30"]:return False
     if _aligned(flow,side,"flow_imbalance")<p["reentry60"]:return False
+    fp=fp or {};peer=peer or {}
+    if fp:
+        if fp.get("absorption"):return False
+        if float(fp.get("persistence") or 0)<p.get("algo_reentry_persistence",-.99):return False
+        intensity=max(float(fp.get("trade_intensity_z") or 0),float(fp.get("notional_intensity_z") or 0))
+        if intensity<p.get("algo_reentry_intensity",-99) and not fp.get("renewed"):return False
+    if peer and float(peer.get("aligned_peer_lag15") or 0)<p.get("algo_peer_min",-99):return False
     rebound=side*(mark/watch["extreme"]-1)
     if rebound<_threshold(m15,p["rebound_mult"]):return False
     loc=m15.get("close_location")
@@ -118,6 +142,7 @@ def _pnl(pos,price):
 
 def _simulate(data,start_epoch,end_epoch,p,symbols=SYMBOLS,start_equity=500.0):
     cash=float(start_equity);positions={};watches={};anchors={};idx={s:0 for s in symbols};last={}
+    recent={s:[] for s in symbols};prev={s:None for s in symbols}
     trades=[];peak=cash;maxdd=0.0;min_eq=cash
     times=sorted(set(t for s in symbols for t in data[s]["buckets"] if start_epoch<=t<end_epoch))
     # Seed anchor from all H1 events known at the fold start.
@@ -143,9 +168,19 @@ def _simulate(data,start_epoch,end_epoch,p,symbols=SYMBOLS,start_equity=500.0):
             m15=bt._m15_at(data[s]["buckets"],data[s]["m15"],t,int(side))
             if not m15.get("ready"):continue
             flow=bt._flow(data[s]["buckets"],t,int(side))
+            fp=footprint(int(side),mark,prev.get(s),flow,recent.get(s,[]))
+            recent[s]=append_recent(recent.get(s,[]),mark,flow,fp);prev[s]=mark
+            peers=[]
+            for ps in symbols:
+                if ps==s:continue
+                pb=data[ps]["buckets"].get(t-15)
+                if pb:
+                    pf=bt._flow(data[ps]["buckets"],t-15,None)
+                    peers.append(float(pf.get("flow_imbalance_15s") or 0))
+            peer={"aligned_peer_lag15":int(side)*(statistics.median(peers) if peers else 0.0),"aligned_peer_now":0.0}
             if pos:
                 move=pos["side"]*(mark/pos["entry"]-1);pos["mfe"]=max(pos.get("mfe",0),move)
-                reason="h1_flip" if int(a.get("entry_side") or 0)==-pos["side"] else _exit_reason(pos,m15,flow,mark,p)
+                reason="h1_flip" if int(a.get("entry_side") or 0)==-pos["side"] else _exit_reason(pos,m15,flow,mark,p,fp,peer)
                 if reason:
                     v=_pnl(pos,mark);cash+=v;trades.append((s,v,reason))
                     watches[s]={"side":pos["side"],"exit_price":mark,"extreme":mark,"phase":"WAIT_PULLBACK","counter_seen":False,"confirmed_t":None}
@@ -190,18 +225,27 @@ def _candidate_params():
       (1.0,.006,.015,1.5,.012,.020),(1.35,.0075,.018,1.75,.015,.025),
       (1.6,.008,.020,2.0,.018,.028),(1.8,.010,.022,2.2,.020,.030)
     ]
+    algo_sets=[
+      (-.20,-1.0,-.20,-1.0,-1.0,False),
+      (.05,-.50,.08,-.25,-.15,True),
+      (.10,0.0,.12,0.0,-.10,True),
+      (.15,.50,.15,.50,0.0,True)
+    ]
     out=[]
-    all_sets=list(itertools.product(entry_sets,exit_sets,re_sets,stop_sets))
+    all_sets=list(itertools.product(entry_sets,exit_sets,re_sets,stop_sets,algo_sets))
     # Deterministic space-filling subset keeps the research fast enough for a live Render service.
     picks=sorted(set(int(round(i*(len(all_sets)-1)/95)) for i in range(96)))
     for j in picks:
-        e,x,r,s=all_sets[j]
+        e,x,r,s,a=all_sets[j]
         p=dict(BASE)
         p.update(entry15=e[0],entry30=e[1],entry60=e[2],entry_recovery=e[3])
         p.update(weak15=x[0],weak30=x[1],weak_drop=x[2],exit_recoil_mult=x[3])
         p.update(reentry15=r[0],reentry30=r[1],reentry60=r[2],reentry_recovery=r[3],
                  pullback_mult=r[4],rebound_mult=r[5])
         p.update(soft_mult=s[0],soft_floor=s[1],soft_cap=s[2],hard_mult=s[3],hard_floor=s[4],hard_cap=s[5])
+        p.update(algo_entry_persistence=a[0],algo_entry_intensity=a[1],
+                 algo_reentry_persistence=a[2],algo_reentry_intensity=a[3],
+                 algo_peer_min=a[4],algo_exit_enabled=a[5])
         out.append(p)
     return out
 
@@ -240,7 +284,7 @@ def _precompute(data,se,ee):
         while ci<len(closed_all) and closed_all[ci]["t"]<((times[0]//900)*900 if times else se):ci+=1
         closed=closed_all[:ci]
         current_period=None;partial=None
-        q=[];series=[]
+        q=[];series=[];recent=[];prev_mark=None
         for t in times:
             while ei<len(h1events) and h1events[ei]["at"]<=t:anchor=h1events[ei];ei+=1
             period=(t//900)*900
@@ -268,15 +312,36 @@ def _precompute(data,se,ee):
             flow={"trade_data_fresh":True,"trade_count_60s":c60,"observed_notional_60s":b60+s60,
                   "flow_imbalance_15s":imb(b15,s15),"flow_imbalance_30s":imb(b30,s30),
                   "flow_imbalance":imb(b60,s60),"flow_imbalance_300s":imb(b300,s300)}
-            series.append((t,b["c"],dict(anchor),m15,flow))
+            fp=footprint(side,b["c"],prev_mark,flow,recent)
+            recent=append_recent(recent,b["c"],flow,fp)
+            series.append({"t":t,"mark":b["c"],"anchor":dict(anchor),"m15":m15,"flow":flow,"fp":fp})
+            prev_mark=b["c"]
         out[symbol]=series
         print("S1_OPT_PRECOMPUTE",json.dumps({"symbol":symbol,"observations":len(series)},separators=(",",":")),flush=True)
+    # Cross-token synchronous/lagged consensus. This is public lead/lag structure,
+    # not identification of any proprietary exchange bot.
+    maps={s:{row["t"]:row for row in out[s]} for s in SYMBOLS}
+    for s in SYMBOLS:
+        for row in out[s]:
+            t=row["t"];side=int(row["anchor"].get("entry_side") or 0)
+            peers_now=[];peers_lag=[]
+            for qsym in SYMBOLS:
+                if qsym==s:continue
+                q=maps[qsym].get(t);ql=maps[qsym].get(t-15)
+                if q:peers_now.append(float(q["flow"].get("flow_imbalance_15s") or 0))
+                if ql:peers_lag.append(float(ql["flow"].get("flow_imbalance_15s") or 0))
+            row["peer"]={
+                "aligned_peer_now":side*(statistics.median(peers_now) if peers_now else 0.0),
+                "aligned_peer_lag15":side*(statistics.median(peers_lag) if peers_lag else 0.0),
+                "peer_count_now":len(peers_now),"peer_count_lag15":len(peers_lag)
+            }
     return out
 
 
 def _simulate_series(series,start_epoch,end_epoch,p,start_equity=500.0):
     cash=float(start_equity);pos=None;watch=None;peak=cash;maxdd=0.0;trades=[];last=None
-    for t,mark,a,m15,flow in series:
+    for row in series:
+        t=row["t"];mark=row["mark"];a=row["anchor"];m15=row["m15"];flow=row["flow"];fp=row.get("fp") or {};peer=row.get("peer") or {}
         if t<start_epoch or t>=end_epoch:continue
         last=mark;side=(pos or watch or {}).get("side") if (pos or watch) else int(a.get("entry_side") or 0)
         if side not in (-1,1):continue
@@ -291,9 +356,9 @@ def _simulate_series(series,start_epoch,end_epoch,p,start_equity=500.0):
             if int(a.get("entry_side") or 0)==-watch["side"]:watch=None
             else:
                 watch=_watch_update(watch,mark,m15,flow,t,p)
-                if _reentry_ok(watch,m15,flow,mark,t,p):
+                if _reentry_ok(watch,m15,flow,mark,t,p,fp,peer):
                     margin=max(.01,cash*MF);pos={"side":watch["side"],"entry":mark,"margin":margin,"notional":margin*LEV,"mfe":0.0};watch=None
-        elif _entry_ok(a,m15,flow,mark,p):
+        elif _entry_ok(a,m15,flow,mark,p,fp,peer):
             margin=max(.01,cash*MF);pos={"side":int(a["entry_side"]),"entry":mark,"margin":margin,"notional":margin*LEV,"mfe":0.0}
         eq=cash+(_pnl(pos,mark) if pos else 0.0);peak=max(peak,eq)
         if peak>0:maxdd=max(maxdd,(peak-eq)/peak)
