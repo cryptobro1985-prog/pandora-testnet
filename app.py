@@ -3013,8 +3013,10 @@ def comparison_strategies_loop():
      floor=max(.0002,float((p1.get("features") or {}).get("estimated_round_trip_cost_move",0) or 0))
      be=caterpillar_breakeven(p1,float(mark))
      weakening=_s1_weakening_exit(p1,m15,float(mark),flow)
-     if h1exit and favorable>floor:
-      if _comparison_close("local_s1","local_s1",symbol,float(mark),h1exit+"_profit_only"):act1="H1_OPPOSITE_EXIT"
+     if h1exit:
+      # A confirmed opposite H1 local invalidates the old thesis regardless of PnL.
+      # Profit-only gating belongs to routine M15 weakening, never to direction flips.
+      if _comparison_close("local_s1","local_s1",symbol,float(mark),h1exit):act1="H1_OPPOSITE_EXIT"
      elif weakening or (caterpillar_pressure_exit(p1,m15,float(mark),flow) and favorable>floor):
       if _comparison_close("local_s1","local_s1",symbol,float(mark),"m15_weakening_profit_exit",True,"WAIT_RESUMPTION"):act1="M15_WEAKENING_EXIT"
      elif be is not None:
@@ -5475,6 +5477,14 @@ def html_dashboard(data):
    comparison_rows.append('<tr><td>%s</td><td>%s</td><td>%s</td><td>20%% equity</td><td>25x</td><td>$%.2f</td><td>$%.2f</td><td>%sx</td><td>%s</td></tr>'%(
     label,esc(sym),esc(side_txt),notional,margin,round(lev,2) if lev else "—",round(entry,8) if entry else "—"))
  comparison+='<h3>OPEN POSITIONS · FIXED RULE: 20% EQUITY × 25x</h3><table><tr><th>Strategy</th><th>Token</th><th>Side</th><th>Margin Rule</th><th>Target Lev</th><th>Position $</th><th>Margin $</th><th>Actual Lev</th><th>Entry</th></tr>'+''.join(comparison_rows)+'</table>'
+ s1_closed=(data.get("local_s1_closed_trades") or [])[:50]
+ s1_closed_rows="".join('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td class="%s">$%.4f</td><td>%s</td></tr>'%(
+   esc(x.get("closed","")),esc(x.get("symbol","")),"LONG" if int(x.get("side",0) or 0)>0 else "SHORT",
+   esc(round(float(x.get("entry",0) or 0),8)),esc(round(float(x.get("exit",0) or 0),8)),
+   "posv" if float(x.get("pnl",0) or 0)>=0 else "negv",float(x.get("pnl",0) or 0),esc(x.get("reason","")))
+   for x in s1_closed)
+ comparison+='<h3>STRATEGY 1 · ACTUAL CLOSED TRADES</h3><div class="muted">Executed PAPER history only. Counterfactual/replay trades are never mixed into these totals.</div><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Reason</th></tr>'+(
+   s1_closed_rows or '<tr><td colspan=7>No actual Strategy 1 closes recorded yet</td></tr>')+'</table>'
  exp_cards=comparison+exp_cards
  exp_realized=float(data.get("local_experiment_realized_pnl",0) or 0)
  exp_open=float(data.get("local_experiment_unrealized_pnl",0) or 0)
