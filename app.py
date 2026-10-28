@@ -5371,65 +5371,134 @@ def local_compare_history(prefix,limit=100):
   return [dict(x) for x in db.execute(f"""select opened,closed,symbol,side,entry,exit,pnl,reason,margin,notional,leverage
    from {table} order by closed desc limit %s""",(int(limit),)).fetchall()]
 
+def _bybit_linear_m15_history(symbol,start_ms,end_ms):
+ # Public Bybit market data: no API key is required for historical klines.
+ pair=str(symbol).upper()+"USDT"
+ urls=[
+  "https://api.bybit.com/v5/market/kline",
+  "https://api.bytick.com/v5/market/kline",
+ ]
+ last_error=None
+ for base in urls:
+  try:
+   query=urllib.parse.urlencode({"category":"linear","symbol":pair,"interval":"15",
+     "start":int(start_ms),"end":int(end_ms),"limit":1000})
+   req=urllib.request.Request(base+"?"+query,headers={"User-Agent":"PANDORA-paper/1.0","Accept":"application/json"})
+   with urllib.request.urlopen(req,timeout=12) as r:payload=json.load(r)
+   if int(payload.get("retCode",0) or 0)!=0:raise RuntimeError("bybit_retCode_"+str(payload.get("retCode")))
+   raw=((payload.get("result") or {}).get("list") or [])
+   rows=[]
+   for x in raw:
+    if len(x)<5:continue
+    rows.append({"t":int(x[0]),"o":float(x[1]),"h":float(x[2]),"l":float(x[3]),"c":float(x[4]),
+      "v":float(x[5]) if len(x)>5 else 0.0,"turnover":float(x[6]) if len(x)>6 else 0.0})
+   rows.sort(key=lambda z:z["t"])
+   # Keep only fully closed candles inside the requested window.
+   rows=[x for x in rows if int(start_ms)<=int(x["t"])<int(end_ms)]
+   if not rows:raise RuntimeError("empty_bybit_history")
+   gaps=[]
+   for a,b in zip(rows,rows[1:]):
+    if int(b["t"])-int(a["t"])!=900000:gaps.append([int(a["t"]),int(b["t"])])
+   return rows,{"source":"bybit_linear_public","pair":pair,"candles":len(rows),"gaps":gaps,
+     "continuous":not gaps,"start_ms":int(start_ms),"end_ms":int(end_ms)}
+  except Exception as exc:last_error=type(exc).__name__+":"+str(exc)[:120]
+ raise RuntimeError(last_error or "bybit_history_failed")
+
 def strategy1_counterfactual_replay_12h():
- # Candle-only diagnostic replay. It deliberately does NOT claim historical
- # executed-flow confirmation, because per-decision flow was not persisted.
+ # Diagnostic reconstruction. NEAR/GRASS are backfilled from public Bybit M15
+ # so missing local checkpoints cannot hide overnight exit/re-entry cycles.
+ # Historical executed-flow snapshots were not persisted, therefore this remains
+ # a candle-causal reconstruction and is never written into actual PAPER fills.
  try:
+  end_ms=(int(time.time()*1000)//900000)*900000
+  start_ms=end_ms-12*3600*1000
   with pg() as db:
    positions=[dict(x) for x in db.execute("""select symbol,side,entry,opened,notional
       from local_s1_positions where symbol=any(%s) order by opened""",(list(LOCAL_EXPERIMENT_SYMBOLS),)).fetchall()]
    rows=db.execute("""select symbol,candles from local_candle_checkpoints
       where interval='15m' and symbol=any(%s)""",(list(LOCAL_EXPERIMENT_SYMBOLS),)).fetchall()
-  by_symbol={x["symbol"]:x["candles"] for x in rows}
+  saved={x["symbol"]:x["candles"] for x in rows}
+  by_symbol={};coverage={}
+  for symbol in LOCAL_EXPERIMENT_SYMBOLS:
+   if symbol in ("NEAR","GRASS"):
+    try:
+     b,meta=_bybit_linear_m15_history(symbol,start_ms,end_ms)
+     by_symbol[symbol]=b;coverage[symbol]=meta
+     if not meta.get("continuous"):
+      coverage[symbol]["usable"]=False
+    else:coverage[symbol]["usable"]=True
+    except Exception as exc:
+     by_symbol[symbol]=saved.get(symbol,[]) or []
+     coverage[symbol]={"source":"saved_checkpoint_fallback","usable":False,
+       "error":type(exc).__name__+":"+str(exc)[:120],"candles":len(by_symbol[symbol])}
+   else:
+    by_symbol[symbol]=saved.get(symbol,[]) or []
+    coverage[symbol]={"source":"saved_checkpoint","usable":True,"candles":len(by_symbol[symbol])}
   events=[];total=0.0;per_symbol={}
   for pos in positions:
-   symbol=pos["symbol"];side=int(pos["side"]);entry=float(pos["entry"]);notional=float(pos["notional"])
+   symbol=pos["symbol"];side=int(pos["side"]);original_entry=float(pos["entry"]);entry=original_entry;notional=float(pos["notional"])
    try:opened_epoch=datetime.datetime.fromisoformat(str(pos["opened"]).replace("Z","+00:00")).timestamp()
    except Exception:continue
+   raw=by_symbol.get(symbol,[]) or []
    candles=[]
-   for r in by_symbol.get(symbol,[]) or []:
+   for r in raw:
     try:
      t=float(r["t"])/1000.0
-     if t>opened_epoch:candles.append(r)
+     if t>opened_epoch and int(r["t"])>=start_ms and int(r["t"])<end_ms:candles.append(r)
     except Exception:continue
    candles=sorted(candles,key=lambda r:int(r["t"]))
-   state="IN";hi=entry;lo=entry;prev2=None;prev1=None;cycle=0
-   last_price=entry
+   if symbol in ("NEAR","GRASS") and not (coverage.get(symbol) or {}).get("usable"):
+    per_symbol[symbol]={"status":"DATA_GAP","side":"LONG" if side>0 else "SHORT",
+      "initial_entry":original_entry,"notional":notional,"realized_pnl":0.0,"unrealized_pnl":0.0,
+      "cycles":0,"coverage":coverage.get(symbol)}
+    continue
+   events.append({"symbol":symbol,"type":"ENTRY","cycle":0,"time":str(pos.get("opened") or ""),
+     "price":original_entry,"pnl":None,"source":"actual_starting_paper_position"})
+   state="IN";hi=entry;lo=entry;prev2=None;prev1=None;cycle=0;last_price=entry
    for cur in candles:
-    last_price=float(cur["c"])
-    close=float(cur["c"]);hi=max(hi,float(cur["h"]));lo=min(lo,float(cur["l"]))
+    last_price=float(cur["c"]);close=float(cur["c"]);hi=max(hi,float(cur["h"]));lo=min(lo,float(cur["l"]))
     if prev2 is not None and prev1 is not None:
      if state=="IN":
       turn=(float(prev1["c"])<=float(prev2["c"]) and close>float(prev1["c"])) if side<0 else (float(prev1["c"])>=float(prev2["c"]) and close<float(prev1["c"]))
       favorable=side*(close/entry-1.0)
       if turn and favorable>max(.0013,2*FEE+.0004):
        pnl=notional*(favorable-2*FEE);total+=pnl;cycle+=1
-       events.append({"symbol":symbol,"type":"EXIT","cycle":cycle,"time":datetime.datetime.fromtimestamp(float(cur["t"])/1000.0,datetime.timezone.utc).isoformat(),
-        "price":close,"pnl":round(pnl,4)})
+       events.append({"symbol":symbol,"type":"EXIT","cycle":cycle,
+        "time":datetime.datetime.fromtimestamp(float(cur["t"])/1000.0,datetime.timezone.utc).isoformat(),
+        "price":close,"pnl":round(pnl,4),"source":coverage.get(symbol,{}).get("source")})
        state="WATCH";hi=close;lo=close;prev2=None;prev1=None;continue
      else:
       turn=(float(prev1["c"])>=float(prev2["c"]) and close<float(prev1["c"])) if side<0 else (float(prev1["c"])<=float(prev2["c"]) and close>float(prev1["c"]))
       resume=(hi/close-1.0) if side<0 else (close/lo-1.0)
       if turn and resume>=.0006:
        entry=close
-       events.append({"symbol":symbol,"type":"REENTRY","cycle":cycle,"time":datetime.datetime.fromtimestamp(float(cur["t"])/1000.0,datetime.timezone.utc).isoformat(),"price":close})
+       events.append({"symbol":symbol,"type":"REENTRY","cycle":cycle,
+        "time":datetime.datetime.fromtimestamp(float(cur["t"])/1000.0,datetime.timezone.utc).isoformat(),
+        "price":close,"pnl":None,"source":coverage.get(symbol,{}).get("source")})
        state="IN";hi=close;lo=close;prev2=None;prev1=None;continue
     prev2=prev1;prev1=cur
    unreal=0.0
-   if state=="IN":
+   if state=="IN" and last_price>0:
     unreal=notional*(side*(last_price/entry-1.0)-2*FEE)
    sym_realized=sum(float(x.get("pnl",0) or 0) for x in events if x.get("symbol")==symbol and x.get("type")=="EXIT")
    per_symbol[symbol]={"status":"IN_POSITION" if state=="IN" else "WAIT_RESUMPTION","side":"LONG" if side>0 else "SHORT",
-     "initial_entry":float(pos["entry"]),"current_replay_entry":entry,"last_price":last_price,"notional":notional,
+     "initial_entry":original_entry,"current_replay_entry":entry,"last_price":last_price,"notional":notional,
      "realized_pnl":round(sym_realized,4),"unrealized_pnl":round(unreal,4),
-     "cycles":sum(1 for x in events if x.get("symbol")==symbol and x.get("type")=="EXIT")}
+     "cycles":sum(1 for x in events if x.get("symbol")==symbol and x.get("type")=="EXIT"),
+     "coverage":coverage.get(symbol)}
   unrealized_total=sum(float(x.get("unrealized_pnl",0) or 0) for x in per_symbol.values())
   mtm_equity=500.0+total+unrealized_total
-  return {"window_hours":12,"basis":"causal_m15_candle_turns_without_historical_executed_flow",
-    "not_executed":True,"events":events,"per_symbol":per_symbol,"realized_pnl":round(total,4),
+  result={"window_hours":12,"window_start_utc":datetime.datetime.fromtimestamp(start_ms/1000,datetime.timezone.utc).isoformat(),
+    "window_end_utc":datetime.datetime.fromtimestamp(end_ms/1000,datetime.timezone.utc).isoformat(),
+    "basis":"causal_m15_candle_turns_with_bybit_backfill_for_NEAR_GRASS_without_historical_executed_flow",
+    "not_executed":True,"coverage":coverage,"events":events,"per_symbol":per_symbol,"realized_pnl":round(total,4),
     "unrealized_pnl":round(unrealized_total,4),"reconstructed_equity":round(500.0+total,4),
     "mtm_equity":round(mtm_equity,4),"mtm_return_pct":round((mtm_equity/500.0-1.0)*100,3),
     "return_on_500_pct":round(total/500.0*100,3)}
+  print("S1_REPLAY_12H "+json.dumps({"realized_pnl":result["realized_pnl"],"unrealized_pnl":result["unrealized_pnl"],
+    "mtm_equity":result["mtm_equity"],"mtm_return_pct":result["mtm_return_pct"],
+    "near":per_symbol.get("NEAR"),"grass":per_symbol.get("GRASS")},ensure_ascii=False,default=str),flush=True)
+  return result
  except Exception as exc:
   return {"window_hours":12,"basis":"replay_unavailable","not_executed":True,"events":[],"realized_pnl":0.0,
    "return_on_500_pct":0.0,"error":type(exc).__name__+":"+str(exc)[:120]}
