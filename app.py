@@ -3061,7 +3061,15 @@ def comparison_strategies_loop():
     else:
      h1_rows,h1_ms=fetched[(symbol,"h1")]
      live=local_h1_direction(h1_rows,h1_ms,symbol)
-     a1=copy.deepcopy(live);a2=copy.deepcopy(live)
+     # A transient incomplete/new H1 reconstruction must never erase an
+     # already-confirmed structural regime. Keep the durable H1 anchor until
+     # a newly confirmed opposite pivot is available.
+     if not live.get("ready"):
+      durable=_comparison_anchor("local_s1",symbol)
+      a1=copy.deepcopy(durable or live)
+     else:
+      a1=copy.deepcopy(live)
+     a2=copy.deepcopy(a1)
     m15_rows,m15_ms=fetched.get((symbol,"m15"),([],int(time.time()*1000)))
     flow=MARKET_OBS.flow_context(symbol,time.time())
 
