@@ -61,23 +61,30 @@ def entry_candidate(symbol, analysis, m15, flow, stamp):
     dom = dominance(flow)
     h1 = bool((analysis or {}).get("ready") and (analysis or {}).get("h1_direction_anchor")
               and not (analysis or {}).get("entry_blocked") and side in (-1, 1))
-    m15_ready = bool((m15 or {}).get("ready"))
-    eligible = h1 and m15_ready and m15_direction(m15) == side
+    m15_ready = bool((m15 or {}).get("ready") and not (m15 or {}).get("partial"))
+    imbalance = _f((flow or {}).get("flow_imbalance")) if dom is not None else None
+    aligned_flow = side * imbalance if imbalance is not None else None
+    recovery = int((m15 or {}).get("recovery_score") or 0)
+    adverse = int((m15 or {}).get("adverse_score") or 0)
+    eligible = (h1 and m15_ready and m15_direction(m15) == side
+                and dom == side and aligned_flow is not None and aligned_flow >= 0.12
+                and recovery >= 2 and adverse <= 1)
     reason = ("h1_local_m15_direction" if eligible else
               "waiting_for_h1_local" if not h1 else
               "waiting_for_m15_data" if not m15_ready else
-              "waiting_for_m15_direction")
-    imbalance = _f((flow or {}).get("flow_imbalance"))
+              "waiting_for_m15_direction" if m15_direction(m15) != side else
+              "waiting_for_fresh_aligned_flow" if dom != side or aligned_flow is None or aligned_flow < 0.12 else
+              "waiting_for_m15_recovery_quality")
     return dict(symbol=symbol, side=side, eligible=eligible, reason=reason,
                 policy=POLICY, dominant_side=dom,
                 buy_volume_60s=(flow or {}).get("buy_volume_60s"),
                 sell_volume_60s=(flow or {}).get("sell_volume_60s"),
-                aligned_flow=side * imbalance if imbalance is not None else None)
+                aligned_flow=aligned_flow, recovery_score=recovery, adverse_score=adverse)
 
 def pressure_exit(position, m15, mark, flow):
     """Leave the H1-side position when sellers/buyers lose control on M15."""
     side = int((position or {}).get("side") or 0)
-    if side not in (-1, 1) or not (m15 or {}).get("ready"):
+    if side not in (-1, 1) or not (m15 or {}).get("ready") or (m15 or {}).get("partial"):
         return None
     if m15_direction(m15) != -side:
         return None
@@ -113,15 +120,25 @@ def update_watch(watch, mark, m15, flow, stamp):
     return out
 
 def reentry_ready(side, m15, mark, watch, flow, stamp):
-    """Re-enter H1 side as the observed pullback ends and original side returns."""
+    """Re-enter only after a completed pullback and confirmed H1-side resumption."""
     side = int(side or 0)
     if side not in (-1, 1) or not watch or int(watch.get("side") or 0) != side:
         return False
-    if not (m15 or {}).get("ready"):
+    if not (m15 or {}).get("ready") or (m15 or {}).get("partial"):
         return False
     ctx = watch.get("context") or {}
-    if not ctx.get("counter_pressure_seen") or m15_direction(m15) != side:
+    if (ctx.get("phase") != "WAIT_RESUMPTION" or not ctx.get("counter_pressure_seen")
+            or m15_direction(m15) != side):
+        return False
+    imbalance = _f((flow or {}).get("flow_imbalance")) if dominance(flow) == side else None
+    if imbalance is None or side * imbalance < 0.12:
+        return False
+    if int(m15.get("recovery_score") or 0) < 2 or int(m15.get("adverse_score") or 0) > 1:
         return False
     mark = _f(mark)
     extreme = _f(ctx.get("pullback_extreme"))
-    return bool(mark is not None and extreme is not None and side * (mark - extreme) > 0)
+    typical = max(0.0005, _f(m15.get("median_range_move")) or 0.008)
+    resume_floor = max(0.0006, min(0.0020, typical * 0.15))
+    resumed = side * (mark / extreme - 1.0) if mark is not None and extreme not in (None, 0) else None
+    return bool(resumed is not None and resumed >= resume_floor)
+
