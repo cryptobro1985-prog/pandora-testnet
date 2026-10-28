@@ -73,6 +73,72 @@ LOCAL_EXPERIMENT_MAX_POSITIONS=7
 VALIDATED_MAX_LEVERAGE={"BTC":50.0,"ETH":50.0,"SOL":20.0,"HYPE":10.0,"NEAR":10.0,"APT":10.0,"TAO":5.0,"SPX":5.0,"LIT":5.0,
  "INIT":3.0,"USELESS":3.0,"GRASS":3.0,"CHIP":3.0,"BABY":3.0,"CASHCAT":3.0}
 ALL_LOCAL_CANDLE_SYMBOLS=tuple(dict.fromkeys(tuple(LOCAL_SWING_SYMBOLS)+LOCAL_EXPERIMENT_SYMBOLS+LOCAL_S3_SYMBOLS))
+DISCOVERY_MAX_HOT=5
+DISCOVERY_SCAN_SECONDS=20
+DISCOVERY_MIN_TURNOVER_24H=5_000_000.0
+DISCOVERY_MIN_RANGE_24H_PCT=8.0
+DISCOVERY_MIN_MOVE_5M_PCT=2.0
+
+def strategy1_runtime_symbols():
+ with LOCK:
+  hot=tuple((S.get("strategy1_discovery") or {}).get("hot_symbols") or ())
+ return tuple(dict.fromkeys(tuple(LOCAL_EXPERIMENT_SYMBOLS)+hot))
+
+def bybit_volatility_discovery_loop():
+ """Direction-neutral Bybit discovery. HOT only expands Strategy 1's universe; H1 locals still choose side."""
+ samples={}
+ while not SHUTDOWN.is_set():
+  try:
+   req=urllib.request.Request("https://api.bybit.com/v5/market/tickers?category=linear",
+    headers={"User-Agent":"PANDORA-paper/1.0","Accept":"application/json"})
+   with urllib.request.urlopen(req,timeout=12) as resp:payload=json.load(resp)
+   if int(payload.get("retCode",0) or 0)!=0:raise RuntimeError("bybit_retCode_"+str(payload.get("retCode")))
+   now_epoch=time.time();rows=(payload.get("result") or {}).get("list") or []
+   with LOCK:available=set(S.get("_prices",{}))
+   ranked=[]
+   for x in rows:
+    pair=str(x.get("symbol") or "")
+    if not pair.endswith("USDT"):continue
+    symbol=pair[:-4]
+    if symbol in LOCAL_EXPERIMENT_SYMBOLS:continue
+    try:
+     last=float(x.get("lastPrice") or 0);turn=float(x.get("turnover24h") or 0)
+     high=float(x.get("highPrice24h") or 0);low=float(x.get("lowPrice24h") or 0)
+    except (TypeError,ValueError):continue
+    if last<=0 or low<=0 or turn<DISCOVERY_MIN_TURNOVER_24H:continue
+    hist=samples.setdefault(symbol,[])
+    hist.append((now_epoch,last));cut=now_epoch-330
+    while hist and hist[0][0]<cut:hist.pop(0)
+    ref=hist[0][1] if hist else last
+    move5=abs(last/ref-1)*100 if ref>0 and now_epoch-hist[0][0]>=180 else 0.0
+    range24=(high/low-1)*100 if high>0 else 0.0
+    # Require an actual short-horizon shock OR exceptionally wide 24h regime.
+    hot=move5>=DISCOVERY_MIN_MOVE_5M_PCT or range24>=DISCOVERY_MIN_RANGE_24H_PCT
+    if not hot:continue
+    # Current paper Strategy 1 consumes the existing live price/candle transport.
+    # Do not admit a Bybit-only symbol until that transport can manage it safely.
+    executable=symbol in available
+    score=max(move5/DISCOVERY_MIN_MOVE_5M_PCT,range24/DISCOVERY_MIN_RANGE_24H_PCT)*math.log10(max(turn,10))
+    ranked.append({"symbol":symbol,"pair":pair,"score":round(score,3),"move_5m_pct":round(move5,3),
+      "range_24h_pct":round(range24,3),"turnover_24h":round(turn,2),"runtime_eligible":executable})
+   ranked.sort(key=lambda z:z["score"],reverse=True)
+   eligible=[x for x in ranked if x["runtime_eligible"]][:DISCOVERY_MAX_HOT]
+   hot=[x["symbol"] for x in eligible]
+   state={"ok":True,"last_check":now(),"mode":"BYBIT_LINEAR_ALL_TICKERS_RATE_SAFE","scan_seconds":DISCOVERY_SCAN_SECONDS,
+    "universe_size":len(rows),"hot_symbols":hot,"hot":eligible,"top_anomalies":ranked[:12],
+    "max_hot":DISCOVERY_MAX_HOT,"direction_policy":"H1_LOCAL_HIGH_SHORT__H1_LOCAL_LOW_LONG",
+    "entry_policy":"DISCOVERY_NEVER_ENTERS_DIRECTLY","transport":"single aggregated public REST scan; no per-symbol polling",
+    "thresholds":{"min_turnover_24h":DISCOVERY_MIN_TURNOVER_24H,"min_range_24h_pct":DISCOVERY_MIN_RANGE_24H_PCT,
+      "min_move_5m_pct":DISCOVERY_MIN_MOVE_5M_PCT}}
+   with LOCK:
+    S["strategy1_discovery"]=copy.deepcopy(state);S["sources"]["Strategy1Discovery"]=copy.deepcopy(state)
+  except Exception as exc:
+   with LOCK:
+    prev=copy.deepcopy(S.get("strategy1_discovery") or {})
+    prev.update({"ok":False,"last_check":now(),"error":type(exc).__name__+":"+str(exc)[:160]})
+    S["strategy1_discovery"]=prev;S["sources"]["Strategy1Discovery"]=copy.deepcopy(prev)
+  SHUTDOWN.wait(DISCOVERY_SCAN_SECONDS)
+
 
 def market_max_leverage(symbol):
  with LOCK:
@@ -2800,7 +2866,7 @@ def local_experiment_loop():
      S["sources"]["Caterpillar 1.0"]={"ok":ready_all or bootstrap_wait,"ready":ready_all,
        "warmup":bootstrap_wait and not ready_all,"last_check":now(),
        "mode":"Caterpillar 1.0 PAPER H1-M15 executed-flow","policy":LOCAL4_FLOW_POLICY,
-       "symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"paper_only":True,"starting_equity":LOCAL_EXPERIMENT_STARTING_EQUITY,
+       "symbols":list(strategy1_runtime_symbols()),"permanent_symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"discovery":copy.deepcopy(S.get("strategy1_discovery") or {}),"paper_only":True,"starting_equity":LOCAL_EXPERIMENT_STARTING_EQUITY,
        "equity":equity,"used_margin":used,"free_margin":free,"realized_pnl":S.get("local_experiment_realized_pnl",0),
        "trades":S.get("local_experiment_trades",0),"open_positions":list(S.get("local_v12_positions",{})),
        "watching_for_reentry":list(S.get("local_experiment_watch",{})),"reference_margin_fraction":LOCAL_EXPERIMENT_MARGIN_FRACTION,
@@ -5857,12 +5923,12 @@ def html_strategy1_only(data):
  page="""<!doctype html><html lang='ru'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width'><meta http-equiv='refresh' content='10'><title>PANDORA · Neon Trading Terminal</title><style>%s</style></head><body>
  <header><h1><span class='logo'>⬡</span> PANDORA</h1><nav><a href='#overview'>Dashboard</a><a href='#positions'>Positions</a><a href='#tokens'>Markets</a><a href='#history'>History</a><a href='#strategy'>Strategy</a></nav><span class='chip status'>● PAPER LIVE</span></header>
  <main><div class='shell' id='overview'><section class='panel hero'><div class='eyebrow'>Total PNL</div><div class='total'>$%+.2f</div><div class='percent'>%+.2f%%</div><div class='caption'>Время работы: %s</div><div class='chart'>%s</div><div class='timeline'><span>Новая история · 28.10.2026</span><span>%d закрытых сделок после начала записи</span></div><div class='sub'>PAPER PnL + исторический потенциал $377.36. Сценарный показатель, не баланс исполненных сделок.</div></section>
- <aside class='panel summary'><h2>Статус терминала</h2><div class='mini'>Режим<b>Strategy 1 · PAPER</b></div><div class='mini'>Открытые позиции<b>%d</b></div><div class='mini'>Контролируемые рынки<b>7</b></div><div class='mini'>Закрыто в новой истории<b>%d</b></div><div class='sub'>Данные позиций поступают из PAPER-движка; сигналы ожидания не считаются открытыми сделками.</div></aside></div>
+ <aside class='panel summary'><h2>Статус терминала</h2><div class='mini'>Режим<b>Strategy 1 · PAPER</b></div><div class='mini'>Открытые позиции<b>%d</b></div><div class='mini'>Контролируемые рынки<b>%d</b></div><div class='mini'>Закрыто в новой истории<b>%d</b></div><div class='sub'>Данные позиций поступают из PAPER-движка; сигналы ожидания не считаются открытыми сделками.</div></aside></div>
  <section id='tokens'><h2>Отслеживаемые рынки</h2><div class='tokens'>%s</div></section>
  <section class='panel' id='positions'><h2>Открытые позиции</h2><div class='scroll'><table><thead><tr><th>Token</th><th>Side</th><th>Phase</th><th>H1</th><th>Pivot</th><th>Margin</th><th>Notional</th><th>Lev</th><th>Entry</th><th>Mark</th><th>Open PNL</th><th>ROE</th></tr></thead><tbody>%s</tbody></table></div></section>
  <div class='bottom' style='margin-top:14px'><section class='panel' id='history'><h2>Новая история сделок</h2><div class='sub'>Показываются только PAPER-сделки, закрытые после 28 октября 2026, 12:26 UTC. Старые записи сохранены в аудите.</div><div class='scroll'><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>Entry</th><th>Exit</th><th>Margin</th><th>Notional</th><th>PNL</th><th>Reason</th></tr>%s</table></div></section>
- <section class='panel' id='strategy'><h2>Как работает Strategy 1</h2><p class='sub'>H1 определяет подтверждённый Local High / Local Low и направление. На M15 алгоритм ищет вход по рыночному импульсу, закрывает позицию при ослаблении потока и ждёт возобновления движения для повторного входа. Позиции и цены обновляются по доступным рыночным данным; плечо и маржа отображаются по каждой открытой сделке.</p><span class='chip'>H1 → M15 → EXIT → RE-ENTRY</span></section></div>
- </main><footer>© PANDORA · Paper trading terminal · No live exchange orders</footer></body></html>"""%(css,dream_total,dream_total_pct,esc(strategy_age),chart_svg,len(fresh),len(positions),len(fresh),"".join(token_cards),"".join(rows),"".join(fresh_rows) if fresh_rows else "<tr><td colspan='9' class='empty'>Новая история пуста — записи появятся после закрытия новых PAPER-сделок.</td></tr>")
+ <section class='panel' id='discovery'><h2>Discovery · Bybit 24/7</h2><p class='sub'>Сканирует весь Bybit Linear рынок агрегированным запросом. Аномальная волатильность только переводит рынок в HOT; направление задаёт H1 Local High/Low. HOT сейчас: <b>%s</b>. Scanner: <b>%s</b>.</p><span class='chip'>BYBIT → HOT → H1 LOCAL → M15</span></section><section class='panel' id='strategy'><h2>Как работает Strategy 1</h2><p class='sub'>H1 определяет подтверждённый Local High / Local Low и направление. На M15 алгоритм ищет вход по рыночному импульсу, закрывает позицию при ослаблении потока и ждёт возобновления движения для повторного входа. Позиции и цены обновляются по доступным рыночным данным; плечо и маржа отображаются по каждой открытой сделке.</p><span class='chip'>H1 → M15 → EXIT → RE-ENTRY</span></section></div>
+ </main><footer>© PANDORA · Paper trading terminal · No live exchange orders</footer></body></html>"""%(css,dream_total,dream_total_pct,esc(strategy_age),chart_svg,len(fresh),len(positions),len(strategy1_runtime_symbols()),len(fresh),"".join(token_cards),"".join(rows),",".join((S.get("strategy1_discovery") or {}).get("hot_symbols") or []) or "—","OK" if (S.get("strategy1_discovery") or {}).get("ok") else "WARMUP","".join(fresh_rows) if fresh_rows else "<tr><td colspan='9' class='empty'>Новая история пуста — записи появятся после закрытия новых PAPER-сделок.</td></tr>")
  return page
 
 def html_dashboard(data):
