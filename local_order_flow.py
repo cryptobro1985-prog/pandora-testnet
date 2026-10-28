@@ -49,13 +49,18 @@ def flow_profile(flow, side):
         return None
 
     aligned300 = side * raw300
+    price300 = _f(flow.get("price_return_300s"))
+    aligned_price = side * price300 if price300 is not None else None
     values = {
         "300s": aligned300,
         "event_epoch": _event_epoch(flow),
         "active": True,
-        "aligned_control": aligned300 >= CONTROL_DEADBAND,
-        "counter_takeover": aligned300 <= -CONTROL_DEADBAND,
-        "resumed": aligned300 >= CONTROL_DEADBAND,
+        "aligned_price_300s": aligned_price,
+        "price_response_ready": aligned_price is not None,
+        "aligned_control": aligned300 >= CONTROL_DEADBAND and aligned_price is not None and aligned_price > 0,
+        "counter_takeover": aligned300 <= -CONTROL_DEADBAND and aligned_price is not None and aligned_price < 0,
+        "failed_counterflow": aligned300 <= -CONTROL_DEADBAND and aligned_price is not None and aligned_price > 0,
+        "resumed": aligned_price is not None and aligned_price > 0 and abs(aligned300) >= CONTROL_DEADBAND,
         "raw_300s": raw300,
         "buy_volume_300s": buy300,
         "sell_volume_300s": sell300,
@@ -104,6 +109,7 @@ def _candidate(symbol, analysis, flow):
     return dict(symbol=symbol, side=side, eligible=eligible, reason=reason,
                 policy=POLICY, dominant_side=dominance(flow),
                 aligned_flow_300s=profile["300s"] if profile else None,
+                aligned_price_300s=profile["aligned_price_300s"] if profile else None,
                 aligned_flow_60s=profile["60s"] if profile else None,
                 event_epoch=profile["event_epoch"] if profile else None)
 
@@ -117,7 +123,7 @@ def entry_candidate(symbol, analysis, m15, flow, stamp):
 
 
 def pressure_exit(position, m15, mark, flow):
-    """Exit when the rolling M5 executed-flow majority flips against the position."""
+    """Exit only when counter-side M5 flow is strong AND price actually responds against us."""
     side = int((position or {}).get("side") or 0)
     profile = flow_profile(flow, side)
     if side not in (-1, 1) or profile is None or not profile["counter_takeover"]:
@@ -138,7 +144,7 @@ def update_watch(watch, mark, m15, flow, stamp):
     ctx.update(last_observed_epoch=_f(stamp), policy=POLICY)
     profile = flow_profile(flow, side)
     if profile:
-        ctx.update(flow_300s=profile["300s"], flow_60s=profile["60s"])
+        ctx.update(flow_300s=profile["300s"], flow_60s=profile["60s"],\n                   aligned_price_300s=profile["aligned_price_300s"],\n                   failed_counterflow=profile["failed_counterflow"])
         if profile["counter_takeover"]:
             ctx["counter_pressure_seen"] = True
             ctx["phase"] = "WAIT_RESUMPTION"
@@ -149,7 +155,7 @@ def update_watch(watch, mark, m15, flow, stamp):
 
 
 def reentry_ready(side, m15, mark, watch, flow, stamp):
-    """Re-enter when later rolling M5 executed flow returns to the H1 side."""
+    """Re-enter when price resumes the H1 direction and M5 flow confirms or fails against it."""
     side = int(side or 0)
     if side not in (-1, 1) or not watch or int(watch.get("side") or 0) != side:
         return False
