@@ -2970,7 +2970,7 @@ def _s1_adaptive_stop(position,m15,mark):
  # Catastrophe guard is defined on the underlying price move, not leveraged ROE.
  # It adapts to M15 noise but is hard-capped so 25x paper positions cannot sit
  # through -40/-50% ROE solely because H1 direction has not flipped yet.
- stop_move=max(.0065,min(.0120,typical*1.35))
+ stop_move=max(.0080,min(.0140,typical*1.75))
  adverse=max(0.0,-side*(mark/entry-1.0))
  if adverse<stop_move:return None
  return {"reason":"s1_adaptive_volatility_stop","adverse_move":adverse,"stop_move":stop_move,
