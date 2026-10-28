@@ -1,91 +1,100 @@
-"""User-defined H1 direction with executed buy/sell dominance.
-No candle-score, volume-size, price-extension or profit-only trade gates.
+"""Strategy 1: H1 local defines side; M15 manages exit, pullback and re-entry.
+No candle scores, liquidity quotas, arbitrary flow thresholds or entry delays.
 """
 import copy
-import datetime
 import math
-from local_caterpillar import update_watch as m15_update_watch, reentry_ready as m15_reentry_ready
-POLICY="Caterpillar 1.0 H1-M15 cycle v1.2"
+
+POLICY = "Caterpillar 1.0 H1-local M15-cycle user rules"
 
 def _f(x):
     try:
-        n=float(x)
-        return n if math.isfinite(n) else None
-    except (TypeError,ValueError,OverflowError):
+        value = float(x)
+        return value if math.isfinite(value) else None
+    except (TypeError, ValueError, OverflowError):
         return None
 
 def dominance(flow):
-    if not isinstance(flow,dict) or not flow.get("trade_data_fresh"):
+    """Sign of the actually observed executed-buy versus executed-sell volume."""
+    if not isinstance(flow, dict) or not flow.get("trade_data_fresh"):
         return None
-    age=_f(flow.get("latest_trade_age_seconds"))
-    if age is None or not -1<=age<=15:
+    age = _f(flow.get("latest_trade_age_seconds"))
+    if age is None or not -1 <= age <= 15:
         return None
-    buy,sell=_f(flow.get("buy_volume_60s")),_f(flow.get("sell_volume_60s"))
-    if buy is not None and sell is not None:
-        if min(buy,sell)<0:return None
-        return 1 if buy>sell else (-1 if sell>buy else 0)
-    imbalance=_f(flow.get("flow_imbalance"))
-    if imbalance is None or not -1<=imbalance<=1:return None
-    return 1 if imbalance>0 else (-1 if imbalance<0 else 0)
+    buy, sell = _f(flow.get("buy_volume_60s")), _f(flow.get("sell_volume_60s"))
+    if buy is not None and sell is not None and min(buy, sell) >= 0:
+        return 1 if buy > sell else (-1 if sell > buy else 0)
+    imbalance = _f(flow.get("flow_imbalance"))
+    if imbalance is None or not -1 <= imbalance <= 1:
+        return None
+    return 1 if imbalance > 0 else (-1 if imbalance < 0 else 0)
 
-def entry_candidate(symbol,analysis,m15,flow,stamp):
-    side=int((analysis or {}).get("entry_side") or 0)
-    dom=dominance(flow)
-    eligible=bool((analysis or {}).get("ready") and (analysis or {}).get("h1_direction_anchor")
-                  and not (analysis or {}).get("entry_blocked") and side in (-1,1) and dom==side
-                  and (m15 or {}).get("ready") and (m15 or {}).get("recovery_confirmed")
-                  and int((m15 or {}).get("recovery_score") or 0)>=3
-                  and int((m15 or {}).get("adverse_score") or 0)==0)
-    imbalance=_f((flow or {}).get("flow_imbalance"))
-    return dict(symbol=symbol,side=side,eligible=eligible,reason="h1_aligned_executed_flow" if eligible else
-                ("waiting_for_fresh_executed_flow" if dom is None else "waiting_for_h1_side_dominance"),
-                policy=POLICY,dominant_side=dom,buy_volume_60s=(flow or {}).get("buy_volume_60s"),
+def entry_candidate(symbol, analysis, m15, flow, stamp):
+    side = int((analysis or {}).get("entry_side") or 0)
+    dom = dominance(flow)
+    h1 = bool((analysis or {}).get("ready") and (analysis or {}).get("h1_direction_anchor")
+              and not (analysis or {}).get("entry_blocked") and side in (-1, 1))
+    m15_ready = bool((m15 or {}).get("ready"))
+    eligible = h1 and m15_ready and dom == side
+    reason = ("h1_local_m15_direction" if eligible else
+              "waiting_for_h1_local" if not h1 else
+              "waiting_for_m15_data" if not m15_ready else
+              "waiting_for_fresh_executed_flow" if dom is None else
+              "waiting_for_h1_direction")
+    imbalance = _f((flow or {}).get("flow_imbalance"))
+    return dict(symbol=symbol, side=side, eligible=eligible, reason=reason,
+                policy=POLICY, dominant_side=dom,
+                buy_volume_60s=(flow or {}).get("buy_volume_60s"),
                 sell_volume_60s=(flow or {}).get("sell_volume_60s"),
-                aligned_flow=side*imbalance if imbalance is not None else None)
+                aligned_flow=side * imbalance if imbalance is not None else None)
 
-def pressure_exit(position,m15,mark,flow):
-    """Avoid fee-generating churn on a single noisy 60-second flow reversal.
+def pressure_exit(position, m15, mark, flow):
+    """Leave the H1-side position when sellers/buyers lose control on M15."""
+    side = int((position or {}).get("side") or 0)
+    if side not in (-1, 1) or not (m15 or {}).get("ready"):
+        return None
+    if dominance(flow) != -side:
+        return None
+    # Opposite executed-flow control accompanied by an M15 adverse turn.
+    adverse_turn = (bool(m15.get("strong_adverse_pressure")) or
+                    int(m15.get("adverse_score") or 0) > 0 or
+                    int(m15.get("candle_direction") or 0) == -side or
+                    ((lambda r: r is not None and side * r < 0)(_f(m15.get("return_15m")))))
+    return "m15_opposite_control_exit" if adverse_turn else None
 
-    A genuine H1 opposite pivot and the liquidation guard remain independent.
-    """
-    side=int((position or {}).get("side") or 0)
-    if side not in (-1,1) or dominance(flow)!=-side:
-        return None
-    if not (m15 or {}).get("ready") or not (m15 or {}).get("strong_adverse_pressure"):
-        return None
-    if int((m15 or {}).get("adverse_score") or 0)<3:
-        return None
-    imbalance=_f((flow or {}).get("flow_imbalance"))
-    count=_f((flow or {}).get("trade_count_60s"))
-    notional=_f((flow or {}).get("observed_notional_60s"))
-    coverage=_f((flow or {}).get("trade_coverage_seconds"))
-    if (imbalance is None or side*imbalance>-.20 or count is None or count<8
-            or notional is None or notional<250 or coverage is None or coverage<45):
-        return None
-    opened=_epoch((position or {}).get("opened"))
-    observed=_f((flow or {}).get("observed_at_epoch"))
-    if observed is None:
-        import time
-        observed=time.time()
-    if opened is not None and observed-opened<30:
-        return None
-    return "executed_flow_counter_dominance"
+def update_watch(watch, mark, m15, flow, stamp):
+    """Record actual counter-direction pullback after exit; no percentage hurdle."""
+    out = copy.deepcopy(watch or {})
+    side = int(out.get("side") or 0)
+    mark = _f(mark)
+    if side not in (-1, 1) or mark is None:
+        return out
+    ctx = out.setdefault("context", {})
+    exit_price = _f(out.get("exit_price"))
+    extreme = _f(ctx.get("pullback_extreme"))
+    if extreme is None:
+        extreme = exit_price if exit_price is not None else mark
+    if dominance(flow) == -side:
+        ctx["counter_pressure_seen"] = True
+        ctx["phase"] = "WAIT_RESUMPTION"
+        extreme = min(extreme, mark) if side > 0 else max(extreme, mark)
+    elif ctx.get("counter_pressure_seen"):
+        extreme = min(extreme, mark) if side > 0 else max(extreme, mark)
+    else:
+        ctx["phase"] = "WAIT_PULLBACK"
+    ctx["pullback_extreme"] = extreme
+    ctx["last_observed_epoch"] = stamp
+    return out
 
-def _epoch(value):
-    n=_f(value)
-    if n is not None:return n
-    try:return datetime.datetime.fromisoformat(str(value).replace("Z","+00:00")).timestamp()
-    except (ValueError,TypeError):return None
-
-def update_watch(watch,mark,m15,flow,stamp):
-    """Require a real M15-price pullback before watching for continuation."""
-    normalized=copy.deepcopy(watch or {})
-    context=normalized.setdefault("context",{})
-    if context.get("phase")=="WAIT_RESUMPTION" and not context.get("pullback_confirmed_epoch"):
-        context["phase"]="WAIT_PULLBACK"
-    return m15_update_watch(normalized,mark,m15,flow,stamp)
-
-def reentry_ready(side,m15,mark,watch,flow,stamp):
-    """A fresh M15 recovery, completed pullback and aligned executed flow."""
-    return bool(m15_reentry_ready(side,m15,mark,watch,flow,stamp)
-                and dominance(flow)==int(side))
+def reentry_ready(side, m15, mark, watch, flow, stamp):
+    """Re-enter H1 side as the observed pullback ends and original side returns."""
+    side = int(side or 0)
+    if side not in (-1, 1) or not watch or int(watch.get("side") or 0) != side:
+        return False
+    if not (m15 or {}).get("ready"):
+        return False
+    ctx = watch.get("context") or {}
+    if not ctx.get("counter_pressure_seen") or dominance(flow) != side:
+        return False
+    mark = _f(mark)
+    extreme = _f(ctx.get("pullback_extreme"))
+    return bool(mark is not None and extreme is not None and side * (mark - extreme) > 0)
