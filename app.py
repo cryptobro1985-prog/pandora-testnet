@@ -32,7 +32,6 @@ from local_caterpillar import (POLICY as CATERPILLAR_POLICY,pressure_exit as cat
  update_watch as caterpillar_update_watch,reentry_ready as caterpillar_reentry_ready,
  protective_breakeven as caterpillar_breakeven, entry_candidate as local_entry_candidate,
  rank_candidates as rank_local_candidates, SELECTION_POLICY as LOCAL_SELECTION_POLICY)
-from local_order_flow import m15_direction as local4_m15_direction
 from local_order_flow import (POLICY as LOCAL4_FLOW_POLICY, entry_candidate as local4_entry_candidate,
  initial_entry_candidate as local4_initial_entry_candidate,
  pressure_exit as local4_pressure_exit, update_watch as local4_update_watch, reentry_ready as local4_reentry_ready)
@@ -494,7 +493,7 @@ def pinit():
     id text primary key, ts text not null, candle_time bigint, action text not null, side integer, price double precision,
     features jsonb not null default '{}'::jsonb)""")
   # Two independent $500 paper comparison accounts.
-  # Strategy 1 restores the profitable H1->M15 Caterpillar rules; Strategy 2 is pure H1 pivot-to-pivot.
+  # Strategy 1 uses H1 structure plus executed-flow control; Strategy 2 is pure H1 pivot-to-pivot.
   for prefix in ("local_s1","local_s2","local_s3"):
    c.execute(f"""create table if not exists {prefix}_account_state (
      id integer primary key, equity double precision not null, realized_pnl double precision not null,
@@ -3088,40 +3087,57 @@ def _comparison_update_path(prefix,state_name,symbol,position,mark):
   if symbol in S.get(state_name+"_positions",{}):S[state_name+"_positions"][symbol]=copy.deepcopy(updated)
  return updated
 
-def _s1_weakening_exit(position,m15,mark,flow):
- if not position or not m15 or not m15.get("ready") or m15.get("partial"):return False
- side=int(position.get("side") or 0);entry=float(position.get("entry") or 0);mark=float(mark or 0)
- if side not in (-1,1) or entry<=0 or mark<=0:return False
- features=position.get("features") or {}
- favorable=side*(mark/entry-1.0)
- floor=max(.0002,float(features.get("estimated_round_trip_cost_move",0) or 0))
- if favorable<=floor:return False
- if not (flow or {}).get("trade_data_fresh"):return False
- try:imb=float((flow or {}).get("flow_imbalance"))
- except (TypeError,ValueError):return False
- if side*imb>-0.12:return False
- adverse=int(m15.get("adverse_score") or 0)
- candle_reversal=(int(m15.get("candle_direction") or 0)==-side and float(m15.get("body_fraction") or 0)>=.42)
- if adverse<2 and not candle_reversal:return False
- peak=max(0.0,float(features.get("mfe_price_move",0) or 0),favorable)
- typical=float(m15.get("median_range_move") or .008)
- recoil_floor=max(.0006,min(.0015,typical*.15))
- return (peak-favorable)>=recoil_floor
-
-def _s1_entry_not_chased(analysis,m15,mark):
- if not analysis or not m15 or not m15.get("ready"):return False
- try:
-  ref=float(analysis.get("confirmation_close") or analysis.get("pivot_price") or 0)
-  mark=float(mark or 0);typical=float(m15.get("median_range_move") or .008)
- except (TypeError,ValueError):return False
- if ref<=0 or mark<=0:return False
- # Do not execute an H1/M15 signal after price has already travelled far away
- # from the confirmation area. 2x the normal M15 range is allowed, bounded
- # between 0.40% and 2.00% so ordinary volatility is not treated as staleness.
- limit=max(.004,min(.020,typical*2.0))
- return abs(mark/ref-1.0)<=limit
-
 S1_REFERENCE_LEVERAGE=25.0
+
+@account_mutation
+def strategy1_flow_execution_cycle(prices):
+ # Sub-second execution path: cached marks + executed Hyperliquid trades only.
+ # H1 discovery remains in comparison_strategies_loop; M15 is not consulted.
+ for symbol in LOCAL_EXPERIMENT_SYMBOLS:
+  mark=prices.get(symbol)
+  if not mark:continue
+  with LOCK:
+   pos=copy.deepcopy(S.get("local_s1_positions",{}).get(symbol))
+   watch=copy.deepcopy(S.get("local_s1_watch",{}).get(symbol))
+  flow=MARKET_OBS.flow_context(symbol,time.time())
+  if pos:
+   reason=local4_pressure_exit(pos,None,float(mark),flow)
+   if not reason:continue
+   closed=_comparison_close("local_s1","local_s1",symbol,float(mark),reason,True,"WAIT_COUNTER_CONTROL")
+   if not closed:continue
+   # The exit-causing counter-flow is itself the first state-machine event.
+   with LOCK:watch=copy.deepcopy(S.get("local_s1_watch",{}).get(symbol))
+   if watch:_comparison_watch_update("local_s1","local_s1",symbol,watch,float(mark),None,flow)
+   continue
+  if not watch:continue
+  updated=_comparison_watch_update("local_s1","local_s1",symbol,watch,float(mark),None,flow)
+  if not local4_reentry_ready(int(updated.get("side") or 0),None,float(mark),updated,flow,time.time()):continue
+  side=int(updated.get("side") or 0)
+  with LOCK:current=copy.deepcopy(S.get("local_h1_direction",{}).get(symbol))
+  # A newly confirmed opposite H1 regime always wins over the old watch anchor.
+  if current and current.get("ready") and int(current.get("entry_side") or 0)==-side:continue
+  analysis=current if current and current.get("ready") else _comparison_anchor("local_s1",symbol)
+  if (analysis and analysis.get("ready") and not analysis.get("entry_blocked") and
+      int(analysis.get("entry_side") or 0)==side):
+   _comparison_open("local_s1","local_s1",symbol,side,analysis,float(mark),"REENTRY")
+
+def strategy1_flow_execution_loop():
+ while not SHUTDOWN.is_set():
+  try:
+   with LOCK:
+    active=bool(S.get("engine_active")) and S.get("mode")=="PAPER_ONLY" and not S.get("orders_enabled")
+    age=time.time()-float(S.get("_last_poll_epoch",0) or 0)
+    prices=dict(S.get("_prices",{}))
+   if active and 0<=age<=8 and prices:
+    strategy1_flow_execution_cycle(prices)
+    with LOCK:S["sources"]["Strategy1FlowExecution"]={"ok":True,"last_check":now(),
+     "mode":"cached_mark_executed_tape_500ms","m15_gate":False}
+  except LeaseLost as exc:
+   with LOCK:S["engine_active"]=False;S["engine_error"]=str(exc)
+  except Exception as exc:
+   with LOCK:S["sources"]["Strategy1FlowExecution"]={"ok":False,"last_check":now(),
+    "error":type(exc).__name__+":"+str(exc)[:160]}
+  SHUTDOWN.wait(.5)
 
 def comparison_strategies_loop():
  pool=concurrent.futures.ThreadPoolExecutor(max_workers=16,thread_name_prefix="local-compare")
@@ -3166,7 +3182,7 @@ def comparison_strategies_loop():
     m15_rows,m15_ms=fetched.get((symbol,"m15"),([],int(time.time()*1000)))
     flow=MARKET_OBS.flow_context(symbol,time.time())
 
-    # Strategy 1: restored profitable H1->M15 Caterpillar with cost-aware profit floor.
+    # Strategy 1: H1 supplies direction; the live executed-trade tape owns execution.
     with LOCK:
      p1=copy.deepcopy(S.get("local_s1_positions",{}).get(symbol));w1=copy.deepcopy(S.get("local_s1_watch",{}).get(symbol))
     side1=int((p1 or w1 or {}).get("side") or a1.get("entry_side") or 1)
@@ -3176,53 +3192,27 @@ def comparison_strategies_loop():
      p1=_comparison_update_path("local_s1","local_s1",symbol,p1,float(mark))
      h1exit=("opposite_h1_local_emergency_exit" if a1.get("ready") and a1.get("anchor_confirmed") and int(a1.get("entry_side") or 0)==-int(p1.get("side") or 0) else None)
      if not h1exit:h1exit=hype_position_exit(p1,a1,float(mark)) if a1.get("ready") else None
-     entry=float(p1["entry"]);favorable=int(p1["side"])*(float(mark)/entry-1.0)
-     floor=max(.0002,float((p1.get("features") or {}).get("estimated_round_trip_cost_move",0) or 0))
-     weakening=_s1_weakening_exit(p1,m15,float(mark),flow)
-     raw_pressure=local4_pressure_exit(p1,m15,float(mark),flow)
-     # The first COMPLETED M15 control flip is the causal profit/loss exit.
-     # Partial candles cannot trigger it, and a second M15 would surrender MFE.
-     pressure_reason=raw_pressure if raw_pressure and not m15.get("partial") else None
+     pressure_reason=local4_pressure_exit(p1,None,float(mark),flow)
      if h1exit:
       # A confirmed opposite H1 local invalidates the old thesis regardless of PnL.
       if _comparison_close("local_s1","local_s1",symbol,float(mark),h1exit):act1="H1_OPPOSITE_EXIT"
      elif pressure_reason:
-      # Real counter-pressure is an exit signal even if the trade is slightly red.
-      # Waiting for it to recover is exactly what created the -30/-40% ROE tails.
-      if _comparison_close("local_s1","local_s1",symbol,float(mark),pressure_reason,True,"WAIT_PULLBACK"):act1="M15_PRESSURE_EXIT"
-     elif weakening:
-      if _comparison_close("local_s1","local_s1",symbol,float(mark),"m15_weakening_profit_exit",True,"WAIT_PULLBACK"):act1="M15_WEAKENING_EXIT"
+      if _comparison_close("local_s1","local_s1",symbol,float(mark),pressure_reason,True,"WAIT_COUNTER_CONTROL"):act1="EXECUTED_FLOW_FLIP_EXIT"
     else:
-     # Fresh entries need an observed opposite M15 pullback before renewed H1-side movement.
-     with LOCK:
-      pullbacks=S.setdefault("_s1_initial_pullback",{})
-      anchor_key=(int(a1.get("signal_candle_time") or 0),int(a1.get("entry_side") or 0))
-      state=pullbacks.get(symbol)
-      if not state or tuple(state.get("anchor",()))!=anchor_key:
-       state={"anchor":anchor_key,"counter_seen":False,"recovery_since":None}
-       pullbacks[symbol]=state
-      direction=local4_m15_direction(m15)
-      if anchor_key[1] in (-1,1) and direction==-anchor_key[1]:
-       state["counter_seen"]=True
-      # Do not chase first red/green tick: wait for observed pullback exhaustion.
-      if state.get("counter_seen") and direction==anchor_key[1]:
-       if state.get("recovery_since") is None:state["recovery_since"]=time.time()
-      else:state["recovery_since"]=None
-      initial_ready=bool(state.get("recovery_since") is not None and time.time()-state["recovery_since"]>=30)
      if w1:
       if a1.get("ready") and int(a1.get("entry_side") or 0)==-int(w1.get("side") or 0):
        with pg() as db:
         with db.transaction():STORE.fence(db);db.execute("delete from local_s1_watchlist where symbol=%s",(symbol,))
        with LOCK:S.setdefault("local_s1_watch",{}).pop(symbol,None)
        w1=None;act1="WATCH_INVALIDATED_BY_H1"
-      else:w1=_comparison_watch_update("local_s1","local_s1",symbol,w1,float(mark),m15,flow)
-     if w1 and local4_reentry_ready(int(w1["side"]),m15,float(mark),w1,flow,time.time()):
-      if _comparison_open("local_s1","local_s1",symbol,int(w1["side"]),a1,float(mark),"REENTRY"):act1="M15_RECOVERY_REENTRY"
+      else:w1=_comparison_watch_update("local_s1","local_s1",symbol,w1,float(mark),None,flow)
+     if w1 and local4_reentry_ready(int(w1["side"]),None,float(mark),w1,flow,time.time()):
+      if _comparison_open("local_s1","local_s1",symbol,int(w1["side"]),a1,float(mark),"REENTRY"):act1="EXECUTED_FLOW_REENTRY"
      elif not w1 and a1.get("ready") and not a1.get("entry_blocked"):
       side=int(a1.get("entry_side") or 0)
-      candidate=local4_entry_candidate(symbol,a1,m15,flow,time.time())
-      if side in (-1,1) and initial_ready and candidate.get("eligible"):
-       if _comparison_open("local_s1","local_s1",symbol,side,a1,float(mark),"M15"):act1="M15_ENTRY"
+      candidate=local4_entry_candidate(symbol,a1,None,flow,time.time())
+      if side in (-1,1) and candidate.get("eligible"):
+       if _comparison_open("local_s1","local_s1",symbol,side,a1,float(mark),"EXECUTED_FLOW"):act1="EXECUTED_FLOW_ENTRY"
     with LOCK:p1=copy.deepcopy(S.get("local_s1_positions",{}).get(symbol));w1=copy.deepcopy(S.get("local_s1_watch",{}).get(symbol))
     s1_details[symbol]={"ok":bool(a1.get("ready")),"h1_local":{"pivot_type":a1.get("pivot_type"),"pivot_price":a1.get("pivot_price"),
       "entry_side":a1.get("entry_side"),"signal_candle_time":a1.get("signal_candle_time"),"persisted":a1.get("persisted",False)},
@@ -3239,7 +3229,7 @@ def comparison_strategies_loop():
    s1stats=_comparison_stats("local_s1");s2stats={"trades":0,"wins":0,"win_rate":None,"realized_pnl":0.0}
    with LOCK:
     S["sources"]["Strategy 1 — Restored Caterpillar"]={"ok":all(x.get("ok") for x in s1_details.values()),"ready":all(x.get("ok") for x in s1_details.values()),
-      "last_check":now(),"mode":"paper_h1_local_m15_control_flip_reentry","symbols":list(LOCAL_EXPERIMENT_SYMBOLS),
+      "last_check":now(),"mode":"paper_h1_local_executed_flow_flip_reentry","symbols":list(LOCAL_EXPERIMENT_SYMBOLS),
       "starting_equity":500.0,"equity":s1_total,"realized_equity":S.get("local_s1_equity",500.0),"unrealized_pnl":s1_unreal,
       "used_margin":s1_used,"free_margin":s1_free,"reference_margin_fraction":.20,"reference_leverage":25.0,
       "compound":True,"open_positions":list(S.get("local_s1_positions",{})),"details":s1_details,"stats":s1stats,"error":None}
@@ -5899,7 +5889,7 @@ def html_strategy1_only(data):
   unreal_now=float(pos.get("unrealized_pnl",0) or 0) if pos else 0.0
   current=item["pnl"]+unreal_now
   d=details.get(sym) or {}
-  status=("OPEN "+str(pos.get("side"))) if pos else ("H1/M15 READY" if d.get("ok") and (d.get("m15") or {}).get("ready") else "WAIT DATA")
+  status=("OPEN "+str(pos.get("side"))) if pos else ("H1/FLOW READY" if d.get("ok") else "WAIT DATA")
   token_cards.append("<article class='tok'><span class='symbol'>%s</span><span class='gain %s'>$%+.2f</span><small>%d новых закрытий · %s</small><small>%s</small></article>"%(esc(sym),"pos" if current>=0 else "neg",current,item["closed"],"позиция открыта" if pos else "нет позиции",esc(status)))
  css="""*{box-sizing:border-box}html{scroll-behavior:smooth}body{background:radial-gradient(ellipse at 10% 0%,#24124b 0,transparent 40%),radial-gradient(ellipse at 95% 3%,#10254c 0,transparent 36%),#040712;color:#e9eaff;font-family:Inter,ui-sans-serif,system-ui,sans-serif;margin:0;padding:25px;max-width:1600px;margin-inline:auto}header{display:flex;align-items:center;justify-content:space-between;border:1px solid #3b286e;border-radius:18px;background:#090f21dd;padding:18px 24px;gap:16px;flex-wrap:wrap}h1{font-size:28px;letter-spacing:2px;margin:0;color:#d7afff;text-shadow:0 0 18px #8e3fff}.logo{color:#b43bff}nav{display:flex;gap:14px;flex-wrap:wrap}a{color:#a6c7ff;text-decoration:none;font-size:13px}a:hover{color:#b7ff32}.shell{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(280px,.8fr);gap:14px;margin:17px 0}.panel{background:linear-gradient(145deg,#0b1227,#090e1e);border:1px solid #283366;border-radius:19px;padding:20px;box-shadow:0 15px 34px #0007;min-width:0}.hero{border-color:#7439da;background:radial-gradient(ellipse at 80% 0,#1c2152,transparent 55%),#090d22}.eyebrow{text-transform:uppercase;font-weight:800;letter-spacing:2px;font-size:12px;color:#c8acff}.total{font:800 clamp(42px,6.5vw,90px)/1.1 ui-monospace,SFMono-Regular,Consolas,monospace;color:#baff48;text-shadow:0 0 28px #7bff3666;margin-top:16px}.percent{color:#baff48;font-weight:750;font-size:clamp(20px,2.5vw,31px)}.sub{color:#8498ba;font-size:12px;line-height:1.7}.pos{color:#aaff49!important}.neg{color:#ff6e9c!important}.caption{margin-top:6px;color:#90a6c5;font-size:12px}.chart svg{width:100%;height:auto;filter:drop-shadow(0 0 8px #30bcff66)}.timeline{display:flex;justify-content:space-between;color:#6c89ad;font-size:11px}h2{font-size:16px;letter-spacing:.5px;margin:0 0 14px;color:#d9e4fc}.summary{display:grid;gap:15px}.mini{border:1px solid #273965;border-radius:12px;background:#0b1730;padding:14px}.mini b{display:block;font:700 20px ui-monospace,monospace;margin-top:8px}.tokens{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:11px;margin-bottom:16px}.tok{min-width:0;background:linear-gradient(140deg,#0e1730,#0a0c1e);border:1px solid #36438a;border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:9px}.tok:nth-child(3n+1){border-color:#6522bf}.tok:nth-child(3n+2){border-color:#116ac9}.tok:nth-child(3n){border-color:#547e20}.tok .symbol{font-weight:800;color:#e0dcff}.tok .gain{font:750 17px ui-monospace,monospace}.tok small{font-size:10px;color:#899bc3}table{width:100%;border-collapse:collapse}td,th{padding:13px 11px;border-bottom:1px solid #1f2b4f;text-align:left;font:12px ui-monospace,Consolas,monospace;white-space:nowrap}th{font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:#f5df53;background:#111832}tr:hover{background:#151b35}.scroll{overflow:auto}.bottom{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}.chip{display:inline-block;background:#1e204f;color:#c5b6ff;border:1px solid #6235cb;border-radius:50px;padding:6px 10px;font:11px ui-monospace,monospace}.status{color:#baff48}.empty{color:#7a8caa;padding:16px;font-size:13px}footer{color:#7c92af;font-size:11px;margin:22px 0;text-align:center}@media(max-width:1050px){.tokens{grid-template-columns:repeat(4,minmax(0,1fr))}.shell,.bottom{grid-template-columns:1fr}}@media(max-width:600px){body{padding:10px}header{padding:14px}.tokens{grid-template-columns:repeat(2,minmax(0,1fr))}.panel{padding:13px}.total{font-size:42px}.tok .gain{font-size:15px}td,th{font-size:11px;padding:9px}}"""
  page="""<!doctype html><html lang='ru'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width'><meta http-equiv='refresh' content='10'><title>PANDORA · Neon Trading Terminal</title><style>%s</style></head><body>
@@ -5909,7 +5899,7 @@ def html_strategy1_only(data):
  <section id='tokens'><h2>Отслеживаемые рынки</h2><div class='tokens'>%s</div></section>
  <section class='panel' id='positions'><h2>Открытые позиции</h2><div class='scroll'><table><thead><tr><th>Token</th><th>Side</th><th>Phase</th><th>H1</th><th>Pivot</th><th>Margin</th><th>Notional</th><th>Lev</th><th>Entry</th><th>Mark</th><th>Open PNL</th><th>ROE</th></tr></thead><tbody>%s</tbody></table></div></section>
  <div class='bottom' style='margin-top:14px'><section class='panel' id='history'><h2>Новая история сделок</h2><div class='sub'>Показываются только PAPER-сделки, закрытые после 28 октября 2026, 12:26 UTC. Старые записи сохранены в аудите.</div><div class='scroll'><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>Entry</th><th>Exit</th><th>Margin</th><th>Notional</th><th>PNL</th><th>Reason</th></tr>%s</table></div></section>
- <section class='panel' id='discovery'><h2>Discovery · Bybit 24/7</h2><p class='sub'>Сканирует весь Bybit Linear рынок агрегированным запросом. Аномальная волатильность только переводит рынок в HOT; направление задаёт H1 Local High/Low. HOT-пул обновляется автоматически. Scanner: <b>ACTIVE</b>.</p><span class='chip'>BYBIT → HOT → H1 LOCAL → M15</span></section><section class='panel' id='strategy'><h2>Как работает Strategy 1</h2><p class='sub'>H1 определяет подтверждённый Local High / Local Low и направление. На M15 алгоритм ищет вход по рыночному импульсу, закрывает позицию при ослаблении потока и ждёт возобновления движения для повторного входа. Позиции и цены обновляются по доступным рыночным данным; плечо и маржа отображаются по каждой открытой сделке.</p><span class='chip'>H1 → M15 → EXIT → RE-ENTRY</span></section></div>
+ <section class='panel' id='discovery'><h2>Discovery · Bybit 24/7</h2><p class='sub'>Сканирует весь Bybit Linear рынок агрегированным запросом. Аномальная волатильность только переводит рынок в HOT; направление задаёт H1 Local High/Low. HOT-пул обновляется автоматически. Scanner: <b>ACTIVE</b>.</p><span class='chip'>BYBIT → HOT → H1 LOCAL</span></section><section class='panel' id='strategy'><h2>Как работает Strategy 1</h2><p class='sub'>H1 определяет Local High / Local Low и разрешённое направление. Исполненные агрессивные покупки и продажи в окнах 15/30/60 секунд определяют смену контроля: встречный захват фиксирует позицию, а более поздний возврат контроля по H1 разрешает повторный вход. Закрытия M15 не ожидаются.</p><span class='chip'>H1 → EXECUTED FLOW → EXIT → RE-ENTRY</span></section></div>
  </main><footer>© PANDORA · Paper trading terminal · No live exchange orders</footer></body></html>"""%(css,dream_total,dream_total_pct,esc(strategy_age),chart_svg,len(fresh),len(positions),len(strategy1_runtime_symbols()),len(fresh),"".join(token_cards),"".join(rows),"".join(fresh_rows) if fresh_rows else "<tr><td colspan='9' class='empty'>Новая история пуста — записи появятся после закрытия новых PAPER-сделок.</td></tr>")
  return page
 
@@ -5965,7 +5955,7 @@ def html_dashboard(data):
   )%(
    "OK" if s1.get("ok") else "WARMUP/ERROR",float(s1.get("equity",500) or 500),len(s1.get("open_positions",[]) or []),int(s1stats.get("trades",0) or 0),float(s1stats.get("realized_pnl",0) or 0),
    "OK" if s2.get("ok") else "WARMUP/ERROR",float(s2.get("equity",500) or 500),len(s2.get("open_positions",[]) or []),int(s2stats.get("trades",0) or 0),float(s2stats.get("realized_pnl",0) or 0))
- comparison+='<div class="muted">S1: H1 direction + M15 weakening/profit floor + pullback/resumption re-entry. S2: LOCAL HIGH → SHORT until confirmed LOCAL LOW; LOCAL LOW → LONG until confirmed LOCAL HIGH. Both: INIT / NEAR / GRASS / HYPE / BTC / ETH / SOL · 20%% margin · 25x paper reference · compounding.</div>'
+ comparison+='<div class="muted">S1: H1 sets direction; live executed buyer/seller control drives exit and re-entry without an M15 close. S2: LOCAL HIGH → SHORT until confirmed LOCAL LOW; LOCAL LOW → LONG until confirmed LOCAL HIGH. Both: INIT / NEAR / GRASS / HYPE / BTC / ETH / SOL · 20%% margin · 25x paper reference · compounding.</div>'
  with LOCK:
   s1_positions=copy.deepcopy(S.get("local_s1_positions",{}))
   s2_positions=copy.deepcopy(S.get("local_s2_positions",{}))
@@ -6230,7 +6220,7 @@ def html_dashboard(data):
     esc(p.get("entry","—")),esc(p.get("mark","—")),esc(p.get("roe_pct","—")),
     "posv" if pnl>=0 else "negv",round(pnl,4),esc(d.get("last_action") or "—")))
   comparison_html+='<table><tr><th>Token</th><th>Confirmed H1 local</th><th>Side</th><th>Margin $</th><th>Position $</th><th>Leverage</th><th>Entry</th><th>Mark</th><th>ROE%%</th><th>Open P&L</th><th>Action</th></tr>'+''.join(rows)+'</table>'
-  if key=="local_s1":comparison_html+='<div class="muted">H1 sets direction. M15 weakening/profit floor closes profitable legs; confirmed pullback + resumption re-enters in the same H1 direction.</div>'
+  if key=="local_s1":comparison_html+='<div class="muted">H1 sets direction. Executed aggressor flow over 15s/30s/60s closes on a real control flip and re-enters only after a later mirrored takeover.</div>'
   elif key=="local_s2":comparison_html+='<div class="muted">Pure H1 swing: LOCAL HIGH → SHORT and hold until confirmed LOCAL LOW; then close and flip LONG. LOCAL LOW → LONG and hold until confirmed LOCAL HIGH; then close and flip SHORT. No M15 exits.</div>'
   else:comparison_html+='<div class="muted">Restored Local12 v10: 12 tokens · H1 direction · M15 weakening/profit floor · WAIT_PULLBACK → WAIT_RESUMPTION re-entry · 20% current MTM equity · fixed 25x PAPER · compounding.</div>'
  s1_hist=data.get("local_s1_closed_trades") or []
@@ -6509,6 +6499,7 @@ if __name__=="__main__":
   ("market_trades",market_trade_stream),
   ("breadth_history",market_regime_history),
   ("telemetry",telemetry),
+  ("strategy1_flow_execution",strategy1_flow_execution_loop),
   ("local_strategy_comparison",comparison_strategies_loop),
   ("dashboard_history",dashboard_history_loop),
   ("dashboard_cache",dashboard_cache_loop),
