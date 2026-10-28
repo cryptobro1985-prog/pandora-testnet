@@ -3658,19 +3658,11 @@ def market_history_bootstrap():
    SHUTDOWN.wait(min(2.0,quiet_remaining));continue
   try:
    stamp=time.time()
-   # Bootstrap H1/H4 market-regime context first so Pump/Dump becomes trade-ready
-   # before the larger Local candle fan-out completes.
-   for sym in REGIME_SEED_SYMBOLS:
-    key=("regime",sym)
-    if key in completed:continue
-    stamp=time.time()
-    rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":sym,"interval":"1m",
-      "startTime":int((stamp-6*3600)*1000),"endTime":int(stamp*1000)}}))
-    if isinstance(rows,list) and rows:
-     accept_regime_candles(rows);completed.add(key)
-    SHUTDOWN.wait(2.0)
+   # Trading-critical priority: restore Strategy 1 H1/M15 first. A deploy must
+   # never spend the shared REST budget on breadth while Caterpillar is blind.
+   priority_local=list(LOCAL_EXPERIMENT_SYMBOLS)+[x for x in ALL_LOCAL_CANDLE_SYMBOLS if x not in LOCAL_EXPERIMENT_SYMBOLS]
    # Native intervals avoid losing older H1 anchors.
-   for sym in ALL_LOCAL_CANDLE_SYMBOLS:
+   for sym in priority_local:
     for interval,hours in (("1h",120),("15m",12)):
      if SHUTDOWN.is_set():return
      key=("local",sym,interval)
@@ -3690,6 +3682,17 @@ def market_history_bootstrap():
        "local_ready":sum(1 for x in LOCAL_EXPERIMENT_SYMBOLS if ("local",x,"1h") in completed and ("local",x,"15m") in completed),
        "error":None}
      SHUTDOWN.wait(3.0)
+   # Breadth/regime history is secondary. Restore it only after every Local
+   # symbol has its native H1/M15 cache, so Strategy 1 survives rolling deploys.
+   for sym in REGIME_SEED_SYMBOLS:
+    key=("regime",sym)
+    if key in completed:continue
+    stamp=time.time()
+    rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":sym,"interval":"1m",
+      "startTime":int((stamp-6*3600)*1000),"endTime":int(stamp*1000)}}))
+    if isinstance(rows,list) and rows:
+     accept_regime_candles(rows);completed.add(key)
+    SHUTDOWN.wait(2.0)
    with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":False,"last_check":now(),
      "mode":"paced_rest_after_lease","regime_ready":sum(1 for x in completed if x[0]=="regime"),
      "local_ready":sum(1 for x in LOCAL_EXPERIMENT_SYMBOLS if ("local",x,"1h") in completed and ("local",x,"15m") in completed),"error":None}
