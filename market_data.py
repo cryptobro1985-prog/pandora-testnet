@@ -322,14 +322,25 @@ class RollingMarketData:
             def volumes(seconds):
                 rows=[buckets.get(i,(0.,0.,0)) for i in range(end-seconds//self.bucket_seconds+1,end+1)]
                 return sum(x[0] for x in rows),sum(x[1] for x in rows),sum(x[2] for x in rows)
+            b15,s15,c15=volumes(15)
+            b30,s30,c30=volumes(30)
             buy,sell,count=volumes(60)
-            out.update(trade_data_fresh=True,buy_volume_60s=buy,sell_volume_60s=sell,
-                       flow_imbalance=(buy-sell)/(buy+sell) if buy+sell else 0.,
+            def imbalance(b,s):
+                return (b-s)/(b+s) if b+s else 0.
+            i15,i30,i60=imbalance(b15,s15),imbalance(b30,s30),imbalance(buy,sell)
+            out.update(trade_data_fresh=True,
+                       buy_volume_15s=b15,sell_volume_15s=s15,trade_count_15s=c15,
+                       buy_volume_30s=b30,sell_volume_30s=s30,trade_count_30s=c30,
+                       buy_volume_60s=buy,sell_volume_60s=sell,
+                       flow_imbalance=i60,flow_imbalance_15s=i15,flow_imbalance_30s=i30,
+                       flow_delta_15_60=i15-i60,flow_delta_30_60=i30-i60,
                        trade_count_60s=count,observed_notional_60s=buy+sell,
                        volume_window_end_epoch=epoch,volume_source="hyperliquid_ws_executed_trades")
             if coverage>=300:
                 b5,s5,c5=volumes(300)
-                out.update(buy_volume_300s=b5,sell_volume_300s=s5,trade_count_300s=c5)
+                i300=imbalance(b5,s5)
+                out.update(buy_volume_300s=b5,sell_volume_300s=s5,trade_count_300s=c5,
+                           flow_imbalance_300s=i300,flow_delta_60_300=i60-i300)
             return out
 
     def stats(self):
