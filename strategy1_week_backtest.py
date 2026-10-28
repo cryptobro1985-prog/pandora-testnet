@@ -6,6 +6,7 @@ bars, and replays the universal H1 -> flow weakening -> pullback -> re-entry
 state machine with 20% margin, 25x reference leverage and compounding.
 """
 import csv
+import concurrent.futures
 import datetime as dt
 import gzip
 import io
@@ -289,24 +290,34 @@ def run_backtest(start_date=None,days=7):
     warm_epoch=dt.datetime.combine(warm,dt.time(0),tzinfo=dt.timezone.utc).timestamp()
 
     data={};coverage={}
+    days_list=[];d=warm
+    while d<end_date:
+        days_list.append(d);d+=dt.timedelta(days=1)
+
+    def load_one(symbol,d):
+        try:
+            spool,nbytes,url=_download_day(symbol,d)
+            try:
+                part,n=_parse_day(spool,warm_epoch,end_epoch)
+            finally:
+                spool.close()
+            return d,part,n,nbytes,url,None
+        except Exception as exc:
+            return d,{},0,0,None,type(exc).__name__+":"+str(exc)[:100]
+
     for symbol in SYMBOLS:
         buckets={};files=[];trades=0
-        d=warm
-        while d<end_date:
-            try:
-                spool,nbytes,url=_download_day(symbol,d)
-                try:
-                    part,n=_parse_day(spool,warm_epoch,end_epoch)
-                finally:
-                    spool.close()
-                _merge_buckets(buckets,part);trades+=n
-                files.append({"date":d.isoformat(),"url":url,"ok":True,"bytes":nbytes,"trades":n})
-                print("S1_WEEK_ARCHIVE",json.dumps({"symbol":symbol,"date":d.isoformat(),"bytes":nbytes,"trades":n},separators=(",",":")),flush=True)
-            except Exception as exc:
-                err=type(exc).__name__+":"+str(exc)[:100]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4,thread_name_prefix="bybit-archive") as pool:
+            futures=[pool.submit(load_one,symbol,d) for d in days_list]
+            results=[f.result() for f in concurrent.futures.as_completed(futures)]
+        for d,part,n,nbytes,url,err in sorted(results,key=lambda x:x[0]):
+            if err:
                 files.append({"date":d.isoformat(),"ok":False,"error":err})
                 print("S1_WEEK_ARCHIVE_ERROR",json.dumps({"symbol":symbol,"date":d.isoformat(),"error":err},separators=(",",":")),flush=True)
-            d+=dt.timedelta(days=1)
+                continue
+            _merge_buckets(buckets,part);trades+=n
+            files.append({"date":d.isoformat(),"url":url,"ok":True,"bytes":nbytes,"trades":n})
+            print("S1_WEEK_ARCHIVE",json.dumps({"symbol":symbol,"date":d.isoformat(),"bytes":nbytes,"trades":n},separators=(",",":")),flush=True)
         data[symbol]={"buckets":buckets,"m15":_bars(buckets,900),"h1":_bars(buckets,3600),
                       "events":_h1_events(_bars(buckets,3600))}
         coverage[symbol]={"files":files,"trade_rows":trades,"bucket15s":len(buckets)}
