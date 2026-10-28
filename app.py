@@ -2839,7 +2839,7 @@ def _comparison_open(prefix,state_name,symbol,side,analysis,mark,entry_kind):
  equity,used,free,_=_comparison_mtm(state_name,prices)
  margin=max(.01,equity*.20)
  if free+1e-9<margin:return False
- leverage=float(S1_RISK_LEVERAGE.get(symbol,25.0)) if state_name=="local_s1" else 25.0
+ leverage=S1_REFERENCE_LEVERAGE if state_name=="local_s1" else 25.0
  notional=margin*leverage;opened=now();epoch=time.time()
  features={**copy.deepcopy(analysis),"strategy_name":state_name,"entry_kind":entry_kind,
    "reference_margin_fraction":.20,"reference_leverage":leverage,"estimated_round_trip_cost_move":2*FEE+.0004,
@@ -2961,26 +2961,47 @@ def _s1_entry_not_chased(analysis,m15,mark):
  limit=max(.004,min(.020,typical*2.0))
  return abs(mark/ref-1.0)<=limit
 
-S1_RISK_LEVERAGE={"HYPE":25.0,"NEAR":25.0,"GRASS":20.0,"INIT":15.0}
+S1_REFERENCE_LEVERAGE=25.0
 
-def _s1_adaptive_stop(position,m15,mark):
+def _s1_adaptive_stop(position,m15,mark,flow):
+ """Universal protective stop for every Strategy 1 symbol.
+
+ H1 decides direction. M15/flow decide whether we should remain in the trade.
+ The stop is a last-resort guard, not the normal exit. It scales from each
+ symbol's observed M15 range, so the same logic can be used for BTC/ETH/SOL
+ and volatile alts without symbol-specific thresholds.
+ """
  if not position or not m15 or not m15.get("ready"):return None
  try:
   side=int(position.get("side") or 0);entry=float(position.get("entry") or 0);mark=float(mark or 0)
-  typical=float(m15.get("median_range_move") or .008)
-  leverage=max(1.0,float(position.get("leverage") or 25.0))
+  typical=max(.0005,float(m15.get("median_range_move") or .008))
+  leverage=max(1.0,float(position.get("leverage") or S1_REFERENCE_LEVERAGE))
  except (TypeError,ValueError):return None
  if side not in (-1,1) or entry<=0 or mark<=0:return None
- # Volatility stop: outside normal M15 noise. Risk cap: roughly 30% gross ROE.
- # Lower leverage on the most volatile symbols lets the price stop breathe
- # without accepting -40/-50% leveraged drawdowns.
- volatility_stop=max(.0080,min(.0200,typical*1.75))
- roe_cap_stop=.30/leverage
- stop_move=min(volatility_stop,roe_cap_stop)
  adverse=max(0.0,-side*(mark/entry-1.0))
- if adverse<stop_move:return None
- return {"reason":"s1_adaptive_volatility_stop","adverse_move":adverse,"stop_move":stop_move,
-   "leverage":leverage,"approx_gross_roe_pct":-adverse*leverage*100.0}
+
+ # Soft protective level sits outside ordinary M15 noise. It only executes
+ # when the adverse candle/flow confirms that this is not a random wick.
+ soft_stop=max(.0075,min(.0180,typical*1.35))
+
+ fresh=bool((flow or {}).get("trade_data_fresh"))
+ try:imb=float((flow or {}).get("flow_imbalance")) if fresh else None
+ except (TypeError,ValueError):imb=None
+ counter_flow=(imb is not None and side*imb<=-.12)
+ candle_adverse=(int(m15.get("candle_direction") or 0)==-side and float(m15.get("body_fraction") or 0)>=.45)
+ strong_adverse=bool(m15.get("strong_adverse_pressure")) and int(m15.get("adverse_score") or 0)>=3
+
+ if adverse>=soft_stop and candle_adverse and (counter_flow or strong_adverse):
+  return {"reason":"s1_confirmed_protective_stop","adverse_move":adverse,"stop_move":soft_stop,
+    "leverage":leverage,"approx_gross_roe_pct":-adverse*leverage*100.0}
+
+ # Catastrophe level is wider than normal noise and also volatility-scaled.
+ # This prevents a runaway loss when data/flow confirmation arrives late.
+ hard_stop=max(.0150,min(.0250,typical*1.75))
+ if adverse>=hard_stop:
+  return {"reason":"s1_hard_catastrophe_stop","adverse_move":adverse,"stop_move":hard_stop,
+    "leverage":leverage,"approx_gross_roe_pct":-adverse*leverage*100.0}
+ return None
 
 def comparison_strategies_loop():
  pool=concurrent.futures.ThreadPoolExecutor(max_workers=16,thread_name_prefix="local-compare")
@@ -3031,7 +3052,7 @@ def comparison_strategies_loop():
      be=caterpillar_breakeven(p1,float(mark))
      weakening=_s1_weakening_exit(p1,m15,float(mark),flow)
      pressure_reason=caterpillar_pressure_exit(p1,m15,float(mark),flow)
-     stop_hit=_s1_adaptive_stop(p1,m15,float(mark))
+     stop_hit=_s1_adaptive_stop(p1,m15,float(mark),flow)
      if h1exit:
       # A confirmed opposite H1 local invalidates the old thesis regardless of PnL.
       if _comparison_close("local_s1","local_s1",symbol,float(mark),h1exit):act1="H1_OPPOSITE_EXIT"
@@ -3087,7 +3108,7 @@ def comparison_strategies_loop():
    s1stats=_comparison_stats("local_s1");s2stats=_comparison_stats("local_s2")
    with LOCK:
     S["sources"]["Strategy 1 — Restored Caterpillar"]={"ok":all(x.get("ok") for x in s1_details.values()),"ready":all(x.get("ok") for x in s1_details.values()),
-      "last_check":now(),"mode":"paper_restored_v10_h1_m15_profit_floor","symbols":list(LOCAL_EXPERIMENT_SYMBOLS),
+      "last_check":now(),"mode":"paper_universal_h1_m15_flow_weakening_reentry_25x_protective_stop","symbols":list(LOCAL_EXPERIMENT_SYMBOLS),
       "starting_equity":500.0,"equity":s1_total,"realized_equity":S.get("local_s1_equity",500.0),"unrealized_pnl":s1_unreal,
       "used_margin":s1_used,"free_margin":s1_free,"reference_margin_fraction":.20,"reference_leverage":25.0,
       "compound":True,"open_positions":list(S.get("local_s1_positions",{})),"details":s1_details,"stats":s1stats,"error":None}
