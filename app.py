@@ -3238,7 +3238,6 @@ def comparison_strategies_loop():
        turn["confirmed_candles"]=0
        turn["last_confirmed_candle"]=None
       pressure_reason=raw_pressure if int(turn.get("confirmed_candles") or 0)>=2 else None
-     stop_hit=_s1_adaptive_stop(p1,m15,float(mark),flow)
      if h1exit:
       # A confirmed opposite H1 local invalidates the old thesis regardless of PnL.
       if _comparison_close("local_s1","local_s1",symbol,float(mark),h1exit):act1="H1_OPPOSITE_EXIT"
@@ -3246,8 +3245,6 @@ def comparison_strategies_loop():
       # Real counter-pressure is an exit signal even if the trade is slightly red.
       # Waiting for it to recover is exactly what created the -30/-40% ROE tails.
       if _comparison_close("local_s1","local_s1",symbol,float(mark),pressure_reason,True,"WAIT_PULLBACK"):act1="M15_PRESSURE_EXIT"
-     elif stop_hit:
-      if _comparison_close("local_s1","local_s1",symbol,float(mark),stop_hit["reason"],True,"WAIT_PULLBACK"):act1="ADAPTIVE_STOP_EXIT"
      elif weakening:
       if _comparison_close("local_s1","local_s1",symbol,float(mark),"m15_weakening_profit_exit",True,"WAIT_PULLBACK"):act1="M15_WEAKENING_EXIT"
     else:
@@ -3297,7 +3294,7 @@ def comparison_strategies_loop():
    s1stats=_comparison_stats("local_s1");s2stats={"trades":0,"wins":0,"win_rate":None,"realized_pnl":0.0}
    with LOCK:
     S["sources"]["Strategy 1 — Restored Caterpillar"]={"ok":all(x.get("ok") for x in s1_details.values()),"ready":all(x.get("ok") for x in s1_details.values()),
-      "last_check":now(),"mode":"paper_universal_h1_m15_flow_weakening_reentry_25x_protective_stop","symbols":list(LOCAL_EXPERIMENT_SYMBOLS),
+      "last_check":now(),"mode":"paper_h1_local_m15_control_flip_reentry","symbols":list(LOCAL_EXPERIMENT_SYMBOLS),
       "starting_equity":500.0,"equity":s1_total,"realized_equity":S.get("local_s1_equity",500.0),"unrealized_pnl":s1_unreal,
       "used_margin":s1_used,"free_margin":s1_free,"reference_margin_fraction":.20,"reference_leverage":25.0,
       "compound":True,"open_positions":list(S.get("local_s1_positions",{})),"details":s1_details,"stats":s1stats,"error":None}
