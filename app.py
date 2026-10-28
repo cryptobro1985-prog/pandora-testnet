@@ -5371,6 +5371,54 @@ def local_compare_history(prefix,limit=100):
   return [dict(x) for x in db.execute(f"""select opened,closed,symbol,side,entry,exit,pnl,reason,margin,notional,leverage
    from {table} order by closed desc limit %s""",(int(limit),)).fetchall()]
 
+def strategy1_counterfactual_replay_12h():
+ # Candle-only diagnostic replay. It deliberately does NOT claim historical
+ # executed-flow confirmation, because per-decision flow was not persisted.
+ try:
+  with pg() as db:
+   positions=[dict(x) for x in db.execute("""select symbol,side,entry,opened,notional
+      from local_s1_positions where symbol=any(%s) order by opened""",(list(LOCAL_EXPERIMENT_SYMBOLS),)).fetchall()]
+   rows=db.execute("""select symbol,candles from local_candle_checkpoints
+      where interval='15m' and symbol=any(%s)""",(list(LOCAL_EXPERIMENT_SYMBOLS),)).fetchall()
+  by_symbol={x["symbol"]:x["candles"] for x in rows}
+  events=[];total=0.0
+  for pos in positions:
+   symbol=pos["symbol"];side=int(pos["side"]);entry=float(pos["entry"]);notional=float(pos["notional"])
+   try:opened_epoch=datetime.datetime.fromisoformat(str(pos["opened"]).replace("Z","+00:00")).timestamp()
+   except Exception:continue
+   candles=[]
+   for r in by_symbol.get(symbol,[]) or []:
+    try:
+     t=float(r["t"])/1000.0
+     if t>opened_epoch:candles.append(r)
+    except Exception:continue
+   candles=sorted(candles,key=lambda r:int(r["t"]))
+   state="IN";hi=entry;lo=entry;prev2=None;prev1=None;cycle=0
+   for cur in candles:
+    close=float(cur["c"]);hi=max(hi,float(cur["h"]));lo=min(lo,float(cur["l"]))
+    if prev2 is not None and prev1 is not None:
+     if state=="IN":
+      turn=(float(prev1["c"])<=float(prev2["c"]) and close>float(prev1["c"])) if side<0 else (float(prev1["c"])>=float(prev2["c"]) and close<float(prev1["c"]))
+      favorable=side*(close/entry-1.0)
+      if turn and favorable>max(.0013,2*FEE+.0004):
+       pnl=notional*(favorable-2*FEE);total+=pnl;cycle+=1
+       events.append({"symbol":symbol,"type":"EXIT","cycle":cycle,"time":datetime.datetime.fromtimestamp(float(cur["t"])/1000.0,datetime.timezone.utc).isoformat(),
+        "price":close,"pnl":round(pnl,4)})
+       state="WATCH";hi=close;lo=close;prev2=None;prev1=None;continue
+     else:
+      turn=(float(prev1["c"])>=float(prev2["c"]) and close<float(prev1["c"])) if side<0 else (float(prev1["c"])<=float(prev2["c"]) and close>float(prev1["c"]))
+      resume=(hi/close-1.0) if side<0 else (close/lo-1.0)
+      if turn and resume>=.0006:
+       entry=close
+       events.append({"symbol":symbol,"type":"REENTRY","cycle":cycle,"time":datetime.datetime.fromtimestamp(float(cur["t"])/1000.0,datetime.timezone.utc).isoformat(),"price":close})
+       state="IN";hi=close;lo=close;prev2=None;prev1=None;continue
+    prev2=prev1;prev1=cur
+  return {"window_hours":12,"basis":"causal_m15_candle_turns_without_historical_executed_flow",
+    "not_executed":True,"events":events,"realized_pnl":round(total,4),"return_on_500_pct":round(total/500.0*100,3)}
+ except Exception as exc:
+  return {"window_hours":12,"basis":"replay_unavailable","not_executed":True,"events":[],"realized_pnl":0.0,
+   "return_on_500_pct":0.0,"error":type(exc).__name__+":"+str(exc)[:120]}
+
 def dashboard_history_loop():
  while not SHUTDOWN.is_set():
   try:
@@ -5384,6 +5432,7 @@ def dashboard_history_loop():
           "local_s1_closed_trades":local_compare_history("local_s1",100),
           "local_s2_closed_trades":local_compare_history("local_s2",100),
           "local_s3_closed_trades":local_compare_history("local_s3",100),
+          "local_s1_replay_12h":strategy1_counterfactual_replay_12h(),
           "local_v10_today_realized_pnl":local_v10_today_pnl(),
           "news":[dict(x) for x in persistent_news(20)],
           "features":[dict(x) for x in persistent_features(10)],
@@ -5485,6 +5534,14 @@ def html_dashboard(data):
    for x in s1_closed)
  comparison+='<h3>STRATEGY 1 · ACTUAL CLOSED TRADES</h3><div class="muted">Executed PAPER history only. Counterfactual/replay trades are never mixed into these totals.</div><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Reason</th></tr>'+(
    s1_closed_rows or '<tr><td colspan=7>No actual Strategy 1 closes recorded yet</td></tr>')+'</table>'
+ replay=data.get("local_s1_replay_12h") or {}
+ replay_events=replay.get("events") or []
+ replay_rows="".join('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'%(
+   esc(x.get("time","")),esc(x.get("symbol","")),esc(x.get("type","")),esc(x.get("price","")),
+   ("$%.4f"%float(x.get("pnl",0) or 0)) if x.get("type")=="EXIT" else "—") for x in replay_events[:50])
+ comparison+='<h3>STRATEGY 1 · 12H COUNTERFACTUAL REPLAY · NOT EXECUTED</h3><div class="grid"><b>REPLAY P&L<br>$%.4f</b><b>REPLAY RETURN ON $500<br>%.3f%%</b><b>EVENTS<br>%s</b></div><div class="muted">Causal M15 candle-turn replay only. Historical executed-flow snapshots were not persisted, so this is diagnostic, not actual PAPER history.</div><table><tr><th>Time UTC</th><th>Token</th><th>Event</th><th>Price</th><th>PnL</th></tr>%s</table>'%(
+   float(replay.get("realized_pnl",0) or 0),float(replay.get("return_on_500_pct",0) or 0),len(replay_events),
+   replay_rows or '<tr><td colspan=5>No replay event in saved candle window</td></tr>')
  exp_cards=comparison+exp_cards
  exp_realized=float(data.get("local_experiment_realized_pnl",0) or 0)
  exp_open=float(data.get("local_experiment_unrealized_pnl",0) or 0)
