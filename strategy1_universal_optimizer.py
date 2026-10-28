@@ -6,6 +6,7 @@ Selection is robustness-first: walk-forward validation + cross-symbol stability,
 not maximum in-sample ending equity.
 """
 import datetime as dt
+import concurrent.futures
 import itertools
 import json
 import math
@@ -374,24 +375,42 @@ def _load_data(days=7):
     se=dt.datetime.combine(start,dt.time(0),tzinfo=dt.timezone.utc).timestamp()
     ee=dt.datetime.combine(end,dt.time(0),tzinfo=dt.timezone.utc).timestamp()
     we=dt.datetime.combine(warm,dt.time(0),tzinfo=dt.timezone.utc).timestamp()
-    data={};coverage={}
-    for symbol in SYMBOLS:
-        buckets={};rows=0;files=[];d=warm
-        while d<end:
-            try:
-                spool,nbytes,url=bt._download_day(symbol,d)
-                try:part,n=bt._parse_day(spool,we,ee)
-                finally:spool.close()
-                bt._merge_buckets(buckets,part);rows+=n;files.append((d.isoformat(),n,nbytes))
-                print("S1_OPT_ARCHIVE",json.dumps({"symbol":symbol,"date":d.isoformat(),"trades":n,"bytes":nbytes},separators=(",",":")),flush=True)
-            except Exception as exc:
-                print("S1_OPT_ARCHIVE_ERROR",symbol,d.isoformat(),type(exc).__name__,str(exc)[:100],flush=True)
-            d+=dt.timedelta(days=1)
-        m15=bt._bars(buckets,900);h1=bt._bars(buckets,3600)
-        data[symbol]={"buckets":buckets,"m15":m15,"h1":h1,"events":bt._h1_events(h1)}
-        coverage[symbol]={"trades":rows,"bucket15s":len(buckets),"files":files}
-    return data,start,end,se,ee,coverage
+    dates=[];d=warm
+    while d<end:
+        dates.append(d);d+=dt.timedelta(days=1)
+    data={s:{"buckets":{}} for s in SYMBOLS}
+    coverage={s:{"trades":0,"bucket15s":0,"files":[]} for s in SYMBOLS}
 
+    def load_one(symbol,d):
+        try:
+            spool,nbytes,url=bt._download_day(symbol,d)
+            try:part,n=bt._parse_day(spool,we,ee)
+            finally:spool.close()
+            return symbol,d,part,n,nbytes,url,None
+        except Exception as exc:
+            return symbol,d,{},0,0,None,type(exc).__name__+":"+str(exc)[:100]
+
+    jobs=[(s,d) for s in SYMBOLS for d in dates]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4,thread_name_prefix="s1-opt-archive") as pool:
+        futs=[pool.submit(load_one,s,d) for s,d in jobs]
+        for fut in concurrent.futures.as_completed(futs):
+            symbol,d,part,n,nbytes,url,err=fut.result()
+            if err:
+                coverage[symbol]["files"].append((d.isoformat(),0,0,err))
+                print("S1_OPT_ARCHIVE_ERROR",symbol,d.isoformat(),err,flush=True)
+                continue
+            bt._merge_buckets(data[symbol]["buckets"],part)
+            coverage[symbol]["trades"]+=n
+            coverage[symbol]["files"].append((d.isoformat(),n,nbytes))
+            print("S1_OPT_ARCHIVE",json.dumps({"symbol":symbol,"date":d.isoformat(),"trades":n,"bytes":nbytes},separators=(",",":")),flush=True)
+
+    for symbol in SYMBOLS:
+        buckets=data[symbol]["buckets"]
+        m15=bt._bars(buckets,900);h1=bt._bars(buckets,3600)
+        data[symbol].update({"m15":m15,"h1":h1,"events":bt._h1_events(h1)})
+        coverage[symbol]["files"].sort(key=lambda x:x[0])
+        coverage[symbol]["bucket15s"]=len(buckets)
+    return data,start,end,se,ee,coverage
 
 def optimize(days=7):
     data,start,end,se,ee,coverage=_load_data(days)
