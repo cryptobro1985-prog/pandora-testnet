@@ -5228,6 +5228,7 @@ def build_dashboard_snapshot(history=None):
 "local_experiment_realized_pnl":round(float(state.get("local_experiment_realized_pnl",0) or 0),4),
 "local_experiment_trades":int(state.get("local_experiment_trades",0) or 0),
 "local_v10_closed_trades":copy.deepcopy((history or {}).get("local_v10_closed_trades",[])),
+"local_s1_causal_history":copy.deepcopy((history or {}).get("local_s1_causal_history",{})),
 "local_v10_today_realized_pnl":float((history or {}).get("local_v10_today_realized_pnl",0) or 0),
 "local_experiment_stats":copy.deepcopy(state.get("local_experiment_stats",{})),
 "local_experiment_engine":copy.deepcopy(state.get("sources",{}).get("Caterpillar 1.0",{})),
@@ -5561,6 +5562,7 @@ def dashboard_history_loop():
           "local_s2_closed_trades":local_compare_history("local_s2",300),
           "local_s3_closed_trades":local_compare_history("local_s3",300),
           "local_s1_replay_12h":strategy1_counterfactual_replay_12h(),
+          "local_s1_causal_history":s1_week_backtest_status(),
           "local_v10_today_realized_pnl":local_v10_today_pnl(),
           "news":[dict(x) for x in persistent_news(20)],
           "features":[dict(x) for x in persistent_features(10)],
@@ -5586,7 +5588,88 @@ def dashboard_cache_loop():
    with LOCK:S["last_error"]="dashboard_cache: "+type(exc).__name__+":"+str(exc)[:150]
   SHUTDOWN.wait(2)
 
+def html_strategy1_only(data):
+ esc=lambda x:html.escape(str(x),quote=True)
+ p=data.get("strategy1_primary") or {}
+ stats=p.get("stats") or {}
+ engine=p.get("engine") or {}
+ positions=p.get("open_positions") or []
+ actual=p.get("closed_trades") or []
+ watch=p.get("watch") or {}
+ hist=data.get("local_s1_causal_history") or {}
+ hr=(hist.get("result") or {}) if hist.get("status")=="done" else {}
+ htrades=hr.get("trades") or []
+ eq=float(p.get("total_equity",p.get("realized_equity",500)) or 500)
+ realized=float(p.get("realized_pnl",0) or 0)
+ unreal=float(p.get("unrealized_pnl",0) or 0)
+ wr=stats.get("win_rate")
+ wrtxt="—" if wr is None else "%.1f%%"%(float(wr)*100)
+ posmap={x.get("symbol"):x for x in positions}
+ details=engine.get("details") or {}
+ rows=[]
+ for sym in LOCAL_EXPERIMENT_SYMBOLS:
+  x=posmap.get(sym) or {};d=details.get(sym) or {};a=d.get("h1_local") or {};w=watch.get(sym) or {}
+  side=x.get("side") or d.get("side") or w.get("side")
+  side_txt="LONG" if side in (1,"LONG") else ("SHORT" if side in (-1,"SHORT") else "FLAT")
+  phase=((w.get("context") or {}).get("phase") if w else None) or d.get("last_action") or ("IN_POSITION" if x else "WAIT_ENTRY")
+  rows.append("<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>$%.2f</td><td>$%.2f</td><td>%s</td><td>%s</td><td class='%s'>$%.4f</td></tr>"%(
+   esc(sym),esc(side_txt),esc(phase),esc(a.get("pivot_type") or "—"),esc(a.get("pivot_price") or "—"),
+   float(x.get("margin_usd",0) or 0),float(x.get("notional_usd",0) or 0),esc(x.get("entry","—")),esc(x.get("mark","—")),
+   "pos" if float(x.get("unrealized_pnl",0) or 0)>=0 else "neg",float(x.get("unrealized_pnl",0) or 0)))
+ actual_rows=[]
+ for x in actual:
+  pnl=float(x.get("pnl",0) or 0)
+  actual_rows.append("<tr><td>%s</td><td>%s</td><td>%s</td><td>$%.2f</td><td>$%.2f</td><td>%sx</td><td>%s</td><td>%s</td><td class='%s'>$%.4f</td><td>%s</td></tr>"%(
+   esc(x.get("closed","")),esc(x.get("symbol","")),"LONG" if int(x.get("side",0) or 0)>0 else "SHORT",
+   float(x.get("margin",0) or 0),float(x.get("notional",0) or 0),float(x.get("leverage",0) or 0),
+   esc(x.get("entry","—")),esc(x.get("exit","—")),"pos" if pnl>=0 else "neg",pnl,esc(x.get("reason",""))))
+ hist_rows=[]
+ for x in htrades:
+  pnl=float(x.get("pnl",0) or 0)
+  hist_rows.append("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>$%.2f</td><td>$%.2f</td><td>%sx</td><td>%s</td><td>%s</td><td class='%s'>$%.4f</td><td>%s</td></tr>"%(
+   esc(x.get("opened","")),esc(x.get("closed","")),esc(x.get("symbol","")),"LONG" if int(x.get("side",0) or 0)>0 else "SHORT",
+   float(x.get("margin",0) or 0),float(x.get("notional",0) or 0),float(x.get("leverage",0) or 0),
+   esc(x.get("entry","—")),esc(x.get("exit","—")),"pos" if pnl>=0 else "neg",pnl,esc(x.get("reason",""))))
+ hist_status=hist.get("status","idle")
+ hist_summary=("Historical causal replay is "+esc(hist_status))
+ if hr:
+  hist_summary=("CAUSAL HISTORICAL: $%.2f → $%.2f · PnL %+.2f · %+.2f%%%% · trades %s · WR %s · max DD %.2f%%%%"%(
+   float(hr.get("starting_equity",500) or 500),float(hr.get("final_equity",500) or 500),
+   float(hr.get("final_equity",500) or 500)-float(hr.get("starting_equity",500) or 500),
+   float(hr.get("return_pct",0) or 0),int(hr.get("closed_trades",0) or 0),
+   ("—" if hr.get("win_rate") is None else "%.1f%%%%"%(float(hr.get("win_rate"))*100)),
+   float(hr.get("max_drawdown_pct",0) or 0)))
+ bench=data.get("strategy1_historical_benchmark") or {}
+ css="body{font-family:system-ui;background:#070a0f;color:#eaf0f7;margin:0;padding:16px;max-width:1800px}h1{font-size:30px;margin:0}.sub{color:#8fa0b5;margin:6px 0 18px}.hero{border:2px solid #3977d6;background:#0c1420;border-radius:16px;padding:18px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.card{background:#121b28;padding:14px;border-radius:12px}.big{font-size:25px;font-weight:800}.pos{color:#51da84;font-weight:800}.neg{color:#ff6b6b;font-weight:800}.warn{color:#f2c75c;font-weight:800}.bench{border:1px solid #2c6c45;background:#0c1c13;border-radius:12px;padding:14px;margin:14px 0}.scroll{overflow-x:auto}table{width:100%%;border-collapse:collapse;background:#0d141e;margin:10px 0 24px}th,td{padding:9px;border-bottom:1px solid #202c3b;text-align:left;white-space:nowrap;font-size:13px}th{color:#9fb0c4}h2{margin-top:28px}@media(max-width:700px){body{padding:9px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}th,td{font-size:11px;padding:7px}}"
+ htmlout="""<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width'><meta http-equiv='refresh' content='5'><title>PANDORA · STRATEGY 1</title><style>%s</style></head><body>
+ <h1>PANDORA · STRATEGY 1 ONLY</h1><div class='sub'>LIVE PAPER · INIT / NEAR / GRASS / HYPE · H1 direction → M15 executed-flow exit / pullback / re-entry</div>
+ <section class='hero'><div class='grid'>
+ <div class='card'>MODE<div class='big pos'>S1 ONLY LIVE</div></div>
+ <div class='card'>START<div class='big'>$500.00</div></div>
+ <div class='card'>REALIZED EQUITY<div class='big'>$%.4f</div></div>
+ <div class='card'>REALIZED PnL<div class='big %s'>$%+.4f</div></div>
+ <div class='card'>OPEN PnL<div class='big %s'>$%+.4f</div></div>
+ <div class='card'>MTM EQUITY<div class='big'>$%.4f</div></div>
+ <div class='card'>CLOSED TRADES<div class='big'>%s</div></div>
+ <div class='card'>WIN RATE<div class='big'>%s</div></div>
+ <div class='card'>OPEN POSITIONS<div class='big'>%s</div></div>
+ <div class='card'>RE-ENTRY WATCH<div class='big'>%s</div></div>
+ <div class='card'>SIZING<div class='big'>20%%%% equity</div></div>
+ <div class='card'>REFERENCE LEV<div class='big'>25x</div></div>
+ </div></section>
+ <div class='bench'><b>OPTIMIZATION BENCHMARK · NOT EXECUTED</b><div class='big'>$%.2f → $%.2f</div><div class='pos'>Opportunity +$%.2f</div></div>
+ <h2>LIVE STATE</h2><div class='scroll'><table><tr><th>Token</th><th>Side</th><th>Phase</th><th>H1 Local</th><th>Pivot</th><th>Margin</th><th>Position</th><th>Entry</th><th>Mark</th><th>Open PnL</th></tr>%s</table></div>
+ <h2>ACTUAL CLOSED PAPER TRADES</h2><div class='scroll'><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Reason</th></tr>%s</table></div>
+ <h2>UPDATED STRATEGY · HISTORICAL CAUSAL TRADES</h2><p class='sub'>%s. These are reconstructed/backtest trades and are never mixed with actual PAPER PnL.</p><div class='scroll'><table><tr><th>Opened</th><th>Closed</th><th>Token</th><th>Side</th><th>Margin</th><th>Position</th><th>Lev</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Reason</th></tr>%s</table></div>
+ </body></html>"""%(css,float(p.get("realized_equity",500) or 500),"pos" if realized>=0 else "neg",realized,
+   "pos" if unreal>=0 else "neg",unreal,eq,int(stats.get("trades",len(actual)) or len(actual)),esc(wrtxt),
+   len(positions),len(watch),float(bench.get("starting_equity",500) or 500),float(bench.get("mfe_upper_equity",877.36) or 877.36),
+   float(bench.get("mfe_opportunity_pnl",377.36) or 377.36),"".join(rows),"".join(actual_rows) or "<tr><td colspan='10'>No actual closes</td></tr>",
+   hist_summary,"".join(hist_rows) or "<tr><td colspan='11'>Historical causal replay is running</td></tr>")
+ return htmlout
+
 def html_dashboard(data):
+ if S1_ONLY_MODE:return html_strategy1_only(data)
  esc=lambda x:str(x).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
  age=data.get("account_age_seconds",0);age_txt="%dd %02dh %02dm"%(age//86400,(age%86400)//3600,(age%3600)//60)
  today=data.get("today_pnl") or {}
