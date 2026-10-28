@@ -2938,10 +2938,25 @@ def _comparison_watch_update(prefix,state_name,symbol,watch,mark,m15,flow):
 def _comparison_stats(prefix):
  try:
   with pg() as db:
+   # Keep the immutable accounting ledger distinct from user-curated strategy diagnostics.
+   # Badly executed trades may be excluded from the strategy-quality sample, NEVER from actual account PnL.
+   suffix=(" where coalesce(features->>'excluded_from_strategy_stats','false') <> 'true'"
+           if prefix=="local_s1" else "")
    row=db.execute(f"""select count(*) n,coalesce(sum(pnl),0) pnl,
-     sum(case when pnl>0 then 1 else 0 end) wins from {prefix}_trade_history""").fetchone()
+     sum(case when pnl>0 then 1 else 0 end) wins from {prefix}_trade_history{suffix}""").fetchone()
+   excluded=None
+   if prefix=="local_s1":
+    excluded=db.execute("""select count(*) n,coalesce(sum(pnl),0) pnl
+      from local_s1_trade_history where features->>'excluded_from_strategy_stats'='true'""").fetchone()
   n=int(row["n"] or 0);wins=int(row["wins"] or 0)
-  return {"trades":n,"wins":wins,"win_rate":round(wins/n,4) if n else None,"realized_pnl":float(row["pnl"] or 0)}
+  result={"trades":n,"wins":wins,"win_rate":round(wins/n,4) if n else None,
+          "realized_pnl":float(row["pnl"] or 0)}
+  if excluded is not None:
+   result.update(excluded_trades=int(excluded["n"] or 0),
+                 excluded_pnl=float(excluded["pnl"] or 0),
+                 actual_realized_pnl_including_exclusions=float(row["pnl"] or 0)+float(excluded["pnl"] or 0),
+                 sample_basis="curated_with_auditable_exclusions")
+  return result
  except Exception as exc:return {"error":type(exc).__name__+":"+str(exc)[:120]}
 
 @account_mutation
