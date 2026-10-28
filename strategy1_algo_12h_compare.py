@@ -49,10 +49,26 @@ def _mfe_upper(data,start,end,start_equity=500.0):
     return {"hindsight_upper_equity":equity,"segments":len(rows)}
 
 def run():
-    data,start_date,end_date,se,ee,coverage=opt._load_data(2)
-    # Prefer the latest 12h ending at the dataset's last common 15s bucket.
-    last_common=min(max(data[s]["buckets"]) for s in opt.SYMBOLS if data[s]["buckets"])
-    end=min(ee,last_common+15)
+    # Use the latest fully closed UTC day only. The 12h test is 12:00-24:00 UTC,
+    # while 00:00-12:00 supplies causal H1/M15 warmup. This avoids unnecessary
+    # multi-day downloads and keeps the test fully reproducible.
+    day=dt.datetime.now(dt.timezone.utc).date()-dt.timedelta(days=1)
+    day_start=dt.datetime.combine(day,dt.time(0),tzinfo=dt.timezone.utc).timestamp()
+    day_end=day_start+86400
+    data={};coverage={}
+    import concurrent.futures
+    def load_symbol(symbol):
+        spool,nbytes,url=opt.bt._download_day(symbol,day)
+        try:part,n=opt.bt._parse_day(spool,day_start,day_end)
+        finally:spool.close()
+        m15=opt.bt._bars(part,900);h1=opt.bt._bars(part,3600)
+        return symbol,{"buckets":part,"m15":m15,"h1":h1,"events":opt.bt._h1_events(h1)},{"trades":n,"bytes":nbytes,"url":url}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4,thread_name_prefix="s1-12h-archive") as pool:
+        futs=[pool.submit(load_symbol,s) for s in opt.SYMBOLS]
+        for fut in concurrent.futures.as_completed(futs):
+            symbol,d,meta=fut.result();data[symbol]=d;coverage[symbol]=meta
+            print("S1_ALGO_12H_ARCHIVE",json.dumps({"symbol":symbol,**meta},separators=(",",":")),flush=True)
+    end=day_end
     start=end-12*3600
     observations=opt._precompute(data,start,end)
     # Single-symbol diagnostics and shared-compound portfolio.
