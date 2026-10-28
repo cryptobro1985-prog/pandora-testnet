@@ -77,7 +77,7 @@ DISCOVERY_MAX_HOT=5
 DISCOVERY_SCAN_SECONDS=20
 DISCOVERY_MIN_TURNOVER_24H=5_000_000.0
 DISCOVERY_MIN_RANGE_24H_PCT=8.0
-DISCOVERY_MIN_MOVE_5M_PCT=2.0
+DISCOVERY_MIN_MOVE_5M_PCT=2.0\nDISCOVERY_COOL_SCANS=6
 
 def strategy1_runtime_symbols():
  with LOCK:
@@ -122,11 +122,40 @@ def bybit_volatility_discovery_loop():
     ranked.append({"symbol":symbol,"pair":pair,"score":round(score,3),"move_5m_pct":round(move5,3),
       "range_24h_pct":round(range24,3),"turnover_24h":round(turn,2),"runtime_eligible":executable})
    ranked.sort(key=lambda z:z["score"],reverse=True)
-   eligible=[x for x in ranked if x["runtime_eligible"]][:DISCOVERY_MAX_HOT]
-   hot=[x["symbol"] for x in eligible]
+   eligible=[x for x in ranked if x["runtime_eligible"]]
+   current={x["symbol"]:x for x in eligible}
+   with LOCK:
+    prev=copy.deepcopy(S.get("strategy1_discovery") or {})
+    open_symbols=set(S.get("local_v12_positions",{}))
+    watches=set(S.get("local_experiment_watch",{}))
+   rotation=copy.deepcopy(prev.get("rotation") or {})
+   previous=list(prev.get("hot_symbols") or [])
+   # Hysteresis: six consecutive non-HOT scans (~2 min) before removal.
+   # Never evict a dynamic symbol while its position/re-entry lifecycle is active.
+   for symbol in set(previous)|set(rotation):
+    rec=rotation.setdefault(symbol,{"cool_scans":0,"status":"HOT","activated_at":now()})
+    if symbol in current:
+     rec.update({"cool_scans":0,"status":"HOT","last_hot_at":now()})
+    else:
+     rec["cool_scans"]=int(rec.get("cool_scans") or 0)+1
+     rec["status"]="COOLING" if rec["cool_scans"]<DISCOVERY_COOL_SCANS else "REMOVED"
+     if symbol in open_symbols or symbol in watches:rec["status"]="MANAGING_OPEN"
+   ranked_symbols=[x["symbol"] for x in eligible]
+   retained=[s for s in previous if rotation.get(s,{}).get("status") in ("HOT","COOLING","MANAGING_OPEN")]
+   hot=[]
+   for s in retained+ranked_symbols:
+    if s not in hot and len(hot)<DISCOVERY_MAX_HOT:hot.append(s)
+   # Lifecycle-active symbols remain routable even when all discovery slots are occupied.
+   for s in previous:
+    if s in open_symbols or s in watches:
+     if s not in hot:hot.append(s)
+   eligible_map={x["symbol"]:x for x in eligible}
+   hot_rows=[dict(eligible_map.get(s) or {"symbol":s},status=rotation.get(s,{}).get("status","HOT"),
+      cool_scans=int(rotation.get(s,{}).get("cool_scans",0) or 0)) for s in hot]
    state={"ok":True,"last_check":now(),"mode":"BYBIT_LINEAR_ALL_TICKERS_RATE_SAFE","scan_seconds":DISCOVERY_SCAN_SECONDS,
-    "universe_size":len(rows),"hot_symbols":hot,"hot":eligible,"top_anomalies":ranked[:12],
-    "max_hot":DISCOVERY_MAX_HOT,"direction_policy":"H1_LOCAL_HIGH_SHORT__H1_LOCAL_LOW_LONG",
+    "universe_size":len(rows),"hot_symbols":hot,"hot":hot_rows,"top_anomalies":ranked[:12],"rotation":rotation,
+    "rotation_policy":"HOT -> COOLING(6 scans) -> REMOVED; active position/watch -> MANAGING_OPEN",
+    "max_hot":DISCOVERY_MAX_HOT,"cool_scans_before_remove":DISCOVERY_COOL_SCANS,"direction_policy":"H1_LOCAL_HIGH_SHORT__H1_LOCAL_LOW_LONG",
     "entry_policy":"DISCOVERY_NEVER_ENTERS_DIRECTLY","transport":"single aggregated public REST scan; no per-symbol polling",
     "thresholds":{"min_turnover_24h":DISCOVERY_MIN_TURNOVER_24H,"min_range_24h_pct":DISCOVERY_MIN_RANGE_24H_PCT,
       "min_move_5m_pct":DISCOVERY_MIN_MOVE_5M_PCT}}
