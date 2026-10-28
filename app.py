@@ -2947,23 +2947,34 @@ def _s1_weakening_exit(position,m15,mark,flow):
  recoil_floor=max(.0006,min(.0015,typical*.15))
  return (peak-favorable)>=recoil_floor
 
-def _s1_reentry_ready(side,m15,mark,watch,flow):
- side=int(side or 0)
- if side not in (-1,1) or not m15 or not m15.get("ready") or not watch:return False
- ctx=watch.get("context") or {}
- if ctx.get("phase")!="WAIT_RESUMPTION":return False
- if not (flow or {}).get("trade_data_fresh"):return False
- try:imb=float((flow or {}).get("flow_imbalance"))
+def _s1_entry_not_chased(analysis,m15,mark):
+ if not analysis or not m15 or not m15.get("ready"):return False
+ try:
+  ref=float(analysis.get("confirmation_close") or analysis.get("pivot_price") or 0)
+  mark=float(mark or 0);typical=float(m15.get("median_range_move") or .008)
  except (TypeError,ValueError):return False
- if side*imb<.12:return False
- recovery=int(m15.get("recovery_score") or 0);adverse=int(m15.get("adverse_score") or 0)
- if recovery<2 or adverse>1:return False
- extreme=float(ctx.get("pullback_extreme") or watch.get("exit_price") or 0)
- mark=float(mark or 0)
- if extreme<=0 or mark<=0:return False
- typical=float(m15.get("median_range_move") or .008)
- resume=max(.0005,min(.0012,typical*.10))
- return side*(mark/extreme-1.0)>=resume
+ if ref<=0 or mark<=0:return False
+ # Do not execute an H1/M15 signal after price has already travelled far away
+ # from the confirmation area. 2x the normal M15 range is allowed, bounded
+ # between 0.40% and 2.00% so ordinary volatility is not treated as staleness.
+ limit=max(.004,min(.020,typical*2.0))
+ return abs(mark/ref-1.0)<=limit
+
+def _s1_adaptive_stop(position,m15,mark):
+ if not position or not m15 or not m15.get("ready"):return None
+ try:
+  side=int(position.get("side") or 0);entry=float(position.get("entry") or 0);mark=float(mark or 0)
+  typical=float(m15.get("median_range_move") or .008)
+ except (TypeError,ValueError):return None
+ if side not in (-1,1) or entry<=0 or mark<=0:return None
+ # Catastrophe guard is defined on the underlying price move, not leveraged ROE.
+ # It adapts to M15 noise but is hard-capped so 25x paper positions cannot sit
+ # through -40/-50% ROE solely because H1 direction has not flipped yet.
+ stop_move=max(.0065,min(.0120,typical*1.35))
+ adverse=max(0.0,-side*(mark/entry-1.0))
+ if adverse<stop_move:return None
+ return {"reason":"s1_adaptive_volatility_stop","adverse_move":adverse,"stop_move":stop_move,
+   "approx_gross_roe_pct":-adverse*25.0*100.0}
 
 def comparison_strategies_loop():
  pool=concurrent.futures.ThreadPoolExecutor(max_workers=16,thread_name_prefix="local-compare")
@@ -3013,14 +3024,21 @@ def comparison_strategies_loop():
      floor=max(.0002,float((p1.get("features") or {}).get("estimated_round_trip_cost_move",0) or 0))
      be=caterpillar_breakeven(p1,float(mark))
      weakening=_s1_weakening_exit(p1,m15,float(mark),flow)
+     pressure_reason=caterpillar_pressure_exit(p1,m15,float(mark),flow)
+     stop_hit=_s1_adaptive_stop(p1,m15,float(mark))
      if h1exit:
       # A confirmed opposite H1 local invalidates the old thesis regardless of PnL.
-      # Profit-only gating belongs to routine M15 weakening, never to direction flips.
       if _comparison_close("local_s1","local_s1",symbol,float(mark),h1exit):act1="H1_OPPOSITE_EXIT"
-     elif weakening or (caterpillar_pressure_exit(p1,m15,float(mark),flow) and favorable>floor):
-      if _comparison_close("local_s1","local_s1",symbol,float(mark),"m15_weakening_profit_exit",True,"WAIT_RESUMPTION"):act1="M15_WEAKENING_EXIT"
+     elif pressure_reason:
+      # Real counter-pressure is an exit signal even if the trade is slightly red.
+      # Waiting for it to recover is exactly what created the -30/-40% ROE tails.
+      if _comparison_close("local_s1","local_s1",symbol,float(mark),pressure_reason,True,"WAIT_PULLBACK"):act1="M15_PRESSURE_EXIT"
+     elif stop_hit:
+      if _comparison_close("local_s1","local_s1",symbol,float(mark),stop_hit["reason"],True,"WAIT_PULLBACK"):act1="ADAPTIVE_STOP_EXIT"
+     elif weakening:
+      if _comparison_close("local_s1","local_s1",symbol,float(mark),"m15_weakening_profit_exit",True,"WAIT_PULLBACK"):act1="M15_WEAKENING_EXIT"
      elif be is not None:
-      if _comparison_close("local_s1","local_s1",symbol,float(mark),"v10_cost_aware_profit_floor",True,"WAIT_RESUMPTION"):act1="PROFIT_FLOOR_EXIT"
+      if _comparison_close("local_s1","local_s1",symbol,float(mark),"v10_cost_aware_profit_floor",True,"WAIT_PULLBACK"):act1="PROFIT_FLOOR_EXIT"
     else:
      if w1:
       if a1.get("ready") and int(a1.get("entry_side") or 0)==-int(w1.get("side") or 0):
@@ -3029,12 +3047,12 @@ def comparison_strategies_loop():
        with LOCK:S.setdefault("local_s1_watch",{}).pop(symbol,None)
        w1=None;act1="WATCH_INVALIDATED_BY_H1"
       else:w1=_comparison_watch_update("local_s1","local_s1",symbol,w1,float(mark),m15,flow)
-     if w1 and (caterpillar_reentry_ready(int(w1["side"]),m15,float(mark),w1,flow,time.time()) or _s1_reentry_ready(int(w1["side"]),m15,float(mark),w1,flow)):
+     if w1 and caterpillar_reentry_ready(int(w1["side"]),m15,float(mark),w1,flow,time.time()):
       if _comparison_open("local_s1","local_s1",symbol,int(w1["side"]),a1,float(mark),"REENTRY"):act1="M15_RECOVERY_REENTRY"
      elif not w1 and a1.get("ready") and not a1.get("entry_blocked"):
-      imbalance=flow.get("flow_imbalance") if flow.get("trade_data_fresh") else None
       side=int(a1.get("entry_side") or 0)
-      if side in (-1,1) and imbalance is not None and side*float(imbalance)>=.12 and local_m15_reentry_ready(side,m15,imbalance):
+      candidate=local_entry_candidate(symbol,a1,m15,flow,time.time())
+      if side in (-1,1) and candidate.get("eligible") and _s1_entry_not_chased(a1,m15,float(mark)):
        if _comparison_open("local_s1","local_s1",symbol,side,a1,float(mark),"M15"):act1="M15_ENTRY"
     with LOCK:p1=copy.deepcopy(S.get("local_s1_positions",{}).get(symbol));w1=copy.deepcopy(S.get("local_s1_watch",{}).get(symbol))
     s1_details[symbol]={"ok":bool(a1.get("ready")),"h1_local":{"pivot_type":a1.get("pivot_type"),"pivot_price":a1.get("pivot_price"),
