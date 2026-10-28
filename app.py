@@ -5426,7 +5426,8 @@ def strategy1_counterfactual_replay_12h():
      by_symbol[symbol]=b;coverage[symbol]=meta
      if not meta.get("continuous"):
       coverage[symbol]["usable"]=False
-    else:coverage[symbol]["usable"]=True
+     else:
+      coverage[symbol]["usable"]=True
     except Exception as exc:
      by_symbol[symbol]=saved.get(symbol,[]) or []
      coverage[symbol]={"source":"saved_checkpoint_fallback","usable":False,
