@@ -5423,9 +5423,13 @@ def strategy1_counterfactual_replay_12h():
      "initial_entry":float(pos["entry"]),"current_replay_entry":entry,"last_price":last_price,"notional":notional,
      "realized_pnl":round(sym_realized,4),"unrealized_pnl":round(unreal,4),
      "cycles":sum(1 for x in events if x.get("symbol")==symbol and x.get("type")=="EXIT")}
+  unrealized_total=sum(float(x.get("unrealized_pnl",0) or 0) for x in per_symbol.values())
+  mtm_equity=500.0+total+unrealized_total
   return {"window_hours":12,"basis":"causal_m15_candle_turns_without_historical_executed_flow",
     "not_executed":True,"events":events,"per_symbol":per_symbol,"realized_pnl":round(total,4),
-    "reconstructed_equity":round(500.0+total,4),"return_on_500_pct":round(total/500.0*100,3)}
+    "unrealized_pnl":round(unrealized_total,4),"reconstructed_equity":round(500.0+total,4),
+    "mtm_equity":round(mtm_equity,4),"mtm_return_pct":round((mtm_equity/500.0-1.0)*100,3),
+    "return_on_500_pct":round(total/500.0*100,3)}
  except Exception as exc:
   return {"window_hours":12,"basis":"replay_unavailable","not_executed":True,"events":[],"realized_pnl":0.0,
    "return_on_500_pct":0.0,"error":type(exc).__name__+":"+str(exc)[:120]}
@@ -5554,9 +5558,10 @@ def html_dashboard(data):
  replay_rows="".join('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>'%(
    esc(x.get("time","")),esc(x.get("symbol","")),esc(x.get("type","")),esc(x.get("price","")),
    ("$%.4f"%float(x.get("pnl",0) or 0)) if x.get("type")=="EXIT" else "—") for x in replay_events[:50])
- comparison+='<h3>STRATEGY 1 · 12H COUNTERFACTUAL REPLAY · NOT EXECUTED</h3><div class="grid"><b>REPLAY REALIZED P&L<br>$%.4f</b><b>RECONSTRUCTED EQUITY<br>$%.4f</b><b>REPLAY RETURN ON $500<br>%.3f%%</b><b>EVENTS<br>%s</b></div><div class="muted">Causal M15 candle-turn replay only. Historical executed-flow snapshots were not persisted, so this is diagnostic, not actual PAPER history.</div><table><tr><th>Token</th><th>Side</th><th>End state</th><th>Realized PnL</th><th>Open PnL</th><th>Cycles</th></tr>%s</table><table><tr><th>Time UTC</th><th>Token</th><th>Event</th><th>Price</th><th>PnL</th></tr>%s</table>'%(
+ comparison+='<h3>STRATEGY 1 · 12H COUNTERFACTUAL REPLAY · NOT EXECUTED</h3><div class="grid"><b>REPLAY REALIZED P&L<br>$%.4f</b><b>REALIZED-EQUITY EQUIV.<br>$%.4f</b><b>OPEN P&L<br>$%.4f</b><b>MTM EQUITY<br>$%.4f</b><b>MTM RETURN<br>%.3f%%</b><b>EVENTS<br>%s</b></div><div class="muted">Causal M15 candle-turn replay only. Historical executed-flow snapshots were not persisted, so this is diagnostic, not actual PAPER history.</div><table><tr><th>Token</th><th>Side</th><th>End state</th><th>Realized PnL</th><th>Open PnL</th><th>Cycles</th></tr>%s</table><table><tr><th>Time UTC</th><th>Token</th><th>Event</th><th>Price</th><th>PnL</th></tr>%s</table>'%(
    float(replay.get("realized_pnl",0) or 0),float(replay.get("reconstructed_equity",500) or 500),
-   float(replay.get("return_on_500_pct",0) or 0),len(replay_events),
+   float(replay.get("unrealized_pnl",0) or 0),float(replay.get("mtm_equity",500) or 500),
+   float(replay.get("mtm_return_pct",0) or 0),len(replay_events),
    replay_symbol_rows or '<tr><td colspan=6>No reconstructed symbol states</td></tr>',
    replay_rows or '<tr><td colspan=5>No replay event in saved candle window</td></tr>')
  exp_cards=comparison+exp_cards
