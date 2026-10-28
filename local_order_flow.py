@@ -38,6 +38,24 @@ def m15_direction(m15):
     candle = int(m15.get("candle_direction") or 0)
     return candle if candle in (-1, 1) else None
 
+def initial_entry_candidate(symbol, analysis, m15, flow, stamp):
+    """First entry: a newly confirmed H1 local is the trigger; do not wait for a pullback."""
+    side = int((analysis or {}).get("entry_side") or 0)
+    h1 = bool((analysis or {}).get("ready") and (analysis or {}).get("anchor_confirmed")
+              and (analysis or {}).get("h1_direction_anchor")
+              and not (analysis or {}).get("entry_blocked") and side in (-1, 1))
+    m15_ready = bool((m15 or {}).get("ready"))
+    eligible = h1 and m15_ready
+    reason = ("confirmed_h1_local_immediate_initial" if eligible else
+              "waiting_for_confirmed_h1_local" if not h1 else "waiting_for_m15_data")
+    imbalance = _f((flow or {}).get("flow_imbalance"))
+    return dict(symbol=symbol, side=side, eligible=eligible, reason=reason,
+                policy=POLICY, dominant_side=dominance(flow),
+                buy_volume_60s=(flow or {}).get("buy_volume_60s"),
+                sell_volume_60s=(flow or {}).get("sell_volume_60s"),
+                aligned_flow=side * imbalance if imbalance is not None else None)
+
+
 def entry_candidate(symbol, analysis, m15, flow, stamp):
     side = int((analysis or {}).get("entry_side") or 0)
     dom = dominance(flow)
