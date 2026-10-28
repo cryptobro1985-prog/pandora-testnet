@@ -61,19 +61,35 @@ def _download_day(symbol,date):
     pair=symbol+"USDT"
     name=f"{pair}{date.isoformat()}.csv.gz"
     url=f"https://public.bybit.com/trading/{pair}/{name}"
-    req=urllib.request.Request(url,headers={"User-Agent":"PANDORA-research/1.0","Accept":"*/*"})
+    cache_dir="/tmp/pandora_bybit_archives"
+    os.makedirs(cache_dir,exist_ok=True)
+    cache_path=os.path.join(cache_dir,name)
     spool=tempfile.SpooledTemporaryFile(max_size=16*1024*1024,mode="w+b")
     total=0
     try:
-        with urllib.request.urlopen(req,timeout=60) as r:
+        if os.path.exists(cache_path) and os.path.getsize(cache_path)>50:
+            with open(cache_path,"rb") as f:
+                while True:
+                    chunk=f.read(1024*1024)
+                    if not chunk:break
+                    spool.write(chunk);total+=len(chunk)
+            spool.seek(0)
+            return spool,total,url
+        req=urllib.request.Request(url,headers={"User-Agent":"PANDORA-research/1.0","Accept":"*/*"})
+        tmp_path=cache_path+".part"
+        with urllib.request.urlopen(req,timeout=60) as r, open(tmp_path,"wb") as out:
             while True:
                 chunk=r.read(1024*1024)
                 if not chunk:break
-                spool.write(chunk);total+=len(chunk)
+                spool.write(chunk);out.write(chunk);total+=len(chunk)
         if total<50:raise RuntimeError("archive_too_small")
+        os.replace(tmp_path,cache_path)
         spool.seek(0)
         return spool,total,url
     except Exception:
+        try:
+            if os.path.exists(cache_path+".part"):os.remove(cache_path+".part")
+        except Exception:pass
         spool.close()
         raise
 
