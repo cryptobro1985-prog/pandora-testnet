@@ -6370,8 +6370,10 @@ if __name__=="__main__":
    if not active:
     SHUTDOWN.wait(1);continue
    try:
-    completed=(datetime.datetime.now(datetime.timezone.utc).date()-datetime.timedelta(days=1)).isoformat()
-    start_s1_week_backtest(completed,1)
+    # Canonical historical ledger = latest seven fully completed UTC days.
+    end_day=datetime.datetime.now(datetime.timezone.utc).date()
+    start_day=(end_day-datetime.timedelta(days=7)).isoformat()
+    start_s1_week_backtest(start_day,7)
     while not SHUTDOWN.is_set():
      st=s1_week_backtest_status()
      if st.get("status")=="done":
