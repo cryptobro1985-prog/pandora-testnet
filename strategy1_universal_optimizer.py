@@ -191,7 +191,11 @@ def _candidate_params():
       (1.6,.008,.020,2.0,.018,.028),(1.8,.010,.022,2.2,.020,.030)
     ]
     out=[]
-    for e,x,r,s in itertools.product(entry_sets,exit_sets,re_sets,stop_sets):
+    all_sets=list(itertools.product(entry_sets,exit_sets,re_sets,stop_sets))
+    # Deterministic space-filling subset keeps the research fast enough for a live Render service.
+    picks=sorted(set(int(round(i*(len(all_sets)-1)/95)) for i in range(96)))
+    for j in picks:
+        e,x,r,s=all_sets[j]
         p=dict(BASE)
         p.update(entry15=e[0],entry30=e[1],entry60=e[2],entry_recovery=e[3])
         p.update(weak15=x[0],weak30=x[1],weak_drop=x[2],exit_recoil_mult=x[3])
@@ -201,6 +205,104 @@ def _candidate_params():
         out.append(p)
     return out
 
+
+
+def _fast_m15_features(closed, partial, elapsed, side):
+    rows=closed[-8:]
+    if partial is not None and elapsed>=180:rows=rows+[partial]
+    if len(rows)<5:return None
+    x=rows[-1];prev=rows[-2]
+    r1=x["c"]/prev["c"]-1;r2=x["c"]/rows[-3]["c"]-1
+    rng=max(x["h"]-x["l"],1e-12);body=abs(x["c"]-x["o"])/rng
+    cdir=1 if x["c"]>x["o"] else (-1 if x["c"]<x["o"] else 0);loc=(x["c"]-x["l"])/rng
+    vols=[z["v"] for z in rows[-9:-1] if z.get("v",0)>0];av=sum(vols)/len(vols) if vols else 0
+    raw=x["v"]/av if av>0 else None;frac=min(1,max(.001,elapsed/900)) if partial is not None else 1
+    vr=raw/frac if raw is not None else None
+    adverse=sum((side*r1<=-.0015,side*r2<=-.0025,cdir==-side and body>=.50,
+                 (side>0 and loc<=.30) or (side<0 and loc>=.70),vr is not None and vr>=1.35))
+    recovery=sum((side*r1>=.0012,side*r2>=.0020,cdir==side and body>=.42,
+                  (side>0 and loc>=.65) or (side<0 and loc<=.35),vr is not None and vr>=.90))
+    med=statistics.median((z["h"]-z["l"])/z["c"] for z in closed[-8:]) if len(closed)>=8 else .008
+    return {"ready":True,"side":side,"return_15m":r1,"return_30m":r2,"body_fraction":body,
+            "candle_direction":cdir,"close_location":loc,"median_range_move":med,
+            "adverse_score":adverse,"recovery_score":recovery,
+            "strong_adverse_pressure":adverse>=3 and (side*r1<0 or (cdir==-side and body>=.50)),
+            "recovery_confirmed":recovery>=3 and (side*r1>0 or (cdir==side and body>=.42))}
+
+
+def _precompute(data,se,ee):
+    out={}
+    for symbol in SYMBOLS:
+        buckets=data[symbol]["buckets"];times=sorted(t for t in buckets if se<=t<ee)
+        h1events=data[symbol]["events"];ei=0;anchor=None
+        while ei<len(h1events) and h1events[ei]["at"]<=se:anchor=h1events[ei];ei+=1
+        closed_all=data[symbol]["m15"];ci=0
+        while ci<len(closed_all) and closed_all[ci]["t"]<((times[0]//900)*900 if times else se):ci+=1
+        closed=closed_all[:ci]
+        current_period=None;partial=None
+        q=[];series=[]
+        for t in times:
+            while ei<len(h1events) and h1events[ei]["at"]<=t:anchor=h1events[ei];ei+=1
+            period=(t//900)*900
+            if current_period!=period:
+                while ci<len(closed_all) and closed_all[ci]["t"]<period:
+                    closed.append(closed_all[ci]);ci+=1
+                current_period=period;partial=None
+            b=buckets[t]
+            if partial is None:
+                partial={"t":period,"o":b["o"],"h":b["h"],"l":b["l"],"c":b["c"],"v":b["volume"]}
+            else:
+                partial["h"]=max(partial["h"],b["h"]);partial["l"]=min(partial["l"],b["l"]);partial["c"]=b["c"];partial["v"]+=b["volume"]
+            q.append((t,b["buy"],b["sell"],b["count"]))
+            while q and q[0][0]<t-285:q.pop(0)
+            def flow_window(sec):
+                z=[x for x in q if x[0]>=t-sec+15]
+                buy=sum(x[1] for x in z);sell=sum(x[2] for x in z);count=sum(x[3] for x in z)
+                return buy,sell,count
+            b15,s15,c15=flow_window(15);b30,s30,c30=flow_window(30);b60,s60,c60=flow_window(60);b300,s300,c300=flow_window(300)
+            imb=lambda x,y:(x-y)/(x+y) if x+y else 0.0
+            side=int(anchor.get("entry_side") or 0) if anchor else 0
+            if side not in (-1,1):continue
+            m15=_fast_m15_features(closed,dict(partial),t-period+15,side)
+            if not m15:continue
+            flow={"trade_data_fresh":True,"trade_count_60s":c60,"observed_notional_60s":b60+s60,
+                  "flow_imbalance_15s":imb(b15,s15),"flow_imbalance_30s":imb(b30,s30),
+                  "flow_imbalance":imb(b60,s60),"flow_imbalance_300s":imb(b300,s300)}
+            series.append((t,b["c"],dict(anchor),m15,flow))
+        out[symbol]=series
+        print("S1_OPT_PRECOMPUTE",json.dumps({"symbol":symbol,"observations":len(series)},separators=(",",":")),flush=True)
+    return out
+
+
+def _simulate_series(series,start_epoch,end_epoch,p,start_equity=500.0):
+    cash=float(start_equity);pos=None;watch=None;peak=cash;maxdd=0.0;trades=[];last=None
+    for t,mark,a,m15,flow in series:
+        if t<start_epoch or t>=end_epoch:continue
+        last=mark;side=(pos or watch or {}).get("side") if (pos or watch) else int(a.get("entry_side") or 0)
+        if side not in (-1,1):continue
+        if pos:
+            move=pos["side"]*(mark/pos["entry"]-1);pos["mfe"]=max(pos.get("mfe",0),move)
+            reason="h1_flip" if int(a.get("entry_side") or 0)==-pos["side"] else _exit_reason(pos,m15,flow,mark,p)
+            if reason:
+                v=_pnl(pos,mark);cash+=v;trades.append(v)
+                watch={"side":pos["side"],"exit_price":mark,"extreme":mark,"phase":"WAIT_PULLBACK","counter_seen":False,"confirmed_t":None}
+                pos=None
+        elif watch:
+            if int(a.get("entry_side") or 0)==-watch["side"]:watch=None
+            else:
+                watch=_watch_update(watch,mark,m15,flow,t,p)
+                if _reentry_ok(watch,m15,flow,mark,t,p):
+                    margin=max(.01,cash*MF);pos={"side":watch["side"],"entry":mark,"margin":margin,"notional":margin*LEV,"mfe":0.0};watch=None
+        elif _entry_ok(a,m15,flow,mark,p):
+            margin=max(.01,cash*MF);pos={"side":int(a["entry_side"]),"entry":mark,"margin":margin,"notional":margin*LEV,"mfe":0.0}
+        eq=cash+(_pnl(pos,mark) if pos else 0.0);peak=max(peak,eq)
+        if peak>0:maxdd=max(maxdd,(peak-eq)/peak)
+        if eq<=0:return {"final_equity":eq,"return_pct":-100.0,"max_dd_pct":100.0,"trades":len(trades),"win_rate":0.0,"pf":0.0}
+    final=cash+(_pnl(pos,last) if pos and last else 0.0)
+    wins=sum(v>0 for v in trades);g=sum(v for v in trades if v>0);l=-sum(v for v in trades if v<0)
+    return {"final_equity":final,"return_pct":(final/start_equity-1)*100,"max_dd_pct":maxdd*100,
+            "trades":len(trades),"wins":wins,"win_rate":wins/len(trades) if trades else 0.0,
+            "pf":g/l if l>0 else (99.0 if g>0 else 0.0)}
 
 def _load_data(days=7):
     today=dt.datetime.now(dt.timezone.utc).date();end=today;start=end-dt.timedelta(days=days);warm=start-dt.timedelta(days=1)
@@ -228,42 +330,44 @@ def _load_data(days=7):
 
 def optimize(days=7):
     data,start,end,se,ee,coverage=_load_data(days)
-    # Walk-forward folds: first 4 days train, last 3 validation, plus per-symbol OOS.
+    observations=_precompute(data,se,ee)
     split=se+4*86400
     candidates=_candidate_params()
     ranked=[]
     for i,p in enumerate(candidates):
-        train=_simulate(data,se,split,p)
-        valid=_simulate(data,split,ee,p)
-        per={}
-        token_scores=[]
+        train_by={};valid_by={};train_scores=[];valid_scores=[];valid_dd=[]
         for s in SYMBOLS:
-            r=_simulate(data,split,ee,p,(s,))
-            per[s]=r
-            token_scores.append(r["return_pct"])
-        # Robust objective rewards OOS return but heavily punishes drawdown and one-token dependence.
-        med=statistics.median(token_scores)
-        worst=min(token_scores)
-        dispersion=statistics.pstdev(token_scores) if len(token_scores)>1 else 0
-        score=(valid["return_pct"] + .35*med + .15*worst
-               - .75*valid["max_dd_pct"] - .10*dispersion)
-        if valid["trades"]<4:score-=50
-        if train["final_equity"]<=0 or valid["final_equity"]<=0:score-=1000
-        ranked.append({"score":score,"params":p,"train":train,"validation":valid,"validation_by_symbol":per})
-        if i%40==0:
+            tr=_simulate_series(observations[s],se,split,p)
+            va=_simulate_series(observations[s],split,ee,p)
+            train_by[s]=tr;valid_by[s]=va;train_scores.append(tr["return_pct"]);valid_scores.append(va["return_pct"]);valid_dd.append(va["max_dd_pct"])
+        med=statistics.median(valid_scores);worst=min(valid_scores);disp=statistics.pstdev(valid_scores)
+        train_med=statistics.median(train_scores)
+        score=med+.20*worst+.10*train_med-.55*statistics.median(valid_dd)-.08*disp
+        if sum(valid_by[s]["trades"] for s in SYMBOLS)<8:score-=40
+        if any(valid_by[s]["final_equity"]<=0 for s in SYMBOLS):score-=1000
+        ranked.append({"score":score,"params":p,"train_by_symbol":train_by,"validation_by_symbol":valid_by,
+                       "validation_median_return_pct":med,"validation_worst_return_pct":worst,
+                       "validation_dispersion":disp,"validation_median_dd_pct":statistics.median(valid_dd)})
+        if i%16==0:
             print("S1_OPT_PROGRESS",json.dumps({"done":i+1,"total":len(candidates),"best":max(x["score"] for x in ranked)},separators=(",",":")),flush=True)
     ranked.sort(key=lambda x:x["score"],reverse=True)
     top=ranked[:12]
+    # Portfolio confirmation only on top robust candidates.
+    for row in top:
+        row["portfolio_train"]=_simulate(data,se,split,row["params"])
+        row["portfolio_validation"]=_simulate(data,split,ee,row["params"])
+        row["portfolio_score"]=row["score"]+.25*row["portfolio_validation"]["return_pct"]-.20*row["portfolio_validation"]["max_dd_pct"]
+    top.sort(key=lambda x:x["portfolio_score"],reverse=True)
     best=top[0]
-    result={"research_only":True,"method":"walk_forward_cross_symbol_robust_grid",
+    result={"research_only":True,"method":"walk_forward_cross_symbol_then_portfolio_confirmation",
             "start":start.isoformat(),"end_exclusive":end.isoformat(),"candidates":len(candidates),
             "coverage":coverage,"best":best,"top12":top,
-            "selection_note":"Chosen by OOS return, cross-symbol median/worst return and drawdown penalty; not by maximum in-sample equity."}
-    print("S1_OPT_RESULT",json.dumps({"candidates":len(candidates),"best_score":best["score"],"best_params":best["params"],
-          "train":best["train"],"validation":best["validation"],
+            "selection_note":"One shared parameter set; selected on validation robustness across all four symbols, then confirmed on shared compounded portfolio."}
+    print("S1_OPT_RESULT",json.dumps({"candidates":len(candidates),"best_score":best["portfolio_score"],
+          "best_params":best["params"],"portfolio_train":best["portfolio_train"],
+          "portfolio_validation":best["portfolio_validation"],
           "validation_by_symbol":best["validation_by_symbol"]},default=str,separators=(",",":")),flush=True)
     return result
-
 
 def _worker(days):
     with LOCK:STATE.update(status="running",started_at=dt.datetime.now(dt.timezone.utc).isoformat(),finished_at=None,result=None,error=None)
