@@ -2641,7 +2641,7 @@ def _local_experiment_watch_observe(symbol,watch,mark,m15,flow,stamp):
 
 @account_mutation
 def local_experiment_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=None):
- if symbol not in LOCAL_EXPERIMENT_SYMBOLS or int(side or 0) not in (-1,1):return False
+ if symbol not in set(strategy1_runtime_symbols()) or int(side or 0) not in (-1,1):return False
  if S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or not analysis.get("ready"):return False
  if not analysis.get("h1_direction_anchor") or int(analysis.get("entry_side") or 0)!=int(side):return False
  if analysis.get("entry_blocked"):return False
@@ -3037,29 +3037,25 @@ def local_experiment_loop():
        pos=None
       if pos:
        pos_anchor_time=int((pos.get("features") or {}).get("origin_h1_signal_candle") or (pos.get("features") or {}).get("signal_candle_time") or pos.get("signal_candle_time") or 0)
-      analysis_time=int(analysis.get("signal_candle_time") or 0)
-      h1_exit=("opposite_h1_local_emergency_exit" if analysis.get("ready") and analysis.get("anchor_confirmed")
-       and analysis_time>pos_anchor_time>0 and int(analysis.get("entry_side") or 0)==-int(pos.get("side") or 0) else None)
-      if not h1_exit:
-       h1_exit=hype_position_exit(pos,analysis,float(mark)) if analysis.get("ready") else None
-      if h1_exit:
-       # Opposite H1 invalidates the trade thesis, regardless of PnL.
-       # M15 exits likewise follow confirmed pressure, independently of PnL.
-       closed=local_experiment_close(symbol,float(mark),h1_exit,analysis)
-       action="H1_DIRECTION_INVALIDATION_EXIT:"+h1_exit if closed else None
-      elif pressure_reason:=local4_pressure_exit(pos,m15_live,float(mark),flow):
-       pf=pos.get("features") or {}
-       # Strategy 1 rule: once M15 control flips against the position, bank the move.
-       # Do not require a second adverse M15 and do not wait for H1 to reverse.
-       watch_context={"m15":m15_live,"h1_context":h1_context,"flow_imbalance":flow_imb,"flow_context":flow,
-         "flow_source":"hyperliquid_ws_trades","observed_at":now(),"reason":pressure_reason,
-         "exit_policy":"M15_CONTROL_FLIP_IMMEDIATE","mfe_price_move":pf.get("mfe_price_move"),
-         "mfe_giveback_move":pf.get("mfe_giveback_move")}
-       closed=local_experiment_close(symbol,float(mark),pressure_reason,analysis,watch_context)
-       action="M15_CONTROL_FLIP_EXIT" if closed else None
-      else:
-       with LOCK:S.setdefault("_s1_adverse_m15",{}).pop(symbol,None)
-     else:
+       analysis_time=int(analysis.get("signal_candle_time") or 0)
+       h1_exit=("opposite_h1_local_emergency_exit" if analysis.get("ready") and analysis.get("anchor_confirmed")
+        and analysis_time>pos_anchor_time>0 and int(analysis.get("entry_side") or 0)==-int(pos.get("side") or 0) else None)
+       if not h1_exit:
+        h1_exit=hype_position_exit(pos,analysis,float(mark)) if analysis.get("ready") else None
+       if h1_exit:
+        closed=local_experiment_close(symbol,float(mark),h1_exit,analysis)
+        action="H1_DIRECTION_INVALIDATION_EXIT:"+h1_exit if closed else None
+       elif pressure_reason:=local4_pressure_exit(pos,m15_live,float(mark),flow):
+        pf=pos.get("features") or {}
+        watch_context={"m15":m15_live,"h1_context":h1_context,"flow_imbalance":flow_imb,"flow_context":flow,
+          "flow_source":"hyperliquid_ws_trades","observed_at":now(),"reason":pressure_reason,
+          "exit_policy":"M15_CONTROL_FLIP_IMMEDIATE","mfe_price_move":pf.get("mfe_price_move"),
+          "mfe_giveback_move":pf.get("mfe_giveback_move")}
+        closed=local_experiment_close(symbol,float(mark),pressure_reason,analysis,watch_context)
+        action="M15_CONTROL_FLIP_EXIT" if closed else None
+       else:
+        with LOCK:S.setdefault("_s1_adverse_m15",{}).pop(symbol,None)
+     if not pos:
       if watch:watch=_local_experiment_watch_observe(symbol,watch,float(mark),m15_live,flow,time.time())
       if watch:
        watch_anchor_time=int(watch.get("origin_signal_candle") or ((watch.get("context") or {}).get("anchor") or {}).get("signal_candle_time") or 0)
