@@ -9,7 +9,7 @@ A mature partial M15 candle plus live flow can protect earned profit before the 
 import math
 import statistics
 
-POLICY = "local_swing_h1_confirmed_retrace_v14"
+POLICY = "local_swing_h1_latest_confirmed_swing_v15"
 SYMBOL = "HYPE"  # backwards-compatible primary symbol
 SYMBOLS = ("HYPE", "NEAR")
 INTERVAL = "1h"
@@ -22,6 +22,7 @@ PIVOT_LOOKBACK = 4
 H1_PIVOT_MIN_RETRACE = 0.0100  # never confirm a swing on sub-1% H1 noise
 H1_PIVOT_RANGE_MULTIPLIER = 0.75
 H1_PIVOT_CONFIRM_BARS = 2
+H1_PIVOT_SEARCH_BARS = 24
 MIN_FAVORABLE_MOVE_FOR_WEAKENING = 0.0015
 PROFIT_LOCK_ARM_MOVE = 0.0025
 PROFIT_LOCK_BUFFER_MOVE = 0.0012
@@ -90,13 +91,14 @@ def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL, require_fresh=True):
     if any(abs(b["t"]-a["t"]-3_600_000)>1000 for a,b in zip(recent,recent[1:])):
         return {"ready": False, "reason": "gapped_h1_history", "policy": POLICY, "symbol": symbol}
 
-    # Confirm the newest candidate that survives for up to N CLOSED H1 bars.
-    # This is intentionally not a one-candle fractal: an extreme may require
-    # more than one hour for the correction/rebound to become structurally clear.
+    # Universal H1 pivot reconstruction.
+    # Search a rolling historical window, newest candidate first. A candidate
+    # may need multiple later CLOSED H1 bars to confirm; do not forget it just
+    # because it is older than two bars.
     chosen = None
-    max_confirm = min(H1_PIVOT_CONFIRM_BARS, len(candles)-PIVOT_LOOKBACK-1)
-    for confirm_bars in range(1, max_confirm+1):
-        p_idx = len(candles)-1-confirm_bars
+    newest_candidate_idx = len(candles) - 2
+    oldest_candidate_idx = max(PIVOT_LOOKBACK, len(candles) - 1 - H1_PIVOT_SEARCH_BARS)
+    for p_idx in range(newest_candidate_idx, oldest_candidate_idx - 1, -1):
         p = candles[p_idx]
         prior = candles[p_idx-PIVOT_LOOKBACK:p_idx]
         after = candles[p_idx+1:]
@@ -110,37 +112,66 @@ def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL, require_fresh=True):
 
         candidate_low = p["l"] <= min(z["l"] for z in prior)
         candidate_high = p["h"] >= max(z["h"] for z in prior)
+        if not candidate_low and not candidate_high:
+            continue
 
-        # Candidate remains valid only while later closed bars do not extend
-        # through the candidate extreme. Otherwise the newer extreme owns the setup.
-        low_survives = candidate_low and min(z["l"] for z in after) > p["l"]
-        high_survives = candidate_high and max(z["h"] for z in after) < p["h"]
+        low_valid = bool(candidate_low)
+        high_valid = bool(candidate_high)
+        low_confirm = None
+        high_confirm = None
+        best_rebound = 0.0
+        best_pullback = 0.0
 
-        best_rebound = max((z["c"]/p["l"]-1.0) for z in after) if p["l"]>0 else 0.0
-        best_pullback = max((1.0-z["c"]/p["h"]) for z in after) if p["h"]>0 else 0.0
+        for z in after:
+            if low_valid:
+                if z["l"] <= p["l"]:
+                    low_valid = False
+                else:
+                    rebound=(z["c"]/p["l"]-1.0) if p["l"]>0 else 0.0
+                    best_rebound=max(best_rebound,rebound)
+                    if low_confirm is None and rebound >= retrace_threshold:
+                        low_confirm=z
+            if high_valid:
+                if z["h"] >= p["h"]:
+                    high_valid = False
+                else:
+                    pullback=(1.0-z["c"]/p["h"]) if p["h"]>0 else 0.0
+                    best_pullback=max(best_pullback,pullback)
+                    if high_confirm is None and pullback >= retrace_threshold:
+                        high_confirm=z
 
-        local_low = bool(low_survives and best_rebound >= retrace_threshold)
-        local_high = bool(high_survives and best_pullback >= retrace_threshold)
+        local_low = bool(low_valid and low_confirm is not None)
+        local_high = bool(high_valid and high_confirm is not None)
         if not (local_low or local_high):
             continue
 
-        side = 1 if local_low and not local_high else (-1 if local_high and not local_low else 0)
+        side = 0
+        confirm = None
+        if local_low and not local_high:
+            side=1;confirm=low_confirm
+        elif local_high and not local_low:
+            side=-1;confirm=high_confirm
+        else:
+            lt=int(low_confirm["t"]);ht=int(high_confirm["t"])
+            if lt < ht:
+                side=1;confirm=low_confirm
+            elif ht < lt:
+                side=-1;confirm=high_confirm
         if side == 0:
             continue
+
         chosen = {
             "p": p,
-            "confirm": after[-1],
-            "confirm_bars": confirm_bars,
+            "confirm": confirm,
+            "confirm_bars": max(1, int((confirm["t"]-p["t"])//3_600_000)),
             "candidate_low": candidate_low,
             "candidate_high": candidate_high,
-            "local_low": local_low,
-            "local_high": local_high,
+            "local_low": side > 0,
+            "local_high": side < 0,
             "retrace_threshold": retrace_threshold,
             "confirmation_retrace": best_rebound if side>0 else best_pullback,
             "entry_side": side,
         }
-        # Search newest candidate first: 1 bar, then 2 bars. If a one-bar
-        # candidate is already confirmed it is necessarily newer.
         break
 
     x = candles[-1]
