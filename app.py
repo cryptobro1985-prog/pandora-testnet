@@ -2668,7 +2668,7 @@ def local4_fast_entries(prices):
    watch=_local_experiment_watch_observe(symbol,watch,float(mark),None,flow,time.time())
    if local4_reentry_ready(side,None,mark,watch,flow,time.time()):
     local_experiment_open(symbol,side,analysis,"REENTRY",None,watch)
-  elif local4_entry_candidate(symbol,analysis,None,flow,time.time())["eligible"]:
+  elif local4_initial_entry_candidate(symbol,analysis,None,flow,time.time())["eligible"]:
    local_experiment_open(symbol,side,analysis,"ORDER_FLOW")
 
 def local_experiment_risk_loop():
