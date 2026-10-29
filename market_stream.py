@@ -16,8 +16,9 @@ def run_trade_stream(observations, stop, symbols_provider, report, url, on_mids=
                     ws.send(json.dumps({"method": "subscribe", "subscription": {"type": "trades", "coin": symbol}}))
             if on_mids is not None:
                 ws.send(json.dumps({"method":"subscribe","subscription":{"type":"allMids"}}))
+            candle_selected = set(candle_symbols() if callable(candle_symbols) else candle_symbols)
             if on_candles is not None:
-                for symbol in sorted(candle_symbols):
+                for symbol in sorted(candle_selected):
                     for interval in ("1h", "15m"):
                         ws.send(json.dumps({"method":"subscribe","subscription":{"type":"candle","coin":symbol,"interval":interval}}))
             if on_regime_candles is not None:
@@ -98,6 +99,13 @@ def run_trade_stream(observations, stop, symbols_provider, report, url, on_mids=
                         for method, symbols in (("unsubscribe", selected-desired), ("subscribe", desired-selected)):
                             for symbol in sorted(symbols):
                                 ws.send(json.dumps({"method": method, "subscription": {"type": "trades", "coin": symbol}}))
+                    if on_candles is not None:
+                        candle_desired = set(candle_symbols() if callable(candle_symbols) else candle_symbols)
+                        for method, symbols in (("unsubscribe", candle_selected-candle_desired), ("subscribe", candle_desired-candle_selected)):
+                            for symbol in sorted(symbols):
+                                for interval in ("1h","15m"):
+                                    ws.send(json.dumps({"method":method,"subscription":{"type":"candle","coin":symbol,"interval":interval}}))
+                        candle_selected = candle_desired
                     observations.set_subscriptions(desired, epoch)
                     selected, last_refresh = desired, epoch
                 if epoch-last_report >= 5:
