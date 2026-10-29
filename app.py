@@ -2948,6 +2948,20 @@ def _comparison_mtm(state_name,prices):
  return total,used,max(0.0,total-used),unreal
 
 def _comparison_anchor(state_name,symbol):
+ # Canonical H1 structure is authoritative. Never let an already-open position
+ # pin Strategy 1 to its stale entry anchor: that would prevent a newer
+ # opposite H1 local from closing the position and changing the permitted side.
+ with LOCK:
+  durable=copy.deepcopy(S.get("local_h1_direction",{}).get(symbol))
+ if durable and durable.get("ready") and int(durable.get("entry_side") or 0) in (-1,1):
+  durable["persisted"]=True
+  durable["h1_direction_anchor"]=True
+  durable["anchor_confirmed"]=True
+  durable["reason"]="canonical_local_h1_direction"
+  return durable
+
+ # Restart/bootstrap fallback only. Use persisted position/watch context when
+ # fresh H1 history is temporarily unavailable, never in preference to it.
  with LOCK:
   pos=copy.deepcopy(S.get(state_name+"_positions",{}).get(symbol))
   watch=copy.deepcopy(S.get(state_name+"_watch",{}).get(symbol)) if state_name in ("local_s1","local_s3") else None
@@ -2962,18 +2976,7 @@ def _comparison_anchor(state_name,symbol):
     "pivot_price":features.get("pivot_price"),"entry_side":side,"signal_candle_time":candle,
     "pivot_candle_time":int(features.get("pivot_candle_time") or candle),"entry_blocked":False,
     "pending_pivot_type":None,"pending_pivot_price":None,"entry_block_reason":None,
-    "reason":"comparison_persisted_h1_anchor"}
- # Canonical Strategy 1 H1 regime is durable independently of any legacy
- # local_v12 book. A confirmed H1 local remains the structural side until a
- # later confirmed opposite H1 local replaces it.
- with LOCK:
-  durable=copy.deepcopy(S.get("local_h1_direction",{}).get(symbol))
- if durable and durable.get("ready") and int(durable.get("entry_side") or 0) in (-1,1):
-  durable["persisted"]=True
-  durable["h1_direction_anchor"]=True
-  durable["anchor_confirmed"]=True
-  durable["reason"]="durable_local_h1_direction_fallback"
-  return durable
+    "reason":"comparison_persisted_h1_anchor_bootstrap_fallback"}
  return _local_persisted_anchor(symbol)
 
 @account_mutation
