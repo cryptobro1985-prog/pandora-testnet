@@ -70,12 +70,13 @@ def run_trade_stream(observations, stop, symbols_provider, report, url, on_mids=
                             recent_stale_batches = 0
                         elif message.get("data"):
                             recent_stale_batches += 1
-                        # A live websocket heartbeat can conceal a deep queue of
-                        # replayed executions. Restart only when real trades keep
-                        # arriving but none can pass the freshness gate.
-                        if (subscribe_trades and recent_stale_batches >= 25
-                                and last_received - last_accepted_trade > 30):
-                            raise RuntimeError("executed_trade_backlog_reconnect")
+                        # Hyperliquid may replay a startup backlog before the
+                        # subscription reaches live trades. Reconnecting here resets
+                        # RollingMarketData coverage and can create a permanent
+                        # reconnect loop in which the 60/180/300s Strategy 1 flow
+                        # windows never become ready. Drain stale batches in place;
+                        # the freshness gate inside RollingMarketData still rejects
+                        # every stale execution, so trading remains fail-closed.
                     elif message.get("channel") == "allMids" and on_mids is not None:
                         data=message.get("data") or {}
                         on_mids(data.get("mids",{}))
