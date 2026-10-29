@@ -4153,12 +4153,11 @@ def market_trade_stream():
  run_trade_stream(MARKET_OBS,SHUTDOWN,symbols,report,os.getenv("HYPERLIQUID_WS_API","wss://api.hyperliquid.xyz/ws"),subscribe_trades=True)
 
 def market_aux_stream():
- # Price/candle traffic lives on a separate socket so busy candle/allMids
+ # Price/candle traffic lives on a separate read-only socket so busy candle/allMids
  # channels can never delay the executed-trade tape used by Strategy 1.
- while not SHUTDOWN.is_set():
-  with LOCK:active=bool(S.get("engine_active"))
-  if active:break
-  SHUTDOWN.wait(.25)
+ # IMPORTANT: this stream is intentionally process-independent and starts even on
+ # standby Render instances. It performs no trading and no REST calls; it only
+ # keeps the HTTP monitor's live marks/candles current during lease handoffs.
  def symbols():
   return set(strategy1_runtime_symbols())
  def report(status):
@@ -5589,7 +5588,9 @@ def build_dashboard_snapshot(history=None):
   local_swing_positions.append(card)
   if lsym==HYPE_SWING_SYMBOL:hype_swing_position=card
  experiment_positions=[];experiment_unreal=0.0
- _s1_live_prices=copy.deepcopy((durable_s1_live or {}).get("prices") or {})
+ _durable_prices=copy.deepcopy((durable_s1_live or {}).get("prices") or {})
+ _local_price_age=(time.time()-float(S.get("_last_poll_epoch",0) or 0)) if S.get("_last_poll_epoch") else 1e9
+ _s1_live_prices=(copy.deepcopy(prices) if prices and _local_price_age<=3.0 else _durable_prices)
  _s1_live_positions=copy.deepcopy((durable_s1_live or {}).get("positions") or {})
  _s1_source_positions=state.get("local_v12_positions",{})
  if _s1_live_positions:
@@ -6402,9 +6403,10 @@ def html_dashboard(data):
  s1details=copy.deepcopy(s1_engine.get("details") or {})
  s1durable_h1=copy.deepcopy(s1p.get("h1_durable") or {})
  s1durable_live=copy.deepcopy(s1p.get("live_state") or {})
- s1live_prices=copy.deepcopy(s1durable_live.get("prices") or {})
- if not s1live_prices:
-  with LOCK:s1live_prices=copy.deepcopy(S.get("_prices",{}))
+ with LOCK:
+  _monitor_local_prices=copy.deepcopy(S.get("_prices",{}))
+  _monitor_local_age=(time.time()-float(S.get("_last_poll_epoch",0) or 0)) if S.get("_last_poll_epoch") else 1e9
+ s1live_prices=(_monitor_local_prices if _monitor_local_prices and _monitor_local_age<=3.0 else copy.deepcopy(s1durable_live.get("prices") or {}))
   s1live_positions=copy.deepcopy(S.get("local_v12_positions",{}))
   s1live_watch=copy.deepcopy(S.get("local_experiment_watch",{}))
  for _sym in LOCAL_EXPERIMENT_SYMBOLS:
@@ -6546,7 +6548,7 @@ def html_dashboard(data):
    "posv" if s1engine.get("ok") else "warnv","ACTIVE" if s1engine.get("ok") else "WARMUP / PARTIAL DATA",
    float(s1block.get("realized_equity",500) or 500),"posv" if s1_realized>=0 else "negv",s1_realized,
    "posv" if s1_open>=0 else "negv",s1_open,s1_eq,int(s1stats.get("trades",0) or 0),esc(s1wr),
-   len(s1positions),len(s1watch),s1local_coverage,esc(data.get("version") or "—"),round(float(s1durable_live.get("price_age_seconds",999) or 999),2),esc((data.get("strategy1_last_minute_snapshot") or {}).get("ts","pending")),s1_local_rows,"".join(s1_primary_rows),s1_history_rows)
+   len(s1positions),len(s1watch),s1local_coverage,esc(data.get("version") or "—"),round(min(float(_monitor_local_age),float(s1durable_live.get("price_age_seconds",999) or 999)),2),esc((data.get("strategy1_last_minute_snapshot") or {}).get("ts","pending")),s1_local_rows,"".join(s1_primary_rows),s1_history_rows)
  comparison_html=""
  for key,title in (("local_s2","STRATEGY 2 — H1 PIVOT-TO-PIVOT"),("local_s3","STRATEGY 3 — LOCAL12 V10")):
   block=(data.get("comparison_strategies") or {}).get(key,{})
