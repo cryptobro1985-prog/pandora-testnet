@@ -5915,7 +5915,9 @@ def build_dashboard_snapshot(history=None):
    "entry":epos["entry"],"mark":emark,"margin_usd":round(epos["margin"],2),"notional_usd":round(epos["notional"],2),
    "leverage":epos["leverage"],"roe_pct":round(epnl/epos["margin"]*100,3) if epos["margin"] else 0,
    "unrealized_pnl":round(epnl,4),"opened":epos["opened"],"features":epos.get("features",{})})
- experiment_total=float(state.get("local_experiment_equity",LOCAL_EXPERIMENT_STARTING_EQUITY))+experiment_unreal
+ curated_s1_realized=local_v10_curated_realized_pnl()
+ experiment_realized_equity=LOCAL_EXPERIMENT_STARTING_EQUITY+curated_s1_realized
+ experiment_total=experiment_realized_equity+experiment_unreal
  hype_swing_total=float(state.get("hype_swing_equity",HYPE_SWING_STARTING_EQUITY))+hype_swing_unreal
  comparison={}
  for state_name,label in (("local_s1","Strategy 1 — Restored Caterpillar"),("local_s2","Strategy 2 — H1 Pivot Swing"),("local_s3","Strategy 3 — Local12 v10")):
@@ -5958,10 +5960,10 @@ def build_dashboard_snapshot(history=None):
 "hype_h1_stats":history.get("hype_stats",{}) if history is not None else hype_swing_stats(),"hype_h1_policy":CATERPILLAR_POLICY,
 "local_experiment_symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"local_v12_positions":experiment_positions,
 "local_experiment_watch":copy.deepcopy(state.get("local_experiment_watch",{})),
-"local_experiment_balance":round(float(state.get("local_experiment_equity",LOCAL_EXPERIMENT_STARTING_EQUITY)),4),
+"local_experiment_balance":round(experiment_realized_equity,4),
 "local_experiment_unrealized_pnl":round(experiment_unreal,4),"local_experiment_total_equity":round(experiment_total,4),
 "local_experiment_pnl_pct":round((experiment_total/LOCAL_EXPERIMENT_STARTING_EQUITY-1)*100,3),
-"local_experiment_realized_pnl":round(float(state.get("local_experiment_realized_pnl",0) or 0),4),
+"local_experiment_realized_pnl":round(curated_s1_realized,4),
 "local_experiment_trades":int(state.get("local_experiment_trades",0) or 0),
 "local_v10_closed_trades":copy.deepcopy((history or {}).get("local_v10_closed_trades",[])),
 "local_s1_causal_history":copy.deepcopy((history or {}).get("local_s1_causal_history",{})),
@@ -5969,8 +5971,8 @@ def build_dashboard_snapshot(history=None):
 "local_experiment_stats":copy.deepcopy(state.get("local_experiment_stats",{})),
 "local_experiment_engine":copy.deepcopy(state.get("sources",{}).get("Caterpillar 1.0",{})),
 "comparison_strategies":comparison,"strategy1_primary":{"starting_equity":500.0,
-"realized_equity":round(float(state.get("local_experiment_equity",500.0) or 500.0),4),
-"realized_pnl":round(float(state.get("local_experiment_realized_pnl",0) or 0),4),
+"realized_equity":round(experiment_realized_equity,4),
+"realized_pnl":round(curated_s1_realized,4),
 "unrealized_pnl":round(float(experiment_unreal),4),
 "total_equity":round(float(experiment_total),4),
 "open_positions":copy.deepcopy(experiment_positions),
@@ -6156,14 +6158,31 @@ def operations_diagnostics():
   SHUTDOWN.wait(30)
 
 def local_v10_history(limit=100):
+ # Curated Strategy 1 monitor: exclude audited invalid fills and include the
+ # one validated legacy APT SHORT once, with explicit provenance.
  with pg() as db:
-  return [dict(x) for x in db.execute("""select opened,closed,symbol,side,entry,exit,pnl,reason,margin,notional,leverage
-    from local_v12_trade_history order by closed desc limit %s""",(limit,)).fetchall()]
+  rows=[dict(x) for x in db.execute("""select opened,closed,symbol,side,entry,exit,pnl,reason,margin,notional,leverage
+    from local_v12_trade_history
+    where coalesce(features->>'excluded_from_strategy_stats','false') <> 'true'
+    order by closed desc limit %s""",(limit,)).fetchall()]
+  legacy=db.execute("""select opened,closed,symbol,side,entry,exit,pnl,reason,margin,notional,leverage
+    from local_s1_trade_history where id=39 and symbol='APT' and side=-1 limit 1""").fetchone()
+  if legacy:
+   x=dict(legacy);x["reason"]="VALIDATED_LEGACY_S1_APT_SHORT · "+str(x.get("reason") or "")
+   rows.append(x);rows.sort(key=lambda z:str(z.get("closed") or ""),reverse=True)
+  return rows[:limit]
+
+def local_v10_curated_realized_pnl():
+ return sum(float(x.get("pnl") or 0) for x in local_v10_history(10000))
 
 def local_v10_today_pnl():
  with pg() as db:
-  row=db.execute("select coalesce(sum(pnl),0) as pnl from local_v12_trade_history where closed::timestamptz >= date_trunc('day',now())").fetchone()
-  return float(row["pnl"] or 0)
+  row=db.execute("""select coalesce(sum(pnl),0) as pnl from local_v12_trade_history
+    where closed::timestamptz >= date_trunc('day',now())
+      and coalesce(features->>'excluded_from_strategy_stats','false') <> 'true'""").fetchone()
+  legacy=db.execute("""select coalesce(pnl,0) pnl from local_s1_trade_history
+    where id=39 and symbol='APT' and side=-1 and closed::timestamptz >= date_trunc('day',now()) limit 1""").fetchone()
+  return float(row["pnl"] or 0)+(float(legacy["pnl"] or 0) if legacy else 0.0)
 
 def local_compare_history(prefix,limit=100):
  table={"local_s1":"local_s1_trade_history","local_s2":"local_s2_trade_history","local_s3":"local_s3_trade_history"}[prefix]
