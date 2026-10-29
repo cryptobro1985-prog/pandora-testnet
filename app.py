@@ -2489,9 +2489,19 @@ def local_h1_direction(rows,now_ms,symbol):
   # confirmed directional anchor usable instead of blanking the symbol.
   fallback=_local_persisted_anchor(symbol)
   if fallback and int(fallback.get("entry_side") or 0) in (-1,1):
-   return {**fallback,"ready":True,"stale_source_reason":analysis.get("reason"),
+   recovered={**fallback,"ready":True,"stale_source_reason":analysis.get("reason"),
      "anchor_recovered_from":"latest_valid_strategy1_observation",
      **local_pending_extreme(rows,now_ms,int(fallback.get("entry_side") or 0),fallback.get("pivot_price"))}
+   try:
+    with pg() as db:
+     with db.transaction():
+      STORE.fence(db)
+      db.execute("insert into local_h1_direction(symbol,analysis) values(%s,%s::jsonb) on conflict(symbol) do update set analysis=excluded.analysis",
+       (symbol,json.dumps(recovered)))
+    with LOCK:S.setdefault("local_h1_direction",{})[symbol]=copy.deepcopy(recovered)
+   except Exception:
+    pass
+   return recovered
   return analysis
  with LOCK:prior=copy.deepcopy(S.get("local_h1_direction",{}).get(symbol))
  if prior:
@@ -6998,6 +7008,7 @@ if __name__=="__main__":
   ("market_history_bootstrap",market_history_bootstrap),
   ("market_trades",market_trade_stream),
   ("market_aux",market_aux_stream),
+  ("strategy1_bybit_autoscanner",bybit_volatility_discovery_loop),
   ("breadth_history",market_regime_history),
   ("telemetry",telemetry),
   ("strategy1_flow_execution",strategy1_flow_execution_loop),
