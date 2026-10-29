@@ -1082,10 +1082,8 @@ def engine_coordinator():
     claimed=STORE.claim()
    if claimed:
     if not S["engine_active"] and S1_ONLY_MODE:
-     # Strategy-1-only fast takeover: pinit() already loaded the durable PAPER book
-     # before workers started. Do not block readiness on disabled legacy books.
-     with ACCOUNT_LOCK:
-      if apply_local4_user_reset():pinit()
+     # Strategy-1-only fast takeover: init()/pinit() already loaded durable PAPER
+     # state before workers started. Never run historical reset/legacy restoration here.
      S["_engine_activated_epoch"]=time.time()
      S["engine_active"]=True;S["engine_error"]=None
      hydrate_strategy1_anchors()
