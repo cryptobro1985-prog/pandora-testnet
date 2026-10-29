@@ -2795,7 +2795,7 @@ def local_experiment_mark_positions(prices):
   if not mark:continue
   updated,liq=hype_update_path(pos,float(mark))
   f=updated.setdefault("features",{})
-  # Strategy 1 MFE protection: preserve large trend profits without turning one noisy M15 into an exit.
+  # Strategy 1 MFE protection: preserve trend profits; exits are confirmed by executed-flow control transfer.
   entry=float(updated.get("entry") or 0);side=int(updated.get("side") or 0);markf=float(mark)
   move=side*(markf/entry-1.0) if entry>0 and side in (-1,1) else 0.0
   mfe=max(float(f.get("mfe_price_move",0) or 0),move)
@@ -2829,7 +2829,9 @@ def local_experiment_mark_positions(prices):
 
 @account_mutation
 def local4_fast_entries(prices):
- for symbol in LOCAL_EXPERIMENT_SYMBOLS:
+ # Fast PAPER execution path: permanent 18 + current Discovery HOT symbols.
+ # H1 sets direction; fresh M1/M3/M5 executed flow controls entry/re-entry.
+ for symbol in strategy1_runtime_symbols():
   with LOCK:
    if symbol in S.get("local_v12_positions",{}):continue
    analysis=copy.deepcopy(S.get("_local4_analysis",{}).get(symbol))
@@ -2858,9 +2860,10 @@ def local_experiment_risk_loop():
     prices=dict(S.get("_prices",{}))
    if active and 0<=age<=8 and prices:
     local_experiment_mark_positions(prices)
-    # H1 -> M15 entries/reentries belong exclusively to local_experiment_loop.
-    # Never submit orders from this price-only risk loop without M15 candles.
-    with LOCK:S["sources"]["LocalRisk"]={"ok":True,"last_check":now(),"mode":"H1_M1_M3_M5_entries_risk_price_monitor"}
+    # Execution does not wait for M15. H1 provides the allowed side; fresh
+    # M1/M3/M5 aggressor flow opens/re-enters as soon as control is confirmed.
+    local4_fast_entries(prices)
+    with LOCK:S["sources"]["LocalRisk"]={"ok":True,"last_check":now(),"mode":"H1_M1_M3_M5_fast_paper_execution"}
   except LeaseLost as exc:
    with LOCK:
     S["engine_active"]=False;S["engine_error"]=str(exc)
