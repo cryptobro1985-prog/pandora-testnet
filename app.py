@@ -2484,7 +2484,15 @@ def hype_swing_stats():
 
 def local_h1_direction(rows,now_ms,symbol):
  analysis=analyze_hype_h1(rows,now_ms,symbol)
- if not analysis.get("ready"):return analysis
+ if not analysis.get("ready"):
+  # Fresh H1 cache may lag during deploy/lease handoff. Keep the latest
+  # confirmed directional anchor usable instead of blanking the symbol.
+  fallback=_local_persisted_anchor(symbol)
+  if fallback and int(fallback.get("entry_side") or 0) in (-1,1):
+   return {**fallback,"ready":True,"stale_source_reason":analysis.get("reason"),
+     "anchor_recovered_from":"latest_valid_strategy1_observation",
+     **local_pending_extreme(rows,now_ms,int(fallback.get("entry_side") or 0),fallback.get("pivot_price"))}
+  return analysis
  with LOCK:prior=copy.deepcopy(S.get("local_h1_direction",{}).get(symbol))
  if prior:
   prior_t=int(prior.get("signal_candle_time") or 0);new_t=int(analysis.get("signal_candle_time") or 0)
