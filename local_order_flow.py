@@ -101,8 +101,20 @@ def _candidate(symbol, analysis, flow):
               (analysis or {}).get("h1_direction_anchor") and
               not (analysis or {}).get("entry_blocked") and side in (-1, 1))
     profile = flow_profile(flow, side)
-    eligible = bool(h1 and profile and profile["aligned_control"])
-    reason = ("h1_local_m5_executed_flow_control" if eligible else
+    # Startup bridge: after a deploy do not stay blind for the full five-minute
+    # tape warmup. Initial entries only may use a strong fresh 60s executed-flow
+    # signal while 60s <= coverage < 300s. Exits and re-entries still require
+    # the normal 300s profile, so this cannot create fast flip-flopping.
+    coverage = _f((flow or {}).get("trade_coverage_seconds"))
+    raw60 = _f((flow or {}).get("flow_imbalance"))
+    age = _f((flow or {}).get("latest_trade_age_seconds"))
+    bootstrap60 = bool(profile is None and h1 and coverage is not None and 60 <= coverage < 300
+                       and age is not None and -1 <= age <= 15
+                       and raw60 is not None and -1 <= raw60 <= 1
+                       and side * raw60 >= 0.12)
+    eligible = bool(h1 and ((profile and profile["aligned_control"]) or bootstrap60))
+    reason = ("h1_local_startup_60s_executed_flow" if bootstrap60 else
+              "h1_local_m5_executed_flow_control" if eligible else
               "waiting_for_h1_local" if not h1 else
               "waiting_for_fresh_m5_executed_flow" if profile is None else
               "waiting_for_h1_side_m5_control")
@@ -110,8 +122,9 @@ def _candidate(symbol, analysis, flow):
                 policy=POLICY, dominant_side=dominance(flow),
                 aligned_flow_300s=profile["300s"] if profile else None,
                 aligned_price_300s=profile["aligned_price_300s"] if profile else None,
-                aligned_flow_60s=profile["60s"] if profile else None,
-                event_epoch=profile["event_epoch"] if profile else None)
+                aligned_flow_60s=profile["60s"] if profile else (side * raw60 if raw60 is not None else None),
+                startup_bridge=bootstrap60,
+                event_epoch=profile["event_epoch"] if profile else _event_epoch(flow))
 
 
 def initial_entry_candidate(symbol, analysis, m15, flow, stamp):
