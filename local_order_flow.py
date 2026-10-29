@@ -207,6 +207,28 @@ def reentry_ready(side, m15, mark, watch, flow, stamp):
     extreme = _f(ctx.get("pullback_extreme"))
     price_recovered = (price is not None and extreme is not None and extreme > 0
                        and side * (price / extreme - 1.0) >= .0005)
-    return bool(profile and profile["resumed"] and price_recovered and
-                event_epoch is not None and opposite_epoch is not None and
-                event_epoch > opposite_epoch)
+    recovered_after_pullback = bool(profile and profile["resumed"] and price_recovered and
+                                    event_epoch is not None and opposite_epoch is not None and
+                                    event_epoch > opposite_epoch)
+    if recovered_after_pullback:
+        return True
+    # A profit-taking exit can be followed by uninterrupted directional strength.
+    # Do not require counter-side takeover in that case; require a NEW executed
+    # trade after the exit, multihorizon dominance and an actual price advance.
+    exit_epoch = _f(watch.get("exit_epoch"))
+    if exit_epoch is None:
+        try:
+            import datetime
+            exit_epoch = datetime.datetime.fromisoformat(str(watch.get("exit_at")).replace("Z", "+00:00")).timestamp()
+        except (TypeError, ValueError, OverflowError):
+            return False
+    exit_price = _f(watch.get("exit_price"))
+    continuation = bool(
+        profile and profile["resumed"] and profile["aligned_control"]
+        and event_epoch is not None and event_epoch > exit_epoch
+        and price is not None and exit_price is not None and exit_price > 0
+        and side * (price / exit_price - 1.0) >= .0005
+        and _f(ctx.get("last_observed_epoch")) is not None
+        and 0 <= stamp - _f(ctx["last_observed_epoch"]) <= 15
+    )
+    return continuation
