@@ -163,10 +163,16 @@ def pressure_exit(position, m15, mark, flow):
     typical = _f((m15 or {}).get("median_range_move")) or .008
     recoil_threshold = max(.0007, min(.0018, typical * .12))
     recoil = peak - favorable
-    if recoil < recoil_threshold:
-        return None
     cost = max(.0002, _f(features.get("estimated_round_trip_cost_move")) or 0.0)
-    return "m1_m3_m5_mfe_profit_exit" if favorable > cost else "m1_m3_m5_risk_exit"
+    # Never allow a materially profitable excursion to round-trip into a loss
+    # while fresh executed flow has already transferred against the position.
+    # Once peak covered estimated round-trip cost plus a small buffer, counter
+    # takeover is sufficient to preserve the move; otherwise retain the recoil
+    # requirement to avoid churning immediately after entry.
+    peak_was_bankable = peak >= max(cost * 1.5, .0015)
+    if not peak_was_bankable and recoil < recoil_threshold:
+        return None
+    return "m1_m3_m5_mfe_profit_exit" if favorable > cost else "m1_m3_m5_mfe_preservation_exit"
 
 
 def update_watch(watch, mark, m15, flow, stamp):
