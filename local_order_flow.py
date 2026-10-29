@@ -106,29 +106,23 @@ def _candidate(symbol, analysis, flow):
 
 
 def initial_entry_candidate(symbol, analysis, m15, flow, stamp):
-    """Initial entry requires confirmed H1 direction plus live-side resumption.
+    """First entry follows a CONFIRMED H1 local immediately.
 
-    A confirmed H1 local is directional context, not permission to enter blindly.
-    M15 is observational only and never vetoes H1 plus fresh M1/M3/M5
-    executed flow aligned with the H1 side. This mirrors the caterpillar rule:
-    wait through the pullback, then enter when the pullback weakens and control
-    returns toward the active H1 regime.
+    The confirmed H1 Local High/Low is the directional trigger for the first
+    PAPER entry. M15 and executed-flow are observational at this stage and do
+    not veto the initial position. Fresh executed flow remains mandatory for
+    exit control and subsequent re-entry logic.
     """
     data = analysis or {}
     side = int(data.get("entry_side") or 0)
     confirmed = bool(data.get("ready") and data.get("anchor_confirmed") and
                      data.get("h1_direction_anchor") and
                      not data.get("entry_blocked") and side in (-1, 1))
-    if not confirmed:
-        return dict(symbol=symbol, side=side, eligible=False,
-                    reason="waiting_for_confirmed_h1_local", policy=POLICY,
-                    entry_trigger="H1_CONFIRMED_LOCAL_PLUS_FLOW",
-                    signal_candle_time=data.get("signal_candle_time"))
-    candidate = _candidate(symbol, data, flow)
-    candidate.update(entry_trigger="H1_CONFIRMED_LOCAL_PLUS_FLOW",
-                     signal_candle_time=data.get("signal_candle_time"))
-    return candidate
-
+    return dict(symbol=symbol, side=side, eligible=confirmed,
+                reason="confirmed_h1_local_initial" if confirmed else
+                       "waiting_for_confirmed_h1_local",
+                policy=POLICY, entry_trigger="H1_CONFIRMED_LOCAL",
+                signal_candle_time=data.get("signal_candle_time"))
 
 def entry_candidate(symbol, analysis, m15, flow, stamp):
     return _candidate(symbol, analysis, flow)
