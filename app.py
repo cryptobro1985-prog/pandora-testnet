@@ -2966,7 +2966,7 @@ def _local_persisted_anchor(symbol):
 
 
 def local_experiment_loop():
- last_observed={};pool=concurrent.futures.ThreadPoolExecutor(max_workers=24,thread_name_prefix="local-exp-m15")
+ last_observed={};pool=concurrent.futures.ThreadPoolExecutor(max_workers=24,thread_name_prefix="local-exp-h1")
  try:
   while not SHUTDOWN.is_set():
    try:
@@ -2988,11 +2988,17 @@ def local_experiment_loop():
       "error":None}
      SHUTDOWN.wait(.5);continue
     local_experiment_mark_positions(prices)
-    jobs={}
+    jobs={};persisted_by_symbol={}
     runtime_symbols=list(strategy1_runtime_symbols())
+    # Fast restore: a confirmed durable H1 anchor is sufficient for Strategy 1.
+    # Only symbols without a valid anchor spend REST budget on H1 history.
     for symbol in runtime_symbols:
-     jobs[(symbol,"h1")]=pool.submit(_local_h1_candles,symbol)
-     jobs[(symbol,"m15")]=pool.submit(_local_m15_candles,symbol)
+     with LOCK:mem=copy.deepcopy(S.get("_local4_analysis",{}).get(symbol) or S.get("local_h1_direction",{}).get(symbol))
+     persisted=mem if mem and mem.get("ready") and mem.get("anchor_confirmed") else _local_persisted_anchor(symbol)
+     if persisted:
+      persisted_by_symbol[symbol]=persisted
+     else:
+      jobs[(symbol,"h1")]=pool.submit(_local_h1_candles,symbol)
     fetched={};fetch_errors={}
     for key,fut in jobs.items():
      try:fetched[key]=fut.result(timeout=12)
@@ -3004,13 +3010,11 @@ def local_experiment_loop():
       details[symbol]={"ok":False,"error":"mark_unavailable","max_leverage":market_max_leverage(symbol)}
       continue
      h1_error=fetch_errors.get((symbol,"h1"))
-     persisted=None
-     if h1_error:persisted=_local_persisted_anchor(symbol)
+     persisted=persisted_by_symbol.get(symbol)
      if h1_error and not persisted:
       with LOCK:S.setdefault("_local4_analysis",{}).pop(symbol,None)
       details[symbol]={"ok":False,"error":h1_error,"max_leverage":market_max_leverage(symbol)}
       continue
-     m15_rows,m15_ms=fetched.get((symbol,"m15"),([],int(time.time()*1000)))
      if persisted:
       analysis=persisted
       h1_rows=[];h1_ms=int(time.time()*1000)
@@ -3026,8 +3030,10 @@ def local_experiment_loop():
       watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
      canonical_side=int(analysis.get("entry_side") or 0)
      position_vector_mismatch=bool(pos and canonical_side in (-1,1) and int(pos.get("side") or 0)!=canonical_side)
-     target_side=canonical_side if canonical_side in (-1,1) else int((pos or watch or {}).get("side") or 1)
-     m15_live=analyze_local_m15(m15_rows,m15_ms,target_side)
+     # M15 is no longer a trading gate. Keep a compatibility diagnostic shell
+     # while execution is driven by H1 direction + live M1/M3/M5 aggressor flow.
+     m15_live={"ready":False,"partial":None,"adverse_score":None,"recovery_score":None,
+       "mode":"diagnostic_only_not_execution_gate"}
      flow=MARKET_OBS.flow_context(symbol,time.time())
      flow_imb=flow.get("flow_imbalance") if flow.get("trade_data_fresh") else None
      candle=analysis.get("signal_candle_time")
@@ -3055,10 +3061,10 @@ def local_experiment_loop():
         pf=pos.get("features") or {}
         watch_context={"m15":m15_live,"h1_context":h1_context,"flow_imbalance":flow_imb,"flow_context":flow,
           "flow_source":"hyperliquid_ws_trades","observed_at":now(),"reason":pressure_reason,
-          "exit_policy":"M15_CONTROL_FLIP_IMMEDIATE","mfe_price_move":pf.get("mfe_price_move"),
+          "exit_policy":"M1_M3_M5_CONTROL_TRANSFER","mfe_price_move":pf.get("mfe_price_move"),
           "mfe_giveback_move":pf.get("mfe_giveback_move")}
         closed=local_experiment_close(symbol,float(mark),pressure_reason,analysis,watch_context)
-        action="M15_CONTROL_FLIP_EXIT" if closed else None
+        action="FLOW_CONTROL_TRANSFER_EXIT" if closed else None
        else:
         with LOCK:S.setdefault("_s1_adverse_m15",{}).pop(symbol,None)
      if not pos:
@@ -3109,7 +3115,7 @@ def local_experiment_loop():
      selection={k:v for k,v in candidate.items() if k not in ("analysis","m15","watch")}
      details[symbol]["candidate_selection"]={**selection,"rank":rank}
      opened=local_experiment_open(symbol,candidate["side"],candidate["analysis"],candidate["entry_kind"],candidate["m15"],candidate["watch"])
-     details[symbol]["last_action"]=("M15_RECOVERY_REENTRY" if candidate["entry_kind"]=="REENTRY" else "M15_ENTRY") if opened else "WAIT_ALLOCATION_OR_REVALIDATION"
+     details[symbol]["last_action"]=("FLOW_REENTRY" if candidate["entry_kind"]=="REENTRY" else "FLOW_ENTRY") if opened else "WAIT_ALLOCATION_OR_REVALIDATION"
      with LOCK:
       live=copy.deepcopy(S.get("local_v12_positions",{}).get(symbol))
       live_watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
@@ -4248,7 +4254,7 @@ def market_history_bootstrap():
    with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":True,"degraded":False,
      "last_check":now(),"mode":"post_takeover_ip_quiet_window","quiet_remaining_seconds":round(quiet_remaining,1),
      "regime_ready":sum(1 for x in completed if x[0]=="regime"),
-     "local_ready":sum(1 for x in LOCAL_EXPERIMENT_SYMBOLS if ("local",x,"1h") in completed and ("local",x,"15m") in completed),"error":None}
+     "local_ready":sum(1 for x in LOCAL_EXPERIMENT_SYMBOLS if ("local",x,"1h") in completed),"error":None}
    SHUTDOWN.wait(min(2.0,quiet_remaining));continue
   try:
    stamp=time.time()
@@ -4257,7 +4263,7 @@ def market_history_bootstrap():
    runtime_local=list(strategy1_runtime_symbols())
    priority_local=list(LOCAL_EXPERIMENT_SYMBOLS)+[x for x in runtime_local if x not in LOCAL_EXPERIMENT_SYMBOLS]
    # Native intervals avoid losing older H1 anchors.
-   for interval,hours in (("1h",120),("15m",12)):
+   for interval,hours in (("1h",120),):
     for sym in priority_local:
      if SHUTDOWN.is_set():return
      key=("local",sym,interval)
@@ -4287,7 +4293,7 @@ def market_history_bootstrap():
      with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":True,"last_check":now(),
        "mode":"paced_native_local_history_before_breadth",
        "regime_ready":sum(1 for x in completed if x[0]=="regime"),
-       "local_ready":sum(1 for x in LOCAL_EXPERIMENT_SYMBOLS if ("local",x,"1h") in completed and ("local",x,"15m") in completed),
+       "local_ready":sum(1 for x in LOCAL_EXPERIMENT_SYMBOLS if ("local",x,"1h") in completed),
        "error":None}
      SHUTDOWN.wait(3.0)
    # Breadth/regime history is secondary. Restore it only after every Local
@@ -4303,18 +4309,18 @@ def market_history_bootstrap():
     SHUTDOWN.wait(2.0)
    with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":False,"last_check":now(),
      "mode":"paced_rest_after_lease","regime_ready":sum(1 for x in completed if x[0]=="regime"),
-     "local_ready":sum(1 for x in LOCAL_EXPERIMENT_SYMBOLS if ("local",x,"1h") in completed and ("local",x,"15m") in completed),"error":None}
+     "local_ready":sum(1 for x in LOCAL_EXPERIMENT_SYMBOLS if ("local",x,"1h") in completed),"error":None}
    SHUTDOWN.wait(30)
   except RestDeferred:
    with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":True,"degraded":False,"last_check":now(),
      "mode":"rest_budget_wait","regime_ready":sum(1 for x in completed if x[0]=="regime"),
-     "local_ready":sum(1 for x in LOCAL_EXPERIMENT_SYMBOLS if ("local",x,"1h") in completed and ("local",x,"15m") in completed),"error":None}
+     "local_ready":sum(1 for x in LOCAL_EXPERIMENT_SYMBOLS if ("local",x,"1h") in completed),"error":None}
    SHUTDOWN.wait(3)
   except urllib.error.HTTPError as exc:
    if exc.code==429:
     with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":True,"degraded":False,"last_check":now(),
       "mode":"exchange_429_backoff","regime_ready":sum(1 for x in completed if x[0]=="regime"),
-      "local_ready":sum(1 for x in LOCAL_EXPERIMENT_SYMBOLS if ("local",x,"1h") in completed and ("local",x,"15m") in completed),"error":None}
+      "local_ready":sum(1 for x in LOCAL_EXPERIMENT_SYMBOLS if ("local",x,"1h") in completed),"error":None}
     SHUTDOWN.wait(max(10.0,float(HL_REST_BUDGET.status().get("cooldown_seconds",0) or 0)))
    else:
     with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":False,"last_check":now(),"error":str(exc)[:140]}
