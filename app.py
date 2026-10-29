@@ -229,7 +229,11 @@ def market_max_leverage(symbol):
  return float(VALIDATED_MAX_LEVERAGE.get(symbol,1.0))
 
 LATENCIES=LatencyMetrics()
-MARKET_OBS=RollingMarketData(max_symbols=512)
+# Strategy 1 consumes M1/M3/M5 executed flow. Hyperliquid's subscription
+# includes a recent trade snapshot, so keep up to six minutes of genuine
+# exchange executions for restart warmup while current signals still require
+# a <=15s latest trade.
+MARKET_OBS=RollingMarketData(max_symbols=512,max_trade_lag_seconds=360)
 MARKET_AUX_OBS=RollingMarketData(max_symbols=512)
 LIQUIDATION_TAPE=LiquidationTape()
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
