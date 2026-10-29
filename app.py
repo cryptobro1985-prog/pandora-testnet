@@ -3064,14 +3064,14 @@ def _comparison_stats(prefix):
   with pg() as db:
    # Keep the immutable accounting ledger distinct from user-curated strategy diagnostics.
    # Badly executed trades may be excluded from the strategy-quality sample, NEVER from actual account PnL.
-   suffix=(" where coalesce(features->>'excluded_from_strategy_stats','false') <> 'true'"
+   suffix=(" where coalesce(features->>'excluded_from_strategy_stats','false') <> 'true' and reason <> 'audited_invalid_reentry_cleanup'"
            if prefix=="local_s1" else "")
    row=db.execute(f"""select count(*) n,coalesce(sum(pnl),0) pnl,
      sum(case when pnl>0 then 1 else 0 end) wins from {prefix}_trade_history{suffix}""").fetchone()
    excluded=None
    if prefix=="local_s1":
     excluded=db.execute("""select count(*) n,coalesce(sum(pnl),0) pnl
-      from local_s1_trade_history where features->>'excluded_from_strategy_stats'='true'""").fetchone()
+      from local_s1_trade_history where features->>'excluded_from_strategy_stats'='true' or reason='audited_invalid_reentry_cleanup'""").fetchone()
   n=int(row["n"] or 0);wins=int(row["wins"] or 0)
   result={"trades":n,"wins":wins,"win_rate":round(wins/n,4) if n else None,
           "realized_pnl":float(row["pnl"] or 0)}
@@ -5631,7 +5631,7 @@ def local_compare_history(prefix,limit=100):
  table={"local_s1":"local_s1_trade_history","local_s2":"local_s2_trade_history","local_s3":"local_s3_trade_history"}[prefix]
  with pg() as db:
   return [dict(x) for x in db.execute(f"""select opened,closed,symbol,side,entry,exit,pnl,reason,margin,notional,leverage
-   from {table} order by closed desc limit %s""",(int(limit),)).fetchall()]
+   from {table} {("where reason <> 'audited_invalid_reentry_cleanup' and coalesce(features->>'excluded_from_strategy_stats','false') <> 'true'" if prefix=="local_s1" else "")} order by closed desc limit %s""",(int(limit),)).fetchall()]
 
 def _bybit_linear_m15_history(symbol,start_ms,end_ms):
  # Public Bybit market data: no API key is required for historical klines.
