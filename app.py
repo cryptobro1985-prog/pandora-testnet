@@ -1007,7 +1007,7 @@ def engine_coordinator():
  while not SHUTDOWN.is_set():
   S["_coordinator_heartbeat"]=time.time()
   try:
-   grace=120 if not STORE.has_lease_record() else 0
+   STORE.has_lease_record()  # connectivity check; modern deployments always use the fenced Neon lease\n   grace=0
    break
   except Exception as e:
    S["engine_error"]=str(e)[:180];SHUTDOWN.wait(5)
