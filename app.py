@@ -2500,8 +2500,20 @@ def local_h1_direction(rows,now_ms,symbol):
     analysis={**prior,"ready":True,"last_candle_time":analysis.get("last_candle_time"),
       **local_pending_extreme(rows,now_ms,prior_side),
       "anchor_guard":"blocked_non_new_opposite_pivot"}
- if analysis.get("entry_side") not in (-1,1):return analysis
- if not prior or analysis.get("signal_candle_time")!=prior.get("signal_candle_time"):
+ if analysis.get("entry_side") not in (-1,1):
+  # Migration/restart recovery: if fresh reconstruction has no immediately
+  # confirmable swing, restore the newest previously observed confirmed H1 anchor.
+  # This keeps every analyzed symbol directionally usable until a newer confirmed
+  # opposite pivot supersedes it; pending extremes remain diagnostic-only.
+  fallback=_local_persisted_anchor(symbol)
+  if fallback and int(fallback.get("entry_side") or 0) in (-1,1):
+   analysis={**fallback,"ready":True,
+     "last_candle_time":analysis.get("last_candle_time"),
+     **local_pending_extreme(rows,now_ms,int(fallback.get("entry_side") or 0),fallback.get("pivot_price")),
+     "anchor_recovered_from":"latest_valid_strategy1_observation"}
+  else:
+   return analysis
+ if not prior or analysis.get("signal_candle_time")!=prior.get("signal_candle_time") or prior.get("pivot_type")!=analysis.get("pivot_type"):
   with pg() as db:
    with db.transaction():
     STORE.fence(db)
@@ -2909,7 +2921,8 @@ def local_experiment_loop():
      SHUTDOWN.wait(.5);continue
     local_experiment_mark_positions(prices)
     jobs={}
-    for symbol in LOCAL_EXPERIMENT_SYMBOLS:
+    runtime_symbols=list(strategy1_runtime_symbols())
+    for symbol in runtime_symbols:
      jobs[(symbol,"h1")]=pool.submit(_local_h1_candles,symbol)
      jobs[(symbol,"m15")]=pool.submit(_local_m15_candles,symbol)
     fetched={};fetch_errors={}
@@ -2917,7 +2930,7 @@ def local_experiment_loop():
      try:fetched[key]=fut.result(timeout=12)
      except Exception as exc:fetch_errors[key]=type(exc).__name__+":"+str(exc)[:120]
     details={};entry_queue=[]
-    for symbol in LOCAL_EXPERIMENT_SYMBOLS:
+    for symbol in runtime_symbols:
      mark=prices.get(symbol)
      if not mark:
       details[symbol]={"ok":False,"error":"mark_unavailable","max_leverage":market_max_leverage(symbol)}
