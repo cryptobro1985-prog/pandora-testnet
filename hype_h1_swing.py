@@ -9,7 +9,7 @@ A mature partial M15 candle plus live flow can protect earned profit before the 
 import math
 import statistics
 
-POLICY = "local_swing_h1_durable_4x4_m5_execution_v13"
+POLICY = "local_swing_h1_fractal_m15_execution_v12"
 SYMBOL = "HYPE"  # backwards-compatible primary symbol
 SYMBOLS = ("HYPE", "NEAR")
 INTERVAL = "1h"
@@ -19,7 +19,6 @@ STARTING_EQUITY = 100.0
 MARGIN_FRACTION = 0.25
 LEVERAGE = 25.0
 PIVOT_LOOKBACK = 4
-PIVOT_CONFIRM_RIGHT = 4  # require a durable H1 extreme; prefer missing a turn to a false local
 MIN_FAVORABLE_MOVE_FOR_WEAKENING = 0.0015
 PROFIT_LOCK_ARM_MOVE = 0.0025
 PROFIT_LOCK_BUFFER_MOVE = 0.0012
@@ -78,69 +77,8 @@ def _ret(a, b):
 
 def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL):
     candles = completed_candles(rows, now_ms)
-    need = PIVOT_LOOKBACK + PIVOT_CONFIRM_RIGHT + 1
-    if len(candles) < need:
+    if len(candles) < PIVOT_LOOKBACK + 2:
         return {"ready": False, "reason": "insufficient_closed_h1_candles",
-                "closed_candles": len(candles), "policy": POLICY, "symbol": symbol}
-    if float(now_ms) - candles[-1]["T"] > 3_600_000 + 120_000:
-        return {"ready": False, "reason": "stale_h1_history", "policy": POLICY, "symbol": symbol}
-    recent = candles[-need:]
-    if any(abs(b["t"]-a["t"]-3_600_000)>1000 for a,b in zip(recent,recent[1:])):
-        return {"ready": False, "reason": "gapped_h1_history", "policy": POLICY, "symbol": symbol}
-
-    p_index = len(candles) - PIVOT_CONFIRM_RIGHT - 1
-    p = candles[p_index]
-    prior = candles[p_index-PIVOT_LOOKBACK:p_index]
-    right = candles[p_index+1:p_index+1+PIVOT_CONFIRM_RIGHT]
-    x = right[-1]
-    prior_lows = [z["l"] for z in prior]
-    prior_highs = [z["h"] for z in prior]
-
-    # Symmetric durable pivot: four bars before establish the extreme and four
-    # fully closed bars after it must preserve that extreme. A one-hour recoil
-    # is only a candidate and must never flip Strategy 1 direction.
-    local_low = (
-        p["l"] <= min(prior_lows)
-        and all(z["l"] > p["l"] for z in right)
-    )
-    local_high = (
-        p["h"] >= max(prior_highs)
-        and all(z["h"] < p["h"] for z in right)
-    )
-
-    closes = [z["c"] for z in candles]
-    last_ret = _ret(closes[-2], closes[-1])
-    prev_ret = _ret(closes[-3], closes[-2])
-    mom3 = _ret(closes[-4], closes[-1])
-    prev_mom3 = _ret(closes[-5], closes[-2])
-    body = abs(x["c"] - x["o"])
-    rng = max(x["h"] - x["l"], 1e-12)
-    body_fraction = body / rng
-
-    long_weak_score = 0
-    short_weak_score = 0
-    if last_ret <= 0:
-        long_weak_score += 1
-    if last_ret >= 0:
-        short_weak_score += 1
-    if prev_mom3 > 0 and mom3 < prev_mom3 * 0.55:
-        long_weak_score += 1
-    if prev_mom3 < 0 and mom3 > prev_mom3 * 0.55:
-        short_weak_score += 1
-    if x["c"] < x["o"] and body_fraction >= 0.35:
-        long_weak_score += 1
-    if x["c"] > x["o"] and body_fraction >= 0.35:
-        short_weak_score += 1
-    if prev_ret > 0 and last_ret < prev_ret * 0.25:
-        long_weak_score += 1
-    if prev_ret < 0 and last_ret > prev_ret * 0.25:
-        short_weak_score += 1
-
-    entry_side = 1 if local_low and not local_high else (-1 if local_high and not local_low else 0)
-    pivot_type = "LOCAL_LOW" if entry_side == 1 else ("LOCAL_HIGH" if entry_side == -1 else None)
-    pivot_price = p["l"] if entry_side == 1 else (p["h"] if entry_side == -1 else None)
-
-    return {"ready": False, "reason": "insufficient_closed_h1_candles",
                 "closed_candles": len(candles), "policy": POLICY, "symbol": symbol}
     if float(now_ms) - candles[-1]["T"] > 3_600_000 + 120_000:
         return {"ready": False, "reason": "stale_h1_history", "policy": POLICY, "symbol": symbol}
@@ -200,8 +138,8 @@ def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL):
         "policy": POLICY,
         "symbol": symbol,
         "interval": INTERVAL,
-        "signal_candle_time": right[-1]["t"],
-        "signal_candle_close_time": right[-1]["T"],
+        "signal_candle_time": x["t"],
+        "signal_candle_close_time": x["T"],
         "pivot_candle_time": p["t"],
         "pivot_type": pivot_type,
         "pivot_price": pivot_price,
@@ -216,7 +154,7 @@ def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL):
         "previous_h1_return": prev_ret,
         "momentum_3h": mom3,
         "previous_momentum_3h": prev_mom3,
-        "confirmation_close": right[-1]["c"],
+        "confirmation_close": x["c"],
         "closed_candles": len(candles),
     }
 
@@ -224,7 +162,7 @@ def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL):
 def analyze(rows, now_ms, symbol=SYMBOL):
     """Last causally confirmed H1 extreme, held across subsequent H1 candles.
 
-    A pivot is known only after four following H1 candles have closed without breaching it. Reconstructing
+    A pivot is known only when its following H1 candle has closed. Reconstructing
     the latest pivot from closed history also keeps the bias stable after restart.
     """
     latest = _analyze_h1_pivot(rows, now_ms, symbol)
@@ -232,7 +170,7 @@ def analyze(rows, now_ms, symbol=SYMBOL):
         return latest
     candles = completed_candles(rows, now_ms)
     anchor = None
-    for end in range(PIVOT_LOOKBACK + PIVOT_CONFIRM_RIGHT + 1, len(candles) + 1):
+    for end in range(PIVOT_LOOKBACK + 2, len(candles) + 1):
         sample = candles[:end]
         candidate = _analyze_h1_pivot(sample, sample[-1]["T"] + 1001, symbol)
         if candidate.get("ready") and candidate.get("entry_side") in (-1, 1):
