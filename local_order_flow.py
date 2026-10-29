@@ -109,7 +109,7 @@ def initial_entry_candidate(symbol, analysis, m15, flow, stamp):
     """Initial entry requires confirmed H1 direction plus live-side resumption.
 
     A confirmed H1 local is directional context, not permission to enter blindly.
-    Never enter while M15 shows strong counter-pressure; require fresh M1/M3/M5
+    M15 is observational only and never vetoes H1 plus fresh M1/M3/M5
     executed flow aligned with the H1 side. This mirrors the caterpillar rule:
     wait through the pullback, then enter when the pullback weakens and control
     returns toward the active H1 regime.
@@ -123,11 +123,6 @@ def initial_entry_candidate(symbol, analysis, m15, flow, stamp):
         return dict(symbol=symbol, side=side, eligible=False,
                     reason="waiting_for_confirmed_h1_local", policy=POLICY,
                     entry_trigger="H1_CONFIRMED_LOCAL_PLUS_FLOW",
-                    signal_candle_time=data.get("signal_candle_time"))
-    if isinstance(m15, dict) and m15.get("ready") and m15.get("strong_adverse_pressure"):
-        return dict(symbol=symbol, side=side, eligible=False,
-                    reason="m15_strong_adverse_pressure_blocks_initial_entry",
-                    policy=POLICY, entry_trigger="H1_CONFIRMED_LOCAL_PLUS_FLOW",
                     signal_candle_time=data.get("signal_candle_time"))
     candidate = _candidate(symbol, data, flow)
     candidate.update(entry_trigger="H1_CONFIRMED_LOCAL_PLUS_FLOW",
