@@ -90,6 +90,7 @@ def strategy1_runtime_symbols():
 def bybit_volatility_discovery_loop():
  """Direction-neutral Bybit discovery. HOT only expands Strategy 1's universe; H1 locals still choose side."""
  samples={}
+ retry_delay=DISCOVERY_SCAN_SECONDS
  while not SHUTDOWN.is_set():
   try:
    req=urllib.request.Request("https://api.bybit.com/v5/market/tickers?category=linear",
@@ -177,12 +178,14 @@ def bybit_volatility_discovery_loop():
       "min_move_5m_pct":DISCOVERY_MIN_MOVE_5M_PCT}}
    with LOCK:
     S["strategy1_discovery"]=copy.deepcopy(state);S["sources"]["Strategy1Discovery"]=copy.deepcopy(state)
+   retry_delay=DISCOVERY_SCAN_SECONDS
   except Exception as exc:
+   retry_delay=min(300,max(DISCOVERY_SCAN_SECONDS,retry_delay*2))
    with LOCK:
     prev=copy.deepcopy(S.get("strategy1_discovery") or {})
     prev.update({"ok":False,"last_check":now(),"error":type(exc).__name__+":"+str(exc)[:160]})
     S["strategy1_discovery"]=prev;S["sources"]["Strategy1Discovery"]=copy.deepcopy(prev)
-  SHUTDOWN.wait(DISCOVERY_SCAN_SECONDS)
+  SHUTDOWN.wait(retry_delay)
 
 
 def strategy1_discovery_qualification():
