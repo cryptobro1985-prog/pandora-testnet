@@ -5497,6 +5497,17 @@ def build_dashboard_snapshot(history=None):
   state={k:copy.deepcopy(v) for k,v in S.items() if not k.startswith("_")}
   state["_prices"]=dict(S.get("_prices",{}))
  trades=copy.deepcopy(history.get("trades",[])) if history is not None else [dict(x) for x in persistent_trades(100)]
+ # Monitor must be process-independent. During Render lease handoff the HTTP
+ # instance can be standby while another instance owns the trading engine.
+ # Read canonical confirmed H1 locals from durable Neon state so UI never blanks.
+ durable_h1=copy.deepcopy(state.get("local_h1_direction",{}))
+ if len(durable_h1)<len(LOCAL_EXPERIMENT_SYMBOLS):
+  try:
+   with pg() as _db:
+    durable_h1={r["symbol"]:copy.deepcopy(r["analysis"]) for r in _db.execute(
+      "select symbol,analysis from local_h1_direction where symbol = any(%s)",(list(LOCAL_EXPERIMENT_SYMBOLS),)).fetchall()}
+  except Exception:
+   pass
  baseline=copy.deepcopy(state.get("pump_history_baseline",{}))
  if int(baseline.get("restored_closed_trades",0) or 0)>0:
   trades.append({"id":"RESTORED_PUMP_BASELINE","opened":None,"closed":PUMP_RESTORED_HISTORY_TIMESTAMP,
@@ -5593,7 +5604,8 @@ def build_dashboard_snapshot(history=None):
 "closed_trades":copy.deepcopy((history or {}).get("local_v10_closed_trades",[])),
 "watch":copy.deepcopy(state.get("local_experiment_watch",{})),
 "stats":copy.deepcopy(state.get("local_experiment_stats",{})),
-"engine":copy.deepcopy(state.get("sources",{}).get("Caterpillar 1.0",{}))},
+"engine":copy.deepcopy(state.get("sources",{}).get("Caterpillar 1.0",{})),
+"h1_durable":copy.deepcopy(durable_h1)},
 "strategy1_last_minute_snapshot":copy.deepcopy(state.get("strategy1_last_minute_snapshot",{})),
 "strategy1_historical_benchmark":{"starting_equity":500.0,"mfe_upper_equity":877.36,"mfe_opportunity_pnl":377.36,"basis":"historical favorable-excursion upper bound from prior actual-entry analysis","executed":False,"causal":False,"label":"HISTORICAL MFE BENCHMARK — NOT EXECUTED"},"module_trading_enabled":{"strategy1":True,"news":False,"whale_liquidation":False,"pump_dump":False,"strategy2":False,"strategy3":False,"legacy_local":False},"account_model":"UNIFIED_PAPER_ACCOUNT_ALL_STRATEGIES","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"decision_learning":copy.deepcopy(state.get("learning_audit",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
@@ -6019,7 +6031,12 @@ def html_strategy1_only(data):
  wr=stats.get("win_rate")
  wrtxt="—" if wr is None else "%.1f%%"%(float(wr)*100)
  posmap={x.get("symbol"):x for x in positions}
- details=engine.get("details") or {}
+ details=copy.deepcopy(engine.get("details") or {})
+ durable_h1=copy.deepcopy(p.get("h1_durable") or {})
+ for _sym,_a in durable_h1.items():
+  details.setdefault(_sym,{})
+  if not (details[_sym].get("h1_local") or {}).get("ready"):
+   details[_sym]["h1_local"]=copy.deepcopy(_a)
  rows=[]
  for sym in LOCAL_EXPERIMENT_SYMBOLS:
   x=posmap.get(sym) or {};d=details.get(sym) or {};a=d.get("h1_local") or {};w=watch.get(sym) or {}
@@ -6325,8 +6342,8 @@ def html_dashboard(data):
  s1_engine=s1p.get("engine") or {}
  s1status="ACTIVE" if s1_engine.get("ok") else ("WARMUP" if s1_engine.get("warmup") else "ATTENTION")
  s1details=copy.deepcopy(s1_engine.get("details") or {})
+ s1durable_h1=copy.deepcopy(s1p.get("h1_durable") or {})
  with LOCK:
-  s1durable_h1=copy.deepcopy(S.get("local_h1_direction",{}))
   s1live_prices=copy.deepcopy(S.get("_prices",{}))
   s1live_positions=copy.deepcopy(S.get("local_v12_positions",{}))
   s1live_watch=copy.deepcopy(S.get("local_experiment_watch",{}))
