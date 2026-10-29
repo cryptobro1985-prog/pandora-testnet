@@ -602,6 +602,20 @@ def pinit():
   S["local_experiment_equity"]=float(exacct["equity"]);S["local_experiment_realized_pnl"]=float(exacct["realized_pnl"])
   S["local_experiment_started_at"]=exacct["started_at"]
 
+  # One-shot migration to v13 H1 swing confirmation.
+  # Clear only persisted H1 anchors so all 18 symbols are reconstructed from
+  # candle history under the new confirmed-retracement policy. Trading ledger
+  # and raw audit/history remain untouched.
+  h1_migration_action="strategy1-h1-confirmed-retrace-v13-20261029"
+  if not c.execute("select 1 from operator_actions where action_id=%s",(h1_migration_action,)).fetchone():
+   cleared_h1=c.execute("delete from local_h1_direction").rowcount
+   payload={"action":"rebuild_strategy1_h1_anchors","policy":"local_swing_h1_confirmed_retrace_v13",
+     "cleared_h1_rows":cleared_h1,"symbols":list(LOCAL_EXPERIMENT_SYMBOLS),
+     "reason":"migrate_from_single-candle-fractal_to_confirmed_retracement"}
+   c.execute("insert into operator_actions(action_id,completed_at,payload) values(%s,%s,%s::jsonb)",
+     (h1_migration_action,now(),json.dumps(payload,default=str)))
+   S["local_h1_direction"]={}
+
   # One-shot cleanup of the known invalid LIT initial entry opened while M15
   # showed strong adverse pressure. Keep raw signal/audit evidence, but remove
   # the invalid PAPER position from the validated book/PnL.
