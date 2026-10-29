@@ -867,35 +867,41 @@ def init():
   c.execute("create table if not exists snapshots (ts text,markets integer,equity real,positions integer)")
   c.execute("create table if not exists event_features (id text primary key,ts text,source text,title text,symbol text,decision integer,confidence real,features text)")
 def apply_local4_user_reset():
- # Explicit user-authorized reset, fenced after takeover, exactly once.
- action="user-caterpillar-1-0-reset-20261027"
+ # Explicit user-authorized Strategy 1 reset, fenced after takeover, exactly once.
+ # Do not erase unrelated PANDORA strategies.
+ action="user-strategy1-18-caterpillar-reset-20261029-v1"
  with pg() as db:
   with db.transaction():
    STORE.fence(db)
    if db.execute("select 1 from operator_actions where action_id=%s",(action,)).fetchone():return False
    cleared={}
-   for table in ["hype_swing_positions","hype_swing_shadow_exits","hype_swing_signal_journal","hype_swing_trade_history","local_swing_watchlist","local_experiment_positions","local_experiment_signal_journal","local_experiment_trade_history","local_experiment_watchlist","local_v12_positions","local_v12_signal_journal","local_v12_trade_history","local_v12_watchlist","local_h1_direction","local_v12_learning_pre_v10_20261027","local_v12_positions_pre_v10_20261027","local_v12_signal_journal_pre_v10_20261027","local_v12_trade_history_pre_v10_20261027","local_v12_watchlist_pre_v10_20261027"]:
+   for table in ["local_v12_positions","local_v12_signal_journal","local_v12_trade_history",
+                 "local_v12_watchlist","local_h1_direction"]:
     if not db.execute("select to_regclass(%s) as name",(table,)).fetchone()["name"]:continue
     result=db.execute("delete from "+table)
     cleared[table]=result.rowcount
-   db.execute("delete from trade_history where strategy like 'local%%' or strategy like 'hype%%'")
-   db.execute("delete from decision_learning_log where strategy like 'local%%' or strategy like 'hype%%'")
-   db.execute("delete from position_snapshots where strategy like 'local%%' or strategy like 'hype%%'")
-   db.execute("delete from scanner_observations where module like 'local%%' or module like 'hype%%'")
-   db.execute("""delete from audit_journal where kind like 'local%%' or kind like 'hype%%'
-     or payload->>'strategy' like 'local%%' or payload->>'strategy' like 'hype%%'""")
+   db.execute("delete from decision_learning_log where strategy='local_12token_h1_m15'")
+   db.execute("delete from position_snapshots where strategy in ('LOCAL_10TOKEN_24H','local_12token_h1_m15')")
+   db.execute("delete from scanner_observations where module='local_12token_h1_m15'")
+   db.execute("""delete from audit_journal where kind like 'local_experiment%%'
+     or payload->>'strategy'='local_12token_h1_m15'""")
    stamp=now()
-   for table in ("local_v12_account_state","local_experiment_account_state"):
-    db.execute("update "+table+" set equity=500,realized_pnl=0,started_at=%s,updated_at=%s where id=1",(stamp,stamp))
-   db.execute("update hype_swing_account_state set equity=100,realized_pnl=0,started_at=%s,updated_at=%s where id=1",(stamp,stamp))
-   db.execute("delete from local_candle_checkpoints where symbol not in ('INIT','NEAR','GRASS','HYPE','BTC','ETH','SOL')")
-   payload={"symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"starting_equity":500,"margin_fraction":.20,
-            "leverage":25,"policy":LOCAL4_FLOW_POLICY,"cleared":cleared}
-   db.execute("insert into operator_actions(action_id,completed_at,payload) values(%s,%s,%s::jsonb)",(action,stamp,json.dumps(payload)))
+   db.execute("""insert into local_v12_account_state(id,equity,realized_pnl,started_at,updated_at)
+     values(1,500,0,%s,%s)
+     on conflict(id) do update set equity=excluded.equity,realized_pnl=0,
+       started_at=excluded.started_at,updated_at=excluded.updated_at""",(stamp,stamp))
+   payload={"symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"starting_equity":500,
+            "margin_fraction":LOCAL_EXPERIMENT_MARGIN_FRACTION,"leverage":25,
+            "policy":LOCAL4_FLOW_POLICY,"cleared":cleared,
+            "reset_scope":"strategy1_local_v12_only"}
+   db.execute("insert into operator_actions(action_id,completed_at,payload) values(%s,%s,%s::jsonb)",
+     (action,stamp,json.dumps(payload)))
  with LOCK:
-  S["local_experiment_stats"]={};S["_dashboard_history"]={}
-  S["_local4_analysis"]={};S["_local_experiment_path_persist_epoch"]={}
-  S["local_swing_positions"]={};S["local_swing_watch"]={}
+  S["local_v12_positions"]={};S["local_experiment_watch"]={}
+  S["local_experiment_equity"]=500.0;S["local_experiment_realized_pnl"]=0.0
+  S["local_experiment_trades"]=0;S["local_experiment_stats"]={}
+  S["_dashboard_history"]={};S["_local4_analysis"]={}
+  S["_local_experiment_path_persist_epoch"]={};S["_local_experiment_watch_persist_epoch"]={}
  return True
 
 def engine_coordinator():
@@ -2568,7 +2574,11 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
  features["actual_exit_reason"]=reason;features["actual_exit_mark"]=price
  watch=None
  if reason in ("m15_adverse_pressure_profit_protect","profit_lock_stop","m15_momentum_weakening",
-               "m15_pressure_reversal","m15_pressure_reversal_profit_only","caterpillar_breakeven","executed_flow_counter_dominance","m15_opposite_control_exit"):
+               "m15_pressure_reversal","m15_pressure_reversal_profit_only","caterpillar_breakeven",
+               "executed_flow_counter_dominance","m15_opposite_control_exit",
+               "executed_flow_profit_flip_exit","executed_flow_risk_flip_exit",
+               "m1_m3_m5_mfe_profit_exit","m1_m3_m5_risk_exit",
+               "m1_m3_confirmed_counterflow_exit"):
   watch={"symbol":symbol,"side":int(pos["side"]),
    "origin_signal_candle":int(features.get("origin_h1_signal_candle") or pos.get("signal_candle_time") or 0),
    "exit_price":price,"exit_at":now(),"expires_epoch":0.0,
@@ -5503,15 +5513,15 @@ def build_dashboard_snapshot(history=None):
 "local_experiment_stats":copy.deepcopy(state.get("local_experiment_stats",{})),
 "local_experiment_engine":copy.deepcopy(state.get("sources",{}).get("Caterpillar 1.0",{})),
 "comparison_strategies":comparison,"strategy1_primary":{"starting_equity":500.0,
-"realized_equity":round(float(state.get("local_s1_equity",500.0) or 500.0),4),
-"realized_pnl":round(float(state.get("local_s1_equity",500.0) or 500.0)-500.0,4),
-"unrealized_pnl":round(float((comparison.get("local_s1") or {}).get("unrealized_pnl",0) or 0),4),
-"total_equity":round(float((comparison.get("local_s1") or {}).get("total_equity",state.get("local_s1_equity",500.0)) or 500.0),4),
-"open_positions":copy.deepcopy((comparison.get("local_s1") or {}).get("positions",[])),
-"closed_trades":copy.deepcopy((history or {}).get("local_s1_closed_trades",[])),
-"watch":copy.deepcopy(state.get("local_s1_watch",{})),
-"stats":copy.deepcopy((comparison.get("local_s1") or {}).get("stats",{})),
-"engine":copy.deepcopy((comparison.get("local_s1") or {}).get("engine",{}))},
+"realized_equity":round(float(state.get("local_experiment_equity",500.0) or 500.0),4),
+"realized_pnl":round(float(state.get("local_experiment_realized_pnl",0) or 0),4),
+"unrealized_pnl":round(float(experiment_unreal),4),
+"total_equity":round(float(experiment_total),4),
+"open_positions":copy.deepcopy(experiment_positions),
+"closed_trades":copy.deepcopy((history or {}).get("local_v10_closed_trades",[])),
+"watch":copy.deepcopy(state.get("local_experiment_watch",{})),
+"stats":copy.deepcopy(state.get("local_experiment_stats",{})),
+"engine":copy.deepcopy(state.get("sources",{}).get("Caterpillar 1.0",{}))},
 "strategy1_historical_benchmark":{"starting_equity":500.0,"mfe_upper_equity":877.36,"mfe_opportunity_pnl":377.36,"basis":"historical favorable-excursion upper bound from prior actual-entry analysis","executed":False,"causal":False,"label":"HISTORICAL MFE BENCHMARK — NOT EXECUTED"},"module_trading_enabled":{"strategy1":True,"news":False,"whale_liquidation":False,"pump_dump":False,"strategy2":False,"strategy3":False,"legacy_local":False},"account_model":"UNIFIED_PAPER_ACCOUNT_ALL_STRATEGIES","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"decision_learning":copy.deepcopy(state.get("learning_audit",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
 def dashboard():
@@ -6310,6 +6320,7 @@ def html_dashboard(data):
  s1posmap={x.get("symbol"):x for x in s1positions}
  for sym in LOCAL_EXPERIMENT_SYMBOLS:
   p=s1posmap.get(sym) or {};d=s1details.get(sym) or {};a=d.get("h1_local") or {};w=s1watch.get(sym) or {}
+  if not p:continue
   raw_side=p.get("side")
   side=raw_side or ("SHORT" if int((w or {}).get("side") or 0)<0 else ("LONG" if int((w or {}).get("side") or 0)>0 else "FLAT"))
   phase=(w.get("context") or {}).get("phase") if w else None
@@ -6327,14 +6338,14 @@ def html_dashboard(data):
    float(x.get("pnl",0) or 0),esc(x.get("reason",""))) for x in s1_actual_history) or '<tr><td colspan=10>No actual Strategy 1 closes recorded</td></tr>'
  s1_primary_html=(
   '<section id="strategy1-primary" class="primary">'
-  '<h2>STRATEGY 1 · MAIN · H1 LOCAL → M15 FLOW → EXIT / PULLBACK / RE-ENTRY</h2>'
+  '<h2>STRATEGY 1 · MAIN · H1 LOCAL → M1/M3/M5 FLOW → EXIT / PULLBACK / RE-ENTRY</h2>'
   '<div class="grid"><b>STATUS<br><span class="%s">%s</span></b><b>START<br>$500.00</b>'
   '<b>REALIZED EQUITY<br>$%.4f</b><b>REALIZED P&L<br><span class="%s">$%.4f</span></b>'
   '<b>OPEN P&L<br><span class="%s">$%.4f</span></b><b>MTM EQUITY<br>$%.4f</b>'
   '<b>CLOSED TRADES<br>%s</b><b>WIN RATE<br>%s</b><b>OPEN POSITIONS<br>%s</b>'
   '<b>RE-ENTRY WATCH<br>%s</b><b>SIZE<br>20%% CURRENT EQUITY</b><b>REFERENCE LEVERAGE<br>25x PAPER</b></div>'
-  '<div class="muted">ACTUAL PAPER state from durable Neon tables. H1 controls direction; M15 + executed flow control entry, weakening exit, pullback and same-direction re-entry. No replay/MFE values are mixed into actual P&L.</div>'
-  '<h3>LIVE STATE · INIT / NEAR / GRASS / HYPE / BTC / ETH / SOL</h3><div class="scroll"><table><tr><th>Token</th><th>Side</th><th>Phase</th><th>H1 Local</th><th>Margin $</th><th>Position $</th><th>Entry</th><th>Mark</th><th>Open P&L</th><th>Action</th></tr>%s</table></div>'
+  '<div class="muted">ACTUAL PAPER state from durable Neon tables. H1 controls direction; M1/M3/M5 executed flow manages MFE-preserving exits, pullbacks and same-direction re-entry. Only OPEN positions are listed below. No replay values are mixed into actual P&L.</div>'
+  '<h3>OPEN NOW · 18-MARKET UNIVERSE</h3><div class="scroll"><table><tr><th>Token</th><th>Side</th><th>Phase</th><th>H1 Local</th><th>Margin $</th><th>Position $</th><th>Entry</th><th>Mark</th><th>Open P&L</th><th>Action</th></tr>%s</table></div>'
   '<h3>ACTUAL STRATEGY 1 TRADE HISTORY</h3><div class="scroll"><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>Margin $</th><th>Position $</th><th>Lev</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Reason</th></tr>%s</table></div>'
   '</section>'
  )%(
