@@ -172,8 +172,14 @@ def analyze(rows, now_ms, symbol=SYMBOL):
     anchor = None
     for end in range(PIVOT_LOOKBACK + 2, len(candles) + 1):
         sample = candles[:end]
-        candidate = _analyze_h1_pivot(sample, sample[-1]["T"] + 1001, symbol)
-        if candidate.get("ready") and candidate.get("entry_side") in (-1, 1):
+        # Reconstruct historical anchors, but never manufacture confirmation time.
+        # A candidate may change the live H1 regime only if its confirmation candle
+        # is actually closed relative to the real exchange observation timestamp.
+        candidate = _analyze_h1_pivot(sample, now_ms, symbol)
+        signal_close = float(candidate.get("signal_candle_close_time") or 0)
+        causally_closed = signal_close > 0 and signal_close <= float(now_ms) - 1000
+        if (candidate.get("ready") and candidate.get("entry_side") in (-1, 1)
+                and causally_closed):
             anchor = candidate
     result = dict(anchor or latest)
     result.update(last_candle_time=candles[-1]["t"], closed_candles=len(candles),
