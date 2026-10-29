@@ -209,19 +209,17 @@ def analyze(rows, now_ms, symbol=SYMBOL):
 
 
 def pending_extreme(rows, now_ms, side, anchor_pivot_price=None):
-    """Block stale-anchor entries while a new H1 structural extreme is forming.
+    """Diagnostic-only candidate extreme; never blocks lower-timeframe execution.
 
-    Same-side extension:
-      LONG regime + price breaks below active LOCAL_LOW => WAIT_NEW_LOCAL_LOW.
-      SHORT regime + price breaks above active LOCAL_HIGH => WAIT_NEW_LOCAL_HIGH.
-    No lower timeframe may authorize a new entry until that new H1 local is
-    causally confirmed by the following closed H1 candle.
-
-    Opposite-side candidate keeps the prior behavior: pause entries while an
-    opposite H1 extreme is awaiting closed confirmation.
+    The confirmed H1 local is a persistent DIRECTION VECTOR until an opposite
+    H1 swing is fully confirmed. Price may extend beyond the active local while
+    the M1/M3/M5 + M15 caterpillar keeps exiting/re-entering in that same vector.
+    Pending highs/lows are therefore displayed for context only and MUST NOT
+    pause entries, exits or re-entries.
     """
     result = {"entry_blocked": False, "pending_pivot_type": None,
-              "entry_block_reason": None}
+              "pending_pivot_price": None, "entry_block_reason": None,
+              "pending_is_diagnostic_only": True}
     candles = completed_candles(rows, now_ms)
     if side not in (-1, 1) or len(candles) < PIVOT_LOOKBACK + 1:
         return result
@@ -238,32 +236,30 @@ def pending_extreme(rows, now_ms, side, anchor_pivot_price=None):
         if side > 0:
             newest_low = min(p["l"], x["l"] if x else p["l"])
             if newest_low < anchor:
-                result.update(entry_blocked=True, pending_pivot_type="LOCAL_LOW",
+                result.update(pending_pivot_type="LOCAL_LOW",
                               pending_pivot_price=newest_low,
                               pending_pivot_candle_time=x["t"] if x and x["l"] <= p["l"] else p["t"],
-                              entry_block_reason="same_side_h1_low_extension_waiting_confirmation")
+                              entry_block_reason="same_side_h1_low_extension_diagnostic_only")
                 return result
         else:
             newest_high = max(p["h"], x["h"] if x else p["h"])
             if newest_high > anchor:
-                result.update(entry_blocked=True, pending_pivot_type="LOCAL_HIGH",
+                result.update(pending_pivot_type="LOCAL_HIGH",
                               pending_pivot_price=newest_high,
                               pending_pivot_candle_time=x["t"] if x and x["h"] >= p["h"] else p["t"],
-                              entry_block_reason="same_side_h1_high_extension_waiting_confirmation")
+                              entry_block_reason="same_side_h1_high_extension_diagnostic_only")
                 return result
 
     if not x:
         return result
-    high = side > 0 and p["h"] >= max(z["h"] for z in prior) and x["h"] < p["h"] and (p["h"]-x["c"])/p["h"] >= .0015
-    low = side < 0 and p["l"] <= min(z["l"] for z in prior) and x["l"] > p["l"] and (x["c"]-p["l"])/p["l"] >= .0015
+    high = side > 0 and p["h"] >= max(z["h"] for z in prior) and x["h"] < p["h"]
+    low = side < 0 and p["l"] <= min(z["l"] for z in prior) and x["l"] > p["l"]
     if high or low:
-        result.update(entry_blocked=True,
-                      pending_pivot_type="LOCAL_HIGH" if high else "LOCAL_LOW",
+        result.update(pending_pivot_type="LOCAL_HIGH" if high else "LOCAL_LOW",
                       pending_pivot_price=p["h"] if high else p["l"],
                       pending_pivot_candle_time=p["t"],
-                      entry_block_reason="opposite_h1_extreme_awaiting_closed_confirmation")
+                      entry_block_reason="opposite_h1_candidate_diagnostic_only")
     return result
-
 
 def analyze_h1_context(rows, now_ms, symbol=SYMBOL):
     candles = _completed(rows, now_ms, 3_600_000)
