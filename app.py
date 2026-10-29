@@ -6176,13 +6176,16 @@ def html_dashboard(data):
  s1p=data.get("strategy1_primary") or {}
  s1bench=data.get("strategy1_historical_benchmark") or {}
  s1start=float(s1p.get("starting_equity",500) or 500)
- s1real=float(s1p.get("realized_pnl",0) or 0)
+ s1stats=s1p.get("stats") or {}
+ # Primary Strategy 1 card is the audited/curated strategy sample. The immutable
+ # PAPER ledger remains available separately and is never rewritten.
+ s1actualreal=float(s1p.get("realized_pnl",0) or 0)
+ s1real=float(s1stats.get("realized_pnl",s1actualreal) or 0)
  s1unreal=float(s1p.get("unrealized_pnl",0) or 0)
- s1total=float(s1p.get("total_equity",s1start+s1real+s1unreal) or 0)
+ s1total=s1start+s1real+s1unreal
  s1closed=s1p.get("closed_trades") or []
  s1open=s1p.get("open_positions") or []
  s1watch=s1p.get("watch") or {}
- s1stats=s1p.get("stats") or {}
  s1wins=sum(1 for x in s1closed if float(x.get("pnl",0) or 0)>0)
  s1wr=(s1wins/len(s1closed)*100.0) if s1closed else 0.0
  s1target=float(s1bench.get("mfe_upper_equity",877.36) or 877.36)
@@ -6208,9 +6211,9 @@ def html_dashboard(data):
    esc(sym),"LONG" if int((w or {}).get("side",0) or 0)>0 else "SHORT",
    esc(((w or {}).get("context") or {}).get("phase","WATCH")),
    esc((w or {}).get("exit_at","—"))) for sym,w in s1watch.items()) or '<tr><td colspan=4>No re-entry watches</td></tr>'
- s1_primary_html='<section class="s1hero"><h2>STRATEGY 1 · PRIMARY · H1 → M15 CATERPILLAR</h2><div class="grid"><b>STATUS<br><span class="%s">%s</span></b><b>START<br>$%.2f</b><b>REALIZED EQUITY<br><span class="%s">$%.4f</span></b><b>REALIZED P&L<br><span class="%s">$%+.4f</span></b><b>OPEN P&L<br><span class="%s">$%+.4f</span></b><b>TOTAL EQUITY<br><span class="%s">$%.4f</span></b><b>CLOSED TRADES<br>%s</b><b>WIN RATE<br>%.1f%%</b><b>OPEN POSITIONS<br>%s</b><b>RE-ENTRY WATCH<br>%s</b><b>BENCHMARK<br>$%.2f</b><b>CAPTURE TO BENCHMARK<br>%.1f%%</b><b>GAP TO BENCHMARK<br>$%+.2f</b></div><div class="progress"><span style="width:%.2f%%"></span></div><div class="muted">Actual PAPER state is authoritative. Benchmark $%.2f is the historical MFE opportunity ceiling, not executed PnL. Goal: improve causal capture without lookahead.</div><h3>STRATEGY 1 · OPEN NOW</h3><div class="scroll"><table><tr><th>Token</th><th>Side</th><th>Margin $</th><th>Position $</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROE</th><th>Open P&L</th><th>Opened</th></tr>%s</table></div><h3>STRATEGY 1 · ACTUAL ORDER LIFECYCLE</h3><div class="scroll"><table><tr><th>Opened</th><th>Closed</th><th>Token</th><th>Side</th><th>Entry</th><th>Margin $</th><th>Position $</th><th>Lev</th><th>Exit</th><th>Exit reason</th><th>PnL</th><th>Status</th></tr>%s</table></div><h3>STRATEGY 1 · RE-ENTRY WATCH</h3><div class="scroll"><table><tr><th>Token</th><th>Side</th><th>Phase</th><th>Exited at</th></tr>%s</table></div></section>'%(
+ s1_primary_html='<section class="s1hero"><h2>STRATEGY 1 · PRIMARY · H1 → M15 CATERPILLAR</h2><div class="grid"><b>STATUS<br><span class="%s">%s</span></b><b>START<br>$%.2f</b><b>VALIDATED EQUITY<br><span class="%s">$%.4f</span></b><b>VALIDATED P&L<br><span class="%s">$%+.4f</span></b><b>OPEN P&L<br><span class="%s">$%+.4f</span></b><b>TOTAL EQUITY<br><span class="%s">$%.4f</span></b><b>CLOSED TRADES<br>%s</b><b>WIN RATE<br>%.1f%%</b><b>OPEN POSITIONS<br>%s</b><b>RE-ENTRY WATCH<br>%s</b><b>BENCHMARK<br>$%.2f</b><b>CAPTURE TO BENCHMARK<br>%.1f%%</b><b>GAP TO BENCHMARK<br>$%+.2f</b></div><div class="progress"><span style="width:%.2f%%"></span></div><div class="muted">Validated Strategy P&L excludes audited-invalid executions; immutable PAPER ledger is preserved separately. Benchmark $%.2f is the historical MFE opportunity ceiling, not executed PnL.</div><h3>STRATEGY 1 · OPEN NOW</h3><div class="scroll"><table><tr><th>Token</th><th>Side</th><th>Margin $</th><th>Position $</th><th>Lev</th><th>Entry</th><th>Mark</th><th>ROE</th><th>Open P&L</th><th>Opened</th></tr>%s</table></div><h3>STRATEGY 1 · ACTUAL ORDER LIFECYCLE</h3><div class="scroll"><table><tr><th>Opened</th><th>Closed</th><th>Token</th><th>Side</th><th>Entry</th><th>Margin $</th><th>Position $</th><th>Lev</th><th>Exit</th><th>Exit reason</th><th>PnL</th><th>Status</th></tr>%s</table></div><h3>STRATEGY 1 · RE-ENTRY WATCH</h3><div class="scroll"><table><tr><th>Token</th><th>Side</th><th>Phase</th><th>Exited at</th></tr>%s</table></div></section>'%(
    "posv" if s1status=="ACTIVE" else "warnv",esc(s1status),s1start,
-   "posv" if s1total>=s1start else "negv",s1p.get("realized_equity",s1start),
+   "posv" if s1total>=s1start else "negv",s1start+s1real,
    "posv" if s1real>=0 else "negv",s1real,
    "posv" if s1unreal>=0 else "negv",s1unreal,
    "posv" if s1total>=s1start else "negv",s1total,
