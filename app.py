@@ -2929,12 +2929,11 @@ def local_experiment_loop():
       else:
        with LOCK:S.setdefault("_s1_adverse_m15",{}).pop(symbol,None)
      else:
-      if analysis.get("entry_blocked"):action="WAIT_H1_CONFIRMATION:"+str(analysis.get("pending_pivot_type"))
       if watch:watch=_local_experiment_watch_observe(symbol,watch,float(mark),m15_live,flow,time.time())
       if watch:
        if analysis.get("ready") and int(analysis.get("entry_side") or 0)==-int(watch.get("side") or 0):
         _local_experiment_watch_clear(symbol,"opposite_h1_pivot_invalidated_watch");watch=None;action="WATCH_INVALIDATED_BY_H1"
-       elif not analysis.get("entry_blocked") and local4_reentry_ready(int(watch.get("side") or 0),m15_live,float(mark),watch,flow,time.time()):
+       elif local4_reentry_ready(int(watch.get("side") or 0),m15_live,float(mark),watch,flow,time.time()):
         selection=local4_entry_candidate(symbol,analysis,m15_live,flow,time.time())
         if selection["eligible"]:
          entry_queue.append({**selection,"analysis":analysis,"m15":m15_live,"watch":watch,"entry_kind":"REENTRY"})
