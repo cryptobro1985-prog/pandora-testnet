@@ -526,6 +526,14 @@ def pinit():
   c.execute("create table if not exists module_snapshots (id bigserial primary key, ts text not null, module text not null, ok boolean, state jsonb not null)")
   c.execute("create table if not exists position_snapshots (id bigserial primary key, ts text not null, strategy text not null, symbol text not null, opened text, side integer, entry double precision, mark double precision, margin double precision, notional double precision, leverage double precision, unrealized_pnl double precision, roe_pct double precision, peak double precision, exit_reason text, exit_check jsonb not null default '{}'::jsonb, features jsonb not null default '{}'::jsonb)")
   c.execute("create table if not exists scanner_observations (id bigserial primary key, ts text not null, module text not null, payload jsonb not null)")
+  c.execute("""create table if not exists local_v12_minute_snapshots (
+    id bigserial primary key, ts text not null, commit text, engine_active boolean, ready boolean,
+    equity double precision not null, realized_pnl double precision not null, unrealized_pnl double precision not null,
+    total_equity double precision not null, used_margin double precision not null, free_margin double precision not null,
+    open_positions integer not null, reentry_watches integer not null, closed_trades integer not null,
+    wins integer not null, win_rate double precision, symbols_ready integer not null,
+    state jsonb not null default '{}'::jsonb)""")
+  c.execute("create index if not exists local_v12_minute_snapshots_ts_idx on local_v12_minute_snapshots(ts desc)")
   ensure_learning_schema(c)
 
   c.execute("create index if not exists audit_journal_event_idx on audit_journal(event_id,id)")
@@ -2694,7 +2702,7 @@ def local_experiment_risk_loop():
     local_experiment_mark_positions(prices)
     # H1 -> M15 entries/reentries belong exclusively to local_experiment_loop.
     # Never submit orders from this price-only risk loop without M15 candles.
-    with LOCK:S["sources"]["LocalRisk"]={"ok":True,"last_check":now(),"mode":"M15_entries_only_risk_price_monitor"}
+    with LOCK:S["sources"]["LocalRisk"]={"ok":True,"last_check":now(),"mode":"H1_M1_M3_M5_entries_risk_price_monitor"}
   except LeaseLost as exc:
    with LOCK:
     S["engine_active"]=False;S["engine_error"]=str(exc)
@@ -2923,7 +2931,7 @@ def local_experiment_loop():
      S["local_experiment_stats"]=stats
      S["sources"]["Caterpillar 1.0"]={"ok":ready_all or bootstrap_wait,"ready":ready_all,
        "warmup":bootstrap_wait and not ready_all,"last_check":now(),
-       "mode":"Caterpillar 1.0 PAPER H1-M15 executed-flow","policy":LOCAL4_FLOW_POLICY,
+       "mode":"Caterpillar 1.0 PAPER H1 + M1/M3/M5 executed-flow","policy":LOCAL4_FLOW_POLICY,
        "symbols":list(strategy1_runtime_symbols()),"permanent_symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"discovery":copy.deepcopy(S.get("strategy1_discovery") or {}),"paper_only":True,"starting_equity":LOCAL_EXPERIMENT_STARTING_EQUITY,
        "equity":equity,"used_margin":used,"free_margin":free,"realized_pnl":S.get("local_experiment_realized_pnl",0),
        "trades":S.get("local_experiment_trades",0),"open_positions":list(S.get("local_v12_positions",{})),
@@ -2943,6 +2951,59 @@ def local_experiment_loop():
    SHUTDOWN.wait(10)
  finally:
   pool.shutdown(wait=False,cancel_futures=True)
+
+
+def strategy1_minute_snapshot_loop():
+ # Durable 60-second telemetry for the two-hour audit. This is observation only;
+ # it never changes signals, positions or PnL.
+ while not SHUTDOWN.is_set():
+  try:
+   with LOCK:
+    active=bool(S.get("engine_active"))
+    prices=copy.deepcopy(S.get("_prices",{}))
+    positions=copy.deepcopy(S.get("local_v12_positions",{}))
+    watches=copy.deepcopy(S.get("local_experiment_watch",{}))
+    source=copy.deepcopy(S.get("sources",{}).get("Caterpillar 1.0",{}))
+    realized_equity=float(S.get("local_experiment_equity",LOCAL_EXPERIMENT_STARTING_EQUITY) or LOCAL_EXPERIMENT_STARTING_EQUITY)
+    realized_pnl=float(S.get("local_experiment_realized_pnl",0) or 0)
+   unreal=0.0;used=0.0
+   pos_state={}
+   for symbol,pos in positions.items():
+    mark=float(prices.get(symbol,pos.get("entry",0)) or pos.get("entry",0) or 0)
+    pnl=paper_pnl(float(pos.get("notional",0) or 0),float(pos.get("entry",0) or 0),mark,int(pos.get("side",0) or 0),FEE) if mark>0 else 0.0
+    unreal+=pnl;used+=float(pos.get("margin",0) or 0)
+    pos_state[symbol]={"side":int(pos.get("side",0) or 0),"entry":pos.get("entry"),"mark":mark,
+      "margin":pos.get("margin"),"notional":pos.get("notional"),"unrealized_pnl":pnl,
+      "mfe_price_move":(pos.get("features") or {}).get("mfe_price_move"),
+      "mae_price_move":(pos.get("features") or {}).get("mae_price_move")}
+   total=realized_equity+unreal
+   free=max(0.0,total-used)
+   stats=local_experiment_stats()
+   details=source.get("details") or {}
+   symbols_ready=sum(1 for x in details.values() if (x or {}).get("ok"))
+   wins=int(stats.get("wins",0) or 0);trades=int(stats.get("trades",0) or 0)
+   payload={"positions":pos_state,"watches":watches,"stats":stats,
+     "ranked_candidates":source.get("ranked_candidates") or [],
+     "details":details,"policy":LOCAL4_FLOW_POLICY}
+   with pg() as db:
+    db.execute("""insert into local_v12_minute_snapshots
+      (ts,commit,engine_active,ready,equity,realized_pnl,unrealized_pnl,total_equity,used_margin,free_margin,
+       open_positions,reentry_watches,closed_trades,wins,win_rate,symbols_ready,state)
+      values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
+      (now(),os.getenv("RENDER_GIT_COMMIT"),active,bool(source.get("ready")),realized_equity,realized_pnl,
+       unreal,total,used,free,len(positions),len(watches),trades,wins,stats.get("win_rate"),symbols_ready,
+       json.dumps(payload,default=str)))
+   with LOCK:S["strategy1_last_minute_snapshot"]={"ts":now(),"ready":bool(source.get("ready")),
+     "symbols_ready":symbols_ready,"equity":total,"realized_pnl":realized_pnl,"unrealized_pnl":unreal,
+     "open_positions":len(positions),"reentry_watches":len(watches),"closed_trades":trades,
+     "wins":wins,"win_rate":stats.get("win_rate")}
+  except Exception as exc:
+   with LOCK:S["sources"]["Strategy1MinuteSnapshots"]={"ok":False,"last_check":now(),
+     "error":type(exc).__name__+":"+str(exc)[:160]}
+  else:
+   with LOCK:S["sources"]["Strategy1MinuteSnapshots"]={"ok":True,"last_check":now(),
+     "mode":"durable_60s_strategy1_audit","interval_seconds":60}
+  SHUTDOWN.wait(60)
 
 
 def _comparison_mtm(state_name,prices):
@@ -5522,6 +5583,7 @@ def build_dashboard_snapshot(history=None):
 "watch":copy.deepcopy(state.get("local_experiment_watch",{})),
 "stats":copy.deepcopy(state.get("local_experiment_stats",{})),
 "engine":copy.deepcopy(state.get("sources",{}).get("Caterpillar 1.0",{}))},
+"strategy1_last_minute_snapshot":copy.deepcopy(state.get("strategy1_last_minute_snapshot",{})),
 "strategy1_historical_benchmark":{"starting_equity":500.0,"mfe_upper_equity":877.36,"mfe_opportunity_pnl":377.36,"basis":"historical favorable-excursion upper bound from prior actual-entry analysis","executed":False,"causal":False,"label":"HISTORICAL MFE BENCHMARK — NOT EXECUTED"},"module_trading_enabled":{"strategy1":True,"news":False,"whale_liquidation":False,"pump_dump":False,"strategy2":False,"strategy3":False,"legacy_local":False},"account_model":"UNIFIED_PAPER_ACCOUNT_ALL_STRATEGIES","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"decision_learning":copy.deepcopy(state.get("learning_audit",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
 
 def dashboard():
@@ -5684,7 +5746,10 @@ def operations_diagnostics():
     s1trades=int(S.get("local_experiment_trades",0) or 0)
     s1open=list(S.get("local_v12_positions",{}))
     s1watch=list(S.get("local_experiment_watch",{}))
-   print("S1_ONLINE_STATE "+json.dumps({"ok":s1src.get("ok"),"ready":s1src.get("ready"),
+   trade_stream=(S.get("sources",{}).get("MarketTradeStream") or {})
+   bootstrap=(S.get("sources",{}).get("MarketHistoryBootstrap") or {})
+   derived_ready=bool(s1src.get("ready")) or (bool(S.get("engine_active")) and int(bootstrap.get("local_ready",0) or 0)>=len(LOCAL_EXPERIMENT_SYMBOLS) and int(trade_stream.get("symbols",0) or 0)==len(LOCAL_EXPERIMENT_SYMBOLS))
+   print("S1_ONLINE_STATE "+json.dumps({"ok":bool(s1src.get("ok")) or derived_ready,"ready":derived_ready,
     "error":s1src.get("error"),"version":os.getenv("RENDER_GIT_COMMIT"),
     "starting_equity":LOCAL_EXPERIMENT_STARTING_EQUITY,"realized_equity":s1eq,
     "realized_pnl":s1real,"trades":s1trades,"open_positions":s1open,
@@ -6354,7 +6419,7 @@ def html_dashboard(data):
   '<b>REALIZED EQUITY<br>$%.4f</b><b>REALIZED P&L<br><span class="%s">$%.4f</span></b>'
   '<b>OPEN P&L<br><span class="%s">$%.4f</span></b><b>MTM EQUITY<br>$%.4f</b>'
   '<b>CLOSED TRADES<br>%s</b><b>WIN RATE<br>%s</b><b>OPEN POSITIONS<br>%s</b>'
-  '<b>RE-ENTRY WATCH<br>%s</b><b>SIZE<br>20%% CURRENT EQUITY</b><b>REFERENCE LEVERAGE<br>25x PAPER</b></div>'
+  '<b>RE-ENTRY WATCH<br>%s</b><b>SIZE<br>20%% CURRENT EQUITY</b><b>REFERENCE LEVERAGE<br>25x PAPER</b><b>1M SNAPSHOT<br>%s</b></div>'
   '<div class="muted">ACTUAL PAPER state from durable Neon tables. H1 controls direction; M1/M3/M5 executed flow manages MFE-preserving exits, pullbacks and same-direction re-entry. Only OPEN positions are listed below. No replay values are mixed into actual P&L.</div>'
   '<h3>OPEN NOW · 18-MARKET UNIVERSE</h3><div class="scroll"><table><tr><th>Token</th><th>Side</th><th>Phase</th><th>H1 Local</th><th>Margin $</th><th>Position $</th><th>Entry</th><th>Mark</th><th>Open P&L</th><th>Action</th></tr>%s</table></div>'
   '<h3>ACTUAL STRATEGY 1 TRADE HISTORY</h3><div class="scroll"><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>Margin $</th><th>Position $</th><th>Lev</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Reason</th></tr>%s</table></div>'
@@ -6363,7 +6428,7 @@ def html_dashboard(data):
    "posv" if s1engine.get("ok") else "warnv","ACTIVE" if s1engine.get("ok") else "WARMUP / PARTIAL DATA",
    float(s1block.get("realized_equity",500) or 500),"posv" if s1_realized>=0 else "negv",s1_realized,
    "posv" if s1_open>=0 else "negv",s1_open,s1_eq,int(s1stats.get("trades",0) or 0),esc(s1wr),
-   len(s1positions),len(s1watch),"".join(s1_primary_rows),s1_history_rows)
+   len(s1positions),len(s1watch),esc((data.get("strategy1_last_minute_snapshot") or {}).get("ts","pending")),"".join(s1_primary_rows),s1_history_rows)
  comparison_html=""
  for key,title in (("local_s2","STRATEGY 2 — H1 PIVOT-TO-PIVOT"),("local_s3","STRATEGY 3 — LOCAL12 V10")):
   block=(data.get("comparison_strategies") or {}).get(key,{})
@@ -6667,6 +6732,9 @@ if __name__=="__main__":
   ("breadth_history",market_regime_history),
   ("telemetry",telemetry),
   ("strategy1_flow_execution",strategy1_flow_execution_loop),
+  ("strategy1_local_engine",local_experiment_loop),
+  ("strategy1_local_risk",local_experiment_risk_loop),
+  ("strategy1_minute_snapshots",strategy1_minute_snapshot_loop),
   ("local_strategy_comparison",comparison_strategies_loop),
   ("dashboard_history",dashboard_history_loop),
   ("dashboard_cache",dashboard_cache_loop),
