@@ -2404,10 +2404,20 @@ def local_h1_direction(rows,now_ms,symbol):
  analysis=analyze_hype_h1(rows,now_ms,symbol)
  if not analysis.get("ready"):return analysis
  with LOCK:prior=copy.deepcopy(S.get("local_h1_direction",{}).get(symbol))
- if prior and int(prior.get("signal_candle_time") or 0)>int(analysis.get("signal_candle_time") or 0):
-  # A shorter restart cache must never roll a newer persisted H1 anchor back.
-  analysis={**prior,"ready":True,"last_candle_time":analysis.get("last_candle_time"),
-    **local_pending_extreme(rows,now_ms,int(prior.get("entry_side") or 0))}
+ if prior:
+  prior_t=int(prior.get("signal_candle_time") or 0);new_t=int(analysis.get("signal_candle_time") or 0)
+  prior_side=int(prior.get("entry_side") or 0);new_side=int(analysis.get("entry_side") or 0)
+  if prior_t>new_t:
+   # A shorter restart cache must never roll a newer persisted H1 anchor back.
+   analysis={**prior,"ready":True,"last_candle_time":analysis.get("last_candle_time"),
+     **local_pending_extreme(rows,now_ms,prior_side)}
+  elif prior_side in (-1,1) and new_side in (-1,1) and new_side!=prior_side:
+   # Regime side may change ONLY on a strictly newer confirmed opposite H1 pivot.
+   # Same/older candle, cache reconstruction or partial-window analysis cannot flip LOW<->HIGH.
+   if new_t<=prior_t:
+    analysis={**prior,"ready":True,"last_candle_time":analysis.get("last_candle_time"),
+      **local_pending_extreme(rows,now_ms,prior_side),
+      "anchor_guard":"blocked_non_new_opposite_pivot"}
  if analysis.get("entry_side") not in (-1,1):return analysis
  if not prior or analysis.get("signal_candle_time")!=prior.get("signal_candle_time"):
   with pg() as db:
@@ -6407,6 +6417,7 @@ def html_dashboard(data):
   _monitor_local_prices=copy.deepcopy(S.get("_prices",{}))
   _monitor_local_age=(time.time()-float(S.get("_last_poll_epoch",0) or 0)) if S.get("_last_poll_epoch") else 1e9
  s1live_prices=(_monitor_local_prices if _monitor_local_prices and _monitor_local_age<=3.0 else copy.deepcopy(s1durable_live.get("prices") or {}))
+ with LOCK:
   s1live_positions=copy.deepcopy(S.get("local_v12_positions",{}))
   s1live_watch=copy.deepcopy(S.get("local_experiment_watch",{}))
  for _sym in LOCAL_EXPERIMENT_SYMBOLS:
