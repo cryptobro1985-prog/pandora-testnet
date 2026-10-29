@@ -185,33 +185,63 @@ def analyze(rows, now_ms, symbol=SYMBOL):
     result.update(last_candle_time=candles[-1]["t"], closed_candles=len(candles),
                   h1_direction_anchor=True, execution_interval=M15_INTERVAL,
                   anchor_confirmed=bool(anchor))
-    result.update(pending_extreme(rows, now_ms, result.get("entry_side", 0)))
+    result.update(pending_extreme(rows, now_ms, result.get("entry_side", 0), result.get("pivot_price")))
     return result
 
 
-def pending_extreme(rows, now_ms, side):
-    """Pause old-side entries at a possible opposite H1 extreme, never flip early.
+def pending_extreme(rows, now_ms, side, anchor_pivot_price=None):
+    """Block stale-anchor entries while a new H1 structural extreme is forming.
 
-    The last closed H1 bar must set an extreme against its four predecessors.
-    A live following bar must preserve that extreme and recoil by at least
-    0.15%. Its final close is still required to confirm a new direction.
+    Same-side extension:
+      LONG regime + price breaks below active LOCAL_LOW => WAIT_NEW_LOCAL_LOW.
+      SHORT regime + price breaks above active LOCAL_HIGH => WAIT_NEW_LOCAL_HIGH.
+    No lower timeframe may authorize a new entry until that new H1 local is
+    causally confirmed by the following closed H1 candle.
+
+    Opposite-side candidate keeps the prior behavior: pause entries while an
+    opposite H1 extreme is awaiting closed confirmation.
     """
-    result = {"entry_blocked": False, "pending_pivot_type": None}
+    result = {"entry_blocked": False, "pending_pivot_type": None,
+              "entry_block_reason": None}
     candles = completed_candles(rows, now_ms)
     if side not in (-1, 1) or len(candles) < PIVOT_LOOKBACK + 1:
         return result
     p = candles[-1]
     prior = candles[-1-PIVOT_LOOKBACK:-1]
-    current = _completed(rows, float(now_ms) + 3_600_001, 3_600_000)
-    current = [x for x in current if x["t"] == p["t"] + 3_600_000 and x["t"] <= now_ms < x["T"] + 1001]
-    if not current:
+
+    current_rows = _completed(rows, float(now_ms) + 3_600_001, 3_600_000)
+    current = [x for x in current_rows
+               if x["t"] == p["t"] + 3_600_000 and x["t"] <= now_ms < x["T"] + 1001]
+    x = current[-1] if current else None
+
+    anchor = _f(anchor_pivot_price)
+    if anchor is not None and anchor > 0:
+        if side > 0:
+            newest_low = min(p["l"], x["l"] if x else p["l"])
+            if newest_low < anchor:
+                result.update(entry_blocked=True, pending_pivot_type="LOCAL_LOW",
+                              pending_pivot_price=newest_low,
+                              pending_pivot_candle_time=x["t"] if x and x["l"] <= p["l"] else p["t"],
+                              entry_block_reason="same_side_h1_low_extension_waiting_confirmation")
+                return result
+        else:
+            newest_high = max(p["h"], x["h"] if x else p["h"])
+            if newest_high > anchor:
+                result.update(entry_blocked=True, pending_pivot_type="LOCAL_HIGH",
+                              pending_pivot_price=newest_high,
+                              pending_pivot_candle_time=x["t"] if x and x["h"] >= p["h"] else p["t"],
+                              entry_block_reason="same_side_h1_high_extension_waiting_confirmation")
+                return result
+
+    if not x:
         return result
-    x = current[-1]
     high = side > 0 and p["h"] >= max(z["h"] for z in prior) and x["h"] < p["h"] and (p["h"]-x["c"])/p["h"] >= .0015
     low = side < 0 and p["l"] <= min(z["l"] for z in prior) and x["l"] > p["l"] and (x["c"]-p["l"])/p["l"] >= .0015
     if high or low:
-        result.update(entry_blocked=True, pending_pivot_type="LOCAL_HIGH" if high else "LOCAL_LOW",
-                      pending_pivot_price=p["h"] if high else p["l"], pending_pivot_candle_time=p["t"],
+        result.update(entry_blocked=True,
+                      pending_pivot_type="LOCAL_HIGH" if high else "LOCAL_LOW",
+                      pending_pivot_price=p["h"] if high else p["l"],
+                      pending_pivot_candle_time=p["t"],
                       entry_block_reason="opposite_h1_extreme_awaiting_closed_confirmation")
     return result
 
