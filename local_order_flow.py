@@ -43,7 +43,9 @@ def flow_profile(flow, side):
                          ("300s", "flow_imbalance_300s")):
         raw = _f(flow.get(key))
         values[horizon] = side * raw if raw is not None and -1 <= raw <= 1 else None
-    if any(values[h] is None for h in ("60s", "180s", "300s")):
+    # M1 is sufficient to begin causal execution. M3/M5 are optional until
+    # their real post-connect windows exist; they may confirm but never freeze M1.
+    if values["60s"] is None:
         return None
     c60 = _f(flow.get("trade_count_60s"))
     c180 = _f(flow.get("trade_count_180s"))
