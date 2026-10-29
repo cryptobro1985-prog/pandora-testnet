@@ -1,4 +1,4 @@
-"""Causal M15 pressure/recoil execution inside a persistent H1 direction.
+"""Causal executed-trade pressure/recoil execution inside a persistent H1 direction.
 
 No exchange calls or writes. The caller persists the returned watch context.
 A previous exit price is a pullback reference, never a required re-entry hurdle.
@@ -7,7 +7,7 @@ import copy
 import datetime
 import math
 
-POLICY = "local_h1_multihorizon_flow_caterpillar_v16_h1_immediate_initial"
+POLICY = "local_h1_m1_m3_m5_executed_flow_v17_no_m15"
 FLOW_THRESHOLD = .12
 SELECTION_POLICY = "h1_multihorizon_flow_ranked_execution_v2"
 
@@ -73,94 +73,62 @@ def _flow_profile(context, side):
     return vals
 
 
-def _threshold(m15, fraction=.15):
-    typical = _f((m15 or {}).get("median_range_move"))
-    return max(.0006, min(.0015, (typical or .008) * fraction))
+def _threshold(execution_context=None, fraction=.15):
+    """Price recoil threshold independent of 15-minute candles."""
+    return max(.0006, min(.0015, .008 * fraction))
 
-
-def initial_h1_entry_candidate(symbol, analysis, m15, flow, now_epoch):
-    """Immediate first entry on a newly confirmed H1 local.
-
-    The H1 local itself is the initial trigger. Pullback/exhaustion is deliberately
-    NOT required here; those gates belong only to re-entry after an M15/flow exit.
-    Fresh price/flow observations and H1 invalidation guards still apply.
-    """
-    result = dict(symbol=symbol, eligible=False, policy="confirmed_h1_local_immediate_initial_v1")
+def initial_h1_entry_candidate(symbol, analysis, execution_context, flow, now_epoch):
+    """H1 confirmed direction plus fresh actual trades; no candle execution gate."""
+    result = dict(symbol=symbol, eligible=False, policy="h1_executed_flow_initial_v17")
     side = (analysis or {}).get("entry_side")
-    stamp = _f(now_epoch)
-    observed = _f((m15 or {}).get("observed_at_ms"))
     profile = _flow_profile(flow, side)
-    count = _f((flow or {}).get("trade_count_60s"))
-    notional = _f((flow or {}).get("observed_notional_60s"))
-    coverage = _f((flow or {}).get("trade_coverage_seconds"))
-    if not analysis or not analysis.get("ready") or not analysis.get("anchor_confirmed") or not analysis.get("h1_direction_anchor") or side not in (-1, 1):
-        result["reason"] = "confirmed_h1_local_unavailable"; return result
-    if analysis.get("entry_blocked"):
-        result["reason"] = "opposite_h1_confirmation_pending"; return result
-    if not m15 or not m15.get("ready") or stamp is None or observed is None or not 0 <= stamp * 1000 - observed <= 10000:
-        result["reason"] = "fresh_m15_observation_unavailable"; return result
-    if profile is None or coverage is None or coverage < 60 or count is None or notional is None or count < 5 or notional < 100:
-        result["reason"] = "fresh_executed_flow_unavailable"; return result
-    result.update(eligible=True, reason="confirmed_h1_local_immediate_initial", side=side,
-                  recovery_score=_f(m15.get("recovery_score")) or 0,
-                  adverse_score=_f(m15.get("adverse_score")) or 0,
-                  aligned_flow=profile["60s"], aligned_flow_15s=profile["15s"],
-                  aligned_flow_30s=profile["30s"], observed_notional_60s=notional,
-                  trade_count_60s=count, observed_at_ms=observed,
-                  rank_key=[1, profile["15s"], profile["30s"], notional])
-    return result
-
-
-def entry_candidate(symbol, analysis, m15, flow, now_epoch):
-    """Validate observable entry evidence; ranking is not a profit prediction.
-
-    Compare M15 recovery first, then aligned executed flow and observed liquidity.
-    Missing observations must not silently pass a minimum-liquidity check.
-    """
-    result = dict(symbol=symbol, eligible=False, policy=SELECTION_POLICY)
-    side = (analysis or {}).get("entry_side")
-    reason = None
-    stamp = _f(now_epoch)
-    observed = _f((m15 or {}).get("observed_at_ms"))
-    profile = _flow_profile(flow, side)
-    imbalance = _flow(flow)
     count = _f((flow or {}).get("trade_count_60s"))
     notional = _f((flow or {}).get("observed_notional_60s"))
     coverage = _f((flow or {}).get("trade_coverage_seconds"))
     age = _f((flow or {}).get("latest_trade_age_seconds"))
-    score = _f((m15 or {}).get("recovery_score"))
-    adverse = _f((m15 or {}).get("adverse_score"))
-    if not analysis or not analysis.get("ready") or not analysis.get("h1_direction_anchor") or side not in (-1, 1):
-        reason = "h1_direction_unavailable"
-    elif analysis.get("entry_blocked"):
-        reason = "opposite_h1_confirmation_pending"
-    elif not m15 or not m15.get("ready") or m15.get("side") != side:
-        reason = "m15_direction_unavailable"
-    elif stamp is None or observed is None or not 0 <= stamp * 1000 - observed <= 10000:
-        reason = "stale_m15_observation"
-    elif imbalance is None or age is None or coverage is None or coverage < 60:
-        reason = "fresh_executed_flow_unavailable"
-    elif count is None or notional is None or count < 5 or notional < 100:
-        reason = "insufficient_executed_liquidity"
-    elif not m15.get("pullback_observed"):
-        reason = "m15_pullback_not_observed"
-    elif not m15.get("pullback_exhausted"):
-        reason = "m15_pullback_not_exhausted"
-    elif profile is None or not profile.get("strong_resumed"):
-        reason = "flow_not_resumed_after_pullback"
-    elif not m15.get("recovery_confirmed") or score is None or score < 3 or adverse is None or adverse > 1 or m15.get("strong_adverse_pressure"):
-        reason = "m15_recovery_unconfirmed"
-    if reason:
-        result["reason"] = reason
-        return result
-    result.update(eligible=True, reason="confirmed_h1_m15_flow", side=side,
-                  recovery_score=score, adverse_score=adverse,
+    stamp = _f(now_epoch)
+    if not analysis or not analysis.get("ready") or not analysis.get("anchor_confirmed") or not analysis.get("h1_direction_anchor") or side not in (-1, 1):
+        result["reason"] = "confirmed_h1_local_unavailable"; return result
+    if analysis.get("entry_blocked"):
+        result["reason"] = "opposite_h1_confirmation_pending"; return result
+    if stamp is None or profile is None or age is None or age > 15 or coverage is None or coverage < 60 or count is None or count < 5 or notional is None or notional < 100:
+        result["reason"] = "fresh_executed_flow_unavailable"; return result
+    if not profile["resumed"]:
+        result["reason"] = "executed_flow_not_aligned"; return result
+    result.update(eligible=True, reason="h1_m1_m3_m5_flow_initial", side=side,
+                  recovery_score=0, adverse_score=0,
                   aligned_flow=profile["60s"], aligned_flow_15s=profile["15s"],
                   aligned_flow_30s=profile["30s"], observed_notional_60s=notional,
-                  trade_count_60s=count, observed_at_ms=observed,
-                  rank_key=[score, -adverse, profile["15s"], profile["30s"], notional])
+                  trade_count_60s=count, observed_at_ms=int(stamp * 1000),
+                  rank_key=[1, profile["15s"], profile["30s"], notional])
     return result
 
+def entry_candidate(symbol, analysis, execution_context, flow, now_epoch):
+    """Rank same-direction re-entry on independent executed-flow resumption."""
+    result = dict(symbol=symbol, eligible=False, policy=SELECTION_POLICY)
+    side = (analysis or {}).get("entry_side")
+    profile = _flow_profile(flow, side)
+    count = _f((flow or {}).get("trade_count_60s"))
+    notional = _f((flow or {}).get("observed_notional_60s"))
+    coverage = _f((flow or {}).get("trade_coverage_seconds"))
+    stamp = _f(now_epoch)
+    if not analysis or not analysis.get("ready") or not analysis.get("anchor_confirmed") or not analysis.get("h1_direction_anchor") or side not in (-1, 1):
+        result["reason"] = "h1_direction_unavailable"; return result
+    if analysis.get("entry_blocked"):
+        result["reason"] = "opposite_h1_confirmation_pending"; return result
+    if stamp is None or profile is None or coverage is None or coverage < 60:
+        result["reason"] = "fresh_executed_flow_unavailable"; return result
+    if count is None or notional is None or count < 5 or notional < 100:
+        result["reason"] = "insufficient_executed_liquidity"; return result
+    if not profile["strong_resumed"]:
+        result["reason"] = "flow_not_resumed_after_pullback"; return result
+    result.update(eligible=True, reason="confirmed_h1_executed_flow", side=side,
+                  recovery_score=0, adverse_score=0,
+                  aligned_flow=profile["60s"], aligned_flow_15s=profile["15s"],
+                  aligned_flow_30s=profile["30s"], observed_notional_60s=notional,
+                  trade_count_60s=count, observed_at_ms=int(stamp * 1000),
+                  rank_key=[profile["15s"], profile["30s"], profile["60s"], notional])
+    return result
 
 def rank_candidates(candidates):
     """Deterministic order independent of the configured symbol enumeration."""
@@ -168,15 +136,9 @@ def rank_candidates(candidates):
                   key=lambda c: tuple(-v for v in c["rank_key"]) + (c["symbol"],))
 
 
-def pressure_exit(position, m15, mark, fresh_flow_context):
-    """Exit when directional participation genuinely weakens.
-
-    A profitable trend is allowed to run while short/medium executed flow still
-    supports the H1 side. Exit is triggered by a real loss of control plus M15
-    recoil, before waiting for a full 60-second flow reversal. Losing positions
-    require stronger counter-control unless the emergency stop handles them.
-    """
-    if not position or not m15 or not m15.get("ready"):
+def pressure_exit(position, execution_context, mark, fresh_flow_context):
+    """Exit on causal flow control transfer and observed giveback from MFE."""
+    if not position:
         return None
     side = int(position.get("side") or 0)
     entry, mark = _f(position.get("entry")), _f(mark)
@@ -185,29 +147,22 @@ def pressure_exit(position, m15, mark, fresh_flow_context):
         return None
     features = position.get("features") or {}
     move = side * (mark / entry - 1)
-    cost_floor = max(.0002, _f(features.get("estimated_round_trip_cost_move")) or 0.0)
+    cost_floor = max(.0002, _f(features.get("estimated_round_trip_cost_move")) or 0.)
     count = _f((fresh_flow_context or {}).get("trade_count_60s"))
     notional = _f((fresh_flow_context or {}).get("observed_notional_60s"))
-    if (count is not None and count < 5) or (notional is not None and notional < 100):
+    if count is None or count < 5 or notional is None or notional < 100:
         return None
-
-    adverse = int(m15.get("adverse_score") or 0)
-    r15 = _f(m15.get("return_15m"))
-    candle_reversal = (int(m15.get("candle_direction") or 0) == -side and
-                       (_f(m15.get("body_fraction")) or 0.) >= .42)
-    price_confirmation = candle_reversal or (r15 is not None and side * r15 < 0) or adverse >= 2
     peak = max(0., _f(features.get("mfe_price_move")) or 0., move)
     recoil = peak - move
-    if recoil < _threshold(m15):
+    if recoil < _threshold():
         return None
-
-    if move > cost_floor and profile["weakening"] and price_confirmation:
-        return "m15_flow_weakening_profit_exit"
-    if profile["counter_control"] and (adverse >= 3 or candle_reversal):
-        return "m15_flow_counter_control"
+    if profile["counter_control"]:
+        return "executed_flow_counter_control_exit"
+    if move > cost_floor and profile["weakening"] and profile["15s"] < 0:
+        return "executed_flow_weakening_profit_exit"
     return None
 
-def update_watch(watch, mark, m15, flow, now_epoch):
+def update_watch(watch, mark, execution_context, flow, now_epoch):
     """Observe the bounce after exit and arm re-entry only after real counter-flow."""
     out = copy.deepcopy(watch or {})
     side = int(out.get("side") or 0)
@@ -221,8 +176,8 @@ def update_watch(watch, mark, m15, flow, now_epoch):
     extreme = min(extreme, mark) if side > 0 else max(extreme, mark)
     pullback = max(0., -side * (extreme / exit_price - 1))
     context.update(pullback_extreme=extreme, pullback_move=pullback,
-                   pullback_threshold=_threshold(m15),
-                   resumption_threshold=_threshold(m15, .10),
+                   pullback_threshold=_threshold(execution_context),
+                   resumption_threshold=_threshold(execution_context, .10),
                    last_observed_epoch=stamp,last_observed_mark=mark,caterpillar_policy=POLICY)
     profile = _flow_profile(flow, side)
     if profile is not None:
@@ -238,16 +193,10 @@ def update_watch(watch, mark, m15, flow, now_epoch):
         context["pullback_confirmed_epoch"] = stamp
     return out
 
-def reentry_ready(side, m15, mark, watch, flow, now_epoch):
-    """Universal re-entry after a completed bounce and renewed executed control."""
+def reentry_ready(side, execution_context, mark, watch, flow, now_epoch):
+    """Require real pullback, counter-pressure and independent fresh resumption."""
     side = int(side or 0)
     if side not in (-1, 1) or not watch or int(watch.get("side") or 0) != side:
-        return False
-    if not m15 or not m15.get("ready") or not m15.get("recovery_confirmed"):
-        return False
-    if int(m15.get("recovery_score") or 0) < 3 or int(m15.get("adverse_score") or 0) > 1:
-        return False
-    if m15.get("side") is not None and int(m15["side"]) != side:
         return False
     context = watch.get("context") or {}
     if context.get("phase") != "WAIT_RESUMPTION" or not context.get("counter_pressure_seen"):
@@ -255,19 +204,13 @@ def reentry_ready(side, m15, mark, watch, flow, now_epoch):
     profile = _flow_profile(flow, side)
     mark, extreme, stamp = _f(mark), _f(context.get("pullback_extreme")), _f(now_epoch)
     confirmed = _f(context.get("pullback_confirmed_epoch"))
-    if profile is None or not profile.get("strong_resumed") or not mark or not extreme or stamp is None or confirmed is None or stamp <= confirmed:
+    if profile is None or not profile["strong_resumed"] or not mark or not extreme or stamp is None or confirmed is None or stamp <= confirmed:
         return False
     observed = _f(context.get("last_observed_epoch"))
     if observed is None or not 0 <= stamp - observed <= 15:
         return False
     rebound = side * (mark / extreme - 1)
-    if rebound < (_f(context.get("resumption_threshold")) or _threshold(m15, .10)):
-        return False
-    close_location = _f(m15.get("close_location"))
-    if close_location is not None:
-        if side > 0 and close_location < .60:return False
-        if side < 0 and close_location > .40:return False
-    return True
+    return rebound >= (_f(context.get("resumption_threshold")) or _threshold(None, .10))
 
 def protective_breakeven(position, mark):
     """Cost-aware profit floor derived from the saved HYPE/NEAR paper history.
