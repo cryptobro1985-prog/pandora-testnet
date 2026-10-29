@@ -97,7 +97,9 @@ def bybit_volatility_discovery_loop():
    with urllib.request.urlopen(req,timeout=12) as resp:payload=json.load(resp)
    if int(payload.get("retCode",0) or 0)!=0:raise RuntimeError("bybit_retCode_"+str(payload.get("retCode")))
    now_epoch=time.time();rows=(payload.get("result") or {}).get("list") or []
-   with LOCK:available=set(S.get("_prices",{}))
+   with LOCK:
+    available=set(S.get("_prices",{}))
+    unsupported=set((S.get("strategy1_discovery") or {}).get("unsupported_runtime_symbols") or [])
    ranked=[]
    for x in rows:
     pair=str(x.get("symbol") or "")
@@ -120,7 +122,7 @@ def bybit_volatility_discovery_loop():
     if not hot:continue
     # Current paper Strategy 1 consumes the existing live price/candle transport.
     # Do not admit a Bybit-only symbol until that transport can manage it safely.
-    executable=symbol in available
+    executable=symbol in available and symbol not in unsupported
     score=max(move5/DISCOVERY_MIN_MOVE_5M_PCT,range24/DISCOVERY_MIN_RANGE_24H_PCT)*math.log10(max(turn,10))
     ranked.append({"symbol":symbol,"pair":pair,"score":round(score,3),"move_5m_pct":round(move5,3),
       "range_24h_pct":round(range24,3),"turnover_24h":round(turn,2),"runtime_eligible":executable})
@@ -4263,7 +4265,20 @@ def market_history_bootstrap():
      stamp=time.time()
      rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":sym,"interval":interval,
        "startTime":int((stamp-hours*3600)*1000),"endTime":int(stamp*1000)}}))
-     if not isinstance(rows,list) or not rows:raise RuntimeError("empty_local_bootstrap:"+sym+":"+interval)
+     if not isinstance(rows,list) or not rows:
+      # Permanent Strategy 1 symbols are trading-critical and must surface an error.
+      # Dynamic AutoScanner candidates are optional: if the execution venue cannot
+      # provide candles, quarantine them instead of breaking bootstrap for all markets.
+      if sym in LOCAL_EXPERIMENT_SYMBOLS:
+       raise RuntimeError("empty_local_bootstrap:"+sym+":"+interval)
+      with LOCK:
+       disc=S.setdefault("strategy1_discovery",{})
+       bad=set(disc.get("unsupported_runtime_symbols") or [])
+       bad.add(sym);disc["unsupported_runtime_symbols"]=sorted(bad)
+       disc["hot_symbols"]=[x for x in (disc.get("hot_symbols") or []) if x!=sym]
+       S["sources"]["Strategy1Discovery"]=copy.deepcopy(disc)
+      completed.add(key)
+      continue
      accept_local_candles(rows,history=True)
      checkpoint_local_candles()
      completed.add(key)
