@@ -38,16 +38,24 @@ class EngineStore:
             return c.execute("SELECT 1 FROM engine_lease WHERE name='paper'").fetchone() is not None
 
     def claim(self):
-        with self.connect() as c:
-            with c.transaction():
-                self._transaction_timeouts(c)
-                row = c.execute("""INSERT INTO engine_lease(name,owner,expires_at,heartbeat_at)
-                    VALUES('paper',%s,clock_timestamp()+interval '30 seconds',clock_timestamp())
-                    ON CONFLICT(name) DO UPDATE SET owner=excluded.owner,
-                      expires_at=excluded.expires_at,heartbeat_at=excluded.heartbeat_at
-                    WHERE engine_lease.owner=excluded.owner OR engine_lease.expires_at<clock_timestamp()
-                    RETURNING owner""", (self.owner,)).fetchone()
-                return row is not None
+        try:
+            with self.connect() as c:
+                with c.transaction():
+                    self._transaction_timeouts(c)
+                    row = c.execute("""INSERT INTO engine_lease(name,owner,expires_at,heartbeat_at)
+                        VALUES('paper',%s,clock_timestamp()+interval '30 seconds',clock_timestamp())
+                        ON CONFLICT(name) DO UPDATE SET owner=excluded.owner,
+                          expires_at=excluded.expires_at,heartbeat_at=excluded.heartbeat_at
+                        WHERE engine_lease.owner=excluded.owner OR engine_lease.expires_at<clock_timestamp()
+                        RETURNING owner""", (self.owner,)).fetchone()
+                    return row is not None
+        except Exception as exc:
+            # During a Render rolling restart the draining instance can briefly
+            # hold the lease row lock. Treat PostgreSQL lock/statement timeout as
+            # normal standby contention, not as a fatal engine error.
+            if getattr(exc, "sqlstate", None) in ("55P03", "57014"):
+                return False
+            raise
 
     @staticmethod
     def _transaction_timeouts(c):
