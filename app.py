@@ -2001,7 +2001,8 @@ def accept_local_candles(data,history=False):
   for row in rows:
    if not isinstance(row,dict):continue
    symbol,interval=row.get("s"),row.get("i")
-   if symbol not in ALL_LOCAL_CANDLE_SYMBOLS or interval not in ("1h","15m"):continue
+   if symbol not in set(strategy1_runtime_symbols()) and symbol not in ALL_LOCAL_CANDLE_SYMBOLS:continue
+   if interval not in ("1h","15m"):continue
    try:
     t,T=int(row["t"]),int(row["T"])
     values=[float(row[k]) for k in ("o","h","l","c","v")]
@@ -2029,7 +2030,8 @@ def accept_local_history(rows):
  if direct:return accept_local_candles(direct,history=True) or len(direct)
  by_symbol={}
  for row in rows:
-  if not isinstance(row,dict) or row.get("i")!="3m" or row.get("s") not in ALL_LOCAL_CANDLE_SYMBOLS:continue
+  if not isinstance(row,dict) or row.get("i")!="3m":continue
+  if row.get("s") not in set(strategy1_runtime_symbols()) and row.get("s") not in ALL_LOCAL_CANDLE_SYMBOLS:continue
   try:
    t,T=int(row["t"]),int(row["T"])
    vals=[float(row[k]) for k in ("o","h","l","c","v")]
@@ -4168,7 +4170,8 @@ def market_history_bootstrap():
    stamp=time.time()
    # Trading-critical priority: restore Strategy 1 H1/M15 first. A deploy must
    # never spend the shared REST budget on breadth while Caterpillar is blind.
-   priority_local=list(LOCAL_EXPERIMENT_SYMBOLS)+[x for x in ALL_LOCAL_CANDLE_SYMBOLS if x not in LOCAL_EXPERIMENT_SYMBOLS]
+   runtime_local=list(strategy1_runtime_symbols())
+   priority_local=list(LOCAL_EXPERIMENT_SYMBOLS)+[x for x in runtime_local if x not in LOCAL_EXPERIMENT_SYMBOLS]
    # Native intervals avoid losing older H1 anchors.
    for interval,hours in (("1h",120),("15m",12)):
     for sym in priority_local:
@@ -4259,7 +4262,7 @@ def market_aux_stream():
  run_trade_stream(MARKET_AUX_OBS,SHUTDOWN,symbols,report,
   os.getenv("HYPERLIQUID_WS_API","wss://api.hyperliquid.xyz/ws"),
   on_mids=accept_market_prices,on_candles=accept_local_candles,
-  candle_symbols=ALL_LOCAL_CANDLE_SYMBOLS,on_candle_history=accept_local_history,
+  candle_symbols=lambda:set(strategy1_runtime_symbols())|set(ALL_LOCAL_CANDLE_SYMBOLS),on_candle_history=accept_local_history,
   regime_symbols=REGIME_SEED_SYMBOLS,on_regime_candles=accept_regime_candles,
   subscribe_trades=False)
 
