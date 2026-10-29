@@ -3064,14 +3064,14 @@ def _comparison_stats(prefix):
   with pg() as db:
    # Keep the immutable accounting ledger distinct from user-curated strategy diagnostics.
    # Badly executed trades may be excluded from the strategy-quality sample, NEVER from actual account PnL.
-   suffix=(" where coalesce(features->>'excluded_from_strategy_stats','false') <> 'true' and reason <> 'audited_invalid_reentry_cleanup'"
+   suffix=(" where coalesce(features->>'excluded_from_strategy_stats','false') <> 'true' and reason not in ('audited_invalid_reentry_cleanup','audited_stale_h1_restart_entry_cleanup')"
            if prefix=="local_s1" else "")
    row=db.execute(f"""select count(*) n,coalesce(sum(pnl),0) pnl,
      sum(case when pnl>0 then 1 else 0 end) wins from {prefix}_trade_history{suffix}""").fetchone()
    excluded=None
    if prefix=="local_s1":
     excluded=db.execute("""select count(*) n,coalesce(sum(pnl),0) pnl
-      from local_s1_trade_history where features->>'excluded_from_strategy_stats'='true' or reason='audited_invalid_reentry_cleanup'""").fetchone()
+      from local_s1_trade_history where features->>'excluded_from_strategy_stats'='true' or reason in ('audited_invalid_reentry_cleanup','audited_stale_h1_restart_entry_cleanup')""").fetchone()
   n=int(row["n"] or 0);wins=int(row["wins"] or 0)
   result={"trades":n,"wins":wins,"win_rate":round(wins/n,4) if n else None,
           "realized_pnl":float(row["pnl"] or 0)}
@@ -3240,6 +3240,21 @@ def comparison_strategies_loop():
     m15=analyze_local_m15(m15_rows,m15_ms,side1)
     act1=None
     if p1:
+     # Generic cleanup: positions manufactured from an old persisted H1 anchor
+     # after process restart are invalid PAPER executions. Close them at the
+     # currently observed mark and keep them out of validated strategy stats.
+     pf=copy.deepcopy(p1.get("features") or {})
+     ek=str(pf.get("entry_kind") or "")
+     signal_close_ms=float(pf.get("signal_candle_close_time") or 0)
+     opened_epoch=float(p1.get("t") or 0)
+     stale_restart=bool(ek in ("H1_CONFIRMED","H1_REENTRY") and signal_close_ms>0 and
+                        opened_epoch-signal_close_ms/1000.0>120.0)
+     if stale_restart:
+      if _comparison_close("local_s1","local_s1",symbol,float(mark),
+          "audited_stale_h1_restart_entry_cleanup",True,"WAIT_NEW_H1_PIVOT"):
+       act1="STALE_H1_RESTART_ENTRY_CLOSED"
+      with LOCK:p1=copy.deepcopy(S.get("local_s1_positions",{}).get(symbol))
+     if not p1:continue
      # One-time cleanup of the audited invalid USELESS PAPER re-entry.
      # Preserve the executed PAPER outcome; prevent same-anchor new entries.
      if symbol=="USELESS" and str(p1.get("opened")) in ("2026-10-29 05:48:45.219428+00:00","2026-10-29T05:48:45.219428+00:00"):
