@@ -38,12 +38,16 @@ class EngineStore:
             return c.execute("SELECT 1 FROM engine_lease WHERE name='paper'").fetchone() is not None
 
     def claim(self):
+        # Render blue/green startup restoration can exceed 30 seconds. Keep enough
+        # lease headroom that the draining instance cannot reclaim ownership while
+        # the new instance restores durable PAPER state. Normal renewals still run
+        # every few seconds once the coordinator loop is active.
         try:
             with self.connect() as c:
                 with c.transaction():
                     self._transaction_timeouts(c)
                     row = c.execute("""INSERT INTO engine_lease(name,owner,expires_at,heartbeat_at)
-                        VALUES('paper',%s,clock_timestamp()+interval '30 seconds',clock_timestamp())
+                        VALUES('paper',%s,clock_timestamp()+interval '120 seconds',clock_timestamp())
                         ON CONFLICT(name) DO UPDATE SET owner=excluded.owner,
                           expires_at=excluded.expires_at,heartbeat_at=excluded.heartbeat_at
                         WHERE engine_lease.owner=excluded.owner OR engine_lease.expires_at<clock_timestamp()
@@ -129,16 +133,12 @@ class EngineStore:
                          p["locked"],p.get("stop"),p["leverage"],p["margin"],p.get("event_id"),json.dumps(risk_state(p)))).fetchone()
                     if row:
                         if event_id:
-                            # Retain this claim after close. Retried ingestion
-                            # may log an event again, but cannot reopen its trade.
-                            # Any conflict rolls back the position insert too.
                             c.execute("INSERT INTO news_entry_claims(event_id,symbol,opened) VALUES(%s,%s,%s)",
                                       (event_id, symbol, p["opened"]))
                         self._journal(c, "trade_opened", p.get("event_id"),
                             {"symbol": symbol,"side":p["side"],"entry":p["entry"],"notional":p["notional"],
                              "margin":p["margin"],"leverage":p["leverage"],"headline":p["headline"]})
                 else:
-                    # Never UPSERT a checkpoint: that could resurrect a closed trade.
                     row = c.execute("""UPDATE open_positions SET locked=%s,stop=%s,risk_state=%s::jsonb
                         WHERE symbol=%s AND opened=%s RETURNING symbol""",
                         (p["locked"],p.get("stop"),json.dumps(risk_state(p)),symbol,p["opened"])).fetchone()
