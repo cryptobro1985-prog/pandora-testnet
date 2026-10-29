@@ -38,33 +38,31 @@ def flow_profile(flow, side):
     if age is None or not -1 <= age <= 15:
         return None
     values = {}
-    for horizon, key in (("15s", "flow_imbalance_15s"),
-                         ("30s", "flow_imbalance_30s"),
-                         ("60s", "flow_imbalance"),
+    for horizon, key in (("60s", "flow_imbalance"),
+                         ("180s", "flow_imbalance_180s"),
                          ("300s", "flow_imbalance_300s")):
         raw = _f(flow.get(key))
         values[horizon] = side * raw if raw is not None and -1 <= raw <= 1 else None
-    if any(values[h] is None for h in ("15s", "30s", "60s")):
+    if any(values[h] is None for h in ("60s", "180s", "300s")):
         return None
-    c15 = _f(flow.get("trade_count_15s"))
-    c30 = _f(flow.get("trade_count_30s"))
     c60 = _f(flow.get("trade_count_60s"))
-    b15, s15 = _f(flow.get("buy_volume_15s")), _f(flow.get("sell_volume_15s"))
-    b30, s30 = _f(flow.get("buy_volume_30s")), _f(flow.get("sell_volume_30s"))
-    active = (c15 is not None and c30 is not None and c60 is not None and
-              c15 >= 2 and c30 >= 4 and c60 >= 5 and
-              b15 is not None and s15 is not None and b15 + s15 > 0 and
-              b30 is not None and s30 is not None and b30 + s30 > 0)
-    short, medium, minute = values["15s"], values["30s"], values["60s"]
+    c180 = _f(flow.get("trade_count_180s"))
+    c300 = _f(flow.get("trade_count_300s"))
+    active = (c60 is not None and c180 is not None and c300 is not None and
+              c60 >= 5 and c180 >= 12 and c300 >= 20)
+    minute, three_minute, five_minute = values["60s"], values["180s"], values["300s"]
     values.update(
         active=active,
         event_epoch=_event_epoch(flow),
-        counter_takeover=(active and short <= -.15 and medium <= -.10 and
-                          (short <= minute - .08 or minute <= -.08)),
-        # Re-entry must wait until selling pressure has actually subsided
-        # across the whole minute, not merely a 15s buying spike.
-        resumed=(active and short >= .18 and medium >= .12 and minute >= .08),
-        aligned_control=(active and short >= .12 and medium >= .08),
+        # M1 must actually flip, M3 must confirm, and M5 must no longer show
+        # strong control in the old H1-side direction. This is the live mirror
+        # of the 18-market causal replay.
+        counter_takeover=(active and minute <= -.18 and three_minute <= -.08 and
+                          five_minute <= .08),
+        resumed=(active and minute >= .12 and three_minute >= .08 and
+                 five_minute >= .08),
+        aligned_control=(active and minute >= .08 and three_minute >= .05 and
+                         five_minute >= .03),
     )
     return values
 
@@ -101,9 +99,9 @@ def _candidate(symbol, analysis, flow):
               "waiting_for_h1_side_aggressor_control")
     return dict(symbol=symbol, side=side, eligible=eligible, reason=reason,
                 policy=POLICY, dominant_side=dominance(flow),
-                aligned_flow_15s=profile["15s"] if profile else None,
-                aligned_flow_30s=profile["30s"] if profile else None,
                 aligned_flow=profile["60s"] if profile else None,
+                aligned_flow_180s=profile["180s"] if profile else None,
+                aligned_flow_300s=profile["300s"] if profile else None,
                 event_epoch=profile["event_epoch"] if profile else None)
 
 
@@ -131,15 +129,29 @@ def entry_candidate(symbol, analysis, m15, flow, stamp):
 
 
 def pressure_exit(position, m15, mark, flow):
-    """Exit immediately when executed aggression takes control against H1 side."""
+    """Preserve MFE only after confirmed M1/M3/M5 control transfer.
+
+    Counter-flow by itself is not enough: price must also recoil from the best
+    favorable excursion. This prevents a transient flow print from cutting a
+    healthy H1-side move while still reacting far earlier than a full H1 flip.
+    """
     side = int((position or {}).get("side") or 0)
     profile = flow_profile(flow, side)
     if side not in (-1, 1) or profile is None or not profile["counter_takeover"]:
         return None
     entry, mark = _f((position or {}).get("entry")), _f(mark)
-    favorable = side * (mark / entry - 1.0) if entry not in (None, 0) and mark is not None else 0.0
-    cost = max(.0002, _f(((position or {}).get("features") or {}).get("estimated_round_trip_cost_move")) or 0.0)
-    return "executed_flow_profit_flip_exit" if favorable > cost else "executed_flow_risk_flip_exit"
+    if entry in (None, 0) or mark is None:
+        return None
+    favorable = side * (mark / entry - 1.0)
+    features = (position or {}).get("features") or {}
+    peak = max(0.0, _f(features.get("mfe_price_move")) or 0.0, favorable)
+    typical = _f((m15 or {}).get("median_range_move")) or .008
+    recoil_threshold = max(.0007, min(.0018, typical * .12))
+    recoil = peak - favorable
+    if recoil < recoil_threshold:
+        return None
+    cost = max(.0002, _f(features.get("estimated_round_trip_cost_move")) or 0.0)
+    return "m1_m3_m5_mfe_profit_exit" if favorable > cost else "m1_m3_m5_risk_exit"
 
 
 def update_watch(watch, mark, m15, flow, stamp):
@@ -157,7 +169,7 @@ def update_watch(watch, mark, m15, flow, stamp):
     ctx.update(pullback_extreme=extreme, last_observed_epoch=_f(stamp), policy=POLICY)
     profile = flow_profile(flow, side)
     if profile:
-        ctx.update(flow_15s=profile["15s"], flow_30s=profile["30s"], flow_60s=profile["60s"])
+        ctx.update(flow_60s=profile["60s"], flow_180s=profile["180s"], flow_300s=profile["300s"])
         if profile["counter_takeover"]:
             ctx["counter_pressure_seen"] = True
             ctx["phase"] = "WAIT_RESUMPTION"
