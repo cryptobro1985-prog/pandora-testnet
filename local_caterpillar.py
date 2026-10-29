@@ -163,54 +163,46 @@ def pressure_exit(position, execution_context, mark, fresh_flow_context):
     return None
 
 def update_watch(watch, mark, execution_context, flow, now_epoch):
-    """Observe the bounce after exit and arm re-entry only after real counter-flow."""
+    """Record genuine buyer/seller control change; no price-distance gate."""
     out = copy.deepcopy(watch or {})
     side = int(out.get("side") or 0)
-    exit_price, mark, stamp = _f(out.get("exit_price")), _f(mark), _f(now_epoch)
+    stamp = _f(now_epoch)
     exit_epoch = _epoch(out.get("exit_at"))
-    if side not in (-1, 1) or not exit_price or not mark or stamp is None or exit_epoch is None or stamp <= exit_epoch:
+    if side not in (-1, 1) or stamp is None or exit_epoch is None or stamp <= exit_epoch:
         return out
     context = out.setdefault("context", {})
-    context.setdefault("phase", "WAIT_PULLBACK")
-    extreme = _f(context.get("pullback_extreme")) or exit_price
-    extreme = min(extreme, mark) if side > 0 else max(extreme, mark)
-    pullback = max(0., -side * (extreme / exit_price - 1))
-    context.update(pullback_extreme=extreme, pullback_move=pullback,
-                   pullback_threshold=_threshold(execution_context),
-                   resumption_threshold=_threshold(execution_context, .10),
-                   last_observed_epoch=stamp,last_observed_mark=mark,caterpillar_policy=POLICY)
+    context.setdefault("phase", "WAIT_COUNTER_FLOW")
     profile = _flow_profile(flow, side)
-    if profile is not None:
-        context["flow_15s"] = profile["15s"]
-        context["flow_30s"] = profile["30s"]
-        context["flow_60s"] = profile["60s"]
-        if profile["counter_control"] or (profile["15s"] < -.08 and profile["30s"] < -.05):
-            context["counter_pressure_seen"] = True
-            context["last_opposite_flow_epoch"] = stamp
-    if (context["phase"] == "WAIT_PULLBACK" and pullback >= context["pullback_threshold"] and
-            context.get("counter_pressure_seen")):
-        context["phase"] = "WAIT_RESUMPTION"
-        context["pullback_confirmed_epoch"] = stamp
+    if profile is None:
+        return out
+    context.update(last_observed_epoch=stamp, last_observed_mark=_f(mark),
+                   flow_15s=profile["15s"], flow_30s=profile["30s"],
+                   flow_60s=profile["60s"], caterpillar_policy=POLICY)
+    if profile["counter_control"] or (profile["15s"] < -.08 and profile["30s"] < -.05):
+        context["counter_pressure_seen"] = True
+        context["last_opposite_flow_epoch"] = stamp
+        context["phase"] = "WAIT_DIRECTIONAL_RESUMPTION"
     return out
 
 def reentry_ready(side, execution_context, mark, watch, flow, now_epoch):
-    """Require real pullback, counter-pressure and independent fresh resumption."""
+    """Re-enter when fresh sellers/buyers regain control after opposite flow."""
     side = int(side or 0)
     if side not in (-1, 1) or not watch or int(watch.get("side") or 0) != side:
         return False
     context = watch.get("context") or {}
-    if context.get("phase") != "WAIT_RESUMPTION" or not context.get("counter_pressure_seen"):
+    if context.get("phase") != "WAIT_DIRECTIONAL_RESUMPTION" or not context.get("counter_pressure_seen"):
         return False
+    stamp = _f(now_epoch)
+    opposite_epoch = _f(context.get("last_opposite_flow_epoch"))
     profile = _flow_profile(flow, side)
-    mark, extreme, stamp = _f(mark), _f(context.get("pullback_extreme")), _f(now_epoch)
-    confirmed = _f(context.get("pullback_confirmed_epoch"))
-    if profile is None or not profile["strong_resumed"] or not mark or not extreme or stamp is None or confirmed is None or stamp <= confirmed:
+    if stamp is None or opposite_epoch is None or stamp <= opposite_epoch or profile is None:
         return False
+    if not profile["strong_resumed"]:
+        return False
+    # Require a subsequent observation, not the same trade window that recorded
+    # counter-control. Neither price retracement nor candle recovery is a gate.
     observed = _f(context.get("last_observed_epoch"))
-    if observed is None or not 0 <= stamp - observed <= 15:
-        return False
-    rebound = side * (mark / extreme - 1)
-    return rebound >= (_f(context.get("resumption_threshold")) or _threshold(None, .10))
+    return observed is not None and 0 <= stamp - observed <= 15
 
 def protective_breakeven(position, mark):
     """Cost-aware profit floor derived from the saved HYPE/NEAR paper history.
