@@ -1011,10 +1011,21 @@ def engine_coordinator():
  while not SHUTDOWN.is_set() and time.monotonic()<deadline:
   S["_coordinator_heartbeat"]=time.time()
   SHUTDOWN.wait(min(5,max(0,deadline-time.monotonic())))
+ takeover_done=False
  while not SHUTDOWN.is_set():
   S["_coordinator_heartbeat"]=time.time()
   try:
-   if STORE.claim():
+   takeover_commit=os.getenv("FORCE_ENGINE_TAKEOVER_COMMIT","").strip()
+   current_commit=os.getenv("RENDER_GIT_COMMIT","").strip()
+   claimed=False
+   if not takeover_done and takeover_commit and current_commit and takeover_commit==current_commit:
+    claimed=STORE.force_claim()
+    takeover_done=bool(claimed)
+    if claimed:
+     with LOCK:S["sources"]["EngineTakeover"]={"ok":True,"last_check":now(),"mode":"commit_fenced_takeover","commit":current_commit}
+   else:
+    claimed=STORE.claim()
+   if claimed:
     if not S["engine_active"]:
      with ACCOUNT_LOCK:
       if apply_local4_user_reset():pinit()
