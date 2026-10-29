@@ -2514,6 +2514,16 @@ def local_h1_direction(rows,now_ms,symbol):
     pass
    return recovered
   return analysis
+ # Universal monotonicity guard: a fresh reconstruction can never roll the
+ # strategy back behind a newer confirmed anchor already proven by durable state.
+ trusted=_local_persisted_anchor(symbol)
+ if trusted and int(trusted.get("entry_side") or 0) in (-1,1):
+  trusted_t=int(trusted.get("signal_candle_time") or 0)
+  fresh_t=int(analysis.get("signal_candle_time") or 0)
+  if trusted_t>fresh_t:
+   analysis={**trusted,"ready":True,"last_candle_time":analysis.get("last_candle_time"),
+    **local_pending_extreme(rows,now_ms,int(trusted.get("entry_side") or 0),trusted.get("pivot_price")),
+    "anchor_guard":"newest_confirmed_anchor_wins"}
  with LOCK:prior=copy.deepcopy(S.get("local_h1_direction",{}).get(symbol))
  if prior:
   prior_t=int(prior.get("signal_candle_time") or 0);new_t=int(analysis.get("signal_candle_time") or 0)
@@ -2896,43 +2906,56 @@ def local_experiment_stats():
  except Exception as exc:return {"error":type(exc).__name__+":"+str(exc)[:160]}
 
 def _local_persisted_anchor(symbol):
- # During H1 bootstrap/restart keep trading the last confirmed local regime.
- # The regime remains valid until a newly completed H1 pivot confirms the opposite side.
- with LOCK:
-  pos=copy.deepcopy(S.get("local_v12_positions",{}).get(symbol))
-  watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
- for source in (pos,watch):
-  if not source:continue
-  features=copy.deepcopy(source.get("features") or source.get("context") or {})
+ # Universal H1 anchor resolver. Never select by write/arrival time: deployments,
+ # watches or positions can contain an older H1 anchor than the newest confirmed
+ # observation. Active direction is the confirmed candidate with the greatest
+ # H1 signal time (pivot time is the tie-breaker).
+ candidates=[]
+ def add_candidate(source,origin):
+  if not source:return
+  features=copy.deepcopy(source.get("features") or source.get("context") or source.get("analysis") or source)
   side=int(source.get("side") or features.get("entry_side") or 0)
-  if side not in (-1,1):continue
-  pivot_type=features.get("pivot_type") or ("LOCAL_HIGH" if side<0 else "LOCAL_LOW")
+  if side not in (-1,1):return
   pivot_price=features.get("pivot_price")
-  # Incomplete watch/position context must not override the fuller journal anchor.
-  if pivot_price is None:continue
-  candle=int(features.get("signal_candle_time") or features.get("origin_h1_signal_candle") or source.get("signal_candle_time") or source.get("origin_signal_candle") or 0)
-  return {"ready":True,"persisted":True,"anchor_confirmed":True,"h1_direction_anchor":True,
-    "pivot_type":pivot_type,"pivot_price":pivot_price,"entry_side":side,
-    "signal_candle_time":candle,"pivot_candle_time":candle,
-    "entry_blocked":False,"pending_pivot_type":None,"pending_pivot_price":None,
-    "entry_block_reason":None,"reason":"persisted_confirmed_h1_local"}
+  if pivot_price is None:return
+  signal=int(features.get("signal_candle_time") or features.get("origin_h1_signal_candle")
+   or source.get("signal_candle_time") or source.get("origin_signal_candle") or source.get("candle_time") or 0)
+  pivot=int(features.get("pivot_candle_time") or signal or 0)
+  if signal<=0:return
+  candidates.append({"ready":True,"persisted":True,"anchor_confirmed":True,"h1_direction_anchor":True,
+   "pivot_type":features.get("pivot_type") or ("LOCAL_HIGH" if side<0 else "LOCAL_LOW"),
+   "pivot_price":pivot_price,"entry_side":side,"signal_candle_time":signal,"pivot_candle_time":pivot,
+   "entry_blocked":False,"pending_pivot_type":None,"pending_pivot_price":None,
+   "entry_block_reason":None,"reason":"persisted_confirmed_h1_local","anchor_source":origin})
+
+ with LOCK:
+  add_candidate(copy.deepcopy(S.get("local_h1_direction",{}).get(symbol)),"memory_canonical")
+  add_candidate(copy.deepcopy(S.get("local_v12_positions",{}).get(symbol)),"open_position")
+  add_candidate(copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol)),"reentry_watch")
  try:
   with pg() as db:
-   row=db.execute("""select side,candle_time,features from local_v12_signal_journal
+   durable=db.execute("select analysis from local_h1_direction where symbol=%s",(symbol,)).fetchone()
+   if durable:add_candidate(durable,"durable_canonical")
+   # Sort by the actual H1 signal time, NOT journal write time.
+   rows=db.execute("""select side,candle_time,features from local_v12_signal_journal
      where features->>'symbol'=%s and action in ('OBSERVE','OPEN','REENTRY')
-     order by ts desc limit 1""",(symbol,)).fetchone()
-  if not row:return None
-  features=copy.deepcopy(row.get("features") or {})
-  side=int(features.get("entry_side") or row.get("side") or 0)
-  if side not in (-1,1):return None
-  candle=int(features.get("signal_candle_time") or features.get("origin_h1_signal_candle") or row.get("candle_time") or 0)
-  return {"ready":True,"persisted":True,"anchor_confirmed":True,"h1_direction_anchor":True,
-    "pivot_type":features.get("pivot_type") or ("LOCAL_HIGH" if side<0 else "LOCAL_LOW"),
-    "pivot_price":features.get("pivot_price"),"entry_side":side,
-    "signal_candle_time":candle,"pivot_candle_time":int(features.get("pivot_candle_time") or candle),
-    "entry_blocked":False,"pending_pivot_type":None,"pending_pivot_price":None,
-    "entry_block_reason":None,"reason":"persisted_confirmed_h1_local"}
- except Exception:return None
+     order by coalesce(nullif(features->>'signal_candle_time','')::bigint,candle_time) desc,
+              coalesce(nullif(features->>'pivot_candle_time','')::bigint,0) desc, ts desc
+     limit 12""",(symbol,)).fetchall()
+   for row in rows:add_candidate(row,"signal_journal")
+   # Executed trades are another durable proof of the H1 anchor used at entry.
+   trades=db.execute("""select side,features from local_v12_trade_history
+     where symbol=%s order by coalesce(nullif(features->>'signal_candle_time','')::bigint,0) desc, closed desc
+     limit 6""",(symbol,)).fetchall()
+   for row in trades:add_candidate(row,"trade_history")
+ except Exception:
+  pass
+ if not candidates:return None
+ candidates.sort(key=lambda x:(int(x.get("signal_candle_time") or 0),int(x.get("pivot_candle_time") or 0)),reverse=True)
+ best=copy.deepcopy(candidates[0])
+ best["anchor_candidates_checked"]=len(candidates)
+ return best
+
 
 def local_experiment_loop():
  last_observed={};pool=concurrent.futures.ThreadPoolExecutor(max_workers=24,thread_name_prefix="local-exp-m15")
@@ -2993,7 +3016,9 @@ def local_experiment_loop():
      with LOCK:
       pos=copy.deepcopy(S.get("local_v12_positions",{}).get(symbol))
       watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
-     target_side=int((pos or watch or {}).get("side") or analysis.get("entry_side") or 1)
+     canonical_side=int(analysis.get("entry_side") or 0)
+     position_vector_mismatch=bool(pos and canonical_side in (-1,1) and int(pos.get("side") or 0)!=canonical_side)
+     target_side=canonical_side if canonical_side in (-1,1) else int((pos or watch or {}).get("side") or 1)
      m15_live=analyze_local_m15(m15_rows,m15_ms,target_side)
      flow=MARKET_OBS.flow_context(symbol,time.time())
      flow_imb=flow.get("flow_imbalance") if flow.get("trade_data_fresh") else None
@@ -3004,7 +3029,12 @@ def local_experiment_loop():
       last_observed[symbol]=candle
      action=None
      if pos:
-      pos_anchor_time=int((pos.get("features") or {}).get("origin_h1_signal_candle") or (pos.get("features") or {}).get("signal_candle_time") or pos.get("signal_candle_time") or 0)
+      if position_vector_mismatch:
+       closed=local_experiment_close(symbol,float(mark),"position_side_conflicts_with_newest_confirmed_h1_anchor",analysis)
+       action="H1_ANCHOR_CONSISTENCY_EXIT" if closed else None
+       pos=None
+      if pos:
+       pos_anchor_time=int((pos.get("features") or {}).get("origin_h1_signal_candle") or (pos.get("features") or {}).get("signal_candle_time") or pos.get("signal_candle_time") or 0)
       analysis_time=int(analysis.get("signal_candle_time") or 0)
       h1_exit=("opposite_h1_local_emergency_exit" if analysis.get("ready") and analysis.get("anchor_confirmed")
        and analysis_time>pos_anchor_time>0 and int(analysis.get("entry_side") or 0)==-int(pos.get("side") or 0) else None)
