@@ -3230,7 +3230,7 @@ def comparison_strategies_loop():
     if p1:
      # One-time cleanup of the audited invalid USELESS PAPER re-entry.
      # Preserve the executed PAPER outcome; prevent same-anchor new entries.
-     if symbol=="USELESS" and p1.get("opened")=="2026-10-29T05:48:45.219428+00:00":
+     if symbol=="USELESS" and str(p1.get("opened")) in ("2026-10-29 05:48:45.219428+00:00","2026-10-29T05:48:45.219428+00:00"):
       if _comparison_close("local_s1","local_s1",symbol,float(mark),"audited_invalid_reentry_cleanup",True,"WAIT_NEW_H1_PIVOT"):
        act1="INVALID_REENTRY_CLOSED"
       with LOCK:p1=copy.deepcopy(S.get("local_s1_positions",{}).get(symbol))
