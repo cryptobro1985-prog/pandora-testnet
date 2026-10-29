@@ -4,15 +4,16 @@ import time
 import websocket
 
 
-def run_trade_stream(observations, stop, symbols_provider, report, url, on_mids=None, on_candles=None, candle_symbols=(), on_candle_history=None, regime_symbols=(), on_regime_candles=None):
+def run_trade_stream(observations, stop, symbols_provider, report, url, on_mids=None, on_candles=None, candle_symbols=(), on_candle_history=None, regime_symbols=(), on_regime_candles=None, subscribe_trades=True):
     while not stop.is_set():
         ws = None
         try:
             selected = set(symbols_provider())
             ws = websocket.create_connection(url, timeout=5, enable_multithread=True)
             ws.settimeout(2)
-            for symbol in sorted(selected):
-                ws.send(json.dumps({"method": "subscribe", "subscription": {"type": "trades", "coin": symbol}}))
+            if subscribe_trades:
+                for symbol in sorted(selected):
+                    ws.send(json.dumps({"method": "subscribe", "subscription": {"type": "trades", "coin": symbol}}))
             if on_mids is not None:
                 ws.send(json.dumps({"method":"subscribe","subscription":{"type":"allMids"}}))
             if on_candles is not None:
@@ -93,9 +94,10 @@ def run_trade_stream(observations, stop, symbols_provider, report, url, on_mids=
                 epoch = time.time()
                 if epoch-last_refresh >= 5:
                     desired = set(symbols_provider())
-                    for method, symbols in (("unsubscribe", selected-desired), ("subscribe", desired-selected)):
-                        for symbol in sorted(symbols):
-                            ws.send(json.dumps({"method": method, "subscription": {"type": "trades", "coin": symbol}}))
+                    if subscribe_trades:
+                        for method, symbols in (("unsubscribe", selected-desired), ("subscribe", desired-selected)):
+                            for symbol in sorted(symbols):
+                                ws.send(json.dumps({"method": method, "subscription": {"type": "trades", "coin": symbol}}))
                     observations.set_subscriptions(desired, epoch)
                     selected, last_refresh = desired, epoch
                 if epoch-last_report >= 5:
