@@ -3126,6 +3126,15 @@ def _s1_weakening_exit(position,m15,mark,flow):
  # until the next H1 pivot solely because it cannot realize a profit.
  return True
 
+def _s1_fresh_h1_trigger(analysis, max_age_seconds=120.0):
+ # Existing persisted H1 anchors restore direction after restart but must never
+ # create a new order as if the local had just confirmed.
+ if not analysis or not analysis.get("anchor_confirmed"):return False
+ close_ms=float(analysis.get("signal_candle_close_time") or 0)
+ if close_ms<=0:return False
+ age=time.time()-close_ms/1000.0
+ return -2.0<=age<=float(max_age_seconds)
+
 def _s1_reentry_ready(side,m15,mark,watch,flow):
  # After a profitable weakening exit, sit through the bounce/pullback.
  # Re-enter only when that counter move exhausts and H1-side M15 + executed flow resume.
@@ -3281,7 +3290,7 @@ def comparison_strategies_loop():
                     (json.dumps(ctx,default=str),symbol))
        with LOCK:S.setdefault("local_s1_watch",{})[symbol]=copy.deepcopy(w1)
        act1="WAIT_NEW_H1_PIVOT"
-      elif new_h1:
+      elif new_h1 and _s1_fresh_h1_trigger(a1):
        # A newly confirmed H1 local is itself the entry trigger: do not wait for M1/M3/M5.
        if _comparison_open("local_s1","local_s1",symbol,int(w1["side"]),a1,float(mark),"H1_REENTRY"):
         act1="H1_CONFIRMED_REENTRY"
@@ -3290,10 +3299,11 @@ def comparison_strategies_loop():
        # the active H1 pivot. If structure extends, WAIT_NEW_H1_PIVOT owns the state.
        if _comparison_open("local_s1","local_s1",symbol,int(w1["side"]),a1,float(mark),"REENTRY"):
         act1="FLOW_RECOVERY_REENTRY"
-     elif a1.get("ready") and a1.get("anchor_confirmed") and a1.get("h1_direction_anchor") and not a1.get("entry_blocked"):
+     elif a1.get("ready") and a1.get("anchor_confirmed") and a1.get("h1_direction_anchor") and not a1.get("entry_blocked") and _s1_fresh_h1_trigger(a1):
       wanted=int(a1.get("entry_side") or 0)
       if wanted in (-1,1):
-       # First entry from a newly confirmed H1 local is immediate and causal.
+       # First entry is immediate only at a newly confirmed H1 local; restart
+       # restoration of an older anchor does not manufacture another trade.
        if _comparison_open("local_s1","local_s1",symbol,wanted,a1,float(mark),"H1_CONFIRMED"):
         act1="H1_CONFIRMED_ENTRY"
     with LOCK:p1=copy.deepcopy(S.get("local_s1_positions",{}).get(symbol));w1=copy.deepcopy(S.get("local_s1_watch",{}).get(symbol))
