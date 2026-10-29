@@ -3917,7 +3917,7 @@ def market_metadata():
    with LOCK:S["sources"]["MarketMetadata"]={"ok":True,"ready":False,"standby":True,"last_check":now(),"mode":"waiting_for_engine_lease","error":None}
    SHUTDOWN.wait(.5)
    continue
-  quiet_remaining=max(0.0,65.0-(time.time()-activated)) if activated else 65.0
+  quiet_remaining=max(0.0,8.0-(time.time()-activated)) if activated else 8.0
   if quiet_remaining>0:
    with LOCK:S["sources"]["MarketMetadata"]={"ok":True,"ready":False,"warmup":True,"last_check":now(),
      "mode":"post_takeover_ip_quiet_window","quiet_remaining_seconds":round(quiet_remaining,1),"error":None}
