@@ -3228,6 +3228,13 @@ def comparison_strategies_loop():
     m15=analyze_local_m15(m15_rows,m15_ms,side1)
     act1=None
     if p1:
+     # One-time cleanup of the audited invalid USELESS PAPER re-entry.
+     # Preserve the executed PAPER outcome; prevent same-anchor new entries.
+     if symbol=="USELESS" and p1.get("opened")=="2026-10-29T05:48:45.219428+00:00":
+      if _comparison_close("local_s1","local_s1",symbol,float(mark),"audited_invalid_reentry_cleanup",True,"WAIT_NEW_H1_PIVOT"):
+       act1="INVALID_REENTRY_CLOSED"
+      with LOCK:p1=copy.deepcopy(S.get("local_s1_positions",{}).get(symbol))
+     if not p1:continue
      p1=_comparison_update_path("local_s1","local_s1",symbol,p1,float(mark))
      h1exit=("opposite_h1_local_emergency_exit" if a1.get("ready") and a1.get("anchor_confirmed") and int(a1.get("entry_side") or 0)==-int(p1.get("side") or 0) else None)
      if not h1exit:h1exit=hype_position_exit(p1,a1,float(mark)) if a1.get("ready") else None
@@ -3245,7 +3252,10 @@ def comparison_strategies_loop():
        with LOCK:S.setdefault("local_s1_watch",{}).pop(symbol,None)
        w1=None;act1="WATCH_INVALIDATED_BY_H1"
       else:w1=_comparison_watch_update("local_s1","local_s1",symbol,w1,float(mark),m15,flow)
-     if w1 and a1.get("ready") and a1.get("anchor_confirmed") and a1.get("h1_direction_anchor") and not a1.get("entry_blocked") and int(a1.get("entry_side") or 0)==int(w1["side"]) and _s1_reentry_ready(int(w1["side"]),m15,float(mark),w1,flow):
+     # Closed trade never re-enters on its old H1 local: wait for a distinct
+     # confirmed H1 local, same permitted direction. Symmetric long/short.
+     new_h1=bool(w1 and a1.get("ready") and a1.get("anchor_confirmed") and a1.get("h1_direction_anchor") and not a1.get("entry_blocked") and a1.get("pivot_type") in ("LOCAL_LOW","LOCAL_HIGH") and int(a1.get("entry_side") or 0)==int(w1["side"]) and int(a1.get("signal_candle_time") or 0)>int(w1.get("origin_signal_candle") or 0))
+     if new_h1:
       if _comparison_open("local_s1","local_s1",symbol,int(w1["side"]),a1,float(mark),"REENTRY"):act1="M15_RECOVERY_REENTRY"
      elif not w1 and a1.get("ready") and not a1.get("entry_blocked"):
       imbalance=flow.get("flow_imbalance") if flow.get("trade_data_fresh") else None
