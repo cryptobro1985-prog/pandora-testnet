@@ -76,8 +76,6 @@ ALL_LOCAL_CANDLE_SYMBOLS=tuple(dict.fromkeys(tuple(LOCAL_SWING_SYMBOLS)+LOCAL_EX
 DISCOVERY_MAX_HOT=5
 DISCOVERY_SCAN_SECONDS=20
 DISCOVERY_MIN_TURNOVER_24H=5_000_000.0
-DISCOVERY_MIN_RANGE_24H_PCT=8.0
-DISCOVERY_MIN_MOVE_5M_PCT=2.0
 DISCOVERY_COOL_SCANS=6
 DISCOVERY_REAL_CANDIDATE_RETURN_PCT=35.0
 DISCOVERY_REAL_CANDIDATE_MIN_TRADES=3
@@ -118,13 +116,12 @@ def bybit_volatility_discovery_loop():
     ref=hist[0][1] if hist else last
     move5=abs(last/ref-1)*100 if ref>0 and now_epoch-hist[0][0]>=180 else 0.0
     range24=(high/low-1)*100 if high>0 else 0.0
-    # Require an actual short-horizon shock OR exceptionally wide 24h regime.
-    hot=move5>=DISCOVERY_MIN_MOVE_5M_PCT or range24>=DISCOVERY_MIN_RANGE_24H_PCT
-    if not hot:continue
+    # Movement and daily range are observations, never admission thresholds.
+    # Strategy 1 decides whether a candidate has a valid H1 anchor and fresh flow.
     # Current paper Strategy 1 consumes the existing live price/candle transport.
     # Do not admit a Bybit-only symbol until that transport can manage it safely.
     executable=symbol in available and symbol not in unsupported
-    score=max(move5/DISCOVERY_MIN_MOVE_5M_PCT,range24/DISCOVERY_MIN_RANGE_24H_PCT)*math.log10(max(turn,10))
+    score=(move5+range24/24.0)*math.log10(max(turn,10))
     ranked.append({"symbol":symbol,"pair":pair,"score":round(score,3),"move_5m_pct":round(move5,3),
       "range_24h_pct":round(range24,3),"turnover_24h":round(turn,2),"runtime_eligible":executable})
    ranked.sort(key=lambda z:z["score"],reverse=True)
@@ -174,8 +171,8 @@ def bybit_volatility_discovery_loop():
     "rotation_policy":"HOT -> COOLING(6 scans) -> REMOVED; active position/watch -> MANAGING_OPEN",
     "max_hot":DISCOVERY_MAX_HOT,"cool_scans_before_remove":DISCOVERY_COOL_SCANS,"direction_policy":"H1_LOCAL_HIGH_SHORT__H1_LOCAL_LOW_LONG",
     "entry_policy":"DISCOVERY_NEVER_ENTERS_DIRECTLY","transport":"single aggregated public REST scan; no per-symbol polling",
-    "thresholds":{"min_turnover_24h":DISCOVERY_MIN_TURNOVER_24H,"min_range_24h_pct":DISCOVERY_MIN_RANGE_24H_PCT,
-      "min_move_5m_pct":DISCOVERY_MIN_MOVE_5M_PCT}}
+    "thresholds":{"min_turnover_24h":DISCOVERY_MIN_TURNOVER_24H,"min_range_24h_pct":None,
+      "min_move_5m_pct":None}}
    with LOCK:
     S["strategy1_discovery"]=copy.deepcopy(state);S["sources"]["Strategy1Discovery"]=copy.deepcopy(state)
    retry_delay=DISCOVERY_SCAN_SECONDS
