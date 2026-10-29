@@ -6313,6 +6313,21 @@ def html_dashboard(data):
  s1gap=s1target-s1total
  s1_engine=s1p.get("engine") or {}
  s1status="ACTIVE" if s1_engine.get("ok") else ("WARMUP" if s1_engine.get("warmup") else "ATTENTION")
+ s1details=s1_engine.get("details") or {}
+ def _s1_local_row(symbol):
+  d=s1details.get(symbol) or {}
+  h=(d.get("h1_local") or {})
+  pivot=h.get("pivot_type")
+  side=int(h.get("entry_side") or 0)
+  local_txt=pivot or ("LOCAL LOW" if side>0 else ("LOCAL HIGH" if side<0 else "DETECTING"))
+  expected="LONG" if side>0 else ("SHORT" if side<0 else "WAIT")
+  phase=d.get("caterpillar_phase") or ("IN POSITION" if d.get("position_open") else "WAIT ENTRY")
+  cls="posv" if side>0 else ("negv" if side<0 else "warnv")
+  return '<tr><td><b>%s</b></td><td class="%s"><b>%s</b></td><td class="%s"><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td></tr>'%(
+   esc(symbol),cls,esc(local_txt.replace("_"," ")),cls,esc(expected),esc(phase),
+   esc(d.get("mark","—")),esc(d.get("last_action") or "—"))
+ s1_local_rows="".join(_s1_local_row(sym) for sym in LOCAL_EXPERIMENT_SYMBOLS)
+
  s1pos_rows="".join('<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td><td class="%s">%.2f%%</td><td class="%s">$%+.4f</td><td class="%s">%+.2f%%</td></tr>'%(
    esc(x.get("symbol","")),esc(x.get("side","FLAT")),esc(x.get("entry","—")),esc(x.get("mark","—")),
    "posv" if float(x.get("roe_pct",0) or 0)>=0 else "negv",float(x.get("roe_pct",0) or 0),
@@ -6420,7 +6435,7 @@ def html_dashboard(data):
   '<b>OPEN P&L<br><span class="%s">$%.4f</span></b><b>MTM EQUITY<br>$%.4f</b>'
   '<b>CLOSED TRADES<br>%s</b><b>WIN RATE<br>%s</b><b>OPEN POSITIONS<br>%s</b>'
   '<b>RE-ENTRY WATCH<br>%s</b><b>SIZE<br>20%% CURRENT EQUITY</b><b>REFERENCE LEVERAGE<br>25x PAPER</b><b>1M SNAPSHOT<br>%s</b></div>'
-  '<div class="muted">ACTUAL PAPER state from durable Neon tables. H1 controls direction; M1/M3/M5 executed flow manages MFE-preserving exits, pullbacks and same-direction re-entry. Only OPEN positions are listed below. No replay values are mixed into actual P&L.</div>'
+  '<div class="muted">ACTUAL PAPER state from durable Neon tables. H1 controls direction; M1/M3/M5 executed flow manages MFE-preserving exits, pullbacks and same-direction re-entry. Only OPEN positions are listed below. No replay values are mixed into actual P&L.</div><h3>H1 LOCAL DIRECTION · ALL 18 TOKENS</h3><div class="s1compact"><table><tr><th>Token</th><th>H1 Local</th><th>Expected Side</th><th>Phase</th><th>Mark</th><th>Last Action</th></tr>%s</table></div>'
   '<h3>OPEN NOW · 18-MARKET UNIVERSE</h3><div class="scroll"><table><tr><th>Token</th><th>Side</th><th>Phase</th><th>H1 Local</th><th>Margin $</th><th>Position $</th><th>Entry</th><th>Mark</th><th>Open P&L</th><th>Action</th></tr>%s</table></div>'
   '<h3>ACTUAL STRATEGY 1 TRADE HISTORY</h3><div class="scroll"><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>Margin $</th><th>Position $</th><th>Lev</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Reason</th></tr>%s</table></div>'
   '</section>'
@@ -6428,7 +6443,7 @@ def html_dashboard(data):
    "posv" if s1engine.get("ok") else "warnv","ACTIVE" if s1engine.get("ok") else "WARMUP / PARTIAL DATA",
    float(s1block.get("realized_equity",500) or 500),"posv" if s1_realized>=0 else "negv",s1_realized,
    "posv" if s1_open>=0 else "negv",s1_open,s1_eq,int(s1stats.get("trades",0) or 0),esc(s1wr),
-   len(s1positions),len(s1watch),esc((data.get("strategy1_last_minute_snapshot") or {}).get("ts","pending")),"".join(s1_primary_rows),s1_history_rows)
+   len(s1positions),len(s1watch),esc((data.get("strategy1_last_minute_snapshot") or {}).get("ts","pending")),s1_local_rows,"".join(s1_primary_rows),s1_history_rows)
  comparison_html=""
  for key,title in (("local_s2","STRATEGY 2 — H1 PIVOT-TO-PIVOT"),("local_s3","STRATEGY 3 — LOCAL12 V10")):
   block=(data.get("comparison_strategies") or {}).get(key,{})
