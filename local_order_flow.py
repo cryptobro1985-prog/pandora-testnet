@@ -196,8 +196,8 @@ def reentry_ready(side, m15, mark, watch, flow, stamp):
     if side not in (-1, 1) or not watch or int(watch.get("side") or 0) != side:
         return False
     ctx = watch.get("context") or {}
-    if ctx.get("phase") != "WAIT_RESUMPTION" or not ctx.get("counter_pressure_seen"):
-        return False
+    # Continuation is valid even when no counter-side takeover or pullback occurred.
+    # The pullback branch below still requires its own confirmed control reversal.
     profile = flow_profile(flow, side)
     opposite_epoch = _f(ctx.get("last_opposite_trade_epoch"))
     event_epoch = profile.get("event_epoch") if profile else None
@@ -210,7 +210,7 @@ def reentry_ready(side, m15, mark, watch, flow, stamp):
     recovered_after_pullback = bool(profile and profile["resumed"] and price_recovered and
                                     event_epoch is not None and opposite_epoch is not None and
                                     event_epoch > opposite_epoch)
-    if recovered_after_pullback:
+    if ctx.get("phase") == "WAIT_RESUMPTION" and ctx.get("counter_pressure_seen") and recovered_after_pullback:
         return True
     # A profit-taking exit can be followed by uninterrupted directional strength.
     # Do not require counter-side takeover in that case; require a NEW executed
