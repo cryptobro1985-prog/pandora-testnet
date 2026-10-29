@@ -9,7 +9,7 @@ import copy
 import math
 
 POLICY = "Caterpillar 1.2 H1-local pure M5 executed-flow control"
-CONTROL_DEADBAND = 0.03  # avoid treating an almost 50/50 tape as meaningful control
+CONTROL_DEADBAND = 0.12  # require material executed-volume control; avoid 51/49 micro-flip churn
 
 
 def _f(value):
@@ -60,7 +60,7 @@ def flow_profile(flow, side):
         "aligned_control": aligned300 >= CONTROL_DEADBAND and aligned_price is not None and aligned_price > 0,
         "counter_takeover": aligned300 <= -CONTROL_DEADBAND and aligned_price is not None and aligned_price < 0,
         "failed_counterflow": aligned300 <= -CONTROL_DEADBAND and aligned_price is not None and aligned_price > 0,
-        "resumed": aligned_price is not None and aligned_price > 0 and abs(aligned300) >= CONTROL_DEADBAND,
+        "resumed": aligned_price is not None and aligned_price > 0 and aligned300 >= CONTROL_DEADBAND,
         "raw_300s": raw300,
         "buy_volume_300s": buy300,
         "sell_volume_300s": sell300,
