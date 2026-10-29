@@ -1007,7 +1007,8 @@ def engine_coordinator():
  while not SHUTDOWN.is_set():
   S["_coordinator_heartbeat"]=time.time()
   try:
-   STORE.has_lease_record()  # connectivity check; modern deployments always use the fenced Neon lease\n   grace=0
+   STORE.has_lease_record()  # connectivity check; modern deployments always use the fenced Neon lease
+   grace=0
    break
   except Exception as e:
    S["engine_error"]=str(e)[:180];SHUTDOWN.wait(5)
@@ -4248,7 +4249,8 @@ def market_history_bootstrap():
   if not active:
    SHUTDOWN.wait(.5);continue
   checkpoint_local_candles()
-  # Strategy 1 has durable confirmed H1 anchors; long post-deploy REST quiet windows must not block PAPER readiness.\n  ready_after=(metadata_epoch+1.0) if metadata_epoch else (activated+3.0)
+  # Strategy 1 has durable confirmed H1 anchors; long post-deploy REST quiet windows must not block PAPER readiness.
+  ready_after=(metadata_epoch+1.0) if metadata_epoch else (activated+3.0)
   quiet_remaining=max(0.0,ready_after-time.time())
   if quiet_remaining>0:
    with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":True,"degraded":False,
