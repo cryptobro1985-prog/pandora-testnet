@@ -6664,6 +6664,9 @@ def html_dashboard(data):
  exp_realized=float(data.get("local_experiment_realized_pnl",0) or 0)
  exp_open=float(data.get("local_experiment_unrealized_pnl",0) or 0)
  exp_total_pnl=exp_realized+exp_open
+ exp_realized_balance=LOCAL_EXPERIMENT_STARTING_EQUITY+exp_realized
+ exp_mtm_equity=exp_realized_balance+exp_open
+ exp_cards+="<div class='grid'><b>STARTING PAPER CAPITAL<br>$%.2f</b><b>REALIZED PAPER BALANCE (START + CLOSED P&L)<br>$%.2f</b><b>OPEN P&L (UNREALIZED)<br>$%+.2f</b><b>TOTAL MARK-TO-MARKET EQUITY<br>$%.2f</b></div>"%(LOCAL_EXPERIMENT_STARTING_EQUITY,exp_realized_balance,exp_open,exp_mtm_equity)
  exp_today=float(data.get("local_v10_today_realized_pnl",0) or 0)
  exp_today_open=exp_today+exp_open
  exp_cards+='<div class="grid"><b>V10 REALIZED P&L<br><span class="%s">$%.4f</span></b><b>V10 OPEN P&L<br><span class="%s">$%.4f</span></b><b>V10 TOTAL P&L<br><span class="%s">$%.4f</span></b><b>V10 TOTAL RETURN<br><span class="%s">%.3f%%</span></b><b>TODAY REALIZED P&L (UTC)<br><span class="%s">$%.4f</span></b><b>TODAY INCLUDING OPEN P&L<br><span class="%s">$%.4f</span></b><b>TODAY INCLUDING OPEN RETURN<br><span class="%s">%.3f%%</span></b></div>'%("posv" if exp_realized>=0 else "negv",exp_realized,"posv" if exp_open>=0 else "negv",exp_open,"posv" if exp_total_pnl>=0 else "negv",exp_total_pnl,"posv" if exp_total_pnl>=0 else "negv",exp_total_pnl/500*100,"posv" if exp_today>=0 else "negv",exp_today,"posv" if exp_today_open>=0 else "negv",exp_today_open,"posv" if exp_today_open>=0 else "negv",exp_today_open/500*100)
