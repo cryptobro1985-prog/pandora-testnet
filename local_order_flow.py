@@ -61,8 +61,9 @@ def flow_profile(flow, side):
         event_epoch=_event_epoch(flow),
         counter_takeover=(active and short <= -.15 and medium <= -.10 and
                           (short <= minute - .08 or minute <= -.08)),
-        resumed=(active and short >= .18 and medium >= .12 and
-                 (short >= minute + .06 or minute >= .08)),
+        # Re-entry must wait until selling pressure has actually subsided
+        # across the whole minute, not merely a 15s buying spike.
+        resumed=(active and short >= .18 and medium >= .12 and minute >= .08),
         aligned_control=(active and short >= .12 and medium >= .08),
     )
     return values
@@ -177,5 +178,12 @@ def reentry_ready(side, m15, mark, watch, flow, stamp):
     profile = flow_profile(flow, side)
     opposite_epoch = _f(ctx.get("last_opposite_trade_epoch"))
     event_epoch = profile.get("event_epoch") if profile else None
-    return bool(profile and profile["resumed"] and event_epoch is not None and
-                opposite_epoch is not None and event_epoch > opposite_epoch)
+    # A price response from the observed pullback low/high is also required.
+    # A brief buying burst while price is still falling is not a long re-entry.
+    price = _f(mark)
+    extreme = _f(ctx.get("pullback_extreme"))
+    price_recovered = (price is not None and extreme is not None and extreme > 0
+                       and side * (price / extreme - 1.0) >= .0005)
+    return bool(profile and profile["resumed"] and price_recovered and
+                event_epoch is not None and opposite_epoch is not None and
+                event_epoch > opposite_epoch)
