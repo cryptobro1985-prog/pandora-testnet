@@ -352,6 +352,9 @@ class RollingMarketData:
                        flow_delta_15_60=i15-i60,flow_delta_30_60=i30-i60,
                        trade_count_60s=count,observed_notional_60s=buy+sell,
                        volume_window_end_epoch=epoch,volume_source="hyperliquid_ws_executed_trades")
+            if coverage>=180:
+                b3,s3,c3=volumes(180)
+                out.update(flow_imbalance_180s=imbalance(b3,s3),trade_count_180s=c3)
             if coverage>=300:
                 b5,s5,c5=volumes(300)
                 i300=imbalance(b5,s5)
