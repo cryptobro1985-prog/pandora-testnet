@@ -19,6 +19,9 @@ STARTING_EQUITY = 100.0
 MARGIN_FRACTION = 0.25
 LEVERAGE = 25.0
 PIVOT_LOOKBACK = 4
+H1_PIVOT_MIN_RETRACE = 0.0100  # never confirm a swing on sub-1% H1 noise
+H1_PIVOT_RANGE_MULTIPLIER = 0.75
+H1_PIVOT_CONFIRM_BARS = 2
 MIN_FAVORABLE_MOVE_FOR_WEAKENING = 0.0015
 PROFIT_LOCK_ARM_MOVE = 0.0025
 PROFIT_LOCK_BUFFER_MOVE = 0.0012
@@ -92,14 +95,23 @@ def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL, require_fresh=True):
     prior_lows = [z["l"] for z in prior]
     prior_highs = [z["h"] for z in prior]
 
-    local_low = (
-        p["l"] <= min(prior_lows)
-        and x["l"] > p["l"]
-    )
-    local_high = (
-        p["h"] >= max(prior_highs)
-        and x["h"] < p["h"]
-    )
+    # A new extreme is only a candidate. It becomes a confirmed swing after
+    # a real closed-H1 retracement, not merely because the next candle failed
+    # to print a new high/low. The threshold adapts to recent H1 volatility.
+    hist_ranges=[(z["h"]-z["l"])/max(z["c"],1e-12) for z in candles[-14:-2]]
+    typical_range=statistics.median(hist_ranges) if hist_ranges else H1_PIVOT_MIN_RETRACE
+    retrace_threshold=max(H1_PIVOT_MIN_RETRACE,
+                          min(.035, typical_range*H1_PIVOT_RANGE_MULTIPLIER))
+
+    candidate_low = p["l"] <= min(prior_lows)
+    candidate_high = p["h"] >= max(prior_highs)
+    low_retrace = (x["c"]/p["l"]-1.0) if p["l"]>0 else 0.0
+    high_retrace = (1.0-x["c"]/p["h"]) if p["h"]>0 else 0.0
+
+    local_low = bool(candidate_low and x["l"] > p["l"] and
+                     low_retrace >= retrace_threshold)
+    local_high = bool(candidate_high and x["h"] < p["h"] and
+                      high_retrace >= retrace_threshold)
 
     closes = [z["c"] for z in candles]
     last_ret = _ret(closes[-2], closes[-1])
@@ -155,15 +167,22 @@ def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL, require_fresh=True):
         "momentum_3h": mom3,
         "previous_momentum_3h": prev_mom3,
         "confirmation_close": x["c"],
+        "pivot_candidate_low": candidate_low,
+        "pivot_candidate_high": candidate_high,
+        "confirmation_retrace": low_retrace if local_low else (high_retrace if local_high else max(low_retrace if candidate_low else 0.0, high_retrace if candidate_high else 0.0)),
+        "required_retrace": retrace_threshold,
+        "pivot_confirmation_policy": "closed_h1_retrace_after_candidate_extreme",
         "closed_candles": len(candles),
     }
 
 
 def analyze(rows, now_ms, symbol=SYMBOL):
-    """Last causally confirmed H1 extreme, held across subsequent H1 candles.
+    """Last causally confirmed H1 swing, held until an opposite confirmed swing.
 
-    A pivot is known only when its following H1 candle has closed. Reconstructing
-    the latest pivot from closed history also keeps the bias stable after restart.
+    A fresh high/low is only a candidate. It may keep extending for many H1 bars.
+    The regime changes only after a CLOSED H1 retracement large enough relative
+    to recent volatility. Reconstructing the latest confirmed swing from history
+    keeps the bias stable after restart and prevents in-the-moment flip-flops.
     """
     latest = _analyze_h1_pivot(rows, now_ms, symbol)
     if not latest.get("ready"):
