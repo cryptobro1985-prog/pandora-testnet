@@ -3016,6 +3016,9 @@ def _comparison_close(prefix,state_name,symbol,mark,reason,arm_watch=False,watch
  if not pos:return None
  pnl=paper_pnl(pos["notional"],pos["entry"],float(mark),pos["side"],FEE)
  features=copy.deepcopy(pos.get("features") or {});features["actual_exit_reason"]=reason;features["actual_exit_mark"]=float(mark)
+ if state_name=="local_s1" and reason=="audited_invalid_reentry_cleanup":
+  features["excluded_from_strategy_stats"]=True
+  features["exclusion_reason"]="confirmed_invalid_prior_reentry; retained in actual PAPER ledger"
  watch=None
  if arm_watch and state_name in ("local_s1","local_s3"):
   watch={"symbol":symbol,"side":int(pos["side"]),"origin_signal_candle":int(pos.get("signal_candle_time") or 0),
