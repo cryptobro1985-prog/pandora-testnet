@@ -2908,7 +2908,10 @@ def local_experiment_loop():
       last_observed[symbol]=candle
      action=None
      if pos:
-      h1_exit=("opposite_h1_local_emergency_exit" if analysis.get("ready") and analysis.get("anchor_confirmed") and int(analysis.get("entry_side") or 0)==-int(pos.get("side") or 0) else None)
+      pos_anchor_time=int((pos.get("features") or {}).get("origin_h1_signal_candle") or (pos.get("features") or {}).get("signal_candle_time") or pos.get("signal_candle_time") or 0)
+      analysis_time=int(analysis.get("signal_candle_time") or 0)
+      h1_exit=("opposite_h1_local_emergency_exit" if analysis.get("ready") and analysis.get("anchor_confirmed")
+       and analysis_time>pos_anchor_time>0 and int(analysis.get("entry_side") or 0)==-int(pos.get("side") or 0) else None)
       if not h1_exit:
        h1_exit=hype_position_exit(pos,analysis,float(mark)) if analysis.get("ready") else None
       if h1_exit:
@@ -2931,7 +2934,9 @@ def local_experiment_loop():
      else:
       if watch:watch=_local_experiment_watch_observe(symbol,watch,float(mark),m15_live,flow,time.time())
       if watch:
-       if analysis.get("ready") and int(analysis.get("entry_side") or 0)==-int(watch.get("side") or 0):
+       watch_anchor_time=int(watch.get("origin_signal_candle") or ((watch.get("context") or {}).get("anchor") or {}).get("signal_candle_time") or 0)
+       analysis_time=int(analysis.get("signal_candle_time") or 0)
+       if analysis.get("ready") and analysis_time>watch_anchor_time>0 and int(analysis.get("entry_side") or 0)==-int(watch.get("side") or 0):
         _local_experiment_watch_clear(symbol,"opposite_h1_pivot_invalidated_watch");watch=None;action="WATCH_INVALIDATED_BY_H1"
        elif local4_reentry_ready(int(watch.get("side") or 0),m15_live,float(mark),watch,flow,time.time()):
         selection=local4_entry_candidate(symbol,analysis,m15_live,flow,time.time())
