@@ -9,7 +9,7 @@ A mature partial M15 candle plus live flow can protect earned profit before the 
 import math
 import statistics
 
-POLICY = "local_swing_h1_fractal_m15_execution_v12"
+POLICY = "local_swing_h1_durable_4x4_m5_execution_v13"
 SYMBOL = "HYPE"  # backwards-compatible primary symbol
 SYMBOLS = ("HYPE", "NEAR")
 INTERVAL = "1h"
