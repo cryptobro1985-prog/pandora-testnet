@@ -135,3 +135,16 @@ Destructive history/database cleanup requires explicit user confirmation.
 
 ## Suggested first Codex task
 "Audit current Strategy 1 (local_caterpillar.py + the Strategy 1 path in app.py) against the canonical rules in CODEX_HANDOFF_STRATEGY1.md. Do not alter other PANDORA strategies. Build a causal replay diagnostic that identifies why each losing entry/re-entry occurred and measures MFE capture loss. Propose and validate universal changes on INIT/NEAR/GRASS/HYPE with walk-forward testing before modifying live logic."
+
+## Canonical Caterpillar 2026-10-29
+
+Canonical operational rule for all 18 markets:
+- Confirmed H1 Local High => SHORT-only regime until confirmed H1 Local Low.
+- Confirmed H1 Local Low => LONG-only regime until confirmed H1 Local High.
+- Fresh executed aggressor flow (15s/30s/60s) manages entry, MFE-preserving exit and same-direction re-entry.
+- Exit when original pressure weakens and genuine opposite executed-flow control takes over; do not reverse H1 regime on that exit.
+- Stay flat through the pullback; re-enter only after actual post-exit counter-pressure and fresh independent resumption in H1 direction.
+- Repeat the caterpillar until the confirmed opposite H1 local changes regime.
+- Track MFE, MAE, MFE capture, fees, net PnL, drawdown, entry/exit/re-entry reasons for every market.
+- Active universe: INIT, NEAR, GRASS, HYPE, BTC, ETH, SOL, AR, APT, ZEC, WLD, USELESS, TAO, CHIP, BABY, SPX, LIT, CASHCAT.
+- PAPER only; no real-money execution without separate authorization.
