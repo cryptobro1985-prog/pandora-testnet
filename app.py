@@ -3894,12 +3894,13 @@ def market_trade_stream():
   if active:break
   SHUTDOWN.wait(.25)
  def symbols():
-  # Pump/dump coverage is whole-market: subscribe to every currently listed
-  # Hyperliquid perp with metadata, not only the high-volume subset. Deep
-  # order-book work remains candidate-only, so broad trade coverage does not
-  # multiply expensive REST book requests.
   with LOCK:
    volumes=dict(S.get("_day_volumes",{}));prices=set(S.get("_prices",{}));held=set(S["positions"])|set(S["pump_positions"])|set(S["whale_positions"])
+  # In Strategy-1-only mode, subscribing to the whole exchange creates a large
+  # stale trade replay backlog and starves the 5-minute execution tape. Keep the
+  # live tape focused on permanent Strategy 1 markets plus the small HOT pool.
+  if S1_ONLY_MODE:
+   return set(strategy1_runtime_symbols())|held
   listed=set(volumes)&prices if prices else set(volumes)
   return listed|LIQ_WHALE_SYMBOLS|held|set(ALL_LOCAL_CANDLE_SYMBOLS)
  def report(status):
