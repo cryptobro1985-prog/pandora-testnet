@@ -1003,23 +1003,29 @@ def apply_local4_user_reset():
 
 
 def hydrate_strategy1_anchors():
- # Restore all permanent H1 direction anchors in one durable read so Strategy 1
- # is execution-ready immediately after lease takeover. Discovery remains optional.
+ # pinit() loads local_h1_direction before workers start. Hydrate from that in-memory
+ # durable snapshot first; only fall back to one DB read if a permanent anchor is missing.
  with LOCK:
+  durable=copy.deepcopy(S.get("local_h1_direction",{}))
   cached=copy.deepcopy(S.get("_local4_analysis",{}))
- if all((cached.get(sym) or {}).get("ready") and (cached.get(sym) or {}).get("anchor_confirmed")
-        for sym in LOCAL_EXPERIMENT_SYMBOLS):
-  return True
- with pg() as db:
-  rows=db.execute("select symbol,analysis from local_h1_direction where symbol = any(%s)",(list(LOCAL_EXPERIMENT_SYMBOLS),)).fetchall()
  restored={}
- for row in rows:
-  sym=str(row["symbol"]);a=copy.deepcopy(row["analysis"] or {})
+ for sym in LOCAL_EXPERIMENT_SYMBOLS:
+  a=copy.deepcopy(cached.get(sym) or durable.get(sym) or {})
   side=int(a.get("entry_side") or 0)
   if a.get("ready") and a.get("anchor_confirmed") and side in (-1,1):
    a["h1_direction_anchor"]=True
    a["entry_blocked"]=False
    restored[sym]=a
+ if len(restored)<len(LOCAL_EXPERIMENT_SYMBOLS):
+  with pg() as db:
+   rows=db.execute("select symbol,analysis from local_h1_direction where symbol = any(%s)",(list(LOCAL_EXPERIMENT_SYMBOLS),)).fetchall()
+  for row in rows:
+   sym=str(row["symbol"]);a=copy.deepcopy(row["analysis"] or {})
+   side=int(a.get("entry_side") or 0)
+   if a.get("ready") and a.get("anchor_confirmed") and side in (-1,1):
+    a["h1_direction_anchor"]=True
+    a["entry_blocked"]=False
+    restored[sym]=a
  with LOCK:
   S.setdefault("_local4_analysis",{}).update(copy.deepcopy(restored))
   S.setdefault("local_h1_direction",{}).update(copy.deepcopy(restored))
