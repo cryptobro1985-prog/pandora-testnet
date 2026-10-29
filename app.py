@@ -3239,6 +3239,14 @@ def comparison_strategies_loop():
       with LOCK:p1=copy.deepcopy(S.get("local_s1_positions",{}).get(symbol))
      if not p1:continue
      p1=_comparison_update_path("local_s1","local_s1",symbol,p1,float(mark))
+     same_side_extension=bool(a1.get("entry_blocked") and
+       ((int(p1.get("side") or 0)>0 and a1.get("pending_pivot_type")=="LOCAL_LOW") or
+        (int(p1.get("side") or 0)<0 and a1.get("pending_pivot_type")=="LOCAL_HIGH")))
+     if same_side_extension:
+      if _comparison_close("local_s1","local_s1",symbol,float(mark),
+          "same_side_h1_extension_wait_exit",True,"WAIT_NEW_H1_PIVOT"):
+       act1="H1_EXTENSION_EXIT"
+      continue
      h1exit=("opposite_h1_local_emergency_exit" if a1.get("ready") and a1.get("anchor_confirmed") and int(a1.get("entry_side") or 0)==-int(p1.get("side") or 0) else None)
      if not h1exit:h1exit=hype_position_exit(p1,a1,float(mark)) if a1.get("ready") else None
      weakening=_s1_weakening_exit(p1,m15,float(mark),flow)
