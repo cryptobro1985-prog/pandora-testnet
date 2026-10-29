@@ -24,7 +24,7 @@ from local_caterpillar import (
     entry_candidate, pressure_exit, update_watch, reentry_ready,
 )
 
-SYMBOLS=("INIT","NEAR","GRASS","HYPE")
+SYMBOLS=("INIT","NEAR","GRASS","HYPE","BTC","ETH","SOL","AR","APT","ZEC","WLD","USELESS","TAO","CHIP","BABY","SPX","LIT","CASHCAT")
 FEE=0.00045
 LEV=25.0
 MARGIN_FRACTION=0.20
@@ -177,7 +177,7 @@ def _flow(buckets,t,side=None):
                 buy+=b["buy"];sell+=b["sell"];count+=b["count"]
         return buy,sell,count
     def imb(b,s):return (b-s)/(b+s) if b+s else 0.0
-    b15,s15,c15=vol(15);b30,s30,c30=vol(30);b60,s60,c60=vol(60);b300,s300,c300=vol(300)
+    b15,s15,c15=vol(15);b30,s30,c30=vol(30);b60,s60,c60=vol(60);b180,s180,c180=vol(180);b300,s300,c300=vol(300)
     latest=None
     for q in range(t,t-61,-15):
         if buckets.get(q) and buckets[q]["count"]:
@@ -189,6 +189,7 @@ def _flow(buckets,t,side=None):
             "buy_volume_15s":b15,"sell_volume_15s":s15,"trade_count_15s":c15,
             "buy_volume_30s":b30,"sell_volume_30s":s30,"trade_count_30s":c30,
             "buy_volume_60s":b60,"sell_volume_60s":s60,"trade_count_60s":c60,
+            "buy_volume_180s":b180,"sell_volume_180s":s180,"trade_count_180s":c180,"flow_imbalance_180s":imb(b180,s180),
             "buy_volume_300s":b300,"sell_volume_300s":s300,"trade_count_300s":c300,
             "observed_notional_60s":b60+s60,
             "flow_imbalance_15s":imb(b15,s15),"flow_imbalance_30s":imb(b30,s30),
