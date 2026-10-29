@@ -1,5 +1,5 @@
 import unittest
-from local_order_flow import flow_profile, pressure_exit, update_watch, reentry_ready
+from local_order_flow import flow_profile, pressure_exit, update_watch, reentry_ready, initial_entry_candidate
 
 def flow(i60, i180, i300, epoch=1000.0):
     return {
@@ -15,6 +15,13 @@ def flow(i60, i180, i300, epoch=1000.0):
     }
 
 class Strategy1FlowTests(unittest.TestCase):
+    def test_confirmed_h1_flow_entry_is_not_blocked_by_m15(self):
+        analysis={"ready": True, "anchor_confirmed": True, "h1_direction_anchor": {"pivot_type":"LOCAL_LOW"}, "entry_side":1, "entry_blocked":False}
+        executed=flow(0.18,0.12,0.10)
+        adverse_m15={"ready": True, "strong_adverse_pressure": True}
+        candidate=initial_entry_candidate("HYPE",analysis,adverse_m15,executed,1000.0)
+        self.assertTrue(candidate["eligible"], candidate)
+
     def test_m1_m3_m5_counterflow_plus_mfe_recoil_exits(self):
         pos={"side":1,"entry":100.0,"features":{"mfe_price_move":0.02,"estimated_round_trip_cost_move":0.001}}
         reason=pressure_exit(pos,{"median_range_move":0.008},101.0,flow(-0.25,-0.14,0.02))
