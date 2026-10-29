@@ -79,6 +79,8 @@ DISCOVERY_MIN_TURNOVER_24H=5_000_000.0
 DISCOVERY_MIN_RANGE_24H_PCT=8.0
 DISCOVERY_MIN_MOVE_5M_PCT=2.0
 DISCOVERY_COOL_SCANS=6
+DISCOVERY_REAL_CANDIDATE_RETURN_PCT=35.0
+DISCOVERY_REAL_CANDIDATE_MIN_TRADES=3
 
 def strategy1_runtime_symbols():
  with LOCK:
@@ -153,8 +155,19 @@ def bybit_volatility_discovery_loop():
    eligible_map={x["symbol"]:x for x in eligible}
    hot_rows=[dict(eligible_map.get(s) or {"symbol":s},status=rotation.get(s,{}).get("status","HOT"),
       cool_scans=int(rotation.get(s,{}).get("cool_scans",0) or 0)) for s in hot]
+   qualification=strategy1_discovery_qualification()
+   for row in ranked:
+    q=qualification.get(row["symbol"]) or {}
+    row.update(strategy1=q)
+   real_candidates=[{"symbol":sym,**q} for sym,q in qualification.items() if q.get("qualifies")]
+   real_candidates.sort(key=lambda z:float(z.get("account_contribution_pct_24h") or 0),reverse=True)
    state={"ok":True,"last_check":now(),"mode":"BYBIT_LINEAR_ALL_TICKERS_RATE_SAFE","scan_seconds":DISCOVERY_SCAN_SECONDS,
-    "universe_size":len(rows),"hot_symbols":hot,"hot":hot_rows,"top_anomalies":ranked[:12],"rotation":rotation,
+    "universe_size":len(rows),"hot_symbols":hot,"hot":hot_rows,"top_anomalies":ranked[:20],"rotation":rotation,
+    "qualification":qualification,"real_candidates":real_candidates,
+    "qualification_gate":{"daily_return_pct":DISCOVERY_REAL_CANDIDATE_RETURN_PCT,
+      "min_closed_trades":DISCOVERY_REAL_CANDIDATE_MIN_TRADES,
+      "basis":"validated Strategy1 realized PnL / $500 starting equity; rolling 24h",
+      "live_orders":False},
     "rotation_policy":"HOT -> COOLING(6 scans) -> REMOVED; active position/watch -> MANAGING_OPEN",
     "max_hot":DISCOVERY_MAX_HOT,"cool_scans_before_remove":DISCOVERY_COOL_SCANS,"direction_policy":"H1_LOCAL_HIGH_SHORT__H1_LOCAL_LOW_LONG",
     "entry_policy":"DISCOVERY_NEVER_ENTERS_DIRECTLY","transport":"single aggregated public REST scan; no per-symbol polling",
@@ -168,6 +181,37 @@ def bybit_volatility_discovery_loop():
     prev.update({"ok":False,"last_check":now(),"error":type(exc).__name__+":"+str(exc)[:160]})
     S["strategy1_discovery"]=prev;S["sources"]["Strategy1Discovery"]=copy.deepcopy(prev)
   SHUTDOWN.wait(DISCOVERY_SCAN_SECONDS)
+
+
+def strategy1_discovery_qualification():
+ """Validated 24h PAPER performance by token; never sends live orders."""
+ cutoff=(datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(hours=24)).isoformat()
+ rows=[]
+ try:
+  with pg() as db:
+   rows=[dict(r) for r in db.execute("""select symbol,count(*) as trades,
+     coalesce(sum(pnl),0) as pnl,
+     sum(case when pnl>0 then 1 else 0 end) as wins,
+     coalesce(sum(margin),0) as margin_sum
+     from local_v12_trade_history
+     where closed >= %s
+     group by symbol""",(cutoff,)).fetchall()]
+ except Exception:
+  return {}
+ out={}
+ for r in rows:
+  trades=int(r.get("trades") or 0);wins=int(r.get("wins") or 0);pnl=float(r.get("pnl") or 0)
+  contribution_pct=100.0*pnl/LOCAL_EXPERIMENT_STARTING_EQUITY
+  margin_sum=float(r.get("margin_sum") or 0)
+  margin_roe_pct=(100.0*pnl/margin_sum) if margin_sum>0 else None
+  qualifies=trades>=DISCOVERY_REAL_CANDIDATE_MIN_TRADES and contribution_pct>=DISCOVERY_REAL_CANDIDATE_RETURN_PCT
+  out[str(r.get("symbol"))]={
+   "trades":trades,"wins":wins,"win_rate_pct":round(100.0*wins/trades,2) if trades else None,
+   "realized_pnl":round(pnl,4),"account_contribution_pct_24h":round(contribution_pct,2),
+   "deployed_margin_roe_pct_24h":round(margin_roe_pct,2) if margin_roe_pct is not None else None,
+   "status":"REAL-CANDIDATE" if qualifies else ("PAPER-TEST" if trades else "NO-SAMPLE"),
+   "qualifies":qualifies}
+ return out
 
 
 def market_max_leverage(symbol):
