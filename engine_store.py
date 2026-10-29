@@ -37,6 +37,18 @@ class EngineStore:
         with self.connect() as c:
             return c.execute("SELECT 1 FROM engine_lease WHERE name='paper'").fetchone() is not None
 
+    def force_claim(self):
+        """Atomically fence an older Render instance during an explicitly authorized commit takeover."""
+        with self.connect() as c:
+            with c.transaction():
+                self._transaction_timeouts(c)
+                row = c.execute("""INSERT INTO engine_lease(name,owner,expires_at,heartbeat_at)
+                    VALUES('paper',%s,clock_timestamp()+interval '120 seconds',clock_timestamp())
+                    ON CONFLICT(name) DO UPDATE SET owner=excluded.owner,
+                      expires_at=excluded.expires_at,heartbeat_at=excluded.heartbeat_at
+                    RETURNING owner""", (self.owner,)).fetchone()
+                return row is not None
+
     def claim(self):
         # Render blue/green startup restoration can exceed 30 seconds. Keep enough
         # lease headroom that the draining instance cannot reclaim ownership while
