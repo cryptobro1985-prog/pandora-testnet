@@ -181,6 +181,7 @@ def market_max_leverage(symbol):
 
 LATENCIES=LatencyMetrics()
 MARKET_OBS=RollingMarketData(max_symbols=512)
+MARKET_AUX_OBS=RollingMarketData(max_symbols=512)
 LIQUIDATION_TAPE=LiquidationTape()
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
 def choose(db_path,current=(-0.10,0.20)):
@@ -3853,8 +3854,8 @@ def market_history_bootstrap():
    # never spend the shared REST budget on breadth while Caterpillar is blind.
    priority_local=list(LOCAL_EXPERIMENT_SYMBOLS)+[x for x in ALL_LOCAL_CANDLE_SYMBOLS if x not in LOCAL_EXPERIMENT_SYMBOLS]
    # Native intervals avoid losing older H1 anchors.
-   for sym in priority_local:
-    for interval,hours in (("1h",120),("15m",12)):
+   for interval,hours in (("1h",120),("15m",12)):
+    for sym in priority_local:
      if SHUTDOWN.is_set():return
      key=("local",sym,interval)
      with _LOCAL_CANDLE_CACHE_LOCK:cached=_LOCAL_CANDLE_CACHE.get((sym,interval,hours))
@@ -3927,7 +3928,25 @@ def market_trade_stream():
   return listed|LIQ_WHALE_SYMBOLS|held|set(ALL_LOCAL_CANDLE_SYMBOLS)
  def report(status):
   with LOCK:S["sources"]["MarketTradeStream"]={"last_check":now(),**status}
- run_trade_stream(MARKET_OBS,SHUTDOWN,symbols,report,os.getenv("HYPERLIQUID_WS_API","wss://api.hyperliquid.xyz/ws"),on_mids=accept_market_prices,on_candles=accept_local_candles,candle_symbols=ALL_LOCAL_CANDLE_SYMBOLS,on_candle_history=accept_local_history,regime_symbols=REGIME_SEED_SYMBOLS,on_regime_candles=accept_regime_candles)
+ run_trade_stream(MARKET_OBS,SHUTDOWN,symbols,report,os.getenv("HYPERLIQUID_WS_API","wss://api.hyperliquid.xyz/ws"),subscribe_trades=True)
+
+def market_aux_stream():
+ # Price/candle traffic lives on a separate socket so busy candle/allMids
+ # channels can never delay the executed-trade tape used by Strategy 1.
+ while not SHUTDOWN.is_set():
+  with LOCK:active=bool(S.get("engine_active"))
+  if active:break
+  SHUTDOWN.wait(.25)
+ def symbols():
+  return set(strategy1_runtime_symbols())
+ def report(status):
+  with LOCK:S["sources"]["MarketAuxStream"]={"last_check":now(),**status}
+ run_trade_stream(MARKET_AUX_OBS,SHUTDOWN,symbols,report,
+  os.getenv("HYPERLIQUID_WS_API","wss://api.hyperliquid.xyz/ws"),
+  on_mids=accept_market_prices,on_candles=accept_local_candles,
+  candle_symbols=ALL_LOCAL_CANDLE_SYMBOLS,on_candle_history=accept_local_history,
+  regime_symbols=REGIME_SEED_SYMBOLS,on_regime_candles=accept_regime_candles,
+  subscribe_trades=False)
 
 def market_metadata():
  while not SHUTDOWN.is_set():
@@ -6525,6 +6544,7 @@ if __name__=="__main__":
   ("market_metadata",market_metadata),
   ("market_history_bootstrap",market_history_bootstrap),
   ("market_trades",market_trade_stream),
+  ("market_aux",market_aux_stream),
   ("breadth_history",market_regime_history),
   ("telemetry",telemetry),
   ("strategy1_flow_execution",strategy1_flow_execution_loop),
@@ -6574,7 +6594,8 @@ if __name__=="__main__":
  workers.append(threading.Thread(target=operator_one_shot_actions,daemon=True,name="operator_actions"))
  workers.append(threading.Thread(target=authorized_cleanup_worker,daemon=True,name="authorized_cleanup"))
  workers.append(threading.Thread(target=post_lease_historical_restore,daemon=True,name="historical_restore"))
- workers.append(threading.Thread(target=s1_historical_autostart,daemon=True,name="s1_historical_backtest"))
+ if os.getenv("ENABLE_S1_HISTORICAL_AUTOSTART","0")=="1":
+  workers.append(threading.Thread(target=s1_historical_autostart,daemon=True,name="s1_historical_backtest"))
  for worker in workers:worker.start()
  try:server.serve_forever()
  finally:
