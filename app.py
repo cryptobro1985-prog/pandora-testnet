@@ -1001,6 +1001,55 @@ def apply_local4_user_reset():
   S["_local_experiment_path_persist_epoch"]={};S["_local_experiment_watch_persist_epoch"]={}
  return True
 
+
+def hydrate_strategy1_anchors():
+ # Restore all permanent H1 direction anchors in one durable read so Strategy 1
+ # is execution-ready immediately after lease takeover. Discovery remains optional.
+ with LOCK:
+  cached=copy.deepcopy(S.get("_local4_analysis",{}))
+ if all((cached.get(sym) or {}).get("ready") and (cached.get(sym) or {}).get("anchor_confirmed")
+        for sym in LOCAL_EXPERIMENT_SYMBOLS):
+  return True
+ with pg() as db:
+  rows=db.execute("select symbol,analysis from local_h1_direction where symbol = any(%s)",(list(LOCAL_EXPERIMENT_SYMBOLS),)).fetchall()
+ restored={}
+ for row in rows:
+  sym=str(row["symbol"]);a=copy.deepcopy(row["analysis"] or {})
+  side=int(a.get("entry_side") or 0)
+  if a.get("ready") and a.get("anchor_confirmed") and side in (-1,1):
+   a["h1_direction_anchor"]=True
+   a["entry_blocked"]=False
+   restored[sym]=a
+ with LOCK:
+  S.setdefault("_local4_analysis",{}).update(copy.deepcopy(restored))
+  S.setdefault("local_h1_direction",{}).update(copy.deepcopy(restored))
+  details={}
+  prices=dict(S.get("_prices",{}))
+  for sym in LOCAL_EXPERIMENT_SYMBOLS:
+   a=copy.deepcopy(S["_local4_analysis"].get(sym) or {})
+   details[sym]={"ok":bool(a.get("ready") and a.get("anchor_confirmed")),
+    "symbol":sym,"mark":prices.get(sym),
+    "h1_local":{"ready":bool(a.get("ready")),"pivot_type":a.get("pivot_type"),
+      "pivot_price":a.get("pivot_price"),"entry_side":a.get("entry_side"),
+      "signal_candle_time":a.get("signal_candle_time"),"anchor_confirmed":a.get("anchor_confirmed")},
+    "last_action":"READY_FOR_EXECUTED_FLOW" if a.get("ready") else "WAIT_H1_ANCHOR",
+    "error":None if a.get("ready") else "missing_confirmed_h1_anchor"}
+  permanent_ready=all(details[sym]["ok"] for sym in LOCAL_EXPERIMENT_SYMBOLS)
+  S["sources"]["Caterpillar 1.0"]={"ok":permanent_ready,"ready":permanent_ready,"warmup":not permanent_ready,
+    "last_check":now(),"mode":"Caterpillar 1.0 PAPER H1 + M1/M3/M5 executed-flow",
+    "policy":LOCAL4_FLOW_POLICY,"symbols":list(strategy1_runtime_symbols()),
+    "permanent_symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"paper_only":True,
+    "starting_equity":LOCAL_EXPERIMENT_STARTING_EQUITY,
+    "equity":S.get("local_experiment_equity",LOCAL_EXPERIMENT_STARTING_EQUITY),
+    "realized_pnl":S.get("local_experiment_realized_pnl",0),
+    "trades":S.get("local_experiment_trades",0),
+    "open_positions":list(S.get("local_v12_positions",{})),
+    "watching_for_reentry":list(S.get("local_experiment_watch",{})),
+    "reference_margin_fraction":LOCAL_EXPERIMENT_MARGIN_FRACTION,
+    "reference_leverage":25.0,"compound":True,"details":details,
+    "error":None if permanent_ready else "missing_permanent_h1_anchor"}
+ return permanent_ready
+
 def engine_coordinator():
  # On the first rollout the previous release has no lease support. Its Render
  # drain lasts 60s; wait 120s after starting the web listener before taking over.
@@ -1075,6 +1124,7 @@ def engine_coordinator():
      journal("engine_restored",None,{"positions":list(positions),"risk_checkpoints":True})
     if not S.get("engine_active"):S["_engine_activated_epoch"]=time.time()
     S["engine_active"]=True;S["engine_error"]=None
+    hydrate_strategy1_anchors()
    else:
     S["engine_active"]=False;S["engine_error"]="standby: another engine owns the lease"
   except Exception as e:
@@ -3488,7 +3538,8 @@ def strategy1_flow_execution_cycle(prices):
 def strategy1_flow_execution_loop():
  while not SHUTDOWN.is_set():
   with LOCK:S["sources"]["Strategy1FlowExecution"]={"ok":True,"last_check":now(),
-   "mode":"disabled_canonical_h1_m15_caterpillar_owns_execution","m15_gate":True}
+   "mode":"canonical_h1_m1_m3_m5_fast_paper_execution","m15_gate":False,
+   "paper_only":True,"entry_path":"LocalRisk.local4_fast_entries"}
   SHUTDOWN.wait(5)
 
 def comparison_strategies_loop():
