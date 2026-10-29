@@ -3127,7 +3127,11 @@ def _s1_reentry_ready(side,m15,mark,watch,flow):
  if side*imb<.12:return False
  coverage=float((flow or {}).get("trade_coverage_seconds") or 0)
  i300=(flow or {}).get("flow_imbalance_300s")
- if coverage<300 or i300 is None or side*float(i300)<.08:return False
+ # Symmetric LONG/SHORT: buyers must take control after a LONG pullback,
+ # sellers after a SHORT bounce. Require M1, M3 and M5 majority.
+ i180=(flow or {}).get("flow_imbalance_180s")
+ if coverage<300 or i180 is None or i300 is None:return False
+ if side*float(imb)<.12 or side*float(i180)<.08 or side*float(i300)<.08:return False
  recovery=int(m15.get("recovery_score") or 0);adverse=int(m15.get("adverse_score") or 0)
  if recovery<2 or adverse>1:return False
  extreme=float(ctx.get("pullback_extreme") or watch.get("exit_price") or 0)
