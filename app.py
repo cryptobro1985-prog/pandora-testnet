@@ -3168,7 +3168,7 @@ def strategy1_flow_execution_loop():
   SHUTDOWN.wait(5)
 
 def comparison_strategies_loop():
- pool=concurrent.futures.ThreadPoolExecutor(max_workers=16,thread_name_prefix="local-compare")
+ pool=concurrent.futures.ThreadPoolExecutor(max_workers=max(18,len(LOCAL_EXPERIMENT_SYMBOLS)),thread_name_prefix="local-compare")
  while not SHUTDOWN.is_set():
   try:
    with LOCK:
@@ -3255,16 +3255,39 @@ def comparison_strategies_loop():
        with LOCK:S.setdefault("local_s1_watch",{}).pop(symbol,None)
        w1=None;act1="WATCH_INVALIDATED_BY_H1"
       else:w1=_comparison_watch_update("local_s1","local_s1",symbol,w1,float(mark),m15,flow)
-     # Closed trade never re-enters on its old H1 local: wait for a distinct
-     # confirmed H1 local, same permitted direction. Symmetric long/short.
-     new_h1=bool(w1 and a1.get("ready") and a1.get("anchor_confirmed") and a1.get("h1_direction_anchor") and not a1.get("entry_blocked") and a1.get("pivot_type") in ("LOCAL_LOW","LOCAL_HIGH") and int(a1.get("entry_side") or 0)==int(w1["side"]) and int(a1.get("signal_candle_time") or 0)>int(w1.get("origin_signal_candle") or 0))
-     if new_h1:
-      if _comparison_open("local_s1","local_s1",symbol,int(w1["side"]),a1,float(mark),"REENTRY"):act1="M15_RECOVERY_REENTRY"
-     elif not w1 and a1.get("ready") and not a1.get("entry_blocked"):
-      imbalance=flow.get("flow_imbalance") if flow.get("trade_data_fresh") else None
+     if w1:
+      same_side=int(a1.get("entry_side") or 0)==int(w1["side"])
+      new_h1=bool(a1.get("ready") and a1.get("anchor_confirmed") and a1.get("h1_direction_anchor") and
+                  same_side and int(a1.get("signal_candle_time") or 0)>int(w1.get("origin_signal_candle") or 0))
+      waiting_new=bool(a1.get("entry_blocked") and
+                       a1.get("pending_pivot_type") in ("LOCAL_LOW","LOCAL_HIGH") and
+                       ((int(w1["side"])>0 and a1.get("pending_pivot_type")=="LOCAL_LOW") or
+                        (int(w1["side"])<0 and a1.get("pending_pivot_type")=="LOCAL_HIGH")))
+      if waiting_new:
+       ctx=copy.deepcopy(w1.get("context") or {});ctx["phase"]="WAIT_NEW_H1_PIVOT"
+       w1["context"]=ctx
+       with pg() as db:
+        with db.transaction():
+         STORE.fence(db)
+         db.execute("update local_s1_watchlist set context=%s::jsonb where symbol=%s",
+                    (json.dumps(ctx,default=str),symbol))
+       with LOCK:S.setdefault("local_s1_watch",{})[symbol]=copy.deepcopy(w1)
+       act1="WAIT_NEW_H1_PIVOT"
+      elif new_h1:
+       # A newly confirmed H1 local is itself the entry trigger: do not wait for M1/M3/M5.
+       if _comparison_open("local_s1","local_s1",symbol,int(w1["side"]),a1,float(mark),"H1_REENTRY"):
+        act1="H1_CONFIRMED_REENTRY"
+      elif _s1_reentry_ready(int(w1["side"]),m15,float(mark),w1,flow) and not a1.get("entry_blocked"):
+       # Caterpillar re-entry is allowed only while price has NOT extended beyond
+       # the active H1 pivot. If structure extends, WAIT_NEW_H1_PIVOT owns the state.
+       if _comparison_open("local_s1","local_s1",symbol,int(w1["side"]),a1,float(mark),"REENTRY"):
+        act1="FLOW_RECOVERY_REENTRY"
+     elif a1.get("ready") and a1.get("anchor_confirmed") and a1.get("h1_direction_anchor") and not a1.get("entry_blocked"):
       wanted=int(a1.get("entry_side") or 0)
-      if wanted in (-1,1) and imbalance is not None and wanted*float(imbalance)>=.12 and local_m15_reentry_ready(wanted,m15,imbalance):
-       if _comparison_open("local_s1","local_s1",symbol,wanted,a1,float(mark),"M15"):act1="M15_ENTRY"
+      if wanted in (-1,1):
+       # First entry from a newly confirmed H1 local is immediate and causal.
+       if _comparison_open("local_s1","local_s1",symbol,wanted,a1,float(mark),"H1_CONFIRMED"):
+        act1="H1_CONFIRMED_ENTRY"
     with LOCK:p1=copy.deepcopy(S.get("local_s1_positions",{}).get(symbol));w1=copy.deepcopy(S.get("local_s1_watch",{}).get(symbol))
     s1_details[symbol]={"ok":bool(a1.get("ready")),"h1_local":{"pivot_type":a1.get("pivot_type"),"pivot_price":a1.get("pivot_price"),
       "entry_side":a1.get("entry_side"),"signal_candle_time":a1.get("signal_candle_time"),"persisted":a1.get("persisted",False)},
