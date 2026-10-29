@@ -461,13 +461,21 @@ def position_exit(position, analysis, mark):
     mark = _f(mark)
     if side not in (-1, 1) or entry is None or mark is None:
         return None
-    if analysis.get("h1_direction_anchor") and int(analysis.get("entry_side") or 0) == -side:
-        return "opposite_local_high" if side > 0 else "opposite_local_low"
-    entry_candle = position.get("signal_candle_time")
+
+    # Never allow an older H1 anchor to invalidate a position opened from a
+    # newer confirmed local. This timestamp gate MUST run before any side check.
+    features = position.get("features") or {}
+    entry_candle = (position.get("signal_candle_time")
+                    or features.get("origin_h1_signal_candle")
+                    or features.get("signal_candle_time"))
     signal_candle = analysis.get("signal_candle_time")
-    if entry_candle is not None and signal_candle is not None and signal_candle <= entry_candle:
+    if entry_candle is None or signal_candle is None:
+        return None
+    if int(signal_candle) <= int(entry_candle):
         return None
 
+    if analysis.get("h1_direction_anchor") and int(analysis.get("entry_side") or 0) == -side:
+        return "opposite_local_high" if side > 0 else "opposite_local_low"
     if side > 0 and analysis.get("local_high"):
         return "opposite_local_high"
     if side < 0 and analysis.get("local_low"):
