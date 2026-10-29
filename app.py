@@ -126,7 +126,10 @@ def bybit_volatility_discovery_loop():
       "range_24h_pct":round(range24,3),"turnover_24h":round(turn,2),"runtime_eligible":executable})
    ranked.sort(key=lambda z:z["score"],reverse=True)
    eligible=[x for x in ranked if x["runtime_eligible"]]
-   current={x["symbol"]:x for x in eligible}
+   # Only top-ranked eligible candidates remain HOT. Others cool out automatically;
+   # active positions/re-entry watches remain managed until their lifecycle ends.
+   selected=eligible[:DISCOVERY_MAX_HOT]
+   current={x["symbol"]:x for x in selected}
    with LOCK:
     prev=copy.deepcopy(S.get("strategy1_discovery") or {})
     open_symbols=set(S.get("local_v12_positions",{}))
@@ -143,7 +146,7 @@ def bybit_volatility_discovery_loop():
      rec["cool_scans"]=int(rec.get("cool_scans") or 0)+1
      rec["status"]="COOLING" if rec["cool_scans"]<DISCOVERY_COOL_SCANS else "REMOVED"
      if symbol in open_symbols or symbol in watches:rec["status"]="MANAGING_OPEN"
-   ranked_symbols=[x["symbol"] for x in eligible]
+   ranked_symbols=[x["symbol"] for x in selected]
    retained=[s for s in previous if rotation.get(s,{}).get("status") in ("HOT","COOLING","MANAGING_OPEN")]
    hot=[]
    for s in retained+ranked_symbols:
