@@ -3125,6 +3125,9 @@ def _s1_reentry_ready(side,m15,mark,watch,flow):
  try:imb=float((flow or {}).get("flow_imbalance"))
  except (TypeError,ValueError):return False
  if side*imb<.12:return False
+ coverage=float((flow or {}).get("trade_coverage_seconds") or 0)
+ i300=(flow or {}).get("flow_imbalance_300s")
+ if coverage<300 or i300 is None or side*float(i300)<.08:return False
  recovery=int(m15.get("recovery_score") or 0);adverse=int(m15.get("adverse_score") or 0)
  if recovery<2 or adverse>1:return False
  extreme=float(ctx.get("pullback_extreme") or watch.get("exit_price") or 0)
@@ -3227,7 +3230,7 @@ def comparison_strategies_loop():
        with LOCK:S.setdefault("local_s1_watch",{}).pop(symbol,None)
        w1=None;act1="WATCH_INVALIDATED_BY_H1"
       else:w1=_comparison_watch_update("local_s1","local_s1",symbol,w1,float(mark),m15,flow)
-     if w1 and _s1_reentry_ready(int(w1["side"]),m15,float(mark),w1,flow):
+     if w1 and a1.get("ready") and a1.get("anchor_confirmed") and a1.get("h1_direction_anchor") and not a1.get("entry_blocked") and int(a1.get("entry_side") or 0)==int(w1["side"]) and _s1_reentry_ready(int(w1["side"]),m15,float(mark),w1,flow):
       if _comparison_open("local_s1","local_s1",symbol,int(w1["side"]),a1,float(mark),"REENTRY"):act1="M15_RECOVERY_REENTRY"
      elif not w1 and a1.get("ready") and not a1.get("entry_blocked"):
       imbalance=flow.get("flow_imbalance") if flow.get("trade_data_fresh") else None
