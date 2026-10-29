@@ -9,7 +9,7 @@ A mature partial M15 candle plus live flow can protect earned profit before the 
 import math
 import statistics
 
-POLICY = "local_swing_h1_confirmed_retrace_v13"
+POLICY = "local_swing_h1_confirmed_retrace_v14"
 SYMBOL = "HYPE"  # backwards-compatible primary symbol
 SYMBOLS = ("HYPE", "NEAR")
 INTERVAL = "1h"
@@ -80,39 +80,70 @@ def _ret(a, b):
 
 def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL, require_fresh=True):
     candles = completed_candles(rows, now_ms)
-    if len(candles) < PIVOT_LOOKBACK + 2:
+    need = PIVOT_LOOKBACK + H1_PIVOT_CONFIRM_BARS + 1
+    if len(candles) < need:
         return {"ready": False, "reason": "insufficient_closed_h1_candles",
                 "closed_candles": len(candles), "policy": POLICY, "symbol": symbol}
     if require_fresh and float(now_ms) - candles[-1]["T"] > 3_600_000 + 120_000:
         return {"ready": False, "reason": "stale_h1_history", "policy": POLICY, "symbol": symbol}
-    recent = candles[-(PIVOT_LOOKBACK+2):]
+    recent = candles[-need:]
     if any(abs(b["t"]-a["t"]-3_600_000)>1000 for a,b in zip(recent,recent[1:])):
         return {"ready": False, "reason": "gapped_h1_history", "policy": POLICY, "symbol": symbol}
 
+    # Confirm the newest candidate that survives for up to N CLOSED H1 bars.
+    # This is intentionally not a one-candle fractal: an extreme may require
+    # more than one hour for the correction/rebound to become structurally clear.
+    chosen = None
+    max_confirm = min(H1_PIVOT_CONFIRM_BARS, len(candles)-PIVOT_LOOKBACK-1)
+    for confirm_bars in range(1, max_confirm+1):
+        p_idx = len(candles)-1-confirm_bars
+        p = candles[p_idx]
+        prior = candles[p_idx-PIVOT_LOOKBACK:p_idx]
+        after = candles[p_idx+1:]
+        if len(prior) < PIVOT_LOOKBACK or not after:
+            continue
+
+        hist_ranges=[(z["h"]-z["l"])/max(z["c"],1e-12) for z in candles[max(0,p_idx-12):p_idx]]
+        typical_range=statistics.median(hist_ranges) if hist_ranges else H1_PIVOT_MIN_RETRACE
+        retrace_threshold=max(H1_PIVOT_MIN_RETRACE,
+                              min(.035, typical_range*H1_PIVOT_RANGE_MULTIPLIER))
+
+        candidate_low = p["l"] <= min(z["l"] for z in prior)
+        candidate_high = p["h"] >= max(z["h"] for z in prior)
+
+        # Candidate remains valid only while later closed bars do not extend
+        # through the candidate extreme. Otherwise the newer extreme owns the setup.
+        low_survives = candidate_low and min(z["l"] for z in after) > p["l"]
+        high_survives = candidate_high and max(z["h"] for z in after) < p["h"]
+
+        best_rebound = max((z["c"]/p["l"]-1.0) for z in after) if p["l"]>0 else 0.0
+        best_pullback = max((1.0-z["c"]/p["h"]) for z in after) if p["h"]>0 else 0.0
+
+        local_low = bool(low_survives and best_rebound >= retrace_threshold)
+        local_high = bool(high_survives and best_pullback >= retrace_threshold)
+        if not (local_low or local_high):
+            continue
+
+        side = 1 if local_low and not local_high else (-1 if local_high and not local_low else 0)
+        if side == 0:
+            continue
+        chosen = {
+            "p": p,
+            "confirm": after[-1],
+            "confirm_bars": confirm_bars,
+            "candidate_low": candidate_low,
+            "candidate_high": candidate_high,
+            "local_low": local_low,
+            "local_high": local_high,
+            "retrace_threshold": retrace_threshold,
+            "confirmation_retrace": best_rebound if side>0 else best_pullback,
+            "entry_side": side,
+        }
+        # Search newest candidate first: 1 bar, then 2 bars. If a one-bar
+        # candidate is already confirmed it is necessarily newer.
+        break
+
     x = candles[-1]
-    p = candles[-2]
-    prior = candles[-2-PIVOT_LOOKBACK:-2]
-    prior_lows = [z["l"] for z in prior]
-    prior_highs = [z["h"] for z in prior]
-
-    # A new extreme is only a candidate. It becomes a confirmed swing after
-    # a real closed-H1 retracement, not merely because the next candle failed
-    # to print a new high/low. The threshold adapts to recent H1 volatility.
-    hist_ranges=[(z["h"]-z["l"])/max(z["c"],1e-12) for z in candles[-14:-2]]
-    typical_range=statistics.median(hist_ranges) if hist_ranges else H1_PIVOT_MIN_RETRACE
-    retrace_threshold=max(H1_PIVOT_MIN_RETRACE,
-                          min(.035, typical_range*H1_PIVOT_RANGE_MULTIPLIER))
-
-    candidate_low = p["l"] <= min(prior_lows)
-    candidate_high = p["h"] >= max(prior_highs)
-    low_retrace = (x["c"]/p["l"]-1.0) if p["l"]>0 else 0.0
-    high_retrace = (1.0-x["c"]/p["h"]) if p["h"]>0 else 0.0
-
-    local_low = bool(candidate_low and x["l"] > p["l"] and
-                     low_retrace >= retrace_threshold)
-    local_high = bool(candidate_high and x["h"] < p["h"] and
-                      high_retrace >= retrace_threshold)
-
     closes = [z["c"] for z in candles]
     last_ret = _ret(closes[-2], closes[-1])
     prev_ret = _ret(closes[-3], closes[-2])
@@ -124,34 +155,39 @@ def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL, require_fresh=True):
 
     long_weak_score = 0
     short_weak_score = 0
-    if last_ret <= 0:
-        long_weak_score += 1
-    if last_ret >= 0:
-        short_weak_score += 1
-    if prev_mom3 > 0 and mom3 < prev_mom3 * 0.55:
-        long_weak_score += 1
-    if prev_mom3 < 0 and mom3 > prev_mom3 * 0.55:
-        short_weak_score += 1
-    if x["c"] < x["o"] and body_fraction >= 0.35:
-        long_weak_score += 1
-    if x["c"] > x["o"] and body_fraction >= 0.35:
-        short_weak_score += 1
-    if prev_ret > 0 and last_ret < prev_ret * 0.25:
-        long_weak_score += 1
-    if prev_ret < 0 and last_ret > prev_ret * 0.25:
-        short_weak_score += 1
+    if last_ret <= 0: long_weak_score += 1
+    if last_ret >= 0: short_weak_score += 1
+    if prev_mom3 > 0 and mom3 < prev_mom3 * 0.55: long_weak_score += 1
+    if prev_mom3 < 0 and mom3 > prev_mom3 * 0.55: short_weak_score += 1
+    if x["c"] < x["o"] and body_fraction >= 0.35: long_weak_score += 1
+    if x["c"] > x["o"] and body_fraction >= 0.35: short_weak_score += 1
+    if prev_ret > 0 and last_ret < prev_ret * 0.25: long_weak_score += 1
+    if prev_ret < 0 and last_ret > prev_ret * 0.25: short_weak_score += 1
 
-    entry_side = 1 if local_low and not local_high else (-1 if local_high and not local_low else 0)
-    pivot_type = "LOCAL_LOW" if entry_side == 1 else ("LOCAL_HIGH" if entry_side == -1 else None)
-    pivot_price = p["l"] if entry_side == 1 else (p["h"] if entry_side == -1 else None)
+    if chosen:
+        p=chosen["p"]; entry_side=chosen["entry_side"]
+        pivot_type="LOCAL_LOW" if entry_side>0 else "LOCAL_HIGH"
+        pivot_price=p["l"] if entry_side>0 else p["h"]
+        signal=chosen["confirm"]
+        local_low=chosen["local_low"]; local_high=chosen["local_high"]
+        candidate_low=chosen["candidate_low"]; candidate_high=chosen["candidate_high"]
+        retrace_threshold=chosen["retrace_threshold"]
+        confirmation_retrace=chosen["confirmation_retrace"]
+        confirm_bars=chosen["confirm_bars"]
+    else:
+        p=candles[-2]; signal=x; entry_side=0; pivot_type=None; pivot_price=None
+        local_low=False; local_high=False
+        candidate_low=False; candidate_high=False
+        retrace_threshold=H1_PIVOT_MIN_RETRACE
+        confirmation_retrace=0.0; confirm_bars=0
 
     return {
         "ready": True,
         "policy": POLICY,
         "symbol": symbol,
         "interval": INTERVAL,
-        "signal_candle_time": x["t"],
-        "signal_candle_close_time": x["T"],
+        "signal_candle_time": signal["t"],
+        "signal_candle_close_time": signal["T"],
         "pivot_candle_time": p["t"],
         "pivot_type": pivot_type,
         "pivot_price": pivot_price,
@@ -166,12 +202,13 @@ def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL, require_fresh=True):
         "previous_h1_return": prev_ret,
         "momentum_3h": mom3,
         "previous_momentum_3h": prev_mom3,
-        "confirmation_close": x["c"],
+        "confirmation_close": signal["c"],
         "pivot_candidate_low": candidate_low,
         "pivot_candidate_high": candidate_high,
-        "confirmation_retrace": low_retrace if local_low else (high_retrace if local_high else max(low_retrace if candidate_low else 0.0, high_retrace if candidate_high else 0.0)),
+        "confirmation_retrace": confirmation_retrace,
         "required_retrace": retrace_threshold,
-        "pivot_confirmation_policy": "closed_h1_retrace_after_candidate_extreme",
+        "confirmation_bars": confirm_bars,
+        "pivot_confirmation_policy": "closed_h1_multi_bar_retrace_after_candidate_extreme",
         "closed_candles": len(candles),
     }
 
