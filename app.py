@@ -3102,15 +3102,16 @@ def local_experiment_loop():
     local_experiment_mark_positions(prices)
     jobs={};persisted_by_symbol={}
     runtime_symbols=list(LOCAL_EXPERIMENT_SYMBOLS)
-    # Core readiness is defined by the 18 permanent markets. Discovery HOT symbols are optional extensions\n    # and must never stall the canonical Strategy 1 execution loop.\n    # Fast restore: a confirmed durable H1 anchor is sufficient for Strategy 1.
-    # Only symbols without a valid anchor spend REST budget on H1 history.
+    # Core readiness is defined by the 18 permanent markets. Discovery HOT symbols are optional extensions
+    # and must never stall the canonical Strategy 1 execution loop.
+    # Persisted H1 anchors are bootstrap/failure fallbacks ONLY. Always refresh H1
+    # so a newer confirmed opposite LOCAL_HIGH/LOCAL_LOW can supersede the old side.
     for symbol in runtime_symbols:
      with LOCK:mem=copy.deepcopy(S.get("_local4_analysis",{}).get(symbol) or S.get("local_h1_direction",{}).get(symbol))
      persisted=mem if mem and mem.get("ready") and mem.get("anchor_confirmed") else _local_persisted_anchor(symbol)
      if persisted:
       persisted_by_symbol[symbol]=persisted
-     else:
-      jobs[(symbol,"h1")]=pool.submit(_local_h1_candles,symbol)
+     jobs[(symbol,"h1")]=pool.submit(_local_h1_candles,symbol)
     fetched={};fetch_errors={}
     for key,fut in jobs.items():
      try:fetched[key]=fut.result(timeout=12)
@@ -3127,12 +3128,13 @@ def local_experiment_loop():
       with LOCK:S.setdefault("_local4_analysis",{}).pop(symbol,None)
       details[symbol]={"ok":False,"error":h1_error,"max_leverage":market_max_leverage(symbol)}
       continue
-     if persisted:
-      analysis=persisted
-      h1_rows=[];h1_ms=int(time.time()*1000)
-     else:
+     if not h1_error and (symbol,"h1") in fetched:
       h1_rows,h1_ms=fetched[(symbol,"h1")]
       analysis=local_h1_direction(h1_rows,h1_ms,symbol)
+     else:
+      # Transport failure must not blank a previously confirmed direction.
+      analysis=persisted
+      h1_rows=[];h1_ms=int(time.time()*1000)
      with LOCK:S.setdefault("_local4_analysis",{})[symbol]=copy.deepcopy(analysis)
      h1_context=({"ready":True,"persisted":True,"entry_side":analysis.get("entry_side"),
        "pivot_type":analysis.get("pivot_type"),"pivot_price":analysis.get("pivot_price")}
