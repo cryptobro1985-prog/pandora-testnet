@@ -5677,16 +5677,27 @@ def operations_diagnostics():
      "market_metadata":copy.deepcopy(S["sources"].get("MarketMetadata",{})),
      "local12_source":copy.deepcopy(S["sources"].get("Caterpillar 1.0",{}))}
    print(json.dumps(report,ensure_ascii=False,default=str),flush=True)
-   with LOCK:s1src=copy.deepcopy(S.get("sources",{}).get("Strategy 1 — Restored Caterpillar",{}))
+   with LOCK:
+    s1src=copy.deepcopy(S.get("sources",{}).get("Caterpillar 1.0",{}))
+    s1eq=float(S.get("local_experiment_equity",LOCAL_EXPERIMENT_STARTING_EQUITY) or 0)
+    s1real=float(S.get("local_experiment_realized_pnl",0) or 0)
+    s1trades=int(S.get("local_experiment_trades",0) or 0)
+    s1open=list(S.get("local_v12_positions",{}))
+    s1watch=list(S.get("local_experiment_watch",{}))
    print("S1_ONLINE_STATE "+json.dumps({"ok":s1src.get("ok"),"ready":s1src.get("ready"),
-    "error":s1src.get("error"),"equity":s1src.get("equity"),"realized_equity":s1src.get("realized_equity"),
-    "open_positions":s1src.get("open_positions"),"details":s1src.get("details")},ensure_ascii=False,default=str),flush=True)
+    "error":s1src.get("error"),"version":os.getenv("RENDER_GIT_COMMIT"),
+    "starting_equity":LOCAL_EXPERIMENT_STARTING_EQUITY,"realized_equity":s1eq,
+    "realized_pnl":s1real,"trades":s1trades,"open_positions":s1open,
+    "watching_for_reentry":s1watch,"symbols":list(LOCAL_EXPERIMENT_SYMBOLS),
+    "trade_stream_symbols":((S.get("sources",{}).get("MarketTradeStream") or {}).get("symbols")),
+    "details":s1src.get("details")},ensure_ascii=False,default=str),flush=True)
   except Exception as e:print("diagnostics_error: "+str(e)[:180],flush=True)
   SHUTDOWN.wait(30)
 
 def local_v10_history(limit=100):
  with pg() as db:
-  return [dict(x) for x in db.execute("select closed,symbol,side,pnl,reason from local_v12_trade_history order by closed desc limit %s",(limit,)).fetchall()]
+  return [dict(x) for x in db.execute("""select opened,closed,symbol,side,entry,exit,pnl,reason,margin,notional,leverage
+    from local_v12_trade_history order by closed desc limit %s""",(limit,)).fetchall()]
 
 def local_v10_today_pnl():
  with pg() as db:
