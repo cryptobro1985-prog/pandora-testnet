@@ -3093,26 +3093,33 @@ def _comparison_update_path(prefix,state_name,symbol,position,mark):
  return updated
 
 def _s1_weakening_exit(position,m15,mark,flow):
- # Routine Caterpillar exit: never dump a fresh trade just because a tiny tape flip appeared.
- # We harvest only after favorable excursion, genuine M15 weakening/counter-flow and recoil from MFE.
- if not position or not m15 or not m15.get("ready"):return False
- side=int(position.get("side") or 0);entry=float(position.get("entry") or 0);mark=float(mark or 0)
+ # Protect the MFE promptly on M1/M3 executed-flow reversal, without waiting
+ # for M15 close. The same side-relative rule works for LONG and SHORT.
+ if not position or not (flow or {}).get("trade_data_fresh"):return False
+ side=int(position.get("side") or 0)
+ entry=float(position.get("entry") or 0);mark=float(mark or 0)
  if side not in (-1,1) or entry<=0 or mark<=0:return False
+ coverage=float(flow.get("trade_coverage_seconds") or 0)
+ if coverage<180:return False
+ try:
+  i60=side*float(flow["flow_imbalance"])
+  i180=side*float(flow["flow_imbalance_180s"])
+  c60=float(flow.get("trade_count_60s") or 0)
+  c180=float(flow.get("trade_count_180s") or 0)
+ except (TypeError,ValueError,KeyError):return False
+ # Two independent horizons and minimum observed trade activity.
+ if c60<5 or c180<12 or i60>-.18 or i180>-.08:return False
  features=position.get("features") or {}
  favorable=side*(mark/entry-1.0)
- floor=max(.0002,float(features.get("estimated_round_trip_cost_move",0) or 0))
- if favorable<=floor:return False
- if not (flow or {}).get("trade_data_fresh"):return False
- try:imb=float((flow or {}).get("flow_imbalance"))
- except (TypeError,ValueError):return False
- if side*imb>-0.12:return False
- adverse=int(m15.get("adverse_score") or 0)
- candle_reversal=(int(m15.get("candle_direction") or 0)==-side and float(m15.get("body_fraction") or 0)>=.42)
- if adverse<2 and not candle_reversal:return False
- peak=max(0.0,float(features.get("mfe_price_move",0) or 0),favorable)
- typical=float(m15.get("median_range_move") or .008)
- recoil_floor=max(.0006,min(.0015,typical*.15))
- return (peak-favorable)>=recoil_floor
+ peak=max(0.0,float(features.get("mfe_price_move") or 0),favorable)
+ # Price must actually reverse from the best observed mark; never exit solely
+ # because a few aggressive prints hit a quiet order book.
+ typical=float((m15 or {}).get("median_range_move") or .008)
+ recoil=max(.0007,min(.0018,typical*.12))
+ if peak-favorable<recoil:return False
+ # Counter-control is a risk exit too; do not hold an already losing trade
+ # until the next H1 pivot solely because it cannot realize a profit.
+ return True
 
 def _s1_reentry_ready(side,m15,mark,watch,flow):
  # After a profitable weakening exit, sit through the bounce/pullback.
@@ -3227,7 +3234,7 @@ def comparison_strategies_loop():
       # Confirmed opposite H1 local ends the old regime immediately, regardless of PnL.
       if _comparison_close("local_s1","local_s1",symbol,float(mark),h1exit):act1="H1_OPPOSITE_EXIT"
      elif weakening:
-      if _comparison_close("local_s1","local_s1",symbol,float(mark),"m15_weakening_profit_exit",True,"WAIT_PULLBACK"):act1="M15_WEAKENING_EXIT"
+      if _comparison_close("local_s1","local_s1",symbol,float(mark),"m1_m3_confirmed_counterflow_exit",True,"WAIT_PULLBACK"):act1="M1_M3_COUNTERFLOW_EXIT"
     else:
      if w1:
       if a1.get("ready") and int(a1.get("entry_side") or 0)==-int(w1.get("side") or 0):
