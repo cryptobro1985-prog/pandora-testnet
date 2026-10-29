@@ -35,6 +35,7 @@ def run_trade_stream(observations, stop, symbols_provider, report, url, on_mids=
             last_history_send = time.time()
             history_start_after = last_history_send + 5.0
             last_refresh = last_received = time.time()
+            last_mids = last_received
             last_accepted_trade = last_received
             recent_stale_batches = 0
             while not stop.is_set():
@@ -78,6 +79,7 @@ def run_trade_stream(observations, stop, symbols_provider, report, url, on_mids=
                     elif message.get("channel") == "allMids" and on_mids is not None:
                         data=message.get("data") or {}
                         on_mids(data.get("mids",{}))
+                        last_mids = last_received
                     elif message.get("channel") == "candle":
                         data=message.get("data") or {}
                         if data.get("i")=="1m" and on_regime_candles is not None:
@@ -106,6 +108,10 @@ def run_trade_stream(observations, stop, symbols_provider, report, url, on_mids=
                     if time.time()-last_received > 12:
                         raise RuntimeError("exchange_stream_heartbeat_stale")
                 epoch = time.time()
+                # Candle traffic or ping replies are not proof that allMids is live.
+                # Fail closed and reconnect the price socket when marks stop updating.
+                if on_mids is not None and epoch-last_mids > 18:
+                    raise RuntimeError("allmids_stale_reconnect")
                 if epoch-last_refresh >= 5:
                     desired = set(symbols_provider())
                     if subscribe_trades:
