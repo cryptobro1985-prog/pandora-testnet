@@ -35,6 +35,8 @@ def run_trade_stream(observations, stop, symbols_provider, report, url, on_mids=
             last_history_send = time.time()
             history_start_after = last_history_send + 5.0
             last_refresh = last_received = time.time()
+            last_accepted_trade = last_received
+            recent_stale_batches = 0
             while not stop.is_set():
                 epoch = time.time()
                 if epoch-last_ping >= 5:
@@ -61,7 +63,18 @@ def run_trade_stream(observations, stop, symbols_provider, report, url, on_mids=
                     last_received = time.time()
                     observations.heartbeat(last_received)
                     if message.get("channel") == "trades":
-                        observations.ingest_trades(message.get("data", []), last_received)
+                        accepted = observations.ingest_trades(message.get("data", []), last_received)
+                        if accepted:
+                            last_accepted_trade = last_received
+                            recent_stale_batches = 0
+                        elif message.get("data"):
+                            recent_stale_batches += 1
+                        # A live websocket heartbeat can conceal a deep queue of
+                        # replayed executions. Restart only when real trades keep
+                        # arriving but none can pass the freshness gate.
+                        if (subscribe_trades and recent_stale_batches >= 25
+                                and last_received - last_accepted_trade > 30):
+                            raise RuntimeError("executed_trade_backlog_reconnect")
                     elif message.get("channel") == "allMids" and on_mids is not None:
                         data=message.get("data") or {}
                         on_mids(data.get("mids",{}))
