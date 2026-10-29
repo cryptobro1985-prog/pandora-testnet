@@ -9,7 +9,7 @@ import copy
 import math
 
 POLICY = "Caterpillar 1.2 H1-local pure M5 executed-flow control"
-CONTROL_DEADBAND = 0.03  # avoid treating an almost 50/50 tape as meaningful control
+CONTROL_DEADBAND = 0.12  # require material executed-volume control; avoid 51/49 micro-flip churn
 
 
 def _f(value):
@@ -60,7 +60,7 @@ def flow_profile(flow, side):
         "aligned_control": aligned300 >= CONTROL_DEADBAND and aligned_price is not None and aligned_price > 0,
         "counter_takeover": aligned300 <= -CONTROL_DEADBAND and aligned_price is not None and aligned_price < 0,
         "failed_counterflow": aligned300 <= -CONTROL_DEADBAND and aligned_price is not None and aligned_price > 0,
-        "resumed": aligned_price is not None and aligned_price > 0 and abs(aligned300) >= CONTROL_DEADBAND,
+        "resumed": aligned_price is not None and aligned_price > 0 and aligned300 >= CONTROL_DEADBAND,
         "raw_300s": raw300,
         "buy_volume_300s": buy300,
         "sell_volume_300s": sell300,
@@ -136,14 +136,36 @@ def entry_candidate(symbol, analysis, m15, flow, stamp):
 
 
 def pressure_exit(position, m15, mark, flow):
-    """Exit only when counter-side M5 flow is strong AND price actually responds against us."""
+    """Bank a completed favorable leg; never churn a fresh trade into a routine loss.
+
+    H1 owns thesis invalidation and may still close regardless of PnL.  Routine
+    caterpillar exits are different: the position must first have produced a
+    net-positive move, then fresh counter-side M5 control must take over while
+    price gives back part of persisted MFE.  This prevents the same rolling
+    tape that admitted an entry from immediately closing it at a loss.
+    """
     side = int((position or {}).get("side") or 0)
     profile = flow_profile(flow, side)
     if side not in (-1, 1) or profile is None or not profile["counter_takeover"]:
         return None
     entry, mark = _f((position or {}).get("entry")), _f(mark)
-    favorable = side * (mark / entry - 1.0) if entry not in (None, 0) and mark is not None else 0.0
-    return "m5_flow_profit_flip_exit" if favorable > 0 else "m5_flow_risk_flip_exit"
+    if entry in (None, 0) or mark is None:
+        return None
+    favorable = side * (mark / entry - 1.0)
+    features = (position or {}).get("features") or {}
+    modeled_cost = max(0.0002, _f(features.get("estimated_round_trip_cost_move")) or 0.0)
+    mfe = max(0.0, _f(features.get("mfe_price_move")) or 0.0, favorable)
+    recoil = mfe - favorable
+
+    # Routine weakening is profit protection, not a stop-loss.  A losing trade
+    # remains governed by the H1 thesis/invalidation path.
+    if favorable <= modeled_cost:
+        return None
+    # Require an actual give-back from a previously observed favorable extreme;
+    # a pre-existing/noisy counter-flow snapshot alone cannot close the trade.
+    if recoil < max(0.0002, modeled_cost * 0.35):
+        return None
+    return "m5_flow_profit_recoil_exit"
 
 
 def update_watch(watch, mark, m15, flow, stamp):
