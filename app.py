@@ -690,6 +690,30 @@ def pinit():
     c.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'local_experiment_invalid_entry_excluded',%s::jsonb)",
       (now(),json.dumps(payload,default=str)))
 
+  # Exclude PAPER positions opened by the brief d78a82d regression that
+  # treated a confirmed H1 local as sufficient for immediate entry. Strategy 1
+  # requires fresh H1-aligned M1/M3/M5 executed flow for the first entry.
+  invalid_h1_only_action="strategy1-invalid-h1-only-entry-regression-20261029-v1"
+  if not c.execute("select 1 from operator_actions where action_id=%s",(invalid_h1_only_action,)).fetchone():
+   bad_rows=c.execute("""select symbol,opened,side,entry,margin,notional,leverage,features
+     from local_v12_positions
+     where opened::timestamptz >= '2026-10-29T15:23:57Z'::timestamptz
+       and coalesce(features->'candidate_selection'->>'entry_trigger','')='H1_CONFIRMED_LOCAL'""").fetchall()
+   excluded=[]
+   for bad in bad_rows:
+    payload={"action":"exclude_invalid_strategy1_open_position","symbol":bad["symbol"],"opened":bad["opened"],
+      "side":bad["side"],"entry":bad["entry"],"margin":bad["margin"],"notional":bad["notional"],
+      "leverage":bad["leverage"],"reason":"regression_h1_only_entry_without_executed_flow",
+      "raw_features":bad["features"],"validated_pnl_effect":0,
+      "audit_preserved":True,"history_deleted":False}
+    c.execute("delete from local_v12_positions where symbol=%s and opened=%s",(bad["symbol"],bad["opened"]))
+    c.execute("delete from local_v12_watchlist where symbol=%s",(bad["symbol"],))
+    c.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'local_experiment_invalid_entry_excluded',%s::jsonb)",
+      (now(),json.dumps(payload,default=str)))
+    excluded.append({"symbol":bad["symbol"],"opened":bad["opened"]})
+   c.execute("insert into operator_actions(action_id,completed_at,payload) values(%s,%s,%s::jsonb)",
+     (invalid_h1_only_action,now(),json.dumps({"excluded":excluded,"validated_pnl_effect":0},default=str)))
+
   expos={}
   for r in c.execute("select * from local_v12_positions").fetchall():
    expos[r["symbol"]]={"symbol":r["symbol"],"side":int(r["side"]),"entry":float(r["entry"]),"notional":float(r["notional"]),
