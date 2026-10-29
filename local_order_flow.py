@@ -107,7 +107,22 @@ def _candidate(symbol, analysis, flow):
 
 
 def initial_entry_candidate(symbol, analysis, m15, flow, stamp):
-    return _candidate(symbol, analysis, flow)
+    """First entry follows a CONFIRMED H1 local, not the later pullback/flow cycle.
+
+    Flow may still be missing or adverse at the turning point. It is used for
+    exits and subsequent re-entries, never as a veto on this initial entry.
+    The caller separately validates a current tradable mark and available margin.
+    """
+    data = analysis or {}
+    side = int(data.get("entry_side") or 0)
+    confirmed = bool(data.get("ready") and data.get("anchor_confirmed") and
+                     data.get("h1_direction_anchor") and
+                     not data.get("entry_blocked") and side in (-1, 1))
+    return dict(symbol=symbol, side=side, eligible=confirmed,
+                reason="confirmed_h1_local_initial" if confirmed else
+                       "waiting_for_confirmed_h1_local",
+                policy=POLICY, entry_trigger="H1_CONFIRMED_LOCAL",
+                signal_candle_time=data.get("signal_candle_time"))
 
 
 def entry_candidate(symbol, analysis, m15, flow, stamp):
