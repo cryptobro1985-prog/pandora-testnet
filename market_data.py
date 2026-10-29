@@ -36,7 +36,7 @@ class RollingMarketData:
     """
 
     def __init__(self, bucket_seconds=5, retention_seconds=600, max_symbols=512,
-                 max_trade_lag_seconds=10, freshness_seconds=15,
+                 max_trade_lag_seconds=60, freshness_seconds=15,
                  max_seen_per_symbol=8192):
         if (int(bucket_seconds) < 1 or retention_seconds < 90 or max_symbols < 1 or
                 max_trade_lag_seconds <= 0 or freshness_seconds <= 0 or
@@ -55,7 +55,9 @@ class RollingMarketData:
         self._symbols = {}
         self._oi = {}
         self._counters = {"accepted": 0, "duplicates": 0, "invalid": 0,
-                          "stale": 0, "outside_subscription": 0}
+                          "stale": 0, "stale_lag": 0, "stale_before_coverage": 0,
+                          "outside_subscription": 0, "last_trade_lag_seconds": None,
+                          "max_trade_lag_seconds_observed": 0.0}
 
     @staticmethod
     def _new_symbol(epoch):
@@ -162,8 +164,17 @@ class RollingMarketData:
                     continue
                 stamp = millis / 1000.0
                 age = received - stamp
-                if age < -1.0 or age > self.max_trade_lag_seconds or stamp < state["since"]:
+                self._counters["last_trade_lag_seconds"] = age
+                if age >= 0:
+                    self._counters["max_trade_lag_seconds_observed"] = max(
+                        float(self._counters.get("max_trade_lag_seconds_observed") or 0.0), age)
+                if age < -1.0 or age > self.max_trade_lag_seconds:
                     self._counters["stale"] += 1
+                    self._counters["stale_lag"] += 1
+                    continue
+                if stamp < state["since"]:
+                    self._counters["stale"] += 1
+                    self._counters["stale_before_coverage"] += 1
                     continue
                 notional = price * size
                 if not math.isfinite(notional):
@@ -304,8 +315,9 @@ class RollingMarketData:
 
     def flow_context(self, symbol, epoch=None):
         """Executed aggressive buy/sell notional, including the forming bucket.
-        One-minute dominance is the trading input; five-minute flow is context.
-        A full observed minute and a fresh trade are required for data validity.
+        Five-minute executed flow plus price response is Strategy 1's trading input.
+        Shorter windows are telemetry only. Historical buckets may accept moderately
+        delayed exchange delivery, but a current signal still requires a fresh trade.
         """
         epoch=time.time() if epoch is None else float(epoch)
         out={"trade_data_fresh":False,"flow_imbalance":None,"buy_volume_60s":None,
