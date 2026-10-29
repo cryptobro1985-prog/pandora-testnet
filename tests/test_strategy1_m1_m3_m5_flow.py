@@ -31,10 +31,22 @@ class Strategy1FlowTests(unittest.TestCase):
         pos={"side":1,"entry":100.0,"features":{"mfe_price_move":0.0102,"estimated_round_trip_cost_move":0.001}}
         self.assertIsNone(pressure_exit(pos,{"median_range_move":0.008},101.0,flow(-0.25,-0.14,0.02)))
 
-    def test_missing_m5_coverage_blocks_profile(self):
+    def test_missing_m5_coverage_does_not_freeze_fresh_m1_profile(self):
         f=flow(-0.25,-0.14,0.02)
         f.pop("flow_imbalance_300s")
-        self.assertIsNone(flow_profile(f,1))
+        profile=flow_profile(f,1)
+        self.assertIsNotNone(profile)
+        self.assertTrue(profile["active"])
+        self.assertTrue(profile["counter_takeover"])
+
+    def test_missing_m3_m5_allows_fresh_aligned_m1_entry(self):
+        f=flow(0.18,0.12,0.10)
+        f.pop("flow_imbalance_180s")
+        f.pop("flow_imbalance_300s")
+        profile=flow_profile(f,1)
+        self.assertIsNotNone(profile)
+        self.assertTrue(profile["active"])
+        self.assertTrue(profile["aligned_control"])
 
     def test_exit_watch_then_later_resumption_reenters(self):
         watch={"side":1,"exit_price":101.0,"exit_at":"2026-10-29T00:00:00+00:00","context":{"phase":"WAIT_PULLBACK","counter_pressure_seen":False}}
