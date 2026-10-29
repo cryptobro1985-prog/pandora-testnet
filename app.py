@@ -3044,7 +3044,7 @@ def _comparison_close(prefix,state_name,symbol,mark,reason,arm_watch=False,watch
 
 @account_mutation
 def _comparison_watch_update(prefix,state_name,symbol,watch,mark,m15,flow):
- updated=(local4_update_watch if state_name=="local_s1" else caterpillar_update_watch)(watch,float(mark),m15,flow,time.time())
+ updated=caterpillar_update_watch(watch,float(mark),m15,flow,time.time())
  with pg() as db:
   with db.transaction():
    STORE.fence(db)
@@ -3092,57 +3092,61 @@ def _comparison_update_path(prefix,state_name,symbol,position,mark):
   if symbol in S.get(state_name+"_positions",{}):S[state_name+"_positions"][symbol]=copy.deepcopy(updated)
  return updated
 
+def _s1_weakening_exit(position,m15,mark,flow):
+ # Routine Caterpillar exit: never dump a fresh trade just because a tiny tape flip appeared.
+ # We harvest only after favorable excursion, genuine M15 weakening/counter-flow and recoil from MFE.
+ if not position or not m15 or not m15.get("ready"):return False
+ side=int(position.get("side") or 0);entry=float(position.get("entry") or 0);mark=float(mark or 0)
+ if side not in (-1,1) or entry<=0 or mark<=0:return False
+ features=position.get("features") or {}
+ favorable=side*(mark/entry-1.0)
+ floor=max(.0002,float(features.get("estimated_round_trip_cost_move",0) or 0))
+ if favorable<=floor:return False
+ if not (flow or {}).get("trade_data_fresh"):return False
+ try:imb=float((flow or {}).get("flow_imbalance"))
+ except (TypeError,ValueError):return False
+ if side*imb>-0.12:return False
+ adverse=int(m15.get("adverse_score") or 0)
+ candle_reversal=(int(m15.get("candle_direction") or 0)==-side and float(m15.get("body_fraction") or 0)>=.42)
+ if adverse<2 and not candle_reversal:return False
+ peak=max(0.0,float(features.get("mfe_price_move",0) or 0),favorable)
+ typical=float(m15.get("median_range_move") or .008)
+ recoil_floor=max(.0006,min(.0015,typical*.15))
+ return (peak-favorable)>=recoil_floor
+
+def _s1_reentry_ready(side,m15,mark,watch,flow):
+ # After a profitable weakening exit, sit through the bounce/pullback.
+ # Re-enter only when that counter move exhausts and H1-side M15 + executed flow resume.
+ side=int(side or 0)
+ if side not in (-1,1) or not m15 or not m15.get("ready") or not watch:return False
+ ctx=watch.get("context") or {}
+ if ctx.get("phase")!="WAIT_RESUMPTION":return False
+ if not (flow or {}).get("trade_data_fresh"):return False
+ try:imb=float((flow or {}).get("flow_imbalance"))
+ except (TypeError,ValueError):return False
+ if side*imb<.12:return False
+ recovery=int(m15.get("recovery_score") or 0);adverse=int(m15.get("adverse_score") or 0)
+ if recovery<2 or adverse>1:return False
+ extreme=float(ctx.get("pullback_extreme") or watch.get("exit_price") or 0)
+ mark=float(mark or 0)
+ if extreme<=0 or mark<=0:return False
+ typical=float(m15.get("median_range_move") or .008)
+ resume=max(.0005,min(.0012,typical*.10))
+ return side*(mark/extreme-1.0)>=resume
+
 S1_REFERENCE_LEVERAGE=25.0
 
 @account_mutation
 def strategy1_flow_execution_cycle(prices):
- # Sub-second execution path: cached marks + executed Hyperliquid trades only.
- # H1 discovery remains in comparison_strategies_loop; M15 is not consulted.
- for symbol in LOCAL_EXPERIMENT_SYMBOLS:
-  mark=prices.get(symbol)
-  if not mark:continue
-  with LOCK:
-   pos=copy.deepcopy(S.get("local_s1_positions",{}).get(symbol))
-   watch=copy.deepcopy(S.get("local_s1_watch",{}).get(symbol))
-  flow=MARKET_OBS.flow_context(symbol,time.time())
-  if pos:
-   reason=local4_pressure_exit(pos,None,float(mark),flow)
-   if not reason:continue
-   closed=_comparison_close("local_s1","local_s1",symbol,float(mark),reason,True,"WAIT_COUNTER_CONTROL")
-   if not closed:continue
-   # The exit-causing counter-flow is itself the first state-machine event.
-   with LOCK:watch=copy.deepcopy(S.get("local_s1_watch",{}).get(symbol))
-   if watch:_comparison_watch_update("local_s1","local_s1",symbol,watch,float(mark),None,flow)
-   continue
-  if not watch:continue
-  updated=_comparison_watch_update("local_s1","local_s1",symbol,watch,float(mark),None,flow)
-  if not local4_reentry_ready(int(updated.get("side") or 0),None,float(mark),updated,flow,time.time()):continue
-  side=int(updated.get("side") or 0)
-  with LOCK:current=copy.deepcopy(S.get("local_h1_direction",{}).get(symbol))
-  # A newly confirmed opposite H1 regime always wins over the old watch anchor.
-  if current and current.get("ready") and int(current.get("entry_side") or 0)==-side:continue
-  analysis=current if current and current.get("ready") else _comparison_anchor("local_s1",symbol)
-  if (analysis and analysis.get("ready") and not analysis.get("entry_blocked") and
-      int(analysis.get("entry_side") or 0)==side):
-   _comparison_open("local_s1","local_s1",symbol,side,analysis,float(mark),"REENTRY")
+ # Intentionally disabled: the pure-M5 500ms executor caused entry/exit churn and
+ # raced the canonical H1 + M15 Caterpillar state machine.
+ return
 
 def strategy1_flow_execution_loop():
  while not SHUTDOWN.is_set():
-  try:
-   with LOCK:
-    active=bool(S.get("engine_active")) and S.get("mode")=="PAPER_ONLY" and not S.get("orders_enabled")
-    age=time.time()-float(S.get("_last_poll_epoch",0) or 0)
-    prices=dict(S.get("_prices",{}))
-   if active and 0<=age<=8 and prices:
-    strategy1_flow_execution_cycle(prices)
-    with LOCK:S["sources"]["Strategy1FlowExecution"]={"ok":True,"last_check":now(),
-     "mode":"cached_mark_executed_tape_500ms","m15_gate":False}
-  except LeaseLost as exc:
-   with LOCK:S["engine_active"]=False;S["engine_error"]=str(exc)
-  except Exception as exc:
-   with LOCK:S["sources"]["Strategy1FlowExecution"]={"ok":False,"last_check":now(),
-    "error":type(exc).__name__+":"+str(exc)[:160]}
-  SHUTDOWN.wait(.5)
+  with LOCK:S["sources"]["Strategy1FlowExecution"]={"ok":True,"last_check":now(),
+   "mode":"disabled_canonical_h1_m15_caterpillar_owns_execution","m15_gate":True}
+  SHUTDOWN.wait(5)
 
 def comparison_strategies_loop():
  pool=concurrent.futures.ThreadPoolExecutor(max_workers=16,thread_name_prefix="local-compare")
@@ -3199,7 +3203,7 @@ def comparison_strategies_loop():
     m15_rows,m15_ms=fetched.get((symbol,"m15"),([],int(time.time()*1000)))
     flow=MARKET_OBS.flow_context(symbol,time.time())
 
-    # Strategy 1: H1 supplies direction; the live executed-trade tape owns execution.
+    # Strategy 1 canonical: H1 owns direction; M15 + fresh executed flow own the Caterpillar.
     with LOCK:
      p1=copy.deepcopy(S.get("local_s1_positions",{}).get(symbol));w1=copy.deepcopy(S.get("local_s1_watch",{}).get(symbol))
     side1=int((p1 or w1 or {}).get("side") or a1.get("entry_side") or 1)
@@ -3209,12 +3213,12 @@ def comparison_strategies_loop():
      p1=_comparison_update_path("local_s1","local_s1",symbol,p1,float(mark))
      h1exit=("opposite_h1_local_emergency_exit" if a1.get("ready") and a1.get("anchor_confirmed") and int(a1.get("entry_side") or 0)==-int(p1.get("side") or 0) else None)
      if not h1exit:h1exit=hype_position_exit(p1,a1,float(mark)) if a1.get("ready") else None
-     pressure_reason=local4_pressure_exit(p1,None,float(mark),flow)
+     weakening=_s1_weakening_exit(p1,m15,float(mark),flow)
      if h1exit:
-      # A confirmed opposite H1 local invalidates the old thesis regardless of PnL.
+      # Confirmed opposite H1 local ends the old regime immediately, regardless of PnL.
       if _comparison_close("local_s1","local_s1",symbol,float(mark),h1exit):act1="H1_OPPOSITE_EXIT"
-     elif pressure_reason:
-      if _comparison_close("local_s1","local_s1",symbol,float(mark),pressure_reason,True,"WAIT_COUNTER_CONTROL"):act1="EXECUTED_FLOW_FLIP_EXIT"
+     elif weakening:
+      if _comparison_close("local_s1","local_s1",symbol,float(mark),"m15_weakening_profit_exit",True,"WAIT_RESUMPTION"):act1="M15_WEAKENING_EXIT"
     else:
      if w1:
       if a1.get("ready") and int(a1.get("entry_side") or 0)==-int(w1.get("side") or 0):
@@ -3222,14 +3226,14 @@ def comparison_strategies_loop():
         with db.transaction():STORE.fence(db);db.execute("delete from local_s1_watchlist where symbol=%s",(symbol,))
        with LOCK:S.setdefault("local_s1_watch",{}).pop(symbol,None)
        w1=None;act1="WATCH_INVALIDATED_BY_H1"
-      else:w1=_comparison_watch_update("local_s1","local_s1",symbol,w1,float(mark),None,flow)
-     if w1 and local4_reentry_ready(int(w1["side"]),None,float(mark),w1,flow,time.time()):
-      if _comparison_open("local_s1","local_s1",symbol,int(w1["side"]),a1,float(mark),"REENTRY"):act1="EXECUTED_FLOW_REENTRY"
+      else:w1=_comparison_watch_update("local_s1","local_s1",symbol,w1,float(mark),m15,flow)
+     if w1 and _s1_reentry_ready(int(w1["side"]),m15,float(mark),w1,flow):
+      if _comparison_open("local_s1","local_s1",symbol,int(w1["side"]),a1,float(mark),"REENTRY"):act1="M15_RECOVERY_REENTRY"
      elif not w1 and a1.get("ready") and not a1.get("entry_blocked"):
-      side=int(a1.get("entry_side") or 0)
-      candidate=local4_entry_candidate(symbol,a1,None,flow,time.time())
-      if side in (-1,1) and candidate.get("eligible"):
-       if _comparison_open("local_s1","local_s1",symbol,side,a1,float(mark),"EXECUTED_FLOW"):act1="EXECUTED_FLOW_ENTRY"
+      imbalance=flow.get("flow_imbalance") if flow.get("trade_data_fresh") else None
+      wanted=int(a1.get("entry_side") or 0)
+      if wanted in (-1,1) and imbalance is not None and wanted*float(imbalance)>=.12 and local_m15_reentry_ready(wanted,m15,imbalance):
+       if _comparison_open("local_s1","local_s1",symbol,wanted,a1,float(mark),"M15"):act1="M15_ENTRY"
     with LOCK:p1=copy.deepcopy(S.get("local_s1_positions",{}).get(symbol));w1=copy.deepcopy(S.get("local_s1_watch",{}).get(symbol))
     s1_details[symbol]={"ok":bool(a1.get("ready")),"h1_local":{"pivot_type":a1.get("pivot_type"),"pivot_price":a1.get("pivot_price"),
       "entry_side":a1.get("entry_side"),"signal_candle_time":a1.get("signal_candle_time"),"persisted":a1.get("persisted",False)},
@@ -3246,7 +3250,7 @@ def comparison_strategies_loop():
    s1stats=_comparison_stats("local_s1");s2stats={"trades":0,"wins":0,"win_rate":None,"realized_pnl":0.0}
    with LOCK:
     S["sources"]["Strategy 1 — Restored Caterpillar"]={"ok":all(x.get("ok") for x in s1_details.values()),"ready":all(x.get("ok") for x in s1_details.values()),
-      "last_check":now(),"mode":"paper_h1_local_executed_flow_flip_reentry","symbols":list(LOCAL_EXPERIMENT_SYMBOLS),
+      "last_check":now(),"mode":"paper_h1_local_m15_caterpillar","symbols":list(LOCAL_EXPERIMENT_SYMBOLS),
       "starting_equity":500.0,"equity":s1_total,"realized_equity":S.get("local_s1_equity",500.0),"unrealized_pnl":s1_unreal,
       "used_margin":s1_used,"free_margin":s1_free,"reference_margin_fraction":.20,"reference_leverage":25.0,
       "compound":True,"open_positions":list(S.get("local_s1_positions",{})),"details":s1_details,"stats":s1stats,"error":None}
