@@ -1,5 +1,4 @@
 import html
-import faulthandler,sys
 import os,json,time,threading,urllib.request,urllib.parse,urllib.error,sqlite3,datetime,xml.etree.ElementTree as ET,re,hashlib,subprocess,html as htmlmod
 import sqlite3,math,email.utils,secrets,signal,copy,concurrent.futures,functools
 import websocket
@@ -1109,14 +1108,10 @@ def engine_coordinator():
    current_commit=os.getenv("RENDER_GIT_COMMIT","").strip()
    claimed=False
    if not takeover_done and takeover_commit and current_commit and takeover_commit==current_commit:
-    print("ENGINE_COORD before_force_claim commit="+current_commit,flush=True)
     claimed=STORE.force_claim()
-    print("ENGINE_COORD after_force_claim claimed="+str(bool(claimed)),flush=True)
     takeover_done=bool(claimed)
     if claimed:
-     print("ENGINE_COORD before_takeover_lock",flush=True)
      with LOCK:S["sources"]["EngineTakeover"]={"ok":True,"last_check":now(),"mode":"commit_fenced_takeover","commit":current_commit}
-     print("ENGINE_COORD after_takeover_lock",flush=True)
    else:
     claimed=STORE.claim()
    if claimed:
@@ -1125,9 +1120,7 @@ def engine_coordinator():
      # state before workers started. Never run historical reset/legacy restoration here.
      S["_engine_activated_epoch"]=time.time()
      S["engine_active"]=True;S["engine_error"]=None
-     print("ENGINE_COORD before_hydrate",flush=True)
      hydrate_strategy1_anchors()
-     print("ENGINE_COORD after_hydrate",flush=True)
      try:journal("engine_restored",None,{"positions":[],"risk_checkpoints":True,"mode":"strategy1_fast_takeover"})
      except Exception:pass
      SHUTDOWN.wait(1)
@@ -7174,10 +7167,6 @@ class HyperliquidBudgetProxy(BaseHTTPRequestHandler):
   except (BrokenPipeError,ConnectionResetError):pass
 
 if __name__=="__main__":
- # Temporary deadlock diagnostic: if a Python lock stalls startup, dump all
- # thread stacks to Render logs. Removed after the root cause is fixed.
- faulthandler.enable(file=sys.stderr,all_threads=True)
- faulthandler.dump_traceback_later(15,repeat=True,file=sys.stderr)
  budget_proxy=ThreadingHTTPServer(("127.0.0.1",8421),HyperliquidBudgetProxy)
  threading.Thread(target=budget_proxy.serve_forever,daemon=True,name="shared-hl-rest-budget").start()
  if WHALE_NEW_ENTRIES_ENABLED:
