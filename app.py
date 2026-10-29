@@ -176,8 +176,10 @@ def bybit_volatility_discovery_loop():
     "entry_policy":"DISCOVERY_NEVER_ENTERS_DIRECTLY","transport":"single aggregated public REST scan; no per-symbol polling",
     "thresholds":{"min_turnover_24h":DISCOVERY_MIN_TURNOVER_24H,"min_range_24h_pct":None,
       "min_move_5m_pct":None}}
+   state["scan_diagnostics"]={"ranked":len(ranked),"transport_eligible":len(eligible),"excluded_no_transport":sum(1 for x in ranked if not x["runtime_eligible"]),"selected_hot":len(hot),"unsupported_runtime":len(unsupported),"paper_route":"Strategy1 shared PAPER engine","strategy_fit_prequalification":"NOT_VALIDATED"}
    with LOCK:
     S["strategy1_discovery"]=copy.deepcopy(state);S["sources"]["Strategy1Discovery"]=copy.deepcopy(state)
+   print("S1_DISCOVERY_STATE "+json.dumps({"ok":True,"last_check":state["last_check"],"universe_size":len(rows),"scan_diagnostics":state["scan_diagnostics"],"hot_symbols":hot,"top_anomalies":[x["symbol"] for x in ranked[:5]]},ensure_ascii=False),flush=True)
    retry_delay=DISCOVERY_SCAN_SECONDS
   except Exception as exc:
    retry_delay=min(300,max(DISCOVERY_SCAN_SECONDS,retry_delay*2))
@@ -185,6 +187,7 @@ def bybit_volatility_discovery_loop():
     prev=copy.deepcopy(S.get("strategy1_discovery") or {})
     prev.update({"ok":False,"last_check":now(),"error":type(exc).__name__+":"+str(exc)[:160]})
     S["strategy1_discovery"]=prev;S["sources"]["Strategy1Discovery"]=copy.deepcopy(prev)
+   print("S1_DISCOVERY_STATE "+json.dumps({"ok":False,"last_check":prev["last_check"],"error":prev["error"],"retry_seconds":retry_delay},ensure_ascii=False),flush=True)
   SHUTDOWN.wait(retry_delay)
 
 
