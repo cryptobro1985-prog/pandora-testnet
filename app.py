@@ -6363,7 +6363,7 @@ def html_strategy1_only(data):
   ret=q.get("account_contribution_pct_24h")
   wrq=q.get("win_rate_pct")
   pnlq=q.get("realized_pnl")
-  det=s1details.get(sym) or {}
+  det=details.get(sym) or {}
   h=(det.get("h1_local") or {})
   h1txt=(h.get("pivot_type") or "—").replace("_"," ")
   pivot=h.get("pivot_price")
