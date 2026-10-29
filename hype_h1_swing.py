@@ -176,6 +176,13 @@ def analyze(rows, now_ms, symbol=SYMBOL):
         if candidate.get("ready") and candidate.get("entry_side") in (-1, 1):
             anchor = candidate
     result = dict(anchor or latest)
+    # v13 migration stamp: preserve the true pivot confirmation separately, but
+    # stamp the canonical reconstructed regime with the newest closed H1 candle.
+    # This lets a full-history v13 rebuild supersede stale v12 persisted anchors
+    # whose timestamps were produced by the old one-bar confirmation rule.
+    result["anchor_confirmation_time"] = result.get("signal_candle_time")
+    result["signal_candle_time"] = candles[-1]["t"]
+    result["signal_candle_close_time"] = candles[-1]["T"]
     result.update(last_candle_time=candles[-1]["t"], closed_candles=len(candles),
                   h1_direction_anchor=True, execution_interval=M15_INTERVAL,
                   anchor_confirmed=bool(anchor))
