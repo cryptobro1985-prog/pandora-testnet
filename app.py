@@ -6474,8 +6474,14 @@ def html_dashboard(data):
   expected="LONG" if side>0 else ("SHORT" if side<0 else "WAIT")
   phase=d.get("caterpillar_phase") or ("IN POSITION" if d.get("position_open") else "WAIT ENTRY")
   cls="posv" if side>0 else ("negv" if side<0 else "warnv")
-  return '<tr><td><b>%s</b></td><td class="%s"><b>%s</b></td><td class="%s"><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td></tr>'%(
-   esc(symbol),cls,esc(local_txt.replace("_"," ")),cls,esc(expected),esc(phase),
+  pivot_price=h.get("pivot_price")
+  pivot_time=h.get("pivot_candle_time")
+  pending_type=h.get("pending_pivot_type")
+  pending_price=h.get("pending_pivot_price")
+  pending_txt=(("%s @ %s"%(str(pending_type).replace("_"," "),pending_price)) if pending_type and pending_price is not None else "—")
+  return '<tr><td><b>%s</b></td><td class="%s"><b>%s</b></td><td><b>%s</b></td><td>%s</td><td>%s</td><td class="%s"><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td></tr>'%(
+   esc(symbol),cls,esc(local_txt.replace("_"," ")),esc(pivot_price if pivot_price is not None else "—"),
+   esc(pivot_time if pivot_time is not None else "—"),esc(pending_txt),cls,esc(expected),esc(phase),
    esc(d.get("mark","—")),esc(d.get("last_action") or "—"))
  s1_local_rows="".join(_s1_local_row(sym) for sym in LOCAL_EXPERIMENT_SYMBOLS)
 
@@ -6586,7 +6592,7 @@ def html_dashboard(data):
   '<b>OPEN P&L<br><span class="%s">$%.4f</span></b><b>MTM EQUITY<br>$%.4f</b>'
   '<b>CLOSED TRADES<br>%s</b><b>WIN RATE<br>%s</b><b>OPEN POSITIONS<br>%s</b>'
   '<b>RE-ENTRY WATCH<br>%s</b><b>H1 LOCALS<br>%s/18</b><b>LIVE COMMIT<br>%s</b><b>MARK AGE<br>%ss</b><b>SIZE<br>20%% CURRENT EQUITY</b><b>REFERENCE LEVERAGE<br>25x PAPER</b><b>1M SNAPSHOT<br>%s</b></div>'
-  '<div class="muted">ACTUAL PAPER state from durable Neon tables. H1 controls direction; M1/M3/M5 executed flow manages MFE-preserving exits, pullbacks and same-direction re-entry. Only OPEN positions are listed below. No replay values are mixed into actual P&L.</div><h3>H1 LOCAL DIRECTION · ALL 18 TOKENS</h3><div class="s1compact"><table><tr><th>Token</th><th>H1 Local</th><th>Expected Side</th><th>Phase</th><th>Mark</th><th>Last Action</th></tr>%s</table></div>'
+  '<div class="muted">ACTUAL PAPER state from durable Neon tables. H1 controls direction; M1/M3/M5 executed flow manages MFE-preserving exits, pullbacks and same-direction re-entry. Only OPEN positions are listed below. No replay values are mixed into actual P&L.</div><h3>H1 LOCAL DIRECTION · ALL 18 TOKENS</h3><div class="s1compact"><table><tr><th>Token</th><th>H1 Local</th><th>Pivot Price</th><th>Pivot Time</th><th>Pending Candidate</th><th>Expected Side</th><th>Phase</th><th>Mark</th><th>Last Action</th></tr>%s</table></div>'
   '<h3>OPEN NOW · 18-MARKET UNIVERSE</h3><div class="scroll"><table><tr><th>Token</th><th>Side</th><th>Phase</th><th>H1 Local</th><th>Margin $</th><th>Position $</th><th>Entry</th><th>Mark</th><th>Open P&L</th><th>Action</th></tr>%s</table></div>'
   '<h3>ACTUAL STRATEGY 1 TRADE HISTORY</h3><div class="scroll"><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>Margin $</th><th>Position $</th><th>Lev</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Reason</th></tr>%s</table></div>'
   '</section>'
