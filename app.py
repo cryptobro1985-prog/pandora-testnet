@@ -601,6 +601,28 @@ def pinit():
   exacct=c.execute("select equity,realized_pnl,started_at from local_v12_account_state where id=1").fetchone()
   S["local_experiment_equity"]=float(exacct["equity"]);S["local_experiment_realized_pnl"]=float(exacct["realized_pnl"])
   S["local_experiment_started_at"]=exacct["started_at"]
+
+  # One-shot cleanup of the known invalid LIT initial entry opened while M15
+  # showed strong adverse pressure. Keep raw signal/audit evidence, but remove
+  # the invalid PAPER position from the validated book/PnL.
+  invalid_lit_action="strategy1-invalid-lit-entry-20261029-081959-v1"
+  if not c.execute("select 1 from operator_actions where action_id=%s",(invalid_lit_action,)).fetchone():
+   bad=c.execute("""select symbol,opened,side,entry,margin,notional,leverage,features
+                    from local_v12_positions where symbol='LIT'
+                    and opened='2026-10-29T08:19:59.385997+00:00'""").fetchone()
+   if bad:
+    payload={"action":"exclude_invalid_strategy1_open_position","symbol":"LIT","opened":bad["opened"],
+      "side":bad["side"],"entry":bad["entry"],"margin":bad["margin"],"notional":bad["notional"],
+      "leverage":bad["leverage"],"reason":"initial_entry_ignored_strong_adverse_m15",
+      "raw_features":bad["features"],"validated_pnl_effect":0,
+      "audit_preserved":True,"history_deleted":False}
+    c.execute("delete from local_v12_positions where symbol='LIT' and opened=%s",(bad["opened"],))
+    c.execute("delete from local_v12_watchlist where symbol='LIT'")
+    c.execute("insert into operator_actions(action_id,completed_at,payload) values(%s,%s,%s::jsonb)",
+      (invalid_lit_action,now(),json.dumps(payload,default=str)))
+    c.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'local_experiment_invalid_entry_excluded',%s::jsonb)",
+      (now(),json.dumps(payload,default=str)))
+
   expos={}
   for r in c.execute("select * from local_v12_positions").fetchall():
    expos[r["symbol"]]={"symbol":r["symbol"],"side":int(r["side"]),"entry":float(r["entry"]),"notional":float(r["notional"]),
