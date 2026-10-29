@@ -2982,6 +2982,8 @@ def _comparison_anchor(state_name,symbol):
 @account_mutation
 def _comparison_open(prefix,state_name,symbol,side,analysis,mark,entry_kind):
  if side not in (-1,1):return False
+ if state_name=="local_s1" and entry_kind=="REENTRY":
+  if not (analysis.get("ready") and analysis.get("h1_direction_anchor") and analysis.get("anchor_confirmed") and int(analysis.get("entry_side") or 0)==side):return False
  with LOCK:
   if not S.get("engine_active") or symbol in S.get(state_name+"_positions",{}):return False
  prices=dict(S.get("_prices",{}))
