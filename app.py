@@ -2738,13 +2738,13 @@ def _local_experiment_watch_observe(symbol,watch,mark,m15,flow,stamp):
  return updated
 
 @account_mutation
-def local_experiment_open(symbol,side,analysis,entry_kind="M15",m15=None,watch=None):
+def local_experiment_open(symbol,side,analysis,entry_kind="ORDER_FLOW",m15=None,watch=None):
  if symbol not in set(strategy1_runtime_symbols()) or int(side or 0) not in (-1,1):return False
  if S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or not analysis.get("ready"):return False
  if not analysis.get("h1_direction_anchor") or int(analysis.get("entry_side") or 0)!=int(side):return False
  if analysis.get("entry_blocked"):return False
  # Recheck at allocation time: scanning 12 markets and database writes take time.
- # A previously ranked candidate cannot bypass fresh flow or M15 confirmation.
+ # Revalidate fresh executed trades and H1 side; candle horizons never gate orders.
  stamp=time.time()
  flow=MARKET_OBS.flow_context(symbol,stamp)
  selection=(local4_entry_candidate(symbol,analysis,m15,flow,stamp) if entry_kind=="REENTRY"
@@ -2831,12 +2831,13 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
  price=float(price);pnl=paper_pnl(pos["notional"],pos["entry"],price,pos["side"],FEE)
  features=copy.deepcopy(pos.get("features") or {})
  if analysis:features["exit_analysis"]=analysis
- if watch_context:features["m15_profit_protection"]=watch_context
+ if watch_context:features["executed_flow_exit_context"]=watch_context
  features["actual_exit_reason"]=reason;features["actual_exit_mark"]=price
  watch=None
  if reason in ("m15_adverse_pressure_profit_protect","profit_lock_stop","m15_momentum_weakening",
                "m15_pressure_reversal","m15_pressure_reversal_profit_only","caterpillar_breakeven",
                "executed_flow_counter_dominance","m15_opposite_control_exit",
+               "executed_flow_counter_control_exit","executed_flow_weakening_profit_exit",
                "executed_flow_profit_flip_exit","executed_flow_risk_flip_exit",
                "m1_m3_m5_mfe_profit_exit","m1_m3_m5_risk_exit",
                "m1_m3_confirmed_counterflow_exit"):
@@ -3138,10 +3139,8 @@ def local_experiment_loop():
       watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
      canonical_side=int(analysis.get("entry_side") or 0)
      position_vector_mismatch=bool(pos and canonical_side in (-1,1) and int(pos.get("side") or 0)!=canonical_side)
-     # M15 is no longer a trading gate. Keep a compatibility diagnostic shell
-     # while execution is driven by H1 direction + live M1/M3/M5 aggressor flow.
-     m15_live={"ready":False,"partial":None,"adverse_score":None,"recovery_score":None,
-       "mode":"diagnostic_only_not_execution_gate"}
+     # No candle execution gate: H1 owns direction; actual trades own execution.
+     m15_live={"ready":False,"mode":"legacy_metadata_only_not_execution"}
      flow=MARKET_OBS.flow_context(symbol,time.time())
      flow_imb=flow.get("flow_imbalance") if flow.get("trade_data_fresh") else None
      candle=analysis.get("signal_candle_time")
@@ -3167,7 +3166,7 @@ def local_experiment_loop():
         action="H1_DIRECTION_INVALIDATION_EXIT:"+h1_exit if closed else None
        elif pressure_reason:=local4_pressure_exit(pos,m15_live,float(mark),flow):
         pf=pos.get("features") or {}
-        watch_context={"m15":m15_live,"h1_context":h1_context,"flow_imbalance":flow_imb,"flow_context":flow,
+        watch_context={"h1_context":h1_context,"flow_imbalance":flow_imb,"flow_context":flow,
           "flow_source":"hyperliquid_ws_trades","observed_at":now(),"reason":pressure_reason,
           "exit_policy":"M1_M3_M5_CONTROL_TRANSFER","mfe_price_move":pf.get("mfe_price_move"),
           "mfe_giveback_move":pf.get("mfe_giveback_move")}
