@@ -3147,7 +3147,19 @@ def comparison_strategies_loop():
    with LOCK:
     if not S.get("engine_active"):
      SHUTDOWN.wait(1);continue
-   prices=refresh_market_prices(max_age=8.0)
+    prices=dict(S.get("_prices",{}))
+    price_age=time.time()-float(S.get("_last_poll_epoch",0) or 0) if S.get("_last_poll_epoch") else 1e9
+    metadata_ready=bool(S.get("_day_volumes")) and bool(S.get("_max_leverage"))
+   # Strategy 1 comparison/anchor discovery must consume the shared live cache.
+   # It must not issue its own allMids REST request or compete with bootstrap.
+   if not metadata_ready or not prices or price_age>12.0:
+    with LOCK:
+     S["sources"]["Strategy 1 — Restored Caterpillar"]={"ok":False,"ready":False,"warmup":True,
+      "last_check":now(),"mode":"waiting_for_shared_live_cache","error":None}
+     S["sources"]["Strategy 2 — H1 Pivot Swing"]={"ok":True,"ready":False,"disabled":True,
+      "last_check":now(),"error":None}
+    SHUTDOWN.wait(.5)
+    continue
    jobs={}
    for symbol in LOCAL_EXPERIMENT_SYMBOLS:
     jobs[(symbol,"h1")]=pool.submit(_local_h1_candles,symbol)
