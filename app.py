@@ -3033,15 +3033,28 @@ def local_experiment_loop():
     # Canonical Strategy 1 consumes the shared market cache. Never issue its own
     # allMids request; that races metadata/bootstrap and can blank H1 details.
     if not metadata_ready or not prices or price_age>12.0:
-     with LOCK:S["sources"]["Caterpillar 1.0"]={"ok":False,"ready":False,"warmup":True,
-      "last_check":now(),"mode":"waiting_for_shared_live_cache","paper_only":True,
-      "symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"details":copy.deepcopy(S.get("_local4_analysis",{})),
-      "error":None}
+     with LOCK:
+      anchors=copy.deepcopy(S.get("_local4_analysis",{}))
+      permanent_ready=all((anchors.get(sym) or {}).get("ready") and (anchors.get(sym) or {}).get("anchor_confirmed")
+        for sym in LOCAL_EXPERIMENT_SYMBOLS)
+      details={sym:{"ok":bool((anchors.get(sym) or {}).get("ready") and (anchors.get(sym) or {}).get("anchor_confirmed")),
+        "symbol":sym,"mark":prices.get(sym),
+        "h1_local":{"ready":bool((anchors.get(sym) or {}).get("ready")),
+          "pivot_type":(anchors.get(sym) or {}).get("pivot_type"),
+          "pivot_price":(anchors.get(sym) or {}).get("pivot_price"),
+          "entry_side":(anchors.get(sym) or {}).get("entry_side"),
+          "signal_candle_time":(anchors.get(sym) or {}).get("signal_candle_time"),
+          "anchor_confirmed":(anchors.get(sym) or {}).get("anchor_confirmed")},
+        "last_action":"WAIT_FRESH_MARKET_CACHE","error":None} for sym in LOCAL_EXPERIMENT_SYMBOLS}
+      S["sources"]["Caterpillar 1.0"]={"ok":permanent_ready,"ready":permanent_ready,"warmup":not permanent_ready,
+       "execution_cache_ready":False,"last_check":now(),"mode":"H1_READY_WAITING_FRESH_MARKET_CACHE",
+       "paper_only":True,"symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"details":details,
+       "error":None if permanent_ready else "missing_permanent_h1_anchor"}
      SHUTDOWN.wait(.5);continue
     local_experiment_mark_positions(prices)
     jobs={};persisted_by_symbol={}
-    runtime_symbols=list(strategy1_runtime_symbols())
-    # Fast restore: a confirmed durable H1 anchor is sufficient for Strategy 1.
+    runtime_symbols=list(LOCAL_EXPERIMENT_SYMBOLS)
+    # Core readiness is defined by the 18 permanent markets. Discovery HOT symbols are optional extensions\n    # and must never stall the canonical Strategy 1 execution loop.\n    # Fast restore: a confirmed durable H1 anchor is sufficient for Strategy 1.
     # Only symbols without a valid anchor spend REST budget on H1 history.
     for symbol in runtime_symbols:
      with LOCK:mem=copy.deepcopy(S.get("_local4_analysis",{}).get(symbol) or S.get("local_h1_direction",{}).get(symbol))
@@ -3177,7 +3190,7 @@ def local_experiment_loop():
       watching_for_reentry=bool(live_watch),caterpillar_phase=phase)
     stats=local_experiment_stats()
     equity,used,free=_local_experiment_margin_state()
-    ready_all=all(x.get("ok") for x in details.values())
+    ready_all=all((details.get(sym) or {}).get("ok") for sym in LOCAL_EXPERIMENT_SYMBOLS)
     bootstrap_wait=bool(details) and all(x.get("ok") or "history_bootstrap_pending" in str(x.get("error") or "") for x in details.values())
     with LOCK:
      S["local_experiment_stats"]=stats
