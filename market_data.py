@@ -56,6 +56,7 @@ class RollingMarketData:
         self._oi = {}
         self._counters = {"accepted": 0, "duplicates": 0, "invalid": 0,
                           "stale": 0, "stale_lag": 0, "stale_before_coverage": 0,
+                          "bootstrap_trades": 0,
                           "outside_subscription": 0, "last_trade_lag_seconds": None,
                           "max_trade_lag_seconds_observed": 0.0}
 
@@ -173,9 +174,15 @@ class RollingMarketData:
                     self._counters["stale_lag"] += 1
                     continue
                 if stamp < state["since"]:
-                    self._counters["stale"] += 1
-                    self._counters["stale_before_coverage"] += 1
-                    continue
+                    # Hyperliquid sends a real recent-trade snapshot when a
+                    # subscription starts. Use only rows already bounded by
+                    # max_trade_lag_seconds to warm the M1/M3/M5 tape instead of
+                    # discarding them solely because they predate socket connect.
+                    # A current decision still requires a genuinely fresh latest
+                    # trade via flow_context(), so stale snapshots cannot trigger
+                    # an entry by themselves.
+                    state["since"] = max(received - self.retention_seconds, stamp)
+                    self._counters["bootstrap_trades"] += 1
                 notional = price * size
                 if not math.isfinite(notional):
                     self._counters["invalid"] += 1
