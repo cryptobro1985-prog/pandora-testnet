@@ -2799,7 +2799,18 @@ def local_experiment_loop():
      metadata_ready=bool(S.get("_day_volumes")) and bool(S.get("_max_leverage"))
     if not active:
      SHUTDOWN.wait(1);continue
-    prices=refresh_market_prices(max_age=8.0)
+    with LOCK:
+     prices=dict(S.get("_prices",{}))
+     price_age=time.time()-float(S.get("_last_poll_epoch",0) or 0) if S.get("_last_poll_epoch") else 1e9
+     metadata_ready=bool(S.get("_day_volumes")) and bool(S.get("_max_leverage"))
+    # Canonical Strategy 1 consumes the shared market cache. Never issue its own
+    # allMids request; that races metadata/bootstrap and can blank H1 details.
+    if not metadata_ready or not prices or price_age>12.0:
+     with LOCK:S["sources"]["Caterpillar 1.0"]={"ok":False,"ready":False,"warmup":True,
+      "last_check":now(),"mode":"waiting_for_shared_live_cache","paper_only":True,
+      "symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"details":copy.deepcopy(S.get("_local4_analysis",{})),
+      "error":None}
+     SHUTDOWN.wait(.5);continue
     local_experiment_mark_positions(prices)
     jobs={}
     for symbol in LOCAL_EXPERIMENT_SYMBOLS:
