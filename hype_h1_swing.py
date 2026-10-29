@@ -179,51 +179,6 @@ def analyze(rows, now_ms, symbol=SYMBOL):
     result.update(last_candle_time=candles[-1]["t"], closed_candles=len(candles),
                   h1_direction_anchor=True, execution_interval=M15_INTERVAL,
                   anchor_confirmed=bool(anchor))
-
-    # A confirmed H1 pivot is usable only while its own extreme remains intact.
-    # If price later trades through a LOCAL_LOW/LOCAL_HIGH, that anchor was not
-    # the durable swing extreme we require for Strategy 1. Go neutral instead
-    # of carrying a stale directional bias until an opposite pivot appears.
-    side = int(result.get("entry_side") or 0)
-    pivot = _f(result.get("pivot_price"))
-    signal_t = result.get("signal_candle_time")
-    broken = False
-    broken_at = None
-    if side in (-1, 1) and pivot is not None and signal_t is not None:
-        for z in candles:
-            if z["t"] <= int(signal_t):
-                continue
-            if side > 0 and z["l"] < pivot:
-                broken, broken_at = True, z["t"]
-                break
-            if side < 0 and z["h"] > pivot:
-                broken, broken_at = True, z["t"]
-                break
-
-        # Also treat a live breach in the current H1 candle as invalidation.
-        # We do not flip direction early; we simply block the stale side.
-        current = _completed(rows, float(now_ms) + 3_600_001, 3_600_000)
-        for z in current:
-            if z["t"] <= candles[-1]["t"] or not (z["t"] <= now_ms < z["T"] + 1001):
-                continue
-            if side > 0 and z["l"] < pivot:
-                broken, broken_at = True, z["t"]
-            if side < 0 and z["h"] > pivot:
-                broken, broken_at = True, z["t"]
-
-    if broken:
-        result.update(
-            anchor_invalidated=True,
-            anchor_invalidated_at=broken_at,
-            anchor_invalidation_reason="pivot_extreme_breached",
-            previous_entry_side=side,
-            entry_side=0,
-            entry_blocked=True,
-            entry_block_reason="h1_pivot_extreme_breached_wait_new_confirmed_local",
-        )
-        return result
-
-    result.update(anchor_invalidated=False)
     result.update(pending_extreme(rows, now_ms, result.get("entry_side", 0)))
     return result
 
@@ -418,8 +373,6 @@ def position_exit(position, analysis, mark):
     mark = _f(mark)
     if side not in (-1, 1) or entry is None or mark is None:
         return None
-    if analysis.get("anchor_invalidated"):
-        return "h1_pivot_extreme_breached"
     if analysis.get("h1_direction_anchor") and int(analysis.get("entry_side") or 0) == -side:
         return "opposite_local_high" if side > 0 else "opposite_local_low"
     entry_candle = position.get("signal_candle_time")
