@@ -277,6 +277,43 @@ def _entry_not_chased(anchor,m15,mark):
     return abs(mark/ref-1)<=limit
 
 
+def _fast_exit(position,m15,mark,flow):
+    """Mirror live M1/M3 counterflow MFE protection."""
+    side=int(position.get("side") or 0)
+    if side not in (-1,1) or not flow.get("trade_data_fresh"):return None
+    try:
+        i60=side*float(flow.get("flow_imbalance"))
+        i180=side*float(flow.get("flow_imbalance_180s"))
+        c60=float(flow.get("trade_count_60s") or 0)
+        c180=float(flow.get("trade_count_180s") or 0)
+    except (TypeError,ValueError):return None
+    if c60<5 or c180<12 or i60>-.18 or i180>-.08:return None
+    entry=float(position.get("entry") or 0)
+    if entry<=0:return None
+    favorable=side*(float(mark)/entry-1.0)
+    peak=max(0.0,float((position.get("features") or {}).get("mfe_price_move") or 0),favorable)
+    typical=float((m15 or {}).get("median_range_move") or .008)
+    recoil=max(.0007,min(.0018,typical*.12))
+    return "m1_m3_confirmed_counterflow_exit" if peak-favorable>=recoil else None
+
+def _resume_ready(side,m15,mark,watch,flow):
+    """Mirror live same-anchor Caterpillar re-entry; H1 extension blocks elsewhere."""
+    if side not in (-1,1) or not m15.get("ready") or not flow.get("trade_data_fresh"):return False
+    ctx=(watch or {}).get("context") or {}
+    if ctx.get("phase") not in ("WAIT_PULLBACK","WAIT_RESUMPTION"):return False
+    try:
+        i60=side*float(flow.get("flow_imbalance"))
+        i180=side*float(flow.get("flow_imbalance_180s"))
+        i300=side*float(flow.get("flow_imbalance_300s"))
+    except (TypeError,ValueError):return False
+    if i60<.12 or i180<.08 or i300<.08:return False
+    if int(m15.get("recovery_score") or 0)<2 or int(m15.get("adverse_score") or 0)>1:return False
+    extreme=float(ctx.get("pullback_extreme") or watch.get("exit_price") or 0)
+    if extreme<=0:return False
+    typical=float(m15.get("median_range_move") or .008)
+    resume=max(.0005,min(.0012,typical*.10))
+    return side*(float(mark)/extreme-1.0)>=resume
+
 def run_backtest(start_date=None,days=7):
     today=dt.datetime.now(dt.timezone.utc).date()
     end_date=today
@@ -370,11 +407,15 @@ def run_backtest(start_date=None,days=7):
                 f=pos.setdefault("features",{})
                 f["mfe_price_move"]=max(float(f.get("mfe_price_move",0) or 0),move)
                 f["mae_price_move"]=min(float(f.get("mae_price_move",0) or 0),move)
+                pivot=float(anchor.get("pivot_price") or 0)
+                extension=(pivot>0 and ((pos["side"]>0 and mark<pivot) or (pos["side"]<0 and mark>pivot)))
                 reason=None
                 if int(anchor.get("entry_side") or 0)==-int(pos["side"]):
                     reason="opposite_confirmed_h1_local"
+                elif extension:
+                    reason="same_side_h1_extension_wait_exit"
                 else:
-                    reason=pressure_exit(pos,m15,mark,flow) or _stop(pos,m15,mark,flow)
+                    reason=_fast_exit(pos,m15,mark,flow) or _stop(pos,m15,mark,flow)
                 if reason:
                     pnl=_pnl(pos,mark);cash+=pnl
                     trades.append({"opened_t":pos.get("opened"),"closed_t":t,"symbol":s,"side":pos["side"],
@@ -386,31 +427,60 @@ def run_backtest(start_date=None,days=7):
                     watches[s]={"symbol":s,"side":pos["side"],"origin_signal_candle":pos.get("signal_candle_time",0),
                                 "exit_price":mark,"exit_at":dt.datetime.fromtimestamp(t,dt.timezone.utc).isoformat(),
                                 "reentries":int(f.get("swing_reentries",0) or 0),
-                                "context":{"phase":"WAIT_PULLBACK","counter_pressure_seen":False,
+                                "context":{"phase":"WAIT_NEW_H1_PIVOT" if extension else "WAIT_PULLBACK",
+                                           "counter_pressure_seen":bool(reason=="m1_m3_confirmed_counterflow_exit"),
                                            "pullback_extreme":mark,"anchor":dict(f)}}
                     del positions[s]
                 continue
 
             if watch:
-                if int(anchor.get("entry_side") or 0)==-int(watch["side"]):
+                wside=int(watch["side"])
+                if int(anchor.get("entry_side") or 0)==-wside:
                     watches.pop(s,None);watch=None
-                else:
-                    watch=update_watch(watch,mark,m15,flow,t+15)
-                    watches[s]=watch
-                if watch and reentry_ready(int(watch["side"]),m15,mark,watch,flow,t+15):
+                    # Opposite confirmed H1 local is a fresh structural entry.
                     equity=mtm();used=sum(p["margin"] for p in positions.values());free=equity-used
                     margin=max(.01,equity*MARGIN_FRACTION)
                     if free+1e-9>=margin:
-                        positions[s]={"symbol":s,"side":int(watch["side"]),"entry":mark,"margin":margin,
+                        positions[s]={"symbol":s,"side":int(anchor["entry_side"]),"entry":mark,"margin":margin,
                                       "notional":margin*LEV,"leverage":LEV,"opened":t,
                                       "signal_candle_time":anchor.get("signal_candle_time",0),
                                       "features":{"estimated_round_trip_cost_move":2*FEE+.0004,
-                                                  "entry_kind":"REENTRY","mfe_price_move":0.0,"mae_price_move":0.0}}
+                                                  "entry_kind":"H1_CONFIRMED","mfe_price_move":0.0,"mae_price_move":0.0}}
+                    continue
+                pivot=float(anchor.get("pivot_price") or 0)
+                extension=(pivot>0 and ((wside>0 and mark<pivot) or (wside<0 and mark>pivot)))
+                ctx=watch.setdefault("context",{})
+                extreme=float(ctx.get("pullback_extreme") or watch.get("exit_price") or mark)
+                ctx["pullback_extreme"]=min(extreme,mark) if wside>0 else max(extreme,mark)
+                if extension:
+                    ctx["phase"]="WAIT_NEW_H1_PIVOT"
+                newer=int(anchor.get("signal_candle_time") or 0)>int(watch.get("origin_signal_candle") or 0)
+                if ctx.get("phase")=="WAIT_NEW_H1_PIVOT":
+                    if newer and int(anchor.get("entry_side") or 0)==wside:
+                        equity=mtm();used=sum(p["margin"] for p in positions.values());free=equity-used
+                        margin=max(.01,equity*MARGIN_FRACTION)
+                        if free+1e-9>=margin:
+                            positions[s]={"symbol":s,"side":wside,"entry":mark,"margin":margin,
+                                          "notional":margin*LEV,"leverage":LEV,"opened":t,
+                                          "signal_candle_time":anchor.get("signal_candle_time",0),
+                                          "features":{"estimated_round_trip_cost_move":2*FEE+.0004,
+                                                      "entry_kind":"H1_REENTRY","mfe_price_move":0.0,"mae_price_move":0.0}}
+                            watches.pop(s,None)
+                    continue
+                if _resume_ready(wside,m15,mark,watch,flow):
+                    equity=mtm();used=sum(p["margin"] for p in positions.values());free=equity-used
+                    margin=max(.01,equity*MARGIN_FRACTION)
+                    if free+1e-9>=margin:
+                        positions[s]={"symbol":s,"side":wside,"entry":mark,"margin":margin,
+                                      "notional":margin*LEV,"leverage":LEV,"opened":t,
+                                      "signal_candle_time":anchor.get("signal_candle_time",0),
+                                      "features":{"estimated_round_trip_cost_move":2*FEE+.0004,
+                                                  "entry_kind":"FLOW_REENTRY","mfe_price_move":0.0,"mae_price_move":0.0}}
                         watches.pop(s,None)
                 continue
 
-            candidate=entry_candidate(s,anchor,m15,flow,t+15)
-            if candidate.get("eligible") and _entry_not_chased(anchor,m15,mark):
+            # First entry from a causally confirmed H1 local is immediate.
+            if int(anchor.get("entry_side") or 0) in (-1,1):
                 equity=mtm();used=sum(p["margin"] for p in positions.values());free=equity-used
                 margin=max(.01,equity*MARGIN_FRACTION)
                 if free+1e-9>=margin:
@@ -418,7 +488,7 @@ def run_backtest(start_date=None,days=7):
                                   "notional":margin*LEV,"leverage":LEV,"opened":t,
                                   "signal_candle_time":anchor.get("signal_candle_time",0),
                                   "features":{"estimated_round_trip_cost_move":2*FEE+.0004,
-                                              "entry_kind":"FIRST","mfe_price_move":0.0,"mae_price_move":0.0}}
+                                              "entry_kind":"H1_CONFIRMED","mfe_price_move":0.0,"mae_price_move":0.0}}
 
         equity=mtm();peak=max(peak,equity);max_equity=max(max_equity,equity);min_equity=min(min_equity,equity)
         if peak>0:max_dd=max(max_dd,(peak-equity)/peak)
@@ -445,7 +515,7 @@ def run_backtest(start_date=None,days=7):
             "max_drawdown_pct":max_dd*100,"closed_trades":len(trades),
             "wins":wins,"win_rate":wins/len(trades) if trades else None,"profit_factor":pf,
             "per_symbol":per,"open_positions":positions,"coverage":coverage,
-            "trades":history_rows[-500:],"policy":"h1_multihorizon_flow_caterpillar_v14_universal_25x"}
+            "trades":history_rows[-500:],"policy":"h1_structural_watch_m1_m3_exit_m1_m3_m5_reentry_v15_18markets"}
 
 
 def _worker(start_date,days):
