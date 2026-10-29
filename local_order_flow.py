@@ -48,21 +48,28 @@ def flow_profile(flow, side):
     c60 = _f(flow.get("trade_count_60s"))
     c180 = _f(flow.get("trade_count_180s"))
     c300 = _f(flow.get("trade_count_300s"))
-    active = (c60 is not None and c180 is not None and c300 is not None and
-              c60 >= 5 and c180 >= 12 and c300 >= 20)
     minute, three_minute, five_minute = values["60s"], values["180s"], values["300s"]
+    # Fast causal execution: M1 can trade as soon as the live tape is genuinely
+    # fresh. M3/M5 strengthen confirmation when available, but reconnect warm-up
+    # must never freeze Strategy 1 for 3-5 minutes. H1 remains the sole side owner.
+    m1_active = c60 is not None and c60 >= 5
+    m3_active = c180 is not None and c180 >= 12 and three_minute is not None
+    m5_active = c300 is not None and c300 >= 20 and five_minute is not None
+    confirmations = int(m3_active and three_minute >= .04) + int(m5_active and five_minute >= .02)
+    counter_confirms = int(m3_active and three_minute <= -.04) + int(m5_active and five_minute <= .02)
+    active = m1_active
     values.update(
         active=active,
         event_epoch=_event_epoch(flow),
-        # M1 must actually flip, M3 must confirm, and M5 must no longer show
-        # strong control in the old H1-side direction. This is the live mirror
-        # of the 18-market causal replay.
-        counter_takeover=(active and minute <= -.18 and three_minute <= -.08 and
-                          five_minute <= .08),
-        resumed=(active and minute >= .12 and three_minute >= .08 and
-                 five_minute >= .08),
-        aligned_control=(active and minute >= .08 and three_minute >= .05 and
-                         five_minute >= .03),
+        # Strong M1 transfer acts immediately; available M3/M5 evidence confirms
+        # rather than blocks. This preserves responsiveness after reconnects.
+        counter_takeover=(m1_active and minute <= -.18 and
+                          (not m3_active or three_minute <= .04) and
+                          (not m5_active or five_minute <= .08)),
+        resumed=(m1_active and minute >= .12 and
+                 (confirmations >= 1 or (not m3_active and not m5_active))),
+        aligned_control=(m1_active and minute >= .08 and
+                         (confirmations >= 1 or (not m3_active and not m5_active))),
     )
     return values
 
