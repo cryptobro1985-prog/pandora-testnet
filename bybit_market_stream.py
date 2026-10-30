@@ -78,6 +78,8 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
             last_trade_receive = now
             last_trade_exchange = 0.0
             accepted_trades = stale_trades = 0
+            trade_topics_confirmed = not subscribe_trades
+            trade_warmup_deadline = now + 45.0
             mids = {}
             backoff = 1.0
 
@@ -95,6 +97,7 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                     observations.heartbeat(last_received)
                     topic = str(message.get("topic") or "")
                     if topic.startswith("publicTrade."):
+                        trade_topics_confirmed = True
                         batch = []
                         for row in message.get("data") or []:
                             trade = normalize_bybit_public_trade(row)
@@ -132,8 +135,11 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                                 on_regime_candles(candle)
                             elif on_candles is not None:
                                 on_candles(candle)
-                    elif message.get("op") == "subscribe" and message.get("success") is False:
-                        raise RuntimeError("bybit_subscription_error:" + str(message.get("ret_msg") or "")[:120])
+                    elif message.get("op") == "subscribe":
+                        if message.get("success") is False:
+                            raise RuntimeError("bybit_subscription_error:" + str(message.get("ret_msg") or "")[:120])
+                        if subscribe_trades and message.get("success") is True:
+                            trade_topics_confirmed = True
                 except websocket.WebSocketTimeoutException:
                     if time.time() - last_received > 30:
                         raise RuntimeError("bybit_heartbeat_stale")
@@ -141,7 +147,10 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                 epoch = time.time()
                 # The socket being alive is not proof the executed tape is live.
                 # Once warmed, reconnect if no accepted trade batch reaches us.
-                if subscribe_trades and epoch - last_trade_receive > 30:
+                if subscribe_trades and epoch >= trade_warmup_deadline and epoch - last_trade_receive > 30:
+                    # A quiet subset of symbols can legitimately have no trades for 30s.
+                    # Only recycle the socket when the entire subscribed tape is silent
+                    # after the initial subscription/warm-up period.
                     raise RuntimeError("bybit_trade_tape_stale")
 
                 if epoch - last_refresh >= 5:
