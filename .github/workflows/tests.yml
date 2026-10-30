@@ -56,6 +56,9 @@ jobs:
             tests.test_release_gates_20261027 \
             tests.test_strategy_roi \
             tests.test_strategy_stats \
+            tests.test_strategy1_h1_runtime_guard \
+            tests.test_strategy1_h1_flow_transfer \
+            tests.test_strategy1_m1_m3_m5_flow \
             tests.test_ws_mid_prices
       - name: Package source backup
         if: always()
