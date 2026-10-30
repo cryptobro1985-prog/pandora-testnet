@@ -42,6 +42,21 @@ class Strategy1FlowTests(unittest.TestCase):
         self.assertEqual(pressure_exit(pos,{"median_range_move":0.008},100.65,flow(-0.25,-0.14,0.02)),
                          "m1_m3_m5_mfe_preservation_exit")
 
+    def test_large_mfe_uses_tighter_giveback_under_real_counter_control(self):
+        pos={"side":-1,"entry":0.19054,
+             "features":{"mfe_price_move":0.0349,"estimated_round_trip_cost_move":0.001}}
+        # ~10% giveback from a >3% underlying MFE must already be protected
+        # once buyers own both M1 and M3; old 18% logic would still hold.
+        mark=0.18455
+        self.assertEqual(pressure_exit(pos,None,mark,flow(0.25,0.14,-0.02)),
+                         "m1_m3_m5_mfe_preservation_exit")
+
+    def test_large_mfe_does_not_exit_without_real_counter_control(self):
+        pos={"side":-1,"entry":0.19054,
+             "features":{"mfe_price_move":0.0349,"estimated_round_trip_cost_move":0.001}}
+        mark=0.18455
+        self.assertIsNone(pressure_exit(pos,None,mark,flow(-0.25,-0.14,-0.02)))
+
     def test_clear_counter_takeover_exits_even_before_mfe_is_bankable(self):
         pos={"side":1,"entry":100.0,"features":{"mfe_price_move":0.0010,"estimated_round_trip_cost_move":0.001}}
         self.assertEqual(pressure_exit(pos,{"median_range_move":0.008},100.08,flow(-0.25,-0.14,-0.08)),
