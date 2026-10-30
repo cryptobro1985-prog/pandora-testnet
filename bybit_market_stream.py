@@ -226,8 +226,17 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                 # indefinitely in READY_FOR_EXECUTED_FLOW with an apparently live socket.
                 if subscribe_trades and epoch >= subscription_ack_deadline and not trade_topics_confirmed:
                     raise RuntimeError("bybit_trade_subscription_ack_timeout")
-                # Do not recycle a healthy websocket merely because its symbols are quiet.
-                # Dead transport is handled by the receive/heartbeat timeout above.
+                # A live heartbeat is not enough: Bybit can leave a shard draining an
+                # old/replayed publicTrade backlog. Quiet symbols are fine, but repeated stale
+                # trade rows while no execution has been accepted means the tape is unusable.
+                # Recover the recent tail best-effort, then recycle only this shard so Strategy 1
+                # can rebuild fresh executed-flow without resetting the rest of the runtime.
+                if subscribe_trades and stale_trades and epoch - last_trade_receive > 30:
+                    recovered = _recover_recent_trades(selected, observations, max_age_seconds=120)
+                    if recovered:
+                        last_trade_receive = epoch
+                    else:
+                        raise RuntimeError("bybit_trade_tape_stale_reconnect")
 
                 if epoch - last_refresh >= 5:
                     desired = set(symbols_provider())
