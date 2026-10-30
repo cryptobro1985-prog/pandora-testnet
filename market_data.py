@@ -277,7 +277,7 @@ class RollingMarketData:
                    "volume_baseline_samples": 0, "volume_rate_usd_per_sec": None,
                    "buy_volume_60s": None, "sell_volume_60s": None,
                    "flow_imbalance": None, "cvd_1m": None,"trade_count_60s":None,"observed_notional_60s":None,
-                   "volume_source": "hyperliquid_ws_trades",
+                   "volume_source": "bybit_v5_public_trade",
                    "trade_coverage_seconds": 0.0, "trade_data_fresh": False,
                    "latest_trade_age_seconds": None,
                    "volume_window_end_epoch": None,
@@ -375,7 +375,7 @@ class RollingMarketData:
                        flow_imbalance=i60,flow_imbalance_15s=i15,flow_imbalance_30s=i30,
                        flow_delta_15_60=i15-i60,flow_delta_30_60=i30-i60,
                        trade_count_60s=count,observed_notional_60s=buy+sell,
-                       volume_window_end_epoch=epoch,volume_source="hyperliquid_ws_executed_trades")
+                       volume_window_end_epoch=epoch,volume_source="bybit_v5_public_trade")
             if coverage>=180:
                 b3,s3,c3=volumes(180)
                 out.update(flow_imbalance_180s=imbalance(b3,s3),trade_count_180s=c3)
