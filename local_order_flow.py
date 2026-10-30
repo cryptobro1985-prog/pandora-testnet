@@ -54,12 +54,19 @@ def flow_profile(flow, side):
     m3_ready = bool(coverage >= 180 and m3 is not None)
     m5_ready = bool(coverage >= 300 and m5 is not None)
 
-    # User rule only: who actually predominates on M1/M3/M5.
+    # User rule only: who actually predominates on every AVAILABLE execution
+    # window. Never invent a mandatory M5 warm-up after deploy/reconnect: start
+    # with fresh M1, then M3 and M5 automatically join the consensus when ready.
     # No price reaction, MFE %, score, fixed TP or imbalance-size threshold.
-    direct_control = bool(m5_ready and m1 > 0 and m3 > 0 and m5 > 0)
-    counter_takeover = bool(m5_ready and m1 < 0 and m3 < 0 and m5 < 0)
-    fast_counter = bool(m3_ready and m1 < 0 and m3 < 0)
-    fast_aligned = bool(m3_ready and m1 > 0 and m3 > 0)
+    aligned_windows = [m1]
+    if m3_ready:
+        aligned_windows.append(m3)
+    if m5_ready:
+        aligned_windows.append(m5)
+    direct_control = bool(aligned_windows and all(x > 0 for x in aligned_windows))
+    counter_takeover = bool(aligned_windows and all(x < 0 for x in aligned_windows))
+    fast_counter = counter_takeover
+    fast_aligned = direct_control
 
     return {
         "active": True,
@@ -108,8 +115,6 @@ def _candidate(symbol, analysis, flow):
         reason = "waiting_for_h1_local"
     elif profile is None:
         reason = "waiting_for_fresh_executed_flow"
-    elif not profile["m5_ready"]:
-        reason = "waiting_for_m1_m3_m5_coverage"
     else:
         reason = "waiting_for_h1_side_m1_m3_m5_control"
     return dict(
@@ -138,7 +143,7 @@ def entry_candidate(symbol, analysis, m15, flow, stamp):
               (analysis or {}).get("h1_direction_anchor") and
               not (analysis or {}).get("entry_blocked") and side in (-1, 1))
     profile = flow_profile(flow, side)
-    eligible = bool(h1 and profile and profile["m5_ready"] and profile["resumed"])
+    eligible = bool(h1 and profile and profile["resumed"])
     base["eligible"] = eligible
     if eligible:
         base["reason"] = "h1_local_m1_m3_m5_direct_reentry"
@@ -202,6 +207,6 @@ def reentry_ready(side, m15, mark, watch, flow, stamp):
     opposite_epoch = _f(ctx.get("last_opposite_trade_epoch"))
     event_epoch = profile.get("event_epoch") if profile else None
     return bool(
-        profile and profile["m5_ready"] and profile["resumed"] and
+        profile and profile["resumed"] and
         event_epoch is not None and opposite_epoch is not None and event_epoch > opposite_epoch
     )
