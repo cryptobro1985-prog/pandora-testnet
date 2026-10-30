@@ -8,7 +8,7 @@ when short-term control transfers against the position.
 import copy
 import math
 
-POLICY = "Caterpillar H1-local symmetric control-transfer + tiered MFE preservation"
+POLICY = "Caterpillar H1-local pure M1/M3/M5 buyer-seller control"
 
 
 def _f(value):
@@ -28,9 +28,9 @@ def _event_epoch(flow):
 def flow_profile(flow, side):
     """Return executed-flow control aligned to the active H1 side.
 
-    Positive aligned values mean the H1 side is the aggressor. Negative values
-    mean the opposite side is the aggressor. A price move that remains aligned
-    despite opposite aggression is treated as absorption, not as a reversal.
+    Positive aligned values mean the H1 side has greater executed aggressor
+    notional. Negative values mean the opposite side has greater executed
+    aggressor notional. No price-response, score or magnitude threshold is used.
     """
     side = int(side or 0)
     if side not in (-1, 1) or not isinstance(flow, dict) or not flow.get("trade_data_fresh"):
@@ -42,7 +42,7 @@ def flow_profile(flow, side):
     raw60 = _f(flow.get("flow_imbalance"))
     raw180 = _f(flow.get("flow_imbalance_180s"))
     raw300 = _f(flow.get("flow_imbalance_300s"))
-    price300 = _f(flow.get("price_return_300s"))
+    price300 = _f(flow.get("price_return_300s"))  # telemetry only; never a gate
     coverage = _f(flow.get("trade_coverage_seconds")) or 0.0
     if raw60 is None or not -1 <= raw60 <= 1:
         return None
@@ -52,11 +52,12 @@ def flow_profile(flow, side):
     m5 = side * raw300 if raw300 is not None and -1 <= raw300 <= 1 else None
     price5 = side * price300 if price300 is not None else None
     m3_ready = bool(coverage >= 180 and m3 is not None)
-    m5_ready = bool(coverage >= 300 and m5 is not None and price5 is not None)
+    m5_ready = bool(coverage >= 300 and m5 is not None)
 
-    direct_control = bool(m5_ready and m1 > 0 and m3 > 0 and m5 > 0 and price5 > 0)
-    counter_takeover = bool(m5_ready and m1 < 0 and m3 < 0 and m5 < 0 and price5 < 0)
-    absorbed_counter = bool(m5_ready and m1 < 0 and m3 < 0 and m5 < 0 and price5 > 0)
+    # User rule only: who actually predominates on M1/M3/M5.
+    # No price reaction, MFE %, score, fixed TP or imbalance-size threshold.
+    direct_control = bool(m5_ready and m1 > 0 and m3 > 0 and m5 > 0)
+    counter_takeover = bool(m5_ready and m1 < 0 and m3 < 0 and m5 < 0)
     fast_counter = bool(m3_ready and m1 < 0 and m3 < 0)
     fast_aligned = bool(m3_ready and m1 > 0 and m3 > 0)
 
@@ -69,12 +70,10 @@ def flow_profile(flow, side):
         "direct_control": direct_control,
         "aligned_control": direct_control,
         "counter_takeover": counter_takeover,
-        "absorbed_counter": absorbed_counter,
+        "absorbed_counter": False,
         "fast_counter": fast_counter,
         "fast_aligned": fast_aligned,
-        # Re-entry can resume either through direct H1-side aggression or by
-        # absorbing the opposite aggressors while price moves with the H1 side.
-        "resumed": bool(direct_control or absorbed_counter),
+        "resumed": direct_control,
     }
 
 
@@ -111,8 +110,6 @@ def _candidate(symbol, analysis, flow):
         reason = "waiting_for_fresh_executed_flow"
     elif not profile["m5_ready"]:
         reason = "waiting_for_m1_m3_m5_coverage"
-    elif profile["price5"] is not None and profile["price5"] <= 0:
-        reason = "h1_side_flow_without_price_response"
     else:
         reason = "waiting_for_h1_side_m1_m3_m5_control"
     return dict(
@@ -134,7 +131,7 @@ def initial_entry_candidate(symbol, analysis, m15, flow, stamp):
 
 
 def entry_candidate(symbol, analysis, m15, flow, stamp):
-    """Re-entry candidate: direct resumed flow OR proven opposite-flow absorption."""
+    """Re-entry candidate: same H1 side regains executed M1/M3/M5 control."""
     base = _candidate(symbol, analysis, flow)
     side = int((analysis or {}).get("entry_side") or 0)
     h1 = bool((analysis or {}).get("ready") and
@@ -144,19 +141,15 @@ def entry_candidate(symbol, analysis, m15, flow, stamp):
     eligible = bool(h1 and profile and profile["m5_ready"] and profile["resumed"])
     base["eligible"] = eligible
     if eligible:
-        base["reason"] = ("h1_local_m1_m3_m5_absorption_reentry"
-                          if profile["absorbed_counter"]
-                          else "h1_local_m1_m3_m5_direct_reentry")
+        base["reason"] = "h1_local_m1_m3_m5_direct_reentry"
     return base
 
 
 def pressure_exit(position, m15, mark, flow):
-    """Exit only on meaningful control transfer; protect banked MFE earlier.
+    """Close only when the opposite side predominates on executed M1/M3/M5.
 
-    Before meaningful MFE exists, require a full M1/M3/M5 opposite takeover and
-    adverse M5 price response. Once a strong favorable excursion exists, M1+M3
-    opposite control plus a real giveback from the peak is enough to preserve
-    the move without waiting for lagging M5 confirmation.
+    MFE is tracked for measurement and audit, never used as an invented trigger.
+    There is no fixed TP, giveback percentage, score or price-response filter.
     """
     side = int((position or {}).get("side") or 0)
     entry = _f((position or {}).get("entry"))
@@ -164,37 +157,9 @@ def pressure_exit(position, m15, mark, flow):
     profile = flow_profile(flow, side)
     if side not in (-1, 1) or entry is None or entry <= 0 or mark is None or profile is None:
         return None
-
-    features = (position or {}).get("features") or {}
-    current_move = side * (mark / entry - 1.0)
-    mfe = max(0.0, _f(features.get("mfe_price_move")) or 0.0)
-    cost = max(0.0005, _f(features.get("estimated_round_trip_cost_move")) or 0.0)
-    giveback = max(0.0, mfe - current_move)
-
-    # Preserve a bankable excursion. The threshold scales with the achieved MFE,
-    # but never reacts to sub-cost noise. M1+M3 must both have actually flipped.
-    mfe_bankable = bool(mfe >= max(0.0020, cost * 1.5))
-    # Tighten preservation as the excursion becomes valuable. We still require
-    # real opposite M1+M3 executed control, so this is not a naked trailing stop.
-    # 0.8%/1.5%/3% underlying moves are ~20%/37.5%/75% ROE at 25x.
-    if mfe >= 0.030:
-        giveback_fraction = 0.08
-    elif mfe >= 0.015:
-        giveback_fraction = 0.10
-    elif mfe >= 0.008:
-        giveback_fraction = 0.12
-    else:
-        giveback_fraction = 0.15
-    giveback_trigger = max(cost, mfe * giveback_fraction)
-    if mfe_bankable and profile["fast_counter"] and giveback >= giveback_trigger:
-        return "m1_m3_m5_mfe_preservation_exit"
-
-    # For a position that has not yet earned enough MFE, avoid twitch exits:
-    # require the opposite side to own M1/M3/M5 AND make price respond.
     if profile["counter_takeover"]:
-        return "m1_m3_m5_risk_exit"
+        return "executed_flow_m1_m3_m5_opposite_control_exit"
     return None
-
 
 def update_watch(watch, mark, m15, flow, stamp):
     out = copy.deepcopy(watch or {})
