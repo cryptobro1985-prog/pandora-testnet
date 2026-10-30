@@ -61,8 +61,7 @@ from hype_h1_swing import (POLICY as HYPE_SWING_POLICY, SYMBOL as HYPE_SWING_SYM
 
 # Separate 24h Local paper experiment. Leverage follows Hyperliquid's live
 # per-market maxLeverage metadata; validated fallbacks are only for metadata outages.
-LOCAL_EXPERIMENT_SYMBOLS=("INIT","NEAR","GRASS","HYPE","BTC","ETH","SOL","AR","APT","ZEC","WLD",
- "USELESS","TAO","CHIP","BABY","SPX","LIT","CASHCAT")
+LOCAL_EXPERIMENT_SYMBOLS=("INIT","NEAR","BTC","SOL","ETH","LIT","HYPE","ZEC","TAO","GRASS")
 LOCAL_S3_SYMBOLS=("HYPE","NEAR","INIT","USELESS","GRASS","APT","TAO","CHIP","BABY","SPX","LIT","CASHCAT")
 LOCAL_EXPERIMENT_STARTING_EQUITY=500.0
 S1_ONLY_MODE=True
@@ -82,9 +81,9 @@ DISCOVERY_REAL_CANDIDATE_RETURN_PCT=35.0
 DISCOVERY_REAL_CANDIDATE_MIN_TRADES=3
 
 def strategy1_runtime_symbols():
- with LOCK:
-  hot=tuple((S.get("strategy1_discovery") or {}).get("hot_symbols") or ())
- return tuple(dict.fromkeys(tuple(LOCAL_EXPERIMENT_SYMBOLS)+hot))
+ # Strategy 1 PAPER trades exactly the operator-selected ten symbols.
+ # Discovery may monitor others, but cannot promote them into trading.
+ return tuple(LOCAL_EXPERIMENT_SYMBOLS)
 
 STRATEGY1_H1_RUNTIME_VERIFY_MAX_AGE_SECONDS=90.0
 
@@ -135,8 +134,7 @@ def strategy1_confirmed_h1(a):
 def strategy1_trade_symbols():
  # All candidate markets remain in Discovery and H1 scan; trade only confirmed H1.
  with LOCK:
-  hot=tuple((S.get("strategy1_discovery") or {}).get("hot_symbols") or ())
-  pool=tuple(dict.fromkeys(tuple(LOCAL_EXPERIMENT_SYMBOLS)+hot))
+  pool=tuple(LOCAL_EXPERIMENT_SYMBOLS)
   analyses=S.get("_local4_analysis",{})
   durable=S.get("local_h1_direction",{})
   return tuple(s for s in pool if strategy1_confirmed_h1(analyses.get(s))
