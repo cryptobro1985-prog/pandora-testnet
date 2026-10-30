@@ -6515,8 +6515,10 @@ def html_strategy1_only(data):
   details.setdefault(_sym,{})
   if not (details[_sym].get("h1_local") or {}).get("ready"):
    details[_sym]["h1_local"]=copy.deepcopy(_a)
+ discovery=copy.deepcopy(engine.get("discovery") or {})
+ runtime_symbols=list(dict.fromkeys(list(LOCAL_EXPERIMENT_SYMBOLS)+list(discovery.get("hot_symbols") or [])))
  rows=[]
- for sym in LOCAL_EXPERIMENT_SYMBOLS:
+ for sym in runtime_symbols:
   x=posmap.get(sym) or {};d=details.get(sym) or {};a=d.get("h1_local") or {};w=watch.get(sym) or {}
   side=x.get("side") if x else None
   side_txt="LONG" if side in (1,"LONG") else ("SHORT" if side in (-1,"SHORT") else "—")
@@ -6559,7 +6561,7 @@ def html_strategy1_only(data):
    strategy_age="%d д %02d ч %02d мин"%(secs//86400,(secs%86400)//3600,(secs%3600)//60)
  except Exception:pass
  # Per-market totals are derived from actual PAPER closed rows and open marks only.
- token_stats={sym:{"closed":0.0,"open":0.0,"margin":0.0,"trades":0,"wins":0,"active":0} for sym in LOCAL_EXPERIMENT_SYMBOLS}
+ token_stats={sym:{"closed":0.0,"open":0.0,"margin":0.0,"trades":0,"wins":0,"active":0} for sym in runtime_symbols}
  for trade in actual:
   sym=str(trade.get("symbol") or "")
   if sym not in token_stats:continue
@@ -6605,14 +6607,14 @@ def html_strategy1_only(data):
  ymax=max(graph_points)+max(1.0,(max(graph_points)-min(graph_points))*.2)
  chart_coords=" ".join("%.1f,%.1f"%(24+i*852/max(1,len(graph_points)-1),228-184*(v-ymin)/max(.0001,ymax-ymin)) for i,v in enumerate(graph_points))
  chart_svg='<svg viewBox="0 0 900 260" role="img" aria-label="PnL after history reset"><defs><linearGradient id="neon" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#a020f0"/><stop offset=".5" stop-color="#15a9ff"/><stop offset="1" stop-color="#b4ff37"/></linearGradient></defs><path d="M24 228H876 M24 136H876 M24 44H876" fill="none" stroke="#18334a" stroke-dasharray="4 8"/><polyline points="%s" fill="none" stroke="url(#neon)" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/></svg>'%chart_coords
- fresh_by_symbol={sym:{"pnl":0.0,"closed":0} for sym in LOCAL_EXPERIMENT_SYMBOLS}
+ fresh_by_symbol={sym:{"pnl":0.0,"closed":0} for sym in runtime_symbols}
  for trade in fresh:
   sym=str(trade.get("symbol") or "")
   if sym in fresh_by_symbol:
    fresh_by_symbol[sym]["pnl"]+=float(trade.get("pnl",0) or 0)
    fresh_by_symbol[sym]["closed"]+=1
  token_cards=[]
- for sym in LOCAL_EXPERIMENT_SYMBOLS:
+ for sym in runtime_symbols:
   pos=posmap.get(sym) or {}
   item=fresh_by_symbol[sym]
   unreal_now=float(pos.get("unrealized_pnl",0) or 0) if pos else 0.0
@@ -6624,14 +6626,23 @@ def html_strategy1_only(data):
   pivot_txt=("%s · %s"%(pivot_type,pivot_price)) if pivot_price is not None else pivot_type
   status=("OPEN "+str(pos.get("side"))) if pos else ("H1/M5 FLOW READY" if d.get("ok") else "WAIT DATA")
   token_cards.append("<article class='tok'><span class='symbol'>%s</span><span class='gain %s'>$%+.2f</span><small>%d новых закрытий · %s</small><small><b>H1 PIVOT:</b> %s</small><small>%s</small></article>"%(esc(sym),"pos" if current>=0 else "neg",current,item["closed"],"позиция открыта" if pos else "нет позиции",esc(pivot_txt),esc(status)))
- discovery=copy.deepcopy(engine.get("discovery") or {})
  qualification=copy.deepcopy(discovery.get("qualification") or {})
  anomalies=list(discovery.get("top_anomalies") or [])
+ hot_set=set(discovery.get("hot_symbols") or [])
  scanner_rows=[]
- for item in anomalies[:20]:
+ # HOT / PAPER-managed Discovery tokens are always visible first; research candidates follow.
+ display_items=[]
+ by_symbol={str(x.get("symbol") or ""):x for x in anomalies}
+ for sym in discovery.get("hot_symbols") or []:
+  display_items.append(by_symbol.get(sym) or {"symbol":sym,"runtime_eligible":True})
+ for item in anomalies:
+  if str(item.get("symbol") or "") not in hot_set:display_items.append(item)
+ for item in display_items[:25]:
   sym=str(item.get("symbol") or "")
   q=qualification.get(sym) or item.get("strategy1") or {}
-  status=q.get("status") or ("VOLATILITY-HOT" if item.get("runtime_eligible") else "VOLATILITY-ONLY")
+  rotation=(discovery.get("rotation") or {}).get(sym) or {}
+  lifecycle=rotation.get("status")
+  status=q.get("status") or (lifecycle if lifecycle else ("HOT / PAPER" if sym in hot_set else ("RESEARCH" if item.get("runtime_eligible") else "VOLATILITY-ONLY")))
   ret=q.get("account_contribution_pct_24h")
   wrq=q.get("win_rate_pct")
   pnlq=q.get("realized_pnl")
@@ -6654,8 +6665,9 @@ def html_strategy1_only(data):
  scanner_status=("ACTIVE" if scanner_ok else ("ERROR" if scanner_ok is False else "WARMING"))
  scanner_error=discovery.get("error")
  scan_diag=discovery.get("scan_diagnostics") or {}
- scanner_summary="<div class='sub'>Scanner: <b>%s</b> · last check: <b>%s</b> · Universe: <b>%s</b> · HOT: <b>%s</b> · Gate: <b>≥35%% / 24h</b> · min closed trades: <b>%s</b>%s<br>REAL-CANDIDATE: %s</div>"%(
-  esc(scanner_status),esc(discovery.get("last_check","—")),esc(discovery.get("universe_size","—")),len(discovery.get("hot_symbols") or []),
+ hot_names=", ".join(discovery.get("hot_symbols") or []) or "—"
+ scanner_summary="<div class='sub'>Scanner: <b>%s</b> · last check: <b>%s</b> · Universe: <b>%s</b> · HOT/PAPER: <b>%s</b> [%s] · Gate: <b>≥35%% / 24h</b> · min closed trades: <b>%s</b>%s<br>REAL-CANDIDATE: %s</div>"%(
+  esc(scanner_status),esc(discovery.get("last_check","—")),esc(discovery.get("universe_size","—")),len(discovery.get("hot_symbols") or []),esc(hot_names),
   esc((discovery.get("qualification_gate") or {}).get("min_closed_trades",DISCOVERY_REAL_CANDIDATE_MIN_TRADES)),
   (" · error: <b>"+esc(scanner_error)+"</b>") if scanner_error else "",
   esc(real_candidate_txt))
