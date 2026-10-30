@@ -2050,7 +2050,7 @@ def accept_market_prices(mids):
  if not valid:raise ValueError("empty market response")
  stamp=time.time()
  with LOCK:
-  S["last_poll"]=now();S["_last_poll_epoch"]=stamp;S["market_count"]=len(valid);S["_prices"]=valid;S["last_market_error"]=None
+  S["last_poll"]=now();S["_last_poll_epoch"]=stamp;merged=dict(S.get("_prices",{}));merged.update(valid);S["market_count"]=len(merged);S["_prices"]=merged;S["last_market_error"]=None
   for sym,px in valid.items():
    track=S.setdefault("_timeline",{}).setdefault(sym,[])
    if not track or stamp-float(track[-1][0])>=0.5:
