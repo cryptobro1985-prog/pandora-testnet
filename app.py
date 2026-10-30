@@ -2849,8 +2849,19 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
    "origin_signal_candle":int(features.get("origin_h1_signal_candle") or pos.get("signal_candle_time") or 0),
    "exit_price":price,"exit_at":now(),"expires_epoch":0.0,
    "reentries":int(features.get("swing_reentries",0) or 0),"context":copy.deepcopy(watch_context or {})}
-  watch["context"].update(phase="WAIT_PULLBACK",counter_pressure_seen=False,
-    caterpillar_policy=LOCAL4_FLOW_POLICY)
+  # The opposite executed-flow trade was already witnessed at exit.
+  # Preserve its exchange timestamp to re-enter on the first later reversal.
+  opposite_flow_exit=reason in ("executed_flow_15s30s_counter_control_exit","executed_flow_weakening_exit",
+    "executed_flow_counter_control_exit","executed_flow_counter_dominance")
+  flow_at_exit=(watch_context or {}).get("flow_context") or {}
+  try:
+   opposite_epoch=float(flow_at_exit["volume_window_end_epoch"])-float(flow_at_exit["latest_trade_age_seconds"])
+   if not math.isfinite(opposite_epoch):opposite_epoch=None
+  except (KeyError,TypeError,ValueError,OverflowError):opposite_epoch=None
+  confirmed_opposite=bool(opposite_flow_exit and opposite_epoch is not None)
+  watch["context"].update(phase="WAIT_RESUMPTION" if confirmed_opposite else "WAIT_PULLBACK",
+    counter_pressure_seen=confirmed_opposite,caterpillar_policy=LOCAL4_FLOW_POLICY)
+  if confirmed_opposite:watch["context"]["last_opposite_trade_epoch"]=opposite_epoch
  with pg() as db:
   with db.transaction():
    STORE.fence(db)
