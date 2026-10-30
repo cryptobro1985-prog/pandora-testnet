@@ -6237,7 +6237,7 @@ def operations_diagnostics():
     "error":s1src.get("error"),"version":os.getenv("RENDER_GIT_COMMIT"),
     "starting_equity":LOCAL_EXPERIMENT_STARTING_EQUITY,"realized_equity":s1eq,
     "realized_pnl":s1real,"trades":s1trades,"open_positions":s1open,
-    "watching_for_reentry":s1watch,"symbols":list(LOCAL_EXPERIMENT_SYMBOLS),
+    "watching_for_reentry":s1watch,"symbols":list(strategy1_runtime_symbols()),
     "trade_stream_symbols":((S.get("sources",{}).get("MarketTradeStream") or {}).get("symbols")),
     "details":s1src.get("details")},ensure_ascii=False,default=str),flush=True)
   except Exception as e:print("diagnostics_error: "+str(e)[:180],flush=True)
