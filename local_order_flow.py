@@ -7,7 +7,7 @@ completed M15 bars, order-book quotes and elapsed-time delays are not gates.
 import copy
 import math
 
-POLICY = "Caterpillar 1.2 H1-local 15s/30s/60s executed-flow control cycle"
+POLICY = "Caterpillar 1.3 H1-local profit-capture + unlimited re-entry"
 
 
 def _f(value):
@@ -148,7 +148,16 @@ def pressure_exit(position, m15, mark, flow):
     bankable=peak>=max(cost*1.5,.0015)
     if profile["counter_takeover"]:
         return "executed_flow_15s30s_counter_control_exit"
-    if bankable and profile["weakening"] and profile["15s"] < 0:
+    # Protect a meaningful excursion before it can collapse. Once profit has
+    # become bankable, a material giveback plus fast-flow weakening is enough
+    # to flatten. H1 direction is NOT reversed: the symbol moves to WATCH and
+    # may re-enter the same side as often as fresh flow resumes.
+    giveback = max(0.0, peak - favorable)
+    capture_trigger = max(cost * 2.0, .0020)
+    if bankable and peak >= .0040 and giveback >= capture_trigger:
+        if profile["weakening"] or profile["15s"] < .04 or profile["30s"] < .06:
+            return "executed_flow_mfe_giveback_profit_capture_exit"
+    if bankable and profile["weakening"]:
         return "executed_flow_15s30s_mfe_weakening_exit"
     return None
 
