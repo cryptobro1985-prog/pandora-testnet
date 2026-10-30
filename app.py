@@ -6606,9 +6606,12 @@ def html_strategy1_only(data):
   if not (details[_sym].get("h1_local") or {}).get("ready"):
    details[_sym]["h1_local"]=copy.deepcopy(_a)
  discovery=copy.deepcopy(engine.get("discovery") or {})
- runtime_symbols=list(dict.fromkeys(list(LOCAL_EXPERIMENT_SYMBOLS)+list(discovery.get("hot_symbols") or [])))
+ # All HOT candidates remain in the background H1 scanner. Only confirmed
+ # markets have trading cards. Open positions always remain visible.
+ runtime_symbols=list(strategy1_trade_symbols())
+ position_symbols=list(dict.fromkeys(str(x.get("symbol")) for x in positions if x.get("symbol")))
  rows=[]
- for sym in runtime_symbols:
+ for sym in position_symbols:
   x=posmap.get(sym) or {};d=details.get(sym) or {};a=d.get("h1_local") or {};w=watch.get(sym) or {}
   side=x.get("side") if x else None
   side_txt="LONG" if side in (1,"LONG") else ("SHORT" if side in (-1,"SHORT") else "—")
@@ -6628,6 +6631,8 @@ def html_strategy1_only(data):
    esc(mark) if mark_valid else ("DATA WAIT" if x else "—"),
    "pos" if pnl>=0 else "neg","$%+.4f"%pnl if x and mark_valid else "DATA WAIT" if x else "—",
    "pos" if pnl>=0 else "neg","%+.2f%%"%roe if roe is not None and mark_valid else "DATA WAIT" if x else "—"))
+ if not rows:
+  rows.append("<tr><td colspan='12' class='empty'>Нет открытых PAPER-позиций</td></tr>")
  actual_rows=[]
  for x in actual:
   pnl=float(x.get("pnl",0) or 0)
@@ -6727,7 +6732,9 @@ def html_strategy1_only(data):
   display_items.append(by_symbol.get(sym) or {"symbol":sym,"runtime_eligible":True})
  for item in anomalies:
   if str(item.get("symbol") or "") not in hot_set:display_items.append(item)
- for item in display_items[:25]:
+ # Discovery scans all markets internally; this screen displays confirmed H1 only.
+ for item in (item for item in display_items if item.get("symbol") in set(runtime_symbols)):
+  if len(scanner_rows)>=25:break
   sym=str(item.get("symbol") or "")
   q=qualification.get(sym) or item.get("strategy1") or {}
   rotation=(discovery.get("rotation") or {}).get(sym) or {}
@@ -6755,9 +6762,9 @@ def html_strategy1_only(data):
  scanner_status=("ACTIVE" if scanner_ok else ("ERROR" if scanner_ok is False else "WARMING"))
  scanner_error=discovery.get("error")
  scan_diag=discovery.get("scan_diagnostics") or {}
- hot_names=", ".join(discovery.get("hot_symbols") or []) or "—"
- scanner_summary="<div class='sub'>Scanner: <b>%s</b> · last check: <b>%s</b> · Universe: <b>%s</b> · HOT/PAPER: <b>%s</b> [%s] · Gate: <b>≥35%% / 24h</b> · min closed trades: <b>%s</b>%s<br>REAL-CANDIDATE: %s</div>"%(
-  esc(scanner_status),esc(discovery.get("last_check","—")),esc(discovery.get("universe_size","—")),len(discovery.get("hot_symbols") or []),esc(hot_names),
+ hot_names=", ".join(sym for sym in (discovery.get("hot_symbols") or []) if sym in set(runtime_symbols)) or "—"
+ scanner_summary="<div class='sub'>Scanner: <b>%s</b> · last check: <b>%s</b> · Universe: <b>%s</b> · CONFIRMED H1 HOT/PAPER: <b>%s</b> [%s] · Gate: <b>≥35%% / 24h</b> · min closed trades: <b>%s</b>%s<br>REAL-CANDIDATE: %s</div>"%(
+  esc(scanner_status),esc(discovery.get("last_check","—")),esc(discovery.get("universe_size","—")),sum(sym in set(runtime_symbols) for sym in (discovery.get("hot_symbols") or [])),esc(hot_names),
   esc((discovery.get("qualification_gate") or {}).get("min_closed_trades",DISCOVERY_REAL_CANDIDATE_MIN_TRADES)),
   (" · error: <b>"+esc(scanner_error)+"</b>") if scanner_error else "",
   esc(real_candidate_txt))
@@ -6770,11 +6777,11 @@ def html_strategy1_only(data):
  <header><h1><span class='logo'>⬡</span> PANDORA</h1><nav><a href='#overview'>Dashboard</a><a href='#positions'>Positions</a><a href='#tokens'>Markets</a><a href='#history'>History</a><a href='#discovery'>Discovery / AutoScanner</a><a href='#strategy'>Strategy</a></nav><span class='chip status'>● PAPER LIVE</span></header>
  <main><div class='shell' id='overview'><section class='panel hero'><div class='eyebrow'>Total PNL</div><div class='total'>$%+.2f</div><div class='percent'>%+.2f%%</div><div class='caption'>Время работы: %s</div><div class='chart'>%s</div><div class='timeline'><span>Новая история · 28.10.2026</span><span>%d закрытых сделок после начала записи</span></div><div class='sub'>PAPER PnL + исторический потенциал $377.36. Сценарный показатель, не баланс исполненных сделок.</div></section>
  <aside class='panel summary'><h2>Статус терминала</h2><div class='mini'>Режим<b>Strategy 1 · PAPER</b></div><div class='mini'>Открытые позиции<b>%d</b></div><div class='mini'>Контролируемые рынки<b>%d</b></div><div class='mini'>Закрыто в новой истории<b>%d</b></div><div class='sub'>Данные позиций поступают из PAPER-движка; сигналы ожидания не считаются открытыми сделками.</div></aside></div>
- <section id='tokens'><h2>Отслеживаемые рынки</h2><div class='tokens'>%s</div></section>
- <section class='panel' id='positions'><h2>Открытые позиции</h2><div class='scroll'><table><thead><tr><th>Token</th><th>Side</th><th>Phase</th><th>H1</th><th>Pivot</th><th>Margin</th><th>Notional</th><th>Lev</th><th>Entry</th><th>Mark</th><th>Open PNL</th><th>ROE</th></tr></thead><tbody>%s</tbody></table></div></section>
+ <section id='tokens'><h2>Торговый пул · только подтверждённые H1 локалы</h2><div class='tokens'>%s</div></section>
+ <section class='panel' id='positions'><h2>Открытые PAPER-позиции</h2><div class='scroll'><table><thead><tr><th>Token</th><th>Side</th><th>Phase</th><th>H1</th><th>Pivot</th><th>Margin</th><th>Notional</th><th>Lev</th><th>Entry</th><th>Mark</th><th>Open PNL</th><th>ROE</th></tr></thead><tbody>%s</tbody></table></div></section>
  <div class='bottom' style='margin-top:14px'><section class='panel' id='history'><h2>Новая история сделок</h2><div class='sub'>Показываются только PAPER-сделки, закрытые после 28 октября 2026, 12:26 UTC. Старые записи сохранены в аудите.</div><div class='scroll'><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>Entry</th><th>Exit</th><th>Margin</th><th>Notional</th><th>PNL</th><th>Reason</th></tr>%s</table></div></section>
- <section class='panel' id='discovery'><h2>Discovery / AutoScanner · Bybit 24/7</h2><p class='sub'>Stage 1 сканирует весь Bybit Linear рынок по волатильности. Stage 2 проверяет Strategy 1 PAPER-результат кандидата. REAL-CANDIDATE присваивается только при validated rolling-24h результате ≥35%% от базовых $500 и минимум 3 закрытых сделках. Автоматических реальных ордеров нет.</p>%s<div class='scroll' style='margin-top:12px'><table><tr><th>Token</th><th>24h Range</th><th>5m Move</th><th>24h Turnover</th><th>H1 Local</th><th>Pivot</th><th>Side</th><th>S1 Trades</th><th>WR</th><th>Realized PnL</th><th>24h Return · Status</th></tr>%s</table></div><span class='chip'>BYBIT → VOLATILITY → S1 PAPER → ≥35%% → REAL-CANDIDATE</span></section><section class='panel' id='strategy'><h2>Как работает Strategy 1</h2><p class='sub'>H1 определяет Local High / Local Low и единственное разрешённое направление. M15 ведёт Caterpillar: позиция удерживается по импульсу; routine exit разрешён только после прибыльного MFE, реального ослабления, свежего встречного executed flow и ценового recoil. После выхода ждём pullback; re-entry только когда pullback выдохся и M15 + flow снова подтверждают H1-направление.</p><span class='chip'>H1 → M15 + FLOW → EXIT → PULLBACK → RE-ENTRY</span></section></div>
- </main><footer>© PANDORA · Paper trading terminal · No live exchange orders</footer></body></html>"""%(css,dream_total,dream_total_pct,esc(strategy_age),chart_svg,len(fresh),len(positions),len(strategy1_runtime_symbols()),len(fresh),"".join(token_cards),"".join(rows),"".join(fresh_rows) if fresh_rows else "<tr><td colspan='9' class='empty'>Новая история пуста — записи появятся после закрытия новых PAPER-сделок.</td></tr>",scanner_summary,scanner_table)
+ <section class='panel' id='discovery'><h2>Discovery / AutoScanner · Bybit 24/7</h2><p class='sub'>Stage 1 сканирует весь Bybit Linear рынок по волатильности. Stage 2 проверяет Strategy 1 PAPER-результат кандидата. REAL-CANDIDATE присваивается только при validated rolling-24h результате ≥35%% от базовых $500 и минимум 3 закрытых сделках. Автоматических реальных ордеров нет.</p>%s<div class='scroll' style='margin-top:12px'><table><tr><th>Token</th><th>24h Range</th><th>5m Move</th><th>24h Turnover</th><th>H1 Local</th><th>Pivot</th><th>Side</th><th>S1 Trades</th><th>WR</th><th>Realized PnL</th><th>24h Return · Status</th></tr>%s</table></div><span class='chip'>BYBIT → VOLATILITY → S1 PAPER → ≥35%% → REAL-CANDIDATE</span></section><section class='panel' id='strategy'><h2>Как работает Strategy 1</h2><p class='sub'>Подтверждённый H1 Local High разрешает только SHORT, Local Low — только LONG. Перевес исполненных покупок/продаж в сторону H1 открывает PAPER-позицию, противоположный перевес закрывает, возврат перевеса разрешает re-entry. M15, MACD, EMA не являются торговыми фильтрами. Discovery анализирует все токены, но без подтверждённого H1 новые позиции не открываются.</p><span class='chip'>H1 → BUY/SELL FLOW → EXIT → RE-ENTRY</span></section></div>
+ </main><footer>© PANDORA · Paper trading terminal · No live exchange orders</footer></body></html>"""%(css,dream_total,dream_total_pct,esc(strategy_age),chart_svg,len(fresh),len(positions),len(runtime_symbols),len(fresh),"".join(token_cards),"".join(rows),"".join(fresh_rows) if fresh_rows else "<tr><td colspan='9' class='empty'>Новая история пуста — записи появятся после закрытия новых PAPER-сделок.</td></tr>",scanner_summary,scanner_table)
  return page
 
 def html_dashboard(data):
