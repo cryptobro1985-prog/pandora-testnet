@@ -65,12 +65,20 @@ class Strategy1ExecutedFlowTests(unittest.TestCase):
     def test_initial_entry_needs_h1_side_flow_and_matching_price_response(self):
         analysis = {"ready": True, "h1_direction_anchor": True,
                     "entry_blocked": False, "entry_side": 1}
-        self.assertTrue(flow.entry_candidate("INIT", analysis, None,
-                                             tape(1, .20, .005), 0)["eligible"])
-        self.assertFalse(flow.entry_candidate("INIT", analysis, None,
-                                              tape(1, .20, -.005), 0)["eligible"])
-        self.assertFalse(flow.entry_candidate("INIT", analysis, None,
-                                              tape(1, -.20, .005), 0)["eligible"])
+        self.assertTrue(flow.initial_entry_candidate("INIT", analysis, None,
+                                                     tape(1, .20, .005), 0)["eligible"])
+        self.assertFalse(flow.initial_entry_candidate("INIT", analysis, None,
+                                                      tape(1, .20, -.005), 0)["eligible"])
+        self.assertFalse(flow.initial_entry_candidate("INIT", analysis, None,
+                                                      tape(1, -.20, .005), 0)["eligible"])
+
+    def test_reentry_candidate_accepts_proven_absorption(self):
+        analysis = {"ready": True, "h1_direction_anchor": True,
+                    "entry_blocked": False, "entry_side": 1}
+        absorbed_selling = tape(1, -.20, .005)
+        candidate = flow.entry_candidate("INIT", analysis, None, absorbed_selling, 0)
+        self.assertTrue(candidate["eligible"])
+        self.assertEqual(candidate["reason"], "h1_local_m1_m3_m5_absorption_reentry")
 
     def test_stale_or_not_warmed_m5_flow_cannot_trade(self):
         pos = {"side": -1, "entry": 100}
