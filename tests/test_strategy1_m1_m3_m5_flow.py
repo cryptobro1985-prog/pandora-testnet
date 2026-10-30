@@ -11,6 +11,7 @@ def flow(i60, i180, i300, epoch=1000.0):
         "flow_imbalance_30s": i180,
         "flow_imbalance_180s": i180,
         "flow_imbalance_300s": i300,
+        "price_return_300s": 0.01 if i300 > 0 else -0.01,
         "trade_count_15s": 5,
         "trade_count_30s": 7,
         "trade_count_60s": 8,
@@ -52,14 +53,14 @@ class Strategy1FlowTests(unittest.TestCase):
         self.assertTrue(profile["active"])
         self.assertTrue(profile["counter_takeover"])
 
-    def test_missing_m3_m5_allows_fresh_aligned_m1_entry(self):
+    def test_missing_m3_m5_blocks_new_entry(self):
         f=flow(0.18,0.12,0.10)
         f.pop("flow_imbalance_180s")
         f.pop("flow_imbalance_300s")
         profile=flow_profile(f,1)
         self.assertIsNotNone(profile)
         self.assertTrue(profile["active"])
-        self.assertTrue(profile["aligned_control"])
+        self.assertFalse(profile["aligned_control"])
 
     def test_exit_watch_then_later_resumption_reenters(self):
         watch={"side":1,"exit_price":101.0,"exit_at":"2026-10-29T00:00:00+00:00","context":{"phase":"WAIT_PULLBACK","counter_pressure_seen":False}}
