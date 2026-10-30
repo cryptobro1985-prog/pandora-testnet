@@ -86,6 +86,39 @@ def strategy1_runtime_symbols():
   hot=tuple((S.get("strategy1_discovery") or {}).get("hot_symbols") or ())
  return tuple(dict.fromkeys(tuple(LOCAL_EXPERIMENT_SYMBOLS)+hot))
 
+STRATEGY1_H1_RUNTIME_VERIFY_MAX_AGE_SECONDS=90.0
+
+def strategy1_runtime_h1_verified(symbol,analysis=None,now_epoch=None):
+ # Persisted H1 anchors are valid for display and managing an already-open position,
+ # but a NEW entry/re-entry must be backed by an H1 scan performed by THIS process.
+ # This prevents deploy/lease takeover from reopening a stale regime before current
+ # closed H1 candles have been re-read.
+ with LOCK:meta=copy.deepcopy(S.get("_local_h1_runtime_verified",{}).get(symbol))
+ if not meta:return False
+ try:
+  now_epoch=float(time.time() if now_epoch is None else now_epoch)
+  verified_at=float(meta.get("verified_at") or 0)
+  last_closed=int(meta.get("last_candle_time") or 0)
+  side=int(meta.get("entry_side") or 0)
+  signal=int(meta.get("signal_candle_time") or 0)
+  pivot=int(meta.get("pivot_candle_time") or 0)
+ except (TypeError,ValueError,OverflowError):
+  return False
+ age=now_epoch-verified_at
+ if age<0 or age>STRATEGY1_H1_RUNTIME_VERIFY_MAX_AGE_SECONDS:return False
+ # H1 candles are UTC-aligned. After the first second of a new hour, the
+ # immediately preceding H1 candle must have been present in the verified scan.
+ expected_latest=int(((now_epoch*1000.0-1000.0)//3_600_000)*3_600_000-3_600_000)
+ if expected_latest>0 and last_closed<expected_latest:return False
+ if analysis is not None:
+  try:
+   if int(analysis.get("entry_side") or 0)!=side:return False
+   if int(analysis.get("signal_candle_time") or 0)!=signal:return False
+   if int(analysis.get("pivot_candle_time") or 0)!=pivot:return False
+  except (TypeError,ValueError,OverflowError):
+   return False
+ return side in (-1,1) and signal>0 and pivot>0
+
 def strategy1_confirmed_h1(a):
  # Confirmed H1 LOCAL_HIGH -> SHORT or LOCAL_LOW -> LONG; no other trade filter.
  if not isinstance(a,dict):return False
@@ -2621,6 +2654,17 @@ def hype_swing_stats():
 
 def local_h1_direction(rows,now_ms,symbol):
  analysis=analyze_hype_h1(rows,now_ms,symbol)
+ # Process-local proof that current CLOSED H1 candles were actually scanned.
+ # Never hydrate this flag from Neon: a deploy must earn it again from live data.
+ if analysis.get("ready") and analysis.get("anchor_confirmed") and int(analysis.get("entry_side") or 0) in (-1,1):
+  with LOCK:
+   S.setdefault("_local_h1_runtime_verified",{})[symbol]={
+    "verified_at":time.time(),"observed_at_ms":int(now_ms),
+    "last_candle_time":int(analysis.get("last_candle_time") or 0),
+    "entry_side":int(analysis.get("entry_side") or 0),
+    "signal_candle_time":int(analysis.get("signal_candle_time") or 0),
+    "pivot_candle_time":int(analysis.get("pivot_candle_time") or 0),
+    "pivot_type":analysis.get("pivot_type"),"pivot_price":analysis.get("pivot_price")}
  if not analysis.get("ready"):
   # Fresh H1 cache may lag during deploy/lease handoff. Keep the latest
   # confirmed directional anchor usable instead of blanking the symbol.
@@ -2767,6 +2811,9 @@ def _local_experiment_watch_observe(symbol,watch,mark,m15,flow,stamp):
 def local_experiment_open(symbol,side,analysis,entry_kind="ORDER_FLOW",m15=None,watch=None):
  if symbol not in set(strategy1_trade_symbols()) or int(side or 0) not in (-1,1):return False
  if not strategy1_confirmed_h1(analysis):return False
+ # Fail closed for NEW risk until this runtime has revalidated the current H1 book.
+ # Hydrated/persisted anchors may manage existing risk but may not create fresh risk.
+ if not strategy1_runtime_h1_verified(symbol,analysis):return False
  if S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or not analysis.get("ready"):return False
  if not analysis.get("h1_direction_anchor") or int(analysis.get("entry_side") or 0)!=int(side):return False
  if analysis.get("entry_blocked"):return False
@@ -2973,6 +3020,8 @@ def local4_fast_entries(prices):
    watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
   mark=prices.get(symbol)
   if not analysis or not mark:continue
+  # The 500ms executor must never outrun the H1 scanner after deploy/takeover.
+  if not strategy1_runtime_h1_verified(symbol,analysis):continue
   side=int(analysis.get("entry_side") or 0)
   if watch and int(watch.get("side") or 0)==-side:
    _local_experiment_watch_clear(symbol,"opposite_h1_pivot_invalidated_watch");watch=None
