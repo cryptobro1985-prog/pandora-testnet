@@ -86,6 +86,29 @@ def strategy1_runtime_symbols():
   hot=tuple((S.get("strategy1_discovery") or {}).get("hot_symbols") or ())
  return tuple(dict.fromkeys(tuple(LOCAL_EXPERIMENT_SYMBOLS)+hot))
 
+def strategy1_confirmed_h1(a):
+ # Confirmed H1 LOCAL_HIGH -> SHORT or LOCAL_LOW -> LONG; no other trade filter.
+ if not isinstance(a,dict):return False
+ try:
+  side=int(a.get("entry_side") or 0)
+  price=float(a.get("pivot_price") or 0)
+  signal=int(a.get("signal_candle_time") or 0)
+ except (TypeError,ValueError,OverflowError):return False
+ expected="LOCAL_HIGH" if side==-1 else "LOCAL_LOW" if side==1 else None
+ return bool(expected and a.get("ready") and a.get("anchor_confirmed") and
+  a.get("h1_direction_anchor") and not a.get("entry_blocked") and
+  a.get("pivot_type")==expected and math.isfinite(price) and price>0 and signal>0)
+
+def strategy1_trade_symbols():
+ # All candidate markets remain in Discovery and H1 scan; trade only confirmed H1.
+ with LOCK:
+  hot=tuple((S.get("strategy1_discovery") or {}).get("hot_symbols") or ())
+  pool=tuple(dict.fromkeys(tuple(LOCAL_EXPERIMENT_SYMBOLS)+hot))
+  analyses=S.get("_local4_analysis",{})
+  durable=S.get("local_h1_direction",{})
+  return tuple(s for s in pool if strategy1_confirmed_h1(analyses.get(s))
+   or strategy1_confirmed_h1(durable.get(s)))
+
 def bybit_volatility_discovery_loop():
  """Direction-neutral Bybit discovery. HOT only expands Strategy 1's universe; H1 locals still choose side."""
  samples={}
@@ -2742,7 +2765,8 @@ def _local_experiment_watch_observe(symbol,watch,mark,m15,flow,stamp):
 
 @account_mutation
 def local_experiment_open(symbol,side,analysis,entry_kind="ORDER_FLOW",m15=None,watch=None):
- if symbol not in set(strategy1_runtime_symbols()) or int(side or 0) not in (-1,1):return False
+ if symbol not in set(strategy1_trade_symbols()) or int(side or 0) not in (-1,1):return False
+ if not strategy1_confirmed_h1(analysis):return False
  if S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or not analysis.get("ready"):return False
  if not analysis.get("h1_direction_anchor") or int(analysis.get("entry_side") or 0)!=int(side):return False
  if analysis.get("entry_blocked"):return False
@@ -2942,7 +2966,7 @@ def local_experiment_mark_positions(prices):
 def local4_fast_entries(prices):
  # Fast PAPER execution path: permanent 18 + current Discovery HOT symbols.
  # H1 sets direction; fresh M1/M3/M5 executed flow controls entry/re-entry.
- for symbol in strategy1_runtime_symbols():
+ for symbol in strategy1_trade_symbols():
   with LOCK:
    if symbol in S.get("local_v12_positions",{}):continue
    analysis=copy.deepcopy(S.get("_local4_analysis",{}).get(symbol))
@@ -2974,7 +2998,7 @@ def local_experiment_risk_loop():
     # Execution does not wait for M15. H1 provides the allowed side; fresh
     # 15s/30s/60s aggressor flow opens/re-enters as soon as control is confirmed.
     local4_fast_entries(prices)
-    with LOCK:S["sources"]["LocalRisk"]={"ok":True,"ready":True,"last_check":now(),"mode":"H1_15S_30S_60S_fast_paper_execution","symbols":list(strategy1_runtime_symbols()),"error":None}
+    with LOCK:S["sources"]["LocalRisk"]={"ok":True,"ready":True,"last_check":now(),"mode":"H1_15S_30S_60S_fast_paper_execution","symbols":list(strategy1_trade_symbols()),"error":None}
   except LeaseLost as exc:
    with LOCK:
     S["engine_active"]=False;S["engine_error"]=str(exc)
@@ -3130,10 +3154,8 @@ def local_experiment_loop():
      except Exception as exc:fetch_errors[key]=type(exc).__name__+":"+str(exc)[:120]
     details={};entry_queue=[]
     for symbol in runtime_symbols:
+     # Analyze all H1 pivots, including symbols whose trading ticker is absent.
      mark=prices.get(symbol)
-     if not mark:
-      details[symbol]={"ok":False,"error":"mark_unavailable","max_leverage":market_max_leverage(symbol)}
-      continue
      h1_error=fetch_errors.get((symbol,"h1"))
      persisted=persisted_by_symbol.get(symbol)
      if h1_error and not persisted:
@@ -3148,6 +3170,16 @@ def local_experiment_loop():
       analysis=persisted
       h1_rows=[];h1_ms=int(time.time()*1000)
      with LOCK:S.setdefault("_local4_analysis",{})[symbol]=copy.deepcopy(analysis)
+     if not mark:
+      confirmed=strategy1_confirmed_h1(analysis)
+      details[symbol]={"ok":confirmed,"symbol":symbol,"mark":None,
+       "h1_local":{"ready":confirmed,"pivot_type":analysis.get("pivot_type"),
+        "pivot_price":analysis.get("pivot_price"),"entry_side":analysis.get("entry_side"),
+        "signal_candle_time":analysis.get("signal_candle_time"),
+        "anchor_confirmed":analysis.get("anchor_confirmed")},
+       "last_action":"WAIT_FRESH_MARK" if confirmed else "EXCLUDED_NO_CONFIRMED_H1",
+       "error":"mark_unavailable" if confirmed else "confirmed_h1_not_determined"}
+      continue
      h1_context=({"ready":True,"persisted":True,"entry_side":analysis.get("entry_side"),
        "pivot_type":analysis.get("pivot_type"),"pivot_price":analysis.get("pivot_price")}
        if persisted else analyze_local_h1_context(h1_rows,h1_ms,symbol))
@@ -3191,7 +3223,7 @@ def local_experiment_loop():
         action="FLOW_CONTROL_TRANSFER_EXIT" if closed else None
        else:
         with LOCK:S.setdefault("_s1_adverse_m15",{}).pop(symbol,None)
-     if not pos:
+     if not pos and strategy1_confirmed_h1(analysis):
       if watch:watch=_local_experiment_watch_observe(symbol,watch,float(mark),m15_live,flow,time.time())
       if watch:
        watch_anchor_time=int(watch.get("origin_signal_candle") or ((watch.get("context") or {}).get("anchor") or {}).get("signal_candle_time") or 0)
@@ -3209,13 +3241,15 @@ def local_experiment_loop():
         entry_queue.append({**selection,"analysis":analysis,"m15":m15_live,"watch":None,"entry_kind":"ORDER_FLOW"})
         action="CANDIDATE_ENTRY"
        else:action="WAIT:"+selection["reason"]
+     elif not pos:
+      action="EXCLUDED_NO_CONFIRMED_H1"
      with LOCK:
       live=copy.deepcopy(S.get("local_v12_positions",{}).get(symbol))
       live_watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
      equity,used,free=_local_experiment_margin_state()
      ref_notional=equity*LOCAL_EXPERIMENT_MARGIN_FRACTION*25.0
      lev=25.0;required_margin=ref_notional/25.0
-     details[symbol]={"ok":bool(analysis.get("ready")),"symbol":symbol,"mark":float(mark),"max_leverage":lev,
+     details[symbol]={"ok":bool(strategy1_confirmed_h1(analysis)),"symbol":symbol,"mark":float(mark),"max_leverage":lev,
        "target_notional":round(ref_notional,4),"required_margin_for_full_target":round(required_margin,4),
        "position_open":bool(live),"side":int(live.get("side")) if live else None,
        "actual_margin":float(live.get("margin")) if live else None,"actual_notional":float(live.get("notional")) if live else None,
@@ -3257,7 +3291,10 @@ def local_experiment_loop():
      S["sources"]["Caterpillar 1.0"]={"ok":ready_all or bootstrap_wait,"ready":ready_all,
        "warmup":bootstrap_wait and not ready_all,"last_check":now(),
        "mode":"Caterpillar 1.0 PAPER H1 + M1/M3/M5 executed-flow","policy":LOCAL4_FLOW_POLICY,
-       "symbols":list(strategy1_runtime_symbols()),"permanent_symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"discovery":copy.deepcopy(S.get("strategy1_discovery") or {}),"paper_only":True,"starting_equity":LOCAL_EXPERIMENT_STARTING_EQUITY,
+       "symbols":list(strategy1_trade_symbols()),
+       "h1_scan_universe_size":len(runtime_symbols),
+       "excluded_no_confirmed_h1":[sym for sym in runtime_symbols if sym not in set(strategy1_trade_symbols())],
+       "permanent_symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"discovery":copy.deepcopy(S.get("strategy1_discovery") or {}),"paper_only":True,"starting_equity":LOCAL_EXPERIMENT_STARTING_EQUITY,
        "equity":equity,"used_margin":used,"free_margin":free,"realized_pnl":S.get("local_experiment_realized_pnl",0),
        "trades":S.get("local_experiment_trades",0),"open_positions":list(S.get("local_v12_positions",{})),
        "watching_for_reentry":list(S.get("local_experiment_watch",{})),"reference_margin_fraction":LOCAL_EXPERIMENT_MARGIN_FRACTION,
@@ -4547,12 +4584,12 @@ def market_trade_stream():
   SHUTDOWN.wait(.25)
  def symbols():
   with LOCK:
-   volumes=dict(S.get("_day_volumes",{}));prices=set(S.get("_prices",{}));held=set(S["positions"])|set(S["pump_positions"])|set(S["whale_positions"])
+   volumes=dict(S.get("_day_volumes",{}));prices=set(S.get("_prices",{}));held=set(S["positions"])|set(S["pump_positions"])|set(S["whale_positions"])|set(S.get("local_v12_positions",{}))
   # In Strategy-1-only mode, subscribing to the whole exchange creates a large
   # stale trade replay backlog and starves the 5-minute execution tape. Keep the
   # live tape focused on permanent Strategy 1 markets plus the small HOT pool.
   if S1_ONLY_MODE:
-   return set(strategy1_runtime_symbols())|held
+   return set(strategy1_trade_symbols())|held
   listed=set(volumes)&prices if prices else set(volumes)
   return listed|LIQ_WHALE_SYMBOLS|held|set(ALL_LOCAL_CANDLE_SYMBOLS)
  # Shard the executed tape across independent sockets. A busy symbol or one
@@ -4591,7 +4628,9 @@ def market_aux_stream():
  # Bybit-only marks/H1 candles. Shard the auxiliary topics too: one socket with
  # hundreds of ticker+kline topics was unstable and left many marks null.
  workers=max(2,min(8,int(os.getenv("BYBIT_AUX_WS_SHARDS","4"))))
- def symbols(): return set(strategy1_runtime_symbols())
+ def symbols():
+  with LOCK:held=set(S.get("local_v12_positions",{}))
+  return set(strategy1_trade_symbols())|held
  def shard(symbol): return int(hashlib.sha1(str(symbol).encode()).hexdigest()[:8],16)%workers
  def run_worker(idx):
   key="MarketAuxStream:"+str(idx)
@@ -6090,7 +6129,7 @@ def build_dashboard_snapshot(history=None):
 "hype_h1_pnl_pct":round((hype_swing_total/HYPE_SWING_STARTING_EQUITY-1)*100,3),"hype_h1_realized_pnl":round(float(state.get("hype_swing_realized_pnl",0)),4),
 "hype_h1_trades":state.get("hype_swing_trades",0),"hype_h1_engine":copy.deepcopy(state.get("sources",{}).get("HypeH1LocalSwing",{})),
 "hype_h1_stats":history.get("hype_stats",{}) if history is not None else hype_swing_stats(),"hype_h1_policy":CATERPILLAR_POLICY,
-"local_experiment_symbols":list(strategy1_runtime_symbols()),"local_v12_positions":experiment_positions,
+"local_experiment_symbols":list(strategy1_trade_symbols()),"local_v12_positions":experiment_positions,
 "local_experiment_watch":copy.deepcopy(state.get("local_experiment_watch",{})),
 "local_experiment_balance":round(experiment_realized_equity,4),
 "local_experiment_unrealized_pnl":round(experiment_unreal,4),"local_experiment_total_equity":round(experiment_total,4),
@@ -6111,7 +6150,7 @@ def build_dashboard_snapshot(history=None):
 "closed_trades":copy.deepcopy((history or {}).get("local_v10_closed_trades",[])),
 "watch":copy.deepcopy(state.get("local_experiment_watch",{})),
 "stats":copy.deepcopy(state.get("local_experiment_stats",{})),
-"engine":dict(copy.deepcopy(state.get("sources",{}).get("Caterpillar 1.0",{})), discovery=copy.deepcopy(state.get("strategy1_discovery",{})), symbols=list(strategy1_runtime_symbols())),
+"engine":dict(copy.deepcopy(state.get("sources",{}).get("Caterpillar 1.0",{})), discovery=copy.deepcopy(state.get("strategy1_discovery",{})), symbols=list(strategy1_trade_symbols())),
 "h1_durable":copy.deepcopy(durable_h1),"live_state":copy.deepcopy(durable_s1_live)},
 "strategy1_last_minute_snapshot":copy.deepcopy(state.get("strategy1_last_minute_snapshot",{})),
 "strategy1_historical_benchmark":{"starting_equity":500.0,"mfe_upper_equity":877.36,"mfe_opportunity_pnl":377.36,"basis":"historical favorable-excursion upper bound from prior actual-entry analysis","executed":False,"causal":False,"label":"HISTORICAL MFE BENCHMARK — NOT EXECUTED"},"module_trading_enabled":{"strategy1":True,"news":False,"whale_liquidation":False,"pump_dump":False,"strategy2":False,"strategy3":False,"legacy_local":False},"account_model":"UNIFIED_PAPER_ACCOUNT_ALL_STRATEGIES","trades":trades,"news":newsrows,"features":feats,"sources":visible_sources,"errors":state["errors"],"last_error":state["last_error"],"news_seen":state["news_seen"],"market_count":state["market_count"],"last_poll":state["last_poll"],"uptime_seconds":int(time.time()-START),"engine_active":state["engine_active"],"engine_error":state["engine_error"],"last_checkpoint":state["last_checkpoint"],"last_market_error":state["last_market_error"],"news_max_age_seconds":NEWS_MAX_AGE_SECONDS,"news_health":copy.deepcopy(state.get("news_health",{})),"market_structure_filter_active":False,"entry_rejections":dict(S.get("_entry_rejections",{})),"decision_counts":dict(S.get("_decision_counts",{})),"learning":copy.deepcopy(S.get("adaptive",{})),"decision_learning":copy.deepcopy(state.get("learning_audit",{})),"latency_metrics":LATENCIES.snapshot(time.time()),"simulation":{"execution":"mid_price_paper","funding_modeled":False,"slippage_modeled":False,"exchange_liquidation_modeled":False,"profitability_validated":False},"version":os.getenv("RENDER_GIT_COMMIT","risk-state-v2")}
@@ -6278,12 +6317,14 @@ def operations_diagnostics():
     s1watch=list(S.get("local_experiment_watch",{}))
    trade_stream=(S.get("sources",{}).get("MarketTradeStream") or {})
    bootstrap=(S.get("sources",{}).get("MarketHistoryBootstrap") or {})
-   derived_ready=bool(s1src.get("ready")) or (bool(S.get("engine_active")) and int(bootstrap.get("local_ready",0) or 0)>=len(LOCAL_EXPERIMENT_SYMBOLS) and int(trade_stream.get("symbols",0) or 0)>=len(strategy1_runtime_symbols()))
+   derived_ready=bool(s1src.get("ready")) or (bool(S.get("engine_active")) and int(bootstrap.get("local_ready",0) or 0)>=len(LOCAL_EXPERIMENT_SYMBOLS) and int(trade_stream.get("symbols",0) or 0)>=len(strategy1_trade_symbols()))
    print("S1_ONLINE_STATE "+json.dumps({"ok":bool(s1src.get("ok")) or derived_ready,"ready":derived_ready,
     "error":s1src.get("error"),"version":os.getenv("RENDER_GIT_COMMIT"),
     "starting_equity":LOCAL_EXPERIMENT_STARTING_EQUITY,"realized_equity":s1eq,
     "realized_pnl":s1real,"trades":s1trades,"open_positions":s1open,
-    "watching_for_reentry":s1watch,"symbols":list(strategy1_runtime_symbols()),
+    "watching_for_reentry":s1watch,"symbols":list(strategy1_trade_symbols()),
+    "scan_universe_size":len(strategy1_runtime_symbols()),
+    "excluded_no_confirmed_h1":len(strategy1_runtime_symbols())-len(strategy1_trade_symbols()),
     "trade_stream_symbols":((S.get("sources",{}).get("MarketTradeStream") or {}).get("symbols")),
     "details":s1src.get("details")},ensure_ascii=False,default=str),flush=True)
   except Exception as e:print("diagnostics_error: "+str(e)[:180],flush=True)
@@ -6929,7 +6970,7 @@ def html_dashboard(data):
  with LOCK:
   s1live_positions=copy.deepcopy(S.get("local_v12_positions",{}))
   s1live_watch=copy.deepcopy(S.get("local_experiment_watch",{}))
- for _sym in strategy1_runtime_symbols():
+ for _sym in strategy1_trade_symbols():
   if _sym not in s1details:s1details[_sym]={}
   if not (s1details[_sym].get("h1_local") or {}).get("ready") and (s1durable_h1.get(_sym) or {}).get("ready"):
    s1details[_sym]["h1_local"]=copy.deepcopy(s1durable_h1[_sym])
@@ -6938,7 +6979,7 @@ def html_dashboard(data):
   if not s1details[_sym].get("caterpillar_phase"):
    s1details[_sym]["caterpillar_phase"]=("IN POSITION" if _sym in s1live_positions else
      ("WAIT RE-ENTRY" if _sym in s1live_watch else "WAIT ENTRY"))
- s1_runtime=list(strategy1_runtime_symbols())
+ s1_runtime=list(strategy1_trade_symbols())
  s1local_coverage=sum(1 for _sym in s1_runtime if (s1details.get(_sym,{}).get("h1_local") or {}).get("ready"))
  def _s1_local_row(symbol):
   d=s1details.get(symbol) or {}
@@ -6958,7 +6999,7 @@ def html_dashboard(data):
    esc(symbol),cls,esc(local_txt.replace("_"," ")),esc(pivot_price if pivot_price is not None else "—"),
    esc(pivot_time if pivot_time is not None else "—"),esc(pending_txt),cls,esc(expected),esc(phase),
    esc(d.get("mark","—")),esc(d.get("last_action") or "—"))
- s1_local_rows="".join(_s1_local_row(sym) for sym in strategy1_runtime_symbols())
+ s1_local_rows="".join(_s1_local_row(sym) for sym in strategy1_trade_symbols())
 
  s1pos_rows="".join('<tr><td><b>%s</b></td><td>%s</td><td>%s</td><td>%s</td><td class="%s">%.2f%%</td><td class="%s">$%+.4f</td><td class="%s">%+.2f%%</td></tr>'%(
    esc(x.get("symbol","")),esc(x.get("side","FLAT")),esc(x.get("entry","—")),esc(x.get("mark","—")),
