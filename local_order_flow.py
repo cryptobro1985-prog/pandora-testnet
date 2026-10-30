@@ -49,11 +49,11 @@ def flow_profile(flow, side):
     values.update(
         active=active,
         event_epoch=_event_epoch(flow),
-        counter_takeover=(active and short <= -.15 and medium <= -.10),
-        weakening=(active and short < .02 and medium < .06 and short <= minute - .08),
+        counter_takeover=(active and short < 0),
+        weakening=(active and short < 0),
         resumed=(active and short >= .18 and medium >= .12 and
                  (short >= minute + .06 or minute >= .08)),
-        aligned_control=(active and short >= .12 and medium >= .08),
+        aligned_control=(active and short > 0),
     )
     return values
 
