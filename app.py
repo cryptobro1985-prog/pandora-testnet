@@ -2681,10 +2681,14 @@ def strategy1_h1_flow_transfer(symbol,new_side,stamp=None):
  aligned60=new_side*i60
  aligned180=(new_side*i180) if i180 is not None else None
  aligned300=(new_side*i300) if i300 is not None else None
- available=[aligned60]+([aligned180] if aligned180 is not None else [])+([aligned300] if aligned300 is not None else [])
- confirmed=bool(-1<=age<=15 and available and all(x>0 for x in available))
+ # M1 may manage the active Caterpillar leg, but it may NEVER flip H1 by itself.
+ # Until genuine M3+M5 executed control exists, keep trading the persisted H1
+ # anchor; this is not a global warmup gate and does not stop the current regime.
+ windows_ready=(aligned180 is not None and aligned300 is not None)
+ confirmed=bool(-1<=age<=15 and windows_ready and aligned60>0 and aligned180>0 and aligned300>0)
  reason=("executed_flow_control_transfer_confirmed" if confirmed else
-         "opposite_structure_but_previous_side_still_controls")
+         ("waiting_for_m3_m5_control_transfer" if not windows_ready else
+          "opposite_structure_but_previous_side_still_controls"))
  return {"confirmed":confirmed,"reason":reason,"candidate_side":new_side,
   "aligned_flow_60s":aligned60,"aligned_flow_180s":aligned180,
   "aligned_flow_300s":aligned300,"flow_windows_used":len(available),
