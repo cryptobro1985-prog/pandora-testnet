@@ -16,6 +16,7 @@ def tape(side, a300, price_aligned, event=1000.0, *, fresh=True, coverage=320):
         "trade_coverage_seconds": coverage,
         "volume_window_end_epoch": event + 1,
         "flow_imbalance_300s": raw300,
+        "flow_imbalance_180s": raw300,
         "buy_volume_300s": buy300,
         "sell_volume_300s": sell300,
         "trade_count_300s": 100,
