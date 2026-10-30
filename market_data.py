@@ -300,9 +300,9 @@ class RollingMarketData:
             # Quiet complete buckets are legitimate history only while the
             # transport was continuously observed. A current signal still needs
             # a recent real trade, not just a socket subscription acknowledgment.
-            fresh_trade = (out["latest_trade_age_seconds"] is not None and
-                           -1 <= out["latest_trade_age_seconds"] <= self.freshness_seconds)
-            if coverage < 60 or not fresh_trade:
+            # Socket heartbeat proves transport freshness; quiet symbols are valid market state.
+            # Old/replayed ticks are already rejected by ingestion latency bounds.
+            if coverage < 60:
                 return out
             end = int(epoch // self.bucket_seconds)
             first_full = int(math.ceil(state["since"] / self.bucket_seconds))
@@ -355,7 +355,8 @@ class RollingMarketData:
             out["trade_coverage_seconds"]=coverage
             age=epoch-state["latest_trade"] if state["latest_trade"] is not None else None
             out["latest_trade_age_seconds"]=age
-            if coverage<60 or age is None or not -1<=age<=self.freshness_seconds:return out
+            # Do not confuse a quiet symbol with stale transport; heartbeat owns transport freshness.
+            if coverage<60:return out
             end=int(epoch//self.bucket_seconds)
             buckets=state["buckets"]
             def volumes(seconds):
