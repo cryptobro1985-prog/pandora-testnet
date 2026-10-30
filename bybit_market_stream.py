@@ -6,6 +6,8 @@ authentication and no order placement. Fails closed on stale trade tape.
 import json
 import time
 import websocket
+import urllib.parse
+import urllib.request
 
 from exchange_trade_adapter import normalize_bybit_public_trade, validate_latency, to_legacy_observation
 
@@ -36,6 +38,48 @@ def _legacy_candle(row):
     except (KeyError, TypeError, ValueError, OverflowError):
         return None
 
+
+def _recover_recent_trades(symbols, observations, max_age_seconds=120):
+    """Best-effort REST gap recovery before a stale shard is recycled."""
+    recovered = 0
+    now = time.time()
+    for symbol in symbols:
+        try:
+            query = urllib.parse.urlencode({
+                "category": "linear", "symbol": _pair(symbol), "limit": 200,
+            })
+            req = urllib.request.Request(
+                "https://api.bybit.com/v5/market/recent-trade?" + query,
+                headers={"User-Agent": "pandora-paper/1.0"},
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+            rows = ((payload.get("result") or {}).get("list") or [])
+            batch = []
+            seen = set()
+            for row in reversed(rows):
+                trade = normalize_bybit_public_trade(row)
+                age = now - (trade.exchange_epoch_ms / 1000.0)
+                if age < 0 or age > max_age_seconds:
+                    continue
+                key = (
+                    getattr(trade, "symbol", None),
+                    getattr(trade, "trade_id", None),
+                    trade.exchange_epoch_ms,
+                    getattr(trade, "price", None),
+                    getattr(trade, "size", None),
+                    getattr(trade, "side", None),
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                batch.append(to_legacy_observation(trade))
+            if batch:
+                observations.ingest_trades(batch, time.time())
+                recovered += len(batch)
+        except Exception:
+            continue
+    return recovered
 
 def run_bybit_stream(observations, stop, symbols_provider, report,
                      url=DEFAULT_URL, on_mids=None, on_candles=None,
@@ -186,6 +230,13 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                         if not recv or not exch or epoch - recv > 30 or epoch - exch > 30:
                             stale_symbols.append(s)
                     if stale_symbols:
+                        recovered = _recover_recent_trades(stale_symbols, observations)
+                        report({
+                            "ok": False, "mode": "bybit_v5_public_linear", "worker": worker_name,
+                            "error": "bybit_symbol_trade_tape_stale:" + ",".join(stale_symbols[:12]),
+                            "rest_recovered_trades": recovered,
+                            "action": "recycle_shard_after_rest_recovery",
+                        })
                         raise RuntimeError("bybit_symbol_trade_tape_stale:" + ",".join(stale_symbols[:12]))
 
                 if epoch - last_refresh >= 5:
