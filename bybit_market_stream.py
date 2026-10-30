@@ -119,7 +119,7 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                 send("subscribe", ["kline.1." + _pair(s) for s in sorted(regime_selected)])
 
             now = time.time()
-            observations.mark_connected(now, selected)
+            observations.mark_connected(now, selected, owner=worker_name)
             last_received = now
             last_ping = 0.0
             last_report = 0.0
@@ -244,7 +244,7 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                             if s not in desired:
                                 per_symbol_receive.pop(s, None); per_symbol_exchange.pop(s, None)
                                 sequence_by_symbol.pop(s, None)
-                        observations.set_subscriptions(desired, epoch)
+                        observations.set_subscriptions(desired, epoch, owner=worker_name)
                     if on_candles is not None:
                         desired_c = set(candle_symbols() if callable(candle_symbols) else candle_symbols)
                         removed, added = candle_selected - desired_c, desired_c - candle_selected
@@ -282,12 +282,12 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                     })
                     last_report = epoch
         except Exception as exc:
-            observations.mark_disconnected()
+            observations.mark_disconnected(owner=worker_name)
             report({"ok": False, "mode": "bybit_v5_public_linear", "worker": worker_name,
                     "error": type(exc).__name__ + ":" + str(exc)[:160],
                     "reconnect_backoff_seconds": backoff})
         finally:
-            observations.mark_disconnected()
+            observations.mark_disconnected(owner=worker_name)
             if ws is not None:
                 try: ws.close()
                 except Exception: pass
