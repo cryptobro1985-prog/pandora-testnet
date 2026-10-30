@@ -4629,8 +4629,11 @@ def market_aux_stream():
  # hundreds of ticker+kline topics was unstable and left many marks null.
  workers=max(2,min(8,int(os.getenv("BYBIT_AUX_WS_SHARDS","4"))))
  def symbols():
+  # All Discovery/H1 candidates need price/candle observations to establish
+  # confirmed pivots. They are NOT subscribed to executed-trade PAPER entry
+  # unless strategy1_trade_symbols() independently confirms their H1 anchor.
   with LOCK:held=set(S.get("local_v12_positions",{}))
-  return set(strategy1_trade_symbols())|held
+  return set(strategy1_runtime_symbols())|held
  def shard(symbol): return int(hashlib.sha1(str(symbol).encode()).hexdigest()[:8],16)%workers
  def run_worker(idx):
   key="MarketAuxStream:"+str(idx)
