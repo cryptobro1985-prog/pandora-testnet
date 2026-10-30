@@ -85,7 +85,7 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                      url=DEFAULT_URL, on_mids=None, on_candles=None,
                      candle_symbols=(), on_regime_candles=None,
                      regime_symbols=(), subscribe_trades=True,
-                     symbol_filter=None, worker_name="primary"):
+                     symbol_filter=None, candle_filter=None, on_trade_mids=None, worker_name="primary"):
     """Persistent Bybit linear stream with dynamic subscriptions and stale watchdog."""
     backoff = 1.0
     while not stop.is_set():
@@ -95,6 +95,8 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
             if symbol_filter is not None:
                 selected = {s for s in selected if symbol_filter(s)}
             candle_selected = set(candle_symbols() if callable(candle_symbols) else candle_symbols)
+            if candle_filter is not None:
+                candle_selected = {s for s in candle_selected if candle_filter(s)}
             regime_selected = set(regime_symbols)
             ws = websocket.create_connection(url, timeout=8, enable_multithread=True)
             ws.settimeout(2)
@@ -179,6 +181,12 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                             observations.ingest_trades(batch, last_received)
                             accepted_trades += len(batch)
                             last_trade_receive = last_received
+                            if on_trade_mids is not None:
+                                trade_mids = {}
+                                for item in batch:
+                                    try: trade_mids[str(item["coin"])] = float(item["px"])
+                                    except (KeyError, TypeError, ValueError): pass
+                                if trade_mids: on_trade_mids(trade_mids)
                     elif topic.startswith("tickers.") and on_mids is not None:
                         data = message.get("data") or {}
                         rows = data if isinstance(data, list) else [data]
@@ -247,6 +255,8 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                         observations.set_subscriptions(desired, epoch, owner=worker_name)
                     if on_candles is not None:
                         desired_c = set(candle_symbols() if callable(candle_symbols) else candle_symbols)
+                        if candle_filter is not None:
+                            desired_c = {s for s in desired_c if candle_filter(s)}
                         removed, added = candle_selected - desired_c, desired_c - candle_selected
                         old_topics=[];new_topics=[]
                         for s in sorted(removed): old_topics += ["kline.60."+_pair(s),"kline.15."+_pair(s)]
