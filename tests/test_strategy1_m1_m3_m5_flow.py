@@ -33,18 +33,20 @@ class Strategy1FlowTests(unittest.TestCase):
         self.assertTrue(initial_entry_candidate("HYPE",self.analysis(1),None,flow(.18,.12,.10),1000)["eligible"])
         self.assertFalse(initial_entry_candidate("HYPE",self.analysis(1),None,flow(.18,.12,-.01),1000)["eligible"])
 
-    def test_exit_only_when_opposite_side_predominates_on_m1_m3_m5(self):
+    def test_exit_immediately_when_opposite_m1_predominates(self):
         pos={"side":1,"entry":100.0,"features":{"mfe_price_move":0.03}}
         self.assertEqual(pressure_exit(pos,None,101.0,flow(-.25,-.14,-.08)),
-                         "executed_flow_m1_m3_m5_opposite_control_exit")
-        self.assertIsNone(pressure_exit(pos,None,101.0,flow(-.25,-.14,.02)))
+                         "executed_flow_m1_opposite_control_exit")
+        self.assertEqual(pressure_exit(pos,None,101.0,flow(-.25,-.14,.02)),
+                         "executed_flow_m1_opposite_control_exit")
+        self.assertIsNone(pressure_exit(pos,None,101.0,flow(.25,-.14,-.08)))
 
     def test_mfe_size_and_giveback_do_not_create_exit_filter(self):
         counter=flow(-.25,-.14,-.08)
         for mfe,mark in ((0.0,99.8),(0.001,100.0),(0.02,101.0),(0.08,104.0)):
             pos={"side":1,"entry":100.0,"features":{"mfe_price_move":mfe}}
             self.assertEqual(pressure_exit(pos,None,mark,counter),
-                             "executed_flow_m1_m3_m5_opposite_control_exit")
+                             "executed_flow_m1_opposite_control_exit")
 
     def test_price_response_does_not_gate_buyer_seller_control(self):
         f=flow(.18,.12,.10)
