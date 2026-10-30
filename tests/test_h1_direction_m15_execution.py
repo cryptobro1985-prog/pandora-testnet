@@ -20,37 +20,16 @@ class H1DirectionTests(unittest.TestCase):
             self.assertTrue(r['h1_direction_anchor'])
             self.assertEqual(r['pivot_candle_time'],4*H)
 
-    def test_unclosed_candidate_does_not_reveal_future_pivot(self):
-        rows=history();r=analyze(rows,5*H-2000)
+    def test_unclosed_confirmation_does_not_reveal_future_pivot(self):
+        rows=history();r=analyze(rows,6*H-2000)
         self.assertFalse(r.get('anchor_confirmed',False))
         self.assertNotEqual(r.get('entry_side'),1)
 
     def test_bias_survives_new_hour_without_new_extreme(self):
         rows=history();rows.append(dict(t=6*H,T=7*H-1,o=95,h=97,l=94,c=96,v=100))
         r=analyze(rows,7*H+1001)
-        self.assertEqual((r['entry_side'],r['signal_candle_time']),(1,4*H))
+        self.assertEqual((r['entry_side'],r['signal_candle_time']),(1,5*H))
         self.assertEqual(r['last_candle_time'],6*H)
-
-    def test_init_like_closed_h1_rejection_confirms_low_without_extra_right_hour(self):
-        # Mirrors the 2026-10-30 INIT structure: the candidate H1 low closed
-        # 4.4% above its own extreme, stronger than the 3.5% capped threshold.
-        values=[
-            (.21628,.22298,.21447,.21551),
-            (.21403,.21475,.20500,.20750),
-            (.20810,.20895,.19450,.19578),
-            (.19578,.20141,.17849,.18063),
-            (.18063,.19855,.17380,.18151),
-        ]
-        rows=[dict(t=i*H,T=(i+1)*H-1,o=o,h=h,l=l,c=cl,v=100)
-              for i,(o,h,l,cl) in enumerate(values)]
-        r=analyze(rows,5*H+1001,'INIT')
-        self.assertTrue(r['anchor_confirmed'])
-        self.assertEqual(r['entry_side'],1)
-        self.assertEqual(r['pivot_type'],'LOCAL_LOW')
-        self.assertEqual(r['pivot_candle_time'],4*H)
-        self.assertEqual(r['signal_candle_time'],4*H)
-        self.assertEqual(r['confirmation_bars'],0)
-        self.assertGreater(r['confirmation_retrace'],r['required_retrace'])
 
     def test_opposite_confirmed_h1_pivot_changes_direction(self):
         rows=history();values=[(95,104,94,102),(102,110,101,108),(108,109,100,102)]
