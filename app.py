@@ -4136,8 +4136,9 @@ def market():
    if not active:
     SHUTDOWN.wait(.5)
     continue
-   # Before metadata is ready, the market worker must not hammer allMids.
-   if not metadata_ready:
+   # Strategy-1-only PAPER uses Bybit websocket prices. Legacy Hyperliquid
+   # metadata workers are disabled; their absence must not block checkpoints.
+   if not metadata_ready and not S1_ONLY_MODE:
     with LOCK:
      S["last_market_error"]=None
      if str(S.get("last_error") or "").startswith("market: hyperliquid_rest_deferred"):
@@ -4145,7 +4146,11 @@ def market():
     SHUTDOWN.wait(.5)
     continue
    # Once websocket has delivered fresh allMids, use it and avoid REST entirely.
-   valid=cached if cached and cached_age<=8.0 else refresh_market_prices(force=False,max_age=8.0)
+   if S1_ONLY_MODE and (not cached or cached_age>8.0):
+    # Never refresh PAPER Bybit marks from an unrelated venue.
+    SHUTDOWN.wait(.5)
+    continue
+   valid=cached if S1_ONLY_MODE or (cached and cached_age<=8.0) else refresh_market_prices(force=False,max_age=8.0)
    # Network and SQL work never owns the global state lock. Sources, health
    # and the lease heartbeat remain responsive during a slow checkpoint.
    if active and not SHUTDOWN.is_set():
