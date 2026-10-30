@@ -3527,8 +3527,8 @@ def _comparison_update_path(prefix,state_name,symbol,position,mark):
 
 @account_mutation
 def _s1_pyramid_add(symbol,position,mark,analysis,flow):
- # PAPER only. Add 5% of current MTM equity from free margin when an existing
- # Strategy 1 winner still has the same H1 direction and aligned fresh flow.
+ # PAPER only. Pyramid repeatedly into a winner while H1 and fresh flow remain aligned.
+ # Each add is bounded; never consume the whole free margin.
  if not position or not analysis or not (flow or {}).get("trade_data_fresh"):return False
  side=int(position.get("side") or 0);mark=float(mark or 0);entry=float(position.get("entry") or 0)
  if side not in (-1,1) or mark<=0 or entry<=0:return False
@@ -3536,10 +3536,13 @@ def _s1_pyramid_add(symbol,position,mark,analysis,flow):
          int(analysis.get("entry_side") or 0)==side):return False
  features=copy.deepcopy(position.get("features") or {})
  last_add=float(features.get("pyramid_last_add_epoch") or 0)
+ count=int(features.get("pyramid_add_count") or 0)
+ if count>=S1_PYRAMID_MAX_ADDS:return False
  if time.time()-last_add<S1_PYRAMID_COOLDOWN_SECONDS:return False
  favorable=side*(mark/entry-1.0)
  roe_pct=favorable*S1_REFERENCE_LEVERAGE*100.0
- if roe_pct<S1_PYRAMID_MIN_ROE_PCT:return False
+ required_roe=S1_PYRAMID_MIN_ROE_PCT+count*S1_PYRAMID_ROE_STEP_PCT
+ if roe_pct<required_roe:return False
  try:
   i60=side*float(flow.get("flow_imbalance"))
   i180=side*float(flow.get("flow_imbalance_180s"))
@@ -3549,12 +3552,14 @@ def _s1_pyramid_add(symbol,position,mark,analysis,flow):
  with LOCK:prices=dict(S.get("_prices",{}))
  equity,used,free,_=_comparison_mtm("local_s1",prices)
  add_margin=max(.01,equity*S1_PYRAMID_MARGIN_FRACTION)
- if free+1e-9<add_margin:return False
+ # Preserve a reserve so pyramiding cannot silently exhaust all free margin.
+ reserve=max(.01,equity*S1_PYRAMID_FREE_MARGIN_RESERVE_FRACTION)
+ if free-add_margin<reserve:return False
  add_notional=add_margin*S1_REFERENCE_LEVERAGE
  old_notional=float(position.get("notional") or 0);old_margin=float(position.get("margin") or 0)
  new_notional=old_notional+add_notional;new_margin=old_margin+add_margin
  new_entry=((entry*old_notional)+(mark*add_notional))/new_notional
- count=int(features.get("pyramid_add_count") or 0)+1
+ count=count+1
  event={"count":count,"at":now(),"mark":mark,"roe_before_add_pct":roe_pct,
         "added_margin":add_margin,"added_notional":add_notional,
         "flow_60":i60,"flow_180":i180,"flow_300":i300}
@@ -3644,8 +3649,11 @@ S1_REFERENCE_LEVERAGE=25.0
 # Strategy 1 PAPER pyramiding: strengthen an already profitable winner only while
 # the canonical H1 side and fresh executed flow still agree. This never opens a
 # new direction and never places a real exchange order.
-S1_PYRAMID_MARGIN_FRACTION=float(os.getenv("S1_PYRAMID_MARGIN_FRACTION","0.05"))
+S1_PYRAMID_MARGIN_FRACTION=float(os.getenv("S1_PYRAMID_MARGIN_FRACTION","0.10"))
 S1_PYRAMID_MIN_ROE_PCT=float(os.getenv("S1_PYRAMID_MIN_ROE_PCT","20"))
+S1_PYRAMID_ROE_STEP_PCT=float(os.getenv("S1_PYRAMID_ROE_STEP_PCT","10"))
+S1_PYRAMID_MAX_ADDS=int(os.getenv("S1_PYRAMID_MAX_ADDS","3"))
+S1_PYRAMID_FREE_MARGIN_RESERVE_FRACTION=float(os.getenv("S1_PYRAMID_FREE_MARGIN_RESERVE_FRACTION","0.20"))
 S1_PYRAMID_COOLDOWN_SECONDS=float(os.getenv("S1_PYRAMID_COOLDOWN_SECONDS","60"))
 
 
