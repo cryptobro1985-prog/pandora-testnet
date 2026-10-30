@@ -94,8 +94,9 @@ def _candidate(symbol, analysis, flow):
     return dict(symbol=symbol, side=side, eligible=eligible, reason=reason,
                 policy=POLICY, dominant_side=dominance(flow),
                 aligned_flow=profile["60s"] if profile else None,
-                aligned_flow_180s=profile["180s"] if profile else None,
-                aligned_flow_300s=profile["300s"] if profile else None,
+                aligned_flow_15s=profile["15s"] if profile else None,
+                aligned_flow_30s=profile["30s"] if profile else None,
+                aligned_flow_60s=profile["60s"] if profile else None,
                 event_epoch=profile["event_epoch"] if profile else None)
 
 
@@ -103,7 +104,7 @@ def initial_entry_candidate(symbol, analysis, m15, flow, stamp):
     """Initial entry requires confirmed H1 direction plus live-side resumption.
 
     A confirmed H1 local is directional context, not permission to enter blindly.
-    M15 is observational only and never vetoes H1 plus fresh M1/M3/M5
+    M15 is observational only and never vetoes H1 plus fresh 15s/30s/60s
     executed flow aligned with the H1 side. This mirrors the caterpillar rule:
     wait through the pullback, then enter when the pullback weakens and control
     returns toward the active H1 regime.
@@ -166,7 +167,7 @@ def update_watch(watch, mark, m15, flow, stamp):
     ctx.update(pullback_extreme=extreme, last_observed_epoch=_f(stamp), policy=POLICY)
     profile = flow_profile(flow, side)
     if profile:
-        ctx.update(flow_60s=profile["60s"], flow_180s=profile["180s"], flow_300s=profile["300s"])
+        ctx.update(flow_15s=profile["15s"], flow_30s=profile["30s"], flow_60s=profile["60s"])
         if profile["counter_takeover"]:
             ctx["counter_pressure_seen"] = True
             ctx["phase"] = "WAIT_RESUMPTION"
