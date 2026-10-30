@@ -2666,19 +2666,28 @@ def strategy1_h1_flow_transfer(symbol,new_side,stamp=None):
  try:
   age=float(flow.get("latest_trade_age_seconds"))
   i60=float(flow.get("flow_imbalance"))
-  i180=float(flow.get("flow_imbalance_180s"))
-  i300=float(flow.get("flow_imbalance_300s"))
  except (TypeError,ValueError,OverflowError):
-  return {"confirmed":False,"reason":"waiting_for_m1_m3_m5_flow_coverage","flow":flow}
+  return {"confirmed":False,"reason":"waiting_for_fresh_executed_flow","flow":flow}
+ def optional_imbalance(key):
+  value=flow.get(key)
+  if value is None:return None
+  try:
+   value=float(value)
+   return value if math.isfinite(value) and -1<=value<=1 else None
+  except (TypeError,ValueError,OverflowError):
+   return None
+ i180=optional_imbalance("flow_imbalance_180s")
+ i300=optional_imbalance("flow_imbalance_300s")
  aligned60=new_side*i60
- aligned180=new_side*i180
- aligned300=new_side*i300
- confirmed=bool(-1<=age<=15 and aligned60>0 and aligned180>0 and aligned300>0)
+ aligned180=(new_side*i180) if i180 is not None else None
+ aligned300=(new_side*i300) if i300 is not None else None
+ available=[aligned60]+([aligned180] if aligned180 is not None else [])+([aligned300] if aligned300 is not None else [])
+ confirmed=bool(-1<=age<=15 and available and all(x>0 for x in available))
  reason=("executed_flow_control_transfer_confirmed" if confirmed else
          "opposite_structure_but_previous_side_still_controls")
  return {"confirmed":confirmed,"reason":reason,"candidate_side":new_side,
   "aligned_flow_60s":aligned60,"aligned_flow_180s":aligned180,
-  "aligned_flow_300s":aligned300,
+  "aligned_flow_300s":aligned300,"flow_windows_used":len(available),
   "latest_trade_age_seconds":age,"flow_source":flow.get("volume_source")}
 
 
