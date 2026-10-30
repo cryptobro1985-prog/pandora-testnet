@@ -4496,17 +4496,8 @@ def market_history_bootstrap():
        "local_ready":sum(1 for x in LOCAL_EXPERIMENT_SYMBOLS if ("local",x,"1h") in completed),
        "error":None}
      SHUTDOWN.wait(3.0)
-   # Breadth/regime history is secondary. Restore it only after every Local
-   # symbol has its native H1/M15 cache, so Strategy 1 survives rolling deploys.
-   for sym in REGIME_SEED_SYMBOLS:
-    key=("regime",sym)
-    if key in completed:continue
-    stamp=time.time()
-    rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":sym,"interval":"1m",
-      "startTime":int((stamp-6*3600)*1000),"endTime":int(stamp*1000)}}))
-    if isinstance(rows,list) and rows:
-     accept_regime_candles(rows);completed.add(key)
-    SHUTDOWN.wait(2.0)
+   # Strategy 1 does not consume the legacy Hyperliquid breadth/regime seed.
+   # Keep the execution bootstrap Bybit-only and return to the next refresh cycle.
    with LOCK:S["sources"]["MarketHistoryBootstrap"]={"ok":True,"warmup":False,"last_check":now(),
      "mode":"paced_rest_after_lease","regime_ready":sum(1 for x in completed if x[0]=="regime"),
      "local_ready":sum(1 for x in LOCAL_EXPERIMENT_SYMBOLS if ("local",x,"1h") in completed),"error":None}
@@ -7359,7 +7350,8 @@ if __name__=="__main__":
  worker_specs=[
   ("engine_coordinator",engine_coordinator),
   ("market",market),
-  ("market_metadata",market_metadata),
+  # Strategy-1-only runtime is Bybit-native. Do not start legacy Hyperliquid
+  # metadata/breadth workers; H1 bootstrap and live marks/trades come from Bybit.
   ("market_history_bootstrap",market_history_bootstrap),
   ("market_trades",market_trade_stream),
   ("market_aux",market_aux_stream),
