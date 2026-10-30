@@ -43,18 +43,13 @@ def flow_profile(flow, side):
     c15 = _f(flow.get("trade_count_15s"))
     c30 = _f(flow.get("trade_count_30s"))
     c60 = _f(flow.get("trade_count_60s"))
-    b15, s15 = _f(flow.get("buy_volume_15s")), _f(flow.get("sell_volume_15s"))
-    b30, s30 = _f(flow.get("buy_volume_30s")), _f(flow.get("sell_volume_30s"))
     active = (c15 is not None and c30 is not None and c60 is not None and
-              c15 >= 2 and c30 >= 4 and c60 >= 5 and
-              b15 is not None and s15 is not None and b15 + s15 > 0 and
-              b30 is not None and s30 is not None and b30 + s30 > 0)
+              c15 >= 2 and c30 >= 4 and c60 >= 5)
     short, medium, minute = values["15s"], values["30s"], values["60s"]
     values.update(
         active=active,
         event_epoch=_event_epoch(flow),
-        counter_takeover=(active and short <= -.15 and medium <= -.10 and
-                          (short <= minute - .08 or minute <= -.08)),
+        counter_takeover=(active and short <= -.15 and medium <= -.10),
         weakening=(active and short < .02 and medium < .06 and short <= minute - .08),
         resumed=(active and short >= .18 and medium >= .12 and
                  (short >= minute + .06 or minute >= .08)),
