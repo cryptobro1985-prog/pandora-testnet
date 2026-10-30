@@ -134,7 +134,20 @@ def initial_entry_candidate(symbol, analysis, m15, flow, stamp):
 
 
 def entry_candidate(symbol, analysis, m15, flow, stamp):
-    return _candidate(symbol, analysis, flow)
+    """Re-entry candidate: direct resumed flow OR proven opposite-flow absorption."""
+    base = _candidate(symbol, analysis, flow)
+    side = int((analysis or {}).get("entry_side") or 0)
+    h1 = bool((analysis or {}).get("ready") and
+              (analysis or {}).get("h1_direction_anchor") and
+              not (analysis or {}).get("entry_blocked") and side in (-1, 1))
+    profile = flow_profile(flow, side)
+    eligible = bool(h1 and profile and profile["m5_ready"] and profile["resumed"])
+    base["eligible"] = eligible
+    if eligible:
+        base["reason"] = ("h1_local_m1_m3_m5_absorption_reentry"
+                          if profile["absorbed_counter"]
+                          else "h1_local_m1_m3_m5_direct_reentry")
+    return base
 
 
 def pressure_exit(position, m15, mark, flow):
