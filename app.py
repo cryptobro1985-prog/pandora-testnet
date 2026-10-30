@@ -3078,10 +3078,10 @@ def local_experiment_loop():
     with LOCK:
      prices=dict(S.get("_prices",{}))
      price_age=time.time()-float(S.get("_last_poll_epoch",0) or 0) if S.get("_last_poll_epoch") else 1e9
-     metadata_ready=bool(S.get("_day_volumes")) and bool(S.get("_max_leverage"))
-    # Canonical Strategy 1 consumes the shared market cache. Never issue its own
-    # allMids request; that races metadata/bootstrap and can blank H1 details.
-    if not metadata_ready or not prices or price_age>12.0:
+    # Strategy 1 PAPER readiness is owned by the Bybit websocket cache, H1 anchor
+    # and executed-flow tape. Optional Hyperliquid metadata must never block entry
+    # after a restart; leverage already has a validated per-symbol fallback.
+    if not prices or price_age>12.0:
      with LOCK:
       anchors=copy.deepcopy(S.get("_local4_analysis",{}))
       permanent_ready=all((anchors.get(sym) or {}).get("ready") and (anchors.get(sym) or {}).get("anchor_confirmed")
