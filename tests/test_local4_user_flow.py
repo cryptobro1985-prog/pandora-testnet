@@ -5,13 +5,15 @@ from local_order_flow import dominance,pressure_exit,entry_candidate,update_watc
 from market_data import RollingMarketData
 
 def flow(buy,sell,fresh=True):
-    return dict(trade_data_fresh=fresh,latest_trade_age_seconds=1,buy_volume_60s=buy,sell_volume_60s=sell,
-                flow_imbalance=(buy-sell)/(buy+sell) if buy+sell else 0.)
+    imb=(buy-sell)/(buy+sell) if buy+sell else 0.
+    return dict(trade_data_fresh=fresh,latest_trade_age_seconds=1,trade_coverage_seconds=320,
+                buy_volume_60s=buy,sell_volume_60s=sell,flow_imbalance=imb,
+                flow_imbalance_180s=imb,flow_imbalance_300s=imb,price_return_300s=0.)
 
 class UserFlowTests(unittest.TestCase):
-    def test_exact_four_symbols_and_requested_risk(self):
-        self.assertEqual(app.LOCAL_EXPERIMENT_SYMBOLS,('INIT','NEAR','GRASS','HYPE'))
-        self.assertEqual(app.LOCAL_EXPERIMENT_MAX_POSITIONS,4)
+    def test_current_permanent_symbols_and_requested_risk(self):
+        self.assertEqual(len(app.LOCAL_EXPERIMENT_SYMBOLS),18)
+        self.assertEqual(app.LOCAL_EXPERIMENT_MAX_POSITIONS,7)
         self.assertEqual(app.LOCAL_EXPERIMENT_STARTING_EQUITY,500)
         self.assertEqual(app.LOCAL_EXPERIMENT_MARGIN_FRACTION,.20)
     def test_actual_volume_majority_not_m15_scores_decides(self):
@@ -20,7 +22,7 @@ class UserFlowTests(unittest.TestCase):
             a=dict(ready=True,h1_direction_anchor=True,entry_side=side)
             self.assertTrue(entry_candidate('HYPE',a,dict(ready=False,recovery_score=0),f,100)['eligible'])
             self.assertIsNone(pressure_exit(dict(side=side,entry=100),None,99,f))
-            self.assertEqual(pressure_exit(dict(side=-side,entry=100),None,99,f),'executed_flow_counter_dominance')
+            self.assertEqual(pressure_exit(dict(side=-side,entry=100),None,99,f),'executed_flow_m1_m3_m5_opposite_control_exit')
     def test_tie_or_stale_data_never_makes_up_a_direction(self):
         self.assertEqual(dominance(flow(2,2)),0)
         self.assertIsNone(dominance(flow(3,2,False)))
