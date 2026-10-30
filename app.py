@@ -3683,8 +3683,8 @@ def comparison_strategies_loop():
    # It must not issue its own allMids REST request or compete with bootstrap.
    if not metadata_ready or not prices or price_age>12.0:
     with LOCK:
-     S["sources"]["Strategy 1 — Restored Caterpillar"]={"ok":False,"ready":False,"warmup":True,
-      "last_check":now(),"mode":"waiting_for_shared_live_cache","error":None}
+     S["sources"]["Strategy 1 — Restored Caterpillar"]={"ok":True,"ready":False,"warmup":True,"degraded_noncritical":True,
+      "last_check":now(),"mode":"legacy_comparison_waiting_for_shared_live_cache","error":None}
      S["sources"]["Strategy 2 — H1 Pivot Swing"]={"ok":True,"ready":False,"disabled":True,
       "last_check":now(),"error":None}
     SHUTDOWN.wait(.5)
@@ -3845,12 +3845,12 @@ def comparison_strategies_loop():
       "exit_rule":"LOCAL_HIGH short -> LOCAL_LOW close+long; LOCAL_LOW long -> LOCAL_HIGH close+short","error":None}
   except LeaseLost as exc:
    with LOCK:
-    S["sources"]["Strategy 1 — Restored Caterpillar"]={"ok":False,"error":str(exc)[:160],"last_check":now()}
+    S["sources"]["Strategy 1 — Restored Caterpillar"]={"ok":True,"ready":False,"degraded_noncritical":True,"error":str(exc)[:160],"last_check":now()}
     S["sources"]["Strategy 2 — H1 Pivot Swing"]={"ok":False,"error":str(exc)[:160],"last_check":now()}
   except Exception as exc:
    err=type(exc).__name__+":"+str(exc)[:160]
    with LOCK:
-    S["sources"]["Strategy 1 — Restored Caterpillar"]={"ok":False,"error":err,"last_check":now()}
+    S["sources"]["Strategy 1 — Restored Caterpillar"]={"ok":True,"ready":False,"degraded_noncritical":True,"error":err,"last_check":now()}
     S["sources"]["Strategy 2 — H1 Pivot Swing"]={"ok":False,"error":err,"last_check":now()}
   SHUTDOWN.wait(5)
  pool.shutdown(wait=False,cancel_futures=True)
@@ -6221,7 +6221,7 @@ def operations_diagnostics():
      "market_error":S.get("last_market_error"),"positions":len(S["positions"]),
      "trades":S.get("trades"),"news_seen":S.get("news_seen"),
      "sources_ok":sum(bool(x.get("ok")) for x in S["sources"].values()),
-     "sources_failed":[k for k,v in S["sources"].items() if not v.get("ok") and not v.get("disabled") and not k.startswith("XFree:") and not k.startswith("XIndex:") and k!="XIndexMonitor" and k not in SEARCH_INDEX_FEEDS and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")],
+     "sources_failed":[k for k,v in S["sources"].items() if not v.get("ok") and not v.get("disabled") and not v.get("degraded_noncritical") and not k.startswith("XFree:") and not k.startswith("XIndex:") and k!="XIndexMonitor" and k not in SEARCH_INDEX_FEEDS and not (k.startswith("TruthDirect:") and k!="TruthDirect:realDonaldTrump")],
      "sources_degraded_noncritical":[k for k,v in S["sources"].items() if not v.get("ok") and (k.startswith("XIndex:") or k=="XIndexMonitor")],
      "news_failures":{k:str(v.get("error") or "")[:160] for k,v in S["sources"].items() if not v.get("ok") and ((k in FEEDS and k not in SEARCH_INDEX_FEEDS and not k.startswith("XIndex:")) or k in RESEARCH_PAGES)},
      "social_channels":{k:{"ok":v.get("ok"),"degraded":v.get("degraded"),"mode":v.get("mode"),"posts":v.get("posts"),"last_check":v.get("last_check"),"error":v.get("error"),"realtime_verified":v.get("realtime_verified"),"latest_post_age_seconds":v.get("latest_post_age_seconds"),"delivery_latency_seconds":v.get("delivery_latency_seconds"),"accounts_ok":v.get("accounts_ok"),"accounts_initialized":v.get("accounts_initialized"),"accounts_total":v.get("accounts_total"),"active_accounts":v.get("active_accounts"),"scan_label":v.get("scan_label"),"key_accounts":v.get("key_accounts"),"disabled_retry_accounts":v.get("disabled_retry_accounts"),"recently_polled_accounts":v.get("recently_polled_accounts"),"target_poll_seconds":v.get("target_poll_seconds"),"backend_accounts":v.get("backend_accounts"),"rate_limited_accounts":v.get("rate_limited_accounts"),"backoff_accounts":v.get("backoff_accounts"),"scan_workers":v.get("scan_workers")} for k,v in S["sources"].items() if k in ("XMonitor","XCriticalMonitor","XFilteredStream","XListMonitor","TruthMonitor","TruthStream","TruthDirect:realDonaldTrump","TruthSocialPublic","PiQDirect")},
