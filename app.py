@@ -98,7 +98,6 @@ def bybit_volatility_discovery_loop():
    if int(payload.get("retCode",0) or 0)!=0:raise RuntimeError("bybit_retCode_"+str(payload.get("retCode")))
    now_epoch=time.time();rows=(payload.get("result") or {}).get("list") or []
    with LOCK:
-    available=set(S.get("_prices",{}))
     unsupported=set((S.get("strategy1_discovery") or {}).get("unsupported_runtime_symbols") or [])
    ranked=[]
    for x in rows:
@@ -118,10 +117,10 @@ def bybit_volatility_discovery_loop():
     move5=abs(last/ref-1)*100 if ref>0 and now_epoch-hist[0][0]>=180 else 0.0
     range24=(high/low-1)*100 if high>0 else 0.0
     # Movement and daily range are observations, never admission thresholds.
-    # Strategy 1 decides whether a candidate has a valid H1 anchor and fresh flow.
-    # Current paper Strategy 1 consumes the existing live price/candle transport.
-    # Do not admit a Bybit-only symbol until that transport can manage it safely.
-    executable=symbol in available and symbol not in unsupported
+    # A symbol returned by Bybit linear tickers is transport-discoverable. HOT promotion
+    # itself causes the dynamic Bybit WS to subscribe trades/tickers/H1/M15. Entry still
+    # fails closed until H1 is ready and executed flow is fresh.
+    executable=symbol not in unsupported
     score=(move5+range24/24.0)*math.log10(max(turn,10))
     ranked.append({"symbol":symbol,"pair":pair,"score":round(score,3),"move_5m_pct":round(move5,3),
       "range_24h_pct":round(range24,3),"turnover_24h":round(turn,2),"runtime_eligible":executable})
@@ -4419,6 +4418,24 @@ def market_regime_history():
     "error":None if ok else "waiting_for_single_history_bootstrap"}
   SHUTDOWN.wait(15)
 
+def bybit_local_history(symbol,interval="1h",limit=120):
+ """Read-only Bybit V5 kline bootstrap converted to the legacy candle shape."""
+ bybit_interval={"1h":"60","15m":"15","1m":"1"}.get(interval)
+ if not bybit_interval:raise ValueError("unsupported_bybit_interval:"+str(interval))
+ url="https://api.bybit.com/v5/market/kline?"+urllib.parse.urlencode({
+  "category":"linear","symbol":str(symbol)+"USDT","interval":bybit_interval,"limit":int(limit)})
+ req=urllib.request.Request(url,headers={"User-Agent":"PANDORA-paper/1.0","Accept":"application/json"})
+ with urllib.request.urlopen(req,timeout=12) as resp:payload=json.load(resp)
+ if int(payload.get("retCode",0) or 0)!=0:raise RuntimeError("bybit_kline_retCode_"+str(payload.get("retCode")))
+ raw=(payload.get("result") or {}).get("list") or []
+ rows=[]
+ for x in reversed(raw):
+  try:
+   start=int(x[0]);rows.append({"s":str(symbol),"i":interval,"t":start,"T":start+int({"1h":3600000,"15m":900000,"1m":60000}[interval]),
+    "o":str(x[1]),"h":str(x[2]),"l":str(x[3]),"c":str(x[4]),"v":str(x[5]),"n":0})
+  except (IndexError,TypeError,ValueError):continue
+ return rows
+
 def market_history_bootstrap():
  # One paced history owner. Local's fixed PAPER sizing and known symbols do
  # not require a successful optional universe/metadata HTTP request.
@@ -4455,8 +4472,7 @@ def market_history_bootstrap():
      if _local_cached_interval_fresh(cached,interval):
       completed.add(key);continue
      stamp=time.time()
-     rows=json.loads(get(API,{"type":"candleSnapshot","req":{"coin":sym,"interval":interval,
-       "startTime":int((stamp-hours*3600)*1000),"endTime":int(stamp*1000)}}))
+     rows=bybit_local_history(sym,interval,limit=min(200,max(24,int(hours))))
      if not isinstance(rows,list) or not rows:
       # Permanent Strategy 1 symbols are trading-critical and must surface an error.
       # Dynamic AutoScanner candidates are optional: if the execution venue cannot
