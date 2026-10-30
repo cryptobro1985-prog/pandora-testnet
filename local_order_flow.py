@@ -115,7 +115,7 @@ def pressure_exit(position, m15, mark, flow):
     if side not in (-1, 1) or profile is None:
         return None
     if profile["counter_takeover"]:
-        return "executed_flow_counter_control_exit"
+        return "executed_flow_15s30s_counter_control_exit"
     if profile["weakening"] and profile["15s"] < 0:
         return "executed_flow_weakening_exit"
     return None
