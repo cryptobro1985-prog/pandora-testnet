@@ -3097,13 +3097,13 @@ def local_experiment_loop():
         "last_action":"WAIT_FRESH_MARKET_CACHE","error":None} for sym in LOCAL_EXPERIMENT_SYMBOLS}
       S["sources"]["Caterpillar 1.0"]={"ok":permanent_ready,"ready":permanent_ready,"warmup":not permanent_ready,
        "execution_cache_ready":False,"last_check":now(),"mode":"H1_READY_WAITING_FRESH_MARKET_CACHE",
-       "paper_only":True,"symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"details":details,
+       "paper_only":True,"symbols":list(strategy1_runtime_symbols()),"permanent_symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"details":details,
        "error":None if permanent_ready else "missing_permanent_h1_anchor"}
      SHUTDOWN.wait(.5);continue
     local_experiment_mark_positions(prices)
     jobs={};persisted_by_symbol={}
-    runtime_symbols=list(LOCAL_EXPERIMENT_SYMBOLS)
-    # Core readiness is defined by the 18 permanent markets. Discovery HOT symbols are optional extensions
+    runtime_symbols=list(strategy1_runtime_symbols())
+    # Core readiness is defined by the 18 permanent markets. Discovery HOT symbols are live extensions
     # and must never stall the canonical Strategy 1 execution loop.
     # Persisted H1 anchors are bootstrap/failure fallbacks ONLY. Always refresh H1
     # so a newer confirmed opposite LOCAL_HIGH/LOCAL_LOW can supersede the old side.
