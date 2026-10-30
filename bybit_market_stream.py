@@ -78,6 +78,10 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
             last_trade_receive = now
             last_trade_exchange = 0.0
             accepted_trades = stale_trades = 0
+            per_symbol_receive = {s: 0.0 for s in selected}
+            per_symbol_exchange = {s: 0.0 for s in selected}
+            sequence_by_symbol = {}
+            sequence_gaps = 0
             trade_topics_confirmed = not subscribe_trades
             trade_warmup_deadline = now + 45.0
             mids = {}
@@ -106,7 +110,21 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                                 stale_trades += 1
                                 continue
                             batch.append(to_legacy_observation(trade))
-                            last_trade_exchange = max(last_trade_exchange, trade.exchange_epoch_ms / 1000.0)
+                            sym = str(getattr(trade, "symbol", "") or row.get("s") or "")
+                            if sym.endswith("USDT"): sym = sym[:-4]
+                            exch = trade.exchange_epoch_ms / 1000.0
+                            last_trade_exchange = max(last_trade_exchange, exch)
+                            if sym:
+                                per_symbol_receive[sym] = last_received
+                                per_symbol_exchange[sym] = exch
+                                try:
+                                    seq = int(row.get("seq"))
+                                    prev = sequence_by_symbol.get(sym)
+                                    if prev is not None and seq < prev:
+                                        sequence_gaps += 1
+                                    sequence_by_symbol[sym] = max(seq, prev or seq)
+                                except (TypeError, ValueError):
+                                    pass
                         if batch:
                             observations.ingest_trades(batch, last_received)
                             accepted_trades += len(batch)
@@ -164,6 +182,13 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                             send("unsubscribe", ["tickers." + _pair(s) for s in sorted(removed)])
                             send("subscribe", ["tickers." + _pair(s) for s in sorted(added)])
                         selected = desired
+                        for s in desired:
+                            per_symbol_receive.setdefault(s, 0.0)
+                            per_symbol_exchange.setdefault(s, 0.0)
+                        for s in list(per_symbol_receive):
+                            if s not in desired:
+                                per_symbol_receive.pop(s, None); per_symbol_exchange.pop(s, None)
+                                sequence_by_symbol.pop(s, None)
                         observations.set_subscriptions(desired, epoch)
                     if on_candles is not None:
                         desired_c = set(candle_symbols() if callable(candle_symbols) else candle_symbols)
@@ -178,12 +203,26 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
 
                 if epoch - last_report >= 5:
                     exchange_lag = (epoch - last_trade_exchange) if last_trade_exchange else None
+                    symbol_health = {}
+                    for s in sorted(selected):
+                        recv = per_symbol_receive.get(s) or 0.0
+                        exch = per_symbol_exchange.get(s) or 0.0
+                        symbol_health[s] = {
+                            "receive_age_seconds": round(epoch-recv,3) if recv else None,
+                            "exchange_lag_seconds": round(epoch-exch,3) if exch else None,
+                            "fresh_15s": bool(recv and exch and epoch-recv <= 15 and epoch-exch <= 15),
+                        }
+                    fresh_symbols = sum(1 for v in symbol_health.values() if v["fresh_15s"])
                     report({
                         "ok": True, "mode": "bybit_v5_public_linear",
                         "symbols": len(selected), "heartbeat_age_seconds": round(epoch-last_received,3),
                         "last_trade_receive_age_seconds": round(epoch-last_trade_receive,3) if subscribe_trades else None,
                         "last_trade_exchange_lag_seconds": round(exchange_lag,3) if exchange_lag is not None else None,
                         "accepted_trades": accepted_trades, "stale_trades_rejected": stale_trades,
+                        "subscription_confirmed": trade_topics_confirmed,
+                        "fresh_symbols_15s": fresh_symbols,
+                        "symbol_health": symbol_health,
+                        "sequence_regressions": sequence_gaps,
                         "stats": observations.stats(), "coverage": "bybit_linear", "error": None,
                     })
                     last_report = epoch
