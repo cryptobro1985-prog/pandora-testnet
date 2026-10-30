@@ -3096,9 +3096,62 @@ def local4_fast_entries(prices):
   elif local4_initial_entry_candidate(symbol,analysis,None,flow,time.time())["eligible"]:
    local_experiment_open(symbol,side,analysis,"ORDER_FLOW")
 
+def strategy1_entry_diagnostic_snapshot(prices):
+ # Read-only decision audit: one structured record per candidate every 30 seconds.
+ # This does NOT create orders, alter trading gates or introduce strategies.
+ rows=[]
+ for symbol in strategy1_runtime_symbols():
+  with LOCK:
+   analysis=copy.deepcopy(S.get("_local4_analysis",{}).get(symbol))
+   position=copy.deepcopy(S.get("local_v12_positions",{}).get(symbol))
+   watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
+  record={"symbol":symbol,"h1_ready":strategy1_confirmed_h1(analysis),
+          "position_open":bool(position),"watch_active":bool(watch),
+          "entry_side":(analysis or {}).get("entry_side")}
+  try:
+   if position:
+    record["reason"]="POSITION_ALREADY_OPEN"
+   elif not record["h1_ready"]:
+    record["reason"]="H1_NOT_CONFIRMED_OR_BLOCKED"
+   elif not prices.get(symbol):
+    record["reason"]="MARK_UNAVAILABLE"
+   elif not strategy1_runtime_h1_verified(symbol,analysis):
+    record["reason"]="H1_RUNTIME_VERIFICATION_NOT_READY"
+   else:
+    flow=MARKET_OBS.flow_context(symbol,time.time())
+    record.update({"trade_data_fresh":bool(flow.get("trade_data_fresh")),
+      "latest_trade_age_seconds":flow.get("latest_trade_age_seconds"),
+      "coverage_seconds":flow.get("trade_coverage_seconds"),
+      "flow_m1":flow.get("flow_imbalance"),"flow_m3":flow.get("flow_imbalance_180s"),
+      "flow_m5":flow.get("flow_imbalance_300s")})
+    if watch:
+     ctx=watch.get("context") or {}
+     record["watch_phase"]=ctx.get("phase")
+     record["counter_pressure_seen"]=bool(ctx.get("counter_pressure_seen"))
+     record["reason"]="REENTRY_READY" if local4_reentry_ready(
+       int(analysis.get("entry_side") or 0),None,prices[symbol],watch,flow,time.time()
+       ) else "WAIT_REENTRY_COUNTERFLOW_OR_RESUMPTION"
+    else:
+     selection=local4_initial_entry_candidate(symbol,analysis,None,flow,time.time())
+     record["reason"]="ENTRY_SIGNAL_READY" if selection.get("eligible") else selection.get("reason","UNCLASSIFIED")
+  except Exception as exc:
+   record["reason"]="DIAGNOSTIC_ERROR"
+   record["error"]=type(exc).__name__+":"+str(exc)[:140]
+  rows.append(record)
+ summary={}
+ for row in rows:
+  reason=row["reason"];summary[reason]=summary.get(reason,0)+1
+ snapshot={"at":now(),"symbols":len(rows),"reason_counts":summary,"tokens":rows}
+ with LOCK:S["strategy1_entry_diagnostics"]=snapshot
+ try:journal("strategy1_entry_diagnostics",None,snapshot)
+ except Exception as exc:
+  with LOCK:S["strategy1_entry_diagnostics_error"]=type(exc).__name__+":"+str(exc)[:140]
+ return snapshot
+
 def local_experiment_risk_loop():
  # Protect observed peaks even while H1/M15 history fetches or scans are slow.
  # Use only fresh streamed/cached marks; never spend additional REST budget.
+ last_entry_diagnostics=0.0
  while not SHUTDOWN.is_set():
   try:
    with LOCK:
@@ -3110,6 +3163,9 @@ def local_experiment_risk_loop():
     # Execution does not wait for M15. H1 provides the allowed side; fresh
     # 15s/30s/60s aggressor flow opens/re-enters as soon as control is confirmed.
     local4_fast_entries(prices)
+    if time.time()-last_entry_diagnostics>=30:
+     last_entry_diagnostics=time.time()
+     strategy1_entry_diagnostic_snapshot(prices)
     with LOCK:S["sources"]["LocalRisk"]={"ok":True,"ready":True,"last_check":now(),"mode":"H1_15S_30S_60S_fast_paper_execution","symbols":list(strategy1_trade_symbols()),"error":None}
   except LeaseLost as exc:
    with LOCK:
