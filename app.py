@@ -4563,7 +4563,7 @@ def market_trade_stream():
   run_bybit_stream(MARKET_OBS,SHUTDOWN,symbols,report,
    os.getenv("BYBIT_WS_PUBLIC_LINEAR","wss://stream.bybit.com/v5/public/linear"),
    subscribe_trades=True,symbol_filter=lambda s,i=idx:shard(s)==i,
-   worker_name="trade-"+str(idx))
+   on_trade_mids=accept_market_prices,worker_name="trade-"+str(idx))
  threads=[]
  for idx in range(workers):
   t=threading.Thread(target=run_worker,args=(idx,),daemon=True,name="bybit-trades-"+str(idx))
@@ -4572,22 +4572,33 @@ def market_trade_stream():
   SHUTDOWN.wait(1)
 
 def market_aux_stream():
- # Price/candle traffic lives on a separate read-only socket so busy candle/allMids
- # channels can never delay the executed-trade tape used by Strategy 1.
- # IMPORTANT: this stream is intentionally process-independent and starts even on
- # standby Render instances. It performs no trading and no REST calls; it only
- # keeps the HTTP monitor's live marks/candles current during lease handoffs.
- def symbols():
-  return set(strategy1_runtime_symbols())
- def report(status):
-  with LOCK:S["sources"]["MarketAuxStream"]={"last_check":now(),**status}
- run_bybit_stream(MARKET_AUX_OBS,SHUTDOWN,symbols,report,
-  os.getenv("BYBIT_WS_PUBLIC_LINEAR","wss://stream.bybit.com/v5/public/linear"),
-  on_mids=accept_market_prices,on_candles=accept_local_candles,
-  candle_symbols=lambda:set(strategy1_runtime_symbols())|set(ALL_LOCAL_CANDLE_SYMBOLS),
-  regime_symbols=REGIME_SEED_SYMBOLS,on_regime_candles=accept_regime_candles,
-  subscribe_trades=False)
-
+ # Bybit-only marks/H1 candles. Shard the auxiliary topics too: one socket with
+ # hundreds of ticker+kline topics was unstable and left many marks null.
+ workers=max(2,min(8,int(os.getenv("BYBIT_AUX_WS_SHARDS","4"))))
+ def symbols(): return set(strategy1_runtime_symbols())
+ def shard(symbol): return int(hashlib.sha1(str(symbol).encode()).hexdigest()[:8],16)%workers
+ def run_worker(idx):
+  key="MarketAuxStream:"+str(idx)
+  def report(status):
+   with LOCK:
+    S["sources"][key]={"last_check":now(),**status}
+    states=[S["sources"].get("MarketAuxStream:"+str(i),{}) for i in range(workers)]
+    ok=sum(1 for x in states if x.get("ok"))
+    S["sources"]["MarketAuxStream"]={"last_check":now(),"ok":ok==workers,
+      "ready":ok==workers,"workers":workers,"workers_ok":ok,
+      "mode":"bybit_v5_aux_sharded","error":None if ok==workers else "one_or_more_aux_workers_unhealthy",
+      "shards":copy.deepcopy(states)}
+  run_bybit_stream(MARKET_AUX_OBS,SHUTDOWN,symbols,report,
+   os.getenv("BYBIT_WS_PUBLIC_LINEAR","wss://stream.bybit.com/v5/public/linear"),
+   on_mids=accept_market_prices,on_candles=accept_local_candles,
+   candle_symbols=lambda:set(strategy1_runtime_symbols())|set(ALL_LOCAL_CANDLE_SYMBOLS),
+   subscribe_trades=False,symbol_filter=lambda s,i=idx:shard(s)==i,
+   candle_filter=lambda s,i=idx:shard(s)==i,worker_name="aux-"+str(idx))
+ threads=[]
+ for idx in range(workers):
+  t=threading.Thread(target=run_worker,args=(idx,),daemon=True,name="bybit-aux-"+str(idx))
+  t.start();threads.append(t)
+ while not SHUTDOWN.is_set(): SHUTDOWN.wait(1)
 def market_metadata():
  while not SHUTDOWN.is_set():
   # Do not duplicate REST traffic from a standby Render instance during
