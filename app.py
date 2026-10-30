@@ -2653,10 +2653,9 @@ def hype_swing_stats():
  except Exception as exc:return {"error":str(exc)[:180]}
 
 def strategy1_h1_flow_transfer(symbol,new_side,stamp=None):
- # H1 structure may nominate an opposite local, but the regime flips only after
- # executed trades prove that control actually changed hands. Use M1/M3/M5
- # consensus to reject one-minute noise and require price response so absorbed
- # buying/selling cannot manufacture a false local.
+ # H1 structure nominates an opposite local; the regime flips only when the
+ # candidate side actually predominates in fresh executed M1/M3/M5 flow.
+ # No price-response, score or imbalance-size threshold is allowed here.
  new_side=int(new_side or 0)
  if new_side not in (-1,1):
   return {"confirmed":False,"reason":"invalid_candidate_side"}
@@ -2669,19 +2668,17 @@ def strategy1_h1_flow_transfer(symbol,new_side,stamp=None):
   i60=float(flow.get("flow_imbalance"))
   i180=float(flow.get("flow_imbalance_180s"))
   i300=float(flow.get("flow_imbalance_300s"))
-  r300=float(flow.get("price_return_300s"))
  except (TypeError,ValueError,OverflowError):
   return {"confirmed":False,"reason":"waiting_for_m1_m3_m5_flow_coverage","flow":flow}
  aligned60=new_side*i60
  aligned180=new_side*i180
  aligned300=new_side*i300
- price_response=new_side*r300
- confirmed=bool(-1<=age<=15 and aligned60>0 and aligned180>0 and aligned300>0 and price_response>0)
+ confirmed=bool(-1<=age<=15 and aligned60>0 and aligned180>0 and aligned300>0)
  reason=("executed_flow_control_transfer_confirmed" if confirmed else
          "opposite_structure_but_previous_side_still_controls")
  return {"confirmed":confirmed,"reason":reason,"candidate_side":new_side,
   "aligned_flow_60s":aligned60,"aligned_flow_180s":aligned180,
-  "aligned_flow_300s":aligned300,"aligned_price_return_300s":price_response,
+  "aligned_flow_300s":aligned300,
   "latest_trade_age_seconds":age,"flow_source":flow.get("volume_source")}
 
 
