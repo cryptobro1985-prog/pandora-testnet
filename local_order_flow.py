@@ -8,7 +8,7 @@ when short-term control transfers against the position.
 import copy
 import math
 
-POLICY = "Caterpillar H1-local M1/M3/M5 executed-flow + MFE preservation"
+POLICY = "Caterpillar H1-local symmetric control-transfer + tiered MFE preservation"
 
 
 def _f(value):
@@ -174,7 +174,18 @@ def pressure_exit(position, m15, mark, flow):
     # Preserve a bankable excursion. The threshold scales with the achieved MFE,
     # but never reacts to sub-cost noise. M1+M3 must both have actually flipped.
     mfe_bankable = bool(mfe >= max(0.0020, cost * 1.5))
-    giveback_trigger = max(cost, mfe * 0.18)
+    # Tighten preservation as the excursion becomes valuable. We still require
+    # real opposite M1+M3 executed control, so this is not a naked trailing stop.
+    # 0.8%/1.5%/3% underlying moves are ~20%/37.5%/75% ROE at 25x.
+    if mfe >= 0.030:
+        giveback_fraction = 0.08
+    elif mfe >= 0.015:
+        giveback_fraction = 0.10
+    elif mfe >= 0.008:
+        giveback_fraction = 0.12
+    else:
+        giveback_fraction = 0.15
+    giveback_trigger = max(cost, mfe * giveback_fraction)
     if mfe_bankable and profile["fast_counter"] and giveback >= giveback_trigger:
         return "m1_m3_m5_mfe_preservation_exit"
 
