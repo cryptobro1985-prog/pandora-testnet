@@ -6,10 +6,10 @@ def flow(i60, i180, i300, epoch=1000.0):
         "trade_data_fresh": True,
         "latest_trade_age_seconds": 0.5,
         "volume_window_end_epoch": epoch,
-        "flow_imbalance": i60,
+        "flow_imbalance": i60,\n        "flow_imbalance_15s": i60,\n        "flow_imbalance_30s": i180,
         "flow_imbalance_180s": i180,
         "flow_imbalance_300s": i300,
-        "trade_count_60s": 8,
+        "trade_count_15s": 5,\n        "trade_count_30s": 7,\n        "trade_count_60s": 8,\n        "observed_notional_60s": 1000,
         "trade_count_180s": 20,
         "trade_count_300s": 40,
     }
@@ -25,12 +25,12 @@ class Strategy1FlowTests(unittest.TestCase):
     def test_m1_m3_m5_counterflow_plus_mfe_recoil_exits(self):
         pos={"side":1,"entry":100.0,"features":{"mfe_price_move":0.02,"estimated_round_trip_cost_move":0.001}}
         reason=pressure_exit(pos,{"median_range_move":0.008},101.0,flow(-0.25,-0.14,0.02))
-        self.assertEqual(reason,"m1_m3_m5_mfe_profit_exit")
+        self.assertEqual(reason,"executed_flow_15s30s_counter_control_exit")
 
     def test_bankable_mfe_counterflow_exits_before_roundtrip(self):
         pos={"side":1,"entry":100.0,"features":{"mfe_price_move":0.0102,"estimated_round_trip_cost_move":0.001}}
         self.assertEqual(pressure_exit(pos,{"median_range_move":0.008},101.0,flow(-0.25,-0.14,0.02)),
-                         "m1_m3_m5_mfe_profit_exit")
+                         "executed_flow_15s30s_counter_control_exit")
 
     def test_tiny_mfe_without_recoil_does_not_churn(self):
         pos={"side":1,"entry":100.0,"features":{"mfe_price_move":0.0010,"estimated_round_trip_cost_move":0.001}}
