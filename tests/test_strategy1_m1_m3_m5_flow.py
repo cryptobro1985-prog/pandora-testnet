@@ -5,6 +5,7 @@ def flow(i60, i180, i300, epoch=1000.0):
     return {
         "trade_data_fresh": True,
         "latest_trade_age_seconds": 0.5,
+        "trade_coverage_seconds": 320,
         "volume_window_end_epoch": epoch,
         "flow_imbalance": i60,
         "flow_imbalance_15s": i60,
@@ -33,17 +34,18 @@ class Strategy1FlowTests(unittest.TestCase):
     def test_m1_m3_m5_counterflow_plus_mfe_recoil_exits(self):
         pos={"side":1,"entry":100.0,"features":{"mfe_price_move":0.02,"estimated_round_trip_cost_move":0.001}}
         reason=pressure_exit(pos,{"median_range_move":0.008},101.0,flow(-0.25,-0.14,0.02))
-        self.assertEqual(reason,"executed_flow_15s30s_counter_control_exit")
+        self.assertEqual(reason,"m1_m3_m5_mfe_preservation_exit")
 
-    def test_bankable_mfe_counterflow_exits_before_roundtrip(self):
+    def test_bankable_mfe_holds_tiny_recoil_but_exits_real_giveback(self):
         pos={"side":1,"entry":100.0,"features":{"mfe_price_move":0.0102,"estimated_round_trip_cost_move":0.001}}
-        self.assertEqual(pressure_exit(pos,{"median_range_move":0.008},101.0,flow(-0.25,-0.14,0.02)),
-                         "executed_flow_15s30s_counter_control_exit")
+        self.assertIsNone(pressure_exit(pos,{"median_range_move":0.008},101.0,flow(-0.25,-0.14,0.02)))
+        self.assertEqual(pressure_exit(pos,{"median_range_move":0.008},100.65,flow(-0.25,-0.14,0.02)),
+                         "m1_m3_m5_mfe_preservation_exit")
 
     def test_clear_counter_takeover_exits_even_before_mfe_is_bankable(self):
         pos={"side":1,"entry":100.0,"features":{"mfe_price_move":0.0010,"estimated_round_trip_cost_move":0.001}}
-        self.assertEqual(pressure_exit(pos,{"median_range_move":0.008},100.08,flow(-0.25,-0.14,0.02)),
-                         "executed_flow_15s30s_counter_control_exit")
+        self.assertEqual(pressure_exit(pos,{"median_range_move":0.008},100.08,flow(-0.25,-0.14,-0.08)),
+                         "m1_m3_m5_risk_exit")
 
     def test_missing_m5_coverage_does_not_freeze_fresh_m1_profile(self):
         f=flow(-0.25,-0.14,0.02)
@@ -51,7 +53,8 @@ class Strategy1FlowTests(unittest.TestCase):
         profile=flow_profile(f,1)
         self.assertIsNotNone(profile)
         self.assertTrue(profile["active"])
-        self.assertTrue(profile["counter_takeover"])
+        self.assertFalse(profile["counter_takeover"])
+        self.assertTrue(profile["fast_counter"])
 
     def test_missing_m3_m5_blocks_new_entry(self):
         f=flow(0.18,0.12,0.10)
