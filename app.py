@@ -6911,7 +6911,7 @@ def html_dashboard(data):
  with LOCK:
   s1live_positions=copy.deepcopy(S.get("local_v12_positions",{}))
   s1live_watch=copy.deepcopy(S.get("local_experiment_watch",{}))
- for _sym in LOCAL_EXPERIMENT_SYMBOLS:
+ for _sym in strategy1_runtime_symbols():
   if _sym not in s1details:s1details[_sym]={}
   if not (s1details[_sym].get("h1_local") or {}).get("ready") and (s1durable_h1.get(_sym) or {}).get("ready"):
    s1details[_sym]["h1_local"]=copy.deepcopy(s1durable_h1[_sym])
@@ -6920,7 +6920,8 @@ def html_dashboard(data):
   if not s1details[_sym].get("caterpillar_phase"):
    s1details[_sym]["caterpillar_phase"]=("IN POSITION" if _sym in s1live_positions else
      ("WAIT RE-ENTRY" if _sym in s1live_watch else "WAIT ENTRY"))
- s1local_coverage=sum(1 for _sym in LOCAL_EXPERIMENT_SYMBOLS if (s1details.get(_sym,{}).get("h1_local") or {}).get("ready"))
+ s1_runtime=list(strategy1_runtime_symbols())
+ s1local_coverage=sum(1 for _sym in s1_runtime if (s1details.get(_sym,{}).get("h1_local") or {}).get("ready"))
  def _s1_local_row(symbol):
   d=s1details.get(symbol) or {}
   h=(d.get("h1_local") or {})
@@ -7022,7 +7023,7 @@ def html_dashboard(data):
  s1_open=float(s1block.get("unrealized_pnl",0) or 0)
  s1_primary_rows=[]
  s1posmap={x.get("symbol"):x for x in s1positions}
- for sym in LOCAL_EXPERIMENT_SYMBOLS:
+ for sym in s1_runtime:
   p=s1posmap.get(sym) or {};d=s1details.get(sym) or {};a=d.get("h1_local") or {};w=s1watch.get(sym) or {}
   if not p:continue
   raw_side=p.get("side")
@@ -7040,6 +7041,11 @@ def html_dashboard(data):
    float(x.get("margin",0) or 0),float(x.get("notional",0) or 0),float(x.get("leverage",0) or 0),
    esc(x.get("entry","—")),esc(x.get("exit","—")),"posv" if float(x.get("pnl",0) or 0)>=0 else "negv",
    float(x.get("pnl",0) or 0),esc(x.get("reason",""))) for x in s1_actual_history) or '<tr><td colspan=10>No actual Strategy 1 closes recorded</td></tr>'
+ discovery_state=copy.deepcopy(data.get("strategy1_discovery") or S.get("strategy1_discovery") or {})
+ discovery_hot=list(discovery_state.get("hot_symbols") or [])
+ discovery_diag=discovery_state.get("scan_diagnostics") or {}
+ discovery_rows="".join('<tr><td><b>%s</b></td><td>HOT → PAPER</td><td>%s</td><td>%s</td><td>%s</td></tr>'%(esc(sym),esc((s1details.get(sym) or {}).get("last_action") or "BOOTSTRAP"),esc(((s1details.get(sym) or {}).get("h1_local") or {}).get("pivot_type") or "DETECTING"),esc((s1details.get(sym) or {}).get("mark") or "—")) for sym in discovery_hot) or '<tr><td colspan=5>Discovery scanning — no HOT candidate this cycle</td></tr>'
+ discovery_html='<h3>DISCOVERY · LIVE AUTO-SCANNER</h3><div class="grid"><b>BYBIT UNIVERSE<br>%s</b><b>RANKED<br>%s</b><b>TRANSPORT ELIGIBLE<br>%s</b><b>HOT → PAPER<br>%s</b></div><div class="scroll"><table><tr><th>Token</th><th>Route</th><th>Strategy1 action</th><th>H1 Local</th><th>Mark</th></tr>%s</table></div>'%(discovery_state.get("universe_size",0),discovery_diag.get("ranked",0),discovery_diag.get("transport_eligible",0),len(discovery_hot),discovery_rows)
  s1_primary_html=(
   '<section id="strategy1-primary" class="primary">'
   '<h2>STRATEGY 1 · MAIN · H1 LOCAL → M1/M3/M5 FLOW → EXIT / PULLBACK / RE-ENTRY</h2>'
@@ -7047,16 +7053,16 @@ def html_dashboard(data):
   '<b>REALIZED EQUITY<br>$%.4f</b><b>REALIZED P&L<br><span class="%s">$%.4f</span></b>'
   '<b>OPEN P&L<br><span class="%s">$%.4f</span></b><b>MTM EQUITY<br>$%.4f</b>'
   '<b>CLOSED TRADES<br>%s</b><b>WIN RATE<br>%s</b><b>OPEN POSITIONS<br>%s</b>'
-  '<b>RE-ENTRY WATCH<br>%s</b><b>H1 LOCALS<br>%s/18</b><b>LIVE COMMIT<br>%s</b><b>MARK AGE<br>%ss</b><b>SIZE<br>20%% CURRENT EQUITY</b><b>REFERENCE LEVERAGE<br>25x PAPER</b><b>1M SNAPSHOT<br>%s</b></div>'
-  '<div class="muted">ACTUAL PAPER state from durable Neon tables. H1 controls direction; M1/M3/M5 executed flow manages MFE-preserving exits, pullbacks and same-direction re-entry. Only OPEN positions are listed below. No replay values are mixed into actual P&L.</div><h3>H1 LOCAL DIRECTION · ALL 18 TOKENS</h3><div class="s1compact"><table><tr><th>Token</th><th>H1 Local</th><th>Pivot Price</th><th>Pivot Time</th><th>Pending Candidate</th><th>Expected Side</th><th>Phase</th><th>Mark</th><th>Last Action</th></tr>%s</table></div>'
-  '<h3>OPEN NOW · 18-MARKET UNIVERSE</h3><div class="scroll"><table><tr><th>Token</th><th>Side</th><th>Phase</th><th>H1 Local</th><th>Margin $</th><th>Position $</th><th>Entry</th><th>Mark</th><th>Open P&L</th><th>Action</th></tr>%s</table></div>'
+  '<b>RE-ENTRY WATCH<br>%s</b><b>RUNTIME MARKETS<br>%s</b><b>H1 LOCALS<br>%s/%s</b><b>LIVE COMMIT<br>%s</b><b>MARK AGE<br>%ss</b><b>SIZE<br>20%% CURRENT EQUITY</b><b>REFERENCE LEVERAGE<br>25x PAPER</b><b>1M SNAPSHOT<br>%s</b></div>'
+  '<div class="muted">ACTUAL PAPER state from durable Neon tables. H1 controls direction; M1/M3/M5 executed flow manages MFE-preserving exits, pullbacks and same-direction re-entry. Only OPEN positions are listed below. No replay values are mixed into actual P&L.</div><h3>H1 LOCAL DIRECTION · ALL RUNTIME TOKENS (18 CORE + DISCOVERY HOT)</h3><div class="s1compact"><table><tr><th>Token</th><th>H1 Local</th><th>Pivot Price</th><th>Pivot Time</th><th>Pending Candidate</th><th>Expected Side</th><th>Phase</th><th>Mark</th><th>Last Action</th></tr>%s</table></div>'
+  '<h3>OPEN NOW · DYNAMIC STRATEGY 1 UNIVERSE</h3><div class="scroll"><table><tr><th>Token</th><th>Side</th><th>Phase</th><th>H1 Local</th><th>Margin $</th><th>Position $</th><th>Entry</th><th>Mark</th><th>Open P&L</th><th>Action</th></tr>%s</table></div>'
   '<h3>ACTUAL STRATEGY 1 TRADE HISTORY</h3><div class="scroll"><table><tr><th>Closed</th><th>Token</th><th>Side</th><th>Margin $</th><th>Position $</th><th>Lev</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Reason</th></tr>%s</table></div>'
-  '</section>'
+  +discovery_html+'</section>'
  )%(
    "posv" if s1engine.get("ok") else "warnv","ACTIVE" if s1engine.get("ok") else "WARMUP / PARTIAL DATA",
    float(s1block.get("realized_equity",500) or 500),"posv" if s1_realized>=0 else "negv",s1_realized,
    "posv" if s1_open>=0 else "negv",s1_open,s1_eq,int(s1stats.get("trades",0) or 0),esc(s1wr),
-   len(s1positions),len(s1watch),s1local_coverage,esc(data.get("version") or "—"),round(min(float(_monitor_local_age),float(s1durable_live.get("price_age_seconds",999) or 999)),2),esc((data.get("strategy1_last_minute_snapshot") or {}).get("ts","pending")),s1_local_rows,"".join(s1_primary_rows),s1_history_rows)
+   len(s1positions),len(s1watch),len(s1_runtime),s1local_coverage,len(s1_runtime),esc(data.get("version") or "—"),round(min(float(_monitor_local_age),float(s1durable_live.get("price_age_seconds",999) or 999)),2),esc((data.get("strategy1_last_minute_snapshot") or {}).get("ts","pending")),s1_local_rows,"".join(s1_primary_rows),s1_history_rows)
  comparison_html=""
  for key,title in (("local_s2","STRATEGY 2 — H1 PIVOT-TO-PIVOT"),("local_s3","STRATEGY 3 — LOCAL12 V10")):
   block=(data.get("comparison_strategies") or {}).get(key,{})
