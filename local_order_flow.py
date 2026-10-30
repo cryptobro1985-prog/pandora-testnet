@@ -7,7 +7,7 @@ completed M15 bars, order-book quotes and elapsed-time delays are not gates.
 import copy
 import math
 
-POLICY = "Caterpillar 1.1 H1-local executed-flow control cycle"
+POLICY = "Caterpillar 1.2 H1-local 15s/30s/60s executed-flow control cycle"
 
 
 def _f(value):
@@ -26,10 +26,11 @@ def _event_epoch(flow):
 
 
 def flow_profile(flow, side):
-    """Executed aggressor pressure aligned to the H1 side.
+    """Fast causal 15s/30s/60s executed-flow state.
 
-    Positive means H1-side aggression; negative means counter-side aggression.
-    Multiple windows reject a one-print flip while still reacting before M15.
+    H1 owns direction. 15s detects transfer first, 30s confirms it and 60s
+    supplies context. A very strong 15s transfer may exit immediately when
+    there is enough real executed liquidity; M3/M5 never gate execution.
     """
     side = int(side or 0)
     if side not in (-1, 1) or not isinstance(flow, dict) or not flow.get("trade_data_fresh"):
@@ -37,44 +38,28 @@ def flow_profile(flow, side):
     age = _f(flow.get("latest_trade_age_seconds"))
     if age is None or not -1 <= age <= 15:
         return None
-    values = {}
-    for horizon, key in (("60s", "flow_imbalance"),
-                         ("180s", "flow_imbalance_180s"),
-                         ("300s", "flow_imbalance_300s")):
+    vals = {}
+    for horizon, key in (("15s","flow_imbalance_15s"),("30s","flow_imbalance_30s"),("60s","flow_imbalance")):
         raw = _f(flow.get(key))
-        values[horizon] = side * raw if raw is not None and -1 <= raw <= 1 else None
-    # M1 is sufficient to begin causal execution. M3/M5 are optional until
-    # their real post-connect windows exist; they may confirm but never freeze M1.
-    if values["60s"] is None:
+        vals[horizon] = side * raw if raw is not None and -1 <= raw <= 1 else None
+    if vals["60s"] is None:
         return None
-    c60 = _f(flow.get("trade_count_60s"))
-    c180 = _f(flow.get("trade_count_180s"))
-    c300 = _f(flow.get("trade_count_300s"))
-    minute, three_minute, five_minute = values["60s"], values["180s"], values["300s"]
-    # Fast causal execution: M1 can trade as soon as the live tape is genuinely
-    # fresh. M3/M5 strengthen confirmation when available, but reconnect warm-up
-    # must never freeze Strategy 1 for 3-5 minutes. H1 remains the sole side owner.
-    m1_active = c60 is not None and c60 >= 5
-    m3_active = c180 is not None and c180 >= 12 and three_minute is not None
-    m5_active = c300 is not None and c300 >= 20 and five_minute is not None
-    confirmations = int(m3_active and three_minute >= .04) + int(m5_active and five_minute >= .02)
-    counter_confirms = int(m3_active and three_minute <= -.04) + int(m5_active and five_minute <= .02)
-    active = m1_active
-    values.update(
-        active=active,
-        event_epoch=_event_epoch(flow),
-        # Strong M1 transfer acts immediately; available M3/M5 evidence confirms
-        # rather than blocks. This preserves responsiveness after reconnects.
-        counter_takeover=(m1_active and minute <= -.18 and
-                          (not m3_active or three_minute <= .04) and
-                          (not m5_active or five_minute <= .08)),
-        resumed=(m1_active and minute >= .12 and
-                 (confirmations >= 1 or (not m3_active and not m5_active))),
-        aligned_control=(m1_active and minute >= .08 and
-                         (confirmations >= 1 or (not m3_active and not m5_active))),
+    if vals["15s"] is None: vals["15s"] = vals["60s"]
+    if vals["30s"] is None: vals["30s"] = vals["60s"]
+    c15=_f(flow.get("trade_count_15s")); c30=_f(flow.get("trade_count_30s")); c60=_f(flow.get("trade_count_60s"))
+    notional=_f(flow.get("observed_notional_60s"))
+    active=bool(c60 is not None and c60 >= 5 and notional is not None and notional >= 100)
+    fast_counter=bool(active and c15 is not None and c15 >= 3 and vals["15s"] <= -.35)
+    confirmed_counter=bool(active and vals["15s"] <= -.12 and vals["30s"] <= -.08)
+    vals.update(
+        active=active,event_epoch=_event_epoch(flow),
+        counter_takeover=bool(fast_counter or confirmed_counter),
+        weakening=bool(active and vals["15s"] < .02 and vals["30s"] < .06 and vals["15s"] <= vals["60s"]-.08),
+        resumed=bool(active and vals["15s"] >= .16 and vals["30s"] >= .12 and vals["60s"] >= .08),
+        aligned_control=bool(active and vals["15s"] >= .12 and vals["30s"] >= .08 and vals["60s"] >= .06),
+        observed_notional_60s=notional,
     )
-    return values
-
+    return vals
 
 def dominance(flow):
     """Current 60-second executed-volume majority; diagnostic compatibility."""
@@ -144,36 +129,27 @@ def entry_candidate(symbol, analysis, m15, flow, stamp):
 
 
 def pressure_exit(position, m15, mark, flow):
-    """Preserve MFE only after confirmed M1/M3/M5 control transfer.
+    """Exit immediately when fresh opposite executed flow takes control.
 
-    Counter-flow by itself is not enough: price must also recoil from the best
-    favorable excursion. This prevents a transient flow print from cutting a
-    healthy H1-side move while still reacting far earlier than a full H1 flip.
+    PnL never vetoes a genuine takeover. For bankable MFE, weakening plus
+    negative fast flow also protects the excursion before a full 60s flip.
     """
-    side = int((position or {}).get("side") or 0)
-    profile = flow_profile(flow, side)
-    if side not in (-1, 1) or profile is None or not profile["counter_takeover"]:
+    side=int((position or {}).get("side") or 0)
+    profile=flow_profile(flow,side)
+    if side not in (-1,1) or profile is None or not profile["active"]:
         return None
-    entry, mark = _f((position or {}).get("entry")), _f(mark)
-    if entry in (None, 0) or mark is None:
-        return None
-    favorable = side * (mark / entry - 1.0)
-    features = (position or {}).get("features") or {}
-    peak = max(0.0, _f(features.get("mfe_price_move")) or 0.0, favorable)
-    typical = _f((m15 or {}).get("median_range_move")) or .008
-    recoil_threshold = max(.0007, min(.0018, typical * .12))
-    recoil = peak - favorable
-    cost = max(.0002, _f(features.get("estimated_round_trip_cost_move")) or 0.0)
-    # Never allow a materially profitable excursion to round-trip into a loss
-    # while fresh executed flow has already transferred against the position.
-    # Once peak covered estimated round-trip cost plus a small buffer, counter
-    # takeover is sufficient to preserve the move; otherwise retain the recoil
-    # requirement to avoid churning immediately after entry.
-    peak_was_bankable = peak >= max(cost * 1.5, .0015)
-    if not peak_was_bankable and recoil < recoil_threshold:
-        return None
-    return "m1_m3_m5_mfe_profit_exit" if favorable > cost else "m1_m3_m5_mfe_preservation_exit"
-
+    entry,mark=_f((position or {}).get("entry")),_f(mark)
+    if entry in (None,0) or mark is None:return None
+    favorable=side*(mark/entry-1.0)
+    features=(position or {}).get("features") or {}
+    peak=max(0.0,_f(features.get("mfe_price_move")) or 0.0,favorable)
+    cost=max(.0002,_f(features.get("estimated_round_trip_cost_move")) or 0.0)
+    bankable=peak>=max(cost*1.5,.0015)
+    if profile["counter_takeover"]:
+        return "executed_flow_15s30s_counter_control_exit"
+    if bankable and profile["weakening"] and profile["15s"] < 0:
+        return "executed_flow_15s30s_mfe_weakening_exit"
+    return None
 
 def update_watch(watch, mark, m15, flow, stamp):
     """Persist counter-control and wait for a later mirrored takeover."""
