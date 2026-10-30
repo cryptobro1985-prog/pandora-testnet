@@ -121,7 +121,10 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                         if changed:
                             on_mids(dict(mids))
                     elif topic.startswith("kline."):
+                        topic_pair = topic.rsplit(".", 1)[-1]
                         for row in message.get("data") or []:
+                            row = dict(row)
+                            row.setdefault("symbol", topic_pair)
                             candle = _legacy_candle(row)
                             if not candle:
                                 continue
