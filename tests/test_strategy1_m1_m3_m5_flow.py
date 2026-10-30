@@ -24,69 +24,50 @@ def flow(i60, i180, i300, epoch=1000.0):
     }
 
 class Strategy1FlowTests(unittest.TestCase):
-    def test_confirmed_h1_flow_entry_is_not_blocked_by_m15(self):
-        analysis={"ready": True, "anchor_confirmed": True, "h1_direction_anchor": {"pivot_type":"LOCAL_LOW"}, "entry_side":1, "entry_blocked":False}
-        executed=flow(0.18,0.12,0.10)
-        adverse_m15={"ready": True, "strong_adverse_pressure": True}
-        candidate=initial_entry_candidate("HYPE",analysis,adverse_m15,executed,1000.0)
-        self.assertTrue(candidate["eligible"], candidate)
+    def analysis(self, side=1):
+        return {"ready": True, "anchor_confirmed": True,
+                "h1_direction_anchor": {"pivot_type":"LOCAL_LOW" if side>0 else "LOCAL_HIGH"},
+                "entry_side": side, "entry_blocked": False}
 
-    def test_m1_m3_m5_counterflow_plus_mfe_recoil_exits(self):
-        pos={"side":1,"entry":100.0,"features":{"mfe_price_move":0.02,"estimated_round_trip_cost_move":0.001}}
-        reason=pressure_exit(pos,{"median_range_move":0.008},101.0,flow(-0.25,-0.14,0.02))
-        self.assertEqual(reason,"m1_m3_m5_mfe_preservation_exit")
+    def test_entry_only_when_h1_side_predominates_on_m1_m3_m5(self):
+        self.assertTrue(initial_entry_candidate("HYPE",self.analysis(1),None,flow(.18,.12,.10),1000)["eligible"])
+        self.assertFalse(initial_entry_candidate("HYPE",self.analysis(1),None,flow(.18,.12,-.01),1000)["eligible"])
 
-    def test_bankable_mfe_holds_tiny_recoil_but_exits_real_giveback(self):
-        pos={"side":1,"entry":100.0,"features":{"mfe_price_move":0.0102,"estimated_round_trip_cost_move":0.001}}
-        self.assertIsNone(pressure_exit(pos,{"median_range_move":0.008},101.0,flow(-0.25,-0.14,0.02)))
-        self.assertEqual(pressure_exit(pos,{"median_range_move":0.008},100.65,flow(-0.25,-0.14,0.02)),
-                         "m1_m3_m5_mfe_preservation_exit")
+    def test_exit_only_when_opposite_side_predominates_on_m1_m3_m5(self):
+        pos={"side":1,"entry":100.0,"features":{"mfe_price_move":0.03}}
+        self.assertEqual(pressure_exit(pos,None,101.0,flow(-.25,-.14,-.08)),
+                         "executed_flow_m1_m3_m5_opposite_control_exit")
+        self.assertIsNone(pressure_exit(pos,None,101.0,flow(-.25,-.14,.02)))
 
-    def test_large_mfe_uses_tighter_giveback_under_real_counter_control(self):
-        pos={"side":-1,"entry":0.19054,
-             "features":{"mfe_price_move":0.0349,"estimated_round_trip_cost_move":0.001}}
-        # ~10% giveback from a >3% underlying MFE must already be protected
-        # once buyers own both M1 and M3; old 18% logic would still hold.
-        mark=0.18455
-        self.assertEqual(pressure_exit(pos,None,mark,flow(0.25,0.14,-0.02)),
-                         "m1_m3_m5_mfe_preservation_exit")
+    def test_mfe_size_and_giveback_do_not_create_exit_filter(self):
+        counter=flow(-.25,-.14,-.08)
+        for mfe,mark in ((0.0,99.8),(0.001,100.0),(0.02,101.0),(0.08,104.0)):
+            pos={"side":1,"entry":100.0,"features":{"mfe_price_move":mfe}}
+            self.assertEqual(pressure_exit(pos,None,mark,counter),
+                             "executed_flow_m1_m3_m5_opposite_control_exit")
 
-    def test_large_mfe_does_not_exit_without_real_counter_control(self):
-        pos={"side":-1,"entry":0.19054,
-             "features":{"mfe_price_move":0.0349,"estimated_round_trip_cost_move":0.001}}
-        mark=0.18455
-        self.assertIsNone(pressure_exit(pos,None,mark,flow(-0.25,-0.14,-0.02)))
+    def test_price_response_does_not_gate_buyer_seller_control(self):
+        f=flow(.18,.12,.10)
+        f["price_return_300s"]=-.02
+        self.assertTrue(flow_profile(f,1)["direct_control"])
+        self.assertTrue(initial_entry_candidate("HYPE",self.analysis(1),None,f,1000)["eligible"])
 
-    def test_clear_counter_takeover_exits_even_before_mfe_is_bankable(self):
-        pos={"side":1,"entry":100.0,"features":{"mfe_price_move":0.0010,"estimated_round_trip_cost_move":0.001}}
-        self.assertEqual(pressure_exit(pos,{"median_range_move":0.008},100.08,flow(-0.25,-0.14,-0.08)),
-                         "m1_m3_m5_risk_exit")
-
-    def test_missing_m5_coverage_does_not_freeze_fresh_m1_profile(self):
-        f=flow(-0.25,-0.14,0.02)
-        f.pop("flow_imbalance_300s")
-        profile=flow_profile(f,1)
-        self.assertIsNotNone(profile)
-        self.assertTrue(profile["active"])
-        self.assertFalse(profile["counter_takeover"])
-        self.assertTrue(profile["fast_counter"])
-
-    def test_missing_m3_m5_blocks_new_entry(self):
-        f=flow(0.18,0.12,0.10)
+    def test_missing_m3_m5_coverage_fails_closed(self):
+        f=flow(.18,.12,.10)
         f.pop("flow_imbalance_180s")
         f.pop("flow_imbalance_300s")
         profile=flow_profile(f,1)
         self.assertIsNotNone(profile)
-        self.assertTrue(profile["active"])
         self.assertFalse(profile["aligned_control"])
 
-    def test_exit_watch_then_later_resumption_reenters(self):
-        watch={"side":1,"exit_price":101.0,"exit_at":"2026-10-29T00:00:00+00:00","context":{"phase":"WAIT_PULLBACK","counter_pressure_seen":False}}
-        observed=update_watch(watch,100.0,None,flow(-0.25,-0.14,0.02,1000.0),1000.0)
+    def test_exit_watch_then_independent_same_side_control_reenters(self):
+        watch={"side":1,"exit_price":101.0,"exit_at":"2026-10-29T00:00:00+00:00",
+               "context":{"phase":"WAIT_PULLBACK","counter_pressure_seen":False}}
+        observed=update_watch(watch,100.0,None,flow(-.25,-.14,-.08,1000.0),1000.0)
         self.assertEqual(observed["context"]["phase"],"WAIT_RESUMPTION")
         self.assertTrue(observed["context"]["counter_pressure_seen"])
-        self.assertFalse(reentry_ready(1,None,100.06,observed,flow(0.18,0.12,0.10,1000.0),1001.0))
-        self.assertTrue(reentry_ready(1,None,100.06,observed,flow(0.18,0.12,0.10,1002.0),1002.0))
+        self.assertFalse(reentry_ready(1,None,100.06,observed,flow(.18,.12,.10,1000.0),1001.0))
+        self.assertTrue(reentry_ready(1,None,100.06,observed,flow(.18,.12,.10,1002.0),1002.0))
 
 if __name__=="__main__":
     unittest.main()
