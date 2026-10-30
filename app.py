@@ -4548,9 +4548,37 @@ def market_trade_stream():
    return set(strategy1_runtime_symbols())|held
   listed=set(volumes)&prices if prices else set(volumes)
   return listed|LIQ_WHALE_SYMBOLS|held|set(ALL_LOCAL_CANDLE_SYMBOLS)
- def report(status):
-  with LOCK:S["sources"]["MarketTradeStream"]={"last_check":now(),**status}
- run_bybit_stream(MARKET_OBS,SHUTDOWN,symbols,report,os.getenv("BYBIT_WS_PUBLIC_LINEAR","wss://stream.bybit.com/v5/public/linear"),subscribe_trades=True)
+ # Shard the executed tape across independent sockets. A busy symbol or one
+ # reconnect can no longer head-of-line block the whole Strategy 1 universe.
+ # All workers ingest into the same thread-safe rolling tape.
+ workers=max(2,min(4,int(os.getenv("BYBIT_TRADE_WS_SHARDS","3"))))
+ def shard(symbol):
+  return int(hashlib.sha1(str(symbol).encode()).hexdigest()[:8],16)%workers
+ def run_worker(idx):
+  key="MarketTradeStream:"+str(idx)
+  def report(status):
+   with LOCK:
+    S["sources"][key]={"last_check":now(),**status}
+    states=[S["sources"].get("MarketTradeStream:"+str(i),{}) for i in range(workers)]
+    ok=sum(1 for x in states if x.get("ok"))
+    fresh=sum(int(x.get("fresh_symbols_15s") or 0) for x in states)
+    total=sum(int(x.get("symbols") or 0) for x in states)
+    S["sources"]["MarketTradeStream"]={
+      "last_check":now(),"ok":ok==workers,"ready":ok==workers and total>0,
+      "mode":"bybit_v5_public_linear_sharded","workers":workers,"workers_ok":ok,
+      "symbols":total,"fresh_symbols_15s":fresh,
+      "error":None if ok==workers else "one_or_more_trade_workers_unhealthy",
+      "shards":copy.deepcopy(states)}
+  run_bybit_stream(MARKET_OBS,SHUTDOWN,symbols,report,
+   os.getenv("BYBIT_WS_PUBLIC_LINEAR","wss://stream.bybit.com/v5/public/linear"),
+   subscribe_trades=True,symbol_filter=lambda s,i=idx:shard(s)==i,
+   worker_name="trade-"+str(idx))
+ threads=[]
+ for idx in range(workers):
+  t=threading.Thread(target=run_worker,args=(idx,),daemon=True,name="bybit-trades-"+str(idx))
+  t.start();threads.append(t)
+ while not SHUTDOWN.is_set():
+  SHUTDOWN.wait(1)
 
 def market_aux_stream():
  # Price/candle traffic lives on a separate read-only socket so busy candle/allMids
