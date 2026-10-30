@@ -2652,19 +2652,41 @@ def hype_swing_stats():
       "weakening_avg_gross_roe_pct":float(shadows["weakening_avg_gross_roe_pct"]) if shadows["weakening_avg_gross_roe_pct"] is not None else None}}
  except Exception as exc:return {"error":str(exc)[:180]}
 
+def strategy1_h1_flow_transfer(symbol,new_side,stamp=None):
+ # H1 structure may nominate an opposite local, but the regime flips only after
+ # executed trades prove that control actually changed hands. Use M1/M3/M5
+ # consensus to reject one-minute noise and require price response so absorbed
+ # buying/selling cannot manufacture a false local.
+ new_side=int(new_side or 0)
+ if new_side not in (-1,1):
+  return {"confirmed":False,"reason":"invalid_candidate_side"}
+ stamp=time.time() if stamp is None else float(stamp)
+ flow=MARKET_OBS.flow_context(symbol,stamp)
+ if not isinstance(flow,dict) or not flow.get("trade_data_fresh"):
+  return {"confirmed":False,"reason":"waiting_for_fresh_executed_flow","flow":flow}
+ try:
+  age=float(flow.get("latest_trade_age_seconds"))
+  i60=float(flow.get("flow_imbalance"))
+  i180=float(flow.get("flow_imbalance_180s"))
+  i300=float(flow.get("flow_imbalance_300s"))
+  r300=float(flow.get("price_return_300s"))
+ except (TypeError,ValueError,OverflowError):
+  return {"confirmed":False,"reason":"waiting_for_m1_m3_m5_flow_coverage","flow":flow}
+ aligned60=new_side*i60
+ aligned180=new_side*i180
+ aligned300=new_side*i300
+ price_response=new_side*r300
+ confirmed=bool(-1<=age<=15 and aligned60>0 and aligned180>0 and aligned300>0 and price_response>0)
+ reason=("executed_flow_control_transfer_confirmed" if confirmed else
+         "opposite_structure_but_previous_side_still_controls")
+ return {"confirmed":confirmed,"reason":reason,"candidate_side":new_side,
+  "aligned_flow_60s":aligned60,"aligned_flow_180s":aligned180,
+  "aligned_flow_300s":aligned300,"aligned_price_return_300s":price_response,
+  "latest_trade_age_seconds":age,"flow_source":flow.get("volume_source")}
+
+
 def local_h1_direction(rows,now_ms,symbol):
  analysis=analyze_hype_h1(rows,now_ms,symbol)
- # Process-local proof that current CLOSED H1 candles were actually scanned.
- # Never hydrate this flag from Neon: a deploy must earn it again from live data.
- if analysis.get("ready") and analysis.get("anchor_confirmed") and int(analysis.get("entry_side") or 0) in (-1,1):
-  with LOCK:
-   S.setdefault("_local_h1_runtime_verified",{})[symbol]={
-    "verified_at":time.time(),"observed_at_ms":int(now_ms),
-    "last_candle_time":int(analysis.get("last_candle_time") or 0),
-    "entry_side":int(analysis.get("entry_side") or 0),
-    "signal_candle_time":int(analysis.get("signal_candle_time") or 0),
-    "pivot_candle_time":int(analysis.get("pivot_candle_time") or 0),
-    "pivot_type":analysis.get("pivot_type"),"pivot_price":analysis.get("pivot_price")}
  if not analysis.get("ready"):
   # Fresh H1 cache may lag during deploy/lease handoff. Keep the latest
   # confirmed directional anchor usable instead of blanking the symbol.
@@ -2703,12 +2725,28 @@ def local_h1_direction(rows,now_ms,symbol):
    analysis={**prior,"ready":True,"last_candle_time":analysis.get("last_candle_time"),
      **local_pending_extreme(rows,now_ms,prior_side)}
   elif prior_side in (-1,1) and new_side in (-1,1) and new_side!=prior_side:
-   # Regime side may change ONLY on a strictly newer confirmed opposite H1 pivot.
-   # Same/older candle, cache reconstruction or partial-window analysis cannot flip LOW<->HIGH.
+   # Regime side may change ONLY on a strictly newer opposite H1 structure AND
+   # a real M1/M3/M5 executed-flow control transfer. A price bounce by itself
+   # never turns LOCAL_HIGH into LOCAL_LOW (or vice versa).
    if new_t<=prior_t:
     analysis={**prior,"ready":True,"last_candle_time":analysis.get("last_candle_time"),
       **local_pending_extreme(rows,now_ms,prior_side),
       "anchor_guard":"blocked_non_new_opposite_pivot"}
+   else:
+    candidate=copy.deepcopy(analysis)
+    transfer=strategy1_h1_flow_transfer(symbol,new_side)
+    if not transfer.get("confirmed"):
+     analysis={**prior,"ready":True,"last_candle_time":candidate.get("last_candle_time"),
+       **local_pending_extreme(rows,now_ms,prior_side,prior.get("pivot_price")),
+       "anchor_guard":"opposite_h1_waiting_for_executed_flow_transfer",
+       "pending_opposite_pivot_type":candidate.get("pivot_type"),
+       "pending_opposite_pivot_price":candidate.get("pivot_price"),
+       "pending_opposite_signal_candle_time":candidate.get("signal_candle_time"),
+       "pending_opposite_pivot_candle_time":candidate.get("pivot_candle_time"),
+       "pending_opposite_flow_transfer":transfer}
+    else:
+     analysis["flow_transfer_confirmation"]=transfer
+     analysis["anchor_guard"]="opposite_h1_structure_and_flow_confirmed"
  if analysis.get("entry_side") not in (-1,1):
   # Migration/restart recovery: if fresh reconstruction has no immediately
   # confirmable swing, restore the newest previously observed confirmed H1 anchor.
@@ -2722,6 +2760,18 @@ def local_h1_direction(rows,now_ms,symbol):
      "anchor_recovered_from":"latest_valid_strategy1_observation"}
   else:
    return analysis
+ # Process-local proof that current CLOSED H1 candles were actually scanned.
+ # This marker is written only AFTER all structural + flow guards select the
+ # final active anchor, so the 500ms executor cannot outrun H1 reconciliation.
+ if analysis.get("ready") and analysis.get("anchor_confirmed") and int(analysis.get("entry_side") or 0) in (-1,1):
+  with LOCK:
+   S.setdefault("_local_h1_runtime_verified",{})[symbol]={
+    "verified_at":time.time(),"observed_at_ms":int(now_ms),
+    "last_candle_time":int(analysis.get("last_candle_time") or 0),
+    "entry_side":int(analysis.get("entry_side") or 0),
+    "signal_candle_time":int(analysis.get("signal_candle_time") or 0),
+    "pivot_candle_time":int(analysis.get("pivot_candle_time") or 0),
+    "pivot_type":analysis.get("pivot_type"),"pivot_price":analysis.get("pivot_price")}
  changed=(not prior or analysis.get("signal_candle_time")!=prior.get("signal_candle_time")
   or prior.get("pivot_type")!=analysis.get("pivot_type") or prior.get("pivot_price")!=analysis.get("pivot_price"))
  stamp=time.time()
