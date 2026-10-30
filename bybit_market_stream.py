@@ -233,12 +233,8 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                 # trade rows while no execution has been accepted means the tape is unusable.
                 # Recover the recent tail best-effort, then recycle only this shard so Strategy 1
                 # can rebuild fresh executed-flow without resetting the rest of the runtime.
-                if subscribe_trades and stale_trades and epoch - last_trade_receive > 30:
-                    recovered = _recover_recent_trades(selected, observations, max_age_seconds=120)
-                    if recovered:
-                        last_trade_receive = epoch
-                    else:
-                        raise RuntimeError("bybit_trade_tape_stale_reconnect")
+                if subscribe_trades and epoch - last_trade_receive > 30:
+                    raise RuntimeError("bybit_trade_tape_stale")
 
                 if epoch - last_refresh >= 5:
                     desired = set(symbols_provider())
