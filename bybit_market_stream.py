@@ -40,13 +40,16 @@ def _legacy_candle(row):
 def run_bybit_stream(observations, stop, symbols_provider, report,
                      url=DEFAULT_URL, on_mids=None, on_candles=None,
                      candle_symbols=(), on_regime_candles=None,
-                     regime_symbols=(), subscribe_trades=True):
+                     regime_symbols=(), subscribe_trades=True,
+                     symbol_filter=None, worker_name="primary"):
     """Persistent Bybit linear stream with dynamic subscriptions and stale watchdog."""
     backoff = 1.0
     while not stop.is_set():
         ws = None
         try:
             selected = set(symbols_provider())
+            if symbol_filter is not None:
+                selected = {s for s in selected if symbol_filter(s)}
             candle_selected = set(candle_symbols() if callable(candle_symbols) else candle_symbols)
             regime_selected = set(regime_symbols)
             ws = websocket.create_connection(url, timeout=8, enable_multithread=True)
@@ -173,6 +176,8 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
 
                 if epoch - last_refresh >= 5:
                     desired = set(symbols_provider())
+                    if symbol_filter is not None:
+                        desired = {s for s in desired if symbol_filter(s)}
                     if desired != selected:
                         removed, added = selected - desired, desired - selected
                         if subscribe_trades:
@@ -214,7 +219,7 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                         }
                     fresh_symbols = sum(1 for v in symbol_health.values() if v["fresh_15s"])
                     report({
-                        "ok": True, "mode": "bybit_v5_public_linear",
+                        "ok": True, "mode": "bybit_v5_public_linear", "worker": worker_name,
                         "symbols": len(selected), "heartbeat_age_seconds": round(epoch-last_received,3),
                         "last_trade_receive_age_seconds": round(epoch-last_trade_receive,3) if subscribe_trades else None,
                         "last_trade_exchange_lag_seconds": round(exchange_lag,3) if exchange_lag is not None else None,
@@ -228,7 +233,7 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                     last_report = epoch
         except Exception as exc:
             observations.mark_disconnected()
-            report({"ok": False, "mode": "bybit_v5_public_linear",
+            report({"ok": False, "mode": "bybit_v5_public_linear", "worker": worker_name,
                     "error": type(exc).__name__ + ":" + str(exc)[:160],
                     "reconnect_backoff_seconds": backoff})
         finally:
