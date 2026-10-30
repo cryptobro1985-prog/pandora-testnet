@@ -4551,7 +4551,7 @@ def market_trade_stream():
  # Shard the executed tape across independent sockets. A busy symbol or one
  # reconnect can no longer head-of-line block the whole Strategy 1 universe.
  # All workers ingest into the same thread-safe rolling tape.
- workers=max(2,min(4,int(os.getenv("BYBIT_TRADE_WS_SHARDS","3"))))
+ workers=max(2,min(8,int(os.getenv("BYBIT_TRADE_WS_SHARDS","6"))))
  def shard(symbol):
   return int(hashlib.sha1(str(symbol).encode()).hexdigest()[:8],16)%workers
  def run_worker(idx):
