@@ -61,6 +61,8 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                     ws.send(json.dumps({"op": op, "args": topics[i:i+50]}))
 
             if subscribe_trades:
+                # Subscribe first, then require an explicit successful Bybit ACK before
+                # treating this socket as a usable executed-trade source.
                 send("subscribe", ["publicTrade." + _pair(s) for s in sorted(selected)])
             if on_mids is not None:
                 send("subscribe", ["tickers." + _pair(s) for s in sorted(selected)])
@@ -86,6 +88,7 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
             sequence_by_symbol = {}
             sequence_gaps = 0
             trade_topics_confirmed = not subscribe_trades
+            subscription_ack_deadline = now + 12.0
             trade_warmup_deadline = now + 45.0
             mids = {}
             backoff = 1.0
@@ -166,7 +169,11 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                         raise RuntimeError("bybit_heartbeat_stale")
 
                 epoch = time.time()
-                # The socket being alive is not proof the executed tape is live.
+                # The socket being alive is not proof that Bybit accepted our trade topics.
+                # Fail fast on a missing subscription ACK instead of leaving Strategy 1
+                # indefinitely in READY_FOR_EXECUTED_FLOW with an apparently live socket.
+                if subscribe_trades and epoch >= subscription_ack_deadline and not trade_topics_confirmed:
+                    raise RuntimeError("bybit_trade_subscription_ack_timeout")
                 # Once warmed, reconnect if no accepted trade batch reaches us.
                 if subscribe_trades and epoch >= trade_warmup_deadline and epoch - last_trade_receive > 30:
                     # A quiet subset of symbols can legitimately have no trades for 30s.
