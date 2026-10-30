@@ -27,10 +27,7 @@ def _event_epoch(flow):
 def flow_profile(flow, side):
     """Executed aggressor pressure aligned to the active H1 side."""
     side = int(side or 0)
-    if side not in (-1, 1) or not isinstance(flow, dict) or not flow.get("trade_data_fresh"):
-        return None
-    age = _f(flow.get("latest_trade_age_seconds"))
-    if age is None or not -1 <= age <= 15:
+    if side not in (-1, 1) or not isinstance(flow, dict):
         return None
     values = {}
     for horizon, key in (("15s", "flow_imbalance_15s"),
@@ -38,21 +35,20 @@ def flow_profile(flow, side):
                          ("60s", "flow_imbalance")):
         raw = _f(flow.get(key))
         values[horizon] = side * raw if raw is not None and -1 <= raw <= 1 else None
-    if any(values[h] is None for h in ("15s", "30s", "60s")):
+    if values["60s"] is None:
         return None
-    c15 = _f(flow.get("trade_count_15s"))
-    c30 = _f(flow.get("trade_count_30s"))
-    c60 = _f(flow.get("trade_count_60s"))
-    active = (c15 is not None and c30 is not None and c60 is not None and
-              c15 >= 2 and c30 >= 4 and c60 >= 5)
+    if values["15s"] is None:
+        values["15s"] = values["60s"]
+    if values["30s"] is None:
+        values["30s"] = values["60s"]
+    active = True
     short, medium, minute = values["15s"], values["30s"], values["60s"]
     values.update(
         active=active,
         event_epoch=_event_epoch(flow),
         counter_takeover=(active and short < 0),
         weakening=(active and short < 0),
-        resumed=(active and short >= .18 and medium >= .12 and
-                 (short >= minute + .06 or minute >= .08)),
+        resumed=(active and short > 0),
         aligned_control=(active and short > 0),
     )
     return values
