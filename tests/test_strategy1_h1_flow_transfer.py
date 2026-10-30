@@ -29,12 +29,13 @@ class Strategy1H1FlowTransferTests(unittest.TestCase):
             x = app.strategy1_h1_flow_transfer("INIT", 1, 1000)
         self.assertTrue(x["confirmed"])
 
-    def test_absorbed_buying_does_not_confirm_local_low(self):
-        # Aggressive buys dominate, but price still falls: sellers are absorbing.
+    def test_price_response_is_not_an_extra_local_filter(self):
+        # User rule: if buyers predominate on M1/M3/M5, a falling price field
+        # cannot independently veto the executed-flow transfer.
         with patch.object(app.MARKET_OBS, "flow_context",
                           return_value=self.flow(.35, .25, .16, -.006)):
             x = app.strategy1_h1_flow_transfer("INIT", 1, 1000)
-        self.assertFalse(x["confirmed"])
+        self.assertTrue(x["confirmed"])
 
     def test_seller_control_transfer_confirms_local_high(self):
         with patch.object(app.MARKET_OBS, "flow_context",
