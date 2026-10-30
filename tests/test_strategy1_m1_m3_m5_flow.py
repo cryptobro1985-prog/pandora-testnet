@@ -37,9 +37,10 @@ class Strategy1FlowTests(unittest.TestCase):
         self.assertEqual(pressure_exit(pos,{"median_range_move":0.008},101.0,flow(-0.25,-0.14,0.02)),
                          "executed_flow_15s30s_counter_control_exit")
 
-    def test_tiny_mfe_without_recoil_does_not_churn(self):
+    def test_clear_counter_takeover_exits_even_before_mfe_is_bankable(self):
         pos={"side":1,"entry":100.0,"features":{"mfe_price_move":0.0010,"estimated_round_trip_cost_move":0.001}}
-        self.assertIsNone(pressure_exit(pos,{"median_range_move":0.008},100.08,flow(-0.25,-0.14,0.02)))
+        self.assertEqual(pressure_exit(pos,{"median_range_move":0.008},100.08,flow(-0.25,-0.14,0.02)),
+                         "executed_flow_15s30s_counter_control_exit")
 
     def test_missing_m5_coverage_does_not_freeze_fresh_m1_profile(self):
         f=flow(-0.25,-0.14,0.02)
