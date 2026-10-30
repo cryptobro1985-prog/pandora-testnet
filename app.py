@@ -2867,8 +2867,8 @@ def local_experiment_open(symbol,side,analysis,entry_kind="ORDER_FLOW",m15=None,
  if S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or not analysis.get("ready"):return False
  if not analysis.get("h1_direction_anchor") or int(analysis.get("entry_side") or 0)!=int(side):return False
  if analysis.get("entry_blocked"):return False
- # Recheck at allocation time: scanning 12 markets and database writes take time.
- # Revalidate fresh executed trades and H1 side; candle horizons never gate orders.
+ # Recheck at allocation time: scanning many markets and database writes take time.
+ # Revalidate the H1 side plus fresh M1/M3/M5 executed control before adding risk.
  stamp=time.time()
  flow=MARKET_OBS.flow_context(symbol,stamp)
  selection=(local4_entry_candidate(symbol,analysis,m15,flow,stamp) if entry_kind=="REENTRY"
@@ -2973,7 +2973,8 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
   # The opposite executed-flow trade was already witnessed at exit.
   # Preserve its exchange timestamp to re-enter on the first later reversal.
   opposite_flow_exit=reason in ("executed_flow_15s30s_counter_control_exit","executed_flow_weakening_exit",
-    "executed_flow_counter_control_exit","executed_flow_counter_dominance")
+    "executed_flow_counter_control_exit","executed_flow_counter_dominance",
+    "m1_m3_m5_mfe_preservation_exit","m1_m3_m5_risk_exit","m1_m3_confirmed_counterflow_exit")
   flow_at_exit=(watch_context or {}).get("flow_context") or {}
   try:
    opposite_epoch=float(flow_at_exit["volume_window_end_epoch"])-float(flow_at_exit["latest_trade_age_seconds"])
