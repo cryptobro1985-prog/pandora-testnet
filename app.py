@@ -21,6 +21,7 @@ from piq_direct import discover as piq_discover, fetch_story as piq_fetch_story,
 from source_health import LatencyMetrics, aggregate_delivery
 from market_data import RollingMarketData
 from market_stream import run_trade_stream
+from bybit_market_stream import run_bybit_stream
 from hyperliquid_transport import RestBudget, RestDeferred
 from whale_signals import (MIN_NOTIONAL_USD, cluster_positions, summarize_book, significance, update_streaks,
                            PriceToValueTracker, price_to_value_entry, PRICE_TO_VALUE_POLICY)
@@ -176,7 +177,7 @@ def bybit_volatility_discovery_loop():
     "entry_policy":"DISCOVERY_NEVER_ENTERS_DIRECTLY","transport":"single aggregated public REST scan; no per-symbol polling",
     "thresholds":{"min_turnover_24h":DISCOVERY_MIN_TURNOVER_24H,"min_range_24h_pct":None,
       "min_move_5m_pct":None}}
-   state["scan_diagnostics"]={"ranked":len(ranked),"transport_eligible":len(eligible),"excluded_no_transport":sum(1 for x in ranked if not x["runtime_eligible"]),"selected_hot":len(hot),"unsupported_runtime":len(unsupported),"paper_route":"Strategy1 shared PAPER engine","strategy_fit_prequalification":"NOT_VALIDATED"}
+   state["scan_diagnostics"]={"ranked":len(ranked),"transport_eligible":len(eligible),"excluded_no_transport":sum(1 for x in ranked if not x["runtime_eligible"]),"selected_hot":len(hot),"unsupported_runtime":len(unsupported),"paper_route":"Strategy1 shared PAPER engine","strategy_fit_prequalification":"PAPER_VALIDATION"}
    with LOCK:
     S["strategy1_discovery"]=copy.deepcopy(state);S["sources"]["Strategy1Discovery"]=copy.deepcopy(state)
    print("S1_DISCOVERY_STATE "+json.dumps({"ok":True,"last_check":state["last_check"],"universe_size":len(rows),"scan_diagnostics":state["scan_diagnostics"],"hot_symbols":hot,"top_anomalies":[x["symbol"] for x in ranked[:5]]},ensure_ascii=False),flush=True)
@@ -4465,7 +4466,7 @@ def market_trade_stream():
   return listed|LIQ_WHALE_SYMBOLS|held|set(ALL_LOCAL_CANDLE_SYMBOLS)
  def report(status):
   with LOCK:S["sources"]["MarketTradeStream"]={"last_check":now(),**status}
- run_trade_stream(MARKET_OBS,SHUTDOWN,symbols,report,os.getenv("HYPERLIQUID_WS_API","wss://api.hyperliquid.xyz/ws"),subscribe_trades=True)
+ run_bybit_stream(MARKET_OBS,SHUTDOWN,symbols,report,os.getenv("BYBIT_WS_PUBLIC_LINEAR","wss://stream.bybit.com/v5/public/linear"),subscribe_trades=True)
 
 def market_aux_stream():
  # Price/candle traffic lives on a separate read-only socket so busy candle/allMids
@@ -4477,10 +4478,10 @@ def market_aux_stream():
   return set(strategy1_runtime_symbols())
  def report(status):
   with LOCK:S["sources"]["MarketAuxStream"]={"last_check":now(),**status}
- run_trade_stream(MARKET_AUX_OBS,SHUTDOWN,symbols,report,
-  os.getenv("HYPERLIQUID_WS_API","wss://api.hyperliquid.xyz/ws"),
+ run_bybit_stream(MARKET_AUX_OBS,SHUTDOWN,symbols,report,
+  os.getenv("BYBIT_WS_PUBLIC_LINEAR","wss://stream.bybit.com/v5/public/linear"),
   on_mids=accept_market_prices,on_candles=accept_local_candles,
-  candle_symbols=lambda:set(strategy1_runtime_symbols())|set(ALL_LOCAL_CANDLE_SYMBOLS),on_candle_history=accept_local_history,
+  candle_symbols=lambda:set(strategy1_runtime_symbols())|set(ALL_LOCAL_CANDLE_SYMBOLS),
   regime_symbols=REGIME_SEED_SYMBOLS,on_regime_candles=accept_regime_candles,
   subscribe_trades=False)
 
