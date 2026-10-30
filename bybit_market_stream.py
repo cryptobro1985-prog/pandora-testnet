@@ -174,12 +174,19 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                 # indefinitely in READY_FOR_EXECUTED_FLOW with an apparently live socket.
                 if subscribe_trades and epoch >= subscription_ack_deadline and not trade_topics_confirmed:
                     raise RuntimeError("bybit_trade_subscription_ack_timeout")
-                # Once warmed, reconnect if no accepted trade batch reaches us.
-                if subscribe_trades and epoch >= trade_warmup_deadline and epoch - last_trade_receive > 30:
-                    # A quiet subset of symbols can legitimately have no trades for 30s.
-                    # Only recycle the socket when the entire subscribed tape is silent
-                    # after the initial subscription/warm-up period.
-                    raise RuntimeError("bybit_trade_tape_stale")
+                # Once warmed, fail closed per subscribed symbol, not only per socket.
+                # A busy symbol must never mask a stale/missing trade tape for another
+                # Strategy 1 symbol on the same shard. Recycling this shard forces a
+                # clean Bybit resubscribe; the outer reconnect loop provides backoff.
+                if subscribe_trades and epoch >= trade_warmup_deadline:
+                    stale_symbols = []
+                    for s in sorted(selected):
+                        recv = per_symbol_receive.get(s) or 0.0
+                        exch = per_symbol_exchange.get(s) or 0.0
+                        if not recv or not exch or epoch - recv > 30 or epoch - exch > 30:
+                            stale_symbols.append(s)
+                    if stale_symbols:
+                        raise RuntimeError("bybit_symbol_trade_tape_stale:" + ",".join(stale_symbols[:12]))
 
                 if epoch - last_refresh >= 5:
                     desired = set(symbols_provider())
