@@ -3525,6 +3525,56 @@ def _comparison_update_path(prefix,state_name,symbol,position,mark):
   if symbol in S.get(state_name+"_positions",{}):S[state_name+"_positions"][symbol]=copy.deepcopy(updated)
  return updated
 
+@account_mutation
+def _s1_pyramid_add(symbol,position,mark,analysis,flow):
+ # PAPER only. Add 5% of current MTM equity from free margin when an existing
+ # Strategy 1 winner still has the same H1 direction and aligned fresh flow.
+ if not position or not analysis or not (flow or {}).get("trade_data_fresh"):return False
+ side=int(position.get("side") or 0);mark=float(mark or 0);entry=float(position.get("entry") or 0)
+ if side not in (-1,1) or mark<=0 or entry<=0:return False
+ if not (analysis.get("ready") and analysis.get("anchor_confirmed") and
+         int(analysis.get("entry_side") or 0)==side):return False
+ features=copy.deepcopy(position.get("features") or {})
+ last_add=float(features.get("pyramid_last_add_epoch") or 0)
+ if time.time()-last_add<S1_PYRAMID_COOLDOWN_SECONDS:return False
+ favorable=side*(mark/entry-1.0)
+ roe_pct=favorable*S1_REFERENCE_LEVERAGE*100.0
+ if roe_pct<S1_PYRAMID_MIN_ROE_PCT:return False
+ try:
+  i60=side*float(flow.get("flow_imbalance"))
+  i180=side*float(flow.get("flow_imbalance_180s"))
+  i300=side*float(flow.get("flow_imbalance_300s"))
+ except (TypeError,ValueError):return False
+ if float(flow.get("trade_coverage_seconds") or 0)<300 or i60<.12 or i180<.08 or i300<.08:return False
+ with LOCK:prices=dict(S.get("_prices",{}))
+ equity,used,free,_=_comparison_mtm("local_s1",prices)
+ add_margin=max(.01,equity*S1_PYRAMID_MARGIN_FRACTION)
+ if free+1e-9<add_margin:return False
+ add_notional=add_margin*S1_REFERENCE_LEVERAGE
+ old_notional=float(position.get("notional") or 0);old_margin=float(position.get("margin") or 0)
+ new_notional=old_notional+add_notional;new_margin=old_margin+add_margin
+ new_entry=((entry*old_notional)+(mark*add_notional))/new_notional
+ count=int(features.get("pyramid_add_count") or 0)+1
+ event={"count":count,"at":now(),"mark":mark,"roe_before_add_pct":roe_pct,
+        "added_margin":add_margin,"added_notional":add_notional,
+        "flow_60":i60,"flow_180":i180,"flow_300":i300}
+ history=list(features.get("pyramid_adds") or []);history.append(event)
+ features.update({"pyramid_add_count":count,"pyramid_last_add_epoch":time.time(),
+                  "pyramid_adds":history[-50:],"pyramid_enabled":True})
+ with pg() as db:
+  with db.transaction():
+   STORE.fence(db)
+   row=db.execute("""update local_s1_positions set entry=%s,notional=%s,margin=%s,features=%s::jsonb
+     where symbol=%s and opened=%s returning symbol""",
+     (new_entry,new_notional,new_margin,json.dumps(features,default=str),symbol,position.get("opened"))).fetchone()
+   if not row:return False
+   db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'strategy1_pyramid_add',%s::jsonb)",
+    (now(),json.dumps({"symbol":symbol,"side":side,**event,"new_entry":new_entry,
+      "new_margin":new_margin,"new_notional":new_notional},default=str)))
+ updated=copy.deepcopy(position);updated.update(entry=new_entry,notional=new_notional,margin=new_margin,features=features)
+ with LOCK:S.setdefault("local_s1_positions",{})[symbol]=updated
+ return True
+
 def _s1_weakening_exit(position,m15,mark,flow):
  # Protect the MFE promptly on M1/M3 executed-flow reversal, without waiting
  # for M15 close. The same side-relative rule works for LONG and SHORT.
@@ -3591,6 +3641,13 @@ def _s1_reentry_ready(side,m15,mark,watch,flow):
  return side*(mark/extreme-1.0)>=resume
 
 S1_REFERENCE_LEVERAGE=25.0
+# Strategy 1 PAPER pyramiding: strengthen an already profitable winner only while
+# the canonical H1 side and fresh executed flow still agree. This never opens a
+# new direction and never places a real exchange order.
+S1_PYRAMID_MARGIN_FRACTION=float(os.getenv("S1_PYRAMID_MARGIN_FRACTION","0.05"))
+S1_PYRAMID_MIN_ROE_PCT=float(os.getenv("S1_PYRAMID_MIN_ROE_PCT","20"))
+S1_PYRAMID_COOLDOWN_SECONDS=float(os.getenv("S1_PYRAMID_COOLDOWN_SECONDS","60"))
+
 
 @account_mutation
 def strategy1_flow_execution_cycle(prices):
@@ -3692,6 +3749,9 @@ def comparison_strategies_loop():
       with LOCK:p1=copy.deepcopy(S.get("local_s1_positions",{}).get(symbol))
      if not p1:continue
      p1=_comparison_update_path("local_s1","local_s1",symbol,p1,float(mark))
+     if _s1_pyramid_add(symbol,p1,float(mark),a1,flow):
+      act1="PYRAMID_ADD"
+      with LOCK:p1=copy.deepcopy(S.get("local_s1_positions",{}).get(symbol))
      same_side_extension=bool(a1.get("entry_blocked") and
        ((int(p1.get("side") or 0)>0 and a1.get("pending_pivot_type")=="LOCAL_LOW") or
         (int(p1.get("side") or 0)<0 and a1.get("pending_pivot_type")=="LOCAL_HIGH")))
