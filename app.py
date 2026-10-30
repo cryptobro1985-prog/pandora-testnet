@@ -2691,7 +2691,7 @@ def strategy1_h1_flow_transfer(symbol,new_side,stamp=None):
           "opposite_structure_but_previous_side_still_controls"))
  return {"confirmed":confirmed,"reason":reason,"candidate_side":new_side,
   "aligned_flow_60s":aligned60,"aligned_flow_180s":aligned180,
-  "aligned_flow_300s":aligned300,"flow_windows_used":len(available),
+  "aligned_flow_300s":aligned300,"flow_windows_used":1+int(aligned180 is not None)+int(aligned300 is not None),
   "latest_trade_age_seconds":age,"flow_source":flow.get("volume_source")}
 
 
