@@ -9,7 +9,7 @@ A mature partial M15 candle plus live flow can protect earned profit before the 
 import math
 import statistics
 
-POLICY = "local_swing_h1_latest_confirmed_swing_v16_same_candle_rejection"
+POLICY = "local_swing_h1_latest_confirmed_swing_v15"
 SYMBOL = "HYPE"  # backwards-compatible primary symbol
 SYMBOLS = ("HYPE", "NEAR")
 INTERVAL = "1h"
@@ -81,11 +81,7 @@ def _ret(a, b):
 
 def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL, require_fresh=True):
     candles = completed_candles(rows, now_ms)
-    # Four prior H1 candles establish the structural extreme. The candidate
-    # candle itself may confirm at its CLOSE when it rejects its own extreme
-    # by the volatility-adjusted retrace threshold; no arbitrary right-hand
-    # H1 candle is required.
-    need = PIVOT_LOOKBACK + 1
+    need = PIVOT_LOOKBACK + H1_PIVOT_CONFIRM_BARS + 1
     if len(candles) < need:
         return {"ready": False, "reason": "insufficient_closed_h1_candles",
                 "closed_candles": len(candles), "policy": POLICY, "symbol": symbol}
@@ -100,13 +96,13 @@ def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL, require_fresh=True):
     # may need multiple later CLOSED H1 bars to confirm; do not forget it just
     # because it is older than two bars.
     chosen = None
-    newest_candidate_idx = len(candles) - 1
+    newest_candidate_idx = len(candles) - 2
     oldest_candidate_idx = max(PIVOT_LOOKBACK, len(candles) - 1 - H1_PIVOT_SEARCH_BARS)
     for p_idx in range(newest_candidate_idx, oldest_candidate_idx - 1, -1):
         p = candles[p_idx]
         prior = candles[p_idx-PIVOT_LOOKBACK:p_idx]
         after = candles[p_idx+1:]
-        if len(prior) < PIVOT_LOOKBACK:
+        if len(prior) < PIVOT_LOOKBACK or not after:
             continue
 
         hist_ranges=[(z["h"]-z["l"])/max(z["c"],1e-12) for z in candles[max(0,p_idx-12):p_idx]]
@@ -121,15 +117,10 @@ def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL, require_fresh=True):
 
         low_valid = bool(candidate_low)
         high_valid = bool(candidate_high)
-        # A CLOSED H1 candle can causally confirm its own extreme if its close
-        # rejects that extreme strongly enough. This removes the artificial
-        # one-more-hour delay while still using zero future candles.
-        self_rebound = ((p["c"]/p["l"])-1.0) if candidate_low and p["l"]>0 else 0.0
-        self_pullback = (1.0-(p["c"]/p["h"])) if candidate_high and p["h"]>0 else 0.0
-        low_confirm = p if candidate_low and self_rebound >= retrace_threshold else None
-        high_confirm = p if candidate_high and self_pullback >= retrace_threshold else None
-        best_rebound = max(0.0,self_rebound)
-        best_pullback = max(0.0,self_pullback)
+        low_confirm = None
+        high_confirm = None
+        best_rebound = 0.0
+        best_pullback = 0.0
 
         for z in after:
             if low_valid:
@@ -172,7 +163,7 @@ def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL, require_fresh=True):
         chosen = {
             "p": p,
             "confirm": confirm,
-            "confirm_bars": max(0, int((confirm["t"]-p["t"])//3_600_000)),
+            "confirm_bars": max(1, int((confirm["t"]-p["t"])//3_600_000)),
             "candidate_low": candidate_low,
             "candidate_high": candidate_high,
             "local_low": side > 0,
@@ -248,7 +239,7 @@ def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL, require_fresh=True):
         "confirmation_retrace": confirmation_retrace,
         "required_retrace": retrace_threshold,
         "confirmation_bars": confirm_bars,
-        "pivot_confirmation_policy": "closed_h1_same_candle_rejection_or_later_retrace",
+        "pivot_confirmation_policy": "closed_h1_multi_bar_retrace_after_candidate_extreme",
         "closed_candles": len(candles),
     }
 
@@ -256,10 +247,9 @@ def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL, require_fresh=True):
 def analyze(rows, now_ms, symbol=SYMBOL):
     """Last causally confirmed H1 swing, held until an opposite confirmed swing.
 
-    A fresh high/low is only a candidate. A CLOSED H1 candidate may confirm
-    immediately when its own close rejects the extreme by enough relative to
-    recent volatility; otherwise later CLOSED H1 retracement can confirm it.
-    Reconstructing the latest confirmed swing from history
+    A fresh high/low is only a candidate. It may keep extending for many H1 bars.
+    The regime changes only after a CLOSED H1 retracement large enough relative
+    to recent volatility. Reconstructing the latest confirmed swing from history
     keeps the bias stable after restart and prevents in-the-moment flip-flops.
     """
     latest = _analyze_h1_pivot(rows, now_ms, symbol)
@@ -267,7 +257,7 @@ def analyze(rows, now_ms, symbol=SYMBOL):
         return latest
     candles = completed_candles(rows, now_ms)
     anchor = None
-    for end in range(PIVOT_LOOKBACK + 1, len(candles) + 1):
+    for end in range(PIVOT_LOOKBACK + 2, len(candles) + 1):
         sample = candles[:end]
         # Reconstruct historical anchors, but never manufacture confirmation time.
         # A candidate may change the live H1 regime only if its confirmation candle
