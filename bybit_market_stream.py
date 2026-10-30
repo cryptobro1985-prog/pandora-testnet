@@ -218,26 +218,11 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                 # indefinitely in READY_FOR_EXECUTED_FLOW with an apparently live socket.
                 if subscribe_trades and epoch >= subscription_ack_deadline and not trade_topics_confirmed:
                     raise RuntimeError("bybit_trade_subscription_ack_timeout")
-                # Once warmed, fail closed per subscribed symbol, not only per socket.
-                # A busy symbol must never mask a stale/missing trade tape for another
-                # Strategy 1 symbol on the same shard. Recycling this shard forces a
-                # clean Bybit resubscribe; the outer reconnect loop provides backoff.
-                if subscribe_trades and epoch >= trade_warmup_deadline:
-                    stale_symbols = []
-                    for s in sorted(selected):
-                        recv = per_symbol_receive.get(s) or 0.0
-                        exch = per_symbol_exchange.get(s) or 0.0
-                        if not recv or not exch or epoch - recv > 30 or epoch - exch > 30:
-                            stale_symbols.append(s)
-                    if stale_symbols:
-                        recovered = _recover_recent_trades(stale_symbols, observations)
-                        report({
-                            "ok": False, "mode": "bybit_v5_public_linear", "worker": worker_name,
-                            "error": "bybit_symbol_trade_tape_stale:" + ",".join(stale_symbols[:12]),
-                            "rest_recovered_trades": recovered,
-                            "action": "recycle_shard_after_rest_recovery",
-                        })
-                        raise RuntimeError("bybit_symbol_trade_tape_stale:" + ",".join(stale_symbols[:12]))
+                # Quiet symbols are valid market state, not transport failure.
+                # Keep per-symbol freshness as diagnostics/Strategy-1 fail-closed input,
+                # but recycle only when the entire trade shard has stopped receiving trades.
+                if subscribe_trades and epoch >= trade_warmup_deadline and epoch - last_trade_receive > 30:
+                    raise RuntimeError("bybit_trade_tape_stale")
 
                 if epoch - last_refresh >= 5:
                     desired = set(symbols_provider())
