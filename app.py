@@ -2963,7 +2963,7 @@ def local_experiment_risk_loop():
     # Execution does not wait for M15. H1 provides the allowed side; fresh
     # 15s/30s/60s aggressor flow opens/re-enters as soon as control is confirmed.
     local4_fast_entries(prices)
-    with LOCK:S["sources"]["LocalRisk"]={"ok":True,"last_check":now(),"mode":"H1_M1_M3_M5_fast_paper_execution"}
+    with LOCK:S["sources"]["LocalRisk"]={"ok":True,"ready":True,"last_check":now(),"mode":"H1_15S_30S_60S_fast_paper_execution","symbols":list(strategy1_runtime_symbols()),"error":None}
   except LeaseLost as exc:
    with LOCK:
     S["engine_active"]=False;S["engine_error"]=str(exc)
@@ -3832,8 +3832,8 @@ def comparison_strategies_loop():
    s2_total,s2_used,s2_free,s2_unreal=500.0,0.0,500.0,0.0
    s1stats=_comparison_stats("local_s1");s2stats={"trades":0,"wins":0,"win_rate":None,"realized_pnl":0.0}
    with LOCK:
-    S["sources"]["Strategy 1 — Restored Caterpillar"]={"ok":all(x.get("ok") for x in s1_details.values()),"ready":all(x.get("ok") for x in s1_details.values()),
-      "last_check":now(),"mode":"paper_h1_local_m15_caterpillar","symbols":list(LOCAL_EXPERIMENT_SYMBOLS),
+    S["sources"]["Strategy 1 — Restored Caterpillar"]={"ok":True,"ready":True,
+      "last_check":now(),"mode":"legacy_comparison_nonblocking","symbols":list(LOCAL_EXPERIMENT_SYMBOLS),"degraded_noncritical":not all(x.get("ok") for x in s1_details.values()),
       "starting_equity":500.0,"equity":s1_total,"realized_equity":S.get("local_s1_equity",500.0),"unrealized_pnl":s1_unreal,
       "used_margin":s1_used,"free_margin":s1_free,"reference_margin_fraction":.20,"reference_leverage":25.0,
       "compound":True,"open_positions":list(S.get("local_s1_positions",{})),"details":s1_details,"stats":s1stats,"error":None}
