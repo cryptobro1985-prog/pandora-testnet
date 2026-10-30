@@ -64,7 +64,10 @@ def flow_profile(flow, side):
     if m5_ready:
         aligned_windows.append(m5)
     direct_control = bool(aligned_windows and all(x > 0 for x in aligned_windows))
-    counter_takeover = bool(aligned_windows and all(x < 0 for x in aligned_windows))
+    # Exits must not wait for older M3/M5 windows after fresh M1 flips.
+    # Keep all-window consensus for opening, but protect an open position
+    # immediately on observed opposite executed M1 dominance.
+    counter_takeover = bool(m1 < 0)
     fast_counter = counter_takeover
     fast_aligned = direct_control
 
@@ -151,7 +154,7 @@ def entry_candidate(symbol, analysis, m15, flow, stamp):
 
 
 def pressure_exit(position, m15, mark, flow):
-    """Close only when the opposite side predominates on executed M1/M3/M5.
+    """Close promptly when fresh M1 executed flow changes to the opposite side.
 
     MFE is tracked for measurement and audit, never used as an invented trigger.
     There is no fixed TP, giveback percentage, score or price-response filter.
@@ -163,7 +166,7 @@ def pressure_exit(position, m15, mark, flow):
     if side not in (-1, 1) or entry is None or entry <= 0 or mark is None or profile is None:
         return None
     if profile["counter_takeover"]:
-        return "executed_flow_m1_m3_m5_opposite_control_exit"
+        return "executed_flow_m1_opposite_control_exit"
     return None
 
 def update_watch(watch, mark, m15, flow, stamp):
