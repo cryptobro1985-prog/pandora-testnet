@@ -2843,7 +2843,8 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
                "executed_flow_counter_control_exit","executed_flow_weakening_profit_exit",
                "executed_flow_profit_flip_exit","executed_flow_risk_flip_exit",
                "m1_m3_m5_mfe_profit_exit","m1_m3_m5_risk_exit",
-               "m1_m3_confirmed_counterflow_exit"):
+               "m1_m3_confirmed_counterflow_exit","m1_m3_m5_mfe_preservation_exit",
+               "executed_flow_15s30s_counter_control_exit","executed_flow_15s30s_mfe_weakening_exit"):
   watch={"symbol":symbol,"side":int(pos["side"]),
    "origin_signal_candle":int(features.get("origin_h1_signal_candle") or pos.get("signal_candle_time") or 0),
    "exit_price":price,"exit_at":now(),"expires_epoch":0.0,
@@ -2960,7 +2961,7 @@ def local_experiment_risk_loop():
    if active and 0<=age<=8 and prices:
     local_experiment_mark_positions(prices)
     # Execution does not wait for M15. H1 provides the allowed side; fresh
-    # M1/M3/M5 aggressor flow opens/re-enters as soon as control is confirmed.
+    # 15s/30s/60s aggressor flow opens/re-enters as soon as control is confirmed.
     local4_fast_entries(prices)
     with LOCK:S["sources"]["LocalRisk"]={"ok":True,"last_check":now(),"mode":"H1_M1_M3_M5_fast_paper_execution"}
   except LeaseLost as exc:
