@@ -1,5 +1,7 @@
 """Bybit V5 public linear WebSocket for Strategy 1 PAPER market data.
 
+# Strategy 1 live transport: stale-tape recovery/reconnect is intentionally fail-closed.
+
 One venue for executed flow, marks and H1/M15/1m candles. Public only: no
 authentication and no order placement. Fails closed on stale trade tape.
 """
