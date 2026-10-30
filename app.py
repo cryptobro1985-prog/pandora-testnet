@@ -6778,8 +6778,8 @@ def html_strategy1_only(data):
  discovery=copy.deepcopy(engine.get("discovery") or {})
  # All HOT candidates remain in the background H1 scanner. Only confirmed
  # markets have trading cards. Open positions always remain visible.
- runtime_symbols=list(strategy1_trade_symbols())
- position_symbols=list(dict.fromkeys(str(x.get("symbol")) for x in positions if x.get("symbol")))
+ runtime_symbols=list(LOCAL_EXPERIMENT_SYMBOLS)
+ position_symbols=list(dict.fromkeys(str(x.get("symbol")) for x in positions if x.get("symbol") in set(LOCAL_EXPERIMENT_SYMBOLS)))
  rows=[]
  for sym in position_symbols:
   x=posmap.get(sym) or {};d=details.get(sym) or {};a=d.get("h1_local") or {};w=watch.get(sym) or {}
