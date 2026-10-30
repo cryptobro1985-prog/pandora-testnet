@@ -13,7 +13,7 @@ def flow(i60, i180, i300, epoch=1000.0):
         "flow_imbalance_300s": i300,
         "trade_count_15s": 5,
         "trade_count_30s": 7,
-        "trade_count_60s": 8,
+        "trade_count_60s": 8,\n        "buy_volume_15s": 60, "sell_volume_15s": 40,\n        "buy_volume_30s": 120, "sell_volume_30s": 80,
         "observed_notional_60s": 1000,
         "trade_count_180s": 20,
         "trade_count_300s": 40,
