@@ -52,13 +52,15 @@ class Strategy1FlowTests(unittest.TestCase):
         self.assertTrue(flow_profile(f,1)["direct_control"])
         self.assertTrue(initial_entry_candidate("HYPE",self.analysis(1),None,f,1000)["eligible"])
 
-    def test_missing_m3_m5_coverage_fails_closed(self):
+    def test_missing_m3_m5_does_not_create_restart_warmup_gate(self):
         f=flow(.18,.12,.10)
+        f["trade_coverage_seconds"]=60
         f.pop("flow_imbalance_180s")
         f.pop("flow_imbalance_300s")
         profile=flow_profile(f,1)
         self.assertIsNotNone(profile)
-        self.assertFalse(profile["aligned_control"])
+        self.assertTrue(profile["aligned_control"])
+        self.assertTrue(initial_entry_candidate("HYPE",self.analysis(1),None,f,1000)["eligible"])
 
     def test_exit_watch_then_independent_same_side_control_reenters(self):
         watch={"side":1,"exit_price":101.0,"exit_at":"2026-10-29T00:00:00+00:00",
