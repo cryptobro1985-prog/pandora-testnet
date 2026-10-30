@@ -2900,10 +2900,8 @@ def local_experiment_mark_positions(prices):
   move=side*(markf/entry-1.0) if entry>0 and side in (-1,1) else 0.0
   mfe=max(float(f.get("mfe_price_move",0) or 0),move)
   f["mfe_price_move"]=mfe;f["mfe_roe_pct"]=mfe*float(updated.get("leverage") or 25.0)*100.0
-  # Arm early enough for 25x PAPER: 0.25% underlying move ~= 6.25% gross ROE.
-  # The previous 2% threshold required ~50% ROE and let CASHCAT give back a +31.8% MFE.
-  arm=mfe>=0.0025
-  # Adaptive giveback: preserve at least 40% of the best excursion once armed.
+  arm=mfe>=0.02
+  # Adaptive giveback: once a move is large, protect a meaningful fraction of the best excursion.
   floor=(mfe*0.55 if mfe>=0.05 else mfe*0.40) if arm else None
   giveback=max(0.0,mfe-move)
   f.update(caterpillar_policy=LOCAL4_FLOW_POLICY,profit_lock_armed=arm,
