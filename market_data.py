@@ -355,8 +355,11 @@ class RollingMarketData:
             out["trade_coverage_seconds"]=coverage
             age=epoch-state["latest_trade"] if state["latest_trade"] is not None else None
             out["latest_trade_age_seconds"]=age
-            # Do not confuse a quiet symbol with stale transport; heartbeat owns transport freshness.
-            if coverage<60:return out
+            # Execution may use the actual received trade tape before a full
+            # 60-second subscription warm-up. Never extrapolate missing ticks:
+            # require a genuinely recent exchange execution, not a zero-volume window.
+            if age is None or not -1 <= age <= self.freshness_seconds:
+                return out
             end=int(epoch//self.bucket_seconds)
             buckets=state["buckets"]
             def volumes(seconds):
@@ -365,6 +368,8 @@ class RollingMarketData:
             b15,s15,c15=volumes(15)
             b30,s30,c30=volumes(30)
             buy,sell,count=volumes(60)
+            if count < 1 or buy + sell <= 0:
+                return out
             def imbalance(b,s):
                 return (b-s)/(b+s) if b+s else 0.
             i15,i30,i60=imbalance(b15,s15),imbalance(b30,s30),imbalance(buy,sell)
