@@ -43,7 +43,7 @@ class Strategy1H1FlowTransferTests(unittest.TestCase):
             x = app.strategy1_h1_flow_transfer("GRASS", -1, 1000)
         self.assertTrue(x["confirmed"])
 
-    def test_missing_m3_m5_does_not_create_restart_warmup_gate(self):
+    def test_m1_alone_never_flips_h1_local(self):
         flow = {
             "trade_data_fresh": True,
             "latest_trade_age_seconds": 1,
@@ -54,8 +54,8 @@ class Strategy1H1FlowTransferTests(unittest.TestCase):
         }
         with patch.object(app.MARKET_OBS, "flow_context", return_value=flow):
             x = app.strategy1_h1_flow_transfer("INIT", 1, 1000)
-        self.assertTrue(x["confirmed"])
-        self.assertEqual(x["flow_windows_used"], 1)
+        self.assertFalse(x["confirmed"])
+        self.assertEqual(x["reason"], "waiting_for_m3_m5_control_transfer")
 
 
 if __name__ == "__main__":
