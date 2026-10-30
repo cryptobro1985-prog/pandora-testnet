@@ -6260,7 +6260,7 @@ def operations_diagnostics():
     s1watch=list(S.get("local_experiment_watch",{}))
    trade_stream=(S.get("sources",{}).get("MarketTradeStream") or {})
    bootstrap=(S.get("sources",{}).get("MarketHistoryBootstrap") or {})
-   derived_ready=bool(s1src.get("ready")) or (bool(S.get("engine_active")) and int(bootstrap.get("local_ready",0) or 0)>=len(LOCAL_EXPERIMENT_SYMBOLS) and int(trade_stream.get("symbols",0) or 0)==len(LOCAL_EXPERIMENT_SYMBOLS))
+   derived_ready=bool(s1src.get("ready")) or (bool(S.get("engine_active")) and int(bootstrap.get("local_ready",0) or 0)>=len(LOCAL_EXPERIMENT_SYMBOLS) and int(trade_stream.get("symbols",0) or 0)>=len(strategy1_runtime_symbols()))
    print("S1_ONLINE_STATE "+json.dumps({"ok":bool(s1src.get("ok")) or derived_ready,"ready":derived_ready,
     "error":s1src.get("error"),"version":os.getenv("RENDER_GIT_COMMIT"),
     "starting_equity":LOCAL_EXPERIMENT_STARTING_EQUITY,"realized_equity":s1eq,
