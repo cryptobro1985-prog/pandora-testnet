@@ -2971,6 +2971,7 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
                "executed_flow_profit_flip_exit","executed_flow_risk_flip_exit",
                "m1_m3_m5_mfe_profit_exit","m1_m3_m5_risk_exit",
                "m1_m3_confirmed_counterflow_exit","m1_m3_m5_mfe_preservation_exit",
+               "executed_flow_m1_m3_m5_opposite_control_exit",
                "executed_flow_15s30s_counter_control_exit","executed_flow_15s30s_mfe_weakening_exit"):
   watch={"symbol":symbol,"side":int(pos["side"]),
    "origin_signal_candle":int(features.get("origin_h1_signal_candle") or pos.get("signal_candle_time") or 0),
@@ -2978,7 +2979,8 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
    "reentries":int(features.get("swing_reentries",0) or 0),"context":copy.deepcopy(watch_context or {})}
   # The opposite executed-flow trade was already witnessed at exit.
   # Preserve its exchange timestamp to re-enter on the first later reversal.
-  opposite_flow_exit=reason in ("executed_flow_15s30s_counter_control_exit","executed_flow_weakening_exit",
+  opposite_flow_exit=reason in ("executed_flow_m1_m3_m5_opposite_control_exit",
+    "executed_flow_15s30s_counter_control_exit","executed_flow_weakening_exit",
     "executed_flow_counter_control_exit","executed_flow_counter_dominance",
     "m1_m3_m5_mfe_preservation_exit","m1_m3_m5_risk_exit","m1_m3_confirmed_counterflow_exit")
   flow_at_exit=(watch_context or {}).get("flow_context") or {}
