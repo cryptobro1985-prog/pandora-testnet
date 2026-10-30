@@ -52,6 +52,7 @@ class RollingMarketData:
         self._connected = False
         self._connected_at = None
         self._heartbeat_at = None
+        self._owners = {}
         self._symbols = {}
         self._oi = {}
         self._counters = {"accepted": 0, "duplicates": 0, "invalid": 0,
@@ -66,30 +67,45 @@ class RollingMarketData:
                 "seen_queue": deque(), "latest_trade": None,
                 "dedup_overflow_until": None}
 
-    def mark_connected(self, epoch=None, symbols=None):
+    def mark_connected(self, epoch=None, symbols=None, owner=None):
         """Start new coverage; previous trade buckets cannot bridge a reconnect."""
         epoch = time.time() if epoch is None else float(epoch)
         with self._lock:
-            selected = list(self._symbols) if symbols is None else list(symbols)
-            self._connected = True
-            self._connected_at = epoch
-            self._heartbeat_at = epoch
-            self._symbols = {str(s): self._new_symbol(epoch)
-                             for s in selected[:self.max_symbols]}
+            selected = list(self._symbols) if symbols is None else [str(s) for s in symbols]
+            if owner is None:
+                self._owners = {"legacy": set(selected)}
+            else:
+                self._owners[str(owner)] = set(selected)
+            wanted = set().union(*self._owners.values()) if self._owners else set(selected)
+            self._connected = bool(self._owners)
+            self._connected_at = epoch if self._connected_at is None else min(self._connected_at, epoch)
+            self._heartbeat_at = max(epoch, self._heartbeat_at or epoch)
+            self._symbols = {s: self._symbols.get(s) or self._new_symbol(epoch)
+                             for s in list(wanted)[:self.max_symbols]}
 
-    def mark_disconnected(self, epoch=None):
+    def mark_disconnected(self, epoch=None, owner=None):
         with self._lock:
-            self._connected = False
-            self._heartbeat_at = None
+            if owner is None:
+                self._owners.clear()
+            else:
+                self._owners.pop(str(owner), None)
+            self._connected = bool(self._owners)
+            if not self._connected:
+                self._heartbeat_at = None
 
-    def set_subscriptions(self, symbols, epoch=None):
+    def set_subscriptions(self, symbols, epoch=None, owner=None):
         """Call after subscribing; newly added symbols receive their own clock."""
         epoch = time.time() if epoch is None else float(epoch)
         selected = dict.fromkeys(str(s) for s in symbols)
         selected = list(selected)[:self.max_symbols]
         with self._lock:
+            if owner is None:
+                self._owners = {"legacy": set(selected)}
+            else:
+                self._owners[str(owner)] = set(selected)
+            wanted = set().union(*self._owners.values()) if self._owners else set(selected)
             self._symbols = {s: self._symbols.get(s) or self._new_symbol(epoch)
-                             for s in selected}
+                             for s in list(wanted)[:self.max_symbols]}
 
     def heartbeat(self, epoch=None):
         """Report a *received* server message/pong, not an outgoing client ping.
