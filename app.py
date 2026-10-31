@@ -328,7 +328,8 @@ def local_h1_direction(rows,now_ms,symbol):
     "signal_candle_time":int(analysis.get("signal_candle_time") or 0),
     "pivot_candle_time":int(analysis.get("pivot_candle_time") or 0),
     "pivot_type":analysis.get("pivot_type"),"pivot_price":analysis.get("pivot_price")}
- changed=(not prior or analysis.get("signal_candle_time")!=prior.get("signal_candle_time")
+ changed=(not prior or prior.get("policy")!=analysis.get("policy")
+  or analysis.get("signal_candle_time")!=prior.get("signal_candle_time")
   or prior.get("pivot_type")!=analysis.get("pivot_type") or prior.get("pivot_price")!=analysis.get("pivot_price"))
  stamp=time.time()
  with LOCK:last=float(S.setdefault("_local_h1_persist_epoch",{}).get(symbol,0) or 0)
