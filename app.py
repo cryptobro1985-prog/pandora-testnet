@@ -48,7 +48,7 @@ def log_learning_decision(ident,strategy,symbol,side,action,reason,entry_price=N
  except Exception:return False
 
 def apply_local4_user_reset():
- marker='reset_2026_10_31_full_stats_no_negative_close'
+ marker='reset_2026_10_31_mfe_dominance_clean'
  with pg() as db:
   with db.transaction():
    done=db.execute("select 1 from audit_journal where event_id=%s limit 1",(marker,)).fetchone()
@@ -592,7 +592,7 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
  if watch_context:features["executed_flow_exit_context"]=watch_context
  features["actual_exit_reason"]=reason;features["actual_exit_mark"]=price
  watch=None
- if reason in ("m1_mfe_preservation_exit","m1_counterflow_exit","m1_m3_m5_mfe_preservation_exit","m1_m3_m5_risk_exit","m1_m3_confirmed_counterflow_exit"):
+ if reason in ("m1_m3_m5_dominance_mfe_exit","m1_mfe_preservation_exit","m1_counterflow_exit","m1_m3_m5_mfe_preservation_exit","m1_m3_m5_risk_exit","m1_m3_confirmed_counterflow_exit"):
   watch={"symbol":symbol,"side":int(pos["side"]),
    "origin_signal_candle":int(features.get("origin_h1_signal_candle") or pos.get("signal_candle_time") or 0),
    "exit_price":price,"exit_at":now(),"expires_epoch":0.0,
@@ -704,11 +704,16 @@ def _local_entry_resumption_context(symbol,side,analysis,flow):
  if coverage<300 or not all(math.isfinite(x) for x in (raw180,raw300,price300)):
   with LOCK:S.setdefault("_local_entry_flow_state",{}).pop(symbol,None)
   return None
- try:value=float(flow.get("flow_imbalance"))
+ try:
+  value=float(flow.get("flow_imbalance"))
+  value180=float(flow.get("flow_imbalance_180s"))
+  value300=float(flow.get("flow_imbalance_300s"))
  except (TypeError,ValueError,OverflowError):return None
- if not math.isfinite(value):return None
- aligned=float(side)*value
- sign=1 if aligned>0 else -1 if aligned<0 else 0
+ if not all(math.isfinite(x) for x in (value,value180,value300)):return None
+ aligned_values=(float(side)*value,float(side)*value180,float(side)*value300)
+ votes=[1 if x>0 else -1 if x<0 else 0 for x in aligned_values]
+ vote_sum=sum(votes)
+ sign=1 if vote_sum>0 else -1 if vote_sum<0 else 0
  signal=int((analysis or {}).get("signal_candle_time") or 0)
  with LOCK:
   states=S.setdefault("_local_entry_flow_state",{})
@@ -720,12 +725,16 @@ def _local_entry_resumption_context(symbol,side,analysis,flow):
   ready=bool(state.get("counter_seen") and sign>0 and prior<=0)
   state["last_sign"]=sign
   state["last_flow_imbalance"]=value
+  state["last_flow_imbalance_180s"]=value180
+  state["last_flow_imbalance_300s"]=value300
+  state["last_dominance_vote"]=sign
   state["updated_at"]=time.time()
   states[symbol]=state
  if not ready:return None
  try:event_epoch=float(flow.get("volume_window_end_epoch"))-float(flow.get("latest_trade_age_seconds"))
  except (TypeError,ValueError,OverflowError):event_epoch=time.time()
- return {"resumption_observed":True,"flow_imbalance":value,"flow_event_epoch":event_epoch}
+ return {"resumption_observed":True,"flow_imbalance":value,"flow_imbalance_180s":value180,
+   "flow_imbalance_300s":value300,"dominance_vote":sign,"flow_event_epoch":event_epoch}
 
 @account_mutation
 def local4_fast_entries(prices):
