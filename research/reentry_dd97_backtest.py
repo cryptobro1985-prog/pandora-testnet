@@ -1,3 +1,5 @@
+import sys,os
+sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import csv,gzip,io,json,math,statistics,urllib.request,datetime as dt
 from collections import defaultdict
 from h1_structure_legacy import analyze as h1_analyze
