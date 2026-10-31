@@ -1,0 +1,32 @@
+name: Render Keepalive
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/render-keepalive.yml'
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Keep PANDORA Render service awake
+        shell: bash
+        run: |
+          URL="https://pandora-testnet-monitor-nfoc.onrender.com/health"
+          for attempt in 1 2 3 4; do
+            code="$(curl -L -sS -o /tmp/pandora-health.txt -w '%{http_code}' --connect-timeout 10 --max-time 45 "$URL" || true)"
+            echo "attempt=$attempt http=$code"
+            if [ "$code" = "200" ]; then
+              cat /tmp/pandora-health.txt
+              exit 0
+            fi
+            sleep 15
+          done
+          cat /tmp/pandora-health.txt || true
+          exit 1
