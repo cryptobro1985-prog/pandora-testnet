@@ -490,7 +490,10 @@ def local_experiment_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution
   held_symbols=tuple(S.get("local_v12_positions",{}))
   received=dict(S.get("_price_received_epoch",{}))
  if any(not 0<=time.time()-received.get(held,0)<=10 for held in held_symbols):
-  return reject("OPEN_POSITION_MARK_UNAVAILABLE")
+  # Do not block a new PAPER entry because an unrelated open symbol missed a
+  # single mark update. Margin accounting can use the position's last mark;
+  # only the symbol being opened must have a fresh current_entry_price above.
+  pass
  equity,used,free=_local_experiment_margin_state()
  if equity<=0 or free<0.01:return reject("INSUFFICIENT_FREE_MARGIN")
  target_notional=equity*LOCAL_EXPERIMENT_MARGIN_FRACTION*leverage
