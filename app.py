@@ -282,7 +282,7 @@ def local_h1_direction(rows,now_ms,symbol):
  if trusted and int(trusted.get("entry_side") or 0) in (-1,1):
   trusted_t=int(trusted.get("signal_candle_time") or 0)
   fresh_t=int(analysis.get("signal_candle_time") or 0)
-  if trusted_t>fresh_t:
+  if trusted_t>fresh_t and trusted.get("policy")==HYPE_SWING_POLICY:
    analysis={**trusted,"ready":True,"last_candle_time":analysis.get("last_candle_time"),
     **local_pending_extreme(rows,now_ms,int(trusted.get("entry_side") or 0),trusted.get("pivot_price")),
     "anchor_guard":"newest_confirmed_anchor_wins"}
@@ -290,7 +290,7 @@ def local_h1_direction(rows,now_ms,symbol):
  if prior:
   prior_t=int(prior.get("signal_candle_time") or 0);new_t=int(analysis.get("signal_candle_time") or 0)
   prior_side=int(prior.get("entry_side") or 0);new_side=int(analysis.get("entry_side") or 0)
-  if prior_t>new_t:
+  if prior_t>new_t and prior.get("policy")==HYPE_SWING_POLICY:
    # A shorter restart cache must never roll a newer persisted H1 anchor back.
    analysis={**prior,"ready":True,"last_candle_time":analysis.get("last_candle_time"),
      **local_pending_extreme(rows,now_ms,prior_side)}
@@ -363,7 +363,7 @@ def _local_persisted_anchor(symbol):
   candidates.append({"ready":True,"persisted":True,"anchor_confirmed":True,"h1_direction_anchor":True,
    "pivot_type":features.get("pivot_type") or ("LOCAL_HIGH" if side<0 else "LOCAL_LOW"),
    "pivot_price":pivot_price,"entry_side":side,"signal_candle_time":signal,"pivot_candle_time":pivot,
-   "entry_blocked":False,"pending_pivot_type":None,"pending_pivot_price":None,
+   "policy":features.get("policy"),"entry_blocked":False,"pending_pivot_type":None,"pending_pivot_price":None,
    "entry_block_reason":None,"reason":"persisted_confirmed_h1_local","anchor_source":origin})
 
  with LOCK:
