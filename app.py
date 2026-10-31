@@ -245,9 +245,17 @@ def bybit_volatility_discovery_loop():
     rows.append({"symbol":symbol,"pair":pair,"change_24h_pct":round(chg,3),
       "range_24h_pct":round(rng,3),"turnover_24h":round(turn,2),"last":last})
    rows.sort(key=lambda r:(abs(r["change_24h_pct"]),r["turnover_24h"]),reverse=True)
-   selected=rows[:DISCOVERY_MAX_SELECTED]
-   snapshot={"at":now(),"basis":"Bybit linear USDT · absolute 24h move","selected_symbols":[r["symbol"] for r in selected],
-    "selected":selected,"top_movers":rows[:20]}
+   with LOCK:prior=copy.deepcopy(S.get("bybit_discovery") or {})
+   frozen=list(prior.get("selected_symbols") or [])
+   if frozen:
+    by_symbol={r["symbol"]:r for r in rows}
+    selected=[by_symbol[x] for x in frozen if x in by_symbol]
+    selected_symbols=frozen
+   else:
+    selected=rows[:DISCOVERY_MAX_SELECTED]
+    selected_symbols=[r["symbol"] for r in selected]
+   snapshot={"at":now(),"basis":"Bybit linear USDT · absolute 24h move","selected_symbols":selected_symbols,
+    "selected":selected,"top_movers":rows[:20],"selection_frozen":True}
    with LOCK:S["bybit_discovery"]=snapshot
    journal("strategy1_discovery_scan",None,snapshot)
    delay=DISCOVERY_SCAN_SECONDS
@@ -858,7 +866,8 @@ def strategy1_entry_diagnostic_snapshot(prices):
  summary={}
  for row in rows:
   reason=row["reason"];summary[reason]=summary.get(reason,0)+1
- snapshot={"at":now(),"symbols":len(rows),"reason_counts":summary,"tokens":rows}
+ with LOCK:stream_state={k:copy.deepcopy(v) for k,v in S.get("sources",{}).items() if k.startswith("MarketTradeStream:")}
+ snapshot={"at":now(),"symbols":len(rows),"reason_counts":summary,"tokens":rows,"trade_streams":stream_state}
  with LOCK:S["strategy1_entry_diagnostics"]=snapshot
  try:journal("strategy1_entry_diagnostics",None,snapshot)
  except Exception as exc:
@@ -1071,7 +1080,7 @@ def local_experiment_loop():
   TRADE_WAKE.set();SHUTDOWN.wait(1)
 
 def _stream_group(trades):
- count=max(1,min(8,int(os.getenv('BYBIT_TRADE_WS_SHARDS','2') if trades else os.getenv('BYBIT_AUX_WS_SHARDS','2'))))
+ count=2 if trades else max(1,min(8,int(os.getenv('BYBIT_AUX_WS_SHARDS','2'))))
  def symbols():return set(strategy1_runtime_symbols())
  def worker(index):
   key=('MarketTradeStream:' if trades else 'MarketQuotes:')+str(index)
@@ -1080,7 +1089,7 @@ def _stream_group(trades):
   def quote(prices):accept_market_prices(prices);TRADE_WAKE.set()
   stable_shard=lambda symbol:int(hashlib.sha1(str(symbol).encode()).hexdigest()[:8],16)%count
   run_bybit_stream(MARKET_OBS if trades else MARKET_AUX_OBS,SHUTDOWN,symbols,report,
-   symbol_filter=lambda symbol:stable_shard(symbol)==index,
+   symbol_filter=None if trades else (lambda symbol:stable_shard(symbol)==index),
    candle_filter=lambda symbol:stable_shard(symbol)==index,
    subscribe_trades=trades,on_trade_mids=quote if trades else None,
    on_mids=None if trades else quote,on_candles=None if trades else accept_local_candles,
