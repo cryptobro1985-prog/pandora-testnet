@@ -113,7 +113,7 @@ def pinit():
  global S11
  S11=LegacyStrategy11(pg,STORE,LEGACY_MARKET_OBS,current_entry_price,
   lambda: copy.deepcopy(S.get("_prices",{})),paper_pnl,FEE,now)
- S11.ensure_schema("reset_2026_10_31_exact_profitable_strategy11")
+ S11.ensure_schema("reset_2026_10_31_exact_profitable_strategy11_5s_v2")
  with pg() as db:
   seeds=db.execute("select candles from local_candle_checkpoints where interval='1h'").fetchall()
   prior_discovery=db.execute("select payload from audit_journal where kind='strategy1_discovery_scan' order by id desc limit 1").fetchone()
