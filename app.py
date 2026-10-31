@@ -1078,9 +1078,10 @@ def _stream_group(trades):
   def report(state):
    with LOCK:S['sources'][key]={'last_check':now(),**state}
   def quote(prices):accept_market_prices(prices);TRADE_WAKE.set()
+  stable_shard=lambda symbol:int(hashlib.sha1(str(symbol).encode()).hexdigest()[:8],16)%count
   run_bybit_stream(MARKET_OBS if trades else MARKET_AUX_OBS,SHUTDOWN,symbols,report,
-   symbol_filter=lambda symbol:sorted(symbols()).index(symbol)%count==index,
-   candle_filter=lambda symbol:sorted(symbols()).index(symbol)%count==index,
+   symbol_filter=lambda symbol:stable_shard(symbol)==index,
+   candle_filter=lambda symbol:stable_shard(symbol)==index,
    subscribe_trades=trades,on_trade_mids=quote if trades else None,
    on_mids=None if trades else quote,on_candles=None if trades else accept_local_candles,
    candle_symbols=() if trades else symbols,worker_name=('trade-' if trades else 'quotes-')+str(index))
