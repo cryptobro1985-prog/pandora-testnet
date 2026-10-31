@@ -542,7 +542,7 @@ def local_experiment_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution
   "entry_mark":price,"profit_lock_armed":False,
   "pressure_state":{"best":int(side)*price,"noise":float((((watch or {}).get("context") or {}).get("resumption_state") or {}).get("noise") or 0.),
     "barrier":(-float((((watch or {}).get("context") or {}).get("resumption_state") or {}).get("candidate",{}).get("retest_best")) if (((watch or {}).get("context") or {}).get("resumption_state") or {}).get("candidate",{}).get("retest_best") is not None else None),"phase":"HOLDING"},
-  "profit_lock_mode":"executed_flow_reversal_only",
+  "profit_lock_mode":"m1_executed_flow_weakening",
   
   "reentry_watch":copy.deepcopy(watch) if entry_kind=="REENTRY" else None,
   "estimated_round_trip_cost_move":2*FEE+0.0004,"execution_cost_budget_only":True}
@@ -586,7 +586,7 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
  if watch_context:features["executed_flow_exit_context"]=watch_context
  features["actual_exit_reason"]=reason;features["actual_exit_mark"]=price
  watch=None
- if reason in ("m1_m3_m5_mfe_preservation_exit","m1_m3_m5_risk_exit","m1_m3_confirmed_counterflow_exit"):
+ if reason in ("m1_mfe_preservation_exit","m1_counterflow_exit","m1_m3_m5_mfe_preservation_exit","m1_m3_m5_risk_exit","m1_m3_confirmed_counterflow_exit"):
   watch={"symbol":symbol,"side":int(pos["side"]),
    "origin_signal_candle":int(features.get("origin_h1_signal_candle") or pos.get("signal_candle_time") or 0),
    "exit_price":price,"exit_at":now(),"expires_epoch":0.0,
@@ -656,7 +656,7 @@ def local_experiment_mark_positions(prices):
   mfe=max(float(f.get("mfe_price_move",0) or 0),move)
   f["mfe_price_move"]=mfe;f["mfe_roe_pct"]=mfe*float(updated.get("leverage") or 25.0)*100.0
   f.update(caterpillar_policy=LOCAL4_FLOW_POLICY,profit_lock_armed=False,
-    profit_lock_mode="statistics_only",profit_lock_floor_move=None,
+    profit_lock_mode="m1_executed_flow_weakening",profit_lock_floor_move=None,
     current_price_move=move,mfe_giveback_move=max(0.0,mfe-move))
   with LOCK:
    live=S.get("local_v12_positions",{}).get(symbol)
@@ -683,10 +683,38 @@ def local_experiment_mark_positions(prices):
       (json.dumps(updated["features"]),symbol,pos["opened"]))
   with LOCK:S["_local_experiment_path_persist_epoch"][symbol]=stamp
 
+def _local_entry_resumption_context(symbol,side,analysis,flow):
+ # Exact operator rule: do not chase an already-running move. First observe
+ # opposite M1 executed-flow, then enter on the first flip back to the H1 side.
+ if int(side or 0) not in (-1,1) or not isinstance(flow,dict) or not flow.get("trade_data_fresh"):
+  return None
+ try:value=float(flow.get("flow_imbalance"))
+ except (TypeError,ValueError,OverflowError):return None
+ if not math.isfinite(value):return None
+ aligned=float(side)*value
+ sign=1 if aligned>0 else -1 if aligned<0 else 0
+ signal=int((analysis or {}).get("signal_candle_time") or 0)
+ with LOCK:
+  states=S.setdefault("_local_entry_flow_state",{})
+  state=copy.deepcopy(states.get(symbol) or {})
+  if int(state.get("side") or 0)!=int(side) or int(state.get("signal_candle_time") or 0)!=signal:
+   state={"side":int(side),"signal_candle_time":signal,"counter_seen":False,"last_sign":0}
+  prior=int(state.get("last_sign") or 0)
+  if sign<0:state["counter_seen"]=True
+  ready=bool(state.get("counter_seen") and sign>0 and prior<=0)
+  state["last_sign"]=sign
+  state["last_flow_imbalance"]=value
+  state["updated_at"]=time.time()
+  states[symbol]=state
+ if not ready:return None
+ try:event_epoch=float(flow.get("volume_window_end_epoch"))-float(flow.get("latest_trade_age_seconds"))
+ except (TypeError,ValueError,OverflowError):event_epoch=time.time()
+ return {"resumption_observed":True,"flow_imbalance":value,"flow_event_epoch":event_epoch}
+
 @account_mutation
 def local4_fast_entries(prices):
- # Fast PAPER execution path: permanent 18 + current Discovery HOT symbols.
- # H1 sets direction; fresh executed-flow executed flow controls entry/re-entry.
+ # H1 sets direction. Execution happens only on live M1 control transitions:
+ # counter-flow -> H1-side resumption. M3/M5 are telemetry, never gates.
  for symbol in strategy1_trade_symbols():
   with LOCK:
    if symbol in S.get("local_v12_positions",{}):continue
@@ -694,7 +722,6 @@ def local4_fast_entries(prices):
    watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
   mark=prices.get(symbol)
   if not analysis or not mark:continue
-  # The 500ms executor must never outrun the H1 scanner after deploy/takeover.
   if not strategy1_runtime_h1_verified(symbol,analysis):continue
   side=int(analysis.get("entry_side") or 0)
   if watch and int(watch.get("side") or 0)==-side:
@@ -703,9 +730,11 @@ def local4_fast_entries(prices):
   if watch:
    watch=_local_experiment_watch_observe(symbol,watch,float(mark),None,flow,time.time())
    if local4_reentry_ready(side,None,mark,watch,flow,time.time()):
-    local_experiment_open(symbol,side,analysis,"REENTRY",None,watch)
-  elif local4_initial_entry_candidate(symbol,analysis,None,flow,time.time())["eligible"]:
-   local_experiment_open(symbol,side,analysis,"ORDER_FLOW")
+    local_experiment_open(symbol,side,analysis,"REENTRY",{"resumption_observed":True},watch)
+  else:
+   transition=_local_entry_resumption_context(symbol,side,analysis,flow)
+   if transition and local4_initial_entry_candidate(symbol,analysis,transition,flow,time.time())["eligible"]:
+    local_experiment_open(symbol,side,analysis,"ORDER_FLOW",transition)
 
 def strategy1_entry_diagnostic_snapshot(prices):
  # Read-only decision audit: one structured record per candidate every 30 seconds.
