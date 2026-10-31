@@ -10,11 +10,14 @@ from market_data import RollingMarketData
 from bybit_market_stream import run_bybit_stream
 from h1_structure import analyze as analyze_hype_h1,pending_extreme as local_pending_extreme,update_path as hype_update_path,POLICY as HYPE_SWING_POLICY
 from local_order_flow import POLICY as LOCAL4_FLOW_POLICY,entry_candidate as local4_entry_candidate,initial_entry_candidate as local4_initial_entry_candidate,pressure_exit as local4_pressure_exit,update_watch as local4_update_watch,reentry_ready as local4_reentry_ready
+from strategy11_engine import LegacyStrategy11
 
 LOCAL_EXPERIMENT_SYMBOLS=('INIT','NEAR','BTC','SOL','ETH','LIT','HYPE','ZEC','TAO','GRASS','BIRB','BEAM')
 LOCAL_EXPERIMENT_STARTING_EQUITY=500.0
 LOCAL_EXPERIMENT_MARGIN_FRACTION=.20
 LOCAL_EXPERIMENT_MAX_POSITIONS=None
+DISCOVERY_MAX_SELECTED=8
+DISCOVERY_SCAN_SECONDS=300
 S1_ONLY_MODE=True
 FEE=.00045
 LOCK=threading.RLock();ACCOUNT_LOCK=threading.RLock();SHUTDOWN=threading.Event();TRADE_WAKE=threading.Event()
@@ -38,6 +41,7 @@ def publication_epoch(value):
 
 def pg():return psycopg.connect(os.environ['DATABASE_URL'],autocommit=True,row_factory=dict_row,connect_timeout=5)
 STORE=EngineStore(pg)
+S11=None
 
 def journal(kind,event_id,payload):
  with pg() as db:db.execute('insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,%s,%s,%s::jsonb)',(now(),event_id,kind,json.dumps(payload,default=str)))
@@ -48,7 +52,7 @@ def log_learning_decision(ident,strategy,symbol,side,action,reason,entry_price=N
  except Exception:return False
 
 def apply_local4_user_reset():
- marker='reset_2026_10_31_mfe_dominance_clean'
+ marker='reset_2026_10_31_ab_strategy12_clean'
  with pg() as db:
   with db.transaction():
    done=db.execute("select 1 from audit_journal where event_id=%s limit 1",(marker,)).fetchone()
@@ -104,6 +108,10 @@ def pinit():
  EngineStore(pg).migrate()
  apply_local4_user_reset()
  restore_state()
+ global S11
+ S11=LegacyStrategy11(pg,STORE,MARKET_OBS,current_entry_price,
+  lambda: copy.deepcopy(S.get("_prices",{})),paper_pnl,FEE,now)
+ S11.ensure_schema("reset_2026_10_31_ab_strategy11_clean")
  with pg() as db:seeds=db.execute("select candles from local_candle_checkpoints where interval='1h'").fetchall()
  for row in seeds:
   rows=row['candles'] or []
@@ -117,7 +125,7 @@ def accept_local_candles(data,history=False):
   for row in rows:
    if not isinstance(row,dict) or row.get('i')!='1h':continue
    symbol=row.get('s')
-   if symbol not in LOCAL_EXPERIMENT_SYMBOLS:continue
+   if symbol not in set(strategy1_runtime_symbols()):continue
    try:
     t,T=int(row['t']),int(row['T']);o,h,l,c,v=[float(row[k]) for k in ('o','h','l','c','v')]
     if not all(math.isfinite(x) for x in (o,h,l,c,v)) or min(o,h,l,c)<=0 or v<0:continue
@@ -159,9 +167,8 @@ def account_mutation(fn):
  return run
 
 def strategy1_runtime_symbols():
- # Strategy 1 PAPER trades exactly the operator-selected ten symbols.
- # Discovery may monitor others, but cannot promote them into trading.
- return tuple(LOCAL_EXPERIMENT_SYMBOLS)
+ with LOCK:hot=tuple((S.get("bybit_discovery") or {}).get("selected_symbols") or ())
+ return tuple(dict.fromkeys(tuple(LOCAL_EXPERIMENT_SYMBOLS)+hot))
 
 def strategy1_runtime_h1_verified(symbol,analysis=None,now_epoch=None):
  # Persisted H1 anchors are valid for display and managing an already-open position,
@@ -208,8 +215,48 @@ def strategy1_confirmed_h1(a):
   a.get("pivot_type")==expected and math.isfinite(price) and price>0 and signal>0)
 
 def strategy1_trade_symbols():
- # Subscribe before H1 is available: current trades bootstrap marks and flow.
- return tuple(LOCAL_EXPERIMENT_SYMBOLS)
+ with LOCK:
+  analyses=copy.deepcopy(S.get("_local4_analysis",{}));durable=copy.deepcopy(S.get("local_h1_direction",{}))
+ return tuple(sym for sym in strategy1_runtime_symbols()
+  if strategy1_confirmed_h1(analyses.get(sym)) or strategy1_confirmed_h1(durable.get(sym)))
+
+def bybit_volatility_discovery_loop():
+ while not SHUTDOWN.is_set():
+  try:
+   req=urllib.request.Request("https://api.bybit.com/v5/market/tickers?category=linear",
+    headers={"User-Agent":"pandora-paper/1.0","Accept":"application/json"})
+   with urllib.request.urlopen(req,timeout=12) as response:payload=json.load(response)
+   if int(payload.get("retCode",-1))!=0:raise RuntimeError("bybit_tickers_failed")
+   with LOCK:instruments=set((S.get("_bybit_instruments") or {}).keys())
+   rows=[]
+   for x in (payload.get("result") or {}).get("list") or []:
+    pair=str(x.get("symbol") or "")
+    if not pair.endswith("USDT"):continue
+    symbol=pair[:-4]
+    if symbol in LOCAL_EXPERIMENT_SYMBOLS:continue
+    if instruments and symbol not in instruments:continue
+    try:
+     last=float(x.get("lastPrice") or 0);chg=float(x.get("price24hPcnt") or 0)*100.0
+     high=float(x.get("highPrice24h") or 0);low=float(x.get("lowPrice24h") or 0)
+     turn=float(x.get("turnover24h") or 0)
+    except (TypeError,ValueError,OverflowError):continue
+    if not all(math.isfinite(v) for v in (last,chg,high,low,turn)) or last<=0 or low<=0 or turn<=0:continue
+    rng=(high/low-1.0)*100.0 if high>0 else 0.0
+    rows.append({"symbol":symbol,"pair":pair,"change_24h_pct":round(chg,3),
+      "range_24h_pct":round(rng,3),"turnover_24h":round(turn,2),"last":last})
+   rows.sort(key=lambda r:(abs(r["change_24h_pct"]),r["turnover_24h"]),reverse=True)
+   selected=rows[:DISCOVERY_MAX_SELECTED]
+   snapshot={"at":now(),"basis":"Bybit linear USDT · absolute 24h move","selected_symbols":[r["symbol"] for r in selected],
+    "selected":selected,"top_movers":rows[:20]}
+   with LOCK:S["bybit_discovery"]=snapshot
+   journal("strategy1_discovery_scan",None,snapshot)
+   delay=DISCOVERY_SCAN_SECONDS
+  except Exception as exc:
+   with LOCK:S["sources"]["BybitDiscovery"]={"ok":False,"last_check":now(),"error":type(exc).__name__+":"+str(exc)[:160]}
+   delay=30
+  else:
+   with LOCK:S["sources"]["BybitDiscovery"]={"ok":True,"last_check":now(),"selected":len(selected),"error":None}
+  SHUTDOWN.wait(delay)
 
 def bybit_instruments_loop():
  # Public contract constraints are independent of H1, quote and execution workers.
@@ -830,9 +877,8 @@ def local_experiment_risk_loop():
     prices=dict(S.get("_prices",{}))
    if active and 0<=age<=8 and prices:
     local_experiment_mark_positions(prices)
-    # Execution does not wait for execution context. H1 provides the allowed side; fresh
-    # event-driven aggressor flow opens/re-enters as soon as control is confirmed.
     local4_fast_entries(prices)
+    if S11 is not None:S11.cycle(strategy1_runtime_symbols(),prices)
 
     with LOCK:S["sources"]["LocalRisk"]={"ok":True,"ready":True,"last_check":now(),"mode":"H1_STREAM_fast_paper_execution","symbols":list(strategy1_trade_symbols()),"error":None}
    if time.time()-last_entry_diagnostics>=30:
@@ -1001,7 +1047,7 @@ def engine_coordinator():
 def market_history_bootstrap():
  while not SHUTDOWN.is_set():
   if not S['engine_active']:SHUTDOWN.wait(.5);continue
-  for symbol in LOCAL_EXPERIMENT_SYMBOLS:
+  for symbol in strategy1_runtime_symbols():
    if SHUTDOWN.is_set():return
    try:
     rows=bybit_local_history(symbol)
@@ -1015,17 +1061,18 @@ def market_history_bootstrap():
 def local_experiment_loop():
  while not SHUTDOWN.is_set():
   if not S['engine_active']:SHUTDOWN.wait(.5);continue
-  for symbol in LOCAL_EXPERIMENT_SYMBOLS:
+  for symbol in strategy1_runtime_symbols():
    try:
     rows,stamp=_local_h1_candles(symbol);analysis=local_h1_direction(rows,stamp,symbol)
     with LOCK:S.setdefault('_local4_analysis',{})[symbol]=analysis
+    if S11 is not None:S11.scan_h1(symbol,rows,stamp)
    except Exception as error:
     with LOCK:S['sources']['H1Scan:'+symbol]={'ok':False,'last_check':now(),'error':type(error).__name__+':'+str(error)[:140]}
   TRADE_WAKE.set();SHUTDOWN.wait(1)
 
 def _stream_group(trades):
  count=max(1,min(8,int(os.getenv('BYBIT_TRADE_WS_SHARDS','2') if trades else os.getenv('BYBIT_AUX_WS_SHARDS','2'))))
- def symbols():return set(LOCAL_EXPERIMENT_SYMBOLS)
+ def symbols():return set(strategy1_runtime_symbols())
  def worker(index):
   key=('MarketTradeStream:' if trades else 'MarketQuotes:')+str(index)
   def report(state):
@@ -1090,7 +1137,7 @@ def build_dashboard_snapshot(history=None):
   positions.append({'symbol':symbol,'side':'LONG' if pos['side']>0 else 'SHORT','opened':pos['opened'],'entry':pos['entry'],
    'mark':mark,'unrealized_pnl':pnl,'margin_usd':pos['margin'],'notional_usd':pos['notional'],'leverage':pos['leverage'],'features':pos.get('features') or {}})
  details={}
- for symbol in LOCAL_EXPERIMENT_SYMBOLS:
+ for symbol in strategy1_runtime_symbols():
   flow=MARKET_OBS.flow_context(symbol)
   anchor=state.get('_local4_analysis',{}).get(symbol) or state['local_h1_direction'].get(symbol) or {}
   details[symbol]={'h1_local':anchor,'flow_context':flow,'last_action':(state.get('strategy1_executor_rejections',{}).get(symbol) or {}).get('reason')}
@@ -1099,8 +1146,11 @@ def build_dashboard_snapshot(history=None):
   'total_equity':state['local_experiment_equity']+unreal if all_marks else None,
   'open_positions':positions,'closed_trades':history.get('trades',[]),'token_totals':history.get('token_totals'),
   'events':history.get('events',{}),'watch':state['local_experiment_watch'],'h1_durable':state['local_h1_direction'],
-  'engine':{'details':details,'symbols':list(LOCAL_EXPERIMENT_SYMBOLS)}}
- return {'strategy1_primary':primary,'local_experiment_symbols':list(LOCAL_EXPERIMENT_SYMBOLS),
+  'engine':{'details':details,'symbols':list(strategy1_runtime_symbols())}}
+ legacy=S11.snapshot() if S11 is not None else {}
+ return {'strategy1_primary':primary,'strategy11_legacy':legacy,
+  'local_experiment_symbols':list(strategy1_runtime_symbols()),'base_symbols':list(LOCAL_EXPERIMENT_SYMBOLS),
+  'discovery':state.get('bybit_discovery',{}),
   'health':health_state(),'sources':state['sources'],'strategy1_entry_diagnostics':state.get('strategy1_entry_diagnostics',{}),
   'history_error':history.get('error'),'history_updated_at':history.get('at'),'positions':[],'snapshot_at':now()}
 
@@ -1161,7 +1211,7 @@ def main():
    except Exception as error:
     with LOCK:S['sources'][label]={'ok':False,'last_check':now(),'error':type(error).__name__+':'+str(error)[:160]}
    SHUTDOWN.wait(1)
- jobs=[('lease',engine_coordinator),('contracts',bybit_instruments_loop),('trades',market_trade_stream),('quotes',market_aux_stream),
+ jobs=[('lease',engine_coordinator),('contracts',bybit_instruments_loop),('discovery',bybit_volatility_discovery_loop),('trades',market_trade_stream),('quotes',market_aux_stream),
   ('h1_history',market_history_bootstrap),('h1_scan',local_experiment_loop),('execution',local_experiment_risk_loop),
   ('checkpoint',strategy1_live_state_loop),('history',dashboard_history_loop)]
  workers=[threading.Thread(target=supervise,args=job,daemon=True,name=job[0]) for job in jobs]
