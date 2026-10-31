@@ -48,20 +48,22 @@ def log_learning_decision(ident,strategy,symbol,side,action,reason,entry_price=N
  except Exception:return False
 
 def apply_local4_user_reset():
- marker='reset_2026_10_31_exact_proven_m1_m3_m5_final_clean'
+ marker='reset_2026_10_31_proven_logic_full_clean'
  with pg() as db:
   with db.transaction():
-   db.execute("create table if not exists local_v12_trade_history_archive_20261031 as select * from local_v12_trade_history with no data")
    done=db.execute("select 1 from audit_journal where event_id=%s limit 1",(marker,)).fetchone()
    if done:return False
-   db.execute("insert into local_v12_trade_history_archive_20261031 select * from local_v12_trade_history")
-   db.execute("delete from local_v12_positions")
-   db.execute("delete from local_v12_watchlist")
-   db.execute("delete from local_v12_signal_journal")
-   db.execute("delete from local_v12_trade_history")
+   # User-requested full PAPER reset: no historical trades survive into the new statistics.
+   db.execute("truncate table local_v12_positions,local_v12_watchlist,local_v12_signal_journal,local_v12_trade_history restart identity")
+   db.execute("truncate table local_v12_trade_history_archive_20261031 restart identity")
+   # Force every H1 local to be reconstructed under the current adaptive v16 logic.
+   db.execute("delete from local_h1_direction")
+   # Remove stale published dashboard state; the live engine republishes immediately after boot.
+   db.execute("delete from local_v12_live_state")
    stamp=now()
    db.execute("update local_v12_account_state set equity=500,realized_pnl=0,started_at=%s,updated_at=%s where id=1",(stamp,stamp))
-   db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,%s,'strategy1_user_reset','{}'::jsonb)",(stamp,marker))
+   db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,%s,'strategy1_user_reset',%s::jsonb)",
+    (stamp,marker,json.dumps({"starting_equity":500,"history_deleted":True,"scanner_state_cleared":True,"h1_anchors_rebuild":True})))
  return True
 
 SCHEMA=(
