@@ -8,14 +8,14 @@ from local_order_flow_legacy import (
     update_watch,
     reentry_ready,
 )
-from h1_structure_legacy import analyze as legacy_h1_analyze, pending_extreme as legacy_pending_extreme, update_path as legacy_update_path, POLICY as H1_POLICY
+from h1_structure_legacy import analyze as legacy_h1_analyze, pending_extreme as legacy_pending_extreme, update_path as legacy_update_path, analyze_m15 as legacy_analyze_m15, m15_reentry_ready as legacy_m15_reentry_ready, position_exit as legacy_position_exit, POLICY as H1_POLICY
 
 
 class LegacyStrategy11:
-    def __init__(self, pg, store, market_obs, price_getter, price_snapshot, paper_pnl, fee, now_func):
+    def __init__(self, pg, store, market_obs, price_getter, price_snapshot, paper_pnl, fee, now_func, m15_getter=None):
         self.pg=pg; self.store=store; self.market_obs=market_obs
         self.price_getter=price_getter; self.price_snapshot=price_snapshot
-        self.paper_pnl=paper_pnl; self.fee=float(fee); self.now=now_func
+        self.paper_pnl=paper_pnl; self.fee=float(fee); self.now=now_func; self.m15_getter=m15_getter
         self.lock=threading.RLock()
         self.positions={}; self.watch={}; self.h1={}; self._h1_verified={}
         self.equity=500.0; self.realized=0.0; self.started_at=None
@@ -257,7 +257,7 @@ class LegacyStrategy11:
           "m1_m3_confirmed_counterflow_exit","m1_m3_m5_mfe_preservation_exit",
           "executed_flow_15s30s_counter_control_exit","executed_flow_15s30s_mfe_weakening_exit"
         )
-        if reason in watch_reasons:
+        if reason=="m15_weakening_profit_exit" or reason in watch_reasons:
             watch={"symbol":symbol,"side":int(pos["side"]),
               "origin_signal_candle":int(features.get("origin_h1_signal_candle") or pos.get("signal_candle_time") or 0),
               "exit_price":mark,"exit_at":self.now(),"expires_epoch":0.0,
@@ -302,56 +302,98 @@ class LegacyStrategy11:
         self._journal("strategy11_trade_closed",{"symbol":symbol,"side":pos["side"],"entry":pos["entry"],"exit":mark,"pnl":pnl,"reason":reason,"equity":self.equity})
         return {"symbol":symbol,"pnl":pnl,"reason":reason,"equity":self.equity}
 
-    def _mark(self,symbol,pos,mark):
-        mark=float(mark)
-        updated,liq=legacy_update_path(pos,mark)
-        f=updated.setdefault("features",{})
-        f["caterpillar_policy"]=FLOW_POLICY
+    def _update_path(self,symbol,pos,mark):
+        updated,_=legacy_update_path(pos,float(mark))
+        oldf=(pos or {}).get("features") or {}; newf=updated.get("features") or {}
         with self.lock:self.positions[symbol]=updated
+        if newf!=oldf:
+            last=self._persist.get(symbol,0)
+            if time.time()-last>=30:
+                with self.pg() as db:
+                    with db.transaction():
+                        self.store.fence(db)
+                        db.execute("update strategy11_positions set features=%s::jsonb where symbol=%s and opened=%s",
+                          (json.dumps(newf,default=str),symbol,pos["opened"]))
+                self._persist[symbol]=time.time()
+        return updated
 
-        flow=self.market_obs.flow_context(symbol,time.time())
-        reason=pressure_exit(updated,None,mark,flow)
-        if reason:
-            return self._close(symbol,mark,reason,{"flow_context":flow,"observed_at":self.now()})
-        if liq:
-            return self._close(symbol,mark,"paper_liquidation_proxy")
+    @staticmethod
+    def _weakening_exit(position,m15,mark,flow):
+        if not position or not m15 or not m15.get("ready"):return False
+        side=int(position.get("side") or 0); entry=float(position.get("entry") or 0); mark=float(mark or 0)
+        if side not in (-1,1) or entry<=0 or mark<=0:return False
+        features=position.get("features") or {}
+        favorable=side*(mark/entry-1.0)
+        floor=max(.0002,float(features.get("estimated_round_trip_cost_move",0) or 0))
+        if favorable<=floor:return False
+        if not (flow or {}).get("trade_data_fresh"):return False
+        try:imb=float((flow or {}).get("flow_imbalance"))
+        except (TypeError,ValueError):return False
+        if side*imb>-0.12:return False
+        adverse=int(m15.get("adverse_score") or 0)
+        candle_reversal=(int(m15.get("candle_direction") or 0)==-side and float(m15.get("body_fraction") or 0)>=.42)
+        if adverse<2 and not candle_reversal:return False
+        peak=max(0.0,float(features.get("mfe_price_move",0) or 0),favorable)
+        typical=float(m15.get("median_range_move") or .008)
+        recoil_floor=max(.0006,min(.0015,typical*.15))
+        return (peak-favorable)>=recoil_floor
 
-        last=self._persist.get(symbol,0)
-        if time.time()-last>=30:
-            with self.pg() as db:
-                with db.transaction():
-                    self.store.fence(db)
-                    db.execute("update strategy11_positions set features=%s::jsonb where symbol=%s and opened=%s",
-                      (json.dumps(f,default=str),symbol,pos["opened"]))
-            self._persist[symbol]=time.time()
-        return None
+    @staticmethod
+    def _reentry_ready(side,m15,mark,watch,flow):
+        side=int(side or 0)
+        if side not in (-1,1) or not m15 or not m15.get("ready") or not watch:return False
+        ctx=watch.get("context") or {}
+        if ctx.get("phase")!="WAIT_RESUMPTION":return False
+        if not (flow or {}).get("trade_data_fresh"):return False
+        try:imb=float((flow or {}).get("flow_imbalance"))
+        except (TypeError,ValueError):return False
+        if side*imb<.12:return False
+        recovery=int(m15.get("recovery_score") or 0); adverse=int(m15.get("adverse_score") or 0)
+        if recovery<2 or adverse>1:return False
+        extreme=float(ctx.get("pullback_extreme") or watch.get("exit_price") or 0); mark=float(mark or 0)
+        if extreme<=0 or mark<=0:return False
+        typical=float(m15.get("median_range_move") or .008)
+        resume=max(.0005,min(.0012,typical*.10))
+        return side*(mark/extreme-1.0)>=resume
 
     def cycle(self,symbols,prices):
-        with self.lock:positions=copy.deepcopy(self.positions)
-        for symbol,pos in positions.items():
-            mark=prices.get(symbol)
-            if mark:self._mark(symbol,pos,mark)
         for symbol in symbols:
-            with self.lock:
-                if symbol in self.positions:continue
-                analysis=copy.deepcopy(self.h1.get(symbol))
-                watch=copy.deepcopy(self.watch.get(symbol))
-            if not self.confirmed_h1(analysis):continue
-            side=int(analysis.get("entry_side") or 0)
             mark=prices.get(symbol)
             if not mark:continue
-            if watch and int(watch.get("side") or 0)==-side:
-                with self.pg() as db:db.execute("delete from strategy11_watchlist where symbol=%s",(symbol,))
-                with self.lock:self.watch.pop(symbol,None)
-                watch=None
+            with self.lock:
+                pos=copy.deepcopy(self.positions.get(symbol)); watch=copy.deepcopy(self.watch.get(symbol)); analysis=copy.deepcopy(self.h1.get(symbol))
+            if not self.confirmed_h1(analysis):continue
+            side=int((pos or watch or {}).get("side") or analysis.get("entry_side") or 1)
+            if self.m15_getter is None:continue
+            try:
+                rows,stamp=self.m15_getter(symbol); m15=legacy_analyze_m15(rows,stamp,side)
+            except Exception:
+                continue
             flow=self.market_obs.flow_context(symbol,time.time())
+            if pos:
+                pos=self._update_path(symbol,pos,float(mark))
+                h1exit=("opposite_h1_local_emergency_exit" if int(analysis.get("entry_side") or 0)==-int(pos.get("side") or 0) else None)
+                if not h1exit:h1exit=legacy_position_exit(pos,analysis,float(mark))
+                if h1exit:
+                    self._close(symbol,float(mark),h1exit)
+                elif self._weakening_exit(pos,m15,float(mark),flow):
+                    self._close(symbol,float(mark),"m15_weakening_profit_exit",{"phase":"WAIT_RESUMPTION","counter_pressure_seen":False,"pullback_extreme":float(mark)})
+                continue
             if watch:
-                updated=update_watch(watch,float(mark),None,flow,time.time())
-                with self.lock:self.watch[symbol]=updated
-                if reentry_ready(side,None,float(mark),updated,flow,time.time()):self._open(symbol,side,analysis,"REENTRY",updated)
-            else:
-                if initial_entry_candidate(symbol,analysis,None,flow,time.time()).get("eligible"):
-                    self._open(symbol,side,analysis,"ORDER_FLOW")
+                if int(analysis.get("entry_side") or 0)==-int(watch.get("side") or 0):
+                    with self.pg() as db:db.execute("delete from strategy11_watchlist where symbol=%s",(symbol,))
+                    with self.lock:self.watch.pop(symbol,None)
+                    watch=None
+                else:
+                    updated=update_watch(watch,float(mark),m15,flow,time.time())
+                    with self.lock:self.watch[symbol]=updated
+                    if self._reentry_ready(int(watch["side"]),m15,float(mark),updated,flow):
+                        self._open(symbol,int(watch["side"]),analysis,"REENTRY",updated)
+                    continue
+            imbalance=flow.get("flow_imbalance") if flow.get("trade_data_fresh") else None
+            wanted=int(analysis.get("entry_side") or 0)
+            if wanted in (-1,1) and imbalance is not None and wanted*float(imbalance)>=.12 and legacy_m15_reentry_ready(wanted,m15,imbalance):
+                self._open(symbol,wanted,analysis,"ORDER_FLOW")
 
     def snapshot(self,limit=50):
         prices=self.price_snapshot()
