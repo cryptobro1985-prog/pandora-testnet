@@ -9,7 +9,7 @@ A mature partial M15 candle plus live flow can protect earned profit before the 
 import math
 import statistics
 
-POLICY = "local_swing_h1_latest_confirmed_swing_v15"
+POLICY = "local_swing_h1_fractal_m15_execution_v12"
 SYMBOL = "HYPE"  # backwards-compatible primary symbol
 SYMBOLS = ("HYPE", "NEAR")
 INTERVAL = "1h"
@@ -19,10 +19,6 @@ STARTING_EQUITY = 100.0
 MARGIN_FRACTION = 0.25
 LEVERAGE = 25.0
 PIVOT_LOOKBACK = 4
-H1_PIVOT_MIN_RETRACE = 0.0100  # never confirm a swing on sub-1% H1 noise
-H1_PIVOT_RANGE_MULTIPLIER = 0.75
-H1_PIVOT_CONFIRM_BARS = 2
-H1_PIVOT_SEARCH_BARS = 24
 MIN_FAVORABLE_MOVE_FOR_WEAKENING = 0.0015
 PROFIT_LOCK_ARM_MOVE = 0.0025
 PROFIT_LOCK_BUFFER_MOVE = 0.0012
@@ -79,102 +75,32 @@ def _ret(a, b):
     return (b / a - 1.0) if a and b else 0.0
 
 
-def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL, require_fresh=True):
+def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL):
     candles = completed_candles(rows, now_ms)
-    need = PIVOT_LOOKBACK + H1_PIVOT_CONFIRM_BARS + 1
-    if len(candles) < need:
+    if len(candles) < PIVOT_LOOKBACK + 2:
         return {"ready": False, "reason": "insufficient_closed_h1_candles",
                 "closed_candles": len(candles), "policy": POLICY, "symbol": symbol}
-    if require_fresh and float(now_ms) - candles[-1]["T"] > 3_600_000 + 120_000:
+    if float(now_ms) - candles[-1]["T"] > 3_600_000 + 120_000:
         return {"ready": False, "reason": "stale_h1_history", "policy": POLICY, "symbol": symbol}
-    recent = candles[-need:]
+    recent = candles[-(PIVOT_LOOKBACK+2):]
     if any(abs(b["t"]-a["t"]-3_600_000)>1000 for a,b in zip(recent,recent[1:])):
         return {"ready": False, "reason": "gapped_h1_history", "policy": POLICY, "symbol": symbol}
 
-    # Universal H1 pivot reconstruction.
-    # Search a rolling historical window, newest candidate first. A candidate
-    # may need multiple later CLOSED H1 bars to confirm; do not forget it just
-    # because it is older than two bars.
-    chosen = None
-    newest_candidate_idx = len(candles) - 2
-    oldest_candidate_idx = max(PIVOT_LOOKBACK, len(candles) - 1 - H1_PIVOT_SEARCH_BARS)
-    for p_idx in range(newest_candidate_idx, oldest_candidate_idx - 1, -1):
-        p = candles[p_idx]
-        prior = candles[p_idx-PIVOT_LOOKBACK:p_idx]
-        after = candles[p_idx+1:]
-        if len(prior) < PIVOT_LOOKBACK or not after:
-            continue
-
-        hist_ranges=[(z["h"]-z["l"])/max(z["c"],1e-12) for z in candles[max(0,p_idx-12):p_idx]]
-        typical_range=statistics.median(hist_ranges) if hist_ranges else H1_PIVOT_MIN_RETRACE
-        retrace_threshold=max(H1_PIVOT_MIN_RETRACE,
-                              min(.035, typical_range*H1_PIVOT_RANGE_MULTIPLIER))
-
-        candidate_low = p["l"] <= min(z["l"] for z in prior)
-        candidate_high = p["h"] >= max(z["h"] for z in prior)
-        if not candidate_low and not candidate_high:
-            continue
-
-        low_valid = bool(candidate_low)
-        high_valid = bool(candidate_high)
-        low_confirm = None
-        high_confirm = None
-        best_rebound = 0.0
-        best_pullback = 0.0
-
-        for z in after:
-            if low_valid:
-                if z["l"] <= p["l"]:
-                    low_valid = False
-                else:
-                    rebound=(z["c"]/p["l"]-1.0) if p["l"]>0 else 0.0
-                    best_rebound=max(best_rebound,rebound)
-                    if low_confirm is None and rebound >= retrace_threshold:
-                        low_confirm=z
-            if high_valid:
-                if z["h"] >= p["h"]:
-                    high_valid = False
-                else:
-                    pullback=(1.0-z["c"]/p["h"]) if p["h"]>0 else 0.0
-                    best_pullback=max(best_pullback,pullback)
-                    if high_confirm is None and pullback >= retrace_threshold:
-                        high_confirm=z
-
-        local_low = bool(low_valid and low_confirm is not None)
-        local_high = bool(high_valid and high_confirm is not None)
-        if not (local_low or local_high):
-            continue
-
-        side = 0
-        confirm = None
-        if local_low and not local_high:
-            side=1;confirm=low_confirm
-        elif local_high and not local_low:
-            side=-1;confirm=high_confirm
-        else:
-            lt=int(low_confirm["t"]);ht=int(high_confirm["t"])
-            if lt < ht:
-                side=1;confirm=low_confirm
-            elif ht < lt:
-                side=-1;confirm=high_confirm
-        if side == 0:
-            continue
-
-        chosen = {
-            "p": p,
-            "confirm": confirm,
-            "confirm_bars": max(1, int((confirm["t"]-p["t"])//3_600_000)),
-            "candidate_low": candidate_low,
-            "candidate_high": candidate_high,
-            "local_low": side > 0,
-            "local_high": side < 0,
-            "retrace_threshold": retrace_threshold,
-            "confirmation_retrace": best_rebound if side>0 else best_pullback,
-            "entry_side": side,
-        }
-        break
-
     x = candles[-1]
+    p = candles[-2]
+    prior = candles[-2-PIVOT_LOOKBACK:-2]
+    prior_lows = [z["l"] for z in prior]
+    prior_highs = [z["h"] for z in prior]
+
+    local_low = (
+        p["l"] <= min(prior_lows)
+        and x["l"] > p["l"]
+    )
+    local_high = (
+        p["h"] >= max(prior_highs)
+        and x["h"] < p["h"]
+    )
+
     closes = [z["c"] for z in candles]
     last_ret = _ret(closes[-2], closes[-1])
     prev_ret = _ret(closes[-3], closes[-2])
@@ -186,39 +112,34 @@ def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL, require_fresh=True):
 
     long_weak_score = 0
     short_weak_score = 0
-    if last_ret <= 0: long_weak_score += 1
-    if last_ret >= 0: short_weak_score += 1
-    if prev_mom3 > 0 and mom3 < prev_mom3 * 0.55: long_weak_score += 1
-    if prev_mom3 < 0 and mom3 > prev_mom3 * 0.55: short_weak_score += 1
-    if x["c"] < x["o"] and body_fraction >= 0.35: long_weak_score += 1
-    if x["c"] > x["o"] and body_fraction >= 0.35: short_weak_score += 1
-    if prev_ret > 0 and last_ret < prev_ret * 0.25: long_weak_score += 1
-    if prev_ret < 0 and last_ret > prev_ret * 0.25: short_weak_score += 1
+    if last_ret <= 0:
+        long_weak_score += 1
+    if last_ret >= 0:
+        short_weak_score += 1
+    if prev_mom3 > 0 and mom3 < prev_mom3 * 0.55:
+        long_weak_score += 1
+    if prev_mom3 < 0 and mom3 > prev_mom3 * 0.55:
+        short_weak_score += 1
+    if x["c"] < x["o"] and body_fraction >= 0.35:
+        long_weak_score += 1
+    if x["c"] > x["o"] and body_fraction >= 0.35:
+        short_weak_score += 1
+    if prev_ret > 0 and last_ret < prev_ret * 0.25:
+        long_weak_score += 1
+    if prev_ret < 0 and last_ret > prev_ret * 0.25:
+        short_weak_score += 1
 
-    if chosen:
-        p=chosen["p"]; entry_side=chosen["entry_side"]
-        pivot_type="LOCAL_LOW" if entry_side>0 else "LOCAL_HIGH"
-        pivot_price=p["l"] if entry_side>0 else p["h"]
-        signal=chosen["confirm"]
-        local_low=chosen["local_low"]; local_high=chosen["local_high"]
-        candidate_low=chosen["candidate_low"]; candidate_high=chosen["candidate_high"]
-        retrace_threshold=chosen["retrace_threshold"]
-        confirmation_retrace=chosen["confirmation_retrace"]
-        confirm_bars=chosen["confirm_bars"]
-    else:
-        p=candles[-2]; signal=x; entry_side=0; pivot_type=None; pivot_price=None
-        local_low=False; local_high=False
-        candidate_low=False; candidate_high=False
-        retrace_threshold=H1_PIVOT_MIN_RETRACE
-        confirmation_retrace=0.0; confirm_bars=0
+    entry_side = 1 if local_low and not local_high else (-1 if local_high and not local_low else 0)
+    pivot_type = "LOCAL_LOW" if entry_side == 1 else ("LOCAL_HIGH" if entry_side == -1 else None)
+    pivot_price = p["l"] if entry_side == 1 else (p["h"] if entry_side == -1 else None)
 
     return {
         "ready": True,
         "policy": POLICY,
         "symbol": symbol,
         "interval": INTERVAL,
-        "signal_candle_time": signal["t"],
-        "signal_candle_close_time": signal["T"],
+        "signal_candle_time": x["t"],
+        "signal_candle_close_time": x["T"],
         "pivot_candle_time": p["t"],
         "pivot_type": pivot_type,
         "pivot_price": pivot_price,
@@ -233,24 +154,16 @@ def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL, require_fresh=True):
         "previous_h1_return": prev_ret,
         "momentum_3h": mom3,
         "previous_momentum_3h": prev_mom3,
-        "confirmation_close": signal["c"],
-        "pivot_candidate_low": candidate_low,
-        "pivot_candidate_high": candidate_high,
-        "confirmation_retrace": confirmation_retrace,
-        "required_retrace": retrace_threshold,
-        "confirmation_bars": confirm_bars,
-        "pivot_confirmation_policy": "closed_h1_multi_bar_retrace_after_candidate_extreme",
+        "confirmation_close": x["c"],
         "closed_candles": len(candles),
     }
 
 
 def analyze(rows, now_ms, symbol=SYMBOL):
-    """Last causally confirmed H1 swing, held until an opposite confirmed swing.
+    """Last causally confirmed H1 extreme, held across subsequent H1 candles.
 
-    A fresh high/low is only a candidate. It may keep extending for many H1 bars.
-    The regime changes only after a CLOSED H1 retracement large enough relative
-    to recent volatility. Reconstructing the latest confirmed swing from history
-    keeps the bias stable after restart and prevents in-the-moment flip-flops.
+    A pivot is known only when its following H1 candle has closed. Reconstructing
+    the latest pivot from closed history also keeps the bias stable after restart.
     """
     latest = _analyze_h1_pivot(rows, now_ms, symbol)
     if not latest.get("ready"):
@@ -262,7 +175,7 @@ def analyze(rows, now_ms, symbol=SYMBOL):
         # Reconstruct historical anchors, but never manufacture confirmation time.
         # A candidate may change the live H1 regime only if its confirmation candle
         # is actually closed relative to the real exchange observation timestamp.
-        candidate = _analyze_h1_pivot(sample, now_ms, symbol, require_fresh=False)
+        candidate = _analyze_h1_pivot(sample, now_ms, symbol)
         signal_close = float(candidate.get("signal_candle_close_time") or 0)
         causally_closed = signal_close > 0 and signal_close <= float(now_ms) - 1000
         if (candidate.get("ready") and candidate.get("entry_side") in (-1, 1)
@@ -272,62 +185,36 @@ def analyze(rows, now_ms, symbol=SYMBOL):
     result.update(last_candle_time=candles[-1]["t"], closed_candles=len(candles),
                   h1_direction_anchor=True, execution_interval=M15_INTERVAL,
                   anchor_confirmed=bool(anchor))
-    result.update(pending_extreme(rows, now_ms, result.get("entry_side", 0), result.get("pivot_price")))
+    result.update(pending_extreme(rows, now_ms, result.get("entry_side", 0)))
     return result
 
 
-def pending_extreme(rows, now_ms, side, anchor_pivot_price=None):
-    """Diagnostic-only candidate extreme; never blocks lower-timeframe execution.
+def pending_extreme(rows, now_ms, side):
+    """Pause old-side entries at a possible opposite H1 extreme, never flip early.
 
-    The confirmed H1 local is a persistent DIRECTION VECTOR until an opposite
-    H1 swing is fully confirmed. Price may extend beyond the active local while
-    the M1/M3/M5 + M15 caterpillar keeps exiting/re-entering in that same vector.
-    Pending highs/lows are therefore displayed for context only and MUST NOT
-    pause entries, exits or re-entries.
+    The last closed H1 bar must set an extreme against its four predecessors.
+    A live following bar must preserve that extreme and recoil by at least
+    0.15%. Its final close is still required to confirm a new direction.
     """
-    result = {"entry_blocked": False, "pending_pivot_type": None,
-              "pending_pivot_price": None, "entry_block_reason": None,
-              "pending_is_diagnostic_only": True}
+    result = {"entry_blocked": False, "pending_pivot_type": None}
     candles = completed_candles(rows, now_ms)
     if side not in (-1, 1) or len(candles) < PIVOT_LOOKBACK + 1:
         return result
     p = candles[-1]
     prior = candles[-1-PIVOT_LOOKBACK:-1]
-
-    current_rows = _completed(rows, float(now_ms) + 3_600_001, 3_600_000)
-    current = [x for x in current_rows
-               if x["t"] == p["t"] + 3_600_000 and x["t"] <= now_ms < x["T"] + 1001]
-    x = current[-1] if current else None
-
-    anchor = _f(anchor_pivot_price)
-    if anchor is not None and anchor > 0:
-        if side > 0:
-            newest_low = min(p["l"], x["l"] if x else p["l"])
-            if newest_low < anchor:
-                result.update(pending_pivot_type="LOCAL_LOW",
-                              pending_pivot_price=newest_low,
-                              pending_pivot_candle_time=x["t"] if x and x["l"] <= p["l"] else p["t"],
-                              entry_block_reason="same_side_h1_low_extension_diagnostic_only")
-                return result
-        else:
-            newest_high = max(p["h"], x["h"] if x else p["h"])
-            if newest_high > anchor:
-                result.update(pending_pivot_type="LOCAL_HIGH",
-                              pending_pivot_price=newest_high,
-                              pending_pivot_candle_time=x["t"] if x and x["h"] >= p["h"] else p["t"],
-                              entry_block_reason="same_side_h1_high_extension_diagnostic_only")
-                return result
-
-    if not x:
+    current = _completed(rows, float(now_ms) + 3_600_001, 3_600_000)
+    current = [x for x in current if x["t"] == p["t"] + 3_600_000 and x["t"] <= now_ms < x["T"] + 1001]
+    if not current:
         return result
-    high = side > 0 and p["h"] >= max(z["h"] for z in prior) and x["h"] < p["h"]
-    low = side < 0 and p["l"] <= min(z["l"] for z in prior) and x["l"] > p["l"]
+    x = current[-1]
+    high = side > 0 and p["h"] >= max(z["h"] for z in prior) and x["h"] < p["h"] and (p["h"]-x["c"])/p["h"] >= .0015
+    low = side < 0 and p["l"] <= min(z["l"] for z in prior) and x["l"] > p["l"] and (x["c"]-p["l"])/p["l"] >= .0015
     if high or low:
-        result.update(pending_pivot_type="LOCAL_HIGH" if high else "LOCAL_LOW",
-                      pending_pivot_price=p["h"] if high else p["l"],
-                      pending_pivot_candle_time=p["t"],
-                      entry_block_reason="opposite_h1_candidate_diagnostic_only")
+        result.update(entry_blocked=True, pending_pivot_type="LOCAL_HIGH" if high else "LOCAL_LOW",
+                      pending_pivot_price=p["h"] if high else p["l"], pending_pivot_candle_time=p["t"],
+                      entry_block_reason="opposite_h1_extreme_awaiting_closed_confirmation")
     return result
+
 
 def analyze_h1_context(rows, now_ms, symbol=SYMBOL):
     candles = _completed(rows, now_ms, 3_600_000)
@@ -492,21 +379,13 @@ def position_exit(position, analysis, mark):
     mark = _f(mark)
     if side not in (-1, 1) or entry is None or mark is None:
         return None
-
-    # Never allow an older H1 anchor to invalidate a position opened from a
-    # newer confirmed local. This timestamp gate MUST run before any side check.
-    features = position.get("features") or {}
-    entry_candle = (position.get("signal_candle_time")
-                    or features.get("origin_h1_signal_candle")
-                    or features.get("signal_candle_time"))
-    signal_candle = analysis.get("signal_candle_time")
-    if entry_candle is None or signal_candle is None:
-        return None
-    if int(signal_candle) <= int(entry_candle):
-        return None
-
     if analysis.get("h1_direction_anchor") and int(analysis.get("entry_side") or 0) == -side:
         return "opposite_local_high" if side > 0 else "opposite_local_low"
+    entry_candle = position.get("signal_candle_time")
+    signal_candle = analysis.get("signal_candle_time")
+    if entry_candle is not None and signal_candle is not None and signal_candle <= entry_candle:
+        return None
+
     if side > 0 and analysis.get("local_high"):
         return "opposite_local_high"
     if side < 0 and analysis.get("local_low"):
