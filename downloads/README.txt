@@ -1,0 +1,1 @@
+PANDORA PAPER handoff package. Read START_HERE.md inside. Includes exact audited source ZIP, tests and deployment instructions. No real orders or production database. SHA256: 8a735efcc99f6076410b3e99f6513362a0b5880c676ff96aabd9b5dbf82aa6ac
