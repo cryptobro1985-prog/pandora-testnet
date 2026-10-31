@@ -9,6 +9,14 @@ def _n(v,digits=4):
 def _m(v):
     try:return f"$ {float(v):+,.2f}"
     except:return "—"
+def _pct(v):
+    try:return f"{float(v):+,.2f}%"
+    except:return "—"
+def _pnl_pair(pnl,basis):
+    try:
+        p=float(pnl); b=float(basis)
+        return f"$ {p:+,.2f} / {((p/b)*100):+,.2f}%" if b else f"$ {p:+,.2f} / —"
+    except:return "—"
 def _side(v):
     if v in (1,"1","LONG","long"):return "LONG"
     if v in (-1,"-1","SHORT","short"):return "SHORT"
@@ -24,7 +32,7 @@ def _cards(primary):
     return [
       ("START","$500.00"),
       ("EQUITY",_m(primary.get("total_equity"))),
-      ("TOTAL PnL",_m(realized+unreal)),
+      ("TOTAL PnL",_pnl_pair(realized+unreal,primary.get("starting_equity") or 500.0)),
       ("REALIZED",_m(realized)),
       ("OPEN",_m(unreal)),
       ("STARTED",primary.get("started_at") or primary.get("account_started_at") or "—"),
@@ -44,7 +52,7 @@ def _history(primary):
     for p in primary.get("closed_trades") or []:
         f=p.get("features") or {}
         rows.append([p.get("closed"),p.get("symbol"),_side(p.get("side")),_n(p.get("entry")),_n(p.get("exit")),
-          _m(p.get("pnl")),f.get("entry_kind") or "—",p.get("reason") or "—",
+          _pnl_pair(p.get("pnl"),p.get("margin") or p.get("margin_usd")),f.get("entry_kind") or "—",p.get("reason") or "—",
           _n(f.get("mfe_roe_pct"),2),_n(f.get("mae_roe_pct"),2)])
     return rows
 
@@ -79,7 +87,7 @@ def render(data):
 
     def panel(title,subtitle,primary,pivots):
         cards='<div class="cards">'+"".join("<article><small>"+_e(k)+"</small><strong>"+_e(v)+"</strong></article>" for k,v in _cards(primary))+"</div>"
-        return '<section class="strategy"><h2>'+_e(title)+'</h2><p class="sub">'+_e(subtitle)+'</p>'+cards+          '<h3>H1 LOCALS</h3>'+_table(["TOKEN","LOCAL","PIVOT","DIRECTION","PENDING","POLICY"],pivots)+          '<h3>OPEN POSITIONS</h3>'+_table(["TOKEN","SIDE","ENTRY","MARK","LEV","MARGIN","PnL","MFE %","MAE %"],_positions(primary))+          '<h3>TRADE HISTORY</h3>'+_table(["CLOSED","TOKEN","SIDE","ENTRY","EXIT","PnL $","ENTRY TYPE","EXIT","MFE %","MAE %"],_history(primary))+'</section>'
+        return '<section class="strategy"><h2>'+_e(title)+'</h2><p class="sub">'+_e(subtitle)+'</p>'+cards+          '<h3>H1 LOCALS</h3>'+_table(["TOKEN","LOCAL","PIVOT","DIRECTION","PENDING","POLICY"],pivots)+          '<h3>OPEN POSITIONS</h3>'+_table(["TOKEN","SIDE","ENTRY","MARK","LEV","MARGIN","PnL","MFE %","MAE %"],_positions(primary))+          '<h3>TRADE HISTORY</h3>'+_table(["CLOSED","TOKEN","SIDE","ENTRY","EXIT","PnL $ / %","ENTRY TYPE","EXIT","MFE %","MAE %"],_history(primary))+'</section>'
 
     body='<header><div><b>PANDORA</b><span>STRATEGY 1 · LIVE A/B PAPER</span></div><i>'+("LIVE ENGINE" if health.get("engine_active") else "ENGINE WAIT")+"</i></header>"
     body+='<section><h2>BYBIT VOLATILITY DISCOVERY</h2><p class="sub">Top selected USDT-linear movers by absolute 24h change. Same candidate pool is fed to both 1.1 and 1.2; actual entries still follow each strategy.</p>'+_table(["TOKEN","MOVE","24H %","24H RANGE %","TURNOVER","LAST"],disc_rows)+'</section>'
