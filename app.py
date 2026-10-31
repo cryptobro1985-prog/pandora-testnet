@@ -116,8 +116,8 @@ def pinit():
  restore_state()
  global S11,S13,S14
  S11=LegacyStrategy11(pg,STORE,LEGACY_MARKET_OBS,current_entry_price,
-  lambda: copy.deepcopy(S.get("_prices",{})),paper_pnl,FEE,now)
- S11.ensure_schema("reset_2026_11_01_historical_848b3c6_clean_500_v1")
+  lambda: copy.deepcopy(S.get("_prices",{})),paper_pnl,FEE,now,_local_m15_candles)
+ S11.ensure_schema("reset_2026_11_01_exact_848b3c6_clean_500_v2")
  S13=Strategy13(pg,STORE,current_entry_price,lambda: copy.deepcopy(S.get("_prices",{})),paper_pnl,FEE,now)
  S13.ensure_schema("reset_2026_10_31_strategy13_pure_h1_500_v1")
  S14=Strategy14(pg,STORE,MARKET_OBS,current_entry_price,lambda: copy.deepcopy(S.get("_prices",{})),paper_pnl,FEE,now)
@@ -137,15 +137,16 @@ def accept_local_candles(data,history=False):
  stamp=time.monotonic();wall=int(time.time()*1000)
  with _LOCAL_CANDLE_CACHE_LOCK:
   for row in rows:
-   if not isinstance(row,dict) or row.get('i')!='1h':continue
+   if not isinstance(row,dict) or row.get('i') not in ('1h','15m'):continue
    symbol=row.get('s')
    if symbol not in set(strategy1_runtime_symbols()):continue
    try:
     t,T=int(row['t']),int(row['T']);o,h,l,c,v=[float(row[k]) for k in ('o','h','l','c','v')]
     if not all(math.isfinite(x) for x in (o,h,l,c,v)) or min(o,h,l,c)<=0 or v<0:continue
-    if not 3599000<=T-t<=3600000 or not l<=min(o,c)<=max(o,c)<=h or t>wall+1000:continue
+    expected=3600000 if row.get('i')=='1h' else 900000
+    if not expected-1000<=T-t<=expected or not l<=min(o,c)<=max(o,c)<=h or t>wall+1000:continue
    except (KeyError,ValueError,TypeError):continue
-   key=(symbol,'1h',120);old=_LOCAL_CANDLE_CACHE.get(key)
+   key=(symbol,row.get('i'),120 if row.get('i')=='1h' else 48);old=_LOCAL_CANDLE_CACHE.get(key)
    merged={int(r['t']):r for r in old[1]} if old else {}
    if not history or t not in merged or T<wall-1000:merged[t]=dict(row)
    _LOCAL_CANDLE_CACHE[key]=(stamp,[merged[k] for k in sorted(merged)][-125:],wall)
@@ -170,6 +171,11 @@ def checkpoint_local_candles():
 def _local_h1_candles(symbol):
  with _LOCAL_CANDLE_CACHE_LOCK:item=_LOCAL_CANDLE_CACHE.get((symbol,'1h',120))
  if not item:raise RuntimeError('closed_h1_history_unavailable:'+symbol)
+ return copy.deepcopy(item[1]),int(time.time()*1000)
+
+def _local_m15_candles(symbol):
+ with _LOCAL_CANDLE_CACHE_LOCK:item=_LOCAL_CANDLE_CACHE.get((symbol,'15m',48))
+ if not item:raise RuntimeError('m15_history_unavailable:'+symbol)
  return copy.deepcopy(item[1]),int(time.time()*1000)
 
 
