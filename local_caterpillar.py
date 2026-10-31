@@ -78,29 +78,39 @@ def _threshold(execution_context=None, fraction=.15):
     return max(.0006, min(.0015, .008 * fraction))
 
 def initial_h1_entry_candidate(symbol, analysis, execution_context, flow, now_epoch):
-    """H1 confirmed direction plus fresh actual trades; no candle execution gate."""
-    result = dict(symbol=symbol, eligible=False, policy="h1_executed_flow_initial_v17")
+    """Bybit PAPER initial entry: confirmed H1 direction + fresh executed-flow dominance.
+
+    Historical 2026-10-29 initial flow policy: no 15/30/60s agreement,
+    60-second warmup, arbitrary count/notional floor or re-entry threshold.
+    Caterpillar's separate entry_candidate/reentry_ready rules are unchanged.
+    """
+    result = dict(symbol=symbol, eligible=False, policy="h1_confirmed_flow_initial_restored")
     side = (analysis or {}).get("entry_side")
-    profile = _flow_profile(flow, side)
-    count = _f((flow or {}).get("trade_count_60s"))
-    notional = _f((flow or {}).get("observed_notional_60s"))
-    coverage = _f((flow or {}).get("trade_coverage_seconds"))
-    age = _f((flow or {}).get("latest_trade_age_seconds"))
-    stamp = _f(now_epoch)
-    if not analysis or not analysis.get("ready") or not analysis.get("anchor_confirmed") or not analysis.get("h1_direction_anchor") or side not in (-1, 1):
-        result["reason"] = "confirmed_h1_local_unavailable"; return result
+    if (not analysis or not analysis.get("ready")
+            or not analysis.get("anchor_confirmed")
+            or not analysis.get("h1_direction_anchor")
+            or side not in (-1, 1)):
+        result["reason"] = "confirmed_h1_local_unavailable"
+        return result
     if analysis.get("entry_blocked"):
-        result["reason"] = "opposite_h1_confirmation_pending"; return result
-    if stamp is None or profile is None or age is None or age > 15 or coverage is None or coverage < 60 or count is None or count < 5 or notional is None or notional < 100:
-        result["reason"] = "fresh_executed_flow_unavailable"; return result
-    if not profile["resumed"]:
-        result["reason"] = "executed_flow_not_aligned"; return result
-    result.update(eligible=True, reason="h1_m1_m3_m5_flow_initial", side=side,
-                  recovery_score=0, adverse_score=0,
-                  aligned_flow=profile["60s"], aligned_flow_15s=profile["15s"],
-                  aligned_flow_30s=profile["30s"], observed_notional_60s=notional,
-                  trade_count_60s=count, observed_at_ms=int(stamp * 1000),
-                  rank_key=[1, profile["15s"], profile["30s"], notional])
+        result["reason"] = "opposite_h1_confirmation_pending"
+        return result
+    # A stale tape is NOT an entry signal. Transport failures must be repaired,
+    # never bypassed by injecting synthetic trade flow.
+    aligned = _flow(flow)
+    stamp = _f(now_epoch)
+    if stamp is None or aligned is None:
+        result["reason"] = "fresh_executed_flow_unavailable"
+        return result
+    pressure = side * aligned
+    if pressure <= 0:
+        result["reason"] = "executed_flow_against_h1"
+        return result
+    result.update(
+        eligible=True, reason="h1_confirmed_local_plus_executed_flow",
+        side=side, aligned_flow=pressure, observed_at_ms=int(stamp * 1000),
+        rank_key=[pressure, 0, 0, 0],
+    )
     return result
 
 def entry_candidate(symbol, analysis, execution_context, flow, now_epoch):
