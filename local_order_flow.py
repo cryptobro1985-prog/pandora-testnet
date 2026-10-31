@@ -92,7 +92,7 @@ def _candidate(symbol, analysis, execution_context, flow):
     )
     profile = flow_profile(flow, side)
     resumed = bool(isinstance(execution_context, dict) and execution_context.get("resumption_observed"))
-    eligible = bool(h1 and profile and profile["aligned_now"] and resumed)
+    eligible = bool(h1 and profile and profile["m5_ready"] and profile["aligned_now"] and resumed)
 
     if eligible:
         reason = "h1_side_resumed_after_counterflow"
@@ -100,6 +100,8 @@ def _candidate(symbol, analysis, execution_context, flow):
         reason = "waiting_for_h1_local"
     elif profile is None:
         reason = "waiting_for_fresh_executed_flow"
+    elif not profile["m5_ready"]:
+        reason = "waiting_for_full_m1_m3_m5_statistics"
     elif profile["counter_now"]:
         reason = "counterflow_active_waiting_for_exhaustion"
     elif profile["aligned_now"] and not resumed:
@@ -201,6 +203,7 @@ def reentry_ready(side, m15, mark, watch, flow, stamp):
     event_epoch = profile.get("event_epoch") if profile else None
     return bool(
         profile
+        and profile["m5_ready"]
         and profile["aligned_now"]
         and event_epoch is not None
         and opposite_epoch is not None
