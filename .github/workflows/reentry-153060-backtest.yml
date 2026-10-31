@@ -1,0 +1,25 @@
+name: Reentry 15-30-60 historical backtest
+
+on:
+  push:
+    branches:
+      - research/reentry-153060-20261031
+  workflow_dispatch:
+
+jobs:
+  backtest:
+    strategy:
+      fail-fast: false
+      matrix:
+        date: ["2026-10-29","2026-10-30"]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run isolated historical replay
+        env:
+          BACKTEST_DATE: ${{ matrix.date }}
+        run: python research/reentry_153060_backtest.py
