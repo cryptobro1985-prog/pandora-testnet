@@ -263,6 +263,8 @@ class LegacyStrategy11:
               "exit_price":mark,"exit_at":self.now(),"expires_epoch":0.0,
               "reentries":int(features.get("swing_reentries",0) or 0),
               "context":copy.deepcopy(watch_context or {})}
+            if reason=="m15_weakening_profit_exit":
+                watch["context"].update(phase="WAIT_RESUMPTION",counter_pressure_seen=False,pullback_extreme=mark)
             # Exact profitable runtime behavior: MFE/risk exits DO NOT imply
             # that a new pullback has already completed. They arm WAIT_PULLBACK.
             opposite_flow_exit=reason in (
