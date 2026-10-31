@@ -1,0 +1,19 @@
+{
+  "suite": "active_strategy1_release",
+  "modules": [
+    "tests.test_accounting",
+    "tests.test_bybit_stream_restoration",
+    "tests.test_pressure_structure",
+    "tests.test_strategy1_end_to_end",
+    "tests.test_strategy1_h1_runtime_guard",
+    "tests.test_strategy1_history_preservation",
+    "tests.test_strategy1_restoration"
+  ],
+  "tests_run": 49,
+  "failures": [],
+  "errors": [],
+  "skipped": [],
+  "successful": true,
+  "live_exchange_verified": false,
+  "note": "WebSocket integration uses a local server with synthetic Bybit-format frames."
+}

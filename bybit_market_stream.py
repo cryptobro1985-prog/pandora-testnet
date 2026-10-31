@@ -2,10 +2,11 @@
 
 # Strategy 1 live transport: stale-tape recovery/reconnect is intentionally fail-closed.
 
-One venue for executed flow, marks and H1/M15/1m candles. Public only: no
+One venue for executed flow, marks and closed H1 candles. Public only: no
 authentication and no order placement. Fails closed on stale trade tape.
 """
 import json
+from collections import deque
 import time
 import websocket
 import urllib.parse
@@ -20,9 +21,9 @@ def _pair(symbol):
     return str(symbol) + "USDT"
 
 
-def _legacy_candle(row):
+def _h1_candle(row):
     interval = str(row.get("interval") or "")
-    mapped = {"60": "1h", "15": "15m", "1": "1m"}.get(interval)
+    mapped = {"60": "1h"}.get(interval)
     if not mapped:
         return None
     try:
@@ -32,7 +33,7 @@ def _legacy_candle(row):
         if not symbol.endswith("USDT"):
             return None
         return {
-            "s": symbol[:-4], "i": mapped, "t": start, "T": end,
+            "s": symbol[:-4], "i": mapped, "t": start, "T": end, "venue": "bybit",
             "o": str(row["open"]), "h": str(row["high"]), "l": str(row["low"]),
             "c": str(row["close"]), "v": str(row.get("volume") or "0"),
             "n": 0,
@@ -40,48 +41,6 @@ def _legacy_candle(row):
     except (KeyError, TypeError, ValueError, OverflowError):
         return None
 
-
-def _recover_recent_trades(symbols, observations, max_age_seconds=120):
-    """Best-effort REST gap recovery before a stale shard is recycled."""
-    recovered = 0
-    now = time.time()
-    for symbol in symbols:
-        try:
-            query = urllib.parse.urlencode({
-                "category": "linear", "symbol": _pair(symbol), "limit": 200,
-            })
-            req = urllib.request.Request(
-                "https://api.bybit.com/v5/market/recent-trade?" + query,
-                headers={"User-Agent": "pandora-paper/1.0"},
-            )
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                payload = json.loads(resp.read().decode("utf-8"))
-            rows = ((payload.get("result") or {}).get("list") or [])
-            batch = []
-            seen = set()
-            for row in reversed(rows):
-                trade = normalize_bybit_public_trade(row)
-                age = now - (trade.exchange_epoch_ms / 1000.0)
-                if age < 0 or age > max_age_seconds:
-                    continue
-                key = (
-                    getattr(trade, "symbol", None),
-                    getattr(trade, "trade_id", None),
-                    trade.exchange_epoch_ms,
-                    getattr(trade, "price", None),
-                    getattr(trade, "size", None),
-                    getattr(trade, "side", None),
-                )
-                if key in seen:
-                    continue
-                seen.add(key)
-                batch.append(to_legacy_observation(trade))
-            if batch:
-                observations.ingest_trades(batch, time.time())
-                recovered += len(batch)
-        except Exception:
-            continue
-    return recovered
 
 def run_bybit_stream(observations, stop, symbols_provider, report,
                      url=DEFAULT_URL, on_mids=None, on_candles=None,
@@ -103,10 +62,23 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
             ws = websocket.create_connection(url, timeout=8, enable_multithread=True)
             ws.settimeout(2)
 
+            pending_trade_subscriptions = {}
+            confirmed_trade_symbols = set()
+            request_number = 0
+
             def send(op, topics):
+                nonlocal request_number
                 topics = list(topics)
                 for i in range(0, len(topics), 50):
-                    ws.send(json.dumps({"op": op, "args": topics[i:i+50]}))
+                    chunk = topics[i:i+50]
+                    request_number += 1
+                    request_id = f"{worker_name}:{request_number}"
+                    trades = {topic.split(".",1)[1][:-4] for topic in chunk if topic.startswith("publicTrade.")}
+                    if op == "subscribe" and trades:
+                        pending_trade_subscriptions[request_id] = trades
+                    elif op == "unsubscribe":
+                        confirmed_trade_symbols.difference_update(trades)
+                    ws.send(json.dumps({"op": op, "args": chunk, "req_id": request_id}))
 
             if subscribe_trades:
                 # Subscribe first, then require an explicit successful Bybit ACK before
@@ -117,7 +89,7 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
             if on_candles is not None:
                 topics = []
                 for s in sorted(candle_selected):
-                    topics += ["kline.60." + _pair(s), "kline.15." + _pair(s)]
+                    topics += ["kline.60." + _pair(s)]
                 send("subscribe", topics)
             if on_regime_candles is not None:
                 send("subscribe", ["kline.1." + _pair(s) for s in sorted(regime_selected)])
@@ -133,9 +105,11 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
             accepted_trades = stale_trades = 0
             per_symbol_receive = {s: 0.0 for s in selected}
             per_symbol_exchange = {s: 0.0 for s in selected}
+            latency_by_symbol = {s: deque(maxlen=2048) for s in selected}
+            mark_exchange_by_symbol = {}
             sequence_by_symbol = {}
             sequence_gaps = 0
-            trade_topics_confirmed = not subscribe_trades
+            trade_topics_confirmed = not subscribe_trades or not selected
             subscription_ack_deadline = now + 12.0
             trade_warmup_deadline = now + 45.0
             mids = {}
@@ -152,13 +126,14 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                         raise RuntimeError("bybit_stream_closed")
                     message = json.loads(raw)
                     last_received = time.time()
-                    observations.heartbeat(last_received)
+                    observations.heartbeat(last_received,owner=worker_name)
                     topic = str(message.get("topic") or "")
                     if topic.startswith("publicTrade."):
-                        trade_topics_confirmed = True
                         batch = []
                         for row in message.get("data") or []:
                             trade = normalize_bybit_public_trade(row)
+                            if trade is not None and (trade.symbol not in selected or topic != "publicTrade."+_pair(trade.symbol)):
+                                continue
                             ok, _reason = validate_latency(trade, int(last_received * 1000), max_age_ms=60000)
                             if not ok:
                                 stale_trades += 1
@@ -169,8 +144,9 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                             exch = trade.exchange_epoch_ms / 1000.0
                             last_trade_exchange = max(last_trade_exchange, exch)
                             if sym:
+                                latency_by_symbol.setdefault(sym, deque(maxlen=2048)).append(max(0.0,last_received-exch))
                                 per_symbol_receive[sym] = last_received
-                                per_symbol_exchange[sym] = exch
+                                per_symbol_exchange[sym] = max(exch,per_symbol_exchange.get(sym,0.0))
                                 try:
                                     seq = int(row.get("seq"))
                                     prev = sequence_by_symbol.get(sym)
@@ -180,33 +156,39 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                                 except (TypeError, ValueError):
                                     pass
                         if batch:
-                            observations.ingest_trades(batch, last_received)
-                            accepted_trades += len(batch)
+                            accepted_rows = []
+                            accepted = observations.ingest_trades(batch, last_received,owner=worker_name,accepted_rows=accepted_rows)
+                            accepted_trades += accepted
                             last_trade_receive = last_received
                             if on_trade_mids is not None:
                                 trade_mids = {}
-                                for item in batch:
-                                    try: trade_mids[str(item["coin"])] = float(item["px"])
+                                for item in accepted_rows:
+                                    try:
+                                        sym = str(item["coin"])
+                                        event_ms = float(item["time"])
+                                        if event_ms >= mark_exchange_by_symbol.get(sym,0):
+                                            trade_mids[sym] = float(item["px"])
+                                            mark_exchange_by_symbol[sym] = event_ms
                                     except (KeyError, TypeError, ValueError): pass
                                 if trade_mids: on_trade_mids(trade_mids)
                     elif topic.startswith("tickers.") and on_mids is not None:
                         data = message.get("data") or {}
                         rows = data if isinstance(data, list) else [data]
-                        changed = False
+                        changed = {}
                         for row in rows:
                             pair = str(row.get("symbol") or "")
                             price = row.get("lastPrice")
                             if pair.endswith("USDT") and price not in (None, ""):
                                 mids[pair[:-4]] = price
-                                changed = True
+                                changed[pair[:-4]] = price
                         if changed:
-                            on_mids(dict(mids))
+                            on_mids(changed)
                     elif topic.startswith("kline."):
                         topic_pair = topic.rsplit(".", 1)[-1]
                         for row in message.get("data") or []:
                             row = dict(row)
                             row.setdefault("symbol", topic_pair)
-                            candle = _legacy_candle(row)
+                            candle = _h1_candle(row)
                             if not candle:
                                 continue
                             if candle["i"] == "1m" and on_regime_candles is not None:
@@ -217,7 +199,9 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                         if message.get("success") is False:
                             raise RuntimeError("bybit_subscription_error:" + str(message.get("ret_msg") or "")[:120])
                         if subscribe_trades and message.get("success") is True:
-                            trade_topics_confirmed = True
+                            acknowledged = pending_trade_subscriptions.pop(str(message.get("req_id") or ""), set())
+                            confirmed_trade_symbols.update(acknowledged)
+                            trade_topics_confirmed = selected.issubset(confirmed_trade_symbols)
                 except websocket.WebSocketTimeoutException:
                     if time.time() - last_received > 30:
                         raise RuntimeError("bybit_heartbeat_stale")
@@ -249,6 +233,8 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                             send("unsubscribe", ["tickers." + _pair(s) for s in sorted(removed)])
                             send("subscribe", ["tickers." + _pair(s) for s in sorted(added)])
                         selected = desired
+                        trade_topics_confirmed = selected.issubset(confirmed_trade_symbols)
+                        subscription_ack_deadline = epoch + 12.0
                         for s in desired:
                             per_symbol_receive.setdefault(s, 0.0)
                             per_symbol_exchange.setdefault(s, 0.0)
@@ -263,8 +249,8 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                             desired_c = {s for s in desired_c if candle_filter(s)}
                         removed, added = candle_selected - desired_c, desired_c - candle_selected
                         old_topics=[];new_topics=[]
-                        for s in sorted(removed): old_topics += ["kline.60."+_pair(s),"kline.15."+_pair(s)]
-                        for s in sorted(added): new_topics += ["kline.60."+_pair(s),"kline.15."+_pair(s)]
+                        for s in sorted(removed): old_topics += ["kline.60."+_pair(s)]
+                        for s in sorted(added): new_topics += ["kline.60."+_pair(s)]
                         if old_topics: send("unsubscribe", old_topics)
                         if new_topics: send("subscribe", new_topics)
                         candle_selected = desired_c
@@ -276,7 +262,15 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                     for s in sorted(selected):
                         recv = per_symbol_receive.get(s) or 0.0
                         exch = per_symbol_exchange.get(s) or 0.0
+                        latencies = sorted(latency_by_symbol.get(s,()))
+                        def percentile(q):
+                            return latencies[min(len(latencies)-1,int((len(latencies)-1)*q))] if latencies else None
                         symbol_health[s] = {
+                            "exchange_epoch": exch or None, "receive_epoch": recv or None,
+                            "latency_sample_count": len(latencies),
+                            "latency_p50_seconds": percentile(.50),
+                            "latency_p95_seconds": percentile(.95),
+                            "latency_p99_seconds": percentile(.99),
                             "receive_age_seconds": round(epoch-recv,3) if recv else None,
                             "exchange_lag_seconds": round(epoch-exch,3) if exch else None,
                             "fresh_15s": bool(recv and exch and epoch-recv <= 15 and epoch-exch <= 15),
@@ -289,6 +283,7 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                         "last_trade_exchange_lag_seconds": round(exchange_lag,3) if exchange_lag is not None else None,
                         "accepted_trades": accepted_trades, "stale_trades_rejected": stale_trades,
                         "subscription_confirmed": trade_topics_confirmed,
+                        "confirmed_trade_symbols": sorted(confirmed_trade_symbols),
                         "fresh_symbols_15s": fresh_symbols,
                         "symbol_health": symbol_health,
                         "sequence_regressions": sequence_gaps,

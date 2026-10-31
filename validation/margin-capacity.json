@@ -1,0 +1,16 @@
+{
+  "synthetic_fixture": true,
+  "live_exchange": false,
+  "simultaneous_positions": 5,
+  "equity_after_modeled_fees": 488.99755501222495,
+  "reserved_margin": 488.99755501222495,
+  "free_margin": 0.0,
+  "rejected": {
+    "GRASS": "INSUFFICIENT_FREE_MARGIN",
+    "HYPE": "INSUFFICIENT_FREE_MARGIN",
+    "LIT": "INSUFFICIENT_FREE_MARGIN",
+    "TAO": "INSUFFICIENT_FREE_MARGIN",
+    "ZEC": "INSUFFICIENT_FREE_MARGIN"
+  },
+  "sizing": "20% current equity, capped by free margin with fee reserve"
+}

@@ -80,7 +80,7 @@ class TransactionTimeoutTests(unittest.TestCase):
             store.fence(conn)
         self.assertEqual(conn.statements[0][0], "SET LOCAL lock_timeout = '2s'")
         self.assertEqual(conn.statements[1][0], "SET LOCAL statement_timeout = '5s'")
-        self.assertIn("FOR UPDATE", conn.statements[2][0])
+        self.assertIn("FOR SHARE", conn.statements[2][0])
 
 
 if __name__ == "__main__":

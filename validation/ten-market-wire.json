@@ -1,0 +1,72 @@
+{
+  "synthetic_fixture": true,
+  "live_exchange": false,
+  "tokens": {
+    "TAO": {
+      "opens": 2,
+      "closes": 2,
+      "reentries": 1,
+      "pnl_net_fees": -17.766186372058307
+    },
+    "HYPE": {
+      "opens": 2,
+      "closes": 2,
+      "reentries": 1,
+      "pnl_net_fees": -7.729862155584527
+    },
+    "LIT": {
+      "opens": 2,
+      "closes": 2,
+      "reentries": 1,
+      "pnl_net_fees": -20.286780453478634
+    },
+    "NEAR": {
+      "opens": 2,
+      "closes": 2,
+      "reentries": 1,
+      "pnl_net_fees": -25.258855236452625
+    },
+    "INIT": {
+      "opens": 2,
+      "closes": 2,
+      "reentries": 1,
+      "pnl_net_fees": -26.646517155157287
+    },
+    "GRASS": {
+      "opens": 2,
+      "closes": 2,
+      "reentries": 1,
+      "pnl_net_fees": -16.840982521755144
+    },
+    "ZEC": {
+      "opens": 2,
+      "closes": 2,
+      "reentries": 1,
+      "pnl_net_fees": -18.79177017992877
+    },
+    "BTC": {
+      "opens": 2,
+      "closes": 2,
+      "reentries": 1,
+      "pnl_net_fees": -23.88032236340178
+    },
+    "SOL": {
+      "opens": 2,
+      "closes": 2,
+      "reentries": 1,
+      "pnl_net_fees": -22.636714661984854
+    },
+    "ETH": {
+      "opens": 2,
+      "closes": 2,
+      "reentries": 1,
+      "pnl_net_fees": -21.401288313193504
+    }
+  },
+  "accepted_frames": 100,
+  "closed_trades": 20,
+  "starting_equity": 500,
+  "ending_equity": 298.7607205870046,
+  "realized_pnl": -201.23927941299544,
+  "transport": "real loopback WebSocket carrying synthetic Bybit publicTrade frames"
+}
