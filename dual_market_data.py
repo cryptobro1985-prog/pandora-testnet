@@ -15,7 +15,7 @@ class DualMarketData:
             bucket_seconds=5,
             retention_seconds=600,
             max_symbols=max(512, int(primary_kwargs.get("max_symbols", 64))),
-            max_trade_lag_seconds=60,
+            max_trade_lag_seconds=360,
             freshness_seconds=15,
             max_seen_per_symbol=8192,
         )
