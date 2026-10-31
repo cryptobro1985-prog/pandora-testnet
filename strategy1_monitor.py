@@ -6,6 +6,12 @@ def _e(v): return html.escape(str("—" if v is None else v), quote=True)
 def _n(v, digits=4):
     try: return f"{float(v):,.{digits}f}"
     except: return "—"
+
+def _side(v):
+    if v in (1, "1", "LONG", "long"): return "LONG"
+    if v in (-1, "-1", "SHORT", "short"): return "SHORT"
+    return "WAIT"
+
 def _m(v):
     try: return f"$ {float(v):+,.2f}"
     except: return "—"
@@ -35,7 +41,7 @@ def render(data):
     op=[]
     for p in positions:
         f=p.get("features") or {}
-        op.append([p.get("symbol"),"LONG" if p.get("side")==1 else "SHORT",_n(p.get("entry")),_n(p.get("mark")),p.get("leverage"),_m(p.get("margin_usd") or p.get("margin")),_m(p.get("unrealized_pnl")),_n(f.get("mfe_roe_pct"),2),_n(f.get("mae_roe_pct"),2)])
+        op.append([p.get("symbol"),_side(p.get("side")),_n(p.get("entry")),_n(p.get("mark")),p.get("leverage"),_m(p.get("margin_usd") or p.get("margin")),_m(p.get("unrealized_pnl")),_n(f.get("mfe_roe_pct"),2),_n(f.get("mae_roe_pct"),2)])
     hist=[]
     for p in primary.get("closed_trades") or []:
         f=p.get("features") or {}
