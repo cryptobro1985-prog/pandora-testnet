@@ -564,17 +564,17 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
  if watch_context:features["executed_flow_exit_context"]=watch_context
  features["actual_exit_reason"]=reason;features["actual_exit_mark"]=price
  watch=None
- if reason=='confirmed_counter_move_exit':
+ if reason in ("m1_m3_m5_mfe_preservation_exit","m1_m3_m5_risk_exit","m1_m3_confirmed_counterflow_exit"):
   watch={"symbol":symbol,"side":int(pos["side"]),
    "origin_signal_candle":int(features.get("origin_h1_signal_candle") or pos.get("signal_candle_time") or 0),
    "exit_price":price,"exit_at":now(),"expires_epoch":0.0,
    "reentries":int(features.get("swing_reentries",0) or 0),"context":{**copy.deepcopy(watch_context or {}),"exit_pressure_state":copy.deepcopy(features.get("pressure_state") or {})}}
-  # The opposite executed-flow trade was already witnessed at exit.
-  # Preserve its exchange timestamp to re-enter on the first later reversal.
-  opposite_flow_exit=reason=='confirmed_counter_move_exit'
+  # Preserve the exchange timestamp of the opposite executed-flow event so
+  # Caterpillar re-entry can only happen on a later M1/M3/M5 resumption.
+  opposite_flow_exit=True
   flow_at_exit=(watch_context or {}).get("flow_context") or {}
   try:
-   opposite_epoch=float(flow_at_exit["latest_trade_epoch"])
+   opposite_epoch=float(flow_at_exit["volume_window_end_epoch"])-float(flow_at_exit["latest_trade_age_seconds"])
    if not math.isfinite(opposite_epoch):opposite_epoch=None
   except (KeyError,TypeError,ValueError,OverflowError):opposite_epoch=None
   confirmed_opposite=bool(opposite_flow_exit and opposite_epoch is not None)
