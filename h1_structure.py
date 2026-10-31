@@ -1,9 +1,14 @@
 """Causal closed-H1 structure and observed MFE/MAE statistics."""
 import math
-POLICY="closed_h1_causal_structure"
+import statistics
+POLICY="closed_h1_adaptive_swing_v16"
 SYMBOL="BTC"
 INTERVAL="1h"
 PIVOT_LOOKBACK=4
+H1_PIVOT_MIN_RETRACE=0.004
+H1_PIVOT_RANGE_MULTIPLIER=0.75
+H1_PIVOT_MAX_RETRACE=0.035
+H1_PIVOT_SEARCH_BARS=24
 LEVERAGE=25.
 
 def _f(value):
@@ -40,12 +45,12 @@ def completed_candles(rows, now_ms):
     return _completed(rows, now_ms, 3_600_000)
 
 def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL, require_fresh=True):
-    """Causal H1 swing structure; no future bars or percent retracement gate.
+    """Adaptive causal H1 swing reconstruction using CLOSED candles only.
 
-    An extreme exceeds the preceding four closed hours. A later closed bar
-    confirms it only with a lower high (high), or higher low (low). An
-    ambiguous simultaneous confirmation never chooses a direction. Ties
-    extend the candidate. Confirmation records never move to an earlier time.
+    An extreme can extend for many H1 bars. The newest surviving candidate in
+    the rolling window owns the setup. It becomes a confirmed opposite swing
+    only after a volatility-normalized CLOSED-H1 retracement; a newer extreme
+    invalidates the older candidate instead of creating a premature flip.
     """
     candles = completed_candles(rows, now_ms)
     base = {"ready": False, "symbol": symbol, "policy": POLICY,
@@ -56,55 +61,95 @@ def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL, require_fresh=True):
         return {**base, "reason": "stale_h1_history"}
     if any(b["t"]-a["t"] != 3_600_000 for a,b in zip(candles,candles[1:])):
         return {**base, "reason": "gapped_h1_history"}
-    high = low = anchor = None
-    for i, bar in enumerate(candles):
-        confirmations = []
-        if high is not None:
-            if bar["h"] >= high["h"]:
-                high = None
-            else:
-                confirmations.append((-1, high))
-                high = None
-        if low is not None:
-            if bar["l"] <= low["l"]:
-                low = None
-            else:
-                confirmations.append((1, low))
-                low = None
-        # Never guess the ordering of two directions inside one hourly candle.
-        if len(confirmations) == 1:
-            side, pivot = confirmations[0]
-            if anchor is None or pivot["t"] > anchor["pivot_candle_time"]:
-                anchor = {
-                    "entry_side": side, "pivot_type": "LOCAL_LOW" if side > 0 else "LOCAL_HIGH",
-                    "pivot_price": pivot["l"] if side > 0 else pivot["h"],
-                    "pivot_candle_time": pivot["t"], "signal_candle_time": bar["t"],
-                    "signal_candle_close_time": bar["T"], "confirmation_close": bar["c"],
-                    "confirmation_bars": (bar["t"]-pivot["t"])//3_600_000,
-                    "pivot_confirmation_policy": "closed_h1_higher_low_after_extreme" if side > 0
-                        else "closed_h1_lower_high_after_extreme",
-                    "confirmation_evidence": {"pivot_high": pivot["h"], "pivot_low": pivot["l"],
-                        "confirm_high": bar["h"], "confirm_low": bar["l"],
-                        "preceding_hours": PIVOT_LOOKBACK},
-                    "local_low": side > 0, "local_high": side < 0,
-                }
-        if i >= PIVOT_LOOKBACK:
-            prior = candles[i-PIVOT_LOOKBACK:i]
-            if bar["h"] >= max(x["h"] for x in prior):
-                high = bar
-            if bar["l"] <= min(x["l"] for x in prior):
-                low = bar
-    return {**base, "ready": True, "interval": INTERVAL,
-            "entry_side": 0, "pivot_type": None, "pivot_price": None,
-            "long_weakening": False, "short_weakening": False,
-            **(anchor or {})}
+
+    chosen = None
+    newest = len(candles)-2
+    oldest = max(PIVOT_LOOKBACK, len(candles)-1-H1_PIVOT_SEARCH_BARS)
+    for p_idx in range(newest, oldest-1, -1):
+        p = candles[p_idx]
+        prior = candles[p_idx-PIVOT_LOOKBACK:p_idx]
+        after = candles[p_idx+1:]
+        if len(prior) < PIVOT_LOOKBACK or not after:
+            continue
+        candidate_low = p["l"] <= min(z["l"] for z in prior)
+        candidate_high = p["h"] >= max(z["h"] for z in prior)
+        if not (candidate_low or candidate_high):
+            continue
+
+        hist = candles[max(0,p_idx-12):p_idx]
+        ranges = [(z["h"]-z["l"])/max(z["c"],1e-12) for z in hist]
+        typical = statistics.median(ranges) if ranges else H1_PIVOT_MIN_RETRACE
+        threshold = max(H1_PIVOT_MIN_RETRACE,
+                        min(H1_PIVOT_MAX_RETRACE, typical*H1_PIVOT_RANGE_MULTIPLIER))
+
+        low_valid, high_valid = bool(candidate_low), bool(candidate_high)
+        low_confirm = high_confirm = None
+        low_retrace = high_retrace = 0.0
+        for z in after:
+            if low_valid:
+                if z["l"] <= p["l"]:
+                    low_valid = False
+                else:
+                    r = z["c"]/p["l"]-1.0
+                    low_retrace = max(low_retrace,r)
+                    if low_confirm is None and r >= threshold:
+                        low_confirm = z
+            if high_valid:
+                if z["h"] >= p["h"]:
+                    high_valid = False
+                else:
+                    r = 1.0-z["c"]/p["h"]
+                    high_retrace = max(high_retrace,r)
+                    if high_confirm is None and r >= threshold:
+                        high_confirm = z
+
+        options=[]
+        if low_valid and low_confirm is not None: options.append((int(low_confirm["t"]),1,low_confirm,low_retrace))
+        if high_valid and high_confirm is not None: options.append((int(high_confirm["t"]),-1,high_confirm,high_retrace))
+        if not options:
+            continue
+        # If one candle would ambiguously confirm both directions, do not guess
+        # intrabar ordering. Otherwise use the first causal confirmation.
+        if len(options)==2 and options[0][0]==options[1][0]:
+            continue
+        _, side, confirm, retrace = min(options,key=lambda x:x[0])
+        chosen={"p":p,"side":side,"confirm":confirm,"threshold":threshold,
+                "retrace":retrace,
+                "candidate_low":candidate_low,"candidate_high":candidate_high}
+        break
+
+    result={**base,"ready":True,"interval":INTERVAL,"entry_side":0,
+            "pivot_type":None,"pivot_price":None,"long_weakening":False,
+            "short_weakening":False}
+    if chosen is None:
+        return result
+    p=chosen["p"]; side=chosen["side"]; confirm=chosen["confirm"]
+    result.update({
+        "entry_side":side,
+        "pivot_type":"LOCAL_LOW" if side>0 else "LOCAL_HIGH",
+        "pivot_price":p["l"] if side>0 else p["h"],
+        "pivot_candle_time":p["t"],
+        "signal_candle_time":confirm["t"],
+        "signal_candle_close_time":confirm["T"],
+        "confirmation_close":confirm["c"],
+        "confirmation_bars":max(1,int((confirm["t"]-p["t"])//3_600_000)),
+        "required_retrace":chosen["threshold"],
+        "confirmation_retrace":chosen["retrace"],
+        "pivot_confirmation_policy":"closed_h1_adaptive_retrace_after_extending_extreme",
+        "confirmation_evidence":{"pivot_high":p["h"],"pivot_low":p["l"],
+            "confirm_high":confirm["h"],"confirm_low":confirm["l"],
+            "preceding_hours":PIVOT_LOOKBACK,"search_hours":H1_PIVOT_SEARCH_BARS,
+            "typical_range_multiplier":H1_PIVOT_RANGE_MULTIPLIER},
+        "local_low":side>0,"local_high":side<0,
+    })
+    return result
 
 def analyze(rows, now_ms, symbol=SYMBOL):
     """Last causally confirmed H1 swing, held until an opposite confirmed swing.
 
     A fresh high/low is only a candidate. It may keep extending for many H1 bars.
     The regime changes only after a CLOSED H1 retracement large enough relative
-    to recent volatility. Reconstructing the latest confirmed swing from history
+    to recent volatility; extending extremes keep moving the candidate. Reconstructing the latest confirmed swing from history
     keeps the bias stable after restart and prevents in-the-moment flip-flops.
     """
     latest = _analyze_h1_pivot(rows, now_ms, symbol)
