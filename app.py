@@ -48,7 +48,7 @@ def log_learning_decision(ident,strategy,symbol,side,action,reason,entry_price=N
  except Exception:return False
 
 def apply_local4_user_reset():
- marker='reset_2026_10_31_exact_proven_m1_m3_m5'
+ marker='reset_2026_10_31_exact_proven_m1_m3_m5_final_clean'
  with pg() as db:
   with db.transaction():
    db.execute("create table if not exists local_v12_trade_history_archive_20261031 as select * from local_v12_trade_history with no data")
