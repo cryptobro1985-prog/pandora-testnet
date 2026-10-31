@@ -35,7 +35,7 @@ def _flow(context):
     if not isinstance(context, dict) or not context.get("trade_data_fresh"):
         return None
     age = _f(context.get("latest_trade_age_seconds"))
-    if age is not None and not -1 <= age <= 15:
+    if age is not None and not -1 <= age <= 60:
         return None
     value = _f(context.get("flow_imbalance"))
     return value if value is not None and -1 <= value <= 1 else None
@@ -50,7 +50,7 @@ def _flow_profile(context, side):
     if side not in (-1, 1) or not isinstance(context, dict) or not context.get("trade_data_fresh"):
         return None
     age = _f(context.get("latest_trade_age_seconds"))
-    if age is not None and not -1 <= age <= 15:
+    if age is not None and not -1 <= age <= 60:
         return None
     vals = {}
     for key, fallback in (("15s","flow_imbalance_15s"),("30s","flow_imbalance_30s"),
