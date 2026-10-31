@@ -105,7 +105,7 @@ class RollingMarketData:
             return accepted
 
     def flow_context(self,symbol,epoch=None):
-        """Fresh Bybit Public Trades with causal 15/30/60/180/300s executed-flow windows.
+        """Fresh Bybit Public Trades with causal M1/M3/M5 executed-flow windows.
 
         Transport ownership/freshness remains unchanged. Windows contain only
         accepted exchange executions; no candles, interpolation or invented volume.
@@ -131,20 +131,18 @@ class RollingMarketData:
                 buy=sum(r[2] for r in rows if r[3]=='B');sell=sum(r[2] for r in rows if r[3]=='A')
                 return rows,buy,sell
             def imbalance(buy,sell): return (buy-sell)/(buy+sell) if buy+sell else 0.
-            r15,b15,s15=window(15);r30,b30,s30=window(30);r60,b60,s60=window(60)
+            r60,b60,s60=window(60)
             if not r60 or b60+s60<=0:return out
-            i15,i30,i60=imbalance(b15,s15),imbalance(b30,s30),imbalance(b60,s60)
+            i60=imbalance(b60,s60)
             levels=list(state['levels']);dominant=1 if b60>s60 else -1 if s60>b60 else 0
             direction=1 if len(levels)==2 and levels[-1]['price']>levels[0]['price'] else -1 if len(levels)==2 and levels[-1]['price']<levels[0]['price'] else 0
             control=dominant if direction==dominant and direction else 0
             out.update(trade_data_fresh=True,buy_notional=b60,sell_notional=s60,flow_imbalance=i60,
-                       buy_volume_15s=b15,sell_volume_15s=s15,trade_count_15s=len(r15),flow_imbalance_15s=i15,
-                       buy_volume_30s=b30,sell_volume_30s=s30,trade_count_30s=len(r30),flow_imbalance_30s=i30,
                        buy_volume_60s=b60,sell_volume_60s=s60,trade_count_60s=len(r60),observed_notional_60s=b60+s60,
-                       flow_delta_15_60=i15-i60,flow_delta_30_60=i30-i60,volume_window_end_epoch=epoch,
+                       volume_window_end_epoch=epoch,
                        price_direction=direction,control_side=control,previous_price=levels[0]['price'] if len(levels)==2 else None,
                        last_price=levels[-1]['price'],pressure_phase='CONTROL_CONFIRMED' if control else 'PRESSURE_WITHOUT_PRICE_CONFIRMATION',
-                       observation_basis='executed_public_trades_15_30_60_180_300s',price_levels=len(levels))
+                       observation_basis='executed_public_trades_m1_m3_m5',price_levels=len(levels))
             if coverage>=180:
                 r,b,s=window(180);out.update(flow_imbalance_180s=imbalance(b,s),trade_count_180s=len(r))
             if coverage>=300:
