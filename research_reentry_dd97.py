@@ -103,9 +103,15 @@ def flow_at(buckets,t,side):
       "raw":{"i15":i15,"i30":i30,"i60":i60,"c15":c15,"c30":c30,"c60":c60}
     }
 
-def pnl(pos,exit_price):
+def gross_pnl(pos,exit_price):
     move=pos["side"]*(exit_price/pos["entry"]-1.0)
-    return pos["notional"]*(move-2*FEE)
+    return pos["notional"]*move
+
+def fees(pos):
+    return pos["notional"]*2*FEE
+
+def pnl(pos,exit_price):
+    return gross_pnl(pos,exit_price)-fees(pos)
 
 def unrealized(pos,mark):
     return pnl(pos,mark)
@@ -154,8 +160,8 @@ def run(symbols,start_date,days):
     def close_pos(symbol,mark,t,reason):
         nonlocal cash
         pos=positions.pop(symbol)
-        value=pnl(pos,mark);cash+=value
-        row={**pos,"closed_t":t,"exit":mark,"pnl":value,"reason":reason}
+        gross=gross_pnl(pos,mark);fee=fees(pos);value=gross-fee;cash+=value
+        row={**pos,"closed_t":t,"exit":mark,"gross_pnl":gross,"fees":fee,"pnl":value,"reason":reason}
         trades.append(row)
         st=stats[symbol];st["pnl"]+=value;st["trades"]+=1;st["wins"]+=int(value>0)
         if pos["entry_kind"]=="REENTRY":
@@ -241,11 +247,16 @@ def run(symbols,start_date,days):
       "research_only":True,"source":"official_bybit_public_trade_archives","policy":"dd97_15s30s60s_counter_takeover_exhaustion_resumption",
       "start":start.isoformat(),"end_exclusive":end.isoformat(),"symbols":symbols,
       "starting_equity":500.0,"final_equity":final_equity,"return_pct":(final_equity/500.0-1)*100.0,
-      "realized_pnl":closed_pnl,"open_pnl":open_pnl,"closed_trades":len(trades),"wins":wins,
+      "realized_pnl":closed_pnl,"gross_closed_pnl":sum(x["gross_pnl"] for x in trades),
+      "fees_paid":sum(x["fees"] for x in trades),"open_pnl":open_pnl,"closed_trades":len(trades),"wins":wins,
+      "avg_hold_seconds":sum(x["closed_t"]-x["opened_t"] for x in trades)/len(trades) if trades else None,
       "win_rate":wins/len(trades) if trades else None,"max_drawdown_pct":max_dd*100.0,
       "reentries_closed":len(reentries),"reentry_wins":sum(1 for x in reentries if x["pnl"]>0),
       "reentry_win_rate":sum(1 for x in reentries if x["pnl"]>0)/len(reentries) if reentries else None,
       "reentry_pnl":sum(x["pnl"] for x in reentries),
+      "reentry_gross_pnl":sum(x["gross_pnl"] for x in reentries),
+      "reentry_fees":sum(x["fees"] for x in reentries),
+      "reentry_avg_hold_seconds":sum(x["closed_t"]-x["opened_t"] for x in reentries)/len(reentries) if reentries else None,
       "per_symbol":{s:{**stats[s],"win_rate":stats[s]["wins"]/stats[s]["trades"] if stats[s]["trades"] else None,
                         "reentry_win_rate":stats[s]["reentry_wins"]/stats[s]["reentries"] if stats[s]["reentries"] else None} for s in symbols},
       "open_positions":positions,"coverage":coverage,
