@@ -147,29 +147,36 @@ def rank_candidates(candidates):
 
 
 def pressure_exit(position, execution_context, mark, fresh_flow_context):
-    """Exit on causal flow control transfer and observed giveback from MFE."""
+    """Persisted MFE protection + causal counter-flow, retaining Caterpillar watch.
+
+    Keep trend profits while same-side volume dominates. On fresh opposite
+    buyer/seller control with observed giveback, realize at actual PAPER mark.
+    Preserve historical 40%/55% MFE floor as a backstop, without invented fills.
+    """
     if not position:
         return None
     side = int(position.get("side") or 0)
-    entry, mark = _f(position.get("entry")), _f(mark)
-    profile = _flow_profile(fresh_flow_context, side)
-    if side not in (-1, 1) or not entry or not mark or profile is None:
+    entry, price = _f(position.get("entry")), _f(mark)
+    if side not in (-1, 1) or not entry or not price:
         return None
     features = position.get("features") or {}
-    move = side * (mark / entry - 1)
-    cost_floor = max(.0002, _f(features.get("estimated_round_trip_cost_move")) or 0.)
-    count = _f((fresh_flow_context or {}).get("trade_count_60s"))
-    notional = _f((fresh_flow_context or {}).get("observed_notional_60s"))
-    if count is None or count < 5 or notional is None or notional < 100:
-        return None
+    move = side * (price / entry - 1)
     peak = max(0., _f(features.get("mfe_price_move")) or 0., move)
-    recoil = peak - move
-    if recoil < _threshold():
-        return None
-    if profile["counter_control"]:
-        return "executed_flow_counter_control_exit"
-    if move > cost_floor and profile["weakening"] and profile["15s"] < 0:
-        return "executed_flow_weakening_profit_exit"
+    cost = max(.0002, _f(features.get("estimated_round_trip_cost_move")) or 0.)
+    recoil = max(0., peak - move)
+    # Saved 2026-10-29 path protection: arm on >=2% underlying MFE.
+    armed = peak >= .02 or bool(features.get("profit_lock_armed"))
+    protected_floor = (peak * (.55 if peak >= .05 else .40)) if armed else None
+    flow = _flow(fresh_flow_context)
+    counter = flow is not None and side * flow < 0
+    # Preserve strong price trend without a counterparty takeover; emergency
+    # floor is only actionable after actual mark crosses it.
+    if armed and protected_floor is not None and move <= protected_floor and move > cost:
+        return "mfe_persisted_profit_floor_exit"
+    if counter and recoil >= _threshold() and move > cost:
+        return "mfe_executed_counterflow_profit_exit"
+    if counter and recoil >= _threshold() and move <= cost:
+        return "mfe_executed_counterflow_risk_exit"
     return None
 
 def update_watch(watch, mark, execution_context, flow, now_epoch):
