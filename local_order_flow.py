@@ -160,8 +160,8 @@ def pressure_exit(position, m15, mark, flow):
 
     # Preserve a bankable excursion. The threshold scales with the achieved MFE,
     # but never reacts to sub-cost noise. M1+M3 must both have actually flipped.
-    mfe_bankable = bool(mfe >= max(0.0015, cost * 1.25))
-    giveback_trigger = max(cost * 0.75, mfe * 0.08)
+    mfe_bankable = bool(mfe >= max(0.0020, cost * 1.5))
+    giveback_trigger = max(cost, mfe * 0.18)
     if mfe_bankable and profile["fast_counter"] and giveback >= giveback_trigger:
         return "m1_m3_m5_mfe_preservation_exit"
 
