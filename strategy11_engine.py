@@ -8,7 +8,7 @@ from local_order_flow_legacy import (
     update_watch,
     reentry_ready,
 )
-from h1_structure_legacy import analyze as legacy_h1_analyze, POLICY as H1_POLICY
+from h1_structure_legacy import analyze as legacy_h1_analyze, update_path as legacy_update_path, POLICY as H1_POLICY
 
 
 class LegacyStrategy11:
@@ -116,8 +116,12 @@ class LegacyStrategy11:
           "candidate_selection":selection,"origin_h1_signal_candle":signal,"swing_reentries":reentries,
           "reference_margin_fraction":0.20,"reference_leverage":25.0,"actual_margin":margin,
           "mfe_price_move":0.0,"mae_price_move":0.0,"mfe_roe_pct":0.0,"mae_roe_pct":0.0,
-          "entry_mark":float(price),"reentry_watch":copy.deepcopy(watch) if watch else None,
-          "estimated_round_trip_cost_move":2*self.fee+0.0004}
+          "entry_mark":float(price),"profit_lock_armed":False,
+          "profit_lock_mode":"executed_flow_reversal_only",
+          "m15_entry_context":None,"m15_reentry_context":None,
+          "reentry_watch":copy.deepcopy(watch) if watch else None,
+          "estimated_round_trip_cost_move":2*self.fee+0.0004,
+          "execution_cost_budget_only":True}
         pos={"symbol":symbol,"side":side,"entry":float(price),"notional":notional,"margin":margin,
              "leverage":leverage,"opened":opened,"t":epoch,"signal_candle_time":signal,"features":features}
         claim=("S11:REENTRY:%s:%s:%s"%(symbol,signal,reentries) if entry_kind=="REENTRY"
@@ -147,14 +151,42 @@ class LegacyStrategy11:
         features["actual_exit_reason"]=reason;features["actual_exit_mark"]=mark
         if watch_context:features["executed_flow_exit_context"]=copy.deepcopy(watch_context)
         watch=None
-        if reason in ("m1_m3_m5_mfe_preservation_exit","m1_m3_m5_risk_exit","m1_m3_confirmed_counterflow_exit"):
-            watch={"symbol":symbol,"side":int(pos["side"]),"origin_signal_candle":int(features.get("origin_h1_signal_candle") or 0),
+        watch_reasons=(
+          "m15_adverse_pressure_profit_protect","profit_lock_stop","m15_momentum_weakening",
+          "m15_pressure_reversal","m15_pressure_reversal_profit_only","caterpillar_breakeven",
+          "executed_flow_counter_dominance","m15_opposite_control_exit",
+          "executed_flow_counter_control_exit","executed_flow_weakening_profit_exit",
+          "executed_flow_profit_flip_exit","executed_flow_risk_flip_exit",
+          "m1_m3_m5_mfe_profit_exit","m1_m3_m5_risk_exit",
+          "m1_m3_confirmed_counterflow_exit","m1_m3_m5_mfe_preservation_exit",
+          "executed_flow_15s30s_counter_control_exit","executed_flow_15s30s_mfe_weakening_exit"
+        )
+        if reason in watch_reasons:
+            watch={"symbol":symbol,"side":int(pos["side"]),
+              "origin_signal_candle":int(features.get("origin_h1_signal_candle") or pos.get("signal_candle_time") or 0),
               "exit_price":mark,"exit_at":self.now(),"expires_epoch":0.0,
               "reentries":int(features.get("swing_reentries",0) or 0),
-              "context":{**copy.deepcopy(watch_context or {}),"phase":"WAIT_RESUMPTION","counter_pressure_seen":True}}
+              "context":copy.deepcopy(watch_context or {})}
+            # Exact profitable runtime behavior: MFE/risk exits DO NOT imply
+            # that a new pullback has already completed. They arm WAIT_PULLBACK.
+            opposite_flow_exit=reason in (
+              "executed_flow_15s30s_counter_control_exit","executed_flow_weakening_exit",
+              "executed_flow_counter_control_exit","executed_flow_counter_dominance"
+            )
             flow_at=(watch_context or {}).get("flow_context") or {}
-            try:watch["context"]["last_opposite_trade_epoch"]=float(flow_at["volume_window_end_epoch"])-float(flow_at["latest_trade_age_seconds"])
-            except Exception:pass
+            try:
+                opposite_epoch=float(flow_at["volume_window_end_epoch"])-float(flow_at["latest_trade_age_seconds"])
+                if not math.isfinite(opposite_epoch):opposite_epoch=None
+            except (KeyError,TypeError,ValueError,OverflowError):
+                opposite_epoch=None
+            confirmed_opposite=bool(opposite_flow_exit and opposite_epoch is not None)
+            watch["context"].update(
+              phase="WAIT_RESUMPTION" if confirmed_opposite else "WAIT_PULLBACK",
+              counter_pressure_seen=confirmed_opposite,
+              caterpillar_policy=FLOW_POLICY
+            )
+            if confirmed_opposite:
+                watch["context"]["last_opposite_trade_epoch"]=opposite_epoch
         with self.pg() as db:
             with db.transaction():
                 self.store.fence(db)
@@ -175,27 +207,26 @@ class LegacyStrategy11:
         return {"symbol":symbol,"pnl":pnl,"reason":reason,"equity":self.equity}
 
     def _mark(self,symbol,pos,mark):
-        mark=float(mark);updated=copy.deepcopy(pos);f=updated.setdefault("features",{})
-        entry=float(pos["entry"]);side=int(pos["side"]);lev=float(pos.get("leverage") or 25)
-        move=side*(mark/entry-1.0)
-        f["mfe_price_move"]=max(float(f.get("mfe_price_move",0) or 0),move)
-        f["mae_price_move"]=min(float(f.get("mae_price_move",0) or 0),move)
-        f["mfe_roe_pct"]=max(float(f.get("mfe_roe_pct",0) or 0),move*lev*100)
-        f["mae_roe_pct"]=min(float(f.get("mae_roe_pct",0) or 0),move*lev*100)
-        f["current_price_move"]=move;f["last_mark"]=mark;f["caterpillar_policy"]=FLOW_POLICY
+        mark=float(mark)
+        updated,liq=legacy_update_path(pos,mark)
+        f=updated.setdefault("features",{})
+        f["caterpillar_policy"]=FLOW_POLICY
         with self.lock:self.positions[symbol]=updated
-        analysis=copy.deepcopy(self.h1.get(symbol) or {})
-        if self.confirmed_h1(analysis) and int(analysis.get("entry_side") or 0)==-side and int(analysis.get("signal_candle_time") or 0)>int(pos.get("signal_candle_time") or 0):
-            return self._close(symbol,mark,"opposite_confirmed_h1_local")
+
         flow=self.market_obs.flow_context(symbol,time.time())
         reason=pressure_exit(updated,None,mark,flow)
-        if reason:return self._close(symbol,mark,reason,{"flow_context":flow,"observed_at":self.now()})
+        if reason:
+            return self._close(symbol,mark,reason,{"flow_context":flow,"observed_at":self.now()})
+        if liq:
+            return self._close(symbol,mark,"paper_liquidation_proxy")
+
         last=self._persist.get(symbol,0)
         if time.time()-last>=30:
             with self.pg() as db:
                 with db.transaction():
                     self.store.fence(db)
-                    db.execute("update strategy11_positions set features=%s::jsonb where symbol=%s and opened=%s",(json.dumps(f,default=str),symbol,pos["opened"]))
+                    db.execute("update strategy11_positions set features=%s::jsonb where symbol=%s and opened=%s",
+                      (json.dumps(f,default=str),symbol,pos["opened"]))
             self._persist[symbol]=time.time()
         return None
 
