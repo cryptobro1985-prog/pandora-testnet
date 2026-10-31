@@ -143,12 +143,9 @@ def entry_candidate(symbol, analysis, execution_context, flow, stamp):
 
 
 def pressure_exit(position, m15, mark, flow):
-    """Preserve earned MFE when M1/M3/M5 dominance flips against the position.
+    """Exit when executed buyer/seller control flips against the H1-side position.
 
-    There is no percentage giveback threshold and no extra indicator. With full
-    5-minute executed-flow coverage, two of the three windows define who
-    dominates. A profitable excursion is protected on the first opposite
-    majority; the account layer separately blocks negative net closes.
+    No MFE, profit, TP/SL, indicator or giveback gate is allowed here.
     """
     side = int((position or {}).get("side") or 0)
     entry = _f((position or {}).get("entry"))
@@ -159,11 +156,7 @@ def pressure_exit(position, m15, mark, flow):
     if not profile["m5_ready"] or not profile["counter_now"]:
         return None
 
-    features = (position or {}).get("features") or {}
-    mfe = max(0.0, _f(features.get("mfe_price_move")) or 0.0)
-    if mfe <= 0:
-        return None
-    return "m1_m3_m5_dominance_mfe_exit"
+    return "executed_flow_control_loss_exit"
 
 
 def update_watch(watch, mark, m15, flow, stamp):
