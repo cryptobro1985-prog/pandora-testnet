@@ -27,7 +27,7 @@ S={'mode':'PAPER_ONLY','orders_enabled':False,'engine_active':False,'engine_erro
  'last_poll':None,'last_checkpoint':None,'last_market_error':None,'market_count':0,
  'local_v12_positions':{},'local_experiment_watch':{},'local_h1_direction':{},'_local4_analysis':{},
  'local_experiment_equity':500.,'local_experiment_realized_pnl':0.,'local_experiment_trades':0}
-MARKET_OBS=RollingMarketData(max_symbols=64,max_trade_lag_seconds=60,freshness_seconds=60,max_seen_per_symbol=65536)
+MARKET_OBS=RollingMarketData(max_symbols=64,max_trade_lag_seconds=15,freshness_seconds=15,max_seen_per_symbol=65536)
 MARKET_AUX_OBS=RollingMarketData(max_symbols=64)
 _LOCAL_CANDLE_CACHE={};_LOCAL_CANDLE_CACHE_LOCK=threading.RLock();_LOCAL_CANDLE_CHECKPOINTED={}
 STRATEGY1_HISTORY_TABLES={'strategy1':'local_v12_trade_history','legacy_s1':'local_s1_trade_history',
@@ -1093,7 +1093,7 @@ def _stream_group(trades):
   def quote(prices):accept_market_prices(prices);TRADE_WAKE.set()
   stable_shard=lambda symbol:int(hashlib.sha1(str(symbol).encode()).hexdigest()[:8],16)%count
   run_bybit_stream(MARKET_OBS if trades else MARKET_AUX_OBS,SHUTDOWN,symbols,report,
-   symbol_filter=None if trades else (lambda symbol:stable_shard(symbol)==index),
+   symbol_filter=lambda symbol:stable_shard(symbol)==index,
    candle_filter=lambda symbol:stable_shard(symbol)==index,
    subscribe_trades=trades,on_trade_mids=quote if trades else None,
    on_mids=None if trades else quote,on_candles=None if trades else accept_local_candles,
