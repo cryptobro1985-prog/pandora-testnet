@@ -83,14 +83,14 @@ def render(data):
         x=selected.get(sym) or {}
         ch=x.get("change_24h_pct")
         move="PUMP" if isinstance(ch,(int,float)) and ch>0 else "DUMP" if isinstance(ch,(int,float)) and ch<0 else "FLAT"
-        disc_rows.append([sym,move,_n(ch,2),_n(x.get("range_24h_pct"),2),_m(x.get("turnover_24h")),x.get("last")])
+        loc=(cur_details.get(sym) or {}).get("h1_local") or cur_h1.get(sym) or legacy_h1.get(sym) or {}\n        disc_rows.append([sym,move,_n(ch,2),_n(x.get("range_24h_pct"),2),_m(x.get("turnover_24h")),x.get("last"),loc.get("pivot_type") or "SCANNING",_side(loc.get("entry_side")) if loc else "WAIT"])
 
     def panel(title,subtitle,primary,pivots):
         cards='<div class="cards">'+"".join("<article><small>"+_e(k)+"</small><strong>"+_e(v)+"</strong></article>" for k,v in _cards(primary))+"</div>"
         return '<section class="strategy"><h2>'+_e(title)+'</h2><p class="sub">'+_e(subtitle)+'</p>'+cards+          '<h3>H1 LOCALS</h3>'+_table(["TOKEN","LOCAL","PIVOT","DIRECTION","PENDING","POLICY"],pivots)+          '<h3>OPEN POSITIONS</h3>'+_table(["TOKEN","SIDE","ENTRY","MARK","LEV","MARGIN","PnL","MFE %","MAE %"],_positions(primary))+          '<h3>TRADE HISTORY</h3>'+_table(["CLOSED","TOKEN","SIDE","ENTRY","EXIT","PnL $ / %","ENTRY TYPE","EXIT","MFE %","MAE %"],_history(primary))+'</section>'
 
     body='<header><div><b>PANDORA</b><span>STRATEGY 1 · LIVE A/B PAPER</span></div><i>'+("LIVE ENGINE" if health.get("engine_active") else "ENGINE WAIT")+"</i></header>"
-    body+='<section><h2>BYBIT VOLATILITY DISCOVERY</h2><p class="sub">Top selected USDT-linear movers by absolute 24h change. Same candidate pool is fed to both 1.1 and 1.2; actual entries still follow each strategy.</p>'+_table(["TOKEN","MOVE","24H %","24H RANGE %","TURNOVER","LAST"],disc_rows)+'</section>'
+    body+='<section><h2>BYBIT VOLATILITY DISCOVERY</h2><p class="sub">Top 3 Bybit USDT-linear PUMP/DUMP movers, rotated every 15 minutes. Discovery finds volatility; H1 Local High/Low determines trade direction.</p>'+_table(["TOKEN","MOVE","24H %","24H RANGE %","TURNOVER","LAST","H1 LOCAL","DIRECTION"],disc_rows)+'</section>'
     body+='<div class="abgrid">'
     body+=panel("STRATEGY 1.1 · LEGACY CATERPILLAR","Historical M1/M3/M5 executed-flow + MFE implementation · independent $500 PAPER ledger",legacy,_pivot_rows(symbols,legacy_h1))
     body+=panel("STRATEGY 1.2 · CURRENT CATERPILLAR","Current executed-flow Caterpillar · independent $500 PAPER ledger",cur,_pivot_rows(symbols,cur_h1,cur_details))
