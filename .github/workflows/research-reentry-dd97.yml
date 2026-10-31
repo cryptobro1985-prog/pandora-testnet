@@ -1,0 +1,24 @@
+name: research reentry dd97
+on:
+  push:
+    branches: [research/reentry-dd97-20261031]
+    paths:
+      - 'research/reentry_dd97_backtest.py'
+      - '.github/workflows/research-reentry-dd97.yml'
+  workflow_dispatch:
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run isolated Bybit archive replay
+        run: python research/reentry_dd97_backtest.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reentry-dd97-result
+          path: reentry_dd97_result.json
