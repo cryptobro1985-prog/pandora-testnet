@@ -8,7 +8,7 @@ from local_order_flow_legacy import (
     update_watch,
     reentry_ready,
 )
-from h1_structure_legacy import analyze as legacy_h1_analyze, update_path as legacy_update_path, POLICY as H1_POLICY
+from h1_structure_legacy import analyze as legacy_h1_analyze, pending_extreme as legacy_pending_extreme, update_path as legacy_update_path, POLICY as H1_POLICY
 
 
 class LegacyStrategy11:
@@ -17,7 +17,7 @@ class LegacyStrategy11:
         self.price_getter=price_getter; self.price_snapshot=price_snapshot
         self.paper_pnl=paper_pnl; self.fee=float(fee); self.now=now_func
         self.lock=threading.RLock()
-        self.positions={}; self.watch={}; self.h1={}
+        self.positions={}; self.watch={}; self.h1={}; self._h1_verified={}
         self.equity=500.0; self.realized=0.0; self.started_at=None
         self._persist={}
 
@@ -63,8 +63,103 @@ class LegacyStrategy11:
                     and not a.get("entry_blocked") and a.get("pivot_type")==expected
                     and math.isfinite(price) and price>0 and signal>0)
 
+    def _h1_flow_transfer(self,symbol,new_side,stamp=None):
+        new_side=int(new_side or 0)
+        if new_side not in (-1,1):
+            return {"confirmed":False,"reason":"invalid_candidate_side"}
+        stamp=time.time() if stamp is None else float(stamp)
+        flow=self.market_obs.flow_context(symbol,stamp)
+        if not isinstance(flow,dict) or not flow.get("trade_data_fresh"):
+            return {"confirmed":False,"reason":"waiting_for_fresh_executed_flow","flow":flow}
+        try:
+            age=float(flow.get("latest_trade_age_seconds"))
+            i60=float(flow.get("flow_imbalance"))
+            i180=float(flow.get("flow_imbalance_180s"))
+            i300=float(flow.get("flow_imbalance_300s"))
+            r300=float(flow.get("price_return_300s"))
+        except (TypeError,ValueError,OverflowError):
+            return {"confirmed":False,"reason":"waiting_for_m1_m3_m5_flow_coverage","flow":flow}
+        aligned60=new_side*i60; aligned180=new_side*i180; aligned300=new_side*i300
+        price_response=new_side*r300
+        confirmed=bool(-1<=age<=15 and aligned60>0 and aligned180>0 and aligned300>0 and price_response>0)
+        return {"confirmed":confirmed,
+          "reason":"executed_flow_control_transfer_confirmed" if confirmed else "opposite_structure_but_previous_side_still_controls",
+          "candidate_side":new_side,"aligned_flow_60s":aligned60,"aligned_flow_180s":aligned180,
+          "aligned_flow_300s":aligned300,"aligned_price_return_300s":price_response,
+          "latest_trade_age_seconds":age,"flow_source":flow.get("volume_source")}
+
+    def _runtime_h1_verified(self,symbol,analysis=None,stamp=None):
+        with self.lock:meta=copy.deepcopy(self._h1_verified.get(symbol))
+        if not meta:return False
+        stamp=time.time() if stamp is None else float(stamp)
+        try:
+            verified=float(meta.get("verified_at") or 0)
+            last_closed=int(meta.get("last_candle_time") or 0)
+            side=int(meta.get("entry_side") or 0)
+            signal=int(meta.get("signal_candle_time") or 0)
+            pivot=int(meta.get("pivot_candle_time") or 0)
+        except (TypeError,ValueError,OverflowError):
+            return False
+        age=stamp-verified
+        if age<0 or age>90:return False
+        expected_latest=int(((stamp*1000.0-1000.0)//3_600_000)*3_600_000-3_600_000)
+        if expected_latest>0 and last_closed<expected_latest:return False
+        if analysis is not None:
+            try:
+                if int(analysis.get("entry_side") or 0)!=side:return False
+                if int(analysis.get("signal_candle_time") or 0)!=signal:return False
+                if int(analysis.get("pivot_candle_time") or 0)!=pivot:return False
+            except (TypeError,ValueError,OverflowError):
+                return False
+        return side in (-1,1) and signal>0 and pivot>0
+
     def scan_h1(self,symbol,rows,now_ms):
         analysis=legacy_h1_analyze(rows,now_ms,symbol)
+        with self.lock:prior=copy.deepcopy(self.h1.get(symbol))
+        if not analysis.get("ready") or not analysis.get("anchor_confirmed"):
+            if self.confirmed_h1(prior):
+                analysis={**prior,"ready":True,"stale_source_reason":analysis.get("reason"),
+                  "anchor_recovered_from":"latest_valid_strategy11_observation",
+                  **legacy_pending_extreme(rows,now_ms,int(prior.get("entry_side") or 0),prior.get("pivot_price"))}
+            else:
+                with self.lock:self.h1[symbol]=copy.deepcopy(analysis)
+                return analysis
+        if self.confirmed_h1(prior):
+            prior_t=int(prior.get("signal_candle_time") or 0); new_t=int(analysis.get("signal_candle_time") or 0)
+            prior_side=int(prior.get("entry_side") or 0); new_side=int(analysis.get("entry_side") or 0)
+            if prior_t>new_t:
+                analysis={**prior,"ready":True,"last_candle_time":analysis.get("last_candle_time"),
+                  **legacy_pending_extreme(rows,now_ms,prior_side,prior.get("pivot_price")),
+                  "anchor_guard":"newest_confirmed_anchor_wins"}
+            elif prior_side in (-1,1) and new_side in (-1,1) and new_side!=prior_side:
+                if new_t<=prior_t:
+                    analysis={**prior,"ready":True,"last_candle_time":analysis.get("last_candle_time"),
+                      **legacy_pending_extreme(rows,now_ms,prior_side,prior.get("pivot_price")),
+                      "anchor_guard":"blocked_non_new_opposite_pivot"}
+                else:
+                    candidate=copy.deepcopy(analysis)
+                    transfer=self._h1_flow_transfer(symbol,new_side)
+                    if not transfer.get("confirmed"):
+                        analysis={**prior,"ready":True,"last_candle_time":candidate.get("last_candle_time"),
+                          **legacy_pending_extreme(rows,now_ms,prior_side,prior.get("pivot_price")),
+                          "anchor_guard":"opposite_h1_waiting_for_executed_flow_transfer",
+                          "pending_opposite_pivot_type":candidate.get("pivot_type"),
+                          "pending_opposite_pivot_price":candidate.get("pivot_price"),
+                          "pending_opposite_signal_candle_time":candidate.get("signal_candle_time"),
+                          "pending_opposite_pivot_candle_time":candidate.get("pivot_candle_time"),
+                          "pending_opposite_flow_transfer":transfer}
+                    else:
+                        analysis["flow_transfer_confirmation"]=transfer
+                        analysis["anchor_guard"]="opposite_h1_structure_and_flow_confirmed"
+        if self.confirmed_h1(analysis):
+            with self.lock:
+                self._h1_verified[symbol]={
+                  "verified_at":time.time(),"observed_at_ms":int(now_ms),
+                  "last_candle_time":int(analysis.get("last_candle_time") or 0),
+                  "entry_side":int(analysis.get("entry_side") or 0),
+                  "signal_candle_time":int(analysis.get("signal_candle_time") or 0),
+                  "pivot_candle_time":int(analysis.get("pivot_candle_time") or 0),
+                  "pivot_type":analysis.get("pivot_type"),"pivot_price":analysis.get("pivot_price")}
         with self.lock:self.h1[symbol]=copy.deepcopy(analysis)
         return analysis
 
@@ -90,6 +185,7 @@ class LegacyStrategy11:
     def _open(self,symbol,side,analysis,entry_kind="ORDER_FLOW",watch=None):
         side=int(side or 0)
         if side not in (-1,1) or not self.confirmed_h1(analysis): return False
+        if not self._runtime_h1_verified(symbol,analysis): return False
         flow=self.market_obs.flow_context(symbol,time.time())
         selection=(entry_candidate(symbol,analysis,None,flow,time.time()) if entry_kind=="REENTRY"
                    else initial_entry_candidate(symbol,analysis,None,flow,time.time()))
