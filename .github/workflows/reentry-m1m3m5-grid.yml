@@ -1,0 +1,28 @@
+name: Reentry M1M3M5 Grid Research
+
+on:
+  pull_request:
+    paths:
+      - "research_reentry_m1m3m5_grid.py"
+      - ".github/workflows/reentry-m1m3m5-grid.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run M1/M3/M5 reentry grid
+        run: python research_reentry_m1m3m5_grid.py
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        with:
+          name: m1m3m5-grid-result
+          path: m1m3m5_grid_result.json
