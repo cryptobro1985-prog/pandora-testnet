@@ -134,7 +134,7 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                             trade = normalize_bybit_public_trade(row)
                             if trade is not None and (trade.symbol not in selected or topic != "publicTrade."+_pair(trade.symbol)):
                                 continue
-                            ok, _reason = validate_latency(trade, int(last_received * 1000), max_age_ms=60000)
+                            ok, _reason = validate_latency(trade, int(last_received * 1000), max_age_ms=15000)
                             if not ok:
                                 stale_trades += 1
                                 continue
