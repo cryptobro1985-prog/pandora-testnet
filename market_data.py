@@ -140,7 +140,11 @@ class RollingMarketData:
             levels=list(state['levels']);dominant=1 if b60>s60 else -1 if s60>b60 else 0
             direction=1 if len(levels)==2 and levels[-1]['price']>levels[0]['price'] else -1 if len(levels)==2 and levels[-1]['price']<levels[0]['price'] else 0
             control=dominant if direction==dominant and direction else 0
+            r15,b15,s15=window(15)
+            r30,b30,s30=window(30)
             out.update(trade_data_fresh=True,buy_notional=b60,sell_notional=s60,flow_imbalance=i60,
+                       buy_volume_15s=b15,sell_volume_15s=s15,trade_count_15s=len(r15),flow_imbalance_15s=imbalance(b15,s15),
+                       buy_volume_30s=b30,sell_volume_30s=s30,trade_count_30s=len(r30),flow_imbalance_30s=imbalance(b30,s30),
                        buy_volume_60s=b60,sell_volume_60s=s60,trade_count_60s=len(r60),observed_notional_60s=b60+s60,
                        volume_window_end_epoch=epoch,
                        price_direction=direction,control_side=control,previous_price=levels[0]['price'] if len(levels)==2 else None,
