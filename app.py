@@ -47,7 +47,22 @@ def log_learning_decision(ident,strategy,symbol,side,action,reason,entry_price=N
  try:journal('strategy1_decision',ident,dict(symbol=symbol,side=side,action=action,reason=reason,features=features or {}));return True
  except Exception:return False
 
-def apply_local4_user_reset():return False
+def apply_local4_user_reset():
+ marker='reset_2026_10_31_m1_m3_weakening'
+ with pg() as db:
+  with db.transaction():
+   db.execute("create table if not exists local_v12_trade_history_archive_20261031 as select * from local_v12_trade_history with no data")
+   done=db.execute("select 1 from audit_journal where event_id=%s limit 1",(marker,)).fetchone()
+   if done:return False
+   db.execute("insert into local_v12_trade_history_archive_20261031 select * from local_v12_trade_history")
+   db.execute("delete from local_v12_positions")
+   db.execute("delete from local_v12_watchlist")
+   db.execute("delete from local_v12_signal_journal")
+   db.execute("delete from local_v12_trade_history")
+   stamp=now()
+   db.execute("update local_v12_account_state set equity=500,realized_pnl=0,started_at=%s,updated_at=%s where id=1",(stamp,stamp))
+   db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,%s,'strategy1_user_reset','{}'::jsonb)",(stamp,marker))
+ return True
 
 SCHEMA=(
  "CREATE TABLE IF NOT EXISTS local_v12_account_state(id integer PRIMARY KEY,equity double precision NOT NULL,realized_pnl double precision NOT NULL,started_at text NOT NULL,updated_at text NOT NULL)",
@@ -83,6 +98,7 @@ def pinit():
    for query in SCHEMA:db.execute(query)
    db.execute('insert into local_v12_account_state(id,equity,realized_pnl,started_at,updated_at) values(1,500,0,%s,%s) on conflict(id) do nothing',(now(),now()))
  EngineStore(pg).migrate()
+ apply_local4_user_reset()
  restore_state()
  with pg() as db:seeds=db.execute("select candles from local_candle_checkpoints where interval='1h'").fetchall()
  for row in seeds:
