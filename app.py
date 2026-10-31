@@ -11,7 +11,7 @@ from bybit_market_stream import run_bybit_stream
 from h1_structure import analyze as analyze_hype_h1,pending_extreme as local_pending_extreme,update_path as hype_update_path,POLICY as HYPE_SWING_POLICY
 from local_order_flow import POLICY as LOCAL4_FLOW_POLICY,entry_candidate as local4_entry_candidate,initial_entry_candidate as local4_initial_entry_candidate,pressure_exit as local4_pressure_exit,update_watch as local4_update_watch,reentry_ready as local4_reentry_ready
 
-LOCAL_EXPERIMENT_SYMBOLS=('INIT','NEAR','BTC','SOL','ETH','LIT','HYPE','ZEC','TAO','GRASS','BIRB')
+LOCAL_EXPERIMENT_SYMBOLS=('INIT','NEAR','BTC','SOL','ETH','LIT','HYPE','ZEC','TAO','GRASS','BIRB','BEAM')
 LOCAL_EXPERIMENT_STARTING_EQUITY=500.0
 LOCAL_EXPERIMENT_MARGIN_FRACTION=.20
 LOCAL_EXPERIMENT_MAX_POSITIONS=None
