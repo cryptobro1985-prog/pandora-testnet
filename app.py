@@ -54,7 +54,7 @@ def log_learning_decision(ident,strategy,symbol,side,action,reason,entry_price=N
  except Exception:return False
 
 def apply_local4_user_reset():
- marker='reset_2026_10_31_audited_848b3c6_clean_500_v1'
+ marker='reset_2026_10_31_audited_848b3c6_clean_500_v2_fullwipe'
  with pg() as db:
   with db.transaction():
    done=db.execute("select 1 from audit_journal where event_id=%s limit 1",(marker,)).fetchone()
