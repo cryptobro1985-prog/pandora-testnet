@@ -898,6 +898,8 @@ def local_experiment_risk_loop():
     local_experiment_mark_positions(prices)
     local4_fast_entries(prices)
     if S11 is not None:S11.cycle(strategy1_runtime_symbols(),prices)
+    if S13 is not None:S13.cycle(copy.deepcopy(S.get("_local4_analysis",{})),prices)
+    if S14 is not None:S14.cycle(strategy1_runtime_symbols(),copy.deepcopy(S.get("_local4_analysis",{})),prices)
 
     with LOCK:S["sources"]["LocalRisk"]={"ok":True,"ready":True,"last_check":now(),"mode":"H1_STREAM_fast_paper_execution","symbols":list(strategy1_trade_symbols()),"error":None}
    if time.time()-last_entry_diagnostics>=30:
