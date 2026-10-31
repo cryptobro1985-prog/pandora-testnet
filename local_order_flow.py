@@ -138,12 +138,12 @@ def entry_candidate(symbol, analysis, m15, flow, stamp):
 
 
 def pressure_exit(position, m15, mark, flow):
-    """Exit only on meaningful control transfer; protect banked MFE earlier.
+    """Exit on actual M1+M3 weakening against the active H1 position.
 
-    Before meaningful MFE exists, require a full M1/M3/M5 opposite takeover and
-    adverse M5 price response. Once a strong favorable excursion exists, M1+M3
-    opposite control plus a real giveback from the peak is enough to preserve
-    the move without waiting for lagging M5 confirmation.
+    No percentage, giveback, profit, volatility, or assistant-added threshold
+    gates the exit. MFE is measured for audit/profit preservation only: once
+    executed flow weakens against the position, close and let the normal
+    Caterpillar re-entry cycle wait for renewed H1-side control.
     """
     side = int((position or {}).get("side") or 0)
     entry = _f((position or {}).get("entry"))
@@ -151,26 +151,11 @@ def pressure_exit(position, m15, mark, flow):
     profile = flow_profile(flow, side)
     if side not in (-1, 1) or entry is None or entry <= 0 or mark is None or profile is None:
         return None
-
-    features = (position or {}).get("features") or {}
-    current_move = side * (mark / entry - 1.0)
-    mfe = max(0.0, _f(features.get("mfe_price_move")) or 0.0)
-    cost = max(0.0005, _f(features.get("estimated_round_trip_cost_move")) or 0.0)
-    giveback = max(0.0, mfe - current_move)
-
-    # Preserve a bankable excursion. The threshold scales with the achieved MFE,
-    # but never reacts to sub-cost noise. M1+M3 must both have actually flipped.
-    mfe_bankable = bool(mfe >= max(0.0020, cost * 1.5))
-    giveback_trigger = max(cost, mfe * 0.18)
-    if mfe_bankable and profile["fast_counter"] and giveback >= giveback_trigger:
-        return "m1_m3_m5_mfe_preservation_exit"
-
-    # For a position that has not yet earned enough MFE, avoid twitch exits:
-    # require the opposite side to own M1/M3/M5 AND make price respond.
-    if profile["counter_takeover"]:
-        return "m1_m3_m5_risk_exit"
+    if profile["fast_counter"]:
+        features = (position or {}).get("features") or {}
+        mfe = max(0.0, _f(features.get("mfe_price_move")) or 0.0)
+        return "m1_m3_mfe_preservation_exit" if mfe > 0 else "m1_m3_weakening_exit"
     return None
-
 
 def update_watch(watch, mark, m15, flow, stamp):
     out = copy.deepcopy(watch or {})
