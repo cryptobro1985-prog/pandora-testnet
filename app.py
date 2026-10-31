@@ -7,6 +7,7 @@ from psycopg.rows import dict_row
 from accounting import paper_pnl
 from engine_store import EngineStore,LeaseLost
 from market_data import RollingMarketData
+from dual_market_data import DualMarketData
 from bybit_market_stream import run_bybit_stream
 from h1_structure import analyze as analyze_hype_h1,pending_extreme as local_pending_extreme,update_path as hype_update_path,POLICY as HYPE_SWING_POLICY
 from local_order_flow import POLICY as LOCAL4_FLOW_POLICY,entry_candidate as local4_entry_candidate,initial_entry_candidate as local4_initial_entry_candidate,pressure_exit as local4_pressure_exit,update_watch as local4_update_watch,reentry_ready as local4_reentry_ready
@@ -27,7 +28,8 @@ S={'mode':'PAPER_ONLY','orders_enabled':False,'engine_active':False,'engine_erro
  'last_poll':None,'last_checkpoint':None,'last_market_error':None,'market_count':0,
  'local_v12_positions':{},'local_experiment_watch':{},'local_h1_direction':{},'_local4_analysis':{},
  'local_experiment_equity':500.,'local_experiment_realized_pnl':0.,'local_experiment_trades':0}
-MARKET_OBS=RollingMarketData(max_symbols=64,max_trade_lag_seconds=15,freshness_seconds=15,max_seen_per_symbol=65536)
+MARKET_OBS=DualMarketData(max_symbols=64,max_trade_lag_seconds=15,freshness_seconds=15,max_seen_per_symbol=65536)
+LEGACY_MARKET_OBS=MARKET_OBS.legacy
 MARKET_AUX_OBS=RollingMarketData(max_symbols=64)
 _LOCAL_CANDLE_CACHE={};_LOCAL_CANDLE_CACHE_LOCK=threading.RLock();_LOCAL_CANDLE_CHECKPOINTED={}
 STRATEGY1_HISTORY_TABLES={'strategy1':'local_v12_trade_history','legacy_s1':'local_s1_trade_history',
@@ -109,9 +111,9 @@ def pinit():
  apply_local4_user_reset()
  restore_state()
  global S11
- S11=LegacyStrategy11(pg,STORE,MARKET_OBS,current_entry_price,
+ S11=LegacyStrategy11(pg,STORE,LEGACY_MARKET_OBS,current_entry_price,
   lambda: copy.deepcopy(S.get("_prices",{})),paper_pnl,FEE,now)
- S11.ensure_schema("reset_2026_10_31_ab_strategy11_clean")
+ S11.ensure_schema("reset_2026_10_31_exact_profitable_strategy11")
  with pg() as db:
   seeds=db.execute("select candles from local_candle_checkpoints where interval='1h'").fetchall()
   prior_discovery=db.execute("select payload from audit_journal where kind='strategy1_discovery_scan' order by id desc limit 1").fetchone()
