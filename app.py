@@ -2970,6 +2970,7 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
                "m15_pressure_reversal","m15_pressure_reversal_profit_only","caterpillar_breakeven",
                "executed_flow_counter_dominance","m15_opposite_control_exit",
                "executed_flow_counter_control_exit","executed_flow_weakening_profit_exit",
+               "mfe_persisted_profit_floor_exit","mfe_executed_counterflow_profit_exit","mfe_executed_counterflow_risk_exit",
                "executed_flow_profit_flip_exit","executed_flow_risk_flip_exit",
                "m1_m3_m5_mfe_profit_exit","m1_m3_m5_risk_exit",
                "m1_m3_confirmed_counterflow_exit","m1_m3_m5_mfe_preservation_exit",
