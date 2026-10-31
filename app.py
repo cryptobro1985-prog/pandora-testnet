@@ -112,7 +112,11 @@ def pinit():
  S11=LegacyStrategy11(pg,STORE,MARKET_OBS,current_entry_price,
   lambda: copy.deepcopy(S.get("_prices",{})),paper_pnl,FEE,now)
  S11.ensure_schema("reset_2026_10_31_ab_strategy11_clean")
- with pg() as db:seeds=db.execute("select candles from local_candle_checkpoints where interval='1h'").fetchall()
+ with pg() as db:
+  seeds=db.execute("select candles from local_candle_checkpoints where interval='1h'").fetchall()
+  prior_discovery=db.execute("select payload from audit_journal where kind='strategy1_discovery_scan' order by id desc limit 1").fetchone()
+ if prior_discovery:
+  with LOCK:S["bybit_discovery"]=copy.deepcopy(prior_discovery["payload"])
  for row in seeds:
   rows=row['candles'] or []
   if rows and all(r.get('venue')=='bybit' for r in rows):accept_local_candles(rows,history=True)
