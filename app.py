@@ -12,6 +12,8 @@ from bybit_market_stream import run_bybit_stream
 from h1_structure import analyze as analyze_hype_h1,pending_extreme as local_pending_extreme,update_path as hype_update_path,POLICY as HYPE_SWING_POLICY
 from local_order_flow import POLICY as LOCAL4_FLOW_POLICY,entry_candidate as local4_entry_candidate,initial_entry_candidate as local4_initial_entry_candidate,pressure_exit as local4_pressure_exit,update_watch as local4_update_watch,reentry_ready as local4_reentry_ready
 from strategy11_engine import LegacyStrategy11
+from strategy13_engine import Strategy13
+from strategy14_engine import Strategy14
 
 LOCAL_EXPERIMENT_SYMBOLS=('INIT','NEAR','BTC','SOL','ETH','LIT','HYPE','ZEC','TAO','GRASS','BIRB','BEAM','LSK')
 LOCAL_EXPERIMENT_STARTING_EQUITY=500.0
@@ -44,6 +46,8 @@ def publication_epoch(value):
 def pg():return psycopg.connect(os.environ['DATABASE_URL'],autocommit=True,row_factory=dict_row,connect_timeout=5)
 STORE=EngineStore(pg)
 S11=None
+S13=None
+S14=None
 
 def journal(kind,event_id,payload):
  with pg() as db:db.execute('insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,%s,%s,%s::jsonb)',(now(),event_id,kind,json.dumps(payload,default=str)))
@@ -110,10 +114,14 @@ def pinit():
  EngineStore(pg).migrate()
  apply_local4_user_reset()
  restore_state()
- global S11
+ global S11,S13,S14
  S11=LegacyStrategy11(pg,STORE,LEGACY_MARKET_OBS,current_entry_price,
   lambda: copy.deepcopy(S.get("_prices",{})),paper_pnl,FEE,now)
  S11.ensure_schema("reset_2026_10_31_exact_profitable_strategy11_5s_v2")
+ S13=Strategy13(pg,STORE,current_entry_price,lambda: copy.deepcopy(S.get("_prices",{})),paper_pnl,FEE,now)
+ S13.ensure_schema("reset_2026_10_31_strategy13_pure_h1_500_v1")
+ S14=Strategy14(pg,STORE,MARKET_OBS,current_entry_price,lambda: copy.deepcopy(S.get("_prices",{})),paper_pnl,FEE,now)
+ S14.ensure_schema("reset_2026_10_31_strategy14_848b3c6_500_v1")
  with pg() as db:
   seeds=db.execute("select candles from local_candle_checkpoints where interval='1h'").fetchall()
   prior_discovery=db.execute("select payload from audit_journal where kind='strategy1_discovery_scan' order by id desc limit 1").fetchone()
@@ -1077,6 +1085,8 @@ def local_experiment_loop():
     rows,stamp=_local_h1_candles(symbol);analysis=local_h1_direction(rows,stamp,symbol)
     with LOCK:S.setdefault('_local4_analysis',{})[symbol]=analysis
     if S11 is not None:S11.scan_h1(symbol,rows,stamp)
+    if S13 is not None:S13.scan_h1(symbol,rows,stamp)
+    if S14 is not None:S14.scan_h1(symbol,rows,stamp)
    except Exception as error:
     with LOCK:S['sources']['H1Scan:'+symbol]={'ok':False,'last_check':now(),'error':type(error).__name__+':'+str(error)[:140]}
   TRADE_WAKE.set();SHUTDOWN.wait(1)
@@ -1160,7 +1170,9 @@ def build_dashboard_snapshot(history=None):
   'events':history.get('events',{}),'watch':state['local_experiment_watch'],'h1_durable':state['local_h1_direction'],
   'engine':{'details':details,'symbols':list(strategy1_runtime_symbols())}}
  legacy=S11.snapshot() if S11 is not None else {}
- return {'strategy1_primary':primary,'strategy11_legacy':legacy,
+ s13=S13.snapshot() if S13 is not None else {}
+ s14=S14.snapshot() if S14 is not None else {}
+ return {'strategy1_primary':primary,'strategy11_legacy':legacy,'strategy13':s13,'strategy14':s14,
   'local_experiment_symbols':list(strategy1_runtime_symbols()),'base_symbols':list(LOCAL_EXPERIMENT_SYMBOLS),
   'discovery':state.get('bybit_discovery',{}),
   'health':health_state(),'sources':state['sources'],'strategy1_entry_diagnostics':state.get('strategy1_entry_diagnostics',{}),
