@@ -311,7 +311,7 @@ def accept_market_prices(mids):
  for k,v in (mids or {}).items():
   try:
    px=float(v)
-   if re.match(r"^[A-Z0-9]{2,15}$",k) and math.isfinite(px) and px>0:valid[k]=px
+   if re.match(r"^[A-Z0-9]{1,15}$",k) and math.isfinite(px) and px>0:valid[k]=px
   except (ValueError,TypeError):continue
  if not valid:raise ValueError("empty market response")
  stamp=time.time()
