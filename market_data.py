@@ -31,9 +31,10 @@ class RollingMarketData:
         with self._lock:
             selected=set(str(s) for s in (symbols or ()))
             if owner is None:self._owners.clear();self._owner_heartbeats.clear()
+            other_owned=set().union(*(v for k,v in self._owners.items() if k!=name)) if any(k!=name for k in self._owners) else set()
             self._owners[name]=selected;self._owner_heartbeats[name]=epoch
             wanted=set().union(*self._owners.values())
-            self._symbols={s:self._new_symbol(epoch) if s in selected else self._symbols.get(s,self._new_symbol(epoch)) for s in wanted}
+            self._symbols={s:(self._symbols.get(s) if s in other_owned and self._symbols.get(s) is not None else self._new_symbol(epoch) if s in selected else self._symbols.get(s,self._new_symbol(epoch))) for s in wanted}
 
     def mark_disconnected(self,epoch=None,owner=None):
         with self._lock:
@@ -56,7 +57,9 @@ class RollingMarketData:
                 if name not in self._owners:continue
                 prior=self._owner_heartbeats.get(name,epoch)
                 if epoch-prior>self.freshness_seconds:
-                    for symbol in self._owners[name]:self._symbols[symbol]=self._new_symbol(epoch)
+                    for symbol in self._owners[name]:
+                        redundant_fresh=any(other!=name and symbol in syms and epoch-self._owner_heartbeats.get(other,float('-inf'))<=self.freshness_seconds for other,syms in self._owners.items())
+                        if not redundant_fresh:self._symbols[symbol]=self._new_symbol(epoch)
                 self._owner_heartbeats[name]=max(epoch,prior)
 
     def ingest_trades(self,rows,received_at=None,owner=None,accepted_rows=None):
