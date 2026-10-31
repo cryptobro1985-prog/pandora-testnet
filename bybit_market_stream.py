@@ -159,7 +159,7 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                         batch = []
                         for row in message.get("data") or []:
                             trade = normalize_bybit_public_trade(row)
-                            ok, _reason = validate_latency(trade, int(last_received * 1000), max_age_ms=15000)
+                            ok, _reason = validate_latency(trade, int(last_received * 1000), max_age_ms=60000)
                             if not ok:
                                 stale_trades += 1
                                 continue
