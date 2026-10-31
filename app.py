@@ -261,7 +261,7 @@ def local_h1_direction(rows,now_ms,symbol):
   # Fresh H1 cache may lag during deploy/lease handoff. Keep the latest
   # confirmed directional anchor usable instead of blanking the symbol.
   fallback=_local_persisted_anchor(symbol)
-  if fallback and int(fallback.get("entry_side") or 0) in (-1,1):
+  if fallback and fallback.get("policy")==HYPE_SWING_POLICY and int(fallback.get("entry_side") or 0) in (-1,1):
    recovered={**fallback,"ready":True,"stale_source_reason":analysis.get("reason"),
      "anchor_recovered_from":"latest_valid_strategy1_observation",
      **local_pending_extreme(rows,now_ms,int(fallback.get("entry_side") or 0),fallback.get("pivot_price"))}
@@ -309,7 +309,7 @@ def local_h1_direction(rows,now_ms,symbol):
   # This keeps every analyzed symbol directionally usable until a newer confirmed
   # opposite pivot supersedes it; pending extremes remain diagnostic-only.
   fallback=_local_persisted_anchor(symbol)
-  if fallback and int(fallback.get("entry_side") or 0) in (-1,1):
+  if fallback and fallback.get("policy")==HYPE_SWING_POLICY and int(fallback.get("entry_side") or 0) in (-1,1):
    analysis={**fallback,"ready":True,
      "last_candle_time":analysis.get("last_candle_time"),
      **local_pending_extreme(rows,now_ms,int(fallback.get("entry_side") or 0),fallback.get("pivot_price")),
