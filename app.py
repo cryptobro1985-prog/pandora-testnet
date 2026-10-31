@@ -290,7 +290,7 @@ LATENCIES=LatencyMetrics()
 # includes a recent trade snapshot, so keep up to six minutes of genuine
 # exchange executions for restart warmup while current signals still require
 # a <=15s latest trade.
-MARKET_OBS=RollingMarketData(max_symbols=512,max_trade_lag_seconds=360)
+MARKET_OBS=RollingMarketData(max_symbols=512,max_trade_lag_seconds=360,freshness_seconds=60)
 MARKET_AUX_OBS=RollingMarketData(max_symbols=512)
 LIQUIDATION_TAPE=LiquidationTape()
 CANDIDATES=[(-0.06,0.12),(-0.08,0.16),(-0.10,0.20),(-0.12,0.24)]
@@ -2683,7 +2683,7 @@ def strategy1_h1_flow_transfer(symbol,new_side,stamp=None):
  # Until genuine M3+M5 executed control exists, keep trading the persisted H1
  # anchor; this is not a global warmup gate and does not stop the current regime.
  windows_ready=(aligned180 is not None and aligned300 is not None)
- confirmed=bool(-1<=age<=15 and windows_ready and aligned60>0 and aligned180>0 and aligned300>0)
+ confirmed=bool(-1<=age<=60 and windows_ready and aligned60>0 and aligned180>0 and aligned300>0)
  reason=("executed_flow_control_transfer_confirmed" if confirmed else
          ("waiting_for_m3_m5_control_transfer" if not windows_ready else
           "opposite_structure_but_previous_side_still_controls"))
@@ -5225,7 +5225,7 @@ def free_x_realtime():
       ident=hashlib.sha256(("XFree:"+handle+":"+str(p["id"])).encode()).hexdigest()
       if len(ingest_futures)<400:
        ingest_futures.add(ingest_pool.submit(ingest_event,ident,"XOfficial:"+handle,p["text"],p.get("created_at"),p.get("url")))
-      if age is not None and 0<=age<=15:
+      if age is not None and 0<=age<=60:
        with LOCK:
         if name in S["sources"]:
          S["sources"][name]["delivery_latency_seconds"]=round(age,2)
