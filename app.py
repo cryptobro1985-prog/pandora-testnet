@@ -54,7 +54,7 @@ def log_learning_decision(ident,strategy,symbol,side,action,reason,entry_price=N
  except Exception:return False
 
 def apply_local4_user_reset():
- marker='reset_2026_10_31_ab_strategy12_clean'
+ marker='reset_2026_10_31_caterpillar_success_clean_500_v1'
  with pg() as db:
   with db.transaction():
    done=db.execute("select 1 from audit_journal where event_id=%s limit 1",(marker,)).fetchone()
@@ -644,16 +644,12 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
  with LOCK:pos=copy.deepcopy(S.get("local_v12_positions",{}).get(symbol))
  if not pos:return None
  price=float(price);pnl=paper_pnl(pos["notional"],pos["entry"],price,pos["side"],FEE)
- if reason!="operator_paper_close" and pnl<0:
-  try:journal("strategy1_negative_close_blocked",None,{"symbol":symbol,"reason":reason,"pnl":pnl,"entry":pos["entry"],"mark":price,"side":pos["side"]})
-  except Exception:pass
-  return {"symbol":symbol,"pnl":pnl,"reason":reason,"blocked":True,"block_reason":"NEGATIVE_NET_PNL"}
  features=copy.deepcopy(pos.get("features") or {})
  if analysis:features["exit_analysis"]=analysis
  if watch_context:features["executed_flow_exit_context"]=watch_context
  features["actual_exit_reason"]=reason;features["actual_exit_mark"]=price
  watch=None
- if reason in ("m1_m3_m5_dominance_mfe_exit","m1_mfe_preservation_exit","m1_counterflow_exit","m1_m3_m5_mfe_preservation_exit","m1_m3_m5_risk_exit","m1_m3_confirmed_counterflow_exit"):
+ if reason in ("executed_flow_control_loss_exit","m1_m3_m5_dominance_mfe_exit","m1_mfe_preservation_exit","m1_counterflow_exit","m1_m3_m5_mfe_preservation_exit","m1_m3_m5_risk_exit","m1_m3_confirmed_counterflow_exit"):
   watch={"symbol":symbol,"side":int(pos["side"]),
    "origin_signal_candle":int(features.get("origin_h1_signal_candle") or pos.get("signal_candle_time") or 0),
    "exit_price":price,"exit_at":now(),"expires_epoch":0.0,
