@@ -48,7 +48,7 @@ def log_learning_decision(ident,strategy,symbol,side,action,reason,entry_price=N
  except Exception:return False
 
 def apply_local4_user_reset():
- marker='reset_2026_10_31_proven_logic_full_clean'
+ marker='reset_2026_10_31_full_stats_no_negative_close'
  with pg() as db:
   with db.transaction():
    done=db.execute("select 1 from audit_journal where event_id=%s limit 1",(marker,)).fetchone()
@@ -56,14 +56,16 @@ def apply_local4_user_reset():
    # User-requested full PAPER reset: no historical trades survive into the new statistics.
    db.execute("truncate table local_v12_positions,local_v12_watchlist,local_v12_signal_journal,local_v12_trade_history restart identity")
    db.execute("truncate table local_v12_trade_history_archive_20261031 restart identity")
-   # Force every H1 local to be reconstructed under the current adaptive v16 logic.
+   db.execute("delete from audit_journal where kind like 'strategy1_%' or kind like 'local_experiment_%'")
+   # Force fresh H1/bootstrap state; no stale scanner or local survives this session.
    db.execute("delete from local_h1_direction")
+   db.execute("delete from local_candle_checkpoints")
    # Remove stale published dashboard state; the live engine republishes immediately after boot.
    db.execute("delete from local_v12_live_state")
    stamp=now()
    db.execute("update local_v12_account_state set equity=500,realized_pnl=0,started_at=%s,updated_at=%s where id=1",(stamp,stamp))
    db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,%s,'strategy1_user_reset',%s::jsonb)",
-    (stamp,marker,json.dumps({"starting_equity":500,"history_deleted":True,"scanner_state_cleared":True,"h1_anchors_rebuild":True})))
+    (stamp,marker,json.dumps({"starting_equity":500,"history_deleted":True,"scanner_state_cleared":True,"h1_anchors_rebuild":True,"full_flow_warmup_seconds":300,"automatic_negative_close_forbidden":True})))
  return True
 
 SCHEMA=(
@@ -581,6 +583,10 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
  with LOCK:pos=copy.deepcopy(S.get("local_v12_positions",{}).get(symbol))
  if not pos:return None
  price=float(price);pnl=paper_pnl(pos["notional"],pos["entry"],price,pos["side"],FEE)
+ if reason!="operator_paper_close" and pnl<0:
+  try:journal("strategy1_negative_close_blocked",None,{"symbol":symbol,"reason":reason,"pnl":pnl,"entry":pos["entry"],"mark":price,"side":pos["side"]})
+  except Exception:pass
+  return {"symbol":symbol,"pnl":pnl,"reason":reason,"blocked":True,"block_reason":"NEGATIVE_NET_PNL"}
  features=copy.deepcopy(pos.get("features") or {})
  if analysis:features["exit_analysis"]=analysis
  if watch_context:features["executed_flow_exit_context"]=watch_context
@@ -687,6 +693,16 @@ def _local_entry_resumption_context(symbol,side,analysis,flow):
  # Exact operator rule: do not chase an already-running move. First observe
  # opposite M1 executed-flow, then enter on the first flip back to the H1 side.
  if int(side or 0) not in (-1,1) or not isinstance(flow,dict) or not flow.get("trade_data_fresh"):
+  return None
+ try:
+  coverage=float(flow.get("trade_coverage_seconds") or 0)
+  raw180=float(flow.get("flow_imbalance_180s"))
+  raw300=float(flow.get("flow_imbalance_300s"))
+  price300=float(flow.get("price_return_300s"))
+ except (TypeError,ValueError,OverflowError):
+  return None
+ if coverage<300 or not all(math.isfinite(x) for x in (raw180,raw300,price300)):
+  with LOCK:S.setdefault("_local_entry_flow_state",{}).pop(symbol,None)
   return None
  try:value=float(flow.get("flow_imbalance"))
  except (TypeError,ValueError,OverflowError):return None
