@@ -1,0 +1,28 @@
+name: Reentry DD97 Research
+
+on:
+  pull_request:
+    paths:
+      - "research_reentry_dd97.py"
+      - ".github/workflows/reentry-dd97-research.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run isolated Bybit archive backtest
+        run: python research_reentry_dd97.py --start 2026-10-29 --days 2 --symbols INIT NEAR GRASS HYPE
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        with:
+          name: reentry-dd97-result
+          path: reentry_dd97_result.json
