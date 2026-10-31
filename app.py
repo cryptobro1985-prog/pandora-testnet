@@ -117,7 +117,7 @@ def pinit():
  global S11,S13,S14
  S11=LegacyStrategy11(pg,STORE,LEGACY_MARKET_OBS,current_entry_price,
   lambda: copy.deepcopy(S.get("_prices",{})),paper_pnl,FEE,now)
- S11.ensure_schema("reset_2026_10_31_exact_profitable_strategy11_5s_v2")
+ S11.ensure_schema("reset_2026_11_01_historical_848b3c6_clean_500_v1")
  S13=Strategy13(pg,STORE,current_entry_price,lambda: copy.deepcopy(S.get("_prices",{})),paper_pnl,FEE,now)
  S13.ensure_schema("reset_2026_10_31_strategy13_pure_h1_500_v1")
  S14=Strategy14(pg,STORE,MARKET_OBS,current_entry_price,lambda: copy.deepcopy(S.get("_prices",{})),paper_pnl,FEE,now)
