@@ -70,7 +70,7 @@ def entry_candidate(symbol,analysis,execution_context,flow,stamp):
 def pressure_exit(position,execution_context,mark,flow):
     side=int((position or {}).get("side") or 0); entry=_f((position or {}).get("entry")); mark=_f(mark); profile=flow_profile(flow,side)
     if side not in (-1,1) or entry is None or entry<=0 or mark is None or profile is None:return None
-    return "confirmed_counter_move_exit" if profile["counter_takeover"] else None
+    return "executed_flow_m1_opposite_control_exit" if profile["counter_takeover"] else None
 
 def update_watch(watch,mark,execution_context,flow,stamp):
     out=copy.deepcopy(watch or {}); side=int(out.get("side") or 0); mark=_f(mark)
