@@ -89,7 +89,7 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
             if on_candles is not None:
                 topics = []
                 for s in sorted(candle_selected):
-                    topics += ["kline.60." + _pair(s)]
+                    topics += ["kline.60." + _pair(s), "kline.15." + _pair(s)]
                 send("subscribe", topics)
             if on_regime_candles is not None:
                 send("subscribe", ["kline.1." + _pair(s) for s in sorted(regime_selected)])
