@@ -1215,6 +1215,20 @@ class Handler(BaseHTTPRequestHandler):
   except (ValueError,TypeError):self.send(400,{'error':'invalid_request'})
   except Exception:self.send(503,{'error':'close_not_confirmed'})
 
+
+def render_keepalive_loop():
+ # Free Render sleeps after 15 minutes without inbound traffic. During PAPER A/B
+ # tests, keep the public health endpoint active without touching trading logic.
+ url=(os.getenv('RENDER_EXTERNAL_URL') or 'https://pandora-testnet-monitor-nfoc.onrender.com').rstrip('/')+'/health'
+ while not SHUTDOWN.wait(240):
+  try:
+   req=urllib.request.Request(url,headers={'User-Agent':'pandora-render-keepalive/1.0','Cache-Control':'no-cache'})
+   with urllib.request.urlopen(req,timeout=30) as response:
+    code=int(response.getcode() or 0)
+   with LOCK:S['sources']['RenderKeepalive']={'ok':200<=code<500,'last_check':now(),'http_status':code}
+  except Exception as error:
+   with LOCK:S['sources']['RenderKeepalive']={'ok':False,'last_check':now(),'error':type(error).__name__+':'+str(error)[:160]}
+
 def main():
  pinit();server=ThreadingHTTPServer(('0.0.0.0',int(os.getenv('PORT','10000'))),Handler)
  def stop(signum,frame):SHUTDOWN.set();threading.Thread(target=server.shutdown,daemon=True).start()
@@ -1227,7 +1241,7 @@ def main():
    SHUTDOWN.wait(1)
  jobs=[('lease',engine_coordinator),('contracts',bybit_instruments_loop),('discovery',bybit_volatility_discovery_loop),('trades',market_trade_stream),('quotes',market_aux_stream),
   ('h1_history',market_history_bootstrap),('h1_scan',local_experiment_loop),('execution',local_experiment_risk_loop),
-  ('checkpoint',strategy1_live_state_loop),('history',dashboard_history_loop)]
+  ('checkpoint',strategy1_live_state_loop),('history',dashboard_history_loop),('keepalive',render_keepalive_loop)]
  workers=[threading.Thread(target=supervise,args=job,daemon=True,name=job[0]) for job in jobs]
  for worker in workers:worker.start()
  try:server.serve_forever()
