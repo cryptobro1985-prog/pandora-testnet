@@ -19,8 +19,8 @@ LOCAL_EXPERIMENT_SYMBOLS=('INIT','NEAR','BTC','SOL','ETH','LIT','HYPE','ZEC','TA
 LOCAL_EXPERIMENT_STARTING_EQUITY=500.0
 LOCAL_EXPERIMENT_MARGIN_FRACTION=.20
 LOCAL_EXPERIMENT_MAX_POSITIONS=None
-DISCOVERY_MAX_SELECTED=8
-DISCOVERY_SCAN_SECONDS=300
+DISCOVERY_MAX_SELECTED=3
+DISCOVERY_SCAN_SECONDS=900
 S1_ONLY_MODE=True
 FEE=.00045
 LOCK=threading.RLock();ACCOUNT_LOCK=threading.RLock();SHUTDOWN=threading.Event();TRADE_WAKE=threading.Event()
@@ -257,25 +257,19 @@ def bybit_volatility_discovery_loop():
     if instruments and symbol not in instruments:continue
     try:
      last=float(x.get("lastPrice") or 0);chg=float(x.get("price24hPcnt") or 0)*100.0
-     high=float(x.get("highPrice24h") or 0);low=float(x.get("lowPrice24h") or 0)
-     turn=float(x.get("turnover24h") or 0)
+     high=float(x.get("highPrice24h") or 0);low=float(x.get("lowPrice24h") or 0);turn=float(x.get("turnover24h") or 0)
     except (TypeError,ValueError,OverflowError):continue
     if not all(math.isfinite(v) for v in (last,chg,high,low,turn)) or last<=0 or low<=0 or turn<=0:continue
     rng=(high/low-1.0)*100.0 if high>0 else 0.0
     rows.append({"symbol":symbol,"pair":pair,"change_24h_pct":round(chg,3),
-      "range_24h_pct":round(rng,3),"turnover_24h":round(turn,2),"last":last})
+      "range_24h_pct":round(rng,3),"turnover_24h":round(turn,2),"last":last,
+      "move":"PUMP" if chg>0 else "DUMP" if chg<0 else "FLAT"})
    rows.sort(key=lambda r:(abs(r["change_24h_pct"]),r["turnover_24h"]),reverse=True)
-   with LOCK:prior=copy.deepcopy(S.get("bybit_discovery") or {})
-   frozen=list(prior.get("selected_symbols") or [])
-   if frozen:
-    by_symbol={r["symbol"]:r for r in rows}
-    selected=[by_symbol[x] for x in frozen if x in by_symbol]
-    selected_symbols=frozen
-   else:
-    selected=rows[:DISCOVERY_MAX_SELECTED]
-    selected_symbols=[r["symbol"] for r in selected]
-   snapshot={"at":now(),"basis":"Bybit linear USDT · absolute 24h move","selected_symbols":selected_symbols,
-    "selected":selected,"top_movers":rows[:20],"selection_frozen":True}
+   selected=rows[:DISCOVERY_MAX_SELECTED]
+   selected_symbols=[r["symbol"] for r in selected]
+   snapshot={"at":now(),"basis":"Bybit linear USDT · strongest absolute 24h PUMP/DUMP movers · rotate every 15m",
+    "selected_symbols":selected_symbols,"selected":selected,"top_movers":rows[:20],
+    "selection_frozen":False,"scan_seconds":DISCOVERY_SCAN_SECONDS}
    with LOCK:S["bybit_discovery"]=snapshot
    journal("strategy1_discovery_scan",None,snapshot)
    delay=DISCOVERY_SCAN_SECONDS
