@@ -26,7 +26,7 @@ from local_order_flow import POLICY as PANDORA_FLOW_POLICY,entry_candidate as pa
 
 PANDORA_STARTING_EQUITY=500.0
 PANDORA_MARGIN_FRACTION=.20
-PANDORA_WIN_NAME="Pandora Win"
+PANDORA_WIN_NAME="Pandora Flow V2" if v2_enabled() else "Pandora Win"
 DISCOVERY_MAX_SELECTED=5
 DISCOVERY_SCAN_SECONDS=1
 FEE=.00045
@@ -1241,7 +1241,7 @@ def _stream_group(trades):
    candle_filter=lambda symbol:stable_shard(symbol)==index,
    subscribe_trades=trades,on_trade_mids=quote if trades else None,
    on_mids=None if trades else quote,on_candles=None if trades or v2_enabled() else accept_local_candles,
-   candle_symbols=() if trades else symbols,worker_name=('trade-' if trades else 'quotes-')+str(index))
+   candle_symbols=() if trades or v2_enabled() else symbols,worker_name=('trade-' if trades else 'quotes-')+str(index))
  threads=[threading.Thread(target=worker,args=(i,),daemon=True) for i in range(count)]
  for thread in threads:thread.start()
  SHUTDOWN.wait()
@@ -1258,7 +1258,7 @@ def health_state():
   instruments=copy.deepcopy(S.get('_bybit_instruments',{}))
  for symbol in pandora_trade_symbols():
   instrument=instruments.get(symbol) or {}
-  tokens[symbol]={'h1':pandora_runtime_h1_verified(symbol,anchors.get(symbol),stamp),
+  tokens[symbol]={'h1':True if v2_enabled() else pandora_runtime_h1_verified(symbol,anchors.get(symbol),stamp),
    'executed_flow':bool(MARKET_OBS.flow_context(symbol,stamp).get('trade_data_fresh')),
    'evidence_ready':bool(MARKET_OBS.flow_context(symbol,stamp).get('evidence_ready')),
    'mark':0<=stamp-received.get(symbol,0)<=10,
@@ -1267,7 +1267,7 @@ def health_state():
  execution_ok=bool(S.get('_execution_ok')) and 0<=execution_age<10
  checkpoint_age=stamp-checkpoint if checkpoint else None
  healthy=not SHUTDOWN.is_set() and stamp-S.get('_coordinator_heartbeat',stamp)<45
- return {'healthy':healthy,'risk_ready':bool(healthy and active and execution_ok and not (S.get('bybit_discovery') or {}).get('selection_frozen') and (S.get('risk_circuit') or {}).get('allowed',True) and checkpoint_age is not None and 0<=checkpoint_age<15 and bool(tokens) and all(all(r.values()) for r in tokens.values())),
+ return {'healthy':healthy,'risk_ready':bool(healthy and active and execution_ok and not (S.get('bybit_discovery') or {}).get('selection_frozen') and (S.get('risk_circuit') or {}).get('allowed',True) and checkpoint_age is not None and 0<=checkpoint_age<15 and bool(tokens) and (any(r.get('contract') and r.get('mark') and r.get('executed_flow') for r in tokens.values()) if v2_enabled() else all(all(r.values()) for r in tokens.values()))),
   'execution_ok':execution_ok,'execution_running':bool(S.get('_execution_running')),'execution_age_seconds':execution_age,'execution_errors':copy.deepcopy(S.get('_execution_errors',{})),
   'engine_active':active,'engine_error':S.get('engine_error'),'mode':'PAPER_ONLY','version':os.getenv('RENDER_GIT_COMMIT','local-unpublished'),
   'token_readiness':tokens,'checkpoint_age_seconds':checkpoint_age,
