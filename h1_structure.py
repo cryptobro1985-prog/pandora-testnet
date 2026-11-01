@@ -246,6 +246,23 @@ def pending_extreme(rows, now_ms, side, anchor_pivot_price=None):
                       pending_pivot_price=x["h"] if high else x["l"],
                       pending_pivot_candle_time=x["t"],
                       entry_block_reason="opposite_h1_extreme_awaiting_closed_confirmation")
+    # Live opposite extreme becomes the active PAPER direction once the current
+    # H1 candle has materially rejected the extreme. Keep the older confirmed
+    # pivot as history; do not keep routing entries in the obsolete direction.
+    pt=result.get("pending_pivot_type")
+    pp=_f(result.get("pending_pivot_price"))
+    if result.get("entry_block_reason")=="opposite_h1_extreme_awaiting_closed_confirmation" and pt in ("LOCAL_HIGH","LOCAL_LOW") and pp:
+        result["previous_confirmed_pivot_type"]=result.get("pivot_type")
+        result["previous_confirmed_pivot_price"]=result.get("pivot_price")
+        result["pivot_type"]=pt
+        result["pivot_price"]=pp
+        result["pivot_candle_time"]=result.get("pending_pivot_candle_time")
+        result["entry_side"]=-1 if pt=="LOCAL_HIGH" else 1
+        result["local_high"]=pt=="LOCAL_HIGH"
+        result["local_low"]=pt=="LOCAL_LOW"
+        result["entry_blocked"]=False
+        result["entry_block_reason"]=None
+        result["live_structural_flip"]=True
     return result
 
 
