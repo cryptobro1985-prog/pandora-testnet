@@ -7,6 +7,7 @@
 - [Запуск, параметры и архитектура](README_PANDORA_WIN.md)
 - [Передача следующему разработчику](PANDORA_WIN_HANDOFF.md)
 - [Готовая поставка: результаты, reset и все изменённые файлы](PANDORA_FLOW_V2_DELIVERY.md)
+- [Дополнительный аудит удержания и комиссионных издержек](PANDORA_PROFIT_AUDIT.md)
 - [Аудит старого decision path и proof нового](PANDORA_FLOW_V2_AUDIT.md)
 - [Полный исходный пакет PANDORA_FLOW_V2_COMPLETE.zip](PANDORA_FLOW_V2_COMPLETE.zip)
 - Монитор: `/`; JSON: `/api/pandora`

@@ -7,6 +7,7 @@
     "tests.test_bootstrap_safety",
     "tests.test_bybit_stream_restoration",
     "tests.test_control_hysteresis",
+    "tests.test_flow_profit_audit",
     "tests.test_flow_v2_decision_path",
     "tests.test_flow_v2_events",
     "tests.test_flow_v2_integration",
@@ -33,7 +34,7 @@
     "tests.test_startup_bootstrap",
     "tests.test_startup_decisions"
   ],
-  "tests_run": 260,
+  "tests_run": 263,
   "failures": [],
   "errors": [],
   "skipped": [],

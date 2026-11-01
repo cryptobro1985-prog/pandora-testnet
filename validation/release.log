@@ -38,6 +38,9 @@ test_strong_five_second_burst_cannot_override_weak_fifteen_seconds (tests.test_c
 test_strong_structural_transfer_requires_three_seconds_of_new_executions (tests.test_control_hysteresis.ControlHysteresisTests.test_strong_structural_transfer_requires_three_seconds_of_new_executions) ... ok
 test_sustained_opposite_flow_without_structural_transfer_still_holds (tests.test_control_hysteresis.ControlHysteresisTests.test_sustained_opposite_flow_without_structural_transfer_still_holds) ... ok
 test_weak_counterflow_never_closes_even_after_a_price_break (tests.test_control_hysteresis.ControlHysteresisTests.test_weak_counterflow_never_closes_even_after_a_price_break) ... ok
+test_initial_micro_drift_cannot_open_below_round_trip_cost (tests.test_flow_profit_audit.FlowProfitAuditTests.test_initial_micro_drift_cannot_open_below_round_trip_cost) ... ok
+test_recent_defended_noise_replaces_obsolete_large_noise_for_both_sides (tests.test_flow_profit_audit.FlowProfitAuditTests.test_recent_defended_noise_replaces_obsolete_large_noise_for_both_sides) ... ok
+test_spread_bounces_do_not_pay_for_reversal_without_net_progress (tests.test_flow_profit_audit.FlowProfitAuditTests.test_spread_bounces_do_not_pay_for_reversal_without_net_progress) ... ok
 test_active_decision_graph_has_no_candle_or_timer_gate (tests.test_flow_v2_decision_path.FlowV2DecisionPathTests.test_active_decision_graph_has_no_candle_or_timer_gate) ... ok
 test_audit_rejects_duration_or_window_completion_gate (tests.test_flow_v2_decision_path.FlowV2DecisionPathTests.test_audit_rejects_duration_or_window_completion_gate) ... ok
 test_audit_rejects_injected_calendar_bucket (tests.test_flow_v2_decision_path.FlowV2DecisionPathTests.test_audit_rejects_injected_calendar_bucket) ... ok
@@ -260,6 +263,6 @@ test_real_tape_warmup_is_explicit_instead_of_instant_fake_readiness (tests.test_
 test_signal_is_not_misreported_as_committed_open (tests.test_startup_decisions.StartupDecisionTests.test_signal_is_not_misreported_as_committed_open) ... ok
 
 ----------------------------------------------------------------------
-Ran 260 tests in 47.109s
+Ran 263 tests in 47.250s
 
 OK

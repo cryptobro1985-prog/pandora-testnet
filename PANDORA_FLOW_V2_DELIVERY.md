@@ -10,9 +10,11 @@
 
 Архитектура: transport → ordered accepted events → FlowStrategy → sequential PAPER account writer → PostgreSQL schema `pandora_flow_v2` → read-only API/monitor. HourlyUniverse фиксирует пять entry symbols и сохраняет schedule; открытые исключённые позиции остаются MANAGED_POSITION.
 
+Последующий [аудит удержания и издержек](PANDORA_PROFIT_AUDIT.md) устраняет lifetime-noise lock и комиссии на практически нулевом net movement. Счёт в этом аудите не сбрасывался.
+
 ## Проверки
 
-- Полный suite: **260 уникальных тестов PASS**, 0 failures/errors/skips. [Машинный отчёт](validation/release-result.json), [лог](validation/release.log).
+- Полный suite: **263 уникальных теста PASS**, 0 failures/errors/skips. [Машинный отчёт](validation/release-result.json), [лог](validation/release.log).
 - Acceptance **1–16: каждый PASS**. [Отдельные результаты и фактические test IDs](validation/flow-acceptance.json), [лог](validation/flow-acceptance.log).
 - Active AST/grep: **82 функций**, 0 нарушений и 0 scoped grep hits. [Proof](validation/flow-decision-path.json). Historical UI/helper code вне активных roots не выдаётся за торговую зависимость.
 - Chromium 320/390/768 px: чистый новый account, без JS errors/переполнения. [Результат](validation/flow-monitor.json). Дополнительные UI-сценарии проверяют live JSON updates, precision и MANAGED_POSITION.
@@ -67,6 +69,9 @@ A — создан, M — изменён, D — удалён из новой в�
 
 | Файл | Статус |
 | --- | --- |
+| `PANDORA_PROFIT_AUDIT.md` | A |
+| `tests/test_flow_profit_audit.py` | A |
+| `validation/profit-audit.json` | A |
 | `.github/workflows/tests.yml` | M |
 | `MANIFEST.json` | M |
 | `PANDORA_FLOW_V2_AUDIT.md` | A |

@@ -20,7 +20,7 @@ test_acceptance_16_stale_state_blocks_entries_reversal_but_is_not_an_exit (tests
 test_stale_is_uncertain_without_immediate_close_then_fresh_mark_breach_can_reduce_risk (tests.test_flow_v2_integration.FlowV2ExecutionTests.test_stale_is_uncertain_without_immediate_close_then_fresh_mark_breach_can_reduce_risk) ... ok
 
 ----------------------------------------------------------------------
-Ran 20 tests in 26.497s
+Ran 20 tests in 26.424s
 
 OK
  1 PASS    Clean $500 reset, legacy isolation and no reset on restart

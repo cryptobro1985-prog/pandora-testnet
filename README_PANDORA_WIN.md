@@ -110,3 +110,5 @@ python scripts/run_flow_acceptance.py --report validation/flow-acceptance.json
 Runner требует DATABASE_URL отдельной тестовой PostgreSQL и PANDORA_TEST_DATABASE_URL_FILE с тем же URL. Synthetic sequence, loopback WebSocket и PostgreSQL contracts не являются backtest/доказательством прибыли. Acceptance matrix и baseline table: [PANDORA_FLOW_V2_AUDIT.md](PANDORA_FLOW_V2_AUDIT.md).
 
 Ветка выпуска — pandora-flow-v2. Код, tests, controlled reset и source ZIP готовятся до запуска. **Render deploy не выполняется без отдельной команды пользователя.** Local/test PostgreSQL, production reset, live exchange и Render — отдельные проверяемые факты; отчёт должен различать их.
+
+Последующий [аудит удержания и издержек](PANDORA_PROFIT_AUDIT.md): последний защищённый откат заменяет lifetime-max noise; net price progress, а не сумма колебаний, должен покрывать существующие costs при re-entry/reversal. Для первого входа также используется тот же round-trip cost floor. Новых численных порогов и fixed SL/TP нет.

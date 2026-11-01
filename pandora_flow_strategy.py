@@ -362,7 +362,10 @@ class FlowStrategy:
         candidate = state.get('candidate')
         if x >= best:
             if candidate:
-                noise = max(noise, best-candidate['counter_extreme'])
+                # The latest defended pullback describes the current auction.
+                # Keeping the lifetime maximum can make an old violent swing
+                # prevent every later, genuinely confirmed exit.
+                noise = max(0., best-candidate['counter_extreme'])
                 state['barrier'] = candidate['counter_extreme']
             state.update(best=x, noise=noise, candidate=None, phase='HOLDING')
             state.update(counter_control_side=0, counter_trade_count=0,
@@ -474,11 +477,19 @@ class FlowStrategy:
                     # A resumed auction can reenter below the former exit;
                     # require meaningful new causal movement, not recovery of
                     # an old price level or a fixed profit/loss percentage.
-                    distance = evidence['buy_price_response' if wanted == 1 else 'sell_price_response']
+                    # Signed responses can accumulate through spread bounces
+                    # while net displacement is negligible. Costs must be
+                    # covered by actual directional progress, not their sum.
+                    distance = wanted*evidence['price_return']
                     observed_noise = close.get('noise', 0.)/price
                     if distance <= max(costs, observed_noise):
                         wanted = 0
                         reason = 'Post-close movement remains within observed noise and round-trip execution costs.'
+            if wanted and not close:
+                recent=flow['windows'][str(self.config.fast_seconds)]
+                if wanted*recent['price_return']<=costs:
+                    wanted=0
+                    reason='Observed directional progress does not cover round-trip fees and slippage.'
             if wanted:
                 action = 'REENTRY' if close and wanted == close['side'] else 'OPEN'
                 if close:

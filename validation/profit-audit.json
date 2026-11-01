@@ -1,0 +1,18 @@
+{
+  "baseline_commit": "34af5f4a56c34a4f9bd33f54560465edba3deaed",
+  "synthetic_contracts": true,
+  "historical_pnl_optimized": false,
+  "before": {
+    "initial_move_below_cost": "OPEN",
+    "bounces_without_net_progress": "OPEN",
+    "transfer_after_recent_small_defended_pullback": "HOLD"
+  },
+  "after": {
+    "initial_move_below_cost": "WAIT",
+    "bounces_without_net_progress": "WAIT",
+    "transfer_after_recent_small_defended_pullback": "CLOSE"
+  },
+  "risk_engine_changed": false,
+  "fixed_tp_sl_added": false,
+  "reset_performed": false
+}
