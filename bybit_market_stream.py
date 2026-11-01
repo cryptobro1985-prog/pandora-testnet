@@ -23,7 +23,7 @@ def _pair(symbol):
 
 def _h1_candle(row):
     interval = str(row.get("interval") or "")
-    mapped = {"60": "1h"}.get(interval)
+    mapped = {"60": "1h", "15": "15m", "1": "1m"}.get(interval)
     if not mapped:
         return None
     try:
@@ -249,8 +249,8 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                             desired_c = {s for s in desired_c if candle_filter(s)}
                         removed, added = candle_selected - desired_c, desired_c - candle_selected
                         old_topics=[];new_topics=[]
-                        for s in sorted(removed): old_topics += ["kline.60."+_pair(s)]
-                        for s in sorted(added): new_topics += ["kline.60."+_pair(s)]
+                        for s in sorted(removed): old_topics += ["kline.60."+_pair(s), "kline.15."+_pair(s)]
+                        for s in sorted(added): new_topics += ["kline.60."+_pair(s), "kline.15."+_pair(s)]
                         if old_topics: send("unsubscribe", old_topics)
                         if new_topics: send("subscribe", new_topics)
                         candle_selected = desired_c
