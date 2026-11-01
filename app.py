@@ -819,7 +819,7 @@ def pandora_mark_positions(prices):
   flow=MARKET_OBS.flow_context(symbol,time.time())
   anchor=copy.deepcopy(S.get('_pandora_analysis',{}).get(symbol) or {})
   updated=mark_metrics(pos,float(mark),flow,anchor,FEE)
-  updated,liq=update_position_path(updated,float(mark))
+  if not v2_enabled():updated,liq=update_position_path(updated,float(mark))
   # No percentage SL/TP or MFE giveback exit: planned reference prices
   # describe stress geometry only. The PAPER maintenance outcome is still
   # modeled honestly when collateral is exhausted.
@@ -1355,6 +1355,18 @@ def build_dashboard_snapshot(history=None):
    instrument_ready=symbol in state.get('_bybit_instruments',{}),
    h1_verified=pandora_runtime_h1_verified(symbol,token['local_state']),
    mark=fresh_mark_price(symbol),checkpoint_ready=checkpoint_ready,rejection=recent_reason,stamp=time.time())
+  if v2_enabled():
+   pos=token.get('position')
+   if pos:
+    v2_action='HOLD'
+    v2_reason=(pos.get('features') or {}).get('exit_decision',{}).get('reason','flow_position_management')
+   else:
+    candidate=v2_entry_candidate(symbol,token['flow_state'])
+    v2_action='SIGNAL_READY' if candidate.get('eligible') else 'WAIT'
+    v2_reason=candidate.get('reason','awaiting_executed_flow')
+   token['decision']={'action':v2_action,'reason':v2_reason,
+     'message':v2_reason,'data_ready':bool(token['flow_state'].get('trade_data_fresh')),
+     'flow_v2':True,'control_side':v2_current_side(token['flow_state'])}
   if not token.get('position'):
    token['action_reason_code']=token['decision']['reason']
    token['action_reason']=token['decision']['message']
