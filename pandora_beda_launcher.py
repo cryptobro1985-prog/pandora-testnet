@@ -3,7 +3,7 @@
 Beda is a separate Python process and a separate PostgreSQL schema. The
 original Flow V2 decision engine is vendored unchanged. No RAW tape is recorded.
 """
-import copy,datetime,json,os,subprocess,sys,threading,time,urllib.request
+import copy,datetime,json,os,re,subprocess,sys,threading,time,urllib.request
 from pathlib import Path
 
 class BedaBridge:
@@ -42,6 +42,7 @@ class BedaBridge:
   self._publish(**data)
 
  def run(self,stop):
+  print('[Pandora Beda] supervisor started',flush=True)
   env=os.environ.copy()
   env.update(PORT="10001",PANDORA_BEDA_PROCESS="1",PYTHONUNBUFFERED="1")
   # Distinct process and search_path: neither account nor lease touches V3.
@@ -54,9 +55,15 @@ class BedaBridge:
       result=subprocess.run(cmd,cwd=self.root,env=env,timeout=90,
                stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
       if result.returncode:
-       self._publish(online=False,status="INIT_FAILED",
-         error="Initialization exit "+str(result.returncode))
+       # Only whitelisted error categories are emitted; database URIs,
+       # role names and passwords are never logged.
+       problem=re.search(r'PAPER initialization failed \\(([A-Za-z]+)(?:; category=([A-Z_]+))?\\)',result.stderr)
+       reason=(problem.group(1)+":"+str(problem.group(2) or "UNCLASSIFIED")) if problem else (
+          "SCRIPT_EXIT_"+str(result.returncode))
+       self._publish(online=False,status="INIT_FAILED",error=reason)
+       print("[Pandora Beda] PAPER initialization failed: "+reason,flush=True)
        stop.wait(15);continue
+      print("[Pandora Beda] isolated PAPER schema initialized",flush=True)
       self.process=subprocess.Popen([sys.executable,"app.py"],cwd=self.root,env=env)
       self._publish(online=False,status="STARTING_ENGINE",error=None)
      except Exception as exc:
