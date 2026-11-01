@@ -10,6 +10,7 @@ from pandora_locals import live_locals, execution_anchor, entry_structure_valid
 from pandora_win_core import mark_metrics
 from pandora_risk import RiskPolicy, plan_entry, position_guard, position_risk
 from local_order_flow import flow_profile
+from pandora_flow_v2_reset import reset_once as v2_reset_once
 from pandora_flow_v2_live import enabled as v2_enabled, current_side as v2_current_side, analysis_for_flow as v2_analysis, entry_candidate as v2_entry_candidate, exit_reason as v2_exit_reason, EXPERIMENT as V2_EXPERIMENT
 import copy,datetime,functools,hashlib,html,json,math,os,re,signal,threading,time
 import urllib.request,urllib.parse
@@ -671,7 +672,7 @@ def pandora_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution_context=
   risk=risk_snapshot(policy)
   if not risk['allowed']:return reject(risk['reason'])
   equity=risk['equity'];free=risk['free_margin'];price=latest_price
-  plan=plan_entry(equity,free,float(instrument['max_leverage']),float(price),int(side),latest_anchor or analysis,latest_flow,risk['portfolio_risk'],policy)
+  plan=plan_entry(equity,free,float(instrument['max_leverage']),float(price),int(side),analysis if v2_enabled() else latest_anchor or analysis,latest_flow,risk['portfolio_risk'],policy)
   if not plan.allowed:return reject(plan.reason)
   leverage=plan.leverage;margin=plan.margin;notional=plan.notional
   desired_margin=equity*(policy.min_margin_fraction+(policy.max_entry_margin_fraction-policy.min_margin_fraction)*plan.signal_strength)
@@ -980,9 +981,9 @@ def pandora_risk_loop():
     else:
      pandora_mark_positions(prices)
      pandora_flow_fast_entries(prices)
-    checkpoint_local_candles()
+    if not v2_enabled():checkpoint_local_candles()
 
-    with LOCK:S["sources"]["LocalRisk"]={"ok":True,"ready":True,"last_check":now(),"mode":"PANDORA_WIN_H1_LOCAL_TOP5_EXECUTED_FLOW","symbols":list(pandora_trade_symbols()),"error":None}
+    with LOCK:S["sources"]["LocalRisk"]={"ok":True,"ready":True,"last_check":now(),"mode":"PANDORA_FLOW_V2_EXECUTED_ONLY" if v2_enabled() else "PANDORA_WIN_H1_LOCAL_TOP5_EXECUTED_FLOW","symbols":list(pandora_trade_symbols()),"error":None}
    if time.time()-last_entry_diagnostics>=30:
     last_entry_diagnostics=time.time()
     pandora_entry_diagnostic_snapshot(prices)
@@ -1157,6 +1158,17 @@ def engine_coordinator():
    owned=STORE.claim()
    if owned and not S['engine_active']:
     with ACCOUNT_LOCK:
+     if v2_enabled():
+      migrated=v2_reset_once(pg,STORE,now)
+      if migrated:
+       with LOCK:
+        S['bybit_discovery']={}
+        S['pandora_watch']={}
+        S['pandora_win_h1_direction']={}
+        S['_pandora_analysis']={}
+       if WIN is not None:
+        WIN.scanner.restore({})
+        WIN.max_equity=400.
      restore_state()
      if WIN is not None:WIN.refresh_after_lease()
    with LOCK:S['engine_active']=owned;S['engine_error']=None if owned else 'standby: another engine owns the lease'
@@ -1193,9 +1205,9 @@ def market_history_bootstrap():
   with LOCK:pool=tuple((S.get('bybit_discovery') or {}).get('candidate_symbols') or ())
   return pool
  def accept(rows,history=True):
-  if S.get('engine_active'):accept_local_candles(rows,history=history)
+  if S.get('engine_active') and not v2_enabled():accept_local_candles(rows,history=history)
  def checkpoint():
-  if S.get('engine_active'):checkpoint_local_candles()
+  if S.get('engine_active') and not v2_enabled():checkpoint_local_candles()
  def report(symbol,value):
   with LOCK:S['sources']['H1History:'+symbol]={**value,'last_check':now()}
   TRADE_WAKE.set()
@@ -1208,6 +1220,7 @@ def pandora_loop():
   if not S['engine_active']:SHUTDOWN.wait(.5);continue
   for symbol in pandora_runtime_symbols():
    try:
+    if v2_enabled():continue
     rows,stamp=_pandora_h1_candles(symbol);analysis=pandora_win_h1_direction(rows,stamp,symbol)
     with LOCK:S.setdefault('_pandora_analysis',{})[symbol]=analysis
    except Exception as error:
@@ -1227,7 +1240,7 @@ def _stream_group(trades):
    symbol_filter=lambda symbol:stable_shard(symbol)==index,
    candle_filter=lambda symbol:stable_shard(symbol)==index,
    subscribe_trades=trades,on_trade_mids=quote if trades else None,
-   on_mids=None if trades else quote,on_candles=None if trades else accept_local_candles,
+   on_mids=None if trades else quote,on_candles=None if trades or v2_enabled() else accept_local_candles,
    candle_symbols=() if trades else symbols,worker_name=('trade-' if trades else 'quotes-')+str(index))
  threads=[threading.Thread(target=worker,args=(i,),daemon=True) for i in range(count)]
  for thread in threads:thread.start()
@@ -1457,7 +1470,7 @@ def main():
     with LOCK:S['sources'][label]={'ok':False,'last_check':now(),'error':type(error).__name__+':'+str(error)[:160]}
    SHUTDOWN.wait(1)
  jobs=[('lease',engine_coordinator),('contracts',bybit_instruments_loop),('discovery',bybit_volatility_discovery_loop),('trades',market_trade_stream),('quotes',market_aux_stream),
-  ('h1_history',market_history_bootstrap),('h1_scan',pandora_loop),('execution',pandora_risk_loop),
+  *((('h1_history',market_history_bootstrap),('h1_scan',pandora_loop)) if not v2_enabled() else ()),('execution',pandora_risk_loop),
   ('checkpoint',pandora_live_state_loop),('history',dashboard_history_loop),('keepalive',render_keepalive_loop)]
  workers=[threading.Thread(target=supervise,args=job,daemon=True,name=job[0]) for job in jobs]
  for worker in workers:worker.start()
