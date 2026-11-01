@@ -1,9 +1,12 @@
 """PANDORA PAPER: Pandora Win — H1 locals + rotating Bybit pump scanner + executed-flow control."""
 import sys
+from zoneinfo import ZoneInfo
+from pandora_api import API_VERSION, openapi, json_safe
 from pandora_runtime import PandoraRuntime
 from pandora_scanner import ticker_worker
 from pandora_locals import live_locals, execution_anchor
 from pandora_win_core import mark_metrics
+from pandora_risk import RiskPolicy, plan_entry, position_guard, position_risk
 from local_order_flow import flow_profile
 import copy,datetime,functools,hashlib,html,json,math,os,re,signal,threading,time
 import urllib.request,urllib.parse
@@ -71,6 +74,7 @@ def apply_local4_user_reset():
  return False
 
 SCHEMA=(
+ "CREATE TABLE IF NOT EXISTS pandora_risk_sessions(day text PRIMARY KEY,opening_equity double precision NOT NULL,peak_equity double precision NOT NULL,halted boolean NOT NULL DEFAULT false,reason text,updated_at timestamptz NOT NULL DEFAULT clock_timestamp())",
  "CREATE TABLE IF NOT EXISTS local_v12_account_state(id integer PRIMARY KEY,equity double precision NOT NULL,realized_pnl double precision NOT NULL,started_at text NOT NULL,updated_at text NOT NULL)",
  "CREATE TABLE IF NOT EXISTS local_v12_positions(symbol text PRIMARY KEY,side integer NOT NULL,entry double precision NOT NULL,notional double precision NOT NULL,margin double precision NOT NULL,leverage double precision NOT NULL,opened text NOT NULL,opened_epoch double precision NOT NULL,signal_candle_time bigint,features jsonb NOT NULL DEFAULT '{}'::jsonb)",
  "CREATE TABLE IF NOT EXISTS local_v12_trade_history(id bigserial PRIMARY KEY,opened text,closed text,symbol text,side integer,entry double precision,exit double precision,pnl double precision,reason text,margin double precision,notional double precision,leverage double precision,features jsonb NOT NULL DEFAULT '{}'::jsonb)",
@@ -285,7 +289,6 @@ def bybit_volatility_discovery_loop():
    with LOCK:
     instruments=copy.deepcopy(S.get('_bybit_instruments',{}));held=tuple(S.get('local_v12_positions',{}))
    snapshot=scanner.rank(instruments,MARKET_OBS.flow_context,held)
-   with LOCK:S['bybit_discovery']=snapshot
    WIN.scanner_snapshot(snapshot)
    with LOCK:S['sources']['BybitDiscovery']={'ok':bool(snapshot['selected_symbols']),'at':now(),'selected':len(snapshot['selected_symbols']),'mode':'LIVE_STREAM'}
    TRADE_WAKE.set();SHUTDOWN.wait(1)
@@ -323,14 +326,21 @@ def bybit_instruments_loop():
    delay=30
   SHUTDOWN.wait(delay)
 
+def fresh_mark_price(symbol,now_epoch=None):
+ stamp=time.time() if now_epoch is None else float(now_epoch)
+ with LOCK:
+  age=stamp-float(S.get('_price_received_epoch',{}).get(symbol,0))
+  price=S.get('_prices',{}).get(symbol)
+ try:price=float(price)
+ except (ValueError,TypeError,OverflowError):return None
+ return price if 0<=age<=10 and math.isfinite(price) and price>0 else None
+
 def current_entry_price(symbol):
  with LOCK:
   if not S["engine_active"] or S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or SHUTDOWN.is_set():return None
-  if time.time()-S.get("_price_received_epoch",{}).get(symbol,0)>10:return None
   checkpoint=publication_epoch(S.get("last_checkpoint"))
-  if checkpoint is None or time.time()-checkpoint>15:return None
-  price=S.get("_prices",{}).get(symbol)
-  return float(price) if price is not None and math.isfinite(float(price)) and float(price)>0 else None
+ if checkpoint is None or not 0<=time.time()-checkpoint<=15:return None
+ return fresh_mark_price(symbol)
 
 def accept_market_prices(mids):
  valid={}
@@ -367,9 +377,10 @@ def local_h1_direction(rows,now_ms,symbol):
   # confirmed directional anchor usable instead of blanking the symbol.
   fallback=_local_persisted_anchor(symbol)
   if fallback and fallback.get("policy")==HYPE_SWING_POLICY and int(fallback.get("entry_side") or 0) in (-1,1):
-   recovered={**fallback,"ready":True,"stale_source_reason":analysis.get("reason"),
+   recovered={**fallback,"ready":False,"stale_source_reason":analysis.get("reason"),
      "anchor_recovered_from":"latest_valid_strategy1_observation",
      **local_pending_extreme(rows,now_ms,int(fallback.get("entry_side") or 0),fallback.get("pivot_price"))}
+   recovered.update(entry_blocked=True,entry_block_reason="current_h1_history_not_verified")
    try:
     with pg() as db:
      with db.transaction():
@@ -423,9 +434,9 @@ def local_h1_direction(rows,now_ms,symbol):
      "anchor_recovered_from":"latest_valid_strategy1_observation"}
   else:
    return analysis
- for key in ('confirmed_local','forming_local','forming_locals'):
+ for key in ('confirmed_local','forming_local','forming_locals','live_structure_fresh'):
   if key in detailed:analysis[key]=copy.deepcopy(detailed[key])
- if detailed.get('entry_blocked') and analysis.get('confirmation_source')!='observed_H1_extreme_closed_M15_and_executed_control':
+ if detailed.get('entry_blocked') and not (analysis.get('confirmation_source')=='observed_H1_extreme_closed_M15_and_executed_control' and analysis.get('pivot_candle_time')==(detailed.get('forming_local') or {}).get('pivot_candle_time') and analysis.get('pivot_price')==(detailed.get('forming_local') or {}).get('pivot_price') and (detailed.get('forming_local') or {}).get('m15_confirmation')):
   analysis['entry_blocked']=True;analysis['entry_block_reason']=detailed.get('entry_block_reason')
  # Process-local proof that current CLOSED H1 candles were actually scanned.
  # This marker is written only AFTER all structural + flow guards select the
@@ -439,10 +450,12 @@ def local_h1_direction(rows,now_ms,symbol):
     "signal_candle_time":int(analysis.get("signal_candle_time") or 0),
     "pivot_candle_time":int(analysis.get("pivot_candle_time") or 0),
     "pivot_type":analysis.get("pivot_type"),"pivot_price":analysis.get("pivot_price")}
- changed=(not prior or prior.get("policy")!=analysis.get("policy")
-  or analysis.get("signal_candle_time")!=prior.get("signal_candle_time")
-  or prior.get("pivot_type")!=analysis.get("pivot_type") or prior.get("pivot_price")!=analysis.get("pivot_price")
-  or prior.get("forming_locals")!=analysis.get("forming_locals"))
+ def local_fingerprint(value):
+  value=value or {}
+  return tuple((x.get('pivot_type'),x.get('pivot_price'),x.get('pivot_candle_time'),x.get('m15_confirmation')) for x in value.get('forming_locals',[]))
+ anchor_changed=(not prior or any((prior or {}).get(k)!=analysis.get(k) for k in ('policy','signal_candle_time','pivot_type','pivot_price')))
+ forming_changed=local_fingerprint(prior)!=local_fingerprint(analysis)
+ changed=anchor_changed or forming_changed
  stamp=time.time()
  with LOCK:last=float(S.setdefault("_local_h1_persist_epoch",{}).get(symbol,0) or 0)
  if changed or stamp-last>=30:
@@ -455,9 +468,9 @@ def local_h1_direction(rows,now_ms,symbol):
    with pg() as db:
     with db.transaction():
      STORE.fence(db)
-     if analysis.get('anchor_confirmed'):
+     if anchor_changed and analysis.get('anchor_confirmed'):
       WIN.event(db,str(analysis.get('pivot_type'))+'_CONFIRMED',symbol,'closed_structure_confirmation',analysis)
-     for forming in analysis.get('forming_locals',[]):
+     for forming in analysis.get('forming_locals',[]) if forming_changed else []:
       WIN.event(db,forming['pivot_type']+'_FORMING',symbol,'observed_online_extreme',forming)
   with LOCK:
    S.setdefault("local_h1_direction",{})[symbol]=copy.deepcopy(analysis)
@@ -517,18 +530,42 @@ def _local_persisted_anchor(symbol):
 
 def _local_experiment_margin_state():
  with LOCK:
-  realized_equity=float(S.get("local_experiment_equity",LOCAL_EXPERIMENT_STARTING_EQUITY) or 0)
-  positions=copy.deepcopy(S.get("local_v12_positions",{}))
-  prices=dict(S.get("_prices",{}))
- used=sum(max(0.0,float(p.get("margin",0) or 0)) for p in positions.values())
- unrealized=0.0
- for sym,p in positions.items():
-  mark=prices.get(sym)
-  if not mark:continue
-  try:unrealized+=paper_pnl(float(p.get("notional",0) or 0),float(p.get("entry",0) or 0),float(mark),int(p.get("side",0) or 0),FEE)
-  except Exception:pass
- equity=max(0.0,realized_equity+unrealized)
- return equity,used,max(0.0,equity-used)
+  realized_equity=float(S.get('local_experiment_equity',500))
+  positions=copy.deepcopy(S.get('local_v12_positions',{}))
+ used=sum(max(0.,float(p.get('margin',0))) for p in positions.values())
+ unrealized=0.;missing=[]
+ for symbol,pos in positions.items():
+  mark=fresh_mark_price(symbol)
+  if mark is None:missing.append(symbol);continue
+  unrealized+=paper_pnl(pos['notional'],pos['entry'],mark,pos['side'],FEE)
+ complete=not missing
+ with LOCK:S['margin_valuation']={'complete':complete,'missing_marks':missing,'at':now()}
+ # Unknown portfolio equity may not finance a new trade. Canonical realized
+ # balance is never clamped; a gap/insolvency remains visible in the ledger.
+ if not complete:return 0.,used,0.
+ equity=realized_equity+unrealized
+ return equity,used,max(0.,equity-used)
+
+def risk_day():
+ return datetime.datetime.now(ZoneInfo(os.getenv('PANDORA_RISK_TIMEZONE','Europe/Samara'))).date().isoformat()
+
+def risk_snapshot(policy=None):
+ policy=policy or RiskPolicy.from_env()
+ equity,used,free=_local_experiment_margin_state()
+ with LOCK:
+  positions=copy.deepcopy(S.get('local_v12_positions',{}))
+  complete=bool(S.get('margin_valuation',{}).get('complete'))
+ modeled=sum(position_risk(p,fee=FEE,slippage=policy.slippage) for p in positions.values())
+ allowed=complete and equity>0 and free>0
+ reason=None if allowed else 'PORTFOLIO_MARKS_STALE' if not complete else 'ACCOUNT_INSOLVENT' if equity<=0 else 'INSUFFICIENT_FREE_MARGIN'
+ # PnL, past losses and historical daily-halt rows never pause new trading.
+ # Admission is determined only by available data, collateral and order rules.
+ state={'equity':equity,'free_margin':free,'used_margin':used,'portfolio_risk':modeled,
+  'allowed':allowed,'reason':reason,'pnl_based_halts':False,'daily_pause_enabled':False,
+  'min_entry_margin_fraction':policy.min_margin_fraction,'min_leverage':policy.min_leverage,
+  'max_leverage':policy.max_leverage,'modeled_risk_is_guarantee':False,'fixed_sl_tp':False,'mfe_percentage_exit':False}
+ with LOCK:S['risk_circuit']=state
+ return state
 
 def _local_experiment_watch_clear(symbol,reason):
  with LOCK:watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
@@ -548,7 +585,7 @@ def _local_experiment_watch_observe(symbol,watch,mark,execution_context,flow,sta
  before=(watch or {}).get("context") or {};context=updated.get("context") or {}
  changed=before.get("phase")!=context.get("phase")
  with LOCK:last=float(S.setdefault("_local_experiment_watch_persist_epoch",{}).get(symbol,0) or 0)
- if changed or stamp-last>=30:
+ if changed or stamp-last>=1:
   with pg() as db:
    with db.transaction():
     STORE.fence(db)
@@ -584,6 +621,8 @@ def local_experiment_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution
  if not analysis.get("h1_direction_anchor") or int(analysis.get("entry_side") or 0)!=int(side):return reject("ENTRY_STATE_REVALIDATION_FAILED")
  if analysis.get("entry_blocked"):return reject("ENTRY_STATE_REVALIDATION_FAILED")
  if WIN is not None and symbol not in set((S.get('bybit_discovery') or {}).get('selected_symbols') or []):return reject('TOKEN_NOT_SELECTED')
+ if (S.get('bybit_discovery') or {}).get('selection_frozen'):return reject('SCANNER_OBSERVATIONS_UNAVAILABLE')
+ if analysis.get('live_structure_fresh') is False:return reject('LOCAL_OBSERVATIONS_STALE')
  # Recheck at allocation time: scanning many markets and database writes take time.
  # Revalidate the H1 side plus fresh executed-flow executed control before adding risk.
  stamp=time.time()
@@ -604,31 +643,32 @@ def local_experiment_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution
   if not local4_reentry_ready(side,execution_context,price,live_watch,flow,stamp):return reject("WAIT_REENTRY_RESUMPTION")
  with LOCK:instrument=copy.deepcopy(S.get("_bybit_instruments",{}).get(symbol))
  if not instrument or time.time()-float(instrument.get("observed_at",0))>86400:return reject("BYBIT_CONTRACT_CONSTRAINTS_UNAVAILABLE")
- leverage=min(25.0,float(instrument["max_leverage"]))
+ leverage=min(50.0,float(instrument["max_leverage"]))
  with LOCK:allocation_blocked=not S.get("engine_active") or symbol in S.get("local_v12_positions",{})
  if allocation_blocked:return reject("ENGINE_STANDBY_OR_POSITION_ALREADY_OPEN")
- # No arbitrary cap on sequential entries; one active position per symbol remains.
- with LOCK:
-  held_symbols=tuple(S.get("local_v12_positions",{}))
-  received=dict(S.get("_price_received_epoch",{}))
- if any(not 0<=time.time()-received.get(held,0)<=10 for held in held_symbols):
-  # Do not block a new PAPER entry because an unrelated open symbol missed a
-  # single mark update. Margin accounting can use the position's last mark;
-  # only the symbol being opened must have a fresh current_entry_price above.
-  pass
- equity,used,free=_local_experiment_margin_state()
- if equity<=0 or free<0.01:return reject("INSUFFICIENT_FREE_MARGIN")
- target_notional=equity*LOCAL_EXPERIMENT_MARGIN_FRACTION*leverage
- max_margin_per_position=equity*LOCAL_EXPERIMENT_MARGIN_FRACTION
- desired_margin=max_margin_per_position
- # Each new position receives 20% of CURRENT mark-to-market equity at 25x.
- # Five full positions can consume the initial $500. Further positions become
- # possible only when realized/unrealized profits create additional free equity.
- # Entry must reserve its own modeled entry/exit fees as well as margin.
- margin=min(desired_margin,free/(1.0+2.0*FEE*leverage))
- if margin<0.01:return reject("INSUFFICIENT_FREE_MARGIN")
- notional=margin*leverage
- exposure_fill_ratio=(notional/target_notional) if target_notional>0 else 0.0
+ # Risk budget, not maximum nominal leverage, governs exposure.
+ policy=RiskPolicy.from_env()
+ risk=risk_snapshot(policy)
+ if not risk['allowed']:return reject(risk['reason'])
+ equity=risk['equity'];free=risk['free_margin']
+ plan=plan_entry(equity,free,float(instrument['max_leverage']),float(price),int(side),analysis,flow,risk['portfolio_risk'],policy)
+ if not plan.allowed:return reject(plan.reason)
+ leverage=plan.leverage;margin=plan.margin;notional=plan.notional
+ desired_margin=equity*(policy.min_margin_fraction+(policy.max_entry_margin_fraction-policy.min_margin_fraction)*plan.signal_strength)
+ max_margin_per_position=equity*policy.max_entry_margin_fraction;target_notional=desired_margin*leverage
+ exposure_fill_ratio=notional/target_notional if target_notional else 0.
+ # Recheck the actual tape after planning. A historical BUY majority must
+ # never admit LONG if current buying has stopped while allocation ran.
+ latest_flow=MARKET_OBS.flow_context(symbol,time.time())
+ latest_selection=(local4_entry_candidate(symbol,analysis,execution_context,latest_flow,time.time()) if entry_kind=='REENTRY'
+                   else local4_initial_entry_candidate(symbol,analysis,execution_context,latest_flow,time.time()))
+ if not latest_selection.get('eligible'):return reject('EXECUTED_CONTROL_CHANGED_DURING_ALLOCATION')
+ with LOCK:latest_anchor=copy.deepcopy(S.get('_local4_analysis',{}).get(symbol) or {})
+ if latest_anchor and (latest_anchor.get('entry_blocked') or latest_anchor.get('live_structure_fresh') is False or
+     int(latest_anchor.get('entry_side') or 0)!=int(side) or
+     int(latest_anchor.get('signal_candle_time') or 0)!=int(analysis.get('signal_candle_time') or 0)):
+  return reject('LOCAL_CHANGED_DURING_ALLOCATION')
+ flow=latest_flow;selection=latest_selection
  price=float(price);opened=now();epoch=time.time()
  reentries=(int(watch.get("reentries") or 0)+1) if entry_kind=="REENTRY" and watch else 0
  origin_signal=int(analysis.get("signal_candle_time") or 0)
@@ -637,7 +677,7 @@ def local_experiment_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution
   "policy":HYPE_SWING_POLICY,"caterpillar_policy":LOCAL4_FLOW_POLICY,"entry_kind":entry_kind,
   "candidate_selection":selection,
   "origin_h1_signal_candle":origin_signal,"swing_reentries":reentries,
-  "reference_margin_fraction":LOCAL_EXPERIMENT_MARGIN_FRACTION,"reference_leverage":25.0,
+  "reference_margin_fraction":plan.chosen_margin_fraction,"minimum_margin_fraction":policy.min_margin_fraction,"reference_leverage":policy.max_leverage,"risk_plan":plan.to_dict(),
   "target_notional":target_notional,"desired_margin":desired_margin,"max_margin_per_position":max_margin_per_position,
   "actual_margin":margin,"free_margin_before":free,"mark_to_market_equity_at_entry":equity,
   "exposure_fill_ratio":exposure_fill_ratio,"leverage":leverage,"leverage_source":"bybit_instruments_info",
@@ -766,7 +806,19 @@ def local_experiment_mark_positions(prices):
  for symbol,pos in positions.items():
   mark=prices.get(symbol)
   if not mark:continue
-  updated,liq=hype_update_path(pos,float(mark))
+  flow=MARKET_OBS.flow_context(symbol,time.time())
+  anchor=copy.deepcopy(S.get('_local4_analysis',{}).get(symbol) or {})
+  updated=mark_metrics(pos,float(mark),flow,anchor,FEE)
+  updated,liq=hype_update_path(updated,float(mark))
+  # No percentage SL/TP or MFE giveback exit: planned reference prices
+  # describe stress geometry only. The PAPER maintenance outcome is still
+  # modeled honestly when collateral is exhausted.
+  guard=position_guard(updated,float(mark),FEE)
+  with LOCK:
+   if S.get('local_v12_positions',{}).get(symbol,{}).get('opened')==pos.get('opened'):
+    S['local_v12_positions'][symbol]=updated
+  if guard:
+   local_experiment_close(symbol,float(mark),guard,anchor);continue
   f=updated.setdefault("features",{})
   # Strategy 1 MFE protection: preserve trend profits; exits are confirmed by executed-flow control transfer.
   entry=float(updated.get("entry") or 0);side=int(updated.get("side") or 0);markf=float(mark)
@@ -774,17 +826,17 @@ def local_experiment_mark_positions(prices):
   mfe=max(float(f.get("mfe_price_move",0) or 0),move)
   f["mfe_price_move"]=mfe;f["mfe_roe_pct"]=mfe*float(updated.get("leverage") or 25.0)*100.0
   f.update(caterpillar_policy=LOCAL4_FLOW_POLICY,profit_lock_armed=False,
-    profit_lock_mode="m1_executed_flow_weakening",profit_lock_floor_move=None,
+    profit_lock_mode="executed_control_and_price_structure_only",
     current_price_move=move,mfe_giveback_move=max(0.0,mfe-move))
   with LOCK:
    live=S.get("local_v12_positions",{}).get(symbol)
    if live and live.get("opened")==pos.get("opened"):S["local_v12_positions"][symbol]=updated
   with LOCK:anchor=copy.deepcopy(S.get('_local4_analysis',{}).get(symbol) or {})
-  if MARKET_OBS.flow_context(symbol,time.time()).get('trade_data_fresh') and MARKET_OBS.flow_context(symbol,time.time()).get('sustained_control_side')==-int(pos['side']) and strategy1_runtime_h1_verified(symbol,anchor) and int(anchor.get('entry_side') or 0)==-int(pos['side']) and int(anchor.get('signal_candle_time') or 0)>int(pos.get('signal_candle_time') or 0):
+  if MARKET_OBS.flow_context(symbol,time.time()).get('trade_data_fresh') and MARKET_OBS.flow_context(symbol,time.time()).get('fast_control_side',MARKET_OBS.flow_context(symbol,time.time()).get('sustained_control_side'))==-int(pos['side']) and strategy1_runtime_h1_verified(symbol,anchor) and int(anchor.get('entry_side') or 0)==-int(pos['side']) and int(anchor.get('signal_candle_time') or 0)>int(pos.get('signal_candle_time') or 0):
    local_experiment_close(symbol,float(mark),'opposite_confirmed_h1_local',anchor)
    continue
   flow=MARKET_OBS.flow_context(symbol,time.time())
-  reason=local4_pressure_exit(updated,None,float(mark),flow)
+  reason=local4_pressure_exit(updated,None,float(mark),flow) if flow.get('trade_data_fresh') else None
   with LOCK:
    if S.get("local_v12_positions",{}).get(symbol,{}).get("opened")==pos.get("opened"):
     S["local_v12_positions"][symbol]=updated
@@ -944,7 +996,7 @@ def local_experiment_risk_loop():
     active=bool(S.get("engine_active")) and S.get("mode")=="PAPER_ONLY" and not S.get("orders_enabled")
     age=time.time()-float(S.get("_last_poll_epoch",0) or 0)
     prices=dict(S.get("_prices",{}))
-   if active and 0<=age<=8 and prices:
+   if active and prices:
     if WIN is not None:WIN.cycle(prices)
     else:
      local_experiment_mark_positions(prices)
@@ -961,6 +1013,7 @@ def local_experiment_risk_loop():
    with LOCK:
     S["engine_active"]=False;S["engine_error"]=str(exc)
   except Exception as exc:
+   with LOCK:S["_execution_ok"]=False
    with LOCK:S["sources"]["LocalRisk"]={"ok":False,"last_check":now(),"error":type(exc).__name__+":"+str(exc)[:160]}
   TRADE_WAKE.wait(1)
   TRADE_WAKE.clear()
@@ -1075,6 +1128,10 @@ def strategy1_history_page(account="strategy1",before_id=None,limit=100,symbol=N
   if not _historical_table_exists(db,STRATEGY1_HISTORY_TABLES[account]):return {'account':account,'trades':[],'next_before_id':None,'symbol':symbol}
   rows=[dict(r) for r in db.execute(f"select * from {STRATEGY1_HISTORY_TABLES[account]}{where} order by id desc limit %s",tuple(params)).fetchall()]
  more=len(rows)>limit;rows=rows[:limit]
+ for trade in rows:
+  margin=float(trade.get('margin') or 0)
+  trade['pnl_usdt']=trade.get('pnl')
+  trade['pnl_percent']=float(trade['pnl'])/margin*100 if trade.get('pnl') is not None and margin>0 else None
  return {"account":account,"trades":rows,"next_before_id":rows[-1]["id"] if rows and more else None,
   "basis":"all_recorded_rows_without_pnl_exclusions","symbol":symbol}
 
@@ -1191,11 +1248,15 @@ def health_state():
   instrument=instruments.get(symbol) or {}
   tokens[symbol]={'h1':strategy1_runtime_h1_verified(symbol,anchors.get(symbol),stamp),
    'executed_flow':bool(MARKET_OBS.flow_context(symbol,stamp).get('trade_data_fresh')),
+   'evidence_ready':bool(MARKET_OBS.flow_context(symbol,stamp).get('evidence_ready')),
    'mark':0<=stamp-received.get(symbol,0)<=10,
    'contract':bool(instrument and 0<=stamp-float(instrument.get('observed_at',0))<=86400)}
+ execution_age=stamp-float(S.get('_execution_heartbeat',0))
+ execution_ok=bool(S.get('_execution_ok')) and 0<=execution_age<10
  checkpoint_age=stamp-checkpoint if checkpoint else None
  healthy=not SHUTDOWN.is_set() and stamp-S.get('_coordinator_heartbeat',stamp)<45
- return {'healthy':healthy,'risk_ready':bool(healthy and active and checkpoint_age is not None and 0<=checkpoint_age<15 and bool(tokens) and all(all(r.values()) for r in tokens.values())),
+ return {'healthy':healthy,'risk_ready':bool(healthy and active and execution_ok and not (S.get('bybit_discovery') or {}).get('selection_frozen') and (S.get('risk_circuit') or {}).get('allowed',True) and checkpoint_age is not None and 0<=checkpoint_age<15 and bool(tokens) and all(all(r.values()) for r in tokens.values())),
+  'execution_ok':execution_ok,'execution_running':bool(S.get('_execution_running')),'execution_age_seconds':execution_age,'execution_errors':copy.deepcopy(S.get('_execution_errors',{})),
   'engine_active':active,'engine_error':S.get('engine_error'),'mode':'PAPER_ONLY','version':os.getenv('RENDER_GIT_COMMIT','local-unpublished'),
   'token_readiness':tokens,'checkpoint_age_seconds':checkpoint_age,
   'market_age_seconds':stamp-S['_last_poll_epoch'] if S['_last_poll_epoch'] else None}
@@ -1224,7 +1285,7 @@ def build_dashboard_snapshot(history=None):
   all_marks=all_marks and mark is not None
   if pnl is not None:unreal+=pnl
   positions.append({'symbol':symbol,'side':'LONG' if pos['side']>0 else 'SHORT','opened':pos['opened'],'entry':pos['entry'],
-   'mark':mark,'unrealized_pnl':pnl,'margin_usd':pos['margin'],'notional_usd':pos['notional'],'leverage':pos['leverage'],'features':pos.get('features') or {}})
+   'mark':mark,'unrealized_pnl':pnl,'margin_usd':pos['margin'],'notional_usd':pos['notional'],'leverage':pos['leverage'],'effective_leverage':pos['notional']/pos['margin'] if pos['margin'] else None,'pnl_percent':pnl/pos['margin']*100 if pnl is not None and pos['margin'] else None,'features':pos.get('features') or {}})
  details={}
  for symbol in strategy1_runtime_symbols():
   flow=MARKET_OBS.flow_context(symbol)
@@ -1236,6 +1297,7 @@ def build_dashboard_snapshot(history=None):
   'open_positions':positions,'closed_trades':history.get('trades',[]),'token_totals':history.get('token_totals'),
   'events':history.get('events',{}),'watch':state['local_experiment_watch'],'h1_durable':state['local_h1_direction'],
   'engine':{'details':details,'symbols':list(strategy1_runtime_symbols())},
+  'risk':state.get('risk_circuit',{}),'margin_valuation':state.get('margin_valuation',{}),
   'account':state.get('pandora_account',{}),'runtime':WIN.snapshot() if WIN is not None else {}}
  selected_rows=(state.get('bybit_discovery') or {}).get('selected') or []
  token_rows=[]
@@ -1257,8 +1319,15 @@ def build_dashboard_snapshot(history=None):
    'mfe':features.get('peak_mfe_usd'),'mae':features.get('mae_usd'),'mfe_giveback':features.get('mfe_giveback_usd'),
    'last_action':token.get('action'),'action_reason':token.get('reason')})
  primary['tokens']=token_rows
+ totals=[row for row in history.get('token_totals') or [] if row.get('account')=='strategy1']
+ closed_count=sum(int(row.get('closed_trades') or 0) for row in totals)
+ wins=sum(int(row.get('wins') or 0) for row in totals)
+ primary['statistics']={'closed_trades':closed_count,'wins':wins,'nonwinning':closed_count-wins,'win_rate_percent':wins/closed_count*100 if closed_count else None,'basis':'all_canonical_closed_trades_including_losses'} if history.get('token_totals') is not None else None
+ primary['total_pnl_usdt']=primary['total_equity']-500 if primary['total_equity'] is not None else None
+ primary['total_pnl_percent']=primary['total_pnl_usdt']/500*100 if primary['total_pnl_usdt'] is not None else None
+ primary['realized_pnl_percent']=primary['realized_pnl']/500*100
  primary['max_equity']=(state.get('pandora_account') or {}).get('max_equity',500.)
- primary['current_exposure']=sum(float(p['notional_usd']) for p in positions)
+ primary['current_exposure']=sum(float(p['notional_usd'])*float(p['mark'])/float(p['entry']) for p in positions) if all_marks else None
  primary['pyramid_adds']=[]
  if WIN is not None:
   with pg() as db:
@@ -1269,7 +1338,9 @@ def build_dashboard_snapshot(history=None):
  legacy=S11.snapshot() if S11 is not None else {}
  s13=S13.snapshot() if S13 is not None else {}
  s14=S14.snapshot() if S14 is not None else {}
- return {'strategy1_primary':primary,'strategy11_legacy':legacy,'strategy13':s13,'strategy14':s14,
+ return {'api_version':API_VERSION,'snapshot_id':int(time.time()*1000),'mode':'PAPER_ONLY',
+  'freshness':{'market_at':state.get('last_poll'),'history_at':history.get('at'),'scanner_at':(state.get('bybit_discovery') or {}).get('at'),'execution_at':state.get('_execution_heartbeat')},
+  'strategy1_primary':primary,'strategy11_legacy':legacy,'strategy13':s13,'strategy14':s14,
   'local_experiment_symbols':list(strategy1_runtime_symbols()),'base_symbols':list(LOCAL_EXPERIMENT_SYMBOLS),
   'discovery':state.get('bybit_discovery',{}),
   'health':health_state(),'sources':state['sources'],'strategy1_entry_diagnostics':state.get('strategy1_entry_diagnostics',{}),
@@ -1284,14 +1355,15 @@ def html_strategy1_only(data):return html_dashboard(data)
 class Handler(BaseHTTPRequestHandler):
  def log_message(self,*args):pass
  def send(self,code,result,content_type='application/json; charset=utf-8'):
-  body=result.encode('utf-8') if isinstance(result,str) else json.dumps(result,ensure_ascii=False,default=str).encode('utf-8')
+  body=result.encode('utf-8') if isinstance(result,str) else json.dumps(json_safe(result),ensure_ascii=False,default=str,allow_nan=False).encode('utf-8')
   self.send_response(code);self.send_header('Content-Type',content_type);self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(body)));self.end_headers()
   try:self.wfile.write(body)
   except (BrokenPipeError,ConnectionResetError):pass
  def do_GET(self):
   parsed=urllib.parse.urlsplit(self.path);args=urllib.parse.parse_qs(parsed.query);path=parsed.path
   try:
-   if path in ('/health','/health/risk'):
+   if path=='/openapi.json':self.send(200,openapi(os.getenv('RENDER_EXTERNAL_URL') or 'http://localhost:'+os.getenv('PORT','10000')))
+   elif path in ('/health','/health/risk'):
     result=health_state();self.send(200 if result['healthy' if path=='/health' else 'risk_ready'] else 503,result)
    elif path=='/':self.send(200,html_dashboard(dashboard()),'text/html; charset=utf-8')
    elif path in ('/api/dashboard','/api/pandora','/status'):self.send(200,dashboard())

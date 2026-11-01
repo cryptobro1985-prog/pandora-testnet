@@ -3,9 +3,11 @@ import copy
 import json
 import time
 
+from engine_store import LeaseLost
 from pandora_scanner import LiveScanner
 from pandora_locals import execution_anchor
 from pandora_win_core import allocation, pyramid_decision, apply_add, mark_metrics
+from pandora_risk import RiskPolicy, plan_add, position_risk, signal_strength
 
 
 class PandoraRuntime:
@@ -16,7 +18,7 @@ class PandoraRuntime:
         self.position_fraction=float(app.os.getenv('PANDORA_MAX_POSITION_MARGIN_FRACTION','0.40'))
         if not 0<=self.max_adds<=20 or not 0<self.add_fraction<=self.position_fraction<=1:
             raise ValueError('invalid explicit pyramiding risk configuration')
-        self.tokens={};self.last_saved={};self.max_equity=500.;self.last_scanner_save=0
+        self.tokens={};self.last_saved={};self.max_equity=500.;self.last_scanner_save=0;self.last_scanner_at=0
         self.max_equity=max(self.max_equity,float(app.S.get('local_experiment_equity',500)))
         with app.pg() as db:
             db.execute("create table if not exists pandora_token_state(symbol text primary key,payload jsonb not null,updated_at timestamptz not null default clock_timestamp())")
@@ -27,7 +29,7 @@ class PandoraRuntime:
                 if row['name']=='scanner':
                     self.scanner.restore(row['payload'])
                     app.S['bybit_discovery']=copy.deepcopy(row['payload'])
-                elif row['name']=='account':self.max_equity=float(row['payload'].get('max_equity',500))
+                elif row['name']=='account':self.max_equity=max(self.max_equity,float(row['payload'].get('max_equity',500)))
 
     def event(self,db,action,symbol,reason,context):
         self.a.STORE.fence(db)
@@ -57,20 +59,47 @@ class PandoraRuntime:
 
     def scanner_snapshot(self,snapshot):
         a=self.a
-        if not a.S.get('engine_active'):return
-        changed=bool(snapshot.get('events'))
-        if not changed and time.time()-self.last_scanner_save<5:return
-        with a.pg() as db:
-            with db.transaction():
-                a.STORE.fence(db)
-                db.execute("insert into pandora_runtime_state(name,payload) values('scanner',%s::jsonb) on conflict(name) do update set payload=excluded.payload,updated_at=clock_timestamp()",(json.dumps(snapshot),))
-                for event in snapshot.get('events',[]):
-                    self.event(db,event['action'],event['symbol'],event['reason'],snapshot)
-                    if event.get('state')=='ROTATE_OUT':
-                        self.event(db,'ROTATE_OUT',event['symbol'],'no_position_and_activity_faded',event)
-                        db.execute('delete from local_v12_watchlist where symbol=%s',(event['symbol'],))
-                        with a.LOCK:a.S.get('local_experiment_watch',{}).pop(event['symbol'],None)
-        self.last_scanner_save=time.time()
+        with a.ACCOUNT_LOCK:
+            if not a.S.get('engine_active'):return False
+            snapshot=copy.deepcopy(snapshot)
+            observed=float(snapshot.get('at') or 0)
+            if observed<float(getattr(self,'last_scanner_at',0)):return False
+            with a.LOCK:
+                held=set(a.S.get('local_v12_positions',{}))
+                selected=set(snapshot.get('selected_symbols') or ())
+                watches=copy.deepcopy(a.S.get('local_experiment_watch',{}))
+            snapshot['retained_open_positions']=sorted(held-selected)
+            states=snapshot.setdefault('states',{})
+            for symbol in held-selected:states[symbol]='FADING'
+            to_clear={}
+            for event in snapshot.get('events',[]):
+                if event.get('state')=='ROTATE_OUT' and event['symbol'] in held:
+                    event['state']='FADING'
+                if event.get('state')=='ROTATE_OUT' and event['symbol'] not in selected:
+                    to_clear[event['symbol']]=watches.get(event['symbol'])
+            changed=bool(snapshot.get('events'))
+            save=changed or time.time()-self.last_scanner_save>=5
+            if save:
+                with a.pg() as db:
+                    with db.transaction():
+                        a.STORE.fence(db)
+                        db.execute("insert into pandora_runtime_state(name,payload) values('scanner',%s::jsonb) on conflict(name) do update set payload=excluded.payload,updated_at=clock_timestamp()",(json.dumps(snapshot),))
+                        for event in snapshot.get('events',[]):
+                            self.event(db,event['action'],event['symbol'],event['reason'],snapshot)
+                            if event['symbol'] in to_clear:
+                                if event['action']!='ROTATE_OUT':
+                                    self.event(db,'ROTATE_OUT',event['symbol'],'no_position_and_activity_faded',event)
+                                db.execute('delete from local_v12_watchlist where symbol=%s',(event['symbol'],))
+                self.last_scanner_save=time.time()
+            # A failed commit must not erase a live watch or publish the failed
+            # selection. Account serialization also prevents rotation/entry races.
+            with a.LOCK:
+                for symbol,previous in to_clear.items():
+                    if a.S.get('local_experiment_watch',{}).get(symbol)==previous:
+                        a.S.get('local_experiment_watch',{}).pop(symbol,None)
+                a.S['bybit_discovery']=snapshot
+            self.last_scanner_at=observed
+            return True
 
     def semantic_open(self,db,symbol,position):
         side='LONG' if position['side']>0 else 'SHORT'
@@ -127,11 +156,25 @@ class PandoraRuntime:
                     if live and live['opened']==position['opened']:
                         live.setdefault('features',{})['pyramid_state']=state
                 return False
-            equity,used,free=a._local_experiment_margin_state()
-            headroom=max(0.,equity*self.position_fraction-float(position['margin']))
-            margin=min(equity*self.add_fraction,headroom,free/(1+2*a.FEE*position['leverage']))
-            if margin<.01:return False
-            updated,record=apply_add(position,mark,margin,flow,analysis,a.now())
+            policy=RiskPolicy.from_env()
+            # Re-read at allocation time; the caller's earlier flow is not proof
+            # that the trade tape is still fresh after preceding DB work.
+            fresh_flow=a.MARKET_OBS.flow_context(symbol)
+            if not pyramid_decision(position,analysis,fresh_flow,mark,self.max_adds)[0]:return False
+            flow=fresh_flow
+            risk=a.risk_snapshot(policy)
+            if not risk['allowed']:return False
+            equity=risk['equity'];free=risk['free_margin']
+            add_request_fraction=self.add_fraction*(.5+signal_strength(position['side'],analysis,flow))
+            plan=plan_add(position,mark,equity*add_request_fraction,equity,free,
+                float(instrument['max_leverage']),analysis,flow,risk['portfolio_risk'],policy)
+            if not plan.allowed:return False
+            updated,record=apply_add(position,mark,plan.added_margin,flow,analysis,a.now(),
+                added_notional=plan.added_notional,total_margin=plan.margin,leverage=plan.leverage)
+            updated['features']['risk_plan']=plan.to_dict()
+            record['risk_plan']=plan.to_dict()
+            record['requested_margin_fraction']=add_request_fraction
+            record['equity_at_add']=equity
             updated=mark_metrics(updated,mark,flow,analysis,a.FEE)
             record['mfe_after_add']=updated['features']['peak_mfe_usd']
             updated['features']['pyramid_adds'][-1]['mfe_after_add']=record['mfe_after_add']
@@ -141,8 +184,8 @@ class PandoraRuntime:
                     row=db.execute("insert into pandora_pyramid_adds(symbol,opened,add_number,payload) values(%s,%s,%s,%s::jsonb) on conflict do nothing returning id",
                         (symbol,position['opened'],record['add_number'],json.dumps(record))).fetchone()
                     if not row:return False
-                    result=db.execute("update local_v12_positions set entry=%s,notional=%s,margin=%s,features=%s::jsonb where symbol=%s and opened=%s returning symbol",
-                        (updated['entry'],updated['notional'],updated['margin'],json.dumps(updated['features']),symbol,position['opened'])).fetchone()
+                    result=db.execute("update local_v12_positions set entry=%s,notional=%s,margin=%s,leverage=%s,features=%s::jsonb where symbol=%s and opened=%s returning symbol",
+                        (updated['entry'],updated['notional'],updated['margin'],updated['leverage'],json.dumps(updated['features']),symbol,position['opened'])).fetchone()
                     if not result:raise RuntimeError('pyramid_position_changed')
                     self.event(db,'ADD_LONG' if position['side']>0 else 'ADD_SHORT',symbol,'profitable_stronger_executed_impulse',record)
             with a.LOCK:a.S['local_v12_positions'][symbol]=updated
@@ -150,64 +193,45 @@ class PandoraRuntime:
 
     def cycle(self,prices):
         a=self.a
-        if not a.S.get('engine_active'):return
-        with a.LOCK:
-            selected=set((a.S.get('bybit_discovery') or {}).get('selected_symbols') or [])
-            symbols=set(a.strategy1_trade_symbols())|{s for s,t in self.tokens.items() if t.get('state')!='ROTATE_OUT'}
-        for symbol in sorted(symbols):
+        with a.ACCOUNT_LOCK:
+            if not a.S.get('engine_active'):return
             with a.LOCK:
-                pos=copy.deepcopy(a.S.get('local_v12_positions',{}).get(symbol))
-                analysis=copy.deepcopy(a.S.get('_local4_analysis',{}).get(symbol) or {})
-            flow=a.MARKET_OBS.flow_context(symbol);mark=a.current_entry_price(symbol)
-            context=dict(flow=flow,local=analysis,mark=mark,selected=symbol in selected)
-            if symbol not in selected and not pos:
-                if symbol in a.S.get('local_experiment_watch',{}):a._local_experiment_watch_clear(symbol,'token_rotated_out')
-                if self.tokens.get(symbol,{}).get('state')!='ROTATE_OUT':self.transition(symbol,'ROTATE_OUT','ROTATE_OUT','no_position_and_not_selected',context)
-                continue
-            if not flow.get('trade_data_fresh') or mark is None:
-                self.transition(symbol,'WAIT_REENTRY' if not pos else ('LONG' if pos['side']>0 else 'SHORT'),
-                    'FLOW_STALE','fresh_executed_trade_and_mark_required',context)
-                continue
-            if pos:
-                # The existing causal pressure structure absorbs small bounces.
-                a.local_experiment_mark_positions({symbol:mark})
-                if symbol not in a.S['local_v12_positions']:
-                    self.reload_token(symbol)
-                    continue
-                pos=mark_metrics(a.S['local_v12_positions'][symbol],mark,flow,analysis,a.FEE)
-                with a.LOCK:a.S['local_v12_positions'][symbol]=pos
-                if time.time()-self.last_saved.get('position:'+symbol,0)>=1:
-                    with a.pg() as db:
-                        with db.transaction():
-                            a.STORE.fence(db)
-                            db.execute('update local_v12_positions set features=%s::jsonb where symbol=%s and opened=%s',
-                                (json.dumps(pos['features']),symbol,pos['opened']))
-                    self.last_saved['position:'+symbol]=time.time()
-                side='LONG' if pos['side']>0 else 'SHORT'
-                added=symbol in selected and self.pyramid(symbol,analysis,flow,mark)
-                weakening=(flow.get('dominance_side')==-pos['side'] or flow.get('buy_absorbed' if pos['side']>0 else 'sell_absorbed'))
-                phase=side+'_PYRAMID' if added else side+'_WEAKENING' if weakening else side
-                self.transition(symbol,phase,'HOLD','confirmed_continuation_add' if added else 'observe_counterpressure' if weakening else 'same_side_control_or_no_confirmed_transfer',context)
-            else:
-                if analysis.get('entry_blocked') and analysis.get('forming_local'):
-                    forming=analysis['forming_local']
-                    self.transition(symbol,'FORMING_'+forming['pivot_type'],forming['pivot_type']+'_FORMING',
-                        'old_anchor_extended_waiting_for_structure_confirmation',context)
-                    continue
-                if not a.strategy1_runtime_h1_verified(symbol,analysis):
-                    forming=analysis.get('forming_local') or {}
-                    phase='FORMING_'+forming['pivot_type'] if forming else 'SELECTED'
-                    self.transition(symbol,phase,'WAIT','fresh_local_structure_required',context);continue
-                before=set(a.S['local_v12_positions'])
-                a.local4_fast_entries({symbol:mark})
-                if symbol in a.S['local_v12_positions'] and symbol not in before:
-                    self.reload_token(symbol)
-                else:
-                    phase='WAIT_REENTRY' if symbol in a.S.get('local_experiment_watch',{}) else ('LONG_READY' if analysis.get('entry_side')==1 else 'SHORT_READY')
-                    self.transition(symbol,phase,'WAIT','waiting_for_executed_control_or_resumption',context)
+                a.S['_execution_started_epoch']=time.time()
+                a.S['_execution_running']=True
+                a.S['_execution_errors']={}
+            try:
+                self._cycle(prices)
+            except Exception as exc:
+                with a.LOCK:
+                    a.S['_execution_errors']['__cycle__']=type(exc).__name__+':'+str(exc)[:160]
+                raise
+            finally:
+                with a.LOCK:
+                    a.S['_execution_running']=False
+                    a.S['_execution_heartbeat']=time.time()
+                    a.S['_execution_ok']=not bool(a.S['_execution_errors'])
+
+    def _cycle(self,prices):
+        a=self.a
+        with a.LOCK:
+            symbols=set(a.strategy1_trade_symbols())|{s for s,t in self.tokens.items() if t.get('state')!='ROTATE_OUT'}
+        held=set(a.S.get('local_v12_positions',{}))
+        for symbol in sorted(symbols,key=lambda s:(s not in held,s)):
+            try:
+                self._cycle_symbol(symbol,prices)
+            except LeaseLost:
+                raise
+            except Exception as exc:
+                # One malformed token or unavailable row must not prevent risk
+                # reduction for every other open position in this iteration.
+                error=type(exc).__name__+':'+str(exc)[:160]
+                with a.LOCK:
+                    a.S['_execution_errors'][symbol]=error
+                    a.S.setdefault('sources',{})['PandoraToken:'+symbol]={'ok':False,'error':error,'at':a.now()}
         equity,used,free=a._local_experiment_margin_state()
+        if hasattr(a,'risk_snapshot'):a.risk_snapshot()
         self.max_equity=max(self.max_equity,equity)
-        with a.LOCK:a.S['pandora_account']=dict(max_equity=self.max_equity,current_exposure=sum(p['notional'] for p in a.S['local_v12_positions'].values()),used_margin=used,free_margin=free)
+        with a.LOCK:a.S['pandora_account']=dict(max_equity=self.max_equity,current_exposure=sum(p['notional']*a.fresh_mark_price(s)/p['entry'] for s,p in a.S['local_v12_positions'].items()) if a.S.get('margin_valuation',{}).get('complete',True) and all(a.fresh_mark_price(s) is not None for s in a.S['local_v12_positions']) else None,used_margin=used,free_margin=free)
         if time.time()-self.last_saved.get('account',0)>=5:
             with a.pg() as db:
                 with db.transaction():
@@ -215,8 +239,79 @@ class PandoraRuntime:
                     db.execute("insert into pandora_runtime_state(name,payload) values('account',%s::jsonb) on conflict(name) do update set payload=excluded.payload,updated_at=clock_timestamp()",(json.dumps(a.S['pandora_account']),))
             self.last_saved['account']=time.time()
 
+    def _cycle_symbol(self,symbol,prices):
+        a=self.a
+        with a.LOCK:
+            selected=set((a.S.get('bybit_discovery') or {}).get('selected_symbols') or [])
+            pos=copy.deepcopy(a.S.get('local_v12_positions',{}).get(symbol))
+            analysis=copy.deepcopy(a.S.get('_local4_analysis',{}).get(symbol) or {})
+        flow=a.MARKET_OBS.flow_context(symbol)
+        mark=getattr(a,'fresh_mark_price',a.current_entry_price)(symbol)
+        context=dict(flow=flow,local=analysis,mark=mark,selected=symbol in selected)
+        if symbol not in selected and not pos:
+            if symbol in a.S.get('local_experiment_watch',{}):a._local_experiment_watch_clear(symbol,'token_rotated_out')
+            if self.tokens.get(symbol,{}).get('state')!='ROTATE_OUT':self.transition(symbol,'ROTATE_OUT','ROTATE_OUT','no_position_and_not_selected',context)
+            return
+        # Risk guards may use a genuinely fresh own-symbol mark even when
+        # checkpoint publication or the executed tape is unavailable. The app's
+        # guard must not make discretionary signal exits from stale flow.
+        if pos and mark is not None:
+            a.local_experiment_mark_positions({symbol:mark})
+            if symbol not in a.S['local_v12_positions']:
+                self.reload_token(symbol)
+                return
+        if not flow.get('trade_data_fresh') or mark is None:
+            self.transition(symbol,'WAIT_REENTRY' if not pos else ('LONG' if pos['side']>0 else 'SHORT'),
+                'FLOW_STALE','fresh_executed_trade_and_mark_required',context)
+            return
+        if pos:
+            current=a.S['local_v12_positions'].get(symbol)
+            if not current or current.get('opened')!=pos.get('opened'):return
+            updated=mark_metrics(current,mark,flow,analysis,a.FEE)
+            # Defend against a row disappearing through an external writer as
+            # well as keeping normal operator-close transactions serialized.
+            live=a.S['local_v12_positions'].get(symbol)
+            if not live or live.get('opened')!=pos.get('opened'):return
+            if time.time()-self.last_saved.get('position:'+symbol,0)>=1:
+                with a.pg() as db:
+                    with db.transaction():
+                        a.STORE.fence(db)
+                        row=db.execute('update local_v12_positions set features=%s::jsonb where symbol=%s and opened=%s returning symbol',
+                            (json.dumps(updated['features']),symbol,pos['opened'])).fetchone()
+                        if not row:
+                            with a.LOCK:
+                                if a.S['local_v12_positions'].get(symbol,{}).get('opened')==pos['opened']:
+                                    a.S['local_v12_positions'].pop(symbol,None)
+                            return
+                self.last_saved['position:'+symbol]=time.time()
+            with a.LOCK:a.S['local_v12_positions'][symbol]=updated
+            side='LONG' if pos['side']>0 else 'SHORT'
+            added=symbol in selected and self.pyramid(symbol,analysis,flow,mark)
+            weakening=(flow.get('dominance_side')==-pos['side'] or flow.get('buy_absorbed' if pos['side']>0 else 'sell_absorbed'))
+            phase=side+'_PYRAMID' if added else side+'_WEAKENING' if weakening else side
+            self.transition(symbol,phase,'HOLD','confirmed_continuation_add' if added else 'observe_counterpressure' if weakening else 'same_side_control_or_no_confirmed_transfer',context)
+        else:
+            if analysis.get('entry_blocked') and analysis.get('forming_local'):
+                forming=analysis['forming_local']
+                self.transition(symbol,'FORMING_'+forming['pivot_type'],forming['pivot_type']+'_FORMING',
+                    'old_anchor_extended_waiting_for_structure_confirmation',context)
+                return
+            if not a.strategy1_runtime_h1_verified(symbol,analysis):
+                forming=analysis.get('forming_local') or {}
+                phase='FORMING_'+forming['pivot_type'] if forming else 'SELECTED'
+                self.transition(symbol,phase,'WAIT','fresh_local_structure_required',context);return
+            before=set(a.S['local_v12_positions'])
+            a.local4_fast_entries({symbol:mark})
+            if symbol in a.S['local_v12_positions'] and symbol not in before:
+                self.reload_token(symbol)
+            else:
+                phase='WAIT_REENTRY' if symbol in a.S.get('local_experiment_watch',{}) else ('LONG_READY' if analysis.get('entry_side')==1 else 'SHORT_READY')
+                self.transition(symbol,phase,'WAIT','waiting_for_executed_control_or_resumption',context)
+
     def snapshot(self):
         with self.a.LOCK:tokens=copy.deepcopy(self.tokens)
+        policy=RiskPolicy.from_env()
         return dict(tokens=tokens,max_equity=self.max_equity,
+                    sizing_policy=dict(min_margin_fraction=policy.min_margin_fraction,max_entry_margin_fraction=policy.max_entry_margin_fraction,min_leverage=policy.min_leverage,max_leverage=policy.max_leverage,fixed_sl_tp=False,pnl_based_halts=False),
                     pyramiding=dict(max_adds=self.max_adds,add_margin_fraction=self.add_fraction,
                                     max_position_margin_fraction=self.position_fraction))

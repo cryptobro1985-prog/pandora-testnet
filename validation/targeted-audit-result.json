@@ -1,0 +1,16 @@
+{
+  "tests_run": 54,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "successful": true,
+  "modules": [
+    "tests.test_signal_audit",
+    "tests.test_risk_audit",
+    "tests.test_runtime_audit",
+    "tests.test_monitor_audit",
+    "tests.test_api_contract",
+    "tests.test_pandora_win.PyramidAccountingTests"
+  ],
+  "note": "Final targeted checks after scanner continuity refinement; complete PostgreSQL/wire run is release-result.json."
+}

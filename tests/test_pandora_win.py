@@ -25,7 +25,7 @@ class ExecutedStrengthTests(unittest.TestCase):
         self.assertEqual(f['sustained_control_side'],0)
 
     def test_sustained_sellers_have_price_response_velocity_and_multiple_windows(self):
-        rows=[(1000,100,100,'A'),(1001,99,200,'A'),(1002,98,300,'A')]
+        rows=[(985,101,10,'A'),(999,100,100,'A'),(1001,99,200,'A'),(1002,98,300,'A')]
         f=summarize(rows,1002,60)
         self.assertEqual(f['sustained_control_side'],-1)
         self.assertGreater(f['sell_price_response'],0)
@@ -59,7 +59,9 @@ class ScannerTests(unittest.TestCase):
         self.assertFalse(scanner.ingest(row,1019000,1020))
         snapshot=scanner.rank({'BTC':{}},lambda *a:{},epoch=1020)
         restored=LiveScanner();restored.restore(snapshot)
-        self.assertEqual(restored.rank({'BTC':{}},lambda *a:{},epoch=1020)['selected_symbols'],[])
+        new=restored.rank({'BTC':{}},lambda *a:{},epoch=1020)
+        self.assertEqual(new['selected_symbols'],['BTC'])
+        self.assertTrue(new['selection_frozen'])
 
 
 class OnlineLocalTests(unittest.TestCase):
@@ -128,7 +130,7 @@ class PyramidAccountingTests(unittest.TestCase):
     def test_allocation_compounds_and_honors_contract_leverage(self):
         self.assertEqual(allocation(500,500,10)['margin'],100)
         self.assertEqual(allocation(800,800,100)['margin'],160)
-        self.assertEqual(allocation(800,800,100)['leverage'],25)
+        self.assertEqual(allocation(800,800,100)['leverage'],50)
 
 
 @unittest.skipUnless(os.getenv('PANDORA_TEST_DATABASE_URL_FILE'),'isolated PostgreSQL required')

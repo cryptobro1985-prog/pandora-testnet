@@ -9,15 +9,17 @@ from accounting import paper_pnl
 
 STARTING_EQUITY=500.
 MARGIN_FRACTION=.20
-REFERENCE_LEVERAGE=25.
+REFERENCE_LEVERAGE=50.
 
 
 def allocation(equity, free, max_leverage, fraction=.20, fee=.00045):
     values=tuple(map(float,(equity,free,max_leverage,fraction,fee)))
     if not all(math.isfinite(x) for x in values) or min(values)<0 or max_leverage<1 or fraction>1:
         raise ValueError('invalid paper allocation')
-    leverage=min(25.,max_leverage)
+    leverage=min(50.,max_leverage)
+    if leverage<10 or fraction<.10:raise ValueError("entry minimum is 10% collateral and 10x")
     margin=min(equity*fraction,free/(1+2*fee*leverage))
+    if margin<equity*.10:return dict(margin=0.,leverage=0.,notional=0.,reason="MIN_ENTRY_MARGIN_UNFUNDED")
     return dict(margin=margin,leverage=leverage,notional=margin*leverage)
 
 
@@ -47,16 +49,22 @@ def pyramid_decision(position, analysis, flow, mark, max_adds=2):
     return reason=='CONFIRMED_PROFITABLE_CONTINUATION',state
 
 
-def apply_add(position, mark, margin, flow, analysis, timestamp):
+def apply_add(position, mark, margin, flow, analysis, timestamp, *, added_notional=None, total_margin=None, leverage=None):
     out=copy.deepcopy(position);features=out.setdefault('features',{})
-    added_notional=float(margin)*float(out['leverage'])
-    if margin<=0 or mark<=0 or not math.isfinite(added_notional+mark):raise ValueError('invalid add')
+    old_leverage=float(out['leverage'])
+    added_notional=float(margin)*old_leverage if added_notional is None else float(added_notional)
+    final_margin=float(out['margin'])+float(margin) if total_margin is None else float(total_margin)
+    final_leverage=old_leverage if leverage is None else float(leverage)
+    if (not all(math.isfinite(x) for x in (added_notional,mark,final_margin,final_leverage)) or
+        added_notional<=0 or mark<=0 or final_margin<float(out['margin']) or final_leverage<1):
+        raise ValueError('invalid add or collateral release')
     total=float(out['notional'])+added_notional
     quantity=float(out['notional'])/float(out['entry'])+added_notional/mark
     average=total/quantity
     level=int(features.get('pyramid_level',0))+1
     fast=(flow.get('windows') or {}).get('15',{})
-    record=dict(add_number=level,timestamp=timestamp,price=mark,added_margin=margin,
+    record=dict(add_number=level,timestamp=timestamp,price=mark,added_margin=final_margin-float(out["margin"]),
+                previous_leverage=old_leverage,leverage=final_leverage,
                 added_notional=added_notional,total_notional=total,average_entry=average,
                 flow_state=copy.deepcopy(flow),buy_volume=flow.get('buy_notional'),
                 sell_volume=flow.get('sell_notional'),local_state=copy.deepcopy(analysis),
@@ -69,8 +77,8 @@ def apply_add(position, mark, margin, flow, analysis, timestamp):
         last_add_event=float(flow.get('decision_event_epoch') or flow.get('latest_trade_epoch') or 0),
         baseline_velocity=float(fast.get('volume_velocity',0)),
         baseline_side_volume=float(fast.get('buy_volume' if out['side']>0 else 'sell_volume',0)))
-    out.update(entry=average,notional=total,margin=float(out['margin'])+margin)
-    features['average_entry']=average
+    out.update(entry=average,notional=total,margin=final_margin,leverage=final_leverage)
+    features.update(average_entry=average,leverage=final_leverage,actual_margin=final_margin,actual_notional=total)
     return out,record
 
 

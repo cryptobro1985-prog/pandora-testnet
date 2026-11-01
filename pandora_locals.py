@@ -13,14 +13,18 @@ def live_locals(h1_rows, m15_rows, now_ms, symbol):
     # Partial candles are usable only with an explicit time of observation.
     # REST snapshots/WS frames stamp this at ingestion; historical final OHLC is
     # never treated as an intrabar observation from an earlier time.
-    partial=[]; observed_extremes={}
+    partial=[]; observed_extremes={}; stale_partial=False
     for row in h1_rows or []:
         seen=_f(row.get('observed_at_ms'))
-        if seen is None or seen>now_ms or now_ms-seen>15_000: continue
+        if seen is None or seen<=0 or seen>now_ms: continue
         t,T=_f(row.get('t')),_f(row.get('T'))
         if t is not None and T is not None and t<=now_ms<T+1000:
             partial.extend(_completed([row],T+1001,3_600_000))
             observed_extremes[int(t)]=row
+            stale_partial=now_ms-seen>15_000
+    partial.sort(key=lambda row:row['t'])
+    out['live_structure_fresh']=not stale_partial
+    if stale_partial:out.update(entry_blocked=True,entry_block_reason='stale_live_structure')
     newest = partial[-1] if partial else closed[-1]
     prior = [r for r in closed if r['t']<newest['t']][-PIVOT_LOOKBACK:]
     if len(prior)<PIVOT_LOOKBACK: return out
@@ -46,7 +50,9 @@ def live_locals(h1_rows, m15_rows, now_ms, symbol):
             a,b=m15[-2:]
             contiguous=b['t']-a['t']==900_000 and 0<=now_ms-b['T']<=901_000
             after=b['T']>=observed
-            candidate['m15_confirmation']=bool(contiguous and after and (
+            relevant=[r for r in m15 if r['t']>=candidate['pivot_candle_time']]
+            consistent=all(r['l']>=candidate['pivot_price'] for r in relevant) if candidate['entry_side']>0 else all(r['h']<=candidate['pivot_price'] for r in relevant)
+            candidate['m15_confirmation']=bool(not stale_partial and consistent and contiguous and after and (
                 b['l']>a['l'] and b['h']>a['h'] and b['l']>candidate['pivot_price'] if candidate['entry_side']>0
                 else b['h']<a['h'] and b['l']<a['l'] and b['h']<candidate['pivot_price']))
             if candidate['m15_confirmation']:
@@ -73,7 +79,7 @@ def execution_anchor(analysis, flow):
     """
     forming=analysis.get('forming_local') or {}
     side=int(forming.get('entry_side') or 0)
-    if not (side and forming.get('m15_confirmation') and flow.get('trade_data_fresh')
+    if not (analysis.get('live_structure_fresh',True) and side and forming.get('m15_confirmation') and flow.get('trade_data_fresh')
             and flow.get('sustained_control_side')==side):
         return analysis
     return {**analysis,**forming,'ready':True,'anchor_confirmed':True,

@@ -85,7 +85,9 @@ class SelectedMarketExecutionTests(unittest.TestCase):
         app.S['bybit_discovery']={'selected_symbols':list(selected[:5])}
         stamp=time.time();hour=3600000;last=(int(stamp*1000)//hour)*hour
         self.sides={symbol:1 if i%2==0 else -1 for i,symbol in enumerate(selected)}
-        values=[(100,102,95,99),(99,101,94,98),(98,100,93,97),(97,99,92,96),(96,98,85,89),(89,96,87,95)]
+        values=[(100.6,100.8,100.3,100.5),(100.5,100.7,100.2,100.4),
+                (100.4,100.6,100.1,100.3),(100.3,100.5,100,100.2),
+                (100.2,100.4,99,99.5),(99.5,100.2,99.2,100)]
         for symbol,side in self.sides.items():
             prices=values if side>0 else [(200-o,200-l,200-h,200-c) for o,h,l,c in values]
             rows=[dict(t=last-(6-i)*hour,T=last-(5-i)*hour-1,o=o,h=h,l=l,c=c,v=100) for i,(o,h,l,c) in enumerate(prices)]
@@ -100,6 +102,10 @@ class SelectedMarketExecutionTests(unittest.TestCase):
         self.transport.start()
         self.wait_for(lambda: self.server.topics=={'publicTrade.'+s+'USDT' for s in self.sides})
         self.assertTrue(self.server.connected.is_set())
+        # Establish genuine observed tape through the real socket. A live socket
+        # alone and two identical bootstrap prints are not sustained dominance.
+        for symbol,side in self.sides.items():self.send(symbol,side,.001,100-side*.2)
+        time.sleep(15.1)
 
     def wait_for(self,predicate,seconds=5):
         end=time.monotonic()+seconds
@@ -139,7 +145,12 @@ class SelectedMarketExecutionTests(unittest.TestCase):
             app.local4_fast_entries({symbol:entry})
             self.assertIn(symbol,app.S['local_v12_positions'])
             self.assertEqual(app.S['local_v12_positions'][symbol]['side'],side)
-            if symbol=='HYPE':self.assertEqual(app.S['local_v12_positions'][symbol]['leverage'],10)
+            position=app.S['local_v12_positions'][symbol]
+            self.assertGreaterEqual(position['leverage'],10)
+            self.assertGreaterEqual(position['margin']+1e-8,.10*position['features']['mark_to_market_equity_at_entry'])
+            if symbol=='HYPE':
+                self.assertGreaterEqual(app.S['local_v12_positions'][symbol]['leverage'],10)
+                self.assertLessEqual(app.S['local_v12_positions'][symbol]['leverage'],10)
             tiny=entry-side*.05
             self.send(symbol,-side,.01,tiny)
             app.local_experiment_mark_positions({symbol:tiny})
@@ -175,9 +186,9 @@ class SelectedMarketExecutionTests(unittest.TestCase):
             self.assertAlmostEqual(account['realized_pnl'],pnl)
             for kind in ('local_experiment_trade_opened','local_experiment_trade_closed'):
                 self.assertEqual(db.execute('select count(*) n from audit_journal where kind=%s',(kind,)).fetchone()['n'],2*len(self.sides))
-        self.assertEqual(self.obs.stats()['accepted'],10*len(self.sides))
+        self.assertEqual(self.obs.stats()['accepted'],11*len(self.sides))
         self.evidence('selected-market-wire.json',{'tokens':{r['symbol']:{'opens':2,'closes':r['n'],'reentries':1,
-            'pnl_net_fees':r['pnl']} for r in trades},'accepted_frames':10*len(self.sides),'closed_trades':2*len(self.sides),
+            'pnl_net_fees':r['pnl']} for r in trades},'accepted_frames':11*len(self.sides),'closed_trades':2*len(self.sides),
             'starting_equity':500,'ending_equity':account['equity'],'realized_pnl':pnl,
             'transport':'real loopback WebSocket carrying synthetic Bybit publicTrade frames'})
 
@@ -196,10 +207,18 @@ class SelectedMarketExecutionTests(unittest.TestCase):
         self.assertGreater(len(app.S['local_v12_positions']),0)
         self.assertLessEqual(used,equity+1e-7)
         self.assertGreaterEqual(free,0)
-        self.assertLess(len(app.S['local_v12_positions']),len(self.sides))  # 20% total-equity sizing exhausts $500
+        self.assertLess(len(app.S['local_v12_positions']),len(self.sides))  # Whole entry floors prohibit a tiny last-slot partial fill.
+        total_risk=sum(app.position_risk(p) for p in app.S['local_v12_positions'].values())
+        for position in app.S['local_v12_positions'].values():
+            self.assertGreaterEqual(position['leverage'],10)
+            self.assertGreaterEqual(position['margin']+1e-8,.10*position['features']['mark_to_market_equity_at_entry'])
         rejected=set(self.sides)-set(app.S['local_v12_positions'])
-        for symbol in rejected:self.assertEqual(app.S['strategy1_executor_rejections'][symbol]['reason'],'INSUFFICIENT_FREE_MARGIN')
+        for symbol in rejected:
+            reason=app.S['strategy1_executor_rejections'][symbol]['reason']
+            self.assertIn(reason,('INSUFFICIENT_FREE_MARGIN','MIN_ENTRY_MARGIN_UNFUNDED','CONTRACT_OR_GEOMETRY_BELOW_MIN_LEVERAGE','OPTIONAL_RISK_CAP_BELOW_ENTRY_MINIMUM'))
         self.evidence('margin-capacity.json',{'simultaneous_positions':len(app.S['local_v12_positions']),
             'equity_after_modeled_fees':equity,'reserved_margin':used,'free_margin':free,
             'rejected':{symbol:app.S['strategy1_executor_rejections'][symbol]['reason'] for symbol in sorted(rejected)},
-            'sizing':'20% current equity, capped by free margin with fee reserve'})
+            'modeled_stop_risk':total_risk,'default_portfolio_risk_cap':None,
+            'minimum_entry_margin_fraction':.10,'minimum_leverage':10,
+            'sizing':'whole entries at >=10% current equity margin and >=10x; reject rather than undersize when risk budget cannot fund the minimum'})

@@ -27,8 +27,18 @@ def flow_profile(flow,side):
  dominant=1 if buy>sell else -1 if sell>buy else 0
  direction=int(flow.get('price_direction') or 0)
  control=dominant if dominant==direction and direction in (-1,1) else 0
+ entry_control=control
+ # Fast corroborated control can reduce existing risk without waiting for old
+ # minute volume to expire. New entry/reentry still requires minute context.
+ # Legacy explicit test flows without a fast key keep their sustained contract.
+ if 'windows' in flow:
+  rich=int(flow.get('sustained_control_side') or 0)
+  entry_control=rich if rich==dominant and rich in (-1,1) else 0
+  fast=int(flow.get('fast_control_side') or 0) if 'fast_control_side' in flow else entry_control
+  control=fast if fast in (-1,1) else 0
  return {'event_epoch':_event_epoch(flow),'aligned_pressure':side*(buy-sell)/(buy+sell),'control_side':control,
-         'aligned_control':control==side,'resumed':control==side,'counter_takeover':control==-side,
+         'entry_control_side':entry_control,
+         'aligned_control':entry_control==side,'resumed':entry_control==side,'counter_takeover':control==-side,
          'weakening':direction==-side or side*(buy-sell)<0,'price_direction':direction}
 
 

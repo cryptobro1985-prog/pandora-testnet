@@ -1,3 +1,7 @@
+# Актуальный глубокий аудит
+
+Текущая политика и найденные дефекты: [DEEP_AUDIT.md](DEEP_AUDIT.md). Итоговая версия: минимумы входа 10% текущего equity и 10x, динамическое плечо до 50x, без процентных SL/TP/MFE-exit и PnL-пауз. Вход/выход определяются local structure и executed control. Реальные ордера отсутствуют. Актуальное число тестов — в validation/release-result.json.
+
 # Проверяемый статус сборки, 2026-11-01
 
 Полный актуальный runner включает проверки полной Pandora Win; количество и исходы — в validation/release-result.json. Отчёт — validation/release-result.json, журнал — validation/release.log. Интеграционные тесты используют отдельную PostgreSQL 17 и настоящий локальный WebSocket с синтетическими кадрами Bybit.

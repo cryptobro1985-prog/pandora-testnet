@@ -1,172 +1,297 @@
-"""Read-only PANDORA Win + Strategy 1 A/B PAPER monitor."""
+"""Responsive, read-only Pandora Win PAPER terminal with incremental JSON updates."""
 import html
+import json
+import math
 from urllib.parse import urlencode
 
-def _e(v): return html.escape(str("—" if v is None else v), quote=True)
-def _n(v,digits=4):
-    try:return f"{float(v):,.{digits}f}"
-    except:return "—"
-def _m(v):
-    try:return f"$ {float(v):+,.4f}"
-    except:return "—"
-def _pct(v):
-    try:return f"{float(v):+,.2f}%"
-    except:return "—"
-def _pnl_pair(pnl,basis):
-    try:
-        p=float(pnl); b=float(basis)
-        return f"$ {p:+,.2f} / {((p/b)*100):+,.2f}%" if b else f"$ {p:+,.2f} / —"
-    except:return "—"
-def _side(v):
-    if v in (1,"1","LONG","long"):return "LONG"
-    if v in (-1,"-1","SHORT","short"):return "SHORT"
-    return "WAIT"
-def _table(head,rows):
-    body="".join("<tr>"+"".join("<td>"+_e(x)+"</td>" for x in r)+"</tr>" for r in rows)
-    if not body:body='<tr><td colspan="'+str(len(head))+'">Нет записей</td></tr>'
-    return '<div class="scroll"><table><tr>'+"".join("<th>"+_e(x)+"</th>" for x in head)+"</tr>"+body+"</table></div>"
 
-def _cards(primary):
-    realized=primary.get("realized_pnl")
-    unreal=primary.get("unrealized_pnl")
-    total=float(realized)+float(unreal) if realized is not None and unreal is not None else None
-    return [
-      ("START",_m(primary.get("starting_equity",500.0))),
-      ("EQUITY",_m(primary.get("total_equity"))),
-      ("TOTAL PnL",_pnl_pair(total,primary.get("starting_equity") or 500.0)),
-      ("REALIZED",_m(realized)),
-      ("OPEN",_m(unreal)),
-      ("STARTED",primary.get("started_at") or primary.get("account_started_at") or "—"),
+def _e(value):
+    return html.escape(str('—' if value is None else value), quote=True)
+
+
+def _finite(value):
+    try:
+        number = float(value)
+        return number if math.isfinite(number) else None
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
+def _n(value, digits=4):
+    number = _finite(value)
+    return f'{number:,.{digits}f}' if number is not None else '—'
+
+
+def _m(value):
+    number = _finite(value)
+    return f'{number:+,.4f} USDT' if number is not None else '—'
+
+
+def _pct(value):
+    number = _finite(value)
+    return f'{number:+,.2f}%' if number is not None else '—'
+
+
+def _side(value):
+    return 'LONG' if value in (1, '1', 'LONG', 'long') else 'SHORT' if value in (-1, '-1', 'SHORT', 'short') else 'WAIT'
+
+
+def _tone(value):
+    number = _finite(value)
+    return 'positive' if number is not None and number > 0 else 'negative' if number is not None and number < 0 else 'neutral'
+
+
+def _field(name, value, kind=''):
+    return '<span data-field="'+_e(name)+'" class="'+_e(kind)+'">'+_e(value)+'</span>'
+
+
+def _metric(label, name, value, kind=''):
+    return '<div class="metric"><dt>'+_e(label)+'</dt><dd>'+_field(name, value, kind)+'</dd></div>'
+
+
+def _card(key, title, subtitle, metrics, kind='', fields=None):
+    fields = fields or ('title', 'subtitle')
+    return '<article class="terminal-card '+_e(kind)+'" data-key="'+_e(key)+'"><div class="card-heading"><h3>'+_field(fields[0], title)+'</h3><small>'+_field(fields[1], subtitle)+'</small></div><dl class="metric-grid">'+''.join(_metric(*m) for m in metrics)+'</dl></article>'
+
+
+def _local_text(local):
+    if not isinstance(local, dict) or not local.get('pivot_type'):
+        return '—'
+    return str(local['pivot_type'])+' · '+_n(local.get('pivot_price'))
+
+
+def _token_view(token):
+    flow = token.get('flow_state') or {}
+    position = token.get('position') or {}
+    features = position.get('features') or {}
+    risk = features.get('risk_plan') or {}
+    direction = _side(token.get('direction'))
+    return token.get('symbol'), 'RANK '+str(token.get('rank', '—'))+' · '+str(token.get('state') or direction), [
+        ('Цена', 'price', _n(token.get('price'))),
+        ('Scanner score', 'score', _n(token.get('pandora_win_score'))),
+        ('Подтверждённый local', 'confirmed', _local_text(token.get('confirmed_local'))),
+        ('Формирующийся local', 'forming', _local_text(token.get('forming_local'))),
+        ('Направление', 'direction', direction),
+        ('Позиция', 'position', _side(position.get('side'))),
+        ('BUY volume', 'buy', _m(token.get('buy_volume'))),
+        ('SELL volume', 'sell', _m(token.get('sell_volume'))),
+        ('Flow imbalance', 'imbalance', _pct(_finite(token.get('flow_imbalance'))*100 if _finite(token.get('flow_imbalance')) is not None else None)),
+        ('Объём / сек.', 'velocity', _n(token.get('volume_velocity'))),
+        ('Tape', 'tape', 'FRESH' if flow.get('trade_data_fresh') else 'STALE'),
+        ('Контроль входа', 'control', _side(flow.get('sustained_control_side'))),
+        ('Быстрый контроль выхода', 'fast_control', _side(flow.get('fast_control_side'))),
+        ('Минутный контекст', 'context_control', _side(flow.get('context_control_side'))),
+        ('Average entry', 'entry', _n(token.get('average_entry'))),
+        ('Маржа', 'margin', _m(token.get('margin'))),
+        ('Notional', 'notional', _m(token.get('notional'))),
+        ('Плечо / ADD', 'leverage', str(token.get('leverage') or '—')+'x / '+str(token.get('pyramid_level', 0))),
+        ('Эффективное плечо', 'effective_leverage', _n(position.get('effective_leverage'))+'x'),
+        ('PnL', 'pnl', _m(token.get('current_pnl_usd')), _tone(token.get('current_pnl_usd'))),
+        ('PnL / маржа', 'pnl_pct', _pct(token.get('current_pnl_pct')), _tone(token.get('current_pnl_pct'))),
+        ('Peak MFE', 'mfe', _m(token.get('mfe'))),
+        ('MAE', 'mae', _m(token.get('mae'))),
+        ('MFE giveback', 'giveback', _m(token.get('mfe_giveback'))),
+        ('Ориентир модели (не SL)', 'stop', _n(risk.get('stop_price'))),
+        ('Последнее действие', 'action', token.get('last_action')),
+        ('Причина', 'reason', token.get('action_reason')),
     ]
 
-def _positions(primary):
-    rows=[]
-    for p in primary.get("open_positions") or []:
-        f=p.get("features") or {}
-        rows.append([p.get("symbol"),_side(p.get("side")),_n(p.get("entry")),_n(p.get("mark")),
-          p.get("leverage"),_m(p.get("margin_usd") or p.get("margin")),_m(p.get("unrealized_pnl")),
-          _n(f.get("mfe_roe_pct"),2),_n(f.get("mae_roe_pct"),2)])
-    return rows
 
-def _history(primary):
-    rows=[]
-    for p in primary.get("closed_trades") or []:
-        f=p.get("features") or {}
-        rows.append([p.get("closed"),p.get("symbol"),_side(p.get("side")),_n(p.get("entry")),_n(p.get("exit")),
-          _pnl_pair(p.get("pnl"),p.get("margin") or p.get("margin_usd")),f.get("entry_kind") or "—",p.get("reason") or "—",
-          _n(f.get("mfe_roe_pct"),2),_n(f.get("mae_roe_pct"),2)])
-    return rows
+def _position_view(position):
+    f = position.get('features') or {}
+    pnl = position.get('unrealized_pnl')
+    margin = position.get('margin_usd', position.get('margin'))
+    percent = float(pnl)/float(margin)*100 if _finite(pnl) is not None and _finite(margin) and float(margin) > 0 else None
+    risk = f.get('risk_plan') or {}
+    return str(position.get('symbol'))+' · '+_side(position.get('side')), position.get('opened'), [
+        ('Average entry', 'entry', _n(position.get('entry'))), ('Mark', 'mark', _n(position.get('mark'))),
+        ('PnL', 'pnl', _m(pnl), _tone(pnl)), ('PnL / маржа', 'pnl_pct', _pct(percent), _tone(percent)),
+        ('Маржа', 'margin', _m(margin)), ('Notional', 'notional', _m(position.get('notional_usd', position.get('notional')))),
+        ('Плечо', 'leverage', str(position.get('leverage') or '—')+'x'), ('Эффективное плечо', 'effective_leverage', _n(position.get('effective_leverage'))+'x'), ('ADD level', 'level', f.get('pyramid_level', 0)),
+        ('Peak MFE', 'mfe', _m(f.get('peak_mfe_usd'))), ('MAE', 'mae', _m(f.get('mae_usd'))),
+        ('MFE giveback', 'giveback', _m(f.get('mfe_giveback_usd'))), ('Ориентир модели (не SL)', 'stop', _n(risk.get('stop_price'))),
+    ]
 
-def _has_local(a):
-    return isinstance(a,dict) and a.get("pivot_type") in ("LOCAL_HIGH","LOCAL_LOW") and a.get("pivot_price") not in (None,"") and a.get("entry_side") not in (None,"")
 
-def _pick_local(sym,source,details=None):
-    details=details or {}
-    live=(details.get(sym) or {}).get("h1_local") or {}
-    durable=source.get(sym) or {}
-    # Runtime details can temporarily contain a non-confirmed/partial H1 object
-    # while the durable confirmed pivot is still valid for monitor display.
-    return live if _has_local(live) else durable if _has_local(durable) else live or durable or {}
+def _trade_view(trade):
+    f = trade.get('features') or {}
+    pnl = trade.get('pnl'); margin = trade.get('margin', trade.get('margin_usd'))
+    percent = float(pnl)/float(margin)*100 if _finite(pnl) is not None and _finite(margin) and float(margin) > 0 else None
+    return str(trade.get('symbol'))+' · '+_side(trade.get('side')), trade.get('closed'), [
+        ('Вход', 'entry', _n(trade.get('entry'))), ('Выход', 'exit', _n(trade.get('exit'))),
+        ('PnL', 'pnl', _m(pnl), _tone(pnl)), ('PnL / маржа', 'pnl_pct', _pct(percent), _tone(percent)),
+        ('Маржа', 'margin', _m(margin)), ('Плечо', 'leverage', str(trade.get('leverage') or '—')+'x'),
+        ('Тип входа', 'kind', f.get('entry_kind')), ('Причина выхода', 'reason', trade.get('reason')),
+        ('Peak MFE', 'mfe', _m(f.get('peak_mfe_usd'))), ('Giveback', 'giveback', _m(f.get('mfe_giveback_usd'))),
+    ]
 
-def _pivot_rows(symbols,source,details=None):
-    rows=[];details=details or {}
-    for sym in symbols:
-        a=_pick_local(sym,source,details)
-        pending=a.get("pending_pivot_type")
-        promoted=bool(a.get("live_structural_flip")) and pending==a.get("pivot_type") and a.get("pending_pivot_price")==a.get("pivot_price")
-        local_label=(a.get("pivot_type") or "SCANNING") if promoted else ((str(pending)+" · FORMING") if pending else (a.get("pivot_type") or "SCANNING"))
-        shown_price=a.get("pivot_price") if promoted else (a.get("pending_pivot_price") if pending else a.get("pivot_price"))
-        pending_label="PROMOTED LIVE" if promoted else ((str(pending)+" @ "+_n(a.get("pending_pivot_price"))) if pending else "—")
-        rows.append([sym,local_label,_n(shown_price),_side(a.get("entry_side")) if _has_local(a) else "WAIT",
-          pending_label,a.get("policy") or a.get("pivot_confirmation_policy") or "—"])
-    return rows
+
+def _tokens(data):
+    primary = data.get('strategy1_primary') or {}
+    if primary.get('tokens'):
+        return primary['tokens']
+    discovery = data.get('discovery') or {}
+    details = (primary.get('engine') or {}).get('details') or {}
+    source = primary.get('h1_durable') or {}
+    selected = {t.get('symbol'): t for t in discovery.get('selected') or []}
+    # Bootstrap still exposes locals before a scanner row or position exists.
+    symbols = discovery.get('selected_symbols') or []
+    return [{**selected.get(s, {}), 'symbol': s, 'confirmed_local': (details.get(s) or {}).get('h1_local') or source.get(s) or {},
+             'flow_state': (details.get(s) or {}).get('flow_context') or {}, 'state': 'SCANNING'} for s in symbols]
+
+
+def _collection(name, entries, empty):
+    return '<div id="'+name+'" class="card-grid">'+''.join(entries)+'</div><p id="'+name+'-empty" class="empty"'+(' hidden' if entries else '')+'>'+_e(empty)+'</p>'
+
+
+def _json_safe(value):
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    return value
+
+
+def _summary(primary):
+    start = _finite(primary.get('starting_equity', 500))
+    equity = _finite(primary.get('total_equity'))
+    realized = _finite(primary.get('realized_pnl')); unreal = _finite(primary.get('unrealized_pnl'))
+    total = realized+unreal if realized is not None and unreal is not None else None
+    percent = total/start*100 if total is not None and start and start > 0 else None
+    return start, equity, total, percent
+
+
+def _shell(body, script=''):
+    return '<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#080b18"><title>Pandora Win · PAPER terminal</title><style>'+CSS+'</style></head><body><main class="terminal">'+body+'</main>'+script+'</body></html>'
+
 
 def render(data):
-    cur=data.get("strategy1_primary") or {}
-    legacy=data.get("strategy11_legacy") or {}
-    s13=data.get("strategy13") or {}
-    s14=data.get("strategy14") or {}
-    health=data.get("health") or {}
-    symbols=list(data.get("local_experiment_symbols") or [])
-    cur_engine=cur.get("engine") or {}
-    cur_details=cur_engine.get("details") or {}
-    cur_h1=cur.get("h1_durable") or {}
-    legacy_h1=legacy.get("h1") or {}
-    discovery=data.get("discovery") or {}
+    p = data.get('strategy1_primary') or {}; health = data.get('health') or {}
+    account = p.get('account') or {}; risk = p.get('risk') or {}; valuation = p.get('margin_valuation') or {}
+    start, equity, total, percent = _summary(p)
+    status = 'PAPER ГОТОВ' if health.get('risk_ready') else 'НЕ ГОТОВ'
+    reason = risk.get('reason') or health.get('engine_error') or next(iter((health.get('execution_errors') or {}).values()), None) or ('PORTFOLIO_MARKS_STALE' if valuation.get('complete') is False else 'Ожидание актуальных данных / проверки исполнителя' if not health.get('risk_ready') else 'Fresh market data · PAPER only')
+    body = '<header class="masthead"><div><p class="eyebrow">BYBIT USDT PERPETUAL · PAPER TERMINAL</p><h1>Pandora <span>Win</span><b class="brand-mark">✦</b></h1><p class="brand-sub">PRICE STRUCTURE / EXECUTED FLOW / CAPITAL CONTROL</p></div><div class="connection"><span class="mode">PAPER ONLY</span><strong id="readiness" class="'+('positive' if health.get('risk_ready') else 'warning')+'">'+_e(status)+'</strong><small id="connection-state" role="status" aria-live="polite">JSON · обновление каждые 2 секунды</small><small id="update-time">'+_e(data.get('snapshot_at'))+'</small></div></header>'
+    body += '<section class="account-panel" aria-labelledby="account-title"><div class="section-head"><h2 id="account-title">Общий счёт</h2><span class="tag">USDT · только фактический PAPER PnL</span></div><div class="account-grid">'
+    for label, key, value, kind in [
+        ('CURRENT EQUITY', 'equity', _m(equity), ''), ('TOTAL PnL · USDT', 'total-pnl', _m(total), _tone(total)),
+        ('TOTAL PnL · % ОТ СТАРТА', 'total-pct', _pct(percent), _tone(percent)), ('START EQUITY', 'start', _m(start), ''),
+        ('REALIZED PnL', 'realized', _m(p.get('realized_pnl')), _tone(p.get('realized_pnl'))),
+        ('UNREALIZED PnL', 'unrealized', _m(p.get('unrealized_pnl')), _tone(p.get('unrealized_pnl'))),
+        ('MAX EQUITY', 'max-equity', _m(p.get('max_equity')), ''), ('CURRENT EXPOSURE', 'exposure', _m(p.get('current_exposure')), ''),
+        ('FREE MARGIN', 'free-margin', _m(account.get('free_margin')), ''), ('USED MARGIN', 'used-margin', _m(account.get('used_margin')), ''),
+    ]:
+        body += '<article class="account-tile"><small>'+_e(label)+'</small><strong id="account-'+key+'" class="'+kind+'">'+_e(value)+'</strong></article>'
+    body += '</div><div id="risk-banner" class="risk-banner"><b>RISK / DATA</b><span id="risk-reason">'+_e(reason)+'</span></div><p class="sub">Доходность счёта считается от стартового equity. PnL позиции и сделки в процентах — от её маржи. Убыточные результаты не скрываются.</p></section>'
+    body += '<nav class="tabs" aria-label="Разделы терминала"><button type="button" data-tab="discovery" aria-pressed="true">Discovery <span id="count-discovery">'+str(len(_tokens(data)))+'</span></button><button type="button" data-tab="positions" aria-pressed="false">Позиции <span id="count-positions">'+str(len(p.get('open_positions') or []))+'</span></button><button type="button" data-tab="history" aria-pressed="false">История</button><button type="button" data-tab="audit" aria-pressed="false">Действия / ADD</button></nav>'
+    body += '<section id="panel-discovery" class="tab-panel" aria-labelledby="discovery-title"><div class="section-head"><div><p class="eyebrow">LIVE DISCOVERY</p><h2 id="discovery-title">Токены под наблюдением</h2></div><button type="button" class="secondary" id="sort-rank">По текущему rank ↗</button></div><p class="sub">Rank обновляется в карточке. Порядок карточек сохраняется; сортировка меняется только по вашей кнопке.</p>'
+    cards = [_card(t.get('symbol'), *_token_view(t), kind='token-card') for t in _tokens(data)]
+    body += _collection('tokens', cards, 'Scanner ожидает свежие рыночные данные. Отсутствующие токены не подставляются.')
+    candidates=(data.get('discovery') or {}).get('top_movers') or []
+    body+='<details class="scanner-details"><summary>Scanner · все кандидаты <span id="count-candidates">'+str(len(candidates))+'</span></summary>'
+    candidate_cards=[]
+    for t in candidates:
+        candidate_cards.append(_card(t.get('symbol'),str(t.get('symbol')),'RANK '+str(t.get('rank','—')),[
+            ('Score','score',_n(t.get('pandora_win_score'))),('Цена','price',_n(t.get('last'))),
+            ('Текущий импульс %','move',_pct(t.get('scan_return_pct'))),('Turnover / мин.','turnover',_m(t.get('turnover_per_minute'))),
+            ('BUY USD','buy',_m(t.get('buy_volume'))),('SELL USD','sell',_m(t.get('sell_volume'))),
+            ('Trades / сек.','trades',_n(t.get('trade_velocity'))),('Executed tape','tape','FRESH' if t.get('flow_fresh') else 'WARMING / STALE')]))
+    body+=_collection('candidates',candidate_cards,'Пул кандидатов ещё не сформирован.')+'</details>'
+    details=(p.get('engine') or {}).get('details') or {};durable=p.get('h1_durable') or {}
+    symbols=list(dict.fromkeys(list(details)+list(durable)+list(data.get('local_experiment_symbols') or [])))
+    body+='<details class="scanner-details"><summary>Все наблюдаемые локалы <span id="count-locals">'+str(len(symbols))+'</span></summary>'
+    local_cards=[]
+    for symbol in symbols:
+        local_state=(details.get(symbol) or {}).get('h1_local') or durable.get(symbol) or {}
+        confirmed=local_state.get('confirmed_local') or local_state
+        forming=local_state.get('forming_local') or ({'pivot_type':local_state.get('pending_pivot_type'),'pivot_price':local_state.get('pending_pivot_price')} if local_state.get('pending_pivot_type') else {})
+        local_cards.append(_card(symbol,symbol,_side(local_state.get('entry_side')),[
+            ('Confirmed local','confirmed',_local_text(confirmed)),('Forming local','forming',_local_text(forming)),
+            ('Разрешение входа','entry_state','BLOCKED' if local_state.get('entry_blocked') else 'READY' if local_state.get('ready') else 'WAIT'),
+            ('Причина','reason',local_state.get('entry_block_reason') or local_state.get('reason') or local_state.get('confirmation_source'))]))
+    body+=_collection('locals',local_cards,'Наблюдений локальной структуры пока нет.')+'</details></section>'
+    body += '<section id="panel-positions" class="tab-panel" hidden><div class="section-head"><h2>Открытые позиции</h2><span class="tag">Включая токены вне Discovery</span></div>'
+    body += _collection('positions', [_card(str(t.get('symbol'))+':'+str(t.get('opened')), *_position_view(t), kind='position-card') for t in p.get('open_positions') or []], 'Открытых позиций нет.')+'</section>'
+    body += '<section id="panel-history" class="tab-panel" hidden><div class="section-head"><h2>Закрытые сделки</h2><a class="secondary" href="/strategy1/history">Полная история ↗</a></div>'
+    body += _collection('trades', [_card(str(t.get('id', str(t.get('symbol'))+':'+str(t.get('opened'))+':'+str(t.get('closed')))), *_trade_view(t), kind='trade-card') for t in (p.get('closed_trades') or [])[:30]], 'Закрытых сделок пока нет.')
+    body += '<h3 class="section-caption">Раздельные итоги счетов и токенов</h3>'
+    totals = p.get('token_totals')
+    body += '<p id="totals-unavailable" class="sub"'+(' hidden' if totals is not None else '')+'>Агрегаты недоступны; нулевой PnL не подставляется.</p>'
+    rows = [_card(str(t.get('account'))+':'+str(t.get('symbol')), str(t.get('account'))+' · '+str(t.get('symbol')), 'Без суммирования независимых счетов', [('Сделок', 'trades', t.get('closed_trades')), ('Realized PnL', 'pnl', _m(t.get('realized_pnl')), _tone(t.get('realized_pnl')))]) for t in totals or []]
+    body += _collection('totals', rows, 'Нет записанных итогов.')+'</section>'
+    body += '<section id="panel-audit" class="tab-panel" hidden><div class="section-head"><h2>PYRAMID ADDS</h2><span class="tag">Каждая доливка записана отдельно</span></div>'
+    adds = []
+    for add in p.get('pyramid_adds') or []:
+        adds.append(_card(str(add.get('symbol'))+':'+str(add.get('opened'))+':'+str(add.get('add_number')), str(add.get('symbol'))+' · ADD '+str(add.get('add_number')), add.get('timestamp'), [
+            ('Цена', 'price', _n(add.get('price'))), ('Average entry', 'average', _n(add.get('average_entry'))),
+            ('Added margin', 'margin', _m(add.get('added_margin'))), ('Added notional', 'notional', _m(add.get('added_notional'))),
+            ('MFE до ADD', 'before', _m(add.get('mfe_before_add'))), ('MFE после ADD', 'after', _m(add.get('mfe_after_add')))]))
+    body += _collection('adds', adds, 'Доливок пока нет.')+'<h3 class="section-caption">RE-ENTRY / REVERSAL / ROTATION / AUDIT</h3>'
+    event_cards = []
+    for e in ((p.get('events') or {}).get('events') or [])[:40]:
+        payload = e.get('payload') or {}
+        event_cards.append(_card(str(e.get('id')), e.get('kind'), e.get('recorded_at'), [('Токен', 'symbol', payload.get('symbol')), ('Причина', 'reason', payload.get('reason'))], kind='event-card'))
+    body += _collection('events', event_cards, 'Журнал действий пока пуст.')+'</section>'
+    body += '<footer><span>Pandora Win · PAPER ONLY</span><a href="/api/pandora">JSON API для ChatGPT ↗</a><a href="/api/strategy1/events">Журнал API ↗</a><a href="/health/risk">Risk readiness ↗</a></footer>'
+    # JSON is consumed as text, never evaluated. Escape all HTML-significant chars
+    # so a symbol/reason cannot terminate the script element.
+    bootstrap = json.dumps(_json_safe(data), ensure_ascii=False, default=str, allow_nan=False).replace('&', '\\u0026').replace('<', '\\u003c').replace('>', '\\u003e')
+    return _shell(body, '<script type="application/json" id="initial-state">'+bootstrap+'</script><script>'+SCRIPT+'</script>')
 
-    selected={x.get("symbol"):x for x in discovery.get("selected") or []}
-    disc_rows=[]
-    for sym in discovery.get("selected_symbols") or []:
-        x=selected.get(sym) or {}
-        ch=x.get("change_24h_pct")
-        move="PUMP" if isinstance(ch,(int,float)) and ch>0 else "DUMP" if isinstance(ch,(int,float)) and ch<0 else "FLAT"
-        loc=_pick_local(sym,cur_h1,cur_details)
-        if not _has_local(loc):
-            loc=legacy_h1.get(sym) or loc
-        disc_rows.append([sym,move,_n(ch,2),_n(x.get("range_24h_pct"),2),_m(x.get("turnover_24h")),x.get("last"),loc.get("pivot_type") or "SCANNING",_side(loc.get("entry_side")) if loc else "WAIT"])
-
-    def panel(title,subtitle,primary,pivots):
-        cards='<div class="cards">'+"".join("<article><small>"+_e(k)+"</small><strong>"+_e(v)+"</strong></article>" for k,v in _cards(primary))+"</div>"
-        return '<section class="strategy"><h2>'+_e(title)+'</h2><p class="sub">'+_e(subtitle)+'</p>'+cards+          '<h3>H1 LOCALS</h3>'+_table(["TOKEN","LOCAL","PIVOT","DIRECTION","PENDING","POLICY"],pivots)+          '<h3>OPEN POSITIONS</h3>'+_table(["TOKEN","SIDE","ENTRY","MARK","LEV","MARGIN","PnL","MFE %","MAE %"],_positions(primary))+          '<h3>TRADE HISTORY</h3>'+_table(["CLOSED","TOKEN","SIDE","ENTRY","EXIT","PnL $ / %","ENTRY TYPE","EXIT","MFE %","MAE %"],_history(primary))+'</section>'
-
-    body='<header><div><b>PANDORA WIN</b><span>TOP-5 PUMP · H1 LOCALS · EXECUTED FLOW · PAPER</span></div><i>'+("PAPER ГОТОВ" if health.get("risk_ready") else "НЕ ГОТОВ")+"</i></header>"
-    body+='<section><h2>PANDORA WIN · BYBIT TOP-5 PUMP SCANNER</h2><p class="sub">5 актуальных Bybit USDT-linear пампящихся токенов · обновление каждые 60 секунд. H1 Local Low/High задаёт направление; executed-flow покупателей/продавцов управляет входом, фиксацией MFE и повторным входом.</p>'+_table(["TOKEN","MOVE","24H %","24H RANGE %","TURNOVER","LAST","H1 LOCAL","DIRECTION"],disc_rows)+'</section>'
-    body+='<div class="abgrid">'
-    body+=panel("STRATEGY 1.1 · LEGACY CATERPILLAR","Historical M1/M3/M5 executed-flow + MFE implementation · independent $500 PAPER ledger",legacy,_pivot_rows(symbols,legacy_h1))
-    body+=panel("PANDORA WIN · ACTIVE PAPER","Top-5 pump scanner → H1 local direction → Bybit executed-flow control · 20% current equity · up to 25x · compounding",cur,_pivot_rows(symbols,cur_h1,cur_details))
-    body+=panel("STRATEGY 1.3 · PURE H1 SWING","Confirmed H1 Local Low → LONG until Local High; Local High → SHORT until Local Low · no intrswing exits",s13,_pivot_rows(s13.get("symbols") or [],{}))
-    body+=panel("STRATEGY 1.4 · HISTORICAL 848b3c6","Historical Caterpillar comparison from audited 848b3c6 mechanics · independent $500 PAPER ledger",s14,_pivot_rows(symbols,{}))
-    body+='</div>'
-    account=cur.get('account') or {}
-    body+='<section><h2>PANDORA WIN · LIVE STATE</h2>'+_table(
-        ['MAX EQUITY','EXPOSURE','USED MARGIN','FREE MARGIN'],
-        [[_m(cur.get('max_equity')),_m(cur.get('current_exposure')),
-          _m(account.get('used_margin')),_m(account.get('free_margin'))]])
-    token_rows=[]
-    for t in cur.get('tokens') or []:
-        local=t.get('confirmed_local') or {}; forming=t.get('forming_local') or {}
-        token_rows.append([t.get('rank'),t.get('symbol'),_n(t.get('price')),_n(t.get('pandora_win_score')),
-            _n(t.get('volume_velocity')),local.get('pivot_type'),_n(local.get('pivot_price')),
-            forming.get('pivot_type'),_n(forming.get('pivot_price')),_side(t.get('direction')),
-            _m(t.get('buy_volume')),_m(t.get('sell_volume')),_n(t.get('flow_imbalance')),
-            t.get('state'),_n(t.get('average_entry')),_m(t.get('margin')),_m(t.get('notional')),
-            t.get('leverage'),t.get('pyramid_level'),_m(t.get('current_pnl_usd')),
-            _pct(t.get('current_pnl_pct')),_m(t.get('mfe')),_m(t.get('mae')),_m(t.get('mfe_giveback')),
-            t.get('last_action'),t.get('action_reason')])
-    body+=_table(['RANK','TOKEN','PRICE','SCORE','VOLUME/s','CONFIRMED','LOCAL PRICE','FORMING','FORMING PRICE',
-        'DIRECTION','BUY USD','SELL USD','IMBALANCE','STATE','AVG ENTRY','MARGIN','NOTIONAL','LEV','ADD LEVEL',
-        'PnL USD','PnL %','MFE USD','MAE USD','MFE GIVEBACK','ACTION','REASON'],token_rows)+'</section>'
-    adds=[]
-    for add in cur.get('pyramid_adds') or []:
-        adds.append([add.get('symbol'),add.get('add_number'),add.get('timestamp'),_n(add.get('price')),
-            _m(add.get('added_margin')),_m(add.get('added_notional')),_n(add.get('average_entry')),
-            _m(add.get('mfe_before_add')),_m(add.get('mfe_after_add'))])
-    body+='<section><h2>PYRAMID ADDS</h2>'+_table(['TOKEN','ADD','TIME','PRICE','MARGIN','NOTIONAL','AVERAGE','MFE BEFORE','MFE AFTER'],adds)+'</section>'
-    events=(cur.get('events') or {}).get('events') or []
-    body+='<section><h2>RE-ENTRIES · REVERSALS · ROTATIONS · AUDIT</h2>'+_table(
-        ['TIME','ACTION','TOKEN','REASON'],[[e.get('recorded_at'),e.get('kind'),
-        (e.get('payload') or {}).get('symbol'),(e.get('payload') or {}).get('reason')] for e in events])+'</section>'
-    totals=cur.get('token_totals')
-    if totals is None:
-        body+='<section><p>Агрегаты недоступны; нулевой PnL не подставляется.</p></section>'
-    else:
-        body+='<section><h2>История по счетам и токенам</h2>'+_table(
-            ['ACCOUNT','TOKEN','CLOSED','REALIZED PnL'],
-            [[r.get('account'),r.get('symbol'),r.get('closed_trades'),_m(r.get('realized_pnl'))] for r in totals])+'</section>'
-    body+='<section><a href="/strategy1/history">Полная история сделок</a></section>'
-
-    css="""html{color-scheme:dark}*{box-sizing:border-box}body{margin:0;padding:14px;background:#03070c;color:#edf7ff;font:14px system-ui}main,#status{max-width:1800px;margin:auto}header{display:flex;justify-content:space-between;align-items:center;padding:20px;border:1px solid #1b516c;border-radius:16px;background:#07121d}header b{font-size:28px;letter-spacing:.16em}header span{margin-left:12px;color:#48dcff}header i{color:#baff45;font-style:normal}.abgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.strategy{min-width:0}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}.cards article{padding:12px;border:1px solid #20536e;border-radius:12px;background:#081622}.cards small{display:block;color:#789bb2}.cards strong{display:block;margin-top:8px;font:700 17px ui-monospace}section{margin-top:12px;padding:14px;border:1px solid #173d53;border-radius:14px;background:#08131f}h2{color:#68e3ff;font-size:15px}h3{color:#9bdfff;font-size:12px;margin-top:17px}.sub{color:#85a6b9;font-size:12px}.scroll{overflow:auto}table{width:100%;border-collapse:collapse;min-width:760px}th,td{padding:8px;border-bottom:1px solid #112c3e;text-align:left;white-space:nowrap;font:10px ui-monospace}th{color:#54dfff}#status{text-align:right;color:#91d940;font:10px ui-monospace;margin-bottom:6px}@media(max-width:1100px){.abgrid{grid-template-columns:1fr}.cards{grid-template-columns:repeat(2,1fr)}body{padding:7px}header{display:block}header i{display:block;margin-top:8px}}"""
-    script="""<script>let b=false;async function r(){if(b||document.hidden)return;b=true;try{const x=await fetch('/?r='+Date.now(),{cache:'no-store'});if(!x.ok)throw Error(x.status);const t=await x.text();const d=new DOMParser().parseFromString(t,'text/html').getElementById('dash');if(!d)throw Error('dash');document.getElementById('dash').replaceWith(document.importNode(d,true));document.getElementById('status').textContent='UPDATED '+new Date().toLocaleTimeString()}catch(e){document.getElementById('status').textContent='REFRESH ERROR'}finally{b=false}}setInterval(r,5000)</script>"""
-    return '<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PANDORA WIN</title><style>'+css+'</style><body><div id="status">PANDORA PAPER</div><main id="dash">'+body+"</main>"+script+"</body></html>"
 
 def render_history(page):
-    rows=[]
-    for t in page.get("trades") or []:
-        f=t.get("features") or {}
-        rows.append([t.get("id"),t.get("symbol"),t.get("opened"),t.get("closed"),_side(t.get("side")),t.get("entry"),t.get("exit"),_m(t.get("pnl")),f.get("entry_kind") or "—",(f.get("candidate_selection") or {}).get("reason") or "—",t.get("reason") or "—"])
-    args={"account":page.get("account") or "strategy1"}
-    if page.get("symbol"):args["symbol"]=page["symbol"]
-    links='<a href="/">Монитор</a> · <a href="/strategy1/history?'+_e(urlencode(args))+'">Новейшие</a>'
-    if page.get("next_before_id") is not None:links+=' · <a href="/strategy1/history?'+_e(urlencode({**args,"before":page["next_before_id"]}))+'">Более ранние сделки →</a>'
-    table=_table(["ID","TOKEN","OPEN","CLOSED","SIDE","ENTRY","EXIT","PnL","ENTRY TYPE","ENTRY REASON","EXIT REASON"],rows)
-    return '<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PANDORA HISTORY</title><style>body{background:#090e18;color:#e2eaf7;font:14px system-ui;padding:18px}a{color:#9dc6ff}.scroll{overflow:auto}table{border-collapse:collapse}th,td{padding:10px;border-bottom:1px solid #25364b;white-space:nowrap}</style><h1>PANDORA · HISTORY</h1><p>'+links+"</p>"+table+"<p>"+links+"</p></html>"
+    account = page.get('account') or 'strategy1'; args = {'account': account}
+    if page.get('symbol'):
+        args['symbol'] = page['symbol']
+    links = '<a class="secondary" href="/">← Pandora Win</a><a class="secondary" href="/strategy1/history?'+_e(urlencode(args))+'">Новейшие сделки</a>'
+    if page.get('next_before_id') is not None:
+        links += '<a class="secondary" href="/strategy1/history?'+_e(urlencode({**args, 'before': page['next_before_id']}))+'">Более ранние сделки →</a>'
+    cards = [_card(str(t.get('id')), *_trade_view(t), kind='trade-card') for t in page.get('trades') or []]
+    body = '<header class="masthead"><div><p class="eyebrow">PAPER LEDGER / '+_e(account)+'</p><h1>Pandora <span>Win</span></h1><h2>Полная история сделок</h2></div><span class="mode">PAPER ONLY</span></header><nav class="history-links">'+links+'</nav>'+_collection('trades', cards, 'Сделок по этому фильтру нет.')+'<nav class="history-links">'+links+'</nav>'
+    return _shell(body)
+
+
+CSS = r'''
+:root{color-scheme:dark;--bg:#080b18;--panel:#11182a;--text:#f1f6ff;--muted:#a4b1ca;--line:#303d5c;--lime:#b9ff52;--violet:#bc9aff;--cyan:#6cddff;--yellow:#fff17b;--red:#ff829c;--green:#7ef5bb;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-synthesis:none}*{box-sizing:border-box}html{scrollbar-gutter:stable;overflow-anchor:auto}body{margin:0;background:radial-gradient(ellipse at 8% 2%,#33205c66,transparent 42%),radial-gradient(ellipse at 96% 20%,#124e6c44,transparent 44%),var(--bg);color:var(--text);font-size:15px;line-height:1.5;min-width:0}body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background-image:linear-gradient(#6a8df108 1px,transparent 1px),linear-gradient(90deg,#6a8df108 1px,transparent 1px);background-size:48px 48px}.terminal{max-width:1540px;margin:auto;padding:28px clamp(14px,3vw,42px) 36px}h1,h2,h3,p{margin:0}h1{font-size:clamp(35px,6vw,70px);letter-spacing:-.055em;line-height:1.08;font-weight:850;text-shadow:0 3px 0 #333b59,0 9px 20px #0009}h1 span{color:var(--lime);text-shadow:0 3px 0 #446825,0 0 26px #b9ff5238}.brand-mark{font-size:.5em;color:var(--violet);margin-left:15px;vertical-align:middle}h2{font-size:clamp(20px,3vw,26px);letter-spacing:-.02em}h3{font-size:20px;line-height:1.35;overflow-wrap:anywhere}.eyebrow{font-size:11px;font-weight:700;letter-spacing:.16em;color:var(--cyan);margin-bottom:12px}.brand-sub{font-size:11px;letter-spacing:.1em;color:var(--muted);margin-top:15px}.masthead{display:flex;justify-content:space-between;gap:22px;align-items:center;margin-bottom:26px}.connection{display:grid;gap:7px;justify-items:end;font-variant-numeric:tabular-nums}.connection strong{font-size:14px}.connection small{font-size:12px;color:var(--muted);overflow-wrap:anywhere}.mode,.tag{display:inline-block;border:1px solid #817237;padding:5px 10px;border-radius:7px;color:var(--yellow);background:#fff17b09;font-size:11px;font-weight:700;letter-spacing:.04em}.tag{border-color:#3e4e72;color:var(--muted);background:#ffffff04;font-size:11px;font-weight:500;letter-spacing:0}.account-panel{background:linear-gradient(125deg,#1b2540,#11182ae6);border:1px solid #6372a6;border-radius:22px;padding:clamp(16px,3vw,26px);box-shadow:inset 0 1px 0 #d0ddff18,0 15px 0 -10px #02040c,0 28px 50px #0005}.section-head{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:18px}.account-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}.account-tile{padding:14px;border:1px solid var(--line);border-radius:13px;min-width:0;background:linear-gradient(145deg,#ffffff05,#02061322);box-shadow:inset 0 1px 0 #ffffff07;min-height:95px}.account-tile:first-child{border-color:#6b8a49}.account-tile small{display:block;font-size:10px;font-weight:650;letter-spacing:.055em;color:var(--muted);min-height:30px}.account-tile strong{display:block;font:700 clamp(15px,1.65vw,23px) ui-monospace,SFMono-Regular,Consolas,monospace;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;line-height:1.45}.positive{color:var(--green)!important}.negative{color:var(--red)!important}.neutral{color:var(--text)}.warning{color:var(--yellow)!important}.risk-banner{display:flex;gap:12px;align-items:flex-start;border-left:3px solid var(--yellow);background:#fff17b08;margin-top:18px;padding:10px 12px;min-height:48px;border-radius:0 8px 8px 0;font-size:12px;overflow-wrap:anywhere}.risk-banner b{flex:none;color:var(--yellow);font-size:10px;line-height:1.9}.sub{color:var(--muted);font-size:12px;margin:12px 0 16px;max-width:900px}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:28px 0 25px;border-bottom:1px solid var(--line);padding-bottom:14px}button,a{touch-action:manipulation}button,.secondary{font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;border:1px solid #485579;border-radius:9px;background:#151e34;color:var(--text);padding:11px 14px;text-decoration:none;line-height:1.4}button:hover,.secondary:hover{border-color:var(--violet);background:#252d4b}button:focus-visible,a:focus-visible{outline:3px solid var(--cyan);outline-offset:4px}.tabs button{min-height:45px;flex:0 1 auto}.tabs button[aria-pressed=true]{color:var(--lime);border-color:#a1d459;background:#b9ff5210;box-shadow:0 0 18px #b9ff520c}.tabs span{margin-left:6px;color:var(--muted);font-variant-numeric:tabular-nums}.card-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:17px;align-items:start}.terminal-card{padding:20px;border:1px solid #445072;border-radius:17px;background:linear-gradient(145deg,#1c2440cc,#10182b);box-shadow:inset 0 1px 0 #ffffff0d,0 10px 0 -7px #050914,0 17px 30px #0004;min-width:0;contain:layout style}.card-heading{display:flex;align-items:flex-start;gap:10px;justify-content:space-between;border-bottom:1px solid #364363;padding-bottom:14px;margin-bottom:14px;min-height:57px}.card-heading h3{color:var(--cyan)}.card-heading small{color:var(--violet);font-size:11px;text-align:right;max-width:60%;overflow-wrap:anywhere}.metric-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 17px;margin:0}.metric{min-width:0}.metric dt{color:var(--muted);font-size:11px;line-height:1.5;margin-bottom:4px}.metric dd{margin:0;min-height:22px;font:600 13px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.metric:has([data-field=confirmed]),.metric:has([data-field=forming]),.metric:has([data-field=reason]),.metric:has([data-field=action]){grid-column:1/-1}.metric:has([data-field=confirmed]) dd{color:var(--lime)}.metric:has([data-field=forming]) dd{color:var(--yellow)}.token-card{min-height:785px}.position-card{min-height:400px}.trade-card{min-height:365px}.event-card{min-height:180px}.event-card h3{font-size:14px}.empty{padding:32px 18px;border:1px dashed #4f5e81;border-radius:14px;color:var(--muted);min-height:100px;font-size:14px}.scanner-details{margin-top:20px;border:1px solid var(--line);border-radius:14px;padding:14px;background:#0c1428}.scanner-details summary{cursor:pointer;color:var(--violet);font-size:14px;font-weight:650;min-height:30px}.scanner-details[open] summary{margin-bottom:16px}.scanner-details summary span{color:var(--muted);margin-left:8px}.scanner-details .terminal-card{min-height:0}.section-caption{font-size:14px;color:var(--violet);letter-spacing:.04em;margin:28px 0 17px}.history-links{display:flex;gap:10px;flex-wrap:wrap;margin:24px 0}footer{display:flex;gap:20px;justify-content:space-between;flex-wrap:wrap;margin-top:35px;padding-top:20px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}footer a{color:var(--cyan)}[hidden]{display:none!important}@media(min-width:1440px){.card-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:1050px){.card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.account-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:640px){body{font-size:15px}.terminal{padding:20px 12px 28px}.masthead{display:block;margin-bottom:20px}.connection{grid-template-columns:auto 1fr;justify-items:start;align-items:center;margin-top:20px;gap:7px 13px}.connection small{grid-column:1/-1;font-size:12px}.brand-sub{font-size:9px;letter-spacing:.055em}.account-panel{border-radius:17px;padding:15px}.account-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.account-tile{padding:11px;min-height:100px}.account-tile:first-child{grid-column:1/-1;min-height:96px}.account-tile:first-child strong{font-size:30px}.account-tile strong{font-size:15px}.account-tile small{font-size:10px;min-height:31px}.section-head{align-items:flex-start}.section-head .tag{display:none}.section-head .secondary{font-size:11px;padding:9px 10px;max-width:130px;text-align:center;flex:none}.tabs{gap:7px;margin:22px 0}.tabs button{font-size:12px;padding:10px 9px;flex:1 1 42%;min-height:44px}.card-grid{grid-template-columns:minmax(0,1fr);gap:14px}.terminal-card{padding:17px;border-radius:14px}.card-heading h3{font-size:23px}.metric dt{font-size:12px}.metric dd{font-size:14px}.token-card{min-height:850px}.position-card,.trade-card{min-height:0}.risk-banner{display:block;line-height:1.6}.risk-banner b{display:block;margin-bottom:4px}.sub{font-size:12px;line-height:1.65}footer{gap:12px;line-height:1.7}footer span{flex:1 1 100%}}@media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+'''
+
+
+SCRIPT = r'''
+(()=>{'use strict';
+const $=id=>document.getElementById(id), number=v=>v===null||v===undefined||v===''?null:Number.isFinite(Number(v))?Number(v):null;
+const fmt=(v,d=4)=>number(v)===null?'—':number(v).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+const money=v=>number(v)===null?'—':(number(v)>=0?'+':'')+fmt(v)+' USDT';
+const pct=v=>number(v)===null?'—':(number(v)>=0?'+':'')+fmt(v,2)+'%';
+const side=v=>[1,'1','LONG','long'].includes(v)?'LONG':[-1,'-1','SHORT','short'].includes(v)?'SHORT':'WAIT';
+const tone=v=>number(v)>0?'positive':number(v)<0?'negative':'neutral';
+const local=v=>v&&v.pivot_type?v.pivot_type+' · '+fmt(v.pivot_price):'—';
+const text=(el,value)=>{const t=value===null||value===undefined?'—':String(value);if(el&&el.textContent!==t)el.textContent=t;};
+let latest=JSON.parse($('initial-state').textContent), busy=false, activeTab='discovery', lastGood=0;
+function metric(label,name,value,kind=''){return {label,name,value,kind};}
+function cardView(title,subtitle,metrics,kind=''){return {title,subtitle,metrics,kind};}
+function tokenView(t){const flow=t.flow_state||{},p=t.position||{},f=p.features||{},risk=f.risk_plan||{};return cardView(t.symbol,'RANK '+(t.rank??'—')+' · '+(t.state||side(t.direction)),[
+metric('Цена','price',fmt(t.price)),metric('Scanner score','score',fmt(t.pandora_win_score)),metric('Подтверждённый local','confirmed',local(t.confirmed_local)),metric('Формирующийся local','forming',local(t.forming_local)),metric('Направление','direction',side(t.direction)),metric('Позиция','position',side(p.side)),metric('BUY volume','buy',money(t.buy_volume)),metric('SELL volume','sell',money(t.sell_volume)),metric('Flow imbalance','imbalance',pct(number(t.flow_imbalance)===null?null:number(t.flow_imbalance)*100)),metric('Объём / сек.','velocity',fmt(t.volume_velocity)),metric('Tape','tape',flow.trade_data_fresh?'FRESH':'STALE'),metric('Контроль входа','control',side(flow.sustained_control_side)),metric('Быстрый контроль выхода','fast_control',side(flow.fast_control_side)),metric('Минутный контекст','context_control',side(flow.context_control_side)),metric('Average entry','entry',fmt(t.average_entry)),metric('Маржа','margin',money(t.margin)),metric('Notional','notional',money(t.notional)),metric('Плечо / ADD','leverage',(t.leverage||'—')+'x / '+(t.pyramid_level??0)),metric('Эффективное плечо','effective_leverage',fmt(p.effective_leverage)+'x'),metric('PnL','pnl',money(t.current_pnl_usd),tone(t.current_pnl_usd)),metric('PnL / маржа','pnl_pct',pct(t.current_pnl_pct),tone(t.current_pnl_pct)),metric('Peak MFE','mfe',money(t.mfe)),metric('MAE','mae',money(t.mae)),metric('MFE giveback','giveback',money(t.mfe_giveback)),metric('Ориентир модели (не SL)','stop',fmt(risk.stop_price)),metric('Последнее действие','action',t.last_action),metric('Причина','reason',t.action_reason)],'token-card');}
+function positionView(p){const f=p.features||{},margin=p.margin_usd??p.margin,pnl=p.unrealized_pnl,risk=f.risk_plan||{};return cardView(p.symbol+' · '+side(p.side),p.opened,[metric('Average entry','entry',fmt(p.entry)),metric('Mark','mark',fmt(p.mark)),metric('PnL','pnl',money(pnl),tone(pnl)),metric('PnL / маржа','pnl_pct',pct(number(pnl)!==null&&number(margin)>0?number(pnl)/number(margin)*100:null),tone(pnl)),metric('Маржа','margin',money(margin)),metric('Notional','notional',money(p.notional_usd??p.notional)),metric('Плечо','leverage',(p.leverage||'—')+'x'),metric('Эффективное плечо','effective_leverage',fmt(p.effective_leverage)+'x'),metric('ADD level','level',f.pyramid_level??0),metric('Peak MFE','mfe',money(f.peak_mfe_usd)),metric('MAE','mae',money(f.mae_usd)),metric('MFE giveback','giveback',money(f.mfe_giveback_usd)),metric('Ориентир модели (не SL)','stop',fmt(risk.stop_price))],'position-card');}
+function tradeView(t){const f=t.features||{},margin=t.margin??t.margin_usd;return cardView(t.symbol+' · '+side(t.side),t.closed,[metric('Вход','entry',fmt(t.entry)),metric('Выход','exit',fmt(t.exit)),metric('PnL','pnl',money(t.pnl),tone(t.pnl)),metric('PnL / маржа','pnl_pct',pct(number(t.pnl)!==null&&number(margin)>0?number(t.pnl)/number(margin)*100:null),tone(t.pnl)),metric('Маржа','margin',money(margin)),metric('Плечо','leverage',(t.leverage||'—')+'x'),metric('Тип входа','kind',f.entry_kind),metric('Причина выхода','reason',t.reason),metric('Peak MFE','mfe',money(f.peak_mfe_usd)),metric('Giveback','giveback',money(f.mfe_giveback_usd))],'trade-card');}
+function makeCard(key,view){const article=document.createElement('article');article.dataset.key=String(key);article.className='terminal-card '+view.kind;const heading=document.createElement('div');heading.className='card-heading';for(const [tag,name] of [['h3','title'],['small','subtitle']]){const parent=document.createElement(tag),span=document.createElement('span');span.dataset.field=name;parent.append(span);heading.append(parent);}article.append(heading);const dl=document.createElement('dl');dl.className='metric-grid';for(const m of view.metrics){const block=document.createElement('div');block.className='metric';const dt=document.createElement('dt');text(dt,m.label);const dd=document.createElement('dd'),span=document.createElement('span');span.dataset.field=m.name;dd.append(span);block.append(dt,dd);dl.append(block);}article.append(dl);return article;}
+function fillCard(card,view){text(card.querySelector('[data-field="title"]'),view.title);text(card.querySelector('[data-field="subtitle"]'),view.subtitle);for(const m of view.metrics){const element=card.querySelector('[data-field="'+m.name+'"]');text(element,m.value);if(element)element.className=m.kind||'';}}
+function syncList(id,rows,key,view,preserveOrder=false){const box=$(id);if(!box)return;const existing=new Map(Array.from(box.children).map(c=>[c.dataset.key,c])),wanted=new Set();rows.forEach((row,index)=>{const k=String(key(row)),v=view(row);wanted.add(k);let card=existing.get(k);if(!card){card=makeCard(k,v);box.append(card);}fillCard(card,v);if(!preserveOrder&&box.children[index]!==card)box.insertBefore(card,box.children[index]||null);});for(const [k,card]of existing)if(!wanted.has(k))card.remove();$(id+'-empty').hidden=rows.length>0;}
+function tokens(data){const p=data.strategy1_primary||{};if(p.tokens&&p.tokens.length)return p.tokens;const d=data.discovery||{},details=(p.engine||{}).details||{},selected=new Map((d.selected||[]).map(t=>[t.symbol,t]));return(d.selected_symbols||[]).map(s=>({...selected.get(s),symbol:s,confirmed_local:(details[s]||{}).h1_local||(p.h1_durable||{})[s]||{},flow_state:(details[s]||{}).flow_context||{},state:'SCANNING'}));}
+function anchor(){const nodes=document.querySelectorAll('.tab-panel:not([hidden]) .terminal-card');for(const node of nodes){const rect=node.getBoundingClientRect();if(rect.bottom>0&&rect.top<innerHeight)return {node,top:rect.top};}return null;}
+function update(data){const keep=anchor(),p=data.strategy1_primary||{},h=data.health||{},account=p.account||{},risk=p.risk||{},valuation=p.margin_valuation||{},start=number(p.starting_equity??500),realized=number(p.realized_pnl),unreal=number(p.unrealized_pnl),total=realized!==null&&unreal!==null?realized+unreal:null,totalPct=total!==null&&start>0?total/start*100:null;
+for(const[key,value,valueTone]of [['equity',money(p.total_equity),''],['total-pnl',money(total),tone(total)],['total-pct',pct(totalPct),tone(totalPct)],['start',money(start),''],['realized',money(p.realized_pnl),tone(p.realized_pnl)],['unrealized',money(p.unrealized_pnl),tone(p.unrealized_pnl)],['max-equity',money(p.max_equity),''],['exposure',money(p.current_exposure),''],['free-margin',money(account.free_margin),''],['used-margin',money(account.used_margin),'']]){const node=$('account-'+key);text(node,value);node.className=valueTone;}
+text($('readiness'),h.risk_ready?'PAPER ГОТОВ':'НЕ ГОТОВ');$('readiness').className=h.risk_ready?'positive':'warning';text($('risk-reason'),risk.reason||h.engine_error||Object.values(h.execution_errors||{})[0]||(valuation.complete===false?'PORTFOLIO_MARKS_STALE':h.risk_ready?'Fresh market data · PAPER only':'Ожидание актуальных данных / проверки исполнителя'));text($('update-time'),data.snapshot_at||'Время снимка недоступно');
+const candidates=(data.discovery||{}).top_movers||[];text($('count-candidates'),candidates.length);syncList('candidates',candidates,t=>t.symbol,t=>cardView(t.symbol,'RANK '+(t.rank??'—'),[metric('Score','score',fmt(t.pandora_win_score)),metric('Цена','price',fmt(t.last)),metric('Текущий импульс %','move',pct(t.scan_return_pct)),metric('Turnover / мин.','turnover',money(t.turnover_per_minute)),metric('BUY USD','buy',money(t.buy_volume)),metric('SELL USD','sell',money(t.sell_volume)),metric('Trades / сек.','trades',fmt(t.trade_velocity)),metric('Executed tape','tape',t.flow_fresh?'FRESH':'WARMING / STALE')]),true);
+const details=(p.engine||{}).details||{},durable=p.h1_durable||{},localSymbols=Array.from(new Set([...Object.keys(details),...Object.keys(durable),...(data.local_experiment_symbols||[])]));text($('count-locals'),localSymbols.length);syncList('locals',localSymbols,s=>s,s=>{const l=(details[s]||{}).h1_local||durable[s]||{},forming=l.forming_local||(l.pending_pivot_type?{pivot_type:l.pending_pivot_type,pivot_price:l.pending_pivot_price}:{});return cardView(s,side(l.entry_side),[metric('Confirmed local','confirmed',local(l.confirmed_local||l)),metric('Forming local','forming',local(forming)),metric('Разрешение входа','entry_state',l.entry_blocked?'BLOCKED':l.ready?'READY':'WAIT'),metric('Причина','reason',l.entry_block_reason||l.reason||l.confirmation_source)]);},true);
+const selected=tokens(data);text($('count-discovery'),selected.length);text($('count-positions'),(p.open_positions||[]).length);syncList('tokens',selected,t=>t.symbol,tokenView,true);syncList('positions',p.open_positions||[],p=>p.symbol+':'+p.opened,positionView,true);syncList('trades',(p.closed_trades||[]).slice(0,30),t=>t.id??(t.symbol+':'+t.opened+':'+t.closed),tradeView);syncList('totals',p.token_totals||[],t=>t.account+':'+t.symbol,t=>cardView(t.account+' · '+t.symbol,'Без суммирования независимых счетов',[metric('Сделок','trades',t.closed_trades),metric('Realized PnL','pnl',money(t.realized_pnl),tone(t.realized_pnl))]));$('totals-unavailable').hidden=p.token_totals!==null&&p.token_totals!==undefined;
+syncList('adds',p.pyramid_adds||[],a=>a.symbol+':'+a.opened+':'+a.add_number,a=>cardView(a.symbol+' · ADD '+a.add_number,a.timestamp,[metric('Цена','price',fmt(a.price)),metric('Average entry','average',fmt(a.average_entry)),metric('Added margin','margin',money(a.added_margin)),metric('Added notional','notional',money(a.added_notional)),metric('MFE до ADD','before',money(a.mfe_before_add)),metric('MFE после ADD','after',money(a.mfe_after_add))]));syncList('events',((p.events||{}).events||[]).slice(0,40),e=>e.id,e=>cardView(e.kind,e.recorded_at,[metric('Токен','symbol',(e.payload||{}).symbol),metric('Причина','reason',(e.payload||{}).reason)],'event-card'));
+if(keep&&keep.node.isConnected){const delta=keep.node.getBoundingClientRect().top-keep.top;if(Math.abs(delta)>1)window.scrollBy(0,delta);}latest=data;}
+function tab(name){activeTab=name;document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.tab===name)));document.querySelectorAll('.tab-panel').forEach(p=>p.hidden=p.id!=='panel-'+name);try{sessionStorage.setItem('pandora-tab',name);}catch{}}
+document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>tab(b.dataset.tab)));try{const saved=sessionStorage.getItem('pandora-tab');if(['discovery','positions','history','audit'].includes(saved))tab(saved);}catch{}
+$('sort-rank').addEventListener('click',()=>{const keep=anchor(),box=$('tokens'),ranking=new Map(tokens(latest).map(t=>[String(t.symbol),number(t.rank)??999]));Array.from(box.children).sort((a,b)=>(ranking.get(a.dataset.key)??999)-(ranking.get(b.dataset.key)??999)).forEach(node=>box.append(node));if(keep&&keep.node.isConnected)window.scrollBy(0,keep.node.getBoundingClientRect().top-keep.top);});
+async function poll(){if(busy||document.hidden)return;busy=true;const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),8000);try{const response=await fetch('/api/pandora',{cache:'no-store',signal:controller.signal,headers:{Accept:'application/json'}});if(!response.ok)throw Error('HTTP '+response.status);const data=await response.json();if(!data||!data.strategy1_primary||!data.health)throw Error('Неверный формат API');update(data);lastGood=Date.now();text($('connection-state'),'JSON подключён · '+new Date(lastGood).toLocaleTimeString());$('connection-state').className='positive';}catch(error){text($('connection-state'),'Нет обновления · '+String(error.message)+' · показан последний снимок');$('connection-state').className='negative';text($('readiness'),'НЕТ СВЕЖЕГО API');$('readiness').className='negative';}finally{clearTimeout(timeout);busy=false;}}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)poll();});setInterval(poll,2000);poll();
+})();
+'''

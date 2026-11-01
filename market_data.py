@@ -25,7 +25,7 @@ class RollingMarketData:
 
     @staticmethod
     def _new_symbol(epoch):
-        return {'since':epoch,'seen':set(),'seen_queue':deque(),'latest_trade':None,'levels':deque(maxlen=2),'trades':deque(),'overflow_until':None}
+        return {'since':epoch,'seen':set(),'seen_queue':deque(),'latest_trade':None,'first_trade':None,'levels':deque(maxlen=2),'trades':deque(),'overflow_until':None}
 
     def mark_connected(self,epoch=None,symbols=None,owner=None):
         epoch=time.time() if epoch is None else float(epoch);name='legacy' if owner is None else str(owner)
@@ -72,7 +72,7 @@ class RollingMarketData:
             for row in rows:
                 if not isinstance(row,dict):self._counters['invalid']+=1;continue
                 symbol=str(row.get('coin',''));state=self._symbols.get(symbol)
-                if state is None:self._counters['outside_subscription']+=1;continue
+                if state is None or (owner is not None and symbol not in self._owners.get(str(owner),set())):self._counters['outside_subscription']+=1;continue
                 px,qty,millis=(_number(row.get(k)) for k in ('px','sz','time'))
                 ident=row.get('tid');side=row.get('side')
                 if None in (px,qty,millis) or px<=0 or qty<=0 or side not in ('B','A') or ident is None or isinstance(ident,(bool,list,dict)):
@@ -85,7 +85,7 @@ class RollingMarketData:
                     self._counters['out_of_order']+=1;continue
                 seen=state['seen'];queue=state['seen_queue']
                 trades=state['trades']
-                while trades and received-trades[0][0]>310: trades.popleft()
+                while trades and received-trades[0][0]>610: trades.popleft()
                 while queue and received-queue[0][0]>self.max_trade_lag_seconds+2:
                     _,old=queue.popleft();seen.discard(old)
                 key=(millis,str(ident))
@@ -102,6 +102,7 @@ class RollingMarketData:
                     levels.append({'price':px,'buy':0.,'sell':0.,'count':0,'first_epoch':stamp})
                 level=levels[-1];level['buy' if side=='B' else 'sell']+=notional;level['count']+=1
                 state['latest_trade']=stamp;state['decision_epoch']=received
+                if state['first_trade'] is None:state['first_trade']=stamp
                 trades.append((stamp,px,notional,side))
                 accepted+=1
                 if accepted_rows is not None:accepted_rows.append(row)
@@ -126,19 +127,23 @@ class RollingMarketData:
             out.update(latest_trade_epoch=latest,latest_trade_age_seconds=age,decision_event_epoch=state.get('decision_epoch'))
             if not fresh or state['overflow_until'] is not None or age is None or not 0<=age<=self.freshness_seconds:return out
             trades=state['trades']
-            while trades and epoch-trades[0][0]>310: trades.popleft()
+            while trades and epoch-trades[0][0]>610: trades.popleft()
             if not trades:return out
-            coverage=max(0.,epoch-state['since'])
+            coverage=max(0.,min(epoch-state['since'],epoch-state['first_trade']))
             out['trade_coverage_seconds']=coverage
             def window(seconds):
-                rows=[r for r in trades if epoch-r[0]<=seconds]
+                rows=[r for r in trades if 0<=epoch-r[0]<=seconds]
                 buy=sum(r[2] for r in rows if r[3]=='B');sell=sum(r[2] for r in rows if r[3]=='A')
                 return rows,buy,sell
             def imbalance(buy,sell): return (buy-sell)/(buy+sell) if buy+sell else 0.
             r60,b60,s60=window(60)
             if not r60 or b60+s60<=0:return out
             i60=imbalance(b60,s60)
-            levels=list(state['levels']);dominant=1 if b60>s60 else -1 if s60>b60 else 0
+            levels=[]
+            for trade in r60:
+                if not levels or levels[-1]['price']!=trade[1]:levels.append({'price':trade[1]})
+            levels=levels[-2:]
+            dominant=1 if b60>s60 else -1 if s60>b60 else 0
             direction=1 if len(levels)==2 and levels[-1]['price']>levels[0]['price'] else -1 if len(levels)==2 and levels[-1]['price']<levels[0]['price'] else 0
             control=dominant if direction==dominant and direction else 0
             r15,b15,s15=window(15)
