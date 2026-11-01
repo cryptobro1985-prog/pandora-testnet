@@ -6,7 +6,7 @@ PAPER ledger, monitoring and maintenance guard. No exchange order API.
 import math, time, copy
 
 MODE_ENV="PANDORA_FLOW_V2"
-EXPERIMENT="PANDORA_FLOW_V2_400"
+EXPERIMENT="PANDORA_PUMP_STRUCTURE_V3_400" if __import__("os").getenv("PANDORA_PUMP_V3","0")=="1" else "PANDORA_FLOW_V2_400"
 MIN_TURNOVER_24H=1_000_000.
 COUNTER_CONFIRM_NEW_TRADES=3
 MIN_CONTROL_IMBALANCE=.20
