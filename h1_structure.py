@@ -235,13 +235,16 @@ def pending_extreme(rows, now_ms, side, anchor_pivot_price=None):
 
     if not x:
         return result
-    high = side > 0 and p["h"] >= max(z["h"] for z in prior) and x["h"] < p["h"] and (p["h"]-x["c"])/p["h"] >= .0015
-    low = side < 0 and p["l"] <= min(z["l"] for z in prior) and x["l"] > p["l"] and (x["c"]-p["l"])/p["l"] >= .0015
+    # The live candle itself may be the new opposite extreme. Keep the last
+    # confirmed anchor as history, but expose the current H1 candidate immediately
+    # so the monitor never hides a fresh Bybit high/low while confirmation is pending.
+    high = side > 0 and x["h"] >= max([p["h"]] + [z["h"] for z in prior]) and x["c"] < x["h"] and (x["h"]-x["c"])/x["h"] >= .0015
+    low = side < 0 and x["l"] <= min([p["l"]] + [z["l"] for z in prior]) and x["c"] > x["l"] and (x["c"]-x["l"])/x["l"] >= .0015
     if high or low:
         result.update(entry_blocked=True,
                       pending_pivot_type="LOCAL_HIGH" if high else "LOCAL_LOW",
-                      pending_pivot_price=p["h"] if high else p["l"],
-                      pending_pivot_candle_time=p["t"],
+                      pending_pivot_price=x["h"] if high else x["l"],
+                      pending_pivot_candle_time=x["t"],
                       entry_block_reason="opposite_h1_extreme_awaiting_closed_confirmation")
     return result
 
