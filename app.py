@@ -20,6 +20,7 @@ from psycopg.rows import dict_row
 from accounting import paper_pnl
 from engine_store import EngineStore,LeaseLost
 from market_data import RollingMarketData
+from pandora_raw_flow_recorder import RawFlowRecorder,raw_trade_page,capture_event_page
 from bybit_market_stream import run_bybit_stream
 from h1_structure import analyze as analyze_pandora_h1,pending_extreme as local_pending_extreme,update_path as update_position_path,POLICY as PANDORA_LOCAL_POLICY
 from local_order_flow import POLICY as PANDORA_FLOW_POLICY,entry_candidate as pandora_flow_entry_candidate,initial_entry_candidate as pandora_flow_initial_entry_candidate,pressure_exit as pandora_flow_pressure_exit,update_watch as pandora_flow_update_watch,reentry_ready as pandora_flow_reentry_ready
@@ -49,6 +50,7 @@ def publication_epoch(value):
 
 def pg():return psycopg.connect(os.environ['DATABASE_URL'],autocommit=True,row_factory=dict_row,connect_timeout=5)
 STORE=EngineStore(pg)
+RAW_RECORDER=RawFlowRecorder(pg)
 WIN=None
 HISTORY_BOOTSTRAP=None
 DASHBOARD_LOCK=threading.RLock()
@@ -100,6 +102,7 @@ def pinit():
    for query in SCHEMA:db.execute(query)
    db.execute('insert into pandora_win_account_state(id,equity,realized_pnl,started_at,updated_at) values(1,500,0,%s,%s) on conflict(id) do nothing',(now(),now()))
  EngineStore(pg).migrate()
+ RAW_RECORDER.migrate()
  restore_state()
  with DASHBOARD_LOCK:_DASHBOARD_CACHE.clear()
  global WIN
@@ -1244,12 +1247,15 @@ def _stream_group(trades):
    candle_filter=lambda symbol:stable_shard(symbol)==index,
    subscribe_trades=trades,on_trade_mids=quote if trades else None,
    on_mids=None if trades else quote,on_candles=None if trades or v2_enabled() else accept_local_candles,
-   candle_symbols=() if trades or v2_enabled() else symbols,worker_name=('trade-' if trades else 'quotes-')+str(index))
+   candle_symbols=() if trades or v2_enabled() else symbols,worker_name=('trade-' if trades else 'quotes-')+str(index),
+   on_accepted_trades=RAW_RECORDER.ingest if trades else None,
+   on_capture_event=RAW_RECORDER.notice if trades else None)
  threads=[threading.Thread(target=worker,args=(i,),daemon=True) for i in range(count)]
  for thread in threads:thread.start()
  SHUTDOWN.wait()
  for thread in threads:thread.join(3)
 
+def raw_flow_capture_loop():RAW_RECORDER.run(SHUTDOWN)
 def market_trade_stream():_stream_group(True)
 def market_aux_stream():_stream_group(False)
 
@@ -1375,6 +1381,11 @@ def build_dashboard_snapshot(history=None):
    token['action_reason']=token['decision']['message']
    token['last_action']=token['decision']['action']
  primary['tokens']=token_rows
+ primary['raw_flow_capture']=RAW_RECORDER.status()
+ for token in token_rows:
+  symbol=token['symbol']
+  token['raw_capture_last_exchange_ms']=primary['raw_flow_capture']['latest_by_symbol'].get(symbol)
+  token['raw_capture_last_saved_exchange_ms']=primary['raw_flow_capture']['persisted_by_symbol'].get(symbol)
  primary['flow_v2']=v2_enabled()
  primary['strategy_name']=PANDORA_WIN_NAME
  primary['experiment_id']=V2_EXPERIMENT if v2_enabled() else PANDORA_WIN_NAME
@@ -1394,9 +1405,9 @@ def build_dashboard_snapshot(history=None):
  closed_count=sum(int(row.get('closed_trades') or 0) for row in totals)
  wins=sum(int(row.get('wins') or 0) for row in totals)
  primary['statistics']={'closed_trades':closed_count,'wins':wins,'nonwinning':closed_count-wins,'win_rate_percent':wins/closed_count*100 if closed_count else None,'basis':'all_canonical_closed_trades_including_losses'} if history.get('token_totals') is not None else None
- primary['total_pnl_usdt']=primary['total_equity']-500 if primary['total_equity'] is not None else None
- primary['total_pnl_percent']=primary['total_pnl_usdt']/500*100 if primary['total_pnl_usdt'] is not None else None
- primary['realized_pnl_percent']=primary['realized_pnl']/500*100
+ primary['total_pnl_usdt']=primary['total_equity']-PANDORA_STARTING_EQUITY if primary['total_equity'] is not None else None
+ primary['total_pnl_percent']=primary['total_pnl_usdt']/PANDORA_STARTING_EQUITY*100 if primary['total_pnl_usdt'] is not None else None
+ primary['realized_pnl_percent']=primary['realized_pnl']/PANDORA_STARTING_EQUITY*100
  primary['max_equity']=(state.get('pandora_account') or {}).get('max_equity',PANDORA_STARTING_EQUITY)
  primary['current_exposure']=sum(float(p['notional_usd'])*float(p['mark'])/float(p['entry']) for p in positions) if all_marks else None
  primary['pyramid_adds']=[]
@@ -1450,6 +1461,12 @@ class Handler(BaseHTTPRequestHandler):
      self.send(200,render_history(result),'text/html; charset=utf-8')
     else:self.send(200,result)
    elif path=='/api/pandora/events':self.send(200,pandora_event_page(args.get('before',[None])[0],int(args.get('limit',['100'])[0])))
+   elif path=='/api/pandora/flow/trades':self.send(200,raw_trade_page(pg,
+     symbol=args.get('symbol',[None])[0],before_id=args.get('before',[None])[0],
+     limit=int(args.get('limit',['100'])[0])))
+   elif path=='/api/pandora/flow/events':self.send(200,capture_event_page(pg,
+     before_id=args.get('before',[None])[0],limit=int(args.get('limit',['100'])[0])))
+   elif path=='/api/pandora/flow/status':self.send(200,RAW_RECORDER.status())
    else:self.send(404,{'error':'not_found'})
   except (ValueError,TypeError):self.send(400,{'error':'invalid_request'})
   except Exception:self.send(503,{'error':'temporarily_unavailable','history_preserved':True})
@@ -1494,7 +1511,7 @@ def main():
    except Exception as error:
     with LOCK:S['sources'][label]={'ok':False,'last_check':now(),'error':type(error).__name__+':'+str(error)[:160]}
    SHUTDOWN.wait(1)
- jobs=[('lease',engine_coordinator),('contracts',bybit_instruments_loop),('discovery',bybit_volatility_discovery_loop),('trades',market_trade_stream),('quotes',market_aux_stream),
+ jobs=[('lease',engine_coordinator),('contracts',bybit_instruments_loop),('discovery',bybit_volatility_discovery_loop),('raw_flow_recorder',raw_flow_capture_loop),('trades',market_trade_stream),('quotes',market_aux_stream),
   *((('h1_history',market_history_bootstrap),('h1_scan',pandora_loop)) if not v2_enabled() else ()),('execution',pandora_risk_loop),
   ('checkpoint',pandora_live_state_loop),('history',dashboard_history_loop),('keepalive',render_keepalive_loop)]
  workers=[threading.Thread(target=supervise,args=job,daemon=True,name=job[0]) for job in jobs]
