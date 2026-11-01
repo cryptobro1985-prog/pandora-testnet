@@ -1280,7 +1280,8 @@ def health_state():
   'execution_ok':execution_ok,'execution_running':bool(S.get('_execution_running')),'execution_age_seconds':execution_age,'execution_errors':copy.deepcopy(S.get('_execution_errors',{})),
   'engine_active':active,'engine_error':S.get('engine_error'),'mode':'PAPER_ONLY','version':os.getenv('RENDER_GIT_COMMIT','local-unpublished'),
   'token_readiness':tokens,'checkpoint_age_seconds':checkpoint_age,
-  'market_age_seconds':stamp-S['_last_poll_epoch'] if S['_last_poll_epoch'] else None}
+  'market_age_seconds':stamp-S['_last_poll_epoch'] if S['_last_poll_epoch'] else None,
+  'raw_flow_capture':RAW_RECORDER.status()}
 
 
 def dashboard_history_loop():
