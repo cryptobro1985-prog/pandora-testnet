@@ -17,6 +17,26 @@ class LiveScanner:
         self.top=int(top); self.candidate_limit=int(candidate_limit); self.freshness=float(freshness)
         self.lock=threading.RLock(); self.markets={}; self.histories={}; self.selected=[]
         self.candidates=[]; self.states={}; self.last_snapshot={}; self.flow_samples={}; self.pump_context=set()
+        self.selected_since={};self.candidate_since={};self.fade_since={}
+
+    @staticmethod
+    def _stable_top(rows, previous, limit, since, epoch):
+        """Warm actual tape before marginal rank noise churns subscriptions.
+
+        A clearly stronger challenger can replace a warmed incumbent. Invalid
+        tickers/faded rows are excluded by the caller, even during warmup.
+        """
+        by_symbol={row['symbol']:row for row in rows}
+        chosen=[by_symbol[s] for s in previous if s in by_symbol][:limit]
+        for challenger in rows:
+            if any(row['symbol']==challenger['symbol'] for row in chosen):continue
+            if len(chosen)<limit:chosen.append(challenger);continue
+            replaceable=[row for row in chosen if epoch-since.get(row['symbol'],epoch)>=15]
+            if not replaceable:continue
+            weakest=min(replaceable,key=lambda row:(row['pandora_win_score'],row['symbol']))
+            if challenger['pandora_win_score']>weakest['pandora_win_score']+.05:
+                chosen.remove(weakest);chosen.append(challenger)
+        return sorted(chosen,key=lambda row:(-row['pandora_win_score'],row['symbol']))
 
     def ingest(self, row, exchange_ms, received=None):
         if not isinstance(row,dict):return False
@@ -56,6 +76,7 @@ class LiveScanner:
             markets=copy.deepcopy(self.markets)
             histories={s:list(h) for s,h in self.histories.items()}
             previous=list(self.selected)
+            previous_candidates=list(self.candidates)
             retained_snapshot=copy.deepcopy(self.last_snapshot)
             prior_flow=copy.deepcopy(self.flow_samples)
             pump_context=set(self.pump_context)|set(previous)|set(held)
@@ -95,15 +116,23 @@ class LiveScanner:
             rapid_volume=float(rapid.get('buy_volume',0))+float(rapid.get('sell_volume',0))
             quiet=bool(windows and (rapid_volume<=0 or int(rapid.get('trade_count',0))==0))
             velocity=float(fast.get('volume_velocity',0));rapid_velocity=float(rapid.get('volume_velocity',0))
-            volume_faded=bool(prior and velocity<float(prior.get('velocity',0)) and rapid_velocity<=float(prior.get('rapid_velocity',0)))
+            # A tiny one-second decline is ordinary market variation. Keep the
+            # pre-decline reference while confirming material loss of activity.
+            reference=float(prior.get('fade_reference_velocity',prior.get('velocity',0)))
+            volume_faded=bool(reference>0 and velocity<reference*.5 and rapid_velocity<=float(prior.get('rapid_velocity',0)))
             movement_faded=bool(prior and abs(short)<=float(prior.get('movement',0)) and short_volatility<=float(prior.get('short_volatility',0)))
             current_control=int(flow.get('fast_control_side') or flow.get('sustained_control_side') or 0)
             # Tiny sample-to-sample declines are not a fade while executions
             # still drive price. Relative ranking can replace it with a stronger
             # market; forced removal requires lost control or a quiet tape.
-            fading=bool(known and (not flow or quiet or (volume_faded and movement_faded and not current_control)))
+            warming=bool(symbol in previous and epoch-self.selected_since.get(symbol,epoch)<15)
+            declining=bool(known and (not flow or (volume_faded and movement_faded and not current_control)))
+            if declining:self.fade_since.setdefault(symbol,epoch)
+            else:self.fade_since.pop(symbol,None)
+            fading=bool(known and not warming and (quiet or (declining and epoch-self.fade_since[symbol]>=15)))
             flow_samples[symbol]=dict(known=known,velocity=velocity,rapid_velocity=rapid_velocity,
-                movement=abs(short),short_volatility=short_volatility)
+                movement=abs(short),short_volatility=short_volatility,
+                fade_reference_velocity=reference if declining else velocity)
             current_pump=short>0 or minute>0 or (bootstrapping and change>0)
             if current_pump:pump_context.add(symbol)
             active_correction=bool(symbol in pump_context and known and flow and not fading and (short<0 or minute<0))
@@ -119,7 +148,8 @@ class LiveScanner:
             consistency=sum(b[1]>a[1] for a,b in zip(samples,samples[1:]))/max(1,len(samples)-1)
             elapsed=max(.001,samples[-1][0]-samples[0][0])
             turnover_velocity=max(0.,turn-samples[0][2])/elapsed
-            rows.append(dict(symbol=symbol,last=last,short_return=short,minute_return=minute,
+            rows.append(dict(symbol=symbol,last=last,price_received=row.get('price_received'),
+                exchange_ms=row.get('exchange_ms'),short_return=short,minute_return=minute,
                 movement_strength=abs(short),dominant_volume=max(fast.get('buy_volume',0),fast.get('sell_volume',0)),
                 eligible=eligible,fading=fading,short_volatility=short_volatility,active_correction=active_correction,
                 acceleration=short-minute/4,volatility=volatility,turnover_24h=turn,
@@ -143,7 +173,9 @@ class LiveScanner:
                 row['pandora_win_score']+=bisect_left(values,row[field])/max(1,len(rows)-1)/len(fields)
         rows.sort(key=lambda r:(-r['pandora_win_score'],r['symbol']))
         for rank,row in enumerate(rows,1):row['rank']=rank
-        selected=[r for r in rows if r['eligible']][:self.top];symbols=[r['symbol'] for r in selected]
+        eligible=[r for r in rows if r['eligible']]
+        selected=self._stable_top(eligible,previous,self.top,self.selected_since,epoch)
+        symbols=[r['symbol'] for r in selected]
         events=[]
         with self.lock:
             for symbol in previous:
@@ -159,7 +191,10 @@ class LiveScanner:
                 self.states[symbol]='SELECTED'
                 if symbol not in previous:events.append(dict(action='TOKEN_SELECTED',symbol=symbol,reason='live_cross_sectional_top_five'))
             self.flow_samples.update(flow_samples);self.pump_context=pump_context
-            self.selected=symbols;self.candidates=[r['symbol'] for r in rows[:self.candidate_limit]]
+            candidates=self._stable_top(eligible,previous_candidates,self.candidate_limit,self.candidate_since,epoch)
+            self.selected_since={s:self.selected_since.get(s,epoch) for s in symbols}
+            self.selected=symbols;self.candidates=[r['symbol'] for r in candidates]
+            self.candidate_since={s:self.candidate_since.get(s,epoch) for s in self.candidates}
             self.last_snapshot=dict(at=epoch,selected_symbols=symbols,selected=selected,
                 top_movers=rows[:self.candidate_limit],candidate_symbols=list(self.candidates),
                 retained_open_positions=[s for s in held if s not in symbols],

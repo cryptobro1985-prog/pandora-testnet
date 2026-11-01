@@ -2,11 +2,77 @@
 from h1_structure import analyze, _completed, _f, PIVOT_LOOKBACK
 
 
+def _closed_m15_local(rows, now_ms):
+    """Latest causal M15 reversal, including higher lows within a rising H1.
+
+    A lower-timeframe pivot need not be a four-hour extreme. Requiring that
+    previously prevented a confirmed higher low from changing an old SHORT.
+    """
+    candles=_completed(rows,now_ms,900_000)
+    if len(candles)<PIVOT_LOOKBACK+2:return None
+    if now_ms-candles[-1]['T']>1_020_000:return None
+    if any(b['t']-a['t']!=900_000 for a,b in zip(candles,candles[1:])):return None
+    high=low=anchor=None
+    for index,bar in enumerate(candles):
+        confirmations=[]
+        if high is not None:
+            if bar['h']>=high['h']:high=None
+            elif bar['l']<high['l']:
+                confirmations.append((-1,high));high=None
+        if low is not None:
+            if bar['l']<=low['l']:low=None
+            elif bar['h']>low['h']:
+                confirmations.append((1,low));low=None
+        if len(confirmations)==1:
+            side,pivot=confirmations[0]
+            if anchor is None or pivot['t']>anchor['pivot_candle_time']:
+                anchor=dict(entry_side=side,pivot_type='LOCAL_LOW' if side>0 else 'LOCAL_HIGH',
+                    pivot_price=pivot['l'] if side>0 else pivot['h'],pivot_candle_time=pivot['t'],
+                    signal_candle_time=bar['t'],signal_candle_close_time=bar['T'],
+                    confirmation_candle_time=bar['t'],confirmation_close_time=bar['T'],
+                    confirmation_close=bar['c'],m15_confirmation=True,
+                    state='CONFIRMED_LOCAL_LOW' if side>0 else 'CONFIRMED_LOCAL_HIGH')
+        if index>=PIVOT_LOOKBACK:
+            preceding=candles[index-PIVOT_LOOKBACK:index]
+            if bar['h']>=max(c['h'] for c in preceding):high=bar
+            if bar['l']<=min(c['l'] for c in preceding):low=bar
+    if anchor is None:return None
+    # Preserve historical pivots but do not propose an already broken reference.
+    later=[c for c in candles if c['t']>anchor['pivot_candle_time']]
+    if anchor['entry_side']>0 and any(c['l']<=anchor['pivot_price'] for c in later):return None
+    if anchor['entry_side']<0 and any(c['h']>=anchor['pivot_price'] for c in later):return None
+    return anchor
+
+
+def entry_structure_valid(analysis, mark, side):
+    """A historical confirmed local never licenses entry beyond its invalidation."""
+    mark=_f(mark);pivot=_f((analysis or {}).get('pivot_price'))
+    if mark is None or pivot is None or min(mark,pivot)<=0 or side not in (-1,1):return False
+    if int((analysis or {}).get('entry_side') or 0)!=side:return False
+    if analysis.get('entry_blocked') or not analysis.get('live_structure_fresh',True):return False
+    return mark>pivot if side>0 else mark<pivot
+
+
+def _with_execution_local(analysis):
+    out=dict(analysis)
+    source=out.get('confirmation_source') or 'closed_H1_structure'
+    out['execution_local']=({**{k:out.get(k) for k in (
+        'pivot_type','pivot_price','pivot_candle_time','signal_candle_time',
+        'signal_candle_close_time','entry_side')},'confirmation_source':source,
+        'interval':'15m' if 'M15' in source else '1h'}
+        if out.get('entry_side') in (-1,1) and out.get('pivot_price') is not None else None)
+    return out
+
+
 def live_locals(h1_rows, m15_rows, now_ms, symbol):
     confirmed = analyze(h1_rows, now_ms, symbol)
     out = dict(confirmed)
     out['confirmed_local'] = {k:confirmed.get(k) for k in (
         'pivot_type','pivot_price','pivot_candle_time','signal_candle_time','entry_side')}
+    m15_anchor=_closed_m15_local(m15_rows,now_ms)
+    out['m15_confirmed_local']=m15_anchor if m15_anchor and (
+        m15_anchor['signal_candle_time']>int(confirmed.get('signal_candle_time') or 0)
+        and m15_anchor['pivot_candle_time']>int(confirmed.get('pivot_candle_time') or 0)) else None
     closed = _completed(h1_rows,now_ms,3_600_000)
     if len(closed)<PIVOT_LOOKBACK:
         return out
@@ -77,13 +143,22 @@ def execution_anchor(analysis, flow):
     The closed H1 anchor remains separately visible; an unconfirmed wick alone
     never flips the executable direction.
     """
+    # Prefer a strictly newer closed-M15 reversal over the old H1 direction.
+    # It is executable only when the actual tape confirms the same direction.
+    m15=analysis.get('m15_confirmed_local') or {}
+    if (analysis.get('live_structure_fresh',True) and m15.get('m15_confirmation')
+            and flow.get('trade_data_fresh')
+            and flow.get('sustained_control_side')==m15.get('entry_side')):
+        return _with_execution_local({**analysis,**m15,'ready':True,'anchor_confirmed':True,
+                'h1_direction_anchor':True,'entry_blocked':False,'entry_block_reason':None,
+                'confirmation_source':'closed_M15_structure_and_executed_control'})
     forming=analysis.get('forming_local') or {}
     side=int(forming.get('entry_side') or 0)
     if not (analysis.get('live_structure_fresh',True) and side and forming.get('m15_confirmation') and flow.get('trade_data_fresh')
             and flow.get('sustained_control_side')==side):
-        return analysis
-    return {**analysis,**forming,'ready':True,'anchor_confirmed':True,
+        return _with_execution_local(analysis)
+    return _with_execution_local({**analysis,**forming,'ready':True,'anchor_confirmed':True,
             'h1_direction_anchor':True,'entry_blocked':False,'entry_block_reason':None,
             'signal_candle_time':int(forming['confirmation_candle_time']),
             'signal_candle_close_time':int(forming['confirmation_close_time']),
-            'confirmation_source':'observed_H1_extreme_closed_M15_and_executed_control'}
+            'confirmation_source':'observed_H1_extreme_closed_M15_and_executed_control'})

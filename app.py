@@ -6,7 +6,7 @@ from pandora_decisions import entry_status, startup_snapshot
 from pandora_bootstrap import HistoryBootstrap
 from pandora_runtime import PandoraRuntime
 from pandora_scanner import ticker_worker
-from pandora_locals import live_locals, execution_anchor
+from pandora_locals import live_locals, execution_anchor, entry_structure_valid
 from pandora_win_core import mark_metrics
 from pandora_risk import RiskPolicy, plan_entry, position_guard, position_risk
 from local_order_flow import flow_profile
@@ -49,6 +49,9 @@ def pg():return psycopg.connect(os.environ['DATABASE_URL'],autocommit=True,row_f
 STORE=EngineStore(pg)
 WIN=None
 HISTORY_BOOTSTRAP=None
+DASHBOARD_LOCK=threading.RLock()
+_DASHBOARD_CACHE={}
+
 
 def journal(kind,event_id,payload):
  with pg() as db:db.execute('insert into pandora_win_audit_journal(recorded_at,event_id,kind,payload) values(%s,%s,%s,%s::jsonb)',(now(),event_id,kind,json.dumps(payload,default=str)))
@@ -69,6 +72,8 @@ SCHEMA=(
  "CREATE TABLE IF NOT EXISTS pandora_win_audit_journal(id bigserial PRIMARY KEY,recorded_at text NOT NULL,event_id text,kind text NOT NULL,payload jsonb NOT NULL)",
  "CREATE TABLE IF NOT EXISTS pandora_win_candle_checkpoints(symbol text NOT NULL,interval text NOT NULL,candles jsonb NOT NULL,saved_at timestamptz NOT NULL DEFAULT clock_timestamp(),PRIMARY KEY(symbol,interval))",
  "CREATE TABLE IF NOT EXISTS pandora_win_live_state(id integer PRIMARY KEY,ts text NOT NULL,commit text,prices jsonb NOT NULL DEFAULT '{}'::jsonb,positions jsonb NOT NULL DEFAULT '{}'::jsonb,unrealized_pnl double precision NOT NULL DEFAULT 0,total_equity double precision NOT NULL DEFAULT 0,price_age_seconds double precision,source text)",
+ "ALTER TABLE pandora_win_live_state ALTER COLUMN unrealized_pnl DROP NOT NULL",
+ "ALTER TABLE pandora_win_live_state ALTER COLUMN total_equity DROP NOT NULL",
  "CREATE INDEX IF NOT EXISTS pandora_win_trade_closed_idx ON pandora_win_trade_history(closed DESC)",
  "CREATE INDEX IF NOT EXISTS pandora_win_audit_kind_time_idx ON pandora_win_audit_journal(kind,recorded_at)")
 
@@ -94,6 +99,7 @@ def pinit():
    db.execute('insert into pandora_win_account_state(id,equity,realized_pnl,started_at,updated_at) values(1,500,0,%s,%s) on conflict(id) do nothing',(now(),now()))
  EngineStore(pg).migrate()
  restore_state()
+ with DASHBOARD_LOCK:_DASHBOARD_CACHE.clear()
  global WIN
  WIN=PandoraRuntime(sys.modules[__name__])
  with pg() as db:
@@ -377,8 +383,6 @@ def pandora_win_h1_direction(rows,now_ms,symbol):
    analysis={**trusted,"ready":True,"last_candle_time":analysis.get("last_candle_time"),
     **local_pending_extreme(rows,now_ms,int(trusted.get("entry_side") or 0),trusted.get("pivot_price")),
     "anchor_guard":"newest_confirmed_anchor_wins"}
- if analysis.get("live_structural_flip"):
-  analysis["signal_candle_time"]=analysis.get("pivot_candle_time") or analysis.get("signal_candle_time")
  with LOCK:prior=copy.deepcopy(S.get("pandora_win_h1_direction",{}).get(symbol))
  if prior:
   prior_t=int(prior.get("signal_candle_time") or 0);new_t=int(analysis.get("signal_candle_time") or 0)
@@ -409,10 +413,17 @@ def pandora_win_h1_direction(rows,now_ms,symbol):
      "anchor_recovered_from":"latest_valid_pandora_observation"}
   else:
    return analysis
- for key in ('confirmed_local','forming_local','forming_locals','live_structure_fresh'):
+ for key in ('confirmed_local','forming_local','forming_locals','live_structure_fresh','m15_confirmed_local'):
   if key in detailed:analysis[key]=copy.deepcopy(detailed[key])
- if detailed.get('entry_blocked') and not (analysis.get('confirmation_source')=='observed_H1_extreme_closed_M15_and_executed_control' and analysis.get('pivot_candle_time')==(detailed.get('forming_local') or {}).get('pivot_candle_time') and analysis.get('pivot_price')==(detailed.get('forming_local') or {}).get('pivot_price') and (detailed.get('forming_local') or {}).get('m15_confirmation')):
+ proof=(detailed.get('m15_confirmed_local') or {}) if analysis.get('confirmation_source')=='closed_M15_structure_and_executed_control' else (detailed.get('forming_local') or {})
+ promoted=bool(analysis.get('confirmation_source') in ('closed_M15_structure_and_executed_control','observed_H1_extreme_closed_M15_and_executed_control')
+  and detailed.get('live_structure_fresh',True) and proof.get('m15_confirmation')
+  and analysis.get('pivot_candle_time')==proof.get('pivot_candle_time')
+  and analysis.get('pivot_price')==proof.get('pivot_price')
+  and analysis.get('entry_side')==proof.get('entry_side'))
+ if detailed.get('entry_blocked') and not promoted:
   analysis['entry_blocked']=True;analysis['entry_block_reason']=detailed.get('entry_block_reason')
+ analysis['execution_local']={**(analysis.get('execution_local') or {}),**{k:copy.deepcopy(analysis.get(k)) for k in ('pivot_type','pivot_price','pivot_candle_time','signal_candle_time','entry_side','confirmation_source')}}
  # Process-local proof that current CLOSED H1 candles were actually scanned.
  # This marker is written only AFTER all structural + flow guards select the
  # final active anchor, so the 500ms executor cannot outrun H1 reconciliation.
@@ -469,16 +480,21 @@ def _local_persisted_anchor(symbol):
    or source.get("signal_candle_time") or source.get("origin_signal_candle") or source.get("candle_time") or 0)
   pivot=int(features.get("pivot_candle_time") or signal or 0)
   if signal<=0:return
-  candidates.append({"ready":True,"persisted":True,"anchor_confirmed":True,"h1_direction_anchor":True,
+  candidates.append({**features,"ready":True,"persisted":True,"anchor_confirmed":True,"h1_direction_anchor":True,
    "pivot_type":features.get("pivot_type") or ("LOCAL_HIGH" if side<0 else "LOCAL_LOW"),
    "pivot_price":pivot_price,"entry_side":side,"signal_candle_time":signal,"pivot_candle_time":pivot,
-   "policy":features.get("policy"),"entry_blocked":False,"pending_pivot_type":None,"pending_pivot_price":None,
-   "entry_block_reason":None,"reason":"persisted_confirmed_h1_local","anchor_source":origin})
+   "policy":features.get("policy"),"entry_blocked":bool(features.get("entry_blocked")),
+   "entry_block_reason":features.get("entry_block_reason"),"reason":"persisted_confirmed_h1_local","anchor_source":origin})
 
  with LOCK:
   add_candidate(copy.deepcopy(S.get("pandora_win_h1_direction",{}).get(symbol)),"memory_canonical")
   add_candidate(copy.deepcopy(S.get("pandora_win_positions",{}).get(symbol)),"open_position")
   add_candidate(copy.deepcopy(S.get("pandora_watch",{}).get(symbol)),"reentry_watch")
+ # restore_state hydrates the durable canonical anchor once; do not scan the
+ # ledger for every market every second while holding up live ingestion.
+ if candidates:
+  candidates.sort(key=lambda x:(int(x.get("signal_candle_time") or 0),int(x.get("pivot_candle_time") or 0)),reverse=True)
+  return copy.deepcopy(candidates[0])
  try:
   with pg() as db:
    durable=db.execute("select analysis from pandora_win_h1_direction where symbol=%s",(symbol,)).fetchone()
@@ -610,6 +626,7 @@ def pandora_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution_context=
      int(current_anchor.get("signal_candle_time") or 0)!=int(analysis.get("signal_candle_time") or 0)):return reject("ENTRY_STATE_REVALIDATION_FAILED")
  price=current_entry_price(symbol)
  if price is None:return reject("CURRENT_SYMBOL_MARK_OR_CHECKPOINT_UNAVAILABLE")
+ if not entry_structure_valid(analysis,price,int(side)):return reject("STRUCTURE_REFERENCE_BROKEN_BY_MARK")
  if entry_kind=="REENTRY":
   if not watch or int(watch.get("side") or 0)!=int(side):return reject("ENTRY_STATE_REVALIDATION_FAILED")
   if int(analysis.get("entry_side") or 0)==-int(side):return reject("ENTRY_STATE_REVALIDATION_FAILED")
@@ -643,6 +660,22 @@ def pandora_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution_context=
      int(latest_anchor.get('entry_side') or 0)!=int(side) or
      int(latest_anchor.get('signal_candle_time') or 0)!=int(analysis.get('signal_candle_time') or 0)):
   return reject('LOCAL_CHANGED_DURING_ALLOCATION')
+ latest_price=current_entry_price(symbol)
+ if latest_price is None:return reject('CURRENT_SYMBOL_MARK_OR_CHECKPOINT_UNAVAILABLE')
+ if not entry_structure_valid(latest_anchor or analysis,latest_price,int(side)):return reject('STRUCTURE_REFERENCE_BROKEN_BY_MARK')
+ if latest_price!=price:
+  # An active market can move while PostgreSQL/allocation is in progress.
+  # Reprice once from the fresh mark and recompute exposure instead of rejecting
+  # every moving market or recording a fill at an obsolete entry price.
+  risk=risk_snapshot(policy)
+  if not risk['allowed']:return reject(risk['reason'])
+  equity=risk['equity'];free=risk['free_margin'];price=latest_price
+  plan=plan_entry(equity,free,float(instrument['max_leverage']),float(price),int(side),latest_anchor or analysis,latest_flow,risk['portfolio_risk'],policy)
+  if not plan.allowed:return reject(plan.reason)
+  leverage=plan.leverage;margin=plan.margin;notional=plan.notional
+  desired_margin=equity*(policy.min_margin_fraction+(policy.max_entry_margin_fraction-policy.min_margin_fraction)*plan.signal_strength)
+  max_margin_per_position=equity*policy.max_entry_margin_fraction
+  target_notional=desired_margin*leverage;exposure_fill_ratio=notional/target_notional if target_notional else 0.
  flow=latest_flow;selection=latest_selection
  price=float(price);opened=now();epoch=time.time()
  reentries=(int(watch.get("reentries") or 0)+1) if entry_kind=="REENTRY" and watch else 0
@@ -713,14 +746,14 @@ def pandora_close(symbol,price,reason,analysis=None,watch_context=None):
  if watch_context:features["executed_flow_exit_context"]=watch_context
  features["actual_exit_reason"]=reason;features["actual_exit_mark"]=price
  watch=None
- if reason == "confirmed_counter_move_exit":
+ if reason in ("confirmed_counter_move_exit","modeled_maintenance_breach"):
   watch={"symbol":symbol,"side":int(pos["side"]),
    "origin_signal_candle":int(features.get("origin_h1_signal_candle") or pos.get("signal_candle_time") or 0),
    "exit_price":price,"exit_at":now(),"expires_epoch":0.0,
    "reentries":int(features.get("swing_reentries",0) or 0),"context":{**copy.deepcopy(watch_context or {}),"exit_pressure_state":copy.deepcopy(features.get("pressure_state") or {})}}
   # Preserve the exchange timestamp of the opposite executed-flow event so
   # Re-entry must follow a later executed-flow resumption.
-  opposite_flow_exit=True
+  opposite_flow_exit=reason=="confirmed_counter_move_exit"
   flow_at_exit=(watch_context or {}).get("flow_context") or {}
   try:
    opposite_epoch=flow_at_exit.get("decision_event_epoch") or flow_at_exit.get("latest_trade_epoch")
@@ -729,8 +762,9 @@ def pandora_close(symbol,price,reason,analysis=None,watch_context=None):
    opposite_epoch=float(opposite_epoch)
    if not math.isfinite(opposite_epoch):opposite_epoch=None
   except (KeyError,TypeError,ValueError,OverflowError):opposite_epoch=None
-  confirmed_opposite=bool(opposite_flow_exit and opposite_epoch is not None)
-  watch["context"].update(phase="WAIT_RESUMPTION" if confirmed_opposite else "WAIT_PULLBACK",
+  profile=flow_profile(flow_at_exit,int(pos["side"]))
+  confirmed_opposite=bool(opposite_flow_exit and opposite_epoch is not None and profile and profile["counter_takeover"])
+  watch["context"].update(phase="WAIT_RESUMPTION" if confirmed_opposite else "WAIT_COUNTER_CONTROL",
     counter_pressure_seen=confirmed_opposite,flow_policy=PANDORA_FLOW_POLICY)
   if confirmed_opposite:watch["context"]["last_opposite_trade_epoch"]=opposite_epoch
  with pg() as db:
@@ -967,6 +1001,20 @@ def pandora_stats():
       "avg_exposure_fill_ratio":float(r["avg_fill"]) if r["avg_fill"] is not None else None} for r in rows}}
  except Exception as exc:return {"error":type(exc).__name__+":"+str(exc)[:160]}
 
+def value_live_positions(positions,prices,received,stamp):
+ result={};unreal=0.;missing=[]
+ for symbol,pos in positions.items():
+  observed=float(received.get(symbol,0) or 0)
+  age=stamp-observed if observed else None
+  mark=prices.get(symbol) if age is not None and 0<=age<=10 else None
+  pnl=paper_pnl(float(pos['notional']),float(pos['entry']),float(mark),int(pos['side']),FEE) if mark is not None else None
+  if pnl is None:missing.append(symbol)
+  else:unreal+=pnl
+  result[symbol]={k:copy.deepcopy(pos.get(k)) for k in ('side','entry','margin','notional','leverage','opened','features')}
+  result[symbol].update(mark=mark,unrealized_pnl=pnl,mark_fresh=mark is not None,
+   mark_received_epoch=observed or None,price_age_seconds=age)
+ return result,unreal if not missing else None,missing
+
 def pandora_live_state_loop():
  # Process-independent Pandora Win mark-to-market snapshot for the monitor.
  # The lease owner publishes one compact row per second from the live Bybit price cache.
@@ -976,20 +1024,17 @@ def pandora_live_state_loop():
     active=bool(S.get("engine_active"))
     prices=copy.deepcopy(S.get("_prices",{}))
     price_epoch=float(S.get("_last_poll_epoch",0) or 0)
+    received=dict(S.get("_price_received_epoch",{}))
     positions=copy.deepcopy(S.get("pandora_win_positions",{}))
-    realized_equity=float(S.get("pandora_equity",PANDORA_STARTING_EQUITY) or PANDORA_STARTING_EQUITY)
+    realized_equity=float(S.get("pandora_equity",PANDORA_STARTING_EQUITY))
    if active and prices and price_epoch>0:
-    pos_state={};unreal=0.0
-    for symbol,pos in positions.items():
-     mark=float(prices.get(symbol,pos.get("entry",0)) or pos.get("entry",0) or 0)
-     pnl=paper_pnl(float(pos.get("notional",0) or 0),float(pos.get("entry",0) or 0),mark,int(pos.get("side",0) or 0),FEE) if mark>0 else 0.0
-     unreal+=pnl
-     pos_state[symbol]={"side":int(pos.get("side",0) or 0),"entry":float(pos.get("entry",0) or 0),
-      "mark":mark,"margin":float(pos.get("margin",0) or 0),"notional":float(pos.get("notional",0) or 0),
-      "leverage":float(pos.get("leverage",25) or 25),"opened":pos.get("opened"),"unrealized_pnl":pnl,
-      "features":copy.deepcopy(pos.get("features") or {})}
-    age=max(0.0,time.time()-price_epoch)
-    payload_prices={s:float(prices[s]) for s in pandora_runtime_symbols() if s in prices}
+    stamp=time.time()
+    pos_state,unreal,missing=value_live_positions(positions,prices,received,stamp)
+    total=realized_equity+unreal if unreal is not None else None
+    relevant=pandora_runtime_symbols()
+    payload_prices={symbol:float(prices[symbol]) for symbol in relevant if symbol in prices and 0<=stamp-float(received.get(symbol,0))<=10}
+    # Per-position age is authoritative; a fresh unrelated ticker cannot hide it.
+    age=max((stamp-float(received.get(symbol,0)) for symbol in positions),default=max(0.,stamp-price_epoch))
     with pg() as db:
      with db.transaction():
       STORE.fence(db)
@@ -999,10 +1044,10 @@ def pandora_live_state_loop():
        positions=excluded.positions,unrealized_pnl=excluded.unrealized_pnl,total_equity=excluded.total_equity,
        price_age_seconds=excluded.price_age_seconds,source=excluded.source""",
        (now(),os.getenv("RENDER_GIT_COMMIT"),json.dumps(payload_prices),json.dumps(pos_state,default=str),
-        unreal,realized_equity+unreal,age))
+        unreal,total,age))
     with LOCK:S["last_checkpoint"]=now()
     with LOCK:S["pandora_live_state"]={"ts":now(),"price_age_seconds":age,"prices":payload_prices,
-      "unrealized_pnl":unreal,"total_equity":realized_equity+unreal,"positions":pos_state}
+      "unrealized_pnl":unreal,"total_equity":total,"positions":pos_state,"missing_marks":missing}
   except Exception as exc:
    with LOCK:S["sources"]["PandoraLiveState"]={"ok":False,"last_check":now(),
      "error":type(exc).__name__+":"+str(exc)[:160]}
@@ -1111,6 +1156,8 @@ def needs_local_history(symbol):
   if not analyze_pandora_h1(h1_rows,stamp,symbol).get('ready'):return True
   latest=max(int(row['t']) for row in h1_rows if int(row['T'])<=stamp-1000)
   expected=int((stamp-1000)//3600000*3600000-3600000)
+  partial=[r for r in h1_rows if int(r['t'])<=stamp<int(r['T'])+1000]
+  if not partial or not 0<=stamp-float(partial[-1].get('observed_at_ms') or 0)<=15000:return True
   m15=sorted((row for row in m15_rows if int(row['T'])<=stamp-1000),key=lambda row:int(row['t']))
   if len(m15)<5:return True
   recent=m15[-5:]
@@ -1208,12 +1255,15 @@ def dashboard_history_loop():
   SHUTDOWN.wait(5)
 
 def build_dashboard_snapshot(history=None):
- with LOCK:state=copy.deepcopy(S)
- history=history if history is not None else state.get('_dashboard_history',{})
- positions=[];unreal=0.;all_marks=True
+ with LOCK:
+  state={k:copy.deepcopy(v) for k,v in S.items() if k not in ('_timeline','_hist','_bybit_instruments','pandora_live_state','_dashboard_history')}
+  state['_bybit_instruments']={symbol:{} for symbol in S.get('_bybit_instruments',{})}
+  saved_history=copy.deepcopy(S.get('_dashboard_history',{}))
+ history=history if history is not None else saved_history
+ positions=[];unreal=0.;all_marks=True;snapshot_epoch=time.time()
  for symbol,pos in state['pandora_win_positions'].items():
   stamp=state['_price_received_epoch'].get(symbol,0)
-  mark=state['_prices'].get(symbol) if 0<=time.time()-stamp<=10 else None
+  mark=state['_prices'].get(symbol) if 0<=snapshot_epoch-stamp<=10 else None
   pnl=paper_pnl(pos['notional'],pos['entry'],mark,pos['side'],FEE) if mark is not None else None
   all_marks=all_marks and mark is not None
   if pnl is not None:unreal+=pnl
@@ -1222,7 +1272,7 @@ def build_dashboard_snapshot(history=None):
    'entry_time':pos['opened'],'average_entry':pos['entry'],
    'entry_local':{k:(pos.get('features') or {}).get(k) for k in ('pivot_type','pivot_price','pivot_candle_time','signal_candle_time','confirmation_source')},
    'current_local':state.get('_pandora_analysis',{}).get(symbol) or state.get('pandora_win_h1_direction',{}).get(symbol) or {},
-   'pnl_usdt':pnl,'mark':mark,'unrealized_pnl':pnl,'margin_usd':pos['margin'],'notional_usd':pos['notional'],'leverage':pos['leverage'],'effective_leverage':pos['notional']/pos['margin'] if pos['margin'] else None,'pnl_percent':pnl/pos['margin']*100 if pnl is not None and pos['margin'] else None,'features':pos.get('features') or {}})
+   'pnl_usdt':pnl,'mark':mark,'mark_fresh':mark is not None,'price_age_seconds':snapshot_epoch-stamp if stamp else None,'mark_received_epoch':stamp or None,'unrealized_pnl':pnl,'margin_usd':pos['margin'],'notional_usd':pos['notional'],'leverage':pos['leverage'],'effective_leverage':pos['notional']/pos['margin'] if pos['margin'] else None,'pnl_percent':pnl/pos['margin']*100 if pnl is not None and pos['margin'] else None,'features':pos.get('features') or {}})
  details={}
  for symbol in pandora_runtime_symbols():
   flow=MARKET_OBS.flow_context(symbol)
@@ -1244,7 +1294,14 @@ def build_dashboard_snapshot(history=None):
   position=next((p for p in positions if p['symbol']==symbol),{})
   features=position.get('features') or {}
   token=WIN.tokens.get(symbol,{}) if WIN is not None else {}
-  token_rows.append({**row,'price':fresh_mark_price(symbol),
+  received=float(state.get('_price_received_epoch',{}).get(symbol,0) or 0)
+  mark=state.get('_prices',{}).get(symbol) if received and 0<=snapshot_epoch-received<=10 else None
+  token_rows.append({**row,'price':mark,'mark_fresh':mark is not None,
+   'price_age_seconds':snapshot_epoch-received if received else None,'mark_received_epoch':received or None,
+   'scanner_price':row.get('last') if 0<=snapshot_epoch-float(row.get('price_received') or 0)<=10 else None,
+   'scanner_price_age_seconds':snapshot_epoch-float(row['price_received']) if row.get('price_received') else None,
+   'execution_local':local.get('execution_local') or {k:local.get(k) for k in ('pivot_type','pivot_price','pivot_candle_time','entry_side','confirmation_source')},
+   'm15_confirmed_local':local.get('m15_confirmed_local'),
    'confirmed_local':local.get('confirmed_local') or local,'forming_local':local.get('forming_local'),
    'forming_locals':local.get('forming_locals',[]),'direction':local.get('entry_side'),
    'buy_volume':flow.get('buy_notional'),'sell_volume':flow.get('sell_notional'),
@@ -1295,14 +1352,23 @@ def build_dashboard_snapshot(history=None):
  primary['reversals']=[t for t in history.get('events',{}).get('events',[]) if str(t.get('kind','')).startswith('pandora_REVERSE_')]
  primary['token_rotations']=[t for t in history.get('events',{}).get('events',[]) if t.get('kind') in ('pandora_TOKEN_ROTATED','pandora_ROTATE_OUT')]
  return {'api_version':API_VERSION,'snapshot_id':int(time.time()*1000),'mode':'PAPER_ONLY',
-  'freshness':{'market_at':state.get('last_poll'),'history_at':history.get('at'),'scanner_at':(state.get('bybit_discovery') or {}).get('at'),'execution_at':state.get('_execution_heartbeat')},
+  'freshness':{'own_symbol_marks':{p['symbol']:{'fresh':p['mark_fresh'],'age_seconds':p['price_age_seconds']} for p in positions},'market_at':state.get('last_poll'),'history_at':history.get('at'),'scanner_at':(state.get('bybit_discovery') or {}).get('at'),'execution_at':state.get('_execution_heartbeat')},
   'pandora':primary,
   'pandora_symbols':list(pandora_runtime_symbols()),
   'discovery':state.get('bybit_discovery',{}),
   'health':health_state(),'sources':state['sources'],'pandora_entry_diagnostics':state.get('pandora_entry_diagnostics',{}),
   'history_error':history.get('error'),'history_updated_at':history.get('at'),'positions':[],'snapshot_at':now()}
 
-def dashboard():return build_dashboard_snapshot()
+def dashboard():
+ # Serialize/cache concurrent HTTP readers; a slow phone must not multiply
+ # flow aggregation, PostgreSQL queries or copies on the trading process.
+ with DASHBOARD_LOCK:
+  stamp=time.monotonic()
+  if stamp-float(_DASHBOARD_CACHE.get('at',0))<.5 and _DASHBOARD_CACHE.get('value') is not None:
+   return _DASHBOARD_CACHE['value']
+  value=build_dashboard_snapshot()
+  _DASHBOARD_CACHE.update(at=time.monotonic(),value=value)
+  return value
 def html_dashboard(data):
  from pandora_monitor import render
  return render(data)

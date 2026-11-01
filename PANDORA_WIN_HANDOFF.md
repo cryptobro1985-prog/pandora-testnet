@@ -36,7 +36,7 @@
 
 Глобальный outage сохраняет selection/watch и блокирует неподтверждённый вход. Один quiet/stale токен не замораживает всю пятёрку. Fast control 5/15s для структурного закрытия отделён от minute context нового входа; старый минутный объём не должен задерживать подтверждённый контрконтроль.
 
-Защита от выхода на слабом откате: `MIN_CONTROL_IMBALANCE=0.20` (60/40 executed volume) в обоих быстрых окнах плюс price response. Entry также требует этого минутного перевеса. Exit проходит через единый `pressure_exit`, включая противоположный H1 local: минимум 3 секунды противоположного control по свежим exchange events и структурное подтверждение. `features.exit_control_state` сохраняет наблюдение; повторный polling не добавляет времени. Neutral/own/stale, gap >5s и благоприятный экстремум сбрасывают наблюдение. Не обходите этот gate прямым close по одному fast-control tick. Контракты покрывает `tests/test_control_hysteresis.py`, а wire-тесты проверяют HOLD первой контратаки и последующий подтверждённый выход. Дополнительное подтверждение может отложить выход; оно не гарантирует сохранение всей MFE.
+Актуальные exit gates описаны в [аудите инцидента](PANDORA_INCIDENT_AUDIT_2026-11-01.md). 60/40 notional + price response остаются обязательными; exit может использовать полный 15/30s context при нейтральных 5s. 3s evidence накапливаются только по новым exchange events, neutral пауза не добавляет время и не стирает всё наблюдение; own/stale/>5s gap/15s expiry/favorable extreme сбрасывают его. `exit_decision` пишет каждый выполненный/невыполненный gate. Новые entries не используют более мягкий exit-context. Контракты `test_incident_flow.py`, `test_control_hysteresis.py` и wire-тесты не доказывают доходность.
 
 ## Интерфейс
 
@@ -61,3 +61,9 @@
 Live Bybit, состояние рабочей базы и deploy Render требуют проверки доступом к соответствующей среде. Нельзя объявлять их подтверждёнными по локальному HTTP или тестовому PnL. Не обещать 100% win rate, прибыльный fill или отсутствие ликвидаций: maintenance — приближённая модель без точных биржевых tiers/funding/slippage.
 
 Полный ZIP должен включать runtime, Dockerfile, зависимости, монитор, тесты, эти документы и manifest. Credentials, database dumps, venv и caches исключаются.
+
+## Совместимость и эксплуатация после инцидента
+
+Существующие account/positions/trade_history не сбрасываются. Live-state aggregate equity/PnL теперь nullable при неизвестном own-symbol mark, миграция снимает NOT NULL без удаления данных. `execution_local` — активный M15/H1 anchor, `confirmed_local` — отдельная H1-история; не путать их при анализе. Resolver использует восстановленную canonical memory, сохраняя provenance и избегая ledger-scan каждого токена каждую секунду. При движении mark в allocation exposure пересчитывается один раз по свежей цене вместо бесконечного отказа всем быстро движущимся рынкам.
+
+После maintenance-close watch начинает WAIT_COUNTER_CONTROL без фиктивного подтверждения: возврат в прежнее направление требует реального counterflow/resumption, обратное — нового local и свежего entry control. Полные исторические тики инцидента отсутствуют; новые расширенные агрегаты/exit reasons не заменяют immutable raw tape. Без доступа к Render deploy и фактическое уменьшение задержек не подтверждать.

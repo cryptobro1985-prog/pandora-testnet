@@ -259,10 +259,15 @@ class PandoraRuntime:
             a.pandora_mark_positions({symbol:mark})
             if symbol not in a.S['pandora_win_positions']:
                 self.reload_token(symbol)
+                # Only after the close commits: a NEW opposite confirmed local
+                # and live entry-control may open the reverse in this cycle.
+                with a.LOCK:latest=copy.deepcopy(a.S.get('_pandora_analysis',{}).get(symbol) or {})
+                if symbol in selected and int(latest.get('entry_side') or 0)==-int(pos['side']):
+                    a.pandora_flow_fast_entries({symbol:mark})
                 return
         if not flow.get('trade_data_fresh') or mark is None:
             self.transition(symbol,'WAIT_REENTRY' if not pos else ('LONG' if pos['side']>0 else 'SHORT'),
-                'FLOW_STALE','fresh_executed_trade_and_mark_required',context)
+                'FLOW_STALE','fresh_mark_required' if mark is None else 'fresh_executed_trade_required',context)
             return
         if pos:
             current=a.S['pandora_win_positions'].get(symbol)
@@ -285,11 +290,14 @@ class PandoraRuntime:
                             return
                 self.last_saved['position:'+symbol]=time.time()
             with a.LOCK:a.S['pandora_win_positions'][symbol]=updated
+            context.update(exit_control_state=copy.deepcopy(updated['features'].get('exit_control_state')),
+                exit_decision=copy.deepcopy(updated['features'].get('exit_decision')),
+                pressure_state=copy.deepcopy(updated['features'].get('pressure_state')))
             side='LONG' if pos['side']>0 else 'SHORT'
             added=symbol in selected and self.pyramid(symbol,analysis,flow,mark)
             weakening=(flow.get('dominance_side')==-pos['side'] or flow.get('buy_absorbed' if pos['side']>0 else 'sell_absorbed'))
             phase=side+'_PYRAMID' if added else side+'_WEAKENING' if weakening else side
-            self.transition(symbol,phase,'HOLD','confirmed_continuation_add' if added else 'observe_counterpressure' if weakening else 'same_side_control_or_no_confirmed_transfer',context)
+            self.transition(symbol,phase,'HOLD','confirmed_continuation_add' if added else (updated['features'].get('exit_decision') or {}).get('reason','observe_counterpressure' if weakening else 'same_side_control_or_no_confirmed_transfer'),context)
         else:
             if analysis.get('entry_blocked') and analysis.get('forming_local'):
                 forming=analysis['forming_local']
@@ -309,7 +317,9 @@ class PandoraRuntime:
                 self.transition(symbol,phase,'WAIT','waiting_for_executed_control_or_resumption',context)
 
     def snapshot(self):
-        with self.a.LOCK:tokens=copy.deepcopy(self.tokens)
+        with self.a.LOCK:
+            visible=set(self.a.pandora_trade_symbols())
+            tokens={symbol:copy.deepcopy(state) for symbol,state in self.tokens.items() if symbol in visible}
         policy=RiskPolicy.from_env()
         return dict(tokens=tokens,max_equity=self.max_equity,
                     sizing_policy=dict(min_margin_fraction=policy.min_margin_fraction,max_entry_margin_fraction=policy.max_entry_margin_fraction,min_leverage=policy.min_leverage,max_leverage=policy.max_leverage,fixed_sl_tp=False,pnl_based_halts=False),

@@ -124,7 +124,9 @@ class HistoryBootstrap:
                 # are never dozens of obsolete candidates queued in an executor.
                 selected=self._wanted(self.selected_symbols)
                 retained=self._wanted(self.retained_symbols)
-                priority=list(dict.fromkeys(selected+retained))
+                # Existing exposure needs current locals before a new candidate
+                # needs an entry. Rotation must not starve retained positions.
+                priority=list(dict.fromkeys(retained+selected))
                 priority_set=set(priority)
                 occupied=sum(lane=='selected' for _,lane in self.futures.values())
                 for symbol in priority:

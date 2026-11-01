@@ -63,6 +63,7 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
             ws.settimeout(2)
 
             pending_trade_subscriptions = {}
+            pending_trade_since = {}
             confirmed_trade_symbols = set()
             request_number = 0
 
@@ -76,8 +77,14 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                     trades = {topic.split(".",1)[1][:-4] for topic in chunk if topic.startswith("publicTrade.")}
                     if op == "subscribe" and trades:
                         pending_trade_subscriptions[request_id] = trades
+                        pending_trade_since[request_id] = time.time()
                     elif op == "unsubscribe":
                         confirmed_trade_symbols.difference_update(trades)
+                        for pending_id,pending_symbols in list(pending_trade_subscriptions.items()):
+                            pending_symbols.difference_update(trades)
+                            if not pending_symbols:
+                                pending_trade_subscriptions.pop(pending_id,None)
+                                pending_trade_since.pop(pending_id,None)
                     ws.send(json.dumps({"op": op, "args": chunk, "req_id": request_id}))
 
             if subscribe_trades:
@@ -103,6 +110,7 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
             last_trade_receive = now
             last_trade_exchange = 0.0
             accepted_trades = stale_trades = 0
+            backlog_since = None
             per_symbol_receive = {s: 0.0 for s in selected}
             per_symbol_exchange = {s: 0.0 for s in selected}
             latency_by_symbol = {s: deque(maxlen=2048) for s in selected}
@@ -110,7 +118,6 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
             sequence_by_symbol = {}
             sequence_gaps = 0
             trade_topics_confirmed = not subscribe_trades or not selected
-            subscription_ack_deadline = now + 12.0
             trade_warmup_deadline = now + 45.0
             mids = {}
             backoff = 1.0
@@ -159,7 +166,13 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                             accepted_rows = []
                             accepted = observations.ingest_trades(batch, last_received,owner=worker_name,accepted_rows=accepted_rows)
                             accepted_trades += accepted
-                            last_trade_receive = last_received
+                            if accepted:last_trade_receive = last_received
+                            packet_lag=last_received-max(float(row['time'])/1000 for row in batch)
+                            if packet_lag>5:
+                                if backlog_since is None:backlog_since=last_received
+                                elif last_received-backlog_since>=15:
+                                    raise RuntimeError('bybit_trade_tape_lagging_fast_window')
+                            else:backlog_since=None
                             if on_trade_mids is not None:
                                 trade_mids = {}
                                 for item in accepted_rows:
@@ -200,7 +213,8 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                             raise RuntimeError("bybit_subscription_error:" + str(message.get("ret_msg") or "")[:120])
                         if subscribe_trades and message.get("success") is True:
                             acknowledged = pending_trade_subscriptions.pop(str(message.get("req_id") or ""), set())
-                            confirmed_trade_symbols.update(acknowledged)
+                            pending_trade_since.pop(str(message.get("req_id") or ""),None)
+                            confirmed_trade_symbols.update(acknowledged & selected)
                             trade_topics_confirmed = selected.issubset(confirmed_trade_symbols)
                 except websocket.WebSocketTimeoutException:
                     if time.time() - last_received > 30:
@@ -210,7 +224,7 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                 # The socket being alive is not proof that Bybit accepted our trade topics.
                 # Fail fast on a missing subscription ACK instead of leaving Pandora Win
                 # indefinitely in READY_FOR_EXECUTED_FLOW with an apparently live socket.
-                if subscribe_trades and epoch >= subscription_ack_deadline and not trade_topics_confirmed:
+                if subscribe_trades and any(epoch-started>=12 for started in pending_trade_since.values()):
                     raise RuntimeError("bybit_trade_subscription_ack_timeout")
                 # A live heartbeat is not enough: Bybit can leave a shard draining an
                 # old/replayed publicTrade backlog. Quiet symbols are fine, but repeated stale
@@ -234,7 +248,6 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                             send("subscribe", ["tickers." + _pair(s) for s in sorted(added)])
                         selected = desired
                         trade_topics_confirmed = selected.issubset(confirmed_trade_symbols)
-                        subscription_ack_deadline = epoch + 12.0
                         for s in desired:
                             per_symbol_receive.setdefault(s, 0.0)
                             per_symbol_exchange.setdefault(s, 0.0)
@@ -283,6 +296,8 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                         "last_trade_exchange_lag_seconds": round(exchange_lag,3) if exchange_lag is not None else None,
                         "accepted_trades": accepted_trades, "stale_trades_rejected": stale_trades,
                         "subscription_confirmed": trade_topics_confirmed,
+                        "pending_trade_requests": len(pending_trade_subscriptions),
+                        "lagging_tape_since": backlog_since,
                         "confirmed_trade_symbols": sorted(confirmed_trade_symbols),
                         "fresh_symbols_15s": fresh_symbols,
                         "symbol_health": symbol_health,

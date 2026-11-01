@@ -133,13 +133,12 @@ def analyze(rows, now_ms, symbol=SYMBOL):
 
 
 def pending_extreme(rows, now_ms, side, anchor_pivot_price=None):
-    """Diagnostic-only candidate extreme; never blocks lower-timeframe execution.
+    """Historical H1 candidate metadata; it does not authorize an entry.
 
-    The confirmed H1 local is a persistent DIRECTION VECTOR until an opposite
-    H1 swing is fully confirmed. Price may extend beyond the active local while
-    the executed-flow engine keeps exiting/re-entering in that same vector.
-    Pending highs/lows are therefore displayed for context only and MUST NOT
-    pause entries, exits or re-entries.
+    The last confirmed H1 local stays visible while a new extreme forms.
+    pandora_locals supplies active forming-state invalidation, closed-M15
+    direction confirmation and a current-mark validity check. Callers must not
+    use these diagnostic fields to clear those execution guards.
     """
     result = {"entry_blocked": False, "pending_pivot_type": None,
               "pending_pivot_price": None, "entry_block_reason": None,

@@ -8,6 +8,7 @@ Pandora Win непрерывно наблюдает Bybit USDT Perpetual, выб
 
 - [Запуск, параметры и архитектура](README_PANDORA_WIN.md)
 - [Передача следующему разработчику](PANDORA_WIN_HANDOFF.md)
+- [Аудит инцидента 01.11.2026 и подтверждённые исправления](PANDORA_INCIDENT_AUDIT_2026-11-01.md)
 - [Полный пакет исходников PANDORA_WIN_COMPLETE.zip](PANDORA_WIN_COMPLETE.zip)
 - Монитор: `/`
 - JSON: `/api/pandora`

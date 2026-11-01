@@ -74,17 +74,23 @@ def summarize(trades, epoch, coverage):
     # A few identical bootstrap prints do not establish independent horizons.
     # 15 seconds of actual observed tape are required, not just socket uptime.
     active=[windows[str(n)] for n in (5,15)]
-    distinct=[r[1] for r in rows if epoch-r[0]<=60]
-    last_price=distinct[-1] if distinct else None
-    prior_price=next((price for price in reversed(distinct) if price!=last_price),None)
-    last_direction=1 if prior_price is not None and last_price>prior_price else -1 if prior_price is not None and last_price<prior_price else 0
-    fast_bias=1 if active[0]['imbalance']>0 else -1 if active[0]['imbalance']<0 else 0
-    fast_response='buy_price_response' if fast_bias>0 else 'sell_price_response'
-    fast_confirmed=bool(fast_bias and windows['15']['complete'] and all(
-        w['complete'] and w['trade_count']>=2
-        and w['imbalance']*fast_bias>=MIN_CONTROL_IMBALANCE
-        and w[fast_response]>0 for w in active) and last_direction==fast_bias)
-    fast_control=fast_bias if fast_confirmed else 0
+    # A single contrary print cannot erase multi-trade executed control.
+    # Price response is evaluated over each window, not by the last tick alone.
+    def window_control(window, require_net_response=False):
+        bias=1 if window['imbalance']>=MIN_CONTROL_IMBALANCE else -1 if window['imbalance']<=-MIN_CONTROL_IMBALANCE else 0
+        response='buy_price_response' if bias>0 else 'sell_price_response'
+        if not (bias and window['complete'] and window['trade_count']>=2 and window[response]>0):return 0
+        if require_net_response and window['price_return']*bias<=0:return 0
+        return bias
+    fast_bias=window_control(active[0])
+    fast_control=fast_bias if fast_bias and window_control(active[1])==fast_bias else 0
+    # Existing exposure may be reduced from corroborated 15/30s volume and net
+    # price movement even when the 5s window is briefly neutral. New entries
+    # retain the faster corroboration and minute context below.
+    medium=window_control(windows['15'],True)
+    slow_exit=medium if medium and window_control(windows['30'],True)==medium else 0
+    exit_control=fast_control or slow_exit
+    exit_basis='fast_5_15' if fast_control else 'confirmed_15_30' if slow_exit else 'unconfirmed'
     # Old minute volume must not veto a structurally confirmed risk-reducing
     # exit. New entries/reentries retain the conservative minute corroboration.
     response_key='buy_price_response' if control>0 else 'sell_price_response'
@@ -96,6 +102,7 @@ def summarize(trades, epoch, coverage):
                 volume_acceleration=windows['15']['volume_acceleration'],
                 dominance_side=control, dominance_duration=dominance_duration,
                 fast_control_side=fast_control,context_control_side=control,
+                exit_control_side=exit_control,exit_control_basis=exit_basis,
                 sustained_control_side=control if sustained else 0,
                 minimum_control_imbalance=MIN_CONTROL_IMBALANCE,
                 evidence_ready=windows['15']['complete'],evidence_required_seconds=15,

@@ -22,6 +22,36 @@ def _n(value, digits=4):
     return f'{number:,.{digits}f}' if number is not None else '—'
 
 
+def _price(value):
+    number = _finite(value)
+    digits = 4 if number is None or abs(number) >= 1 or number == 0 else min(12, max(6, math.ceil(-math.log10(abs(number))) + 5))
+    return _n(value, digits)
+
+
+def _mark_status(token):
+    age = _finite(token.get('price_age_seconds'))
+    if token.get('mark_fresh') is False or _finite(token.get('price')) is None:
+        return ('WAIT FIRST MARK' if _finite(token.get('price')) is None else 'STALE · возраст неизвестен') if age is None else 'STALE · '+_n(age, 1)+' s'
+    return 'FRESH · '+_n(age, 1)+' s' if token.get('mark_fresh') is True and age is not None else 'Возраст mark не передан'
+
+
+def _exit_state(features):
+    phase = (features.get('exit_control_state') or {}).get('phase')
+    return {'UNKNOWN':'НЕТ СВЕЖЕГО FLOW','PAUSED':'ПОДТВЕРЖДЕНИЕ ПРИОСТАНОВЛЕНО',
+            'OBSERVING':'НАБЛЮДАЕМ КОНТРКОНТРОЛЬ','CONFIRMED':'КОНТРКОНТРОЛЬ ПОДТВЕРЖДЁН',
+            'HOLD':'УДЕРЖАНИЕ'}.get(phase, phase or '—')
+
+
+def _local_symbols(data):
+    primary = data.get('pandora') or {}
+    details = (primary.get('engine') or {}).get('details') or {}
+    active = [p.get('symbol') for p in primary.get('open_positions') or []]
+    active += [t.get('symbol') for t in primary.get('tokens') or []]
+    active += list(data.get('pandora_symbols') or []) + list(details)
+    if not any(active):active = list(primary.get('h1_durable') or {})
+    return list(dict.fromkeys(s for s in active if s))[:100]
+
+
 def _m(value):
     number = _finite(value)
     return f'{number:+,.4f} USDT' if number is not None else '—'
@@ -57,8 +87,17 @@ def _card(key, title, subtitle, metrics, kind='', fields=None):
 def _local_text(local):
     if not isinstance(local, dict) or not local.get('pivot_type'):
         return '—'
-    return str(local['pivot_type'])+' · '+_n(local.get('pivot_price'))
+    return str(local['pivot_type'])+' · '+_price(local.get('pivot_price'))
 
+
+
+def _execution_text(local):
+    text = _local_text(local)
+    return text+' · '+str(local.get('confirmation_source') or local.get('interval') or 'H1') if text != '—' else text
+
+
+def _scanner_quote(token):
+    return _price(token.get('scanner_price'))+' · '+_n(token.get('scanner_price_age_seconds'), 1)+' s' if _finite(token.get('scanner_price')) is not None else '—'
 
 
 def _position_data(position):
@@ -77,6 +116,7 @@ def _position_data(position):
                 average_entry=position.get('average_entry', position.get('entry')),
                 entry_time=position.get('entry_time', position.get('opened')),
                 entry_local=entry_local, current_confirmed=confirmed, current_forming=forming,
+                current_execution=current.get('execution_local') or confirmed,
                 pnl=pnl, percent=percent, margin=margin)
 
 
@@ -122,9 +162,12 @@ def _token_view(token):
     decision = token.get('decision')
     decision_reason = decision.get('reason') if isinstance(decision, dict) else None
     return token.get('symbol'), 'RANK '+str(token.get('rank', '—'))+' · '+str(token.get('state') or direction), [
-        ('Цена', 'price', _n(token.get('price'))),
+        ('Цена', 'price', _price(token.get('price'))),
+        ('Mark / данные', 'mark_status', _mark_status(token)),
+        ('Scanner quote / возраст', 'scanner_quote', _scanner_quote(token)),
         ('Scanner score', 'score', _n(token.get('pandora_win_score'))),
-        ('Подтверждённый local', 'confirmed', _local_text(token.get('confirmed_local'))),
+        ('Исторический confirmed H1', 'confirmed', _local_text(token.get('confirmed_local'))),
+        ('Активный local H1/M15', 'execution', _execution_text(token.get('execution_local') or (token.get('local_state') or {}).get('execution_local') or token.get('confirmed_local'))),
         ('Формирующийся local', 'forming', _local_text(token.get('forming_local'))),
         ('Направление', 'direction', direction),
         ('Позиция', 'position', _side(position.get('side'))),
@@ -135,11 +178,15 @@ def _token_view(token):
         ('Tape', 'tape', 'FRESH' if flow.get('trade_data_fresh') else 'STALE'),
         ('Контроль входа', 'control', _side(flow.get('sustained_control_side'))),
         ('Быстрый контроль выхода', 'fast_control', _side(flow.get('fast_control_side'))),
+        ('Контроль закрытия', 'exit_control', _side(flow.get('exit_control_side', flow.get('fast_control_side')))),
+        ('Основание контроля', 'exit_basis', flow.get('exit_control_basis')),
+        ('Подтверждение выхода', 'exit_state', _exit_state(features)),
+        ('Причина удержания / выхода', 'exit_reason', (features.get('exit_decision') or {}).get('reason')),
         ('Минутный контекст', 'context_control', _side(flow.get('context_control_side'))),
-        ('Цена первого входа', 'original_entry', _n(detail['original_entry'])),
+        ('Цена первого входа', 'original_entry', _price(detail['original_entry'])),
         ('Время входа', 'entry_time', detail['entry_time']),
         ('Local при входе', 'entry_local', _local_text(detail['entry_local'])),
-        ('Average entry', 'entry', _n(detail['average_entry'] if position else token.get('average_entry'))),
+        ('Average entry', 'entry', _price(detail['average_entry'] if position else token.get('average_entry'))),
         ('Маржа', 'margin', _m(token.get('margin'))),
         ('Notional', 'notional', _m(token.get('notional'))),
         ('Плечо / ADD', 'leverage', str(token.get('leverage') or '—')+'x / '+str(token.get('pyramid_level', 0))),
@@ -149,7 +196,7 @@ def _token_view(token):
         ('Peak MFE', 'mfe', _m(token.get('mfe'))),
         ('MAE', 'mae', _m(token.get('mae'))),
         ('MFE giveback', 'giveback', _m(token.get('mfe_giveback'))),
-        ('Ориентир модели (не SL)', 'stop', _n(risk.get('stop_price'))),
+        ('Ориентир модели (не SL)', 'stop', _price(risk.get('stop_price'))),
         ('Решение', 'decision', _decision_text(decision, token.get('state'))),
         ('Последнее действие', 'action', token.get('last_action')),
         ('Причина', 'reason', token.get('action_reason') or decision_reason),
@@ -162,17 +209,20 @@ def _position_view(position):
     pnl, margin, percent = detail['pnl'], detail['margin'], detail['percent']
     risk = f.get('risk_plan') or {}
     return str(position.get('symbol'))+' · '+_side(position.get('side')), detail['entry_time'], [
-        ('Цена первого входа', 'original_entry', _n(detail['original_entry'])),
+        ('Цена первого входа', 'original_entry', _price(detail['original_entry'])),
         ('Время входа', 'entry_time', detail['entry_time']),
-        ('Average entry', 'entry', _n(detail['average_entry'])), ('Mark', 'mark', _n(position.get('mark'))),
+        ('Average entry', 'entry', _price(detail['average_entry'])), ('Mark', 'mark', _price(position.get('mark'))),
         ('Local при входе', 'entry_local', _local_text(detail['entry_local'])),
-        ('Текущий confirmed local', 'current_confirmed', _local_text(detail['current_confirmed'])),
+        ('Исторический confirmed H1', 'current_confirmed', _local_text(detail['current_confirmed'])),
+        ('Активный local H1/M15', 'current_execution', _execution_text(detail['current_execution'])),
         ('Текущий forming local', 'current_forming', _local_text(detail['current_forming'])),
         ('PnL · USDT', 'pnl', _m(pnl), _tone(pnl)), ('PnL / маржа', 'pnl_pct', _pct(percent), _tone(percent)),
         ('Маржа', 'margin', _m(margin)), ('Notional', 'notional', _m(position.get('notional_usd', position.get('notional')))),
         ('Плечо', 'leverage', str(position.get('leverage') or '—')+'x'), ('Эффективное плечо', 'effective_leverage', _n(position.get('effective_leverage'))+'x'), ('ADD level', 'level', f.get('pyramid_level', 0)),
         ('Peak MFE', 'mfe', _m(f.get('peak_mfe_usd'))), ('MAE', 'mae', _m(f.get('mae_usd'))),
-        ('MFE giveback', 'giveback', _m(f.get('mfe_giveback_usd'))), ('Ориентир модели (не SL)', 'stop', _n(risk.get('stop_price'))),
+        ('MFE giveback', 'giveback', _m(f.get('mfe_giveback_usd'))), ('Ориентир модели (не SL)', 'stop', _price(risk.get('stop_price'))),
+        ('Подтверждение выхода', 'exit_state', _exit_state(f)),
+        ('Причина удержания / выхода', 'exit_reason', (f.get('exit_decision') or {}).get('reason')),
     ]
 
 
@@ -181,10 +231,10 @@ def _trade_view(trade):
     pnl = trade.get('pnl'); margin = trade.get('margin', trade.get('margin_usd'))
     percent = float(pnl)/float(margin)*100 if _finite(pnl) is not None and _finite(margin) and float(margin) > 0 else None
     return str(trade.get('symbol'))+' · '+_side(trade.get('side')), trade.get('closed'), [
-        ('Первый вход', 'original_entry', _n(trade.get('entry_price',f.get('original_entry',f.get('entry_mark',trade.get('entry')))))),
+        ('Первый вход', 'original_entry', _price(trade.get('entry_price',f.get('original_entry',f.get('entry_mark',trade.get('entry')))))),
         ('Время входа', 'entry_time', trade.get('entry_time',trade.get('opened'))),
         ('Local при входе', 'entry_local', _local_text(trade.get('entry_local') or f)),
-        ('Средний вход', 'entry', _n(trade.get('entry'))), ('Выход', 'exit', _n(trade.get('exit'))),
+        ('Средний вход', 'entry', _price(trade.get('entry'))), ('Выход', 'exit', _price(trade.get('exit'))),
         ('PnL', 'pnl', _m(pnl), _tone(pnl)), ('PnL / маржа', 'pnl_pct', _pct(percent), _tone(percent)),
         ('Маржа', 'margin', _m(margin)), ('Плечо', 'leverage', str(trade.get('leverage') or '—')+'x'),
         ('Тип входа', 'kind', f.get('entry_kind')), ('Причина выхода', 'reason', trade.get('reason')),
@@ -262,14 +312,14 @@ def render(data):
     candidate_cards=[]
     for t in candidates:
         candidate_cards.append(_card(t.get('symbol'),str(t.get('symbol')),'RANK '+str(t.get('rank','—')),[
-            ('Score','score',_n(t.get('pandora_win_score'))),('Цена','price',_n(t.get('last'))),
+            ('Score','score',_n(t.get('pandora_win_score'))),('Цена','price',_price(t.get('last'))),
             ('Текущий импульс %','move',_pct(t.get('scan_return_pct'))),('Turnover / мин.','turnover',_m(t.get('turnover_per_minute'))),
             ('BUY USD','buy',_m(t.get('buy_volume'))),('SELL USD','sell',_m(t.get('sell_volume'))),
             ('Trades / сек.','trades',_n(t.get('trade_velocity'))),('Executed tape','tape','FRESH' if t.get('flow_fresh') else 'WARMING / STALE')]))
     body+=_collection('candidates',candidate_cards,'Пул кандидатов ещё не сформирован.')+'</details>'
     details=(p.get('engine') or {}).get('details') or {};durable=p.get('h1_durable') or {}
-    symbols=list(dict.fromkeys(list(details)+list(durable)+list(data.get('pandora_symbols') or [])))
-    body+='<details class="scanner-details"><summary>Все наблюдаемые локалы <span id="count-locals">'+str(len(symbols))+'</span></summary>'
+    symbols=_local_symbols(data)
+    body+='<details class="scanner-details"><summary>Локалы текущего наблюдения (до 100) <span id="count-locals">'+str(len(symbols))+'</span></summary>'
     local_cards=[]
     for symbol in symbols:
         local_state=(details.get(symbol) or {}).get('h1_local') or durable.get(symbol) or {}
@@ -291,7 +341,7 @@ def render(data):
     adds = []
     for add in p.get('pyramid_adds') or []:
         adds.append(_card(str(add.get('symbol'))+':'+str(add.get('opened'))+':'+str(add.get('add_number')), str(add.get('symbol'))+' · ADD '+str(add.get('add_number')), add.get('timestamp'), [
-            ('Цена', 'price', _n(add.get('price'))), ('Average entry', 'average', _n(add.get('average_entry'))),
+            ('Цена', 'price', _price(add.get('price'))), ('Average entry', 'average', _price(add.get('average_entry'))),
             ('Added margin', 'margin', _m(add.get('added_margin'))), ('Added notional', 'notional', _m(add.get('added_notional'))),
             ('MFE до ADD', 'before', _m(add.get('mfe_before_add'))), ('MFE после ADD', 'after', _m(add.get('mfe_after_add')))]))
     body += _collection('adds', adds, 'Доливок пока нет.')+'<h3 class="section-caption">RE-ENTRY / REVERSAL / ROTATION / AUDIT</h3>'
@@ -333,36 +383,45 @@ const fmt=(v,d=4)=>number(v)===null?'—':number(v).toLocaleString('en-US',{mini
 const money=v=>number(v)===null?'—':(number(v)>=0?'+':'')+fmt(v)+' USDT';
 const pct=v=>number(v)===null?'—':(number(v)>=0?'+':'')+fmt(v,2)+'%';
 const side=v=>[1,'1','LONG','long'].includes(v)?'LONG':[-1,'-1','SHORT','short'].includes(v)?'SHORT':'WAIT';
+const owns=(value,key)=>Object.prototype.hasOwnProperty.call(value,key);
+const priceDigits=v=>number(v)===null||Math.abs(number(v))>=1||number(v)===0?4:Math.min(12,Math.max(6,Math.ceil(-Math.log10(Math.abs(number(v))))+5));
+const price=v=>fmt(v,priceDigits(v));
+const markStatus=t=>t.mark_fresh===false||number(t.price)===null?(number(t.price_age_seconds)===null?(number(t.price)===null?'WAIT FIRST MARK':'STALE · возраст неизвестен'):'STALE · '+fmt(t.price_age_seconds,1)+' s'):t.mark_fresh===true&&number(t.price_age_seconds)!==null?'FRESH · '+fmt(t.price_age_seconds,1)+' s':'Возраст mark не передан';
+const exitState=f=>{const phase=(f.exit_control_state||{}).phase;return ({UNKNOWN:'НЕТ СВЕЖЕГО FLOW',PAUSED:'ПОДТВЕРЖДЕНИЕ ПРИОСТАНОВЛЕНО',OBSERVING:'НАБЛЮДАЕМ КОНТРКОНТРОЛЬ',CONFIRMED:'КОНТРКОНТРОЛЬ ПОДТВЕРЖДЁН',HOLD:'УДЕРЖАНИЕ'})[phase]||phase||'—';};
 const tone=v=>number(v)>0?'positive':number(v)<0?'negative':'neutral';
-const local=v=>v&&v.pivot_type?v.pivot_type+' · '+fmt(v.pivot_price):'—';
+const local=v=>v&&v.pivot_type?v.pivot_type+' · '+price(v.pivot_price):'—';
+const executionLocal=v=>local(v)==='—'?'—':local(v)+' · '+(v.confirmation_source||v.interval||'H1');
+const scannerQuote=t=>number(t.scanner_price)===null?'—':price(t.scanner_price)+' · '+fmt(t.scanner_price_age_seconds,1)+' s';
 const text=(el,value)=>{const t=value===null||value===undefined?'—':String(value);if(el&&el.textContent!==t)el.textContent=t;};
 let latest=JSON.parse($('initial-state').textContent), busy=false, activeTab='discovery', lastGood=0;
+const fieldCache=new WeakMap();
 function metric(label,name,value,kind=''){return {label,name,value,kind};}
 function cardView(title,subtitle,metrics,kind=''){return {title,subtitle,metrics,kind};}
-function positionData(p){const f=p.features||{},current=p.current_local||f.local_state||{},margin=p.margin_usd??p.margin,pnl=Object.hasOwn(p,'pnl_usdt')?p.pnl_usdt:p.unrealized_pnl;return {originalEntry:p.entry_price??p.original_entry??f.original_entry??p.entry,averageEntry:p.average_entry??p.entry,entryTime:p.entry_time??p.opened,entryLocal:p.entry_local||f.entry_local||f.confirmed_local||f,currentConfirmed:current.confirmed_local||current,currentForming:current.forming_local||(current.pending_pivot_type?{pivot_type:current.pending_pivot_type,pivot_price:current.pending_pivot_price}:{}),pnl,percent:Object.hasOwn(p,'pnl_percent')?p.pnl_percent:number(pnl)!==null&&number(margin)>0?number(pnl)/number(margin)*100:null,margin};}
+function positionData(p){const f=p.features||{},current=p.current_local||f.local_state||{},margin=p.margin_usd??p.margin,pnl=owns(p,'pnl_usdt')?p.pnl_usdt:p.unrealized_pnl;return {originalEntry:p.entry_price??p.original_entry??f.original_entry??p.entry,averageEntry:p.average_entry??p.entry,entryTime:p.entry_time??p.opened,entryLocal:p.entry_local||f.entry_local||f.confirmed_local||f,currentConfirmed:current.confirmed_local||current,currentExecution:current.execution_local||current.confirmed_local||current,currentForming:current.forming_local||(current.pending_pivot_type?{pivot_type:current.pending_pivot_type,pivot_price:current.pending_pivot_price}:{}),pnl,percent:owns(p,'pnl_percent')?p.pnl_percent:number(pnl)!==null&&number(margin)>0?number(pnl)/number(margin)*100:null,margin};}
 function decisionText(decision,state){const d=decision&&typeof decision==='object'?(decision.action||decision.status||decision.decision):decision,value=String(d||state||'WAIT').toUpperCase();return ({HOLD:'ПОЗИЦИЯ ОТКРЫТА',ENTRY:'ВХОД',ENTER:'ВХОД',ENTRY_LONG:'ВХОД LONG',ENTER_LONG:'ВХОД LONG',ENTRY_SHORT:'ВХОД SHORT',ENTER_SHORT:'ВХОД SHORT',WAIT:'ЖДЁМ',WAIT_DATA:'ЖДЁМ ДАННЫЕ',WAIT_REENTRY:'ЖДЁМ ПЕРЕЗАХОД',SCANNING:'СКАНИРОВАНИЕ',SELECTED:'ЖДЁМ ПОДТВЕРЖДЕНИЯ',LONG_READY:'ЖДЁМ ВХОД LONG',SHORT_READY:'ЖДЁМ ВХОД SHORT',LONG:'ПОЗИЦИЯ LONG',SHORT:'ПОЗИЦИЯ SHORT'})[value]||value;}
 function startupView(p){const s=p.startup||{},stage=String(s.stage||'WAIT_DATA').toUpperCase(),status=String(s.status||'WAITING').toUpperCase(),stages={WAIT_LEASE:'Ожидание PAPER-счёта',WAIT_CONTRACTS:'Загрузка контрактов Bybit',SCANNING_MARKET:'Обзор всего рынка Bybit',ANALYSING_SELECTED:'Анализ выбранной пятёрки',WAITING_ACTIVE_CANDIDATES:'Поиск активных кандидатов',WAIT_SCANNER:'Ожидание свежего обзора',RESTORING:'Восстановление PAPER-состояния',RESTORE:'Восстановление PAPER-состояния',BOOTSTRAP:'Первичный обзор Bybit',METADATA:'Загрузка контрактов Bybit',CONTRACTS:'Загрузка контрактов Bybit',TICKERS:'Обзор всего рынка Bybit',DISCOVERY:'Выбор активной пятёрки',SCANNING:'Обзор всего рынка Bybit',HISTORY:'Подготовка H1 / M15',H1:'Подготовка H1 / M15',FLOW_WARMUP:'Наблюдение исполненных BUY / SELL',WARMING:'Наблюдение исполненных BUY / SELL',ANALYZING:'Анализ пяти выбранных токенов',DECIDING:'Решения: вход или ожидание',READY:'Первичный анализ завершён',RUNNING:'Непрерывный анализ рынка',WAIT_DATA:'Ожидание свежих данных Bybit'},statuses={READY:'ГОТОВО',RUNNING:'РАБОТАЕТ',WAITING:'ЖДЁМ',WARMING:'ПРОГРЕВ ДАННЫХ',PENDING:'ПОДГОТОВКА',FAILED:'НЕТ ДАННЫХ',ERROR:'НЕТ ДАННЫХ',BLOCKED:'ЖДЁМ'};return {stage:stages[stage]||stage,status:statuses[status]||status,reason:s.reason||s.message||'Вход разрешён только после свежей структуры и исполненных сделок.'};}
 function tokenView(t){const flow=t.flow_state||{},p=t.position||{},f=p.features||{},risk=f.risk_plan||{},d=positionData(p),held=Object.keys(p).length>0,pnl=held?d.pnl:t.current_pnl_usd,percent=held?d.percent:t.current_pnl_pct;return cardView(t.symbol,'RANK '+(t.rank??'—')+' · '+(t.state||side(t.direction)),[
-metric('Цена','price',fmt(t.price)),metric('Scanner score','score',fmt(t.pandora_win_score)),metric('Подтверждённый local','confirmed',local(t.confirmed_local)),metric('Формирующийся local','forming',local(t.forming_local)),metric('Направление','direction',side(t.direction)),metric('Позиция','position',side(p.side)),metric('BUY volume','buy',money(t.buy_volume)),metric('SELL volume','sell',money(t.sell_volume)),metric('Flow imbalance','imbalance',pct(number(t.flow_imbalance)===null?null:number(t.flow_imbalance)*100)),metric('Объём / сек.','velocity',fmt(t.volume_velocity)),metric('Tape','tape',flow.trade_data_fresh?'FRESH':'STALE'),metric('Контроль входа','control',side(flow.sustained_control_side)),metric('Быстрый контроль выхода','fast_control',side(flow.fast_control_side)),metric('Минутный контекст','context_control',side(flow.context_control_side)),metric('Цена первого входа','original_entry',fmt(d.originalEntry)),metric('Время входа','entry_time',d.entryTime),metric('Local при входе','entry_local',local(d.entryLocal)),metric('Average entry','entry',fmt(held?d.averageEntry:t.average_entry)),metric('Маржа','margin',money(t.margin)),metric('Notional','notional',money(t.notional)),metric('Плечо / ADD','leverage',(t.leverage||'—')+'x / '+(t.pyramid_level??0)),metric('Эффективное плечо','effective_leverage',fmt(p.effective_leverage)+'x'),metric('PnL · USDT','pnl',money(pnl),tone(pnl)),metric('PnL / маржа','pnl_pct',pct(percent),tone(percent)),metric('Peak MFE','mfe',money(t.mfe)),metric('MAE','mae',money(t.mae)),metric('MFE giveback','giveback',money(t.mfe_giveback)),metric('Ориентир модели (не SL)','stop',fmt(risk.stop_price)),metric('Решение','decision',decisionText(t.decision,t.state)),metric('Последнее действие','action',t.last_action),metric('Причина','reason',t.action_reason||(t.decision&&typeof t.decision==='object'?t.decision.reason:null))],'token-card');}
-function positionView(p){const f=p.features||{},d=positionData(p),pnl=d.pnl,risk=f.risk_plan||{};return cardView(p.symbol+' · '+side(p.side),d.entryTime,[metric('Цена первого входа','original_entry',fmt(d.originalEntry)),metric('Время входа','entry_time',d.entryTime),metric('Average entry','entry',fmt(d.averageEntry)),metric('Mark','mark',fmt(p.mark)),metric('Local при входе','entry_local',local(d.entryLocal)),metric('Текущий confirmed local','current_confirmed',local(d.currentConfirmed)),metric('Текущий forming local','current_forming',local(d.currentForming)),metric('PnL · USDT','pnl',money(pnl),tone(pnl)),metric('PnL / маржа','pnl_pct',pct(d.percent),tone(d.percent)),metric('Маржа','margin',money(d.margin)),metric('Notional','notional',money(p.notional_usd??p.notional)),metric('Плечо','leverage',(p.leverage||'—')+'x'),metric('Эффективное плечо','effective_leverage',fmt(p.effective_leverage)+'x'),metric('ADD level','level',f.pyramid_level??0),metric('Peak MFE','mfe',money(f.peak_mfe_usd)),metric('MAE','mae',money(f.mae_usd)),metric('MFE giveback','giveback',money(f.mfe_giveback_usd)),metric('Ориентир модели (не SL)','stop',fmt(risk.stop_price))],'position-card');}
-function tradeView(t){const f=t.features||{},margin=t.margin??t.margin_usd;return cardView(t.symbol+' · '+side(t.side),t.closed,[metric('Первый вход','original_entry',fmt(t.entry_price??f.original_entry??f.entry_mark??t.entry)),metric('Время входа','entry_time',t.entry_time??t.opened),metric('Local при входе','entry_local',local(t.entry_local||f)),metric('Средний вход','entry',fmt(t.entry)),metric('Выход','exit',fmt(t.exit)),metric('PnL','pnl',money(t.pnl),tone(t.pnl)),metric('PnL / маржа','pnl_pct',pct(number(t.pnl)!==null&&number(margin)>0?number(t.pnl)/number(margin)*100:null),tone(t.pnl)),metric('Маржа','margin',money(margin)),metric('Плечо','leverage',(t.leverage||'—')+'x'),metric('Тип входа','kind',f.entry_kind),metric('Причина выхода','reason',t.reason),metric('Peak MFE','mfe',money(f.peak_mfe_usd)),metric('Giveback','giveback',money(f.mfe_giveback_usd))],'trade-card');}
+metric('Цена','price',price(t.price)),metric('Mark / данные','mark_status',markStatus(t)),metric('Scanner quote / возраст','scanner_quote',scannerQuote(t)),metric('Scanner score','score',fmt(t.pandora_win_score)),metric('Исторический confirmed H1','confirmed',local(t.confirmed_local)),metric('Активный local H1/M15','execution',executionLocal(t.execution_local||(t.local_state||{}).execution_local||t.confirmed_local)),metric('Формирующийся local','forming',local(t.forming_local)),metric('Направление','direction',side(t.direction)),metric('Позиция','position',side(p.side)),metric('BUY volume','buy',money(t.buy_volume)),metric('SELL volume','sell',money(t.sell_volume)),metric('Flow imbalance','imbalance',pct(number(t.flow_imbalance)===null?null:number(t.flow_imbalance)*100)),metric('Объём / сек.','velocity',fmt(t.volume_velocity)),metric('Tape','tape',flow.trade_data_fresh?'FRESH':'STALE'),metric('Контроль входа','control',side(flow.sustained_control_side)),metric('Быстрый контроль выхода','fast_control',side(flow.fast_control_side)),metric('Контроль закрытия','exit_control',side(flow.exit_control_side??flow.fast_control_side)),metric('Основание контроля','exit_basis',flow.exit_control_basis),metric('Подтверждение выхода','exit_state',exitState(f)),metric('Причина удержания / выхода','exit_reason',(f.exit_decision||{}).reason),metric('Минутный контекст','context_control',side(flow.context_control_side)),metric('Цена первого входа','original_entry',price(d.originalEntry)),metric('Время входа','entry_time',d.entryTime),metric('Local при входе','entry_local',local(d.entryLocal)),metric('Average entry','entry',price(held?d.averageEntry:t.average_entry)),metric('Маржа','margin',money(t.margin)),metric('Notional','notional',money(t.notional)),metric('Плечо / ADD','leverage',(t.leverage||'—')+'x / '+(t.pyramid_level??0)),metric('Эффективное плечо','effective_leverage',fmt(p.effective_leverage)+'x'),metric('PnL · USDT','pnl',money(pnl),tone(pnl)),metric('PnL / маржа','pnl_pct',pct(percent),tone(percent)),metric('Peak MFE','mfe',money(t.mfe)),metric('MAE','mae',money(t.mae)),metric('MFE giveback','giveback',money(t.mfe_giveback)),metric('Ориентир модели (не SL)','stop',price(risk.stop_price)),metric('Решение','decision',decisionText(t.decision,t.state)),metric('Последнее действие','action',t.last_action),metric('Причина','reason',t.action_reason||(t.decision&&typeof t.decision==='object'?t.decision.reason:null))],'token-card');}
+function positionView(p){const f=p.features||{},d=positionData(p),pnl=d.pnl,risk=f.risk_plan||{};return cardView(p.symbol+' · '+side(p.side),d.entryTime,[metric('Цена первого входа','original_entry',price(d.originalEntry)),metric('Время входа','entry_time',d.entryTime),metric('Average entry','entry',price(d.averageEntry)),metric('Mark','mark',price(p.mark)),metric('Local при входе','entry_local',local(d.entryLocal)),metric('Исторический confirmed H1','current_confirmed',local(d.currentConfirmed)),metric('Активный local H1/M15','current_execution',executionLocal(d.currentExecution)),metric('Текущий forming local','current_forming',local(d.currentForming)),metric('PnL · USDT','pnl',money(pnl),tone(pnl)),metric('PnL / маржа','pnl_pct',pct(d.percent),tone(d.percent)),metric('Маржа','margin',money(d.margin)),metric('Notional','notional',money(p.notional_usd??p.notional)),metric('Плечо','leverage',(p.leverage||'—')+'x'),metric('Эффективное плечо','effective_leverage',fmt(p.effective_leverage)+'x'),metric('ADD level','level',f.pyramid_level??0),metric('Peak MFE','mfe',money(f.peak_mfe_usd)),metric('MAE','mae',money(f.mae_usd)),metric('MFE giveback','giveback',money(f.mfe_giveback_usd)),metric('Ориентир модели (не SL)','stop',price(risk.stop_price)),metric('Подтверждение выхода','exit_state',exitState(f)),metric('Причина удержания / выхода','exit_reason',(f.exit_decision||{}).reason)],'position-card');}
+function tradeView(t){const f=t.features||{},margin=t.margin??t.margin_usd;return cardView(t.symbol+' · '+side(t.side),t.closed,[metric('Первый вход','original_entry',price(t.entry_price??f.original_entry??f.entry_mark??t.entry)),metric('Время входа','entry_time',t.entry_time??t.opened),metric('Local при входе','entry_local',local(t.entry_local||f)),metric('Средний вход','entry',price(t.entry)),metric('Выход','exit',price(t.exit)),metric('PnL','pnl',money(t.pnl),tone(t.pnl)),metric('PnL / маржа','pnl_pct',pct(number(t.pnl)!==null&&number(margin)>0?number(t.pnl)/number(margin)*100:null),tone(t.pnl)),metric('Маржа','margin',money(margin)),metric('Плечо','leverage',(t.leverage||'—')+'x'),metric('Тип входа','kind',f.entry_kind),metric('Причина выхода','reason',t.reason),metric('Peak MFE','mfe',money(f.peak_mfe_usd)),metric('Giveback','giveback',money(f.mfe_giveback_usd))],'trade-card');}
 function makeCard(key,view){const article=document.createElement('article');article.dataset.key=String(key);article.className='terminal-card '+view.kind;const heading=document.createElement('div');heading.className='card-heading';for(const [tag,name] of [['h3','title'],['small','subtitle']]){const parent=document.createElement(tag),span=document.createElement('span');span.dataset.field=name;parent.append(span);heading.append(parent);}article.append(heading);const dl=document.createElement('dl');dl.className='metric-grid';for(const m of view.metrics){const block=document.createElement('div');block.className='metric';const dt=document.createElement('dt');text(dt,m.label);const dd=document.createElement('dd'),span=document.createElement('span');span.dataset.field=m.name;dd.append(span);block.append(dt,dd);dl.append(block);}article.append(dl);return article;}
-function fillCard(card,view){text(card.querySelector('[data-field="title"]'),view.title);text(card.querySelector('[data-field="subtitle"]'),view.subtitle);for(const m of view.metrics){const element=card.querySelector('[data-field="'+m.name+'"]');text(element,m.value);if(element)element.className=m.kind||'';}}
+function fillCard(card,view){let fields=fieldCache.get(card);if(!fields){fields=new Map(Array.from(card.querySelectorAll('[data-field]')).map(node=>[node.dataset.field,node]));fieldCache.set(card,fields);}text(fields.get('title'),view.title);text(fields.get('subtitle'),view.subtitle);for(const m of view.metrics){const element=fields.get(m.name);text(element,m.value);if(element&&element.className!==(m.kind||''))element.className=m.kind||'';}}
 function syncList(id,rows,key,view,preserveOrder=false){const box=$(id);if(!box)return;const existing=new Map(Array.from(box.children).map(c=>[c.dataset.key,c])),wanted=new Set();rows.forEach((row,index)=>{const k=String(key(row)),v=view(row);wanted.add(k);let card=existing.get(k);if(!card){card=makeCard(k,v);box.append(card);}fillCard(card,v);if(!preserveOrder&&box.children[index]!==card)box.insertBefore(card,box.children[index]||null);});for(const [k,card]of existing)if(!wanted.has(k))card.remove();$(id+'-empty').hidden=rows.length>0;}
 function tokens(data){const p=data.pandora||{};if(p.tokens&&p.tokens.length)return p.tokens;const d=data.discovery||{},details=(p.engine||{}).details||{},selected=new Map((d.selected||[]).map(t=>[t.symbol,t]));return(d.selected_symbols||[]).map(s=>({...selected.get(s),symbol:s,confirmed_local:(details[s]||{}).h1_local||(p.h1_durable||{})[s]||{},flow_state:(details[s]||{}).flow_context||{},state:'SCANNING'}));}
+function observedSymbols(data){const p=data.pandora||{},details=(p.engine||{}).details||{},active=[...(p.open_positions||[]).map(row=>row.symbol),...(p.tokens||[]).map(row=>row.symbol),...(data.pandora_symbols||[]),...Object.keys(details)].filter(Boolean);return Array.from(new Set(active.length?active:Object.keys(p.h1_durable||{}))).slice(0,100);}
 function anchor(){const nodes=document.querySelectorAll('.tab-panel:not([hidden]) .terminal-card');for(const node of nodes){const rect=node.getBoundingClientRect();if(rect.bottom>0&&rect.top<innerHeight)return {node,top:rect.top};}return null;}
 function update(data){const keep=anchor(),p=data.pandora||{},h=data.health||{},account=p.account||{},risk=p.risk||{},valuation=p.margin_valuation||{},start=number(p.starting_equity??500),realized=number(p.realized_pnl),unreal=number(p.unrealized_pnl),total=realized!==null&&unreal!==null?realized+unreal:null,totalPct=total!==null&&start>0?total/start*100:null;
 for(const[key,value,valueTone]of [['equity',money(p.total_equity),''],['total-pnl',money(total),tone(total)],['total-pct',pct(totalPct),tone(totalPct)],['start',money(start),''],['realized',money(p.realized_pnl),tone(p.realized_pnl)],['unrealized',money(p.unrealized_pnl),tone(p.unrealized_pnl)],['max-equity',money(p.max_equity),''],['exposure',money(p.current_exposure),''],['free-margin',money(account.free_margin),''],['used-margin',money(account.used_margin),'']]){const node=$('account-'+key);text(node,value);node.className=valueTone;}
 text($('readiness'),h.risk_ready?'PAPER ГОТОВ':'НЕ ГОТОВ');$('readiness').className=h.risk_ready?'positive':'warning';text($('risk-reason'),risk.reason||h.engine_error||Object.values(h.execution_errors||{})[0]||(valuation.complete===false?'PORTFOLIO_MARKS_STALE':h.risk_ready?'Fresh market data · PAPER only':'Ожидание актуальных данных / проверки исполнителя'));text($('update-time'),data.snapshot_at||'Время снимка недоступно');const startup=startupView(p);text($('startup-stage'),startup.stage);text($('startup-status'),startup.status);text($('startup-reason'),startup.reason);
-const candidates=(data.discovery||{}).top_movers||[];text($('count-candidates'),candidates.length);syncList('candidates',candidates,t=>t.symbol,t=>cardView(t.symbol,'RANK '+(t.rank??'—'),[metric('Score','score',fmt(t.pandora_win_score)),metric('Цена','price',fmt(t.last)),metric('Текущий импульс %','move',pct(t.scan_return_pct)),metric('Turnover / мин.','turnover',money(t.turnover_per_minute)),metric('BUY USD','buy',money(t.buy_volume)),metric('SELL USD','sell',money(t.sell_volume)),metric('Trades / сек.','trades',fmt(t.trade_velocity)),metric('Executed tape','tape',t.flow_fresh?'FRESH':'WARMING / STALE')]),true);
-const details=(p.engine||{}).details||{},durable=p.h1_durable||{},localSymbols=Array.from(new Set([...Object.keys(details),...Object.keys(durable),...(data.pandora_symbols||[])]));text($('count-locals'),localSymbols.length);syncList('locals',localSymbols,s=>s,s=>{const l=(details[s]||{}).h1_local||durable[s]||{},forming=l.forming_local||(l.pending_pivot_type?{pivot_type:l.pending_pivot_type,pivot_price:l.pending_pivot_price}:{});return cardView(s,side(l.entry_side),[metric('Confirmed local','confirmed',local(l.confirmed_local||l)),metric('Forming local','forming',local(forming)),metric('Разрешение входа','entry_state',l.entry_blocked?'BLOCKED':l.ready?'READY':'WAIT'),metric('Причина','reason',l.entry_block_reason||l.reason||l.confirmation_source)]);},true);
+const candidates=(data.discovery||{}).top_movers||[];text($('count-candidates'),candidates.length);syncList('candidates',candidates,t=>t.symbol,t=>cardView(t.symbol,'RANK '+(t.rank??'—'),[metric('Score','score',fmt(t.pandora_win_score)),metric('Цена','price',price(t.last)),metric('Текущий импульс %','move',pct(t.scan_return_pct)),metric('Turnover / мин.','turnover',money(t.turnover_per_minute)),metric('BUY USD','buy',money(t.buy_volume)),metric('SELL USD','sell',money(t.sell_volume)),metric('Trades / сек.','trades',fmt(t.trade_velocity)),metric('Executed tape','tape',t.flow_fresh?'FRESH':'WARMING / STALE')]),true);
+const details=(p.engine||{}).details||{},durable=p.h1_durable||{},localSymbols=observedSymbols(data);text($('count-locals'),localSymbols.length);syncList('locals',localSymbols,s=>s,s=>{const l=(details[s]||{}).h1_local||durable[s]||{},forming=l.forming_local||(l.pending_pivot_type?{pivot_type:l.pending_pivot_type,pivot_price:l.pending_pivot_price}:{});return cardView(s,side(l.entry_side),[metric('Confirmed local','confirmed',local(l.confirmed_local||l)),metric('Forming local','forming',local(forming)),metric('Разрешение входа','entry_state',l.entry_blocked?'BLOCKED':l.ready?'READY':'WAIT'),metric('Причина','reason',l.entry_block_reason||l.reason||l.confirmation_source)]);},true);
 const selected=tokens(data);text($('count-discovery'),selected.length);text($('count-positions'),(p.open_positions||[]).length);syncList('tokens',selected,t=>t.symbol,tokenView,true);syncList('positions',p.open_positions||[],p=>p.symbol+':'+p.opened,positionView,true);syncList('trades',(p.closed_trades||[]).slice(0,30),t=>t.id??(t.symbol+':'+t.opened+':'+t.closed),tradeView);
-syncList('adds',p.pyramid_adds||[],a=>a.symbol+':'+a.opened+':'+a.add_number,a=>cardView(a.symbol+' · ADD '+a.add_number,a.timestamp,[metric('Цена','price',fmt(a.price)),metric('Average entry','average',fmt(a.average_entry)),metric('Added margin','margin',money(a.added_margin)),metric('Added notional','notional',money(a.added_notional)),metric('MFE до ADD','before',money(a.mfe_before_add)),metric('MFE после ADD','after',money(a.mfe_after_add))]));syncList('events',((p.events||{}).events||[]).slice(0,40),e=>e.id,e=>cardView(e.kind,e.recorded_at,[metric('Токен','symbol',(e.payload||{}).symbol),metric('Причина','reason',(e.payload||{}).reason)],'event-card'));
+syncList('adds',p.pyramid_adds||[],a=>a.symbol+':'+a.opened+':'+a.add_number,a=>cardView(a.symbol+' · ADD '+a.add_number,a.timestamp,[metric('Цена','price',price(a.price)),metric('Average entry','average',price(a.average_entry)),metric('Added margin','margin',money(a.added_margin)),metric('Added notional','notional',money(a.added_notional)),metric('MFE до ADD','before',money(a.mfe_before_add)),metric('MFE после ADD','after',money(a.mfe_after_add))]));syncList('events',((p.events||{}).events||[]).slice(0,40),e=>e.id,e=>cardView(e.kind,e.recorded_at,[metric('Токен','symbol',(e.payload||{}).symbol),metric('Причина','reason',(e.payload||{}).reason)],'event-card'));
 if(keep&&keep.node.isConnected){const delta=keep.node.getBoundingClientRect().top-keep.top;if(Math.abs(delta)>1)window.scrollBy(0,delta);}latest=data;}
 function tab(name){activeTab=name;document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.tab===name)));document.querySelectorAll('.tab-panel').forEach(p=>p.hidden=p.id!=='panel-'+name);try{sessionStorage.setItem('pandora-tab',name);}catch{}}
 document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>tab(b.dataset.tab)));try{const saved=sessionStorage.getItem('pandora-tab');if(['discovery','positions','history','audit'].includes(saved))tab(saved);}catch{}
 $('sort-rank').addEventListener('click',()=>{const keep=anchor(),box=$('tokens'),ranking=new Map(tokens(latest).map(t=>[String(t.symbol),number(t.rank)??999]));Array.from(box.children).sort((a,b)=>(ranking.get(a.dataset.key)??999)-(ranking.get(b.dataset.key)??999)).forEach(node=>box.append(node));if(keep&&keep.node.isConnected)window.scrollBy(0,keep.node.getBoundingClientRect().top-keep.top);});
-async function poll(){if(busy||document.hidden)return;busy=true;const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),8000);try{const response=await fetch('/api/pandora',{cache:'no-store',signal:controller.signal,headers:{Accept:'application/json'}});if(!response.ok)throw Error('HTTP '+response.status);const data=await response.json();if(!data||!data.pandora||!data.health)throw Error('Неверный формат API');update(data);lastGood=Date.now();text($('connection-state'),'JSON подключён · '+new Date(lastGood).toLocaleTimeString());$('connection-state').className='positive';}catch(error){text($('connection-state'),'Нет обновления · '+String(error.message)+' · показан последний снимок');$('connection-state').className='negative';text($('readiness'),'НЕТ СВЕЖЕГО API');$('readiness').className='negative';}finally{clearTimeout(timeout);busy=false;}}
+async function poll(){if(busy||document.hidden)return;busy=true;const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),8000);try{const response=await fetch('/api/pandora',{cache:'no-store',signal:controller.signal,headers:{Accept:'application/json'}});if(!response.ok)throw Error('HTTP '+response.status);const data=await response.json();if(!data||!data.pandora||!data.health)throw Error('Неверный формат API');update(data);lastGood=Date.now();const published=Date.parse(data.snapshot_at),age=Number.isFinite(published)?Math.max(0,(lastGood-published)/1000):null;if(age!==null&&age>15){text($('connection-state'),'API снимок устарел · '+fmt(age,1)+' s');$('connection-state').className='negative';text($('readiness'),'НЕТ СВЕЖЕГО API');$('readiness').className='negative';}else{text($('connection-state'),'JSON подключён · '+new Date(lastGood).toLocaleTimeString());$('connection-state').className='positive';}}catch(error){text($('connection-state'),'Нет обновления · '+String(error.message)+' · показан последний снимок');$('connection-state').className='negative';text($('readiness'),'НЕТ СВЕЖЕГО API');$('readiness').className='negative';}finally{clearTimeout(timeout);busy=false;}}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)poll();});setInterval(poll,1000);poll();
 })();
 '''

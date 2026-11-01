@@ -7,6 +7,7 @@ or false-alarm guarantee. Transport freshness is a separate validity check.
 """
 from collections import deque
 from pandora_flow import summarize
+import copy
 import math,threading,time
 
 
@@ -25,7 +26,7 @@ class RollingMarketData:
 
     @staticmethod
     def _new_symbol(epoch):
-        return {'since':epoch,'seen':set(),'seen_queue':deque(),'latest_trade':None,'first_trade':None,'levels':deque(maxlen=2),'trades':deque(),'overflow_until':None}
+        return {'since':epoch,'seen':set(),'seen_queue':deque(),'latest_trade':None,'first_trade':None,'levels':deque(maxlen=2),'trades':deque(),'overflow_until':None,'revision':0,'flow_cache':None}
 
     def mark_connected(self,epoch=None,symbols=None,owner=None):
         epoch=time.time() if epoch is None else float(epoch);name='default' if owner is None else str(owner)
@@ -101,7 +102,10 @@ class RollingMarketData:
                 if not levels or levels[-1]['price']!=px:
                     levels.append({'price':px,'buy':0.,'sell':0.,'count':0,'first_epoch':stamp})
                 level=levels[-1];level['buy' if side=='B' else 'sell']+=notional;level['count']+=1
-                state['latest_trade']=stamp;state['decision_epoch']=received
+                state['latest_trade']=stamp
+                previous_event=state.get('decision_epoch')
+                state['decision_epoch']=stamp if previous_event is None else max(stamp,math.nextafter(previous_event,float('inf')))
+                state['revision']+=1
                 if state['first_trade'] is None:state['first_trade']=stamp
                 trades.append((stamp,px,notional,side))
                 accepted+=1
@@ -129,42 +133,58 @@ class RollingMarketData:
             trades=state['trades']
             while trades and epoch-trades[0][0]>610: trades.popleft()
             if not trades:return out
-            coverage=max(0.,min(epoch-state['since'],epoch-state['first_trade']))
-            out['trade_coverage_seconds']=coverage
-            def window(seconds):
-                rows=[r for r in trades if 0<=epoch-r[0]<=seconds]
-                buy=sum(r[2] for r in rows if r[3]=='B');sell=sum(r[2] for r in rows if r[3]=='A')
-                return rows,buy,sell
-            def imbalance(buy,sell): return (buy-sell)/(buy+sell) if buy+sell else 0.
-            r60,b60,s60=window(60)
-            if not r60 or b60+s60<=0:return out
-            i60=imbalance(b60,s60)
-            levels=[]
-            for trade in r60:
-                if not levels or levels[-1]['price']!=trade[1]:levels.append({'price':trade[1]})
-            levels=levels[-2:]
-            dominant=1 if b60>s60 else -1 if s60>b60 else 0
-            direction=1 if len(levels)==2 and levels[-1]['price']>levels[0]['price'] else -1 if len(levels)==2 and levels[-1]['price']<levels[0]['price'] else 0
-            control=dominant if direction==dominant and direction else 0
-            r15,b15,s15=window(15)
-            r30,b30,s30=window(30)
-            out.update(trade_data_fresh=True,buy_notional=b60,sell_notional=s60,flow_imbalance=i60,
-                       buy_volume_15s=b15,sell_volume_15s=s15,trade_count_15s=len(r15),flow_imbalance_15s=imbalance(b15,s15),
-                       buy_volume_30s=b30,sell_volume_30s=s30,trade_count_30s=len(r30),flow_imbalance_30s=imbalance(b30,s30),
-                       buy_volume_60s=b60,sell_volume_60s=s60,trade_count_60s=len(r60),observed_notional_60s=b60+s60,
-                       volume_window_end_epoch=epoch,
-                       price_direction=direction,control_side=control,previous_price=levels[0]['price'] if len(levels)==2 else None,
-                       last_price=levels[-1]['price'],pressure_phase='CONTROL_CONFIRMED' if control else 'PRESSURE_WITHOUT_PRICE_CONFIRMATION',
-                       observation_basis='executed_public_trades_m1_m3_m5',price_levels=len(levels))
-            out.update(summarize(list(trades),epoch,coverage))
-            if coverage>=180:
-                r,b,s=window(180);out.update(flow_imbalance_180s=imbalance(b,s),trade_count_180s=len(r))
-            if coverage>=300:
-                r,b,s=window(300);i300=imbalance(b,s);price_start=r[0][1] if r else None;price_end=r[-1][1] if r else None
-                out.update(buy_volume_300s=b,sell_volume_300s=s,trade_count_300s=len(r),flow_imbalance_300s=i300,
-                           flow_delta_60_300=i60-i300,price_start_300s=price_start,price_end_300s=price_end,
-                           price_return_300s=(price_end/price_start-1.) if price_start and price_end else None)
-            return out
+            revision=state['revision'];bucket=int(epoch*4)
+            cached=state.get('flow_cache')
+            if cached and cached[0]==revision and cached[1]==bucket and epoch>=cached[2]['flow_computed_at_epoch']:
+                result=copy.deepcopy(cached[2])
+                result.update(latest_trade_age_seconds=age,observed_at_epoch=epoch)
+                return result
+            # Snapshot validated executions under the lock, then perform the
+            # expensive rolling calculations without blocking the socket reader.
+            trades=list(trades);since=state['since'];first_trade=state['first_trade']
+        coverage=max(0.,min(epoch-since,epoch-first_trade))
+        out['trade_coverage_seconds']=coverage
+        def window(seconds):
+            rows=[r for r in trades if 0<=epoch-r[0]<=seconds]
+            buy=sum(r[2] for r in rows if r[3]=='B');sell=sum(r[2] for r in rows if r[3]=='A')
+            return rows,buy,sell
+        def imbalance(buy,sell): return (buy-sell)/(buy+sell) if buy+sell else 0.
+        r60,b60,s60=window(60)
+        if not r60 or b60+s60<=0:return out
+        i60=imbalance(b60,s60)
+        levels=[]
+        for trade in r60:
+            if not levels or levels[-1]['price']!=trade[1]:levels.append({'price':trade[1]})
+        levels=levels[-2:]
+        dominant=1 if b60>s60 else -1 if s60>b60 else 0
+        direction=1 if len(levels)==2 and levels[-1]['price']>levels[0]['price'] else -1 if len(levels)==2 and levels[-1]['price']<levels[0]['price'] else 0
+        control=dominant if direction==dominant and direction else 0
+        r15,b15,s15=window(15)
+        r30,b30,s30=window(30)
+        out.update(trade_data_fresh=True,buy_notional=b60,sell_notional=s60,flow_imbalance=i60,
+                   buy_volume_15s=b15,sell_volume_15s=s15,trade_count_15s=len(r15),flow_imbalance_15s=imbalance(b15,s15),
+                   buy_volume_30s=b30,sell_volume_30s=s30,trade_count_30s=len(r30),flow_imbalance_30s=imbalance(b30,s30),
+                   buy_volume_60s=b60,sell_volume_60s=s60,trade_count_60s=len(r60),observed_notional_60s=b60+s60,
+                   volume_window_end_epoch=epoch,
+                   price_direction=direction,control_side=control,previous_price=levels[0]['price'] if len(levels)==2 else None,
+                   last_price=levels[-1]['price'],pressure_phase='CONTROL_CONFIRMED' if control else 'PRESSURE_WITHOUT_PRICE_CONFIRMATION',
+                   observation_basis='executed_public_trades_m1_m3_m5',price_levels=len(levels))
+        out.update(summarize(list(trades),epoch,coverage))
+        if coverage>=180:
+            r,b,s=window(180);out.update(flow_imbalance_180s=imbalance(b,s),trade_count_180s=len(r))
+        if coverage>=300:
+            r,b,s=window(300);i300=imbalance(b,s);price_start=r[0][1] if r else None;price_end=r[-1][1] if r else None
+            out.update(buy_volume_300s=b,sell_volume_300s=s,trade_count_300s=len(r),flow_imbalance_300s=i300,
+                       flow_delta_60_300=i60-i300,price_start_300s=price_start,price_end_300s=price_end,
+                       price_return_300s=(price_end/price_start-1.) if price_start and price_end else None)
+        out['flow_computed_at_epoch']=epoch
+        with self._lock:
+            if self._symbols.get(str(symbol)) is state and state['revision']==revision:
+                state['flow_cache']=(revision,bucket,copy.deepcopy(out))
+            elif self._symbols.get(str(symbol)) is not state:
+                out.update(trade_data_fresh=False,fast_control_side=0,sustained_control_side=0,
+                           control_side=0,pressure_phase='TRANSPORT_CHANGED_DURING_CALCULATION')
+        return out
 
     def context(self,symbol,epoch=None):return self.flow_context(symbol,epoch)
 
