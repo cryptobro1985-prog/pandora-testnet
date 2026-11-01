@@ -22,6 +22,9 @@ def reset_once(pg,store,now):
     with pg() as db:
         with db.transaction():
             store.fence(db)
+            # The archive may contain years of journal entries; the lease lock
+            # continues to fence other writers for the whole transaction.
+            db.execute("SET LOCAL statement_timeout = '90s'")
             db.execute("CREATE TABLE IF NOT EXISTS pandora_win_experiment_migrations (experiment text PRIMARY KEY, migrated_at timestamptz NOT NULL DEFAULT clock_timestamp(), starting_equity double precision NOT NULL, archived_rows jsonb NOT NULL)")
             existing=db.execute("SELECT experiment FROM pandora_win_experiment_migrations WHERE experiment=%s FOR UPDATE",(EXPERIMENT,)).fetchone()
             if existing:return False
