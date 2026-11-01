@@ -9,6 +9,7 @@ import threading
 import time
 
 import websocket
+from pandora_flow_v2_live import enabled as v2_enabled, MIN_TURNOVER_24H
 
 
 class LiveScanner:
@@ -70,8 +71,72 @@ class LiveScanner:
             while history and received-history[0][0]>300:history.popleft()
         return True
 
+    def _rank_v2(self,instruments,held,epoch):
+        """Hourly rising Bybit USDT perpetual TOP-5; no intrahour rotations."""
+        with self.lock:
+            saved=copy.deepcopy(self.last_snapshot or {})
+            markets=copy.deepcopy(self.markets)
+            prior=list(saved.get("selected_symbols") or [])
+            refresh=float(saved.get("next_refresh_at") or 0)
+            if refresh and epoch<refresh and saved.get("experiment")=="PANDORA_FLOW_V2_400":
+                saved.update(at=epoch,events=[],retained_open_positions=sorted(set(held)-set(prior)))
+                self.last_snapshot=copy.deepcopy(saved)
+                return saved
+        fresh=[(s,r) for s,r in markets.items() if s in instruments and
+               0<=epoch-float(r.get("price_received") or 0)<=self.freshness]
+        if not fresh:
+            frozen={**saved,"at":epoch,"events":[],"selection_frozen":True,
+                "observations_ready":False,"selected_symbols":prior,
+                "retained_open_positions":sorted(set(held)-set(prior)),
+                "reason":"fresh_bybit_tickers_required_for_hourly_top5",
+                "experiment":"PANDORA_FLOW_V2_400"}
+            with self.lock:self.last_snapshot=copy.deepcopy(frozen)
+            return frozen
+        rows=[]
+        for symbol,row in fresh:
+            try:
+                if float(row.get("turnover24h") or 0)<MIN_TURNOVER_24H:continue
+                change=float(row.get("price24hPcnt") or 0)
+                price=float(row.get("lastPrice") or 0)
+                turnover=float(row.get("turnover24h") or 0)
+                if not math.isfinite(change+price+turnover) or price<=0 or change<=0:continue
+            except (TypeError,ValueError,OverflowError):continue
+            rows.append(dict(symbol=symbol,rank=0,last=price,
+               price_received=row.get("price_received"),change_24h_pct=change*100,
+               turnover_24h=turnover,turnover_per_minute=0,move="PUMP",
+               pandora_win_score=change,flow_fresh=False,eligible=True))
+        rows.sort(key=lambda r:(-r["change_24h_pct"],-r["turnover_24h"],r["symbol"]))
+        for i,r in enumerate(rows):r["rank"]=i+1
+        selected=rows[:self.top];symbols=[r["symbol"] for r in selected]
+        events=[]
+        for symbol in prior:
+            if symbol not in symbols:
+                events.append(dict(action="TOKEN_ROTATED",symbol=symbol,
+                                   state="FADING" if symbol in held else "ROTATE_OUT",
+                                   reason="hourly_top5_refresh"))
+        for symbol in symbols:
+            if symbol not in prior:events.append(dict(action="TOKEN_SELECTED",symbol=symbol,
+                                     reason="hourly_rising_top5_min_1m_turnover"))
+        snapshot=dict(at=epoch,selected_at=epoch,next_refresh_at=epoch+3600,
+            experiment="PANDORA_FLOW_V2_400",selected_symbols=symbols,
+            selected=selected,top_movers=rows[:self.candidate_limit],
+            candidate_symbols=[r["symbol"] for r in rows[:self.candidate_limit]],
+            retained_open_positions=sorted(set(held)-set(symbols)),
+            states={s:"SELECTED" for s in symbols},events=events,
+            selection_frozen=False,observations_ready=True,scan_seconds=3600,
+            min_turnover_24h_usdt=MIN_TURNOVER_24H,
+            missing_candidates=max(0,self.top-len(symbols)),
+            basis="hourly_bybit_24h_positive_price_change_and_min_1m_usdt_turnover")
+        with self.lock:
+            self.selected=symbols
+            self.candidates=snapshot["candidate_symbols"]
+            self.states=snapshot["states"]
+            self.last_snapshot=copy.deepcopy(snapshot)
+        return snapshot
+
     def rank(self, instruments, flow_getter, held=(), epoch=None):
         epoch=time.time() if epoch is None else float(epoch)
+        if v2_enabled():return self._rank_v2(instruments,held,epoch)
         with self.lock:
             markets=copy.deepcopy(self.markets)
             histories={s:list(h) for s,h in self.histories.items()}
