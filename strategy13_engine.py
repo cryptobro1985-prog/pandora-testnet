@@ -85,9 +85,13 @@ class Strategy13:
    self._open(symbol,side,a)
  def snapshot(self):
   with self.lock:ps=copy.deepcopy(self.positions);eq=self.equity;real=self.realized;h=copy.deepcopy(self.h1)
+  try:
+   with self.pg() as db: hist=db.execute("select opened,closed,symbol,side,entry,exit,pnl,reason,margin,notional,leverage,features from strategy13_trade_history order by id desc limit 200").fetchall()
+   closed=[{"opened":r["opened"],"closed":r["closed"],"symbol":r["symbol"],"side":"LONG" if int(r["side"])>0 else "SHORT","entry":r["entry"],"exit":r["exit"],"pnl":r["pnl"],"reason":r["reason"],"margin_usd":r["margin"],"notional_usd":r["notional"],"leverage":r["leverage"],"features":r["features"]} for r in hist]
+  except Exception: closed=[]
   prices=self.price_snapshot();out=[];un=0.;allm=True
   for s,p in ps.items():
    m=prices.get(s);x=self.paper_pnl(p["notional"],p["entry"],m,p["side"],self.fee) if m else None;allm=allm and x is not None
    if x is not None:un+=x
    out.append({"symbol":s,"side":"LONG" if p["side"]>0 else "SHORT","entry":p["entry"],"mark":m,"unrealized_pnl":x,"margin_usd":p["margin"],"notional_usd":p["notional"],"leverage":p["leverage"],"opened":p["opened"]})
-  return {"name":"Strategy 1.3","starting_equity":500.,"realized_equity":eq,"realized_pnl":real,"unrealized_pnl":un if allm else None,"total_equity":eq+un if allm else None,"open_positions":out,"h1":h,"symbols":list(SYMBOLS),"logic":"Local Low LONG -> next Local High; Local High SHORT -> next Local Low"}
+  return {"name":"Strategy 1.3","starting_equity":500.,"realized_equity":eq,"realized_pnl":real,"unrealized_pnl":un if allm else None,"total_equity":eq+un if allm else None,"open_positions":out,"closed_trades":closed,"h1":h,"symbols":list(SYMBOLS),"logic":"Local Low LONG -> next Local High; Local High SHORT -> next Local Low"}
