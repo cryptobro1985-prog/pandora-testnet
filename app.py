@@ -2,6 +2,8 @@
 import sys
 from zoneinfo import ZoneInfo
 from pandora_api import API_VERSION, openapi, json_safe
+from pandora_decisions import entry_status, startup_snapshot
+from pandora_bootstrap import HistoryBootstrap
 from pandora_runtime import PandoraRuntime
 from pandora_scanner import ticker_worker
 from pandora_locals import live_locals, execution_anchor
@@ -59,6 +61,7 @@ S11=None
 S13=None
 S14=None
 WIN=None
+HISTORY_BOOTSTRAP=None
 
 def journal(kind,event_id,payload):
  with pg() as db:db.execute('insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,%s,%s,%s::jsonb)',(now(),event_id,kind,json.dumps(payload,default=str)))
@@ -276,7 +279,7 @@ def bybit_volatility_discovery_loop():
   while not SHUTDOWN.is_set():
    # REST bootstraps/reconciles only a missing or wholly stale market stream.
    with scanner.lock:
-    fresh=any(0<=time.time()-r['received']<=scanner.freshness for r in scanner.markets.values())
+    fresh=any(0<=time.time()-r.get('price_received',0)<=scanner.freshness for r in scanner.markets.values())
    if not fresh and time.time()-last_bootstrap>=30:
     last_bootstrap=time.time()
     try:
@@ -1128,10 +1131,7 @@ def strategy1_history_page(account="strategy1",before_id=None,limit=100,symbol=N
   if not _historical_table_exists(db,STRATEGY1_HISTORY_TABLES[account]):return {'account':account,'trades':[],'next_before_id':None,'symbol':symbol}
   rows=[dict(r) for r in db.execute(f"select * from {STRATEGY1_HISTORY_TABLES[account]}{where} order by id desc limit %s",tuple(params)).fetchall()]
  more=len(rows)>limit;rows=rows[:limit]
- for trade in rows:
-  margin=float(trade.get('margin') or 0)
-  trade['pnl_usdt']=trade.get('pnl')
-  trade['pnl_percent']=float(trade['pnl'])/margin*100 if trade.get('pnl') is not None and margin>0 else None
+ rows=[trade_monitor_snapshot(trade) for trade in rows]
  return {"account":account,"trades":rows,"next_before_id":rows[-1]["id"] if rows and more else None,
   "basis":"all_recorded_rows_without_pnl_exclusions","symbol":symbol}
 
@@ -1147,12 +1147,24 @@ def strategy1_event_page(before_id=None,limit=100):
  more=len(rows)>limit;rows=rows[:limit]
  return {"events":rows,"next_before_id":rows[-1]["id"] if rows and more else None}
 
+def trade_monitor_snapshot(row):
+ trade=dict(row);features=trade.get('features') or {}
+ margin=float(trade.get('margin') or 0)
+ trade.update(entry_price=features.get('original_entry',features.get('entry_mark',trade.get('entry'))),
+  entry_time=trade.get('opened'),average_entry=trade.get('entry'),
+  entry_local={k:features.get(k) for k in ('pivot_type','pivot_price','pivot_candle_time','signal_candle_time','confirmation_source')},
+  exit_local=features.get('exit_analysis') or features.get('local_state') or {},
+  pnl_usdt=trade.get('pnl'),
+  pnl_percent=float(trade['pnl'])/margin*100 if trade.get('pnl') is not None and margin>0 else None)
+ return trade
+
 def local_v10_history(limit=100):
  # Actual immutable account ledger, including all historical outcomes.
  with pg() as db:
-  return [dict(x) for x in db.execute("""select id,opened,closed,symbol,side,entry,exit,pnl,
+  rows=db.execute("""select id,opened,closed,symbol,side,entry,exit,pnl,
     reason,margin,notional,leverage,features from local_v12_trade_history
-    order by closed desc,id desc limit %s""",(int(limit),)).fetchall()]
+    order by closed desc,id desc limit %s""",(int(limit),)).fetchall()
+ return [trade_monitor_snapshot(row) for row in rows]
 
 def local_v10_today_pnl():
  with pg() as db:
@@ -1176,30 +1188,39 @@ def engine_coordinator():
  try:STORE.release()
  except Exception:pass
 
+def needs_local_history(symbol):
+ try:
+  h1_rows,stamp=_local_h1_candles(symbol);m15_rows,_=_local_m15_candles(symbol)
+  if not analyze_hype_h1(h1_rows,stamp,symbol).get('ready'):return True
+  latest=max(int(row['t']) for row in h1_rows if int(row['T'])<=stamp-1000)
+  expected=int((stamp-1000)//3600000*3600000-3600000)
+  m15=sorted((row for row in m15_rows if int(row['T'])<=stamp-1000),key=lambda row:int(row['t']))
+  if len(m15)<5:return True
+  recent=m15[-5:]
+  return (latest<expected or not 0<=stamp-int(recent[-1]['T'])<1020000 or
+          any(abs(int(b['t'])-int(a['t'])-900000)>1000 for a,b in zip(recent,recent[1:])))
+ except (RuntimeError,ValueError,TypeError,KeyError):return True
+
 def market_history_bootstrap():
- while not SHUTDOWN.is_set():
-  if not S['engine_active']:SHUTDOWN.wait(.5);continue
-  for symbol in strategy1_runtime_symbols():
-   if SHUTDOWN.is_set():return
-   try:
-    try:
-     h1_rows,stamp=_local_h1_candles(symbol);m15_rows,_=_local_m15_candles(symbol)
-     last_h1=max(int(r['t']) for r in h1_rows if int(r['T'])<=stamp-1000)
-     last_m15=max(int(r['T']) for r in m15_rows if int(r['T'])<=stamp-1000)
-     expected=int((stamp-1000)//3600000*3600000-3600000)
-     if len(h1_rows)>=6 and len(m15_rows)>=5 and last_h1>=expected and 0<=stamp-last_m15<1020000:
-      continue
-    except (RuntimeError,ValueError):pass
-    rows=bybit_local_history(symbol)
-    m15_rows=bybit_local_history(symbol,"15m",48)
-    accept_local_candles(rows,history=True)
-    accept_local_candles(m15_rows,history=True)
-    checkpoint_local_candles()
-    SHUTDOWN.wait(.1)
-    with LOCK:S['sources']['H1History:'+symbol]={'ok':True,'last_check':now(),'rows':len(rows),'m15_rows':len(m15_rows)}
-   except Exception as error:
-    with LOCK:S['sources']['H1History:'+symbol]={'ok':False,'last_check':now(),'error':type(error).__name__+':'+str(error)[:160]}
-  SHUTDOWN.wait(5)
+ global HISTORY_BOOTSTRAP
+ def selected():
+  with LOCK:return tuple((S.get('bybit_discovery') or {}).get('selected_symbols') or ()) if S.get('engine_active') else ()
+ def retained():
+  with LOCK:return tuple(dict.fromkeys(tuple(S.get('local_v12_positions',{}))+tuple(S.get('local_experiment_watch',{})))) if S.get('engine_active') else ()
+ def candidates():
+  if not S.get('engine_active'):return ()
+  with LOCK:pool=tuple((S.get('bybit_discovery') or {}).get('candidate_symbols') or ())
+  return pool+(LOCAL_EXPERIMENT_SYMBOLS if os.getenv('PANDORA_COMPARISON_ENGINES','0')=='1' else ())
+ def accept(rows,history=True):
+  if S.get('engine_active'):accept_local_candles(rows,history=history)
+ def checkpoint():
+  if S.get('engine_active'):checkpoint_local_candles()
+ def report(symbol,value):
+  with LOCK:S['sources']['H1History:'+symbol]={**value,'last_check':now()}
+  TRADE_WAKE.set()
+ HISTORY_BOOTSTRAP=HistoryBootstrap(SHUTDOWN,bybit_local_history,accept,checkpoint,report,
+  needs_local_history,selected,retained,candidates)
+ HISTORY_BOOTSTRAP.run()
 
 def local_experiment_loop():
  while not SHUTDOWN.is_set():
@@ -1285,7 +1306,11 @@ def build_dashboard_snapshot(history=None):
   all_marks=all_marks and mark is not None
   if pnl is not None:unreal+=pnl
   positions.append({'symbol':symbol,'side':'LONG' if pos['side']>0 else 'SHORT','opened':pos['opened'],'entry':pos['entry'],
-   'mark':mark,'unrealized_pnl':pnl,'margin_usd':pos['margin'],'notional_usd':pos['notional'],'leverage':pos['leverage'],'effective_leverage':pos['notional']/pos['margin'] if pos['margin'] else None,'pnl_percent':pnl/pos['margin']*100 if pnl is not None and pos['margin'] else None,'features':pos.get('features') or {}})
+   'entry_price':(pos.get('features') or {}).get('original_entry',(pos.get('features') or {}).get('entry_mark',pos['entry'])),
+   'entry_time':pos['opened'],'average_entry':pos['entry'],
+   'entry_local':{k:(pos.get('features') or {}).get(k) for k in ('pivot_type','pivot_price','pivot_candle_time','signal_candle_time','confirmation_source')},
+   'current_local':state.get('_local4_analysis',{}).get(symbol) or state.get('local_h1_direction',{}).get(symbol) or {},
+   'pnl_usdt':pnl,'mark':mark,'unrealized_pnl':pnl,'margin_usd':pos['margin'],'notional_usd':pos['notional'],'leverage':pos['leverage'],'effective_leverage':pos['notional']/pos['margin'] if pos['margin'] else None,'pnl_percent':pnl/pos['margin']*100 if pnl is not None and pos['margin'] else None,'features':pos.get('features') or {}})
  details={}
  for symbol in strategy1_runtime_symbols():
   flow=MARKET_OBS.flow_context(symbol)
@@ -1315,10 +1340,32 @@ def build_dashboard_snapshot(history=None):
    'state':token.get('state','SELECTED'),'position':position,'entry':features.get('original_entry',position.get('entry')),
    'average_entry':position.get('entry'),'margin':position.get('margin_usd'),'notional':position.get('notional_usd'),
    'leverage':position.get('leverage'),'pyramid_level':features.get('pyramid_level',0),
-   'current_pnl_usd':position.get('unrealized_pnl'),'current_pnl_pct':features.get('current_pnl_pct'),
+   'entry_price':position.get('entry_price'),'entry_time':position.get('entry_time'),'entry_local':position.get('entry_local'),
+   'current_pnl_usd':position.get('unrealized_pnl'),'current_pnl_pct':position.get('pnl_percent'),
    'mfe':features.get('peak_mfe_usd'),'mae':features.get('mae_usd'),'mfe_giveback':features.get('mfe_giveback_usd'),
    'last_action':token.get('action'),'action_reason':token.get('reason')})
+ checkpoint=publication_epoch(state.get('last_checkpoint'))
+ checkpoint_ready=checkpoint is not None and 0<=time.time()-checkpoint<=15
+ for token in token_rows:
+  symbol=token['symbol'];rejection=state.get('strategy1_executor_rejections',{}).get(symbol) or {}
+  rejected_at=publication_epoch(rejection.get('at'))
+  recent_reason=rejection.get('reason') if rejected_at and 0<=time.time()-rejected_at<5 else None
+  token['decision']=entry_status(symbol,token['local_state'],token['flow_state'],token.get('position'),
+   state.get('local_experiment_watch',{}).get(symbol),active=bool(state.get('engine_active')),
+   scanner_ready=not (state.get('bybit_discovery') or {}).get('selection_frozen',False),
+   instrument_ready=symbol in state.get('_bybit_instruments',{}),
+   h1_verified=strategy1_runtime_h1_verified(symbol,token['local_state']),
+   mark=fresh_mark_price(symbol),checkpoint_ready=checkpoint_ready,rejection=recent_reason,stamp=time.time())
+  if not token.get('position'):
+   token['action_reason_code']=token['decision']['reason']
+   token['action_reason']=token['decision']['message']
+   token['last_action']=token['decision']['action']
  primary['tokens']=token_rows
+ observed=0
+ if WIN is not None:
+  with WIN.scanner.lock:observed=len(WIN.scanner.markets)
+ primary['startup']=startup_snapshot(state,token_rows,observed_markets=observed,
+  history=HISTORY_BOOTSTRAP.snapshot() if HISTORY_BOOTSTRAP is not None else {})
  totals=[row for row in history.get('token_totals') or [] if row.get('account')=='strategy1']
  closed_count=sum(int(row.get('closed_trades') or 0) for row in totals)
  wins=sum(int(row.get('wins') or 0) for row in totals)

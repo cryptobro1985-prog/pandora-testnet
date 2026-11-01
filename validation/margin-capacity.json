@@ -2,9 +2,9 @@
   "synthetic_fixture": true,
   "live_exchange": false,
   "simultaneous_positions": 4,
-  "equity_after_modeled_fees": 489.0592716719366,
-  "reserved_margin": 486.2545923583735,
-  "free_margin": 2.804679313563099,
+  "equity_after_modeled_fees": 489.0591674676898,
+  "reserved_margin": 486.2592236582318,
+  "free_margin": 2.799943809458,
   "rejected": {
     "BEAM": "MIN_ENTRY_MARGIN_UNFUNDED",
     "BIRB": "MIN_ENTRY_MARGIN_UNFUNDED",
@@ -16,7 +16,7 @@
     "TAO": "MIN_ENTRY_MARGIN_UNFUNDED",
     "ZEC": "MIN_ENTRY_MARGIN_UNFUNDED"
   },
-  "modeled_stop_risk": 156.81062424882865,
+  "modeled_stop_risk": 156.81197807412977,
   "default_portfolio_risk_cap": null,
   "minimum_entry_margin_fraction": 0.1,
   "minimum_leverage": 10,

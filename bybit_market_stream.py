@@ -220,7 +220,7 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                 if subscribe_trades and epoch - last_trade_receive > 30 and stale_trades >= 10:
                     raise RuntimeError("bybit_trade_tape_stale_backlog")
 
-                if epoch - last_refresh >= 5:
+                if epoch - last_refresh >= 1:
                     desired = set(symbols_provider())
                     if symbol_filter is not None:
                         desired = {s for s in desired if symbol_filter(s)}

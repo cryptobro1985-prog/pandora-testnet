@@ -54,3 +54,9 @@ Pyramiding risk caps по умолчанию: 2 adds, до 10% equity на add, 
 Живой Bybit и Render в этой сессии не подтверждены: proxy CONNECT отклонён с 403, а выбранное пользователем приложение Render не предоставило инструментов. Production database, deploy status и длительная рыночная работа не проверялись. Эти внешние ограничения не заменены искусственными успешными live-результатами. Дальнейшая проверка поведения/настройка стратегии — отдельный этап пользователя.
 
 `PANDORA_WIN_COMPLETE.zip` содержит все исходники, runtime, зависимости, Dockerfile, тесты, CI, эти документы, текущие отчёты и manifest с per-file SHA-256. Credentials, databases, venv, кэши и Git metadata исключены. Запуск и все основные параметры перечислены в README_PANDORA_WIN.md.
+
+## Дополнение: старт и provenance позиций
+
+Выбранные пять больше не ждут последовательного обхода base/candidate history. HistoryBootstrap:5 приоритетных workers +1 background, shared5req/s, bounded futures, приоритет выбранных/сохранённых токенов каждые0.2с, per-symbol backoff. Supervisor запускает его сразу, HTTP доступен во время подготовки. needs_local_history проверяет актуальность/непрерывность H1/M15. Пустая/неполная history не получает HISTORY_READY.
+
+API расширен primary.startup и token.decision. Decision read-only; ENTRY_SIGNAL_READY не означает committed OPEN. Snapshot positions различает entry_price/entry_time/entry_local и average_entry/current_local, PnL USDT/% считается по текущему fresh mark, не stale features. Монитор показывает эти поля и прогресс запуска без потери DOM/scroll. Внешний Render/live Bybit по-прежнему не подтверждены в этой сессии.

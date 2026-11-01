@@ -6,37 +6,37 @@
       "opens": 2,
       "closes": 2,
       "reentries": 1,
-      "pnl_net_fees": -9.282021574181524
+      "pnl_net_fees": -9.285116658107203
     },
     "NEAR": {
       "opens": 2,
       "closes": 2,
       "reentries": 1,
-      "pnl_net_fees": -27.425065530749137
+      "pnl_net_fees": -27.432130282325105
     },
     "INIT": {
       "opens": 2,
       "closes": 2,
       "reentries": 1,
-      "pnl_net_fees": -29.03702679195144
+      "pnl_net_fees": -29.04173727505357
     },
     "BTC": {
       "opens": 2,
       "closes": 2,
       "reentries": 1,
-      "pnl_net_fees": -25.850636761103324
+      "pnl_net_fees": -25.85674277850537
     },
     "SOL": {
       "opens": 2,
       "closes": 2,
       "reentries": 1,
-      "pnl_net_fees": -24.411269333163684
+      "pnl_net_fees": -24.417786138606168
     }
   },
   "accepted_frames": 55,
   "closed_trades": 10,
   "starting_equity": 500,
-  "ending_equity": 383.9939800088508,
-  "realized_pnl": -116.00601999114912,
+  "ending_equity": 383.9664868674026,
+  "realized_pnl": -116.03351313259742,
   "transport": "real loopback WebSocket carrying synthetic Bybit publicTrade frames"
 }
