@@ -9,7 +9,7 @@ import threading
 import time
 
 import websocket
-from pandora_flow_v2_live import enabled as v2_enabled, MIN_TURNOVER_24H
+from pandora_flow_v2_live import enabled as v2_enabled, MIN_TURNOVER_24H, EXPERIMENT as ACTIVE_FLOW_EXPERIMENT
 
 
 class LiveScanner:
@@ -78,7 +78,7 @@ class LiveScanner:
             markets=copy.deepcopy(self.markets)
             prior=list(saved.get("selected_symbols") or [])
             refresh=float(saved.get("next_refresh_at") or 0)
-            if refresh and epoch<refresh and saved.get("experiment")=="PANDORA_FLOW_V2_400":
+            if refresh and epoch<refresh and saved.get("experiment")==ACTIVE_FLOW_EXPERIMENT:
                 saved.update(at=epoch,events=[],retained_open_positions=sorted(set(held)-set(prior)))
                 self.last_snapshot=copy.deepcopy(saved)
                 return saved
@@ -89,7 +89,7 @@ class LiveScanner:
                 "observations_ready":False,"selected_symbols":prior,
                 "retained_open_positions":sorted(set(held)-set(prior)),
                 "reason":"fresh_bybit_tickers_required_for_hourly_top5",
-                "experiment":"PANDORA_FLOW_V2_400"}
+                "experiment":ACTIVE_FLOW_EXPERIMENT}
             with self.lock:self.last_snapshot=copy.deepcopy(frozen)
             return frozen
         rows=[]
@@ -118,7 +118,7 @@ class LiveScanner:
             if symbol not in prior:events.append(dict(action="TOKEN_SELECTED",symbol=symbol,
                                      reason="hourly_rising_top5_min_1m_turnover"))
         snapshot=dict(at=epoch,selected_at=epoch,next_refresh_at=epoch+3600,
-            experiment="PANDORA_FLOW_V2_400",selected_symbols=symbols,
+            experiment=ACTIVE_FLOW_EXPERIMENT,selected_symbols=symbols,
             selected=selected,top_movers=rows[:self.candidate_limit],
             candidate_symbols=[r["symbol"] for r in rows[:self.candidate_limit]],
             retained_open_positions=sorted(set(held)-set(symbols)),
