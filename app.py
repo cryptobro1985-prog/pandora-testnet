@@ -24,7 +24,7 @@ from bybit_market_stream import run_bybit_stream
 from h1_structure import analyze as analyze_pandora_h1,pending_extreme as local_pending_extreme,update_path as update_position_path,POLICY as PANDORA_LOCAL_POLICY
 from local_order_flow import POLICY as PANDORA_FLOW_POLICY,entry_candidate as pandora_flow_entry_candidate,initial_entry_candidate as pandora_flow_initial_entry_candidate,pressure_exit as pandora_flow_pressure_exit,update_watch as pandora_flow_update_watch,reentry_ready as pandora_flow_reentry_ready
 
-PANDORA_STARTING_EQUITY=500.0
+PANDORA_STARTING_EQUITY=400.0 if v2_enabled() else 500.0
 PANDORA_MARGIN_FRACTION=.20
 PANDORA_WIN_NAME="Pandora Flow V2" if v2_enabled() else "Pandora Win"
 DISCOVERY_MAX_SELECTED=5
@@ -36,7 +36,7 @@ S={'mode':'PAPER_ONLY','orders_enabled':False,'engine_active':False,'engine_erro
  'sources':{},'_prices':{},'_price_received_epoch':{},'_timeline':{},'_hist':{},'_last_poll_epoch':0,
  'last_poll':None,'last_checkpoint':None,'last_market_error':None,'market_count':0,
  'pandora_win_positions':{},'pandora_watch':{},'pandora_win_h1_direction':{},'_pandora_analysis':{},
- 'pandora_equity':500.,'pandora_realized_pnl':0.,'pandora_trades':0}
+ 'pandora_equity':PANDORA_STARTING_EQUITY,'pandora_realized_pnl':0.,'pandora_trades':0}
 MARKET_OBS=RollingMarketData(max_symbols=256,max_trade_lag_seconds=15,freshness_seconds=15,max_seen_per_symbol=65536)
 MARKET_AUX_OBS=RollingMarketData(max_symbols=64)
 _LOCAL_CANDLE_CACHE={};_LOCAL_CANDLE_CACHE_LOCK=threading.RLock();_LOCAL_CANDLE_CHECKPOINTED={}
@@ -769,6 +769,9 @@ def pandora_close(symbol,price,reason,analysis=None,watch_context=None):
   watch["context"].update(phase="WAIT_RESUMPTION" if confirmed_opposite else "WAIT_COUNTER_CONTROL",
     counter_pressure_seen=confirmed_opposite,flow_policy=PANDORA_FLOW_POLICY)
   if confirmed_opposite:watch["context"]["last_opposite_trade_epoch"]=opposite_epoch
+  if v2_enabled():
+   # A later independent Bybit trade is required for any re-entry.
+   watch["context"]["last_opposite_trade_epoch"]=max(float(opposite_epoch or 0),time.time())
  with pg() as db:
   with db.transaction():
    STORE.fence(db)
@@ -1384,7 +1387,7 @@ def build_dashboard_snapshot(history=None):
  primary['total_pnl_usdt']=primary['total_equity']-500 if primary['total_equity'] is not None else None
  primary['total_pnl_percent']=primary['total_pnl_usdt']/500*100 if primary['total_pnl_usdt'] is not None else None
  primary['realized_pnl_percent']=primary['realized_pnl']/500*100
- primary['max_equity']=(state.get('pandora_account') or {}).get('max_equity',500.)
+ primary['max_equity']=(state.get('pandora_account') or {}).get('max_equity',PANDORA_STARTING_EQUITY)
  primary['current_exposure']=sum(float(p['notional_usd'])*float(p['mark'])/float(p['entry']) for p in positions) if all_marks else None
  primary['pyramid_adds']=[]
  if WIN is not None:
