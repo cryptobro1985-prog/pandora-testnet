@@ -79,7 +79,18 @@ class LiveScanner:
             prior=list(saved.get("selected_symbols") or [])
             refresh=float(saved.get("next_refresh_at") or 0)
             if refresh and epoch<refresh and saved.get("experiment")==ACTIVE_FLOW_EXPERIMENT:
-                saved.update(at=epoch,events=[],retained_open_positions=sorted(set(held)-set(prior)))
+                # A restart can freeze a restored hourly selection before
+                # ticker subscriptions are fresh. Recover readiness without
+                # rotating the selected five before their scheduled refresh.
+                verified=bool(prior) and all(
+                    sym in instruments and sym in markets and
+                    0<=epoch-float(markets[sym].get("price_received") or 0)<=self.freshness
+                    for sym in prior)
+                saved.update(at=epoch,events=[],
+                    selection_frozen=not verified,
+                    observations_ready=verified,
+                    retained_open_positions=sorted(set(held)-set(prior)))
+                self.selected=prior
                 self.last_snapshot=copy.deepcopy(saved)
                 return saved
         fresh=[(s,r) for s,r in markets.items() if s in instruments and
