@@ -31,6 +31,8 @@ def reset_once(pg,store,now):
             # Do not perform a destructive reset twice if a partial old-style
             # initialization table already exists.
             counts={}
+            db.execute(f"CREATE TABLE {LEGACY_PREFIX}account_state AS TABLE pandora_win_account_state WITH DATA")
+            counts['pandora_win_account_state']=db.execute(f"SELECT count(*) AS n FROM {LEGACY_PREFIX}account_state").fetchone()['n']
             for name in TABLES:
                 suffix=name.removeprefix("pandora_win_")
                 archive=LEGACY_PREFIX+suffix
