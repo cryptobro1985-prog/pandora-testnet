@@ -2,11 +2,11 @@
 import os, unittest
 from unittest.mock import patch
 from pandora_scanner import LiveScanner
-from pandora_flow_v2_live import EXPERIMENT
+EXPERIMENT='PANDORA_PUMP_STRUCTURE_V3_400'
 
 class ScannerReconnectV3(unittest.TestCase):
  def test_frozen_snapshot_unfreezes_only_after_fresh_selected_tickers(self):
-  with patch.dict(os.environ,{"PANDORA_FLOW_V2":"1","PANDORA_PUMP_V3":"1"}):
+  with patch.dict(os.environ,{"PANDORA_FLOW_V2":"1","PANDORA_PUMP_V3":"1"}), patch("pandora_scanner.ACTIVE_FLOW_EXPERIMENT",EXPERIMENT):
    sc=LiveScanner()
    symbols=["ESPORTS","LYN","INIT","NIULAI","FOUR"]
    instruments={s:{} for s in symbols+["CHALLENGER"]}
@@ -35,7 +35,7 @@ class ScannerReconnectV3(unittest.TestCase):
    unchanged=sc.rank(instruments,lambda *_:{},(),1012)
    self.assertEqual(unchanged["selected_symbols"],symbols)
  def test_recovered_tickers_expire_and_freeze_again(self):
-  with patch.dict(os.environ,{"PANDORA_FLOW_V2":"1","PANDORA_PUMP_V3":"1"}):
+  with patch.dict(os.environ,{"PANDORA_FLOW_V2":"1","PANDORA_PUMP_V3":"1"}), patch("pandora_scanner.ACTIVE_FLOW_EXPERIMENT",EXPERIMENT):
    sc=LiveScanner();instruments={"A":{}}
    sc.restore(dict(experiment=EXPERIMENT,selected_symbols=["A"],next_refresh_at=4600,
     selection_frozen=True))
