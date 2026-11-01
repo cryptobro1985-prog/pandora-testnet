@@ -148,7 +148,21 @@ def accept_local_candles(data,history=False):
    except (KeyError,ValueError,TypeError):continue
    key=(symbol,row.get('i'),120 if row.get('i')=='1h' else 48);old=_LOCAL_CANDLE_CACHE.get(key)
    merged={int(r['t']):r for r in old[1]} if old else {}
-   if not history or t not in merged or T<wall-1000:merged[t]=dict(row)
+   if not history or t not in merged or T<wall-1000:
+    merged[t]=dict(row)
+   else:
+    # REST reconciliation for the still-open H1 candle. A late/reconnected WS
+    # subscriber can miss an earlier intrabar extreme; never let an older cached
+    # high/low hide the authoritative Bybit candle extreme.
+    prev=dict(merged[t]);fresh=dict(row)
+    try:
+     fresh['h']=str(max(float(prev['h']),float(fresh['h'])))
+     fresh['l']=str(min(float(prev['l']),float(fresh['l'])))
+     fresh['o']=prev.get('o',fresh.get('o'))
+     fresh['v']=str(max(float(prev.get('v') or 0),float(fresh.get('v') or 0)))
+    except (KeyError,TypeError,ValueError):
+     pass
+    merged[t]=fresh
    _LOCAL_CANDLE_CACHE[key]=(stamp,[merged[k] for k in sorted(merged)][-125:],wall)
  TRADE_WAKE.set()
 
