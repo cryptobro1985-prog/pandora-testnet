@@ -32,7 +32,20 @@ def main(argv=None):
     except Exception as error:
         # Connection/driver errors can contain DSNs and passwords. Report only
         # their type; never echo DATABASE_URL or the driver's raw message.
-        print("PAPER initialization failed (" + type(error).__name__ + ")", file=sys.stderr)
+        # Classify connectivity failures without printing secrets, DSNs, or
+        # driver messages (which can include user names and credentials).
+        msg=str(error).lower()
+        reason=next((label for label,terms in (
+            ("PASSWORD_AUTH",("password authentication failed",)),
+            ("DB_NOT_FOUND",("database", "does not exist")),
+            ("ROLE_NOT_FOUND",("role", "does not exist")),
+            ("DNS",("name or service not known","temporary failure in name resolution","nodename nor servname")),
+            ("NETWORK_TIMEOUT",("timeout expired","timed out","connection timeout")),
+            ("NETWORK_REFUSED",("connection refused",)),
+            ("SSL",("ssl error","certificate verify failed","ssl syscall")),
+            ("NETWORK_UNREACHABLE",("network is unreachable",)),
+        ) if all(t in msg for t in terms)),"UNCLASSIFIED")
+        print("PAPER initialization failed (" + type(error).__name__ + "; category=" + reason + ")",file=sys.stderr)
         return 1
     print(json.dumps(result, sort_keys=True))
     return 0
