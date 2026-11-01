@@ -81,7 +81,8 @@ def exit_reason(position,mark,f,state):
   confirmed=s.get("phase")=="CORRECTION_CONFIRMED" and seller_break(f)
   reason="PUMP_SUPPORT_BROKEN_SELL_VOLUME" if confirmed else "HOLD_LONG_MICRO_PULLBACK"
  else:
-  confirmed=buyer(f) and (s.get("phase")=="PUMP" or n(w(f,60).get("price_return"))>0 or
+  confirmed=buyer(f) and (s.get("phase")=="PUMP" or
+     n(w(f,30).get("price_return"))>=.002 or n(w(f,60).get("price_return"))>0 or
      (n(s.get("peak_support"))>0 and mark>n(s.get("peak_support"))))
   reason="BUY_CONTROL_RECLAIM_SHORT_EXIT" if confirmed else "HOLD_SHORT_BOUNCE"
  feat["exit_decision"]=dict(reason=reason,phase=s.get("phase"),peak=s.get("peak_price"),
