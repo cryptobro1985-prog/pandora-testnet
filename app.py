@@ -10,6 +10,7 @@ from pandora_locals import live_locals, execution_anchor, entry_structure_valid
 from pandora_win_core import mark_metrics
 from pandora_risk import RiskPolicy, plan_entry, position_guard, position_risk
 from local_order_flow import flow_profile
+from pandora_flow_v2_live import enabled as v2_enabled, current_side as v2_current_side, analysis_for_flow as v2_analysis, entry_candidate as v2_entry_candidate, exit_reason as v2_exit_reason, EXPERIMENT as V2_EXPERIMENT
 import copy,datetime,functools,hashlib,html,json,math,os,re,signal,threading,time
 import urllib.request,urllib.parse
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
@@ -604,30 +605,30 @@ def pandora_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution_context=
    except Exception:pass
   return False
  if symbol not in set(pandora_trade_symbols()) or int(side or 0) not in (-1,1):return reject("ENTRY_STATE_REVALIDATION_FAILED")
- if not pandora_confirmed_h1(analysis):return reject("H1_NOT_CONFIRMED")
+ if not v2_enabled() and not pandora_confirmed_h1(analysis):return reject("H1_NOT_CONFIRMED")
  # Fail closed for NEW risk until this runtime has revalidated the current H1 book.
  # Hydrated/persisted anchors may manage existing risk but may not create fresh risk.
- if not pandora_runtime_h1_verified(symbol,analysis):return reject("CURRENT_CLOSED_H1_NOT_VERIFIED")
+ if not v2_enabled() and not pandora_runtime_h1_verified(symbol,analysis):return reject("CURRENT_CLOSED_H1_NOT_VERIFIED")
  if S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or not analysis.get("ready"):return reject("ENTRY_STATE_REVALIDATION_FAILED")
- if not analysis.get("h1_direction_anchor") or int(analysis.get("entry_side") or 0)!=int(side):return reject("ENTRY_STATE_REVALIDATION_FAILED")
- if analysis.get("entry_blocked"):return reject("ENTRY_STATE_REVALIDATION_FAILED")
+ if not v2_enabled() and (not analysis.get("h1_direction_anchor") or int(analysis.get("entry_side") or 0)!=int(side)):return reject("ENTRY_STATE_REVALIDATION_FAILED")
+ if not v2_enabled() and analysis.get("entry_blocked"):return reject("ENTRY_STATE_REVALIDATION_FAILED")
  if WIN is not None and symbol not in set((S.get('bybit_discovery') or {}).get('selected_symbols') or []):return reject('TOKEN_NOT_SELECTED')
  if (S.get('bybit_discovery') or {}).get('selection_frozen'):return reject('SCANNER_OBSERVATIONS_UNAVAILABLE')
- if analysis.get('live_structure_fresh') is False:return reject('LOCAL_OBSERVATIONS_STALE')
+ if not v2_enabled() and analysis.get('live_structure_fresh') is False:return reject('LOCAL_OBSERVATIONS_STALE')
  # Recheck at allocation time: scanning many markets and database writes take time.
  # Revalidate the H1 side plus fresh executed-flow executed control before adding risk.
  stamp=time.time()
  flow=MARKET_OBS.flow_context(symbol,stamp)
- selection=(pandora_flow_entry_candidate(symbol,analysis,execution_context,flow,stamp) if entry_kind=="REENTRY"
-            else pandora_flow_initial_entry_candidate(symbol,analysis,execution_context,flow,stamp))
+ selection=(v2_entry_candidate(symbol,flow,last_exit_event=((watch or {}).get("context") or {}).get("last_opposite_trade_epoch",0)) if v2_enabled() else (pandora_flow_entry_candidate(symbol,analysis,execution_context,flow,stamp) if entry_kind=="REENTRY" else pandora_flow_initial_entry_candidate(symbol,analysis,execution_context,flow,stamp)))
+ if v2_enabled() and selection.get("side")!=int(side):return reject("FLOW_CONTROL_SIDE_CHANGED")
  if not selection["eligible"]:return reject(selection["reason"])
  with LOCK:current_anchor=copy.deepcopy(S.get("pandora_win_h1_direction",{}).get(symbol))
- if current_anchor and (int(current_anchor.get("entry_side") or 0)!=int(side) or
+ if not v2_enabled() and current_anchor and (int(current_anchor.get("entry_side") or 0)!=int(side) or
      int(current_anchor.get("signal_candle_time") or 0)!=int(analysis.get("signal_candle_time") or 0)):return reject("ENTRY_STATE_REVALIDATION_FAILED")
  price=current_entry_price(symbol)
  if price is None:return reject("CURRENT_SYMBOL_MARK_OR_CHECKPOINT_UNAVAILABLE")
- if not entry_structure_valid(analysis,price,int(side)):return reject("STRUCTURE_REFERENCE_BROKEN_BY_MARK")
- if entry_kind=="REENTRY":
+ if not v2_enabled() and not entry_structure_valid(analysis,price,int(side)):return reject("STRUCTURE_REFERENCE_BROKEN_BY_MARK")
+ if entry_kind=="REENTRY" and not v2_enabled():
   if not watch or int(watch.get("side") or 0)!=int(side):return reject("ENTRY_STATE_REVALIDATION_FAILED")
   if int(analysis.get("entry_side") or 0)==-int(side):return reject("ENTRY_STATE_REVALIDATION_FAILED")
   with LOCK:live_watch=copy.deepcopy(S.get("pandora_watch",{}).get(symbol))
@@ -652,17 +653,17 @@ def pandora_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution_context=
  # Recheck the actual tape after planning. A historical BUY majority must
  # never admit LONG if current buying has stopped while allocation ran.
  latest_flow=MARKET_OBS.flow_context(symbol,time.time())
- latest_selection=(pandora_flow_entry_candidate(symbol,analysis,execution_context,latest_flow,time.time()) if entry_kind=='REENTRY'
-                   else pandora_flow_initial_entry_candidate(symbol,analysis,execution_context,latest_flow,time.time()))
+ latest_selection=(v2_entry_candidate(symbol,latest_flow,last_exit_event=((watch or {}).get('context') or {}).get('last_opposite_trade_epoch',0)) if v2_enabled() else (pandora_flow_entry_candidate(symbol,analysis,execution_context,latest_flow,time.time()) if entry_kind=='REENTRY' else pandora_flow_initial_entry_candidate(symbol,analysis,execution_context,latest_flow,time.time())))
+ if v2_enabled() and latest_selection.get('side')!=int(side):return reject('FLOW_CONTROL_CHANGED_DURING_ALLOCATION')
  if not latest_selection.get('eligible'):return reject('EXECUTED_CONTROL_CHANGED_DURING_ALLOCATION')
  with LOCK:latest_anchor=copy.deepcopy(S.get('_pandora_analysis',{}).get(symbol) or {})
- if latest_anchor and (latest_anchor.get('entry_blocked') or latest_anchor.get('live_structure_fresh') is False or
+ if not v2_enabled() and latest_anchor and (latest_anchor.get('entry_blocked') or latest_anchor.get('live_structure_fresh') is False or
      int(latest_anchor.get('entry_side') or 0)!=int(side) or
      int(latest_anchor.get('signal_candle_time') or 0)!=int(analysis.get('signal_candle_time') or 0)):
   return reject('LOCAL_CHANGED_DURING_ALLOCATION')
  latest_price=current_entry_price(symbol)
  if latest_price is None:return reject('CURRENT_SYMBOL_MARK_OR_CHECKPOINT_UNAVAILABLE')
- if not entry_structure_valid(latest_anchor or analysis,latest_price,int(side)):return reject('STRUCTURE_REFERENCE_BROKEN_BY_MARK')
+ if not v2_enabled() and not entry_structure_valid(latest_anchor or analysis,latest_price,int(side)):return reject('STRUCTURE_REFERENCE_BROKEN_BY_MARK')
  if latest_price!=price:
   # An active market can move while PostgreSQL/allocation is in progress.
   # Reprice once from the fresh mark and recompute exposure instead of rejecting
@@ -717,7 +718,7 @@ def pandora_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution_context=
      values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(symbol) do nothing returning symbol""",
      (symbol,int(side),price,notional,margin,leverage,opened,epoch,origin_signal,json.dumps(features,default=str))).fetchone()
    if not row:raise psycopg.Rollback()
-   if entry_kind=="REENTRY":db.execute("delete from pandora_win_watchlist where symbol=%s",(symbol,))
+   if entry_kind=="REENTRY" or v2_enabled():db.execute("delete from pandora_win_watchlist where symbol=%s",(symbol,))
    db.execute("insert into pandora_win_audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'pandora_trade_opened',%s::jsonb)",
     (now(),json.dumps({"strategy":PANDORA_WIN_NAME,"symbol":symbol,"side":int(side),"entry_kind":entry_kind,
       "entry":price,"reason":selection["reason"],"signal_candle_time":origin_signal,
@@ -727,7 +728,7 @@ def pandora_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution_context=
  if not row:return reject("POSITION_WRITE_CONFLICT")
  with LOCK:
   S.setdefault("pandora_win_positions",{})[symbol]=pos
-  if entry_kind=="REENTRY":S.setdefault("pandora_watch",{}).pop(symbol,None)
+  if entry_kind=="REENTRY" or v2_enabled():S.setdefault("pandora_watch",{}).pop(symbol,None)
  log_learning_decision("PANDORA_WIN:%s:%s:%s:%s"%(symbol,entry_kind,claim_token,int(side)),
    PANDORA_WIN_NAME,symbol,side,"OPEN" if entry_kind!="REENTRY" else "REENTRY",
    "confirmed_local_entry",price,None,leverage,features,opened)
@@ -840,10 +841,10 @@ def pandora_mark_positions(prices):
    if live and live.get("opened")==pos.get("opened"):S["pandora_win_positions"][symbol]=updated
   with LOCK:anchor=copy.deepcopy(S.get('_pandora_analysis',{}).get(symbol) or {})
   flow=MARKET_OBS.flow_context(symbol,time.time())
-  opposite_local=bool(pandora_runtime_h1_verified(symbol,anchor)
+  opposite_local=bool(not v2_enabled() and pandora_runtime_h1_verified(symbol,anchor)
    and int(anchor.get('entry_side') or 0)==-int(pos['side'])
    and int(anchor.get('signal_candle_time') or 0)>int(pos.get('signal_candle_time') or 0))
-  reason=pandora_flow_pressure_exit(updated,None,float(mark),flow,opposite_local_confirmed=opposite_local)
+  reason=(v2_exit_reason(updated,float(mark),flow) if v2_enabled() else pandora_flow_pressure_exit(updated,None,float(mark),flow,opposite_local_confirmed=opposite_local))
   with LOCK:
    if S.get("pandora_win_positions",{}).get(symbol,{}).get("opened")==pos.get("opened"):
     S["pandora_win_positions"][symbol]=updated
@@ -864,6 +865,22 @@ def pandora_mark_positions(prices):
 
 @account_mutation
 def pandora_flow_fast_entries(prices):
+ if v2_enabled():
+  for symbol in tuple((S.get('bybit_discovery') or {}).get('selected_symbols') or ()):
+   with LOCK:
+    if symbol in S.get('pandora_win_positions',{}):continue
+    watch=copy.deepcopy(S.get('pandora_watch',{}).get(symbol))
+   mark=prices.get(symbol)
+   if mark is None or current_entry_price(symbol) is None:continue
+   flow=MARKET_OBS.flow_context(symbol,time.time())
+   last_exit=((watch or {}).get('context') or {}).get('last_opposite_trade_epoch',0)
+   candidate=v2_entry_candidate(symbol,flow,last_exit_event=last_exit)
+   if not candidate['eligible']:continue
+   side=candidate['side']
+   analysis=v2_analysis(side,flow,mark)
+   kind='REENTRY' if watch and int(watch.get('side') or 0)==side else 'ORDER_FLOW'
+   pandora_open(symbol,side,analysis,kind,{'v2_event_epoch':candidate['event_epoch']},watch)
+  return
  # Pandora Win execution:
  # confirmed H1 local owns direction; current top-five pump supplies the universe.
  # Enter as soon as real Bybit executed flow strongly controls that H1 side.
@@ -1278,7 +1295,7 @@ def build_dashboard_snapshot(history=None):
   flow=MARKET_OBS.flow_context(symbol)
   anchor=state.get('_pandora_analysis',{}).get(symbol) or state['pandora_win_h1_direction'].get(symbol) or {}
   details[symbol]={'h1_local':anchor,'flow_context':flow,'last_action':(state.get('pandora_executor_rejections',{}).get(symbol) or {}).get('reason')}
- primary={'starting_equity':500.,'realized_equity':state['pandora_equity'],
+ primary={'starting_equity':400. if v2_enabled() else 500.,'realized_equity':state['pandora_equity'],
   'realized_pnl':state['pandora_realized_pnl'],'unrealized_pnl':unreal if all_marks else None,
   'total_equity':state['pandora_equity']+unreal if all_marks else None,
   'open_positions':positions,'closed_trades':history.get('trades',[]),'token_totals':history.get('token_totals'),
