@@ -16,17 +16,19 @@ def buyer(f):
   and n(a.get("trade_count"))>=2 and n(b.get("trade_count"))>=4
   and n(a.get("imbalance"))>=.20 and n(b.get("imbalance"))>=.12
   and n(b.get("price_return"))>0 and not f.get("buy_absorbed"))
-def seller(f):
- a,b,c=w(f,15),w(f,30),w(f,60)
+def seller_break(f):
+ a,b=w(f,15),w(f,30)
  return bool(f and f.get("trade_data_fresh") and f.get("evidence_ready") and a.get("complete") and b.get("complete")
   and n(a.get("trade_count"))>=3 and n(b.get("trade_count"))>=6
   and n(a.get("imbalance"))<=-.25 and n(b.get("imbalance"))<=-.20
   and n(a.get("sell_volume"))>=1.7*n(a.get("buy_volume"))
   and n(b.get("sell_volume"))>n(b.get("buy_volume"))
-  and n(b.get("price_return"))<0 and n(c.get("price_return"))<0
+  and n(b.get("price_return"))<0 and not f.get("sell_absorbed"))
+def seller(f):
+ a,c=w(f,15),w(f,60)
+ return bool(seller_break(f) and n(c.get("price_return"))<0
   and n(c.get("imbalance"))<=-.10
-  and (n(c.get("volume_velocity"))<=0 or n(a.get("volume_velocity"))>=.7*n(c.get("volume_velocity")))
-  and not f.get("sell_absorbed"))
+  and (n(c.get("volume_velocity"))<=0 or n(a.get("volume_velocity"))>=.7*n(c.get("volume_velocity"))))
 def advance(old,f,mark):
  s=copy.deepcopy(old or {})
  if not f or not f.get("trade_data_fresh") or not mark or mark<=0:return s
@@ -35,7 +37,7 @@ def advance(old,f,mark):
  price=float(mark);a,b,c=w(f,15),w(f,30),w(f,60)
  peak=n(s.get("peak_price"));support=n(s.get("peak_support"))
  rising=n(c.get("price_return"))>0 and n(c.get("imbalance"))>0
- buy=buyer(f);sell=seller(f)
+ buy=buyer(f);sell=seller_break(f)
  s.update(last_event_epoch=e,observed_price=price,buy_confirmed=buy,sell_confirmed=sell)
  if not peak or price>peak:
   s.update(phase="PUMP" if (rising or buy or peak) else "OBSERVING",
@@ -76,7 +78,7 @@ def exit_reason(position,mark,f,state):
  if e<=n(feat.get("v3_last_exit_event")):return None
  feat["v3_last_exit_event"]=e
  if int(position["side"])>0:
-  confirmed=s.get("phase")=="CORRECTION_CONFIRMED" and seller(f)
+  confirmed=s.get("phase")=="CORRECTION_CONFIRMED" and seller_break(f)
   reason="PUMP_SUPPORT_BROKEN_SELL_VOLUME" if confirmed else "HOLD_LONG_MICRO_PULLBACK"
  else:
   confirmed=buyer(f) and (s.get("phase")=="PUMP" or n(w(f,60).get("price_return"))>0 or
