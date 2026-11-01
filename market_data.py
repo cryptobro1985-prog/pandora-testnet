@@ -26,7 +26,7 @@ class RollingMarketData:
 
     @staticmethod
     def _new_symbol(epoch):
-        return {'since':epoch,'seen':set(),'seen_queue':deque(),'latest_trade':None,'first_trade':None,'levels':deque(maxlen=2),'trades':deque(),'overflow_until':None,'revision':0,'flow_cache':None}
+        return {'since':epoch,'seen':set(),'seen_queue':deque(),'latest_trade':None,'latest_trade_id':None,'latest_receive_epoch':None,'latest_trade_price':None,'latest_trade_quantity':None,'first_trade':None,'levels':deque(maxlen=2),'trades':deque(),'overflow_until':None,'revision':0,'flow_cache':None}
 
     def mark_connected(self,epoch=None,symbols=None,owner=None):
         epoch=time.time() if epoch is None else float(epoch);name='default' if owner is None else str(owner)
@@ -103,6 +103,10 @@ class RollingMarketData:
                     levels.append({'price':px,'buy':0.,'sell':0.,'count':0,'first_epoch':stamp})
                 level=levels[-1];level['buy' if side=='B' else 'sell']+=notional;level['count']+=1
                 state['latest_trade']=stamp
+                state['latest_trade_id']=str(ident)
+                state['latest_receive_epoch']=received
+                state['latest_trade_price']=px
+                state['latest_trade_quantity']=qty
                 previous_event=state.get('decision_epoch')
                 state['decision_epoch']=stamp if previous_event is None else max(stamp,math.nextafter(previous_event,float('inf')))
                 state['revision']+=1
@@ -128,7 +132,10 @@ class RollingMarketData:
             if state is None:return out
             fresh=any(str(symbol) in symbols and -1<=epoch-self._owner_heartbeats.get(owner,float('-inf'))<=self.freshness_seconds for owner,symbols in self._owners.items())
             latest=state['latest_trade'];age=epoch-latest if latest is not None else None
-            out.update(latest_trade_epoch=latest,latest_trade_age_seconds=age,decision_event_epoch=state.get('decision_epoch'))
+            out.update(latest_trade_epoch=latest,latest_trade_age_seconds=age,decision_event_epoch=state.get('decision_epoch'),
+                       latest_exchange_trade_id=state.get('latest_trade_id'),latest_receive_epoch=state.get('latest_receive_epoch'),
+                       latest_trade_price=state.get('latest_trade_price'),latest_trade_quantity=state.get('latest_trade_quantity'),
+                       accepted_revision=state.get('revision'))
             if not fresh or state['overflow_until'] is not None or age is None or not 0<=age<=self.freshness_seconds:return out
             trades=state['trades']
             while trades and epoch-trades[0][0]>610: trades.popleft()
