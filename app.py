@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 from pandora_api import API_VERSION, openapi, json_safe
 from pandora_decisions import entry_status, startup_snapshot
 from pandora_bootstrap import HistoryBootstrap
+from pandora_beda_launcher import BEDA
 from pandora_runtime import PandoraRuntime
 from pandora_scanner import ticker_worker
 from pandora_locals import live_locals, execution_anchor, entry_structure_valid
@@ -1431,7 +1432,8 @@ def build_dashboard_snapshot(history=None):
   'pandora_symbols':list(pandora_runtime_symbols()),
   'discovery':state.get('bybit_discovery',{}),
   'health':health_state(),'sources':state['sources'],'pandora_entry_diagnostics':state.get('pandora_entry_diagnostics',{}),
-  'history_error':history.get('error'),'history_updated_at':history.get('at'),'positions':[],'snapshot_at':now()}
+  'history_error':history.get('error'),'history_updated_at':history.get('at'),'positions':[],
+  'beda':BEDA.snapshot(),'snapshot_at':now()}
 
 def dashboard():
  # Serialize/cache concurrent HTTP readers; a slow phone must not multiply
@@ -1518,7 +1520,8 @@ def main():
    SHUTDOWN.wait(1)
  jobs=[('lease',engine_coordinator),('contracts',bybit_instruments_loop),('discovery',bybit_volatility_discovery_loop),('trades',market_trade_stream),('quotes',market_aux_stream),
   *((('h1_history',market_history_bootstrap),('h1_scan',pandora_loop)) if not v2_enabled() else ()),('execution',pandora_risk_loop),
-  ('checkpoint',pandora_live_state_loop),('history',dashboard_history_loop),('keepalive',render_keepalive_loop)]
+  ('checkpoint',pandora_live_state_loop),('history',dashboard_history_loop),('keepalive',render_keepalive_loop),
+  ('pandora_beda',lambda:BEDA.run(SHUTDOWN))]
  workers=[threading.Thread(target=supervise,args=job,daemon=True,name=job[0]) for job in jobs]
  for worker in workers:worker.start()
  try:server.serve_forever()
