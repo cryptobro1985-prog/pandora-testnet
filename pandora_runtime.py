@@ -327,6 +327,8 @@ class PandoraRuntime:
         if symbol not in selected and pos is None:
             if symbol in a.S.get('pandora_watch',{}):
                 a._pandora_watch_clear(symbol,'token_rotated_out_no_open_position')
+            if self.tokens.get(symbol,{}).get('state')!='ROTATE_OUT':
+                self.transition(symbol,'ROTATE_OUT','ROTATE_OUT','not_in_hourly_top5_and_no_position',{'flow_v2':True})
             return
         flow=a.MARKET_OBS.flow_context(symbol)
         mark=a.fresh_mark_price(symbol)
