@@ -20,7 +20,6 @@ from psycopg.rows import dict_row
 from accounting import paper_pnl
 from engine_store import EngineStore,LeaseLost
 from market_data import RollingMarketData
-from pandora_raw_flow_recorder import RawFlowRecorder,raw_trade_page,capture_event_page
 from bybit_market_stream import run_bybit_stream
 from h1_structure import analyze as analyze_pandora_h1,pending_extreme as local_pending_extreme,update_path as update_position_path,POLICY as PANDORA_LOCAL_POLICY
 from local_order_flow import POLICY as PANDORA_FLOW_POLICY,entry_candidate as pandora_flow_entry_candidate,initial_entry_candidate as pandora_flow_initial_entry_candidate,pressure_exit as pandora_flow_pressure_exit,update_watch as pandora_flow_update_watch,reentry_ready as pandora_flow_reentry_ready
@@ -50,7 +49,6 @@ def publication_epoch(value):
 
 def pg():return psycopg.connect(os.environ['DATABASE_URL'],autocommit=True,row_factory=dict_row,connect_timeout=5)
 STORE=EngineStore(pg)
-RAW_RECORDER=RawFlowRecorder(pg)
 WIN=None
 HISTORY_BOOTSTRAP=None
 DASHBOARD_LOCK=threading.RLock()
@@ -102,7 +100,6 @@ def pinit():
    for query in SCHEMA:db.execute(query)
    db.execute('insert into pandora_win_account_state(id,equity,realized_pnl,started_at,updated_at) values(1,500,0,%s,%s) on conflict(id) do nothing',(now(),now()))
  EngineStore(pg).migrate()
- RAW_RECORDER.migrate()
  restore_state()
  with DASHBOARD_LOCK:_DASHBOARD_CACHE.clear()
  global WIN
@@ -1265,15 +1262,12 @@ def _stream_group(trades):
    candle_filter=lambda symbol:stable_shard(symbol)==index,
    subscribe_trades=trades,on_trade_mids=quote if trades else None,
    on_mids=None if trades else quote,on_candles=None if trades or v2_enabled() else accept_local_candles,
-   candle_symbols=() if trades or v2_enabled() else symbols,worker_name=('trade-' if trades else 'quotes-')+str(index),
-   on_accepted_trades=RAW_RECORDER.ingest if trades else None,
-   on_capture_event=RAW_RECORDER.notice if trades else None)
+   candle_symbols=() if trades or v2_enabled() else symbols,worker_name=('trade-' if trades else 'quotes-')+str(index))
  threads=[threading.Thread(target=worker,args=(i,),daemon=True) for i in range(count)]
  for thread in threads:thread.start()
  SHUTDOWN.wait()
  for thread in threads:thread.join(3)
 
-def raw_flow_capture_loop():RAW_RECORDER.run(SHUTDOWN)
 def market_trade_stream():_stream_group(True)
 def market_aux_stream():_stream_group(False)
 
@@ -1299,7 +1293,7 @@ def health_state():
   'engine_active':active,'engine_error':S.get('engine_error'),'mode':'PAPER_ONLY','version':os.getenv('RENDER_GIT_COMMIT','local-unpublished'),
   'token_readiness':tokens,'checkpoint_age_seconds':checkpoint_age,
   'market_age_seconds':stamp-S['_last_poll_epoch'] if S['_last_poll_epoch'] else None,
-  'raw_flow_capture':RAW_RECORDER.status()}
+}
 
 
 def dashboard_history_loop():
@@ -1400,23 +1394,6 @@ def build_dashboard_snapshot(history=None):
    token['action_reason']=token['decision']['message']
    token['last_action']=token['decision']['action']
  primary['tokens']=token_rows
- primary['raw_flow_capture']=RAW_RECORDER.status()
- accepted_by_flow_engine=MARKET_OBS.stats().get('accepted',0)
- primary['raw_flow_capture']['source_accepted_count']=accepted_by_flow_engine
- primary['raw_flow_capture']['unforwarded_count']=max(0,accepted_by_flow_engine-primary['raw_flow_capture']['received'])
- if primary['raw_flow_capture']['unforwarded_count']:
-  primary['raw_flow_capture']['capture_complete']=False
- stream_states={k:v for k,v in state.get('sources',{}).items() if k.startswith('MarketTradeStream:')}
- primary['raw_flow_capture']['stream_quality']={
-  k:{field:v.get(field) for field in ('ok','error','sequence_regressions','stale_trades_rejected',
-     'subscription_confirmed','fresh_symbols_15s','accepted_trades','reconnect_backoff_seconds')}
-  for k,v in stream_states.items()}
- primary['raw_flow_capture']['source_stale_rejected']=sum(int(v.get('stale_trades_rejected') or 0) for v in stream_states.values())
- primary['raw_flow_capture']['source_sequence_regressions']=sum(int(v.get('sequence_regressions') or 0) for v in stream_states.values())
- for token in token_rows:
-  symbol=token['symbol']
-  token['raw_capture_last_exchange_ms']=primary['raw_flow_capture']['latest_by_symbol'].get(symbol)
-  token['raw_capture_last_saved_exchange_ms']=primary['raw_flow_capture']['persisted_by_symbol'].get(symbol)
  primary['flow_v2']=v2_enabled()
  primary['strategy_name']=PANDORA_WIN_NAME
  primary['experiment_id']=V2_EXPERIMENT if v2_enabled() else PANDORA_WIN_NAME
@@ -1492,12 +1469,9 @@ class Handler(BaseHTTPRequestHandler):
      self.send(200,render_history(result),'text/html; charset=utf-8')
     else:self.send(200,result)
    elif path=='/api/pandora/events':self.send(200,pandora_event_page(args.get('before',[None])[0],int(args.get('limit',['100'])[0])))
-   elif path=='/api/pandora/flow/trades':self.send(200,raw_trade_page(pg,
-     symbol=args.get('symbol',[None])[0],before_id=args.get('before',[None])[0],
-     limit=int(args.get('limit',['100'])[0])))
-   elif path=='/api/pandora/flow/events':self.send(200,capture_event_page(pg,
-     before_id=args.get('before',[None])[0],limit=int(args.get('limit',['100'])[0])))
-   elif path=='/api/pandora/flow/status':self.send(200,RAW_RECORDER.status())
+   elif path=='/api/pandora/flow/trades':self.send(410,{'enabled':False,'reason':'RAW_RECORDER_DISABLED'})
+   elif path=='/api/pandora/flow/events':self.send(410,{'enabled':False,'reason':'RAW_RECORDER_DISABLED'})
+   elif path=='/api/pandora/flow/status':self.send(200,{'enabled':False,'reason':'RAW_RECORDER_DISABLED','writes_active':False})
    else:self.send(404,{'error':'not_found'})
   except (ValueError,TypeError):self.send(400,{'error':'invalid_request'})
   except Exception:self.send(503,{'error':'temporarily_unavailable','history_preserved':True})
@@ -1542,7 +1516,7 @@ def main():
    except Exception as error:
     with LOCK:S['sources'][label]={'ok':False,'last_check':now(),'error':type(error).__name__+':'+str(error)[:160]}
    SHUTDOWN.wait(1)
- jobs=[('lease',engine_coordinator),('contracts',bybit_instruments_loop),('discovery',bybit_volatility_discovery_loop),('raw_flow_recorder',raw_flow_capture_loop),('trades',market_trade_stream),('quotes',market_aux_stream),
+ jobs=[('lease',engine_coordinator),('contracts',bybit_instruments_loop),('discovery',bybit_volatility_discovery_loop),('trades',market_trade_stream),('quotes',market_aux_stream),
   *((('h1_history',market_history_bootstrap),('h1_scan',pandora_loop)) if not v2_enabled() else ()),('execution',pandora_risk_loop),
   ('checkpoint',pandora_live_state_loop),('history',dashboard_history_loop),('keepalive',render_keepalive_loop)]
  workers=[threading.Thread(target=supervise,args=job,daemon=True,name=job[0]) for job in jobs]
