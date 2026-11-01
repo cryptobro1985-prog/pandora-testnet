@@ -16,7 +16,7 @@ def package(output,baseline=None):
     candidates=[ROOT/name for name in command.stdout.decode().split('\0') if name] if command.returncode==0 else ROOT.rglob('*')
     files={}
     for path in candidates:
-        if not path.is_file() or path.is_symlink():continue
+        if not path.is_file() or path.is_symlink() or path.name == 'MANIFEST.json':continue
         relative=path.relative_to(ROOT)
         if any(part in ('.git','.venv','__pycache__','node_modules') or part.startswith('.env') for part in relative.parts):continue
         if any(part.startswith('.') and part not in ('.github','.gitignore','.dockerignore') for part in relative.parts):continue
@@ -30,12 +30,12 @@ def package(output,baseline=None):
               'production_database_included':False,'files':{name:hashlib.sha256(data).hexdigest() for name,data in sorted(files.items())}}
     try:
         with zipfile.ZipFile(output,'x',compression=zipfile.ZIP_DEFLATED,compresslevel=9) as archive:
-            for name,data in sorted(files.items()):archive.writestr('PANDORA_PAPER/'+name,data)
-            archive.writestr('PANDORA_PAPER/MANIFEST.json',json.dumps(manifest,indent=2)+'\n')
+            for name,data in sorted(files.items()):archive.writestr('PANDORA_WIN/'+name,data)
+            archive.writestr('PANDORA_WIN/MANIFEST.json',json.dumps(manifest,indent=2)+'\n')
         with zipfile.ZipFile(output) as archive:
             if archive.testzip() is not None:raise RuntimeError('ZIP integrity check failed')
             for name,digest in manifest['files'].items():
-                if hashlib.sha256(archive.read('PANDORA_PAPER/'+name)).hexdigest()!=digest:
+                if hashlib.sha256(archive.read('PANDORA_WIN/'+name)).hexdigest()!=digest:
                     raise RuntimeError('archive hash mismatch: '+name)
     except Exception:
         output.unlink(missing_ok=True)

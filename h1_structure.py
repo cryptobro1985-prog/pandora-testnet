@@ -1,15 +1,13 @@
-"""H1 local-extreme direction with M15 execution and recovery re-entry.
+"""Causal closed-H1 direction and shared candle/path helpers.
 
-Pure signal logic only. No exchange orders, credentials, networking or persistence.
-Confirmed H1 extrema define the direction until the opposite H1 extreme.
-M15 pressure manages protective exits and same-direction recovery entries.
-A mature partial M15 candle plus live flow can protect earned profit before the next pivot.
+The active strategy uses confirmed H1 anchors and executed-trade structure.
+M15 helpers remain available for comparison engines; they do not gate entries.
 """
 
 import math
 import statistics
 
-POLICY = "local_swing_h1_fractal_m15_execution_v12"
+POLICY = "closed_h1_causal_structure"
 SYMBOL = "HYPE"  # backwards-compatible primary symbol
 SYMBOLS = ("HYPE", "NEAR")
 INTERVAL = "1h"
@@ -76,193 +74,135 @@ def _ret(a, b):
 
 
 def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL, require_fresh=True):
+    """Causal H1 swing structure; no future bars or percent retracement gate.
+
+    An extreme exceeds the preceding four closed hours. A later closed bar
+    confirms it only with a lower high (high), or higher low (low). An
+    ambiguous simultaneous confirmation never chooses a direction. Ties
+    extend the candidate. Confirmation records never move to an earlier time.
+    """
     candles = completed_candles(rows, now_ms)
+    base = {"ready": False, "symbol": symbol, "policy": POLICY,
+            "closed_candles": len(candles)}
     if len(candles) < PIVOT_LOOKBACK + 2:
-        return {"ready": False, "reason": "insufficient_closed_h1_candles",
-                "closed_candles": len(candles), "policy": POLICY, "symbol": symbol}
+        return {**base, "reason": "insufficient_closed_h1_candles"}
     if require_fresh and float(now_ms) - candles[-1]["T"] > 3_600_000 + 120_000:
-        return {"ready": False, "reason": "stale_h1_history", "policy": POLICY, "symbol": symbol}
-    recent = candles[-(PIVOT_LOOKBACK+2):]
-    if any(abs(b["t"]-a["t"]-3_600_000)>1000 for a,b in zip(recent,recent[1:])):
-        return {"ready": False, "reason": "gapped_h1_history", "policy": POLICY, "symbol": symbol}
-
-    x = candles[-1]
-    p = candles[-2]
-    prior = candles[-2-PIVOT_LOOKBACK:-2]
-    prior_lows = [z["l"] for z in prior]
-    prior_highs = [z["h"] for z in prior]
-
-    local_low = (
-        p["l"] <= min(prior_lows)
-        and x["l"] > p["l"]
-    )
-    local_high = (
-        p["h"] >= max(prior_highs)
-        and x["h"] < p["h"]
-    )
-
-    closes = [z["c"] for z in candles]
-    last_ret = _ret(closes[-2], closes[-1])
-    prev_ret = _ret(closes[-3], closes[-2])
-    mom3 = _ret(closes[-4], closes[-1])
-    prev_mom3 = _ret(closes[-5], closes[-2])
-    body = abs(x["c"] - x["o"])
-    rng = max(x["h"] - x["l"], 1e-12)
-    body_fraction = body / rng
-
-    long_weak_score = 0
-    short_weak_score = 0
-    if last_ret <= 0:
-        long_weak_score += 1
-    if last_ret >= 0:
-        short_weak_score += 1
-    if prev_mom3 > 0 and mom3 < prev_mom3 * 0.55:
-        long_weak_score += 1
-    if prev_mom3 < 0 and mom3 > prev_mom3 * 0.55:
-        short_weak_score += 1
-    if x["c"] < x["o"] and body_fraction >= 0.35:
-        long_weak_score += 1
-    if x["c"] > x["o"] and body_fraction >= 0.35:
-        short_weak_score += 1
-    if prev_ret > 0 and last_ret < prev_ret * 0.25:
-        long_weak_score += 1
-    if prev_ret < 0 and last_ret > prev_ret * 0.25:
-        short_weak_score += 1
-
-    entry_side = 1 if local_low and not local_high else (-1 if local_high and not local_low else 0)
-    pivot_type = "LOCAL_LOW" if entry_side == 1 else ("LOCAL_HIGH" if entry_side == -1 else None)
-    pivot_price = p["l"] if entry_side == 1 else (p["h"] if entry_side == -1 else None)
-
-    return {
-        "ready": True,
-        "policy": POLICY,
-        "symbol": symbol,
-        "interval": INTERVAL,
-        "signal_candle_time": x["t"],
-        "signal_candle_close_time": x["T"],
-        "pivot_candle_time": p["t"],
-        "pivot_type": pivot_type,
-        "pivot_price": pivot_price,
-        "entry_side": entry_side,
-        "local_low": local_low,
-        "local_high": local_high,
-        "long_weakening": long_weak_score >= 2,
-        "short_weakening": short_weak_score >= 2,
-        "long_weak_score": long_weak_score,
-        "short_weak_score": short_weak_score,
-        "last_h1_return": last_ret,
-        "previous_h1_return": prev_ret,
-        "momentum_3h": mom3,
-        "previous_momentum_3h": prev_mom3,
-        "confirmation_close": x["c"],
-        "closed_candles": len(candles),
-    }
+        return {**base, "reason": "stale_h1_history"}
+    if any(b["t"]-a["t"] != 3_600_000 for a,b in zip(candles,candles[1:])):
+        return {**base, "reason": "gapped_h1_history"}
+    high = low = anchor = None
+    for i, bar in enumerate(candles):
+        confirmations = []
+        if high is not None:
+            if bar["h"] >= high["h"]:
+                high = None
+            else:
+                confirmations.append((-1, high))
+                high = None
+        if low is not None:
+            if bar["l"] <= low["l"]:
+                low = None
+            else:
+                confirmations.append((1, low))
+                low = None
+        # Never guess the ordering of two directions inside one hourly candle.
+        if len(confirmations) == 1:
+            side, pivot = confirmations[0]
+            if anchor is None or pivot["t"] > anchor["pivot_candle_time"]:
+                anchor = {
+                    "entry_side": side, "pivot_type": "LOCAL_LOW" if side > 0 else "LOCAL_HIGH",
+                    "pivot_price": pivot["l"] if side > 0 else pivot["h"],
+                    "pivot_candle_time": pivot["t"], "signal_candle_time": bar["t"],
+                    "signal_candle_close_time": bar["T"], "confirmation_close": bar["c"],
+                    "confirmation_bars": (bar["t"]-pivot["t"])//3_600_000,
+                    "pivot_confirmation_policy": "closed_h1_higher_low_after_extreme" if side > 0
+                        else "closed_h1_lower_high_after_extreme",
+                    "confirmation_evidence": {"pivot_high": pivot["h"], "pivot_low": pivot["l"],
+                        "confirm_high": bar["h"], "confirm_low": bar["l"],
+                        "preceding_hours": PIVOT_LOOKBACK},
+                    "local_low": side > 0, "local_high": side < 0,
+                }
+        if i >= PIVOT_LOOKBACK:
+            prior = candles[i-PIVOT_LOOKBACK:i]
+            if bar["h"] >= max(x["h"] for x in prior):
+                high = bar
+            if bar["l"] <= min(x["l"] for x in prior):
+                low = bar
+    return {**base, "ready": True, "interval": INTERVAL,
+            "entry_side": 0, "pivot_type": None, "pivot_price": None,
+            "long_weakening": False, "short_weakening": False,
+            **(anchor or {})}
 
 
 def analyze(rows, now_ms, symbol=SYMBOL):
-    """Last causally confirmed H1 extreme, held across subsequent H1 candles.
+    """Last causally confirmed H1 swing, held until an opposite confirmed swing.
 
-    A pivot is known only when its following H1 candle has closed. Reconstructing
-    the latest pivot from closed history also keeps the bias stable after restart.
+    A fresh high/low is only a candidate. It may keep extending for many H1 bars.
+    The regime changes only after a subsequent CLOSED H1 candle confirms
+    the opposite local extreme. Reconstructing the latest confirmed swing from history
+    keeps the bias stable after restart and prevents in-the-moment flip-flops.
     """
     latest = _analyze_h1_pivot(rows, now_ms, symbol)
     if not latest.get("ready"):
         return latest
     candles = completed_candles(rows, now_ms)
-    anchor = None
-    for end in range(PIVOT_LOOKBACK + 2, len(candles) + 1):
-        sample = candles[:end]
-        # Reconstruct historical anchors, but never manufacture confirmation time.
-        # A candidate may change the live H1 regime only if its confirmation candle
-        # is actually closed relative to the real exchange observation timestamp.
-        candidate = _analyze_h1_pivot(sample, now_ms, symbol, require_fresh=False)
-        signal_close = float(candidate.get("signal_candle_close_time") or 0)
-        causally_closed = signal_close > 0 and signal_close <= float(now_ms) - 1000
-        if (candidate.get("ready") and candidate.get("entry_side") in (-1, 1)
-                and causally_closed):
-            anchor = candidate
-    result = dict(anchor or latest)
+    anchor = latest if latest.get("entry_side") in (-1, 1) else None
+    result = dict(latest)
     result.update(last_candle_time=candles[-1]["t"], closed_candles=len(candles),
-                  h1_direction_anchor=True, execution_interval=M15_INTERVAL,
+                  h1_direction_anchor=True, execution_interval="executed trade stream",
                   anchor_confirmed=bool(anchor))
     result.update(pending_extreme(rows, now_ms, result.get("entry_side", 0), result.get("pivot_price")))
     return result
 
 
 def pending_extreme(rows, now_ms, side, anchor_pivot_price=None):
-    """Block stale-anchor entries while a new H1 structural extreme is forming.
+    """Diagnostic-only candidate extreme; never blocks lower-timeframe execution.
 
-    Same-side extension:
-      LONG regime + price breaks below active LOCAL_LOW => WAIT_NEW_LOCAL_LOW.
-      SHORT regime + price breaks above active LOCAL_HIGH => WAIT_NEW_LOCAL_HIGH.
-    No lower timeframe may authorize a new entry until that new H1 local is
-    causally confirmed by the following closed H1 candle.
-
-    Opposite-side candidate keeps the prior behavior: pause entries while an
-    opposite H1 extreme is awaiting closed confirmation.
+    The confirmed H1 local is a persistent DIRECTION VECTOR until an opposite
+    H1 swing is fully confirmed. Price may extend beyond the active local while
+    the executed-flow caterpillar keeps exiting/re-entering in that same vector.
+    Pending highs/lows are therefore displayed for context only and MUST NOT
+    pause entries, exits or re-entries.
     """
     result = {"entry_blocked": False, "pending_pivot_type": None,
-              "entry_block_reason": None}
+              "pending_pivot_price": None, "entry_block_reason": None,
+              "pending_is_diagnostic_only": True}
     candles = completed_candles(rows, now_ms)
     if side not in (-1, 1) or len(candles) < PIVOT_LOOKBACK + 1:
         return result
     p = candles[-1]
     prior = candles[-1-PIVOT_LOOKBACK:-1]
 
-    current_rows = _completed(rows, float(now_ms) + 3_600_001, 3_600_000)
-    current = [x for x in current_rows
-               if x["t"] == p["t"] + 3_600_000 and x["t"] <= now_ms < x["T"] + 1001]
-    x = current[-1] if current else None
+    # A historical forming candle contains its eventual high/low. Do not read it
+    # even for diagnostic output during causal replay.
+    x = None
 
     anchor = _f(anchor_pivot_price)
     if anchor is not None and anchor > 0:
         if side > 0:
             newest_low = min(p["l"], x["l"] if x else p["l"])
             if newest_low < anchor:
-                result.update(entry_blocked=True, pending_pivot_type="LOCAL_LOW",
+                result.update(pending_pivot_type="LOCAL_LOW",
                               pending_pivot_price=newest_low,
                               pending_pivot_candle_time=x["t"] if x and x["l"] <= p["l"] else p["t"],
-                              entry_block_reason="same_side_h1_low_extension_waiting_confirmation")
+                              entry_block_reason="same_side_h1_low_extension_diagnostic_only")
                 return result
         else:
             newest_high = max(p["h"], x["h"] if x else p["h"])
             if newest_high > anchor:
-                result.update(entry_blocked=True, pending_pivot_type="LOCAL_HIGH",
+                result.update(pending_pivot_type="LOCAL_HIGH",
                               pending_pivot_price=newest_high,
                               pending_pivot_candle_time=x["t"] if x and x["h"] >= p["h"] else p["t"],
-                              entry_block_reason="same_side_h1_high_extension_waiting_confirmation")
+                              entry_block_reason="same_side_h1_high_extension_diagnostic_only")
                 return result
 
-    if not x:
-        return result
-    # The live candle itself may be the new opposite extreme. Keep the last
-    # confirmed anchor as history, but expose the current H1 candidate immediately
-    # so the monitor never hides a fresh Bybit high/low while confirmation is pending.
-    high = side > 0 and x["h"] >= max([p["h"]] + [z["h"] for z in prior]) and x["c"] < x["h"] and (x["h"]-x["c"])/x["h"] >= .0015
-    low = side < 0 and x["l"] <= min([p["l"]] + [z["l"] for z in prior]) and x["c"] > x["l"] and (x["c"]-x["l"])/x["l"] >= .0015
+    high = side > 0 and p["h"] >= max(z["h"] for z in prior) and (x is None or x["h"] < p["h"])
+    low = side < 0 and p["l"] <= min(z["l"] for z in prior) and (x is None or x["l"] > p["l"])
     if high or low:
-        result.update(entry_blocked=True,
-                      pending_pivot_type="LOCAL_HIGH" if high else "LOCAL_LOW",
-                      pending_pivot_price=x["h"] if high else x["l"],
-                      pending_pivot_candle_time=x["t"],
-                      entry_block_reason="opposite_h1_extreme_awaiting_closed_confirmation")
-    # Live opposite extreme becomes the active PAPER direction once the current
-    # H1 candle has materially rejected the extreme. Keep the older confirmed
-    # pivot as history; do not keep routing entries in the obsolete direction.
-    pt=result.get("pending_pivot_type")
-    pp=_f(result.get("pending_pivot_price"))
-    if result.get("entry_block_reason")=="opposite_h1_extreme_awaiting_closed_confirmation" and pt in ("LOCAL_HIGH","LOCAL_LOW") and pp:
-        result["previous_confirmed_pivot_type"]=result.get("pivot_type")
-        result["previous_confirmed_pivot_price"]=result.get("pivot_price")
-        result["pivot_type"]=pt
-        result["pivot_price"]=pp
-        result["pivot_candle_time"]=result.get("pending_pivot_candle_time")
-        result["entry_side"]=-1 if pt=="LOCAL_HIGH" else 1
-        result["local_high"]=pt=="LOCAL_HIGH"
-        result["local_low"]=pt=="LOCAL_LOW"
-        result["entry_blocked"]=False
-        result["entry_block_reason"]=None
-        result["live_structural_flip"]=True
+        result.update(pending_pivot_type="LOCAL_HIGH" if high else "LOCAL_LOW",
+                      pending_pivot_price=p["h"] if high else p["l"],
+                      pending_pivot_candle_time=p["t"],
+                      entry_block_reason="opposite_h1_candidate_diagnostic_only")
     return result
 
 

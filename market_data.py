@@ -6,6 +6,7 @@ comparison. This is an explicit causal heuristic, not a calibrated profitability
 or false-alarm guarantee. Transport freshness is a separate validity check.
 """
 from collections import deque
+from pandora_flow import summarize
 import math,threading,time
 
 
@@ -150,6 +151,7 @@ class RollingMarketData:
                        price_direction=direction,control_side=control,previous_price=levels[0]['price'] if len(levels)==2 else None,
                        last_price=levels[-1]['price'],pressure_phase='CONTROL_CONFIRMED' if control else 'PRESSURE_WITHOUT_PRICE_CONFIRMATION',
                        observation_basis='executed_public_trades_m1_m3_m5',price_levels=len(levels))
+            out.update(summarize(list(trades),epoch,coverage))
             if coverage>=180:
                 r,b,s=window(180);out.update(flow_imbalance_180s=imbalance(b,s),trade_count_180s=len(r))
             if coverage>=300:

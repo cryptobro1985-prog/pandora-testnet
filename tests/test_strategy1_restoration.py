@@ -123,7 +123,11 @@ class RuntimeContracts(unittest.TestCase):
 
     def test_subscriptions_do_not_depend_on_h1_readiness(self):
         app.S['_local4_analysis']={};app.S['local_h1_direction']={}
-        self.assertEqual(set(app.strategy1_trade_symbols()),set(app.LOCAL_EXPERIMENT_SYMBOLS))
+        selected=list(app.LOCAL_EXPERIMENT_SYMBOLS[:5])
+        app.S['bybit_discovery']={'selected_symbols':selected}
+        app.S['local_v12_positions']={};app.S['local_experiment_watch']={}
+        self.assertEqual(set(app.strategy1_trade_symbols()),set(selected))
+        self.assertTrue(set(selected).issubset(app.strategy1_runtime_symbols()))
 
     def test_verified_closed_hour_does_not_expire_after_90_seconds(self):
         stamp=(BASE+6*H+1000)/1000
@@ -148,7 +152,7 @@ class RuntimeContracts(unittest.TestCase):
         app.S.update(engine_active=True,_last_poll_epoch=stamp,last_checkpoint=app.now(),
                      _market_heartbeat=stamp,_coordinator_heartbeat=stamp,_local4_analysis={})
         self.assertFalse(app.health_state()['risk_ready'])
-        self.assertEqual(len(app.health_state()['token_readiness']),10)
+        self.assertEqual(set(app.health_state()['token_readiness']),set(app.strategy1_trade_symbols()))
 
     def test_removed_strategy_entrypoints_are_absent(self):
         for name in ('emergency_profit_take','xnews','whale_liq_open','comparison_strategies_loop'):

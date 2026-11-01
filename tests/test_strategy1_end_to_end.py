@@ -62,7 +62,7 @@ class BybitFixtureServer:
 
 
 @unittest.skipUnless(os.getenv('PANDORA_TEST_DATABASE_URL_FILE'),'isolated PostgreSQL required')
-class TenMarketExecutionTests(unittest.TestCase):
+class SelectedMarketExecutionTests(unittest.TestCase):
     def setUp(self):
         self.url=Path(os.environ['PANDORA_TEST_DATABASE_URL_FILE']).read_text().strip()
         self.schema='wire_'+uuid.uuid4().hex
@@ -79,8 +79,12 @@ class TenMarketExecutionTests(unittest.TestCase):
         app.S.update(engine_active=True,mode='PAPER_ONLY',orders_enabled=False,local_v12_positions={},
                      local_experiment_watch={},local_h1_direction={},_local4_analysis={},_prices={},_price_received_epoch={},
                      local_experiment_equity=500.,local_experiment_realized_pnl=0.,last_checkpoint=app.now())
+        selected=(*app.LOCAL_EXPERIMENT_SYMBOLS[:4],'HYPE')
+        if 'simultaneous' in self._testMethodName:
+            selected=app.LOCAL_EXPERIMENT_SYMBOLS
+        app.S['bybit_discovery']={'selected_symbols':list(selected[:5])}
         stamp=time.time();hour=3600000;last=(int(stamp*1000)//hour)*hour
-        self.sides={symbol:1 if i%2==0 else -1 for i,symbol in enumerate(app.LOCAL_EXPERIMENT_SYMBOLS)}
+        self.sides={symbol:1 if i%2==0 else -1 for i,symbol in enumerate(selected)}
         values=[(100,102,95,99),(99,101,94,98),(98,100,93,97),(97,99,92,96),(96,98,85,89),(89,96,87,95)]
         for symbol,side in self.sides.items():
             prices=values if side>0 else [(200-o,200-l,200-h,200-c) for o,h,l,c in values]
@@ -170,10 +174,10 @@ class TenMarketExecutionTests(unittest.TestCase):
             self.assertAlmostEqual(account['equity'],500+pnl)
             self.assertAlmostEqual(account['realized_pnl'],pnl)
             for kind in ('local_experiment_trade_opened','local_experiment_trade_closed'):
-                self.assertEqual(db.execute('select count(*) n from audit_journal where kind=%s',(kind,)).fetchone()['n'],20)
-        self.assertEqual(self.obs.stats()['accepted'],100)
-        self.evidence('ten-market-wire.json',{'tokens':{r['symbol']:{'opens':2,'closes':r['n'],'reentries':1,
-            'pnl_net_fees':r['pnl']} for r in trades},'accepted_frames':100,'closed_trades':20,
+                self.assertEqual(db.execute('select count(*) n from audit_journal where kind=%s',(kind,)).fetchone()['n'],2*len(self.sides))
+        self.assertEqual(self.obs.stats()['accepted'],10*len(self.sides))
+        self.evidence('selected-market-wire.json',{'tokens':{r['symbol']:{'opens':2,'closes':r['n'],'reentries':1,
+            'pnl_net_fees':r['pnl']} for r in trades},'accepted_frames':10*len(self.sides),'closed_trades':2*len(self.sides),
             'starting_equity':500,'ending_equity':account['equity'],'realized_pnl':pnl,
             'transport':'real loopback WebSocket carrying synthetic Bybit publicTrade frames'})
 
@@ -183,12 +187,16 @@ class TenMarketExecutionTests(unittest.TestCase):
             self.send(symbol,side,1)
             prices[symbol]=100+side*.1
             self.send(symbol,side,1,prices[symbol])
-        app.local4_fast_entries(prices)
+        # Rotate five leaders at a time; already open markets stay managed.
+        symbols=list(self.sides)
+        for offset in range(0,len(symbols),5):
+            app.S['bybit_discovery']={'selected_symbols':symbols[offset:offset+5]}
+            app.local4_fast_entries(prices)
         equity,used,free=app._local_experiment_margin_state()
         self.assertGreater(len(app.S['local_v12_positions']),0)
         self.assertLessEqual(used,equity+1e-7)
         self.assertGreaterEqual(free,0)
-        self.assertLess(len(app.S['local_v12_positions']),10)  # 20% total-equity sizing exhausts $500
+        self.assertLess(len(app.S['local_v12_positions']),len(self.sides))  # 20% total-equity sizing exhausts $500
         rejected=set(self.sides)-set(app.S['local_v12_positions'])
         for symbol in rejected:self.assertEqual(app.S['strategy1_executor_rejections'][symbol]['reason'],'INSUFFICIENT_FREE_MARGIN')
         self.evidence('margin-capacity.json',{'simultaneous_positions':len(app.S['local_v12_positions']),

@@ -33,13 +33,6 @@ class LegacyStrategy11:
             with db.transaction():
                 for q in queries: db.execute(q)
                 db.execute("insert into strategy11_account_state(id,equity,realized_pnl,started_at,updated_at) values(1,500,0,%s,%s) on conflict(id) do nothing",(self.now(),self.now()))
-                done=db.execute("select 1 from audit_journal where event_id=%s limit 1",(reset_marker,)).fetchone()
-                if not done:
-                    db.execute("truncate table strategy11_positions,strategy11_watchlist,strategy11_signal_journal,strategy11_trade_history restart identity")
-                    stamp=self.now()
-                    db.execute("update strategy11_account_state set equity=500,realized_pnl=0,started_at=%s,updated_at=%s where id=1",(stamp,stamp))
-                    db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,%s,'strategy11_reset',%s::jsonb)",
-                      (stamp,reset_marker,json.dumps({"starting_equity":500,"variant":"1.1","logic":"exact_legacy_profitable"})))
         self.restore()
 
     def restore(self):

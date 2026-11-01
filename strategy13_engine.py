@@ -18,11 +18,6 @@ class Strategy13:
    with db.transaction():
     for x in q:db.execute(x)
     db.execute("insert into strategy13_account_state values(1,500,0,%s,%s) on conflict(id) do nothing",(self.now(),self.now()))
-    done=db.execute("select 1 from audit_journal where event_id=%s limit 1",(marker,)).fetchone()
-    if not done:
-     db.execute("truncate table strategy13_positions,strategy13_trade_history restart identity")
-     stamp=self.now();db.execute("update strategy13_account_state set equity=500,realized_pnl=0,started_at=%s,updated_at=%s where id=1",(stamp,stamp))
-     db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,%s,'strategy13_reset',%s::jsonb)",(stamp,marker,json.dumps({"starting_equity":500,"logic":"pure_h1_local_to_opposite_local","symbols":SYMBOLS})))
   self.restore()
  def restore(self):
   with self.pg() as db:
