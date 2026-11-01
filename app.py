@@ -1382,6 +1382,18 @@ def build_dashboard_snapshot(history=None):
    token['last_action']=token['decision']['action']
  primary['tokens']=token_rows
  primary['raw_flow_capture']=RAW_RECORDER.status()
+ accepted_by_flow_engine=MARKET_OBS.stats().get('accepted',0)
+ primary['raw_flow_capture']['source_accepted_count']=accepted_by_flow_engine
+ primary['raw_flow_capture']['unforwarded_count']=max(0,accepted_by_flow_engine-primary['raw_flow_capture']['received'])
+ if primary['raw_flow_capture']['unforwarded_count']:
+  primary['raw_flow_capture']['capture_complete']=False
+ stream_states={k:v for k,v in state.get('sources',{}).items() if k.startswith('MarketTradeStream:')}
+ primary['raw_flow_capture']['stream_quality']={
+  k:{field:v.get(field) for field in ('ok','error','sequence_regressions','stale_trades_rejected',
+     'subscription_confirmed','fresh_symbols_15s','accepted_trades','reconnect_backoff_seconds')}
+  for k,v in stream_states.items()}
+ primary['raw_flow_capture']['source_stale_rejected']=sum(int(v.get('stale_trades_rejected') or 0) for v in stream_states.values())
+ primary['raw_flow_capture']['source_sequence_regressions']=sum(int(v.get('sequence_regressions') or 0) for v in stream_states.values())
  for token in token_rows:
   symbol=token['symbol']
   token['raw_capture_last_exchange_ms']=primary['raw_flow_capture']['latest_by_symbol'].get(symbol)
