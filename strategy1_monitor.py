@@ -83,7 +83,8 @@ def render(data):
         x=selected.get(sym) or {}
         ch=x.get("change_24h_pct")
         move="PUMP" if isinstance(ch,(int,float)) and ch>0 else "DUMP" if isinstance(ch,(int,float)) and ch<0 else "FLAT"
-        loc=(cur_details.get(sym) or {}).get("h1_local") or cur_h1.get(sym) or legacy_h1.get(sym) or {}\n        disc_rows.append([sym,move,_n(ch,2),_n(x.get("range_24h_pct"),2),_m(x.get("turnover_24h")),x.get("last"),loc.get("pivot_type") or "SCANNING",_side(loc.get("entry_side")) if loc else "WAIT"])
+        loc=(cur_details.get(sym) or {}).get("h1_local") or cur_h1.get(sym) or legacy_h1.get(sym) or {}
+        disc_rows.append([sym,move,_n(ch,2),_n(x.get("range_24h_pct"),2),_m(x.get("turnover_24h")),x.get("last"),loc.get("pivot_type") or "SCANNING",_side(loc.get("entry_side")) if loc else "WAIT"])
 
     def panel(title,subtitle,primary,pivots):
         cards='<div class="cards">'+"".join("<article><small>"+_e(k)+"</small><strong>"+_e(v)+"</strong></article>" for k,v in _cards(primary))+"</div>"
