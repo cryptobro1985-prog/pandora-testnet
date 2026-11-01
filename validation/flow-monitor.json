@@ -1,0 +1,17 @@
+{
+  "environment": "local HTTP monitor, no trading workers",
+  "experiment_id": "pandora_flow_v2",
+  "viewports": [
+    320,
+    390,
+    768
+  ],
+  "horizontal_overflow": false,
+  "javascript_errors": 0,
+  "visible_equity": 500,
+  "visible_pnl": 0,
+  "visible_positions": 0,
+  "visible_closed_trades": 0,
+  "production_monitor_verified": false,
+  "render_deployed": false
+}

@@ -1,0 +1,236 @@
+{
+  "suite": "pandora_flow_v2_acceptance_1_to_16",
+  "generated_at": "2026-11-01T19:20:53.797476+00:00",
+  "experiment_id": "pandora_flow_v2",
+  "successful": true,
+  "cases_passed": 16,
+  "cases_total": 16,
+  "unique_tests_run": 20,
+  "cases": [
+    {
+      "number": 1,
+      "title": "Clean $500 reset, legacy isolation and no reset on restart",
+      "status": "PASS",
+      "tests": [
+        {
+          "test": "tests.test_flow_v2_reset.FlowExperimentResetTests.test_clean_reset_preserves_old_losses_and_new_account_survives_restart",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "number": 2,
+      "title": "Continuing 70/30 pump opens/holds LONG",
+      "status": "PASS",
+      "tests": [
+        {
+          "test": "tests.test_flow_v2_strategy.FlowV2StrategyTests.test_acceptance_2_continuing_70_30_pump_uses_executed_direction",
+          "status": "PASS"
+        },
+        {
+          "test": "tests.test_flow_v2_integration.FlowV2ExecutionTests.test_wire_opens_from_new_executions_without_candles_and_polling_adds_no_proof",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "number": 3,
+      "title": "Micro pullback holds LONG",
+      "status": "PASS",
+      "tests": [
+        {
+          "test": "tests.test_flow_v2_strategy.FlowV2StrategyTests.test_acceptance_3_5_12_13_micro_counter_move_and_acceleration_hold",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "number": 4,
+      "title": "Pump exhaustion closes LONG; independent executions confirm SHORT",
+      "status": "PASS",
+      "tests": [
+        {
+          "test": "tests.test_flow_v2_strategy.FlowV2StrategyTests.test_acceptance_4_6_exhaustion_closes_then_requires_new_executions",
+          "status": "PASS"
+        },
+        {
+          "test": "tests.test_flow_v2_integration.FlowV2ExecutionTests.test_real_flow_transfer_closes_then_new_independent_executions_reverse",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "number": 5,
+      "title": "Small bounce holds SHORT",
+      "status": "PASS",
+      "tests": [
+        {
+          "test": "tests.test_flow_v2_strategy.FlowV2StrategyTests.test_acceptance_3_5_12_13_micro_counter_move_and_acceleration_hold",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "number": 6,
+      "title": "Correction exhaustion closes SHORT; independent executions confirm LONG",
+      "status": "PASS",
+      "tests": [
+        {
+          "test": "tests.test_flow_v2_strategy.FlowV2StrategyTests.test_acceptance_4_6_exhaustion_closes_then_requires_new_executions",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "number": 7,
+      "title": "Equivalent executions are independent of wall-clock placement",
+      "status": "PASS",
+      "tests": [
+        {
+          "test": "tests.test_flow_v2_strategy.FlowV2StrategyTests.test_acceptance_7_receive_wall_clock_changes_do_not_change_decisions",
+          "status": "PASS"
+        },
+        {
+          "test": "tests.test_flow_v2_decision_path.FlowV2DecisionPathTests.test_active_decision_graph_has_no_candle_or_timer_gate",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "number": 8,
+      "title": "One hundred polling calls do not advance execution proofs",
+      "status": "PASS",
+      "tests": [
+        {
+          "test": "tests.test_flow_v2_strategy.FlowV2StrategyTests.test_acceptance_8_repeated_polling_cannot_increase_any_proof",
+          "status": "PASS"
+        },
+        {
+          "test": "tests.test_flow_v2_events.ExecutionEventTests.test_acceptance_8_polling_never_creates_new_execution_evidence",
+          "status": "PASS"
+        },
+        {
+          "test": "tests.test_flow_v2_integration.FlowV2ExecutionTests.test_wire_opens_from_new_executions_without_candles_and_polling_adds_no_proof",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "number": 9,
+      "title": "Fee, slippage and learned noise prevent churn",
+      "status": "PASS",
+      "tests": [
+        {
+          "test": "tests.test_flow_v2_strategy.FlowV2StrategyTests.test_acceptance_9_costs_prevent_churn_with_even_strong_counter_volume",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "number": 10,
+      "title": "Hourly TOP-5 stays fixed and rotation retains managed positions",
+      "status": "PASS",
+      "tests": [
+        {
+          "test": "tests.test_flow_v2_universe.HourlyUniverseTests.test_acceptance_10_entry_set_changes_only_at_hour_and_keeps_positions",
+          "status": "PASS"
+        },
+        {
+          "test": "tests.test_flow_v2_integration.FlowV2ExecutionTests.test_rotation_preserves_held_position_and_restart_preserves_account_and_universe",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "number": 11,
+      "title": "Restart preserves account, positions, MFE/MAE, universe and FSM",
+      "status": "PASS",
+      "tests": [
+        {
+          "test": "tests.test_flow_v2_universe.HourlyUniverseTests.test_acceptance_11_restart_preserves_metadata_and_hourly_cycle",
+          "status": "PASS"
+        },
+        {
+          "test": "tests.test_flow_v2_strategy.FlowV2StrategyTests.test_restart_restores_every_execution_proof_and_close_ack",
+          "status": "PASS"
+        },
+        {
+          "test": "tests.test_flow_v2_reset.FlowExperimentResetTests.test_repeat_command_preserves_live_positions_mfe_and_lease",
+          "status": "PASS"
+        },
+        {
+          "test": "tests.test_flow_v2_integration.FlowV2ExecutionTests.test_rotation_preserves_held_position_and_restart_preserves_account_and_universe",
+          "status": "PASS"
+        },
+        {
+          "test": "tests.test_flow_v2_integration.FlowV2ExecutionTests.test_profitable_flow_add_keeps_quantity_average_and_survives_restart",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "number": 12,
+      "title": "BUY acceleration after small dip retains LONG",
+      "status": "PASS",
+      "tests": [
+        {
+          "test": "tests.test_flow_v2_strategy.FlowV2StrategyTests.test_acceptance_3_5_12_13_micro_counter_move_and_acceleration_hold",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "number": 13,
+      "title": "SELL acceleration after small bounce retains SHORT",
+      "status": "PASS",
+      "tests": [
+        {
+          "test": "tests.test_flow_v2_strategy.FlowV2StrategyTests.test_acceptance_3_5_12_13_micro_counter_move_and_acceleration_hold",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "number": 14,
+      "title": "Absorbed BUY volume is not BUY control",
+      "status": "PASS",
+      "tests": [
+        {
+          "test": "tests.test_flow_v2_strategy.FlowV2StrategyTests.test_acceptance_14_15_absorbed_volume_never_confirms_control",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "number": 15,
+      "title": "Absorbed SELL volume is not SELL control",
+      "status": "PASS",
+      "tests": [
+        {
+          "test": "tests.test_flow_v2_strategy.FlowV2StrategyTests.test_acceptance_14_15_absorbed_volume_never_confirms_control",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "number": 16,
+      "title": "Stale tape exposes uncertainty; separate risk protection and recovery",
+      "status": "PASS",
+      "tests": [
+        {
+          "test": "tests.test_flow_v2_strategy.FlowV2StrategyTests.test_acceptance_16_stale_state_blocks_entries_reversal_but_is_not_an_exit",
+          "status": "PASS"
+        },
+        {
+          "test": "tests.test_flow_v2_integration.FlowV2ExecutionTests.test_stale_is_uncertain_without_immediate_close_then_fresh_mark_breach_can_reduce_risk",
+          "status": "PASS"
+        }
+      ]
+    }
+  ],
+  "skipped": [],
+  "live_exchange_verified": false,
+  "production_reset_verified": false,
+  "render_deployed": false,
+  "note": "Software contracts with synthetic tape, loopback WebSocket and isolated PostgreSQL schemas; shared scenarios cover both directions."
+}

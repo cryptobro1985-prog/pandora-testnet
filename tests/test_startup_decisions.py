@@ -15,9 +15,9 @@ class StartupDecisionTests(unittest.TestCase):
         self.ready=dict(active=True,scanner_ready=True,instrument_ready=True,
                         h1_verified=True,mark=100,checkpoint_ready=True,stamp=1000)
 
-    def test_cold_start_reports_missing_metadata_or_structure_without_invented_entry(self):
+    def test_cold_start_requires_metadata_but_never_candle_structure(self):
         self.assertEqual(entry_status('BTC',{},self.flow,**{**self.ready,'instrument_ready':False})['reason'],'WAIT_CONTRACT_METADATA')
-        self.assertEqual(entry_status('BTC',{},self.flow,**{**self.ready,'h1_verified':False})['reason'],'WAIT_LOCAL_STRUCTURE')
+        self.assertEqual(entry_status('BTC',{},self.flow,**{**self.ready,'h1_verified':False})['reason'],'ENTRY_SIGNAL_READY_WAITING_EXECUTOR')
 
     def test_real_tape_warmup_is_explicit_instead_of_instant_fake_readiness(self):
         flow={**self.flow,'evidence_ready':False,'trade_coverage_seconds':4}

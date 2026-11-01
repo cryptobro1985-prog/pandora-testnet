@@ -35,8 +35,15 @@ jobs:
         run: |
           printf '%s\n' "$DATABASE_URL" > "$PANDORA_TEST_DATABASE_URL_FILE"
           python scripts/run_release_tests.py --report /tmp/release-result.json
+      - name: Prove the active flow path and run acceptance cases 1 through 16
+        run: |
+          python scripts/audit_flow_decision_path.py --report /tmp/flow-decision-path.json
+          python scripts/run_flow_acceptance.py --report /tmp/flow-acceptance.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: paper-regression-results
-          path: /tmp/release-result.json
+          path: |
+            /tmp/release-result.json
+            /tmp/flow-decision-path.json
+            /tmp/flow-acceptance.json

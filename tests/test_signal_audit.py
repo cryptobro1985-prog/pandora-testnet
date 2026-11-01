@@ -1,4 +1,8 @@
-"""Audit regressions for observed evidence, freshness and safe signal gates."""
+"""Observed-flow, shard freshness and scanner component regressions.
+
+Calls to local_order_flow exercise the retained v1 helper in isolation; flow-v2
+application entry/exit acceptance lives in test_flow_v2_* and never uses H1.
+"""
 import unittest
 
 from local_order_flow import initial_entry_candidate, flow_profile, pressure_exit

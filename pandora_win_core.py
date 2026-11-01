@@ -28,7 +28,7 @@ def pyramid_decision(position, analysis, flow, mark, max_adds=2):
     side=int(position['side']);f=position.get('features') or {}
     state=copy.deepcopy(f.get('pyramid_state') or {})
     level=int(f.get('pyramid_level',0))
-    event=float(flow.get('decision_event_epoch') or flow.get('latest_trade_epoch') or 0)
+    event=float(flow.get('execution_sequence') or flow.get('decision_event_epoch') or flow.get('latest_trade_epoch') or 0)
     windows=flow.get('windows') or {};fast=windows.get('15',{})
     side_volume=float(fast.get('buy_volume' if side>0 else 'sell_volume',0))
     velocity=float(fast.get('volume_velocity',0))
@@ -74,7 +74,7 @@ def apply_add(position, mark, margin, flow, analysis, timestamp, *, added_notion
     features['original_entry']=features.get('original_entry',out['entry'])
     features['pyramid_level']=level
     features['pyramid_state']=dict(phase='WAIT_NEW_IMPULSE',last_impulse_price=mark,
-        last_add_event=float(flow.get('decision_event_epoch') or flow.get('latest_trade_epoch') or 0),
+        last_add_event=float(flow.get('execution_sequence') or flow.get('decision_event_epoch') or flow.get('latest_trade_epoch') or 0),
         baseline_velocity=float(fast.get('volume_velocity',0)),
         baseline_side_volume=float(fast.get('buy_volume' if out['side']>0 else 'sell_volume',0)))
     out.update(entry=average,notional=total,margin=final_margin,leverage=final_leverage)

@@ -1,148 +1,167 @@
-"""Persistent PAPER orchestration. No private exchange endpoints or order API."""
+"""One event-driven PAPER executor; universe time never selects trade direction."""
 import copy
 import json
 import time
-
+from dataclasses import asdict
 from engine_store import LeaseLost
 from pandora_scanner import LiveScanner
-from pandora_locals import execution_anchor
-from pandora_win_core import allocation, pyramid_decision, apply_add, mark_metrics
-from pandora_risk import RiskPolicy, plan_add, position_risk, signal_strength
+from pandora_universe import HourlyUniverse
+from pandora_flow_strategy import FlowStrategy
+from pandora_experiment import EXPERIMENT_ID
+from pandora_risk import RiskPolicy, plan_add, signal_strength
+from pandora_win_core import pyramid_decision, apply_add, mark_metrics
 
 
 class PandoraRuntime:
     def __init__(self, app):
-        self.a=app;self.scanner=LiveScanner(candidate_limit=int(app.os.getenv('PANDORA_SCAN_CANDIDATES','30')))
+        self.a=app
+        self.scanner=LiveScanner(candidate_limit=int(app.os.getenv('PANDORA_SCAN_CANDIDATES','30')))
+        self.universe=HourlyUniverse()
+        self.strategy=FlowStrategy()
         self.max_adds=int(app.os.getenv('PANDORA_MAX_ADDS','2'))
         self.add_fraction=float(app.os.getenv('PANDORA_ADD_MARGIN_FRACTION','0.10'))
         self.position_fraction=float(app.os.getenv('PANDORA_MAX_POSITION_MARGIN_FRACTION','0.40'))
         if not 0<=self.max_adds<=20 or not 0<self.add_fraction<=self.position_fraction<=1:
-            raise ValueError('invalid explicit pyramiding risk configuration')
-        self.tokens={};self.last_saved={};self.max_equity=500.;self.last_scanner_save=0;self.last_scanner_at=0
-        self.max_equity=max(self.max_equity,float(app.S.get('pandora_equity',500)))
+            raise ValueError('invalid pyramiding risk configuration')
+        self.tokens={};self.last_saved={};self.max_equity=500.;self.last_scanner_save=0.;self.last_scanner_at=0.
         with app.pg() as db:
             db.execute("create table if not exists pandora_win_token_state(symbol text primary key,payload jsonb not null,updated_at timestamptz not null default clock_timestamp())")
             db.execute("create table if not exists pandora_win_runtime_state(name text primary key,payload jsonb not null,updated_at timestamptz not null default clock_timestamp())")
             db.execute("create table if not exists pandora_win_pyramid_adds(id bigserial primary key,symbol text not null,opened text not null,add_number integer not null,payload jsonb not null,unique(symbol,opened,add_number))")
-            for row in db.execute('select symbol,payload from pandora_win_token_state').fetchall():self.tokens[row['symbol']]=row['payload']
-            for row in db.execute('select name,payload from pandora_win_runtime_state').fetchall():
-                if row['name']=='scanner':
-                    self.scanner.restore(row['payload'])
-                    app.S['bybit_discovery']=copy.deepcopy(row['payload'])
-                elif row['name']=='account':self.max_equity=max(self.max_equity,float(row['payload'].get('max_equity',500)))
+        self._restore()
+
+    def _restore(self):
+        a=self.a
+        with a.pg() as db:
+            self.tokens={r['symbol']:r['payload'] for r in db.execute('select symbol,payload from pandora_win_token_state').fetchall()}
+            records={r['name']:r['payload'] for r in db.execute('select name,payload from pandora_win_runtime_state').fetchall()}
+        self.strategy=FlowStrategy(records.get('flow_strategy'))
+        self.universe=HourlyUniverse(state=records.get('universe'))
+        self.max_equity=max(float(a.S.get('pandora_equity',500)),float(records.get('account',{}).get('max_equity',500)))
+        a.MARKET_OBS.restore_execution_sequences({symbol:state.get('last_sequence',0) for symbol,state in self.strategy.tokens.items()})
+        for symbol in set(self.strategy.tokens)|set(a.S.get('pandora_win_positions',{})):
+            pos=a.S.get('pandora_win_positions',{}).get(symbol)
+            state=self.strategy.get_state(symbol)
+            if pos and int(state.get('actual_side') or 0)!=int(pos['side']):self.strategy.on_open(symbol,pos['side'],pos['entry'])
+            self.strategy.mark_data_uncertain(symbol,position=pos,reason='Restart requires fresh independent executions.')
+        a.S['bybit_discovery']=self.universe.snapshot(held=a.S.get('pandora_win_positions',{}))
+
+    @staticmethod
+    def _write_runtime(db,name,payload):
+        db.execute("insert into pandora_win_runtime_state(name,payload) values(%s,%s::jsonb) on conflict(name) do update set payload=excluded.payload,updated_at=clock_timestamp()",(name,json.dumps(payload,default=str)))
 
     def event(self,db,action,symbol,reason,context):
-        self.a.STORE.fence(db)
-        payload=dict(symbol=symbol,action=action,reason=reason,market_context=context,mode='PAPER_ONLY')
-        db.execute("insert into pandora_win_audit_journal(recorded_at,kind,payload) values(%s,%s,%s::jsonb)",
-                   (self.a.now(),'pandora_'+action,json.dumps(payload,default=str)))
+        a=self.a;a.STORE.fence(db)
+        decision=(context or {}).get('flow_decision') or context or {}
+        payload=dict(experiment_id=EXPERIMENT_ID,symbol=symbol,action=action,reason=reason,
+            timestamp=a.now(),exchange_timestamp=decision.get('exchange_epoch'),receive_timestamp=decision.get('received_epoch'),
+            state_before=decision.get('state_before'),state_after=decision.get('state_after'),market_context=context,mode='PAPER_ONLY')
+        db.execute("insert into pandora_win_audit_journal(recorded_at,event_id,kind,payload) values(%s,%s,%s,%s::jsonb)",
+            (a.now(),decision.get('action_id'),'pandora_'+action,json.dumps(payload,default=str)))
 
     def save_token(self,db,symbol,state):
-        db.execute("insert into pandora_win_token_state(symbol,payload) values(%s,%s::jsonb) on conflict(symbol) do update set payload=excluded.payload,updated_at=clock_timestamp()",
-                   (symbol,json.dumps(state,default=str)))
+        db.execute("insert into pandora_win_token_state(symbol,payload) values(%s,%s::jsonb) on conflict(symbol) do update set payload=excluded.payload,updated_at=clock_timestamp()",(symbol,json.dumps(state,default=str)))
 
     def transition(self,symbol,phase,action,reason,context,force=False):
-        a=self.a;stamp=time.time();previous=self.tokens.get(symbol,{})
-        changed=previous.get('state')!=phase or previous.get('action')!=action or previous.get('reason')!=reason
+        a=self.a;stamp=time.monotonic();previous=self.tokens.get(symbol,{})
+        changed=any(previous.get(k)!=v for k,v in (('state',phase),('action',action),('reason',reason)))
         state={**previous,'state':phase,'action':action,'reason':reason,'at':a.now(),'context':context}
-        if not force and not changed and stamp-self.last_saved.get(symbol,0)<5:
-            self.tokens[symbol]=state;return
-        with a.pg() as db:
-            with db.transaction():
-                a.STORE.fence(db)
-                self.save_token(db,symbol,state)
-                # HOLD/WAIT are recorded on each new context or at least every 5s,
-                # not on every millisecond packet. The full state is checkpointed.
-                self.event(db,action,symbol,reason,context)
+        if changed or force or stamp-self.last_saved.get(symbol,0)>=5:
+            with a.pg() as db:
+                with db.transaction():
+                    a.STORE.fence(db);self.save_token(db,symbol,state)
+                    self.event(db,action,symbol,reason,context)
+            self.last_saved[symbol]=stamp
         with a.LOCK:self.tokens[symbol]=state
-        self.last_saved[symbol]=stamp
 
-    def scanner_snapshot(self,snapshot):
+    def update_universe(self,discovery,held=()):
+        with self.a.ACCOUNT_LOCK:
+            draft=HourlyUniverse(state=self.universe.to_dict())
+            snapshot=draft.update(discovery,held=held)
+            if self.scanner_snapshot(snapshot,universe_state=draft.to_dict()):return snapshot
+            return copy.deepcopy(self.a.S.get('bybit_discovery',{}))
+
+    def scanner_snapshot(self,snapshot,universe_state=None):
         a=self.a
         with a.ACCOUNT_LOCK:
             if not a.S.get('engine_active'):return False
             snapshot=copy.deepcopy(snapshot)
-            observed=float(snapshot.get('at') or 0)
-            if observed<float(getattr(self,'last_scanner_at',0)):return False
-            with a.LOCK:
-                held=set(a.S.get('pandora_win_positions',{}))
-                selected=set(snapshot.get('selected_symbols') or ())
-                watches=copy.deepcopy(a.S.get('pandora_watch',{}))
+            if float(snapshot.get('at',0))<self.last_scanner_at:return False
+            held=set(a.S.get('pandora_win_positions',{}));selected=set(snapshot.get('selected_symbols') or [])
             snapshot['retained_open_positions']=sorted(held-selected)
-            states=snapshot.setdefault('states',{})
-            for symbol in held-selected:states[symbol]='FADING'
-            to_clear={}
-            for event in snapshot.get('events',[]):
-                if event.get('state')=='ROTATE_OUT' and event['symbol'] in held:
-                    event['state']='FADING'
-                if event.get('state')=='ROTATE_OUT' and event['symbol'] not in selected:
-                    to_clear[event['symbol']]=watches.get(event['symbol'])
-            changed=bool(snapshot.get('events'))
-            save=changed or time.time()-self.last_scanner_save>=5
-            if save:
+            for symbol in held-selected:snapshot.setdefault('states',{})[symbol]='MANAGED_POSITION'
+            if snapshot.get('events') or time.monotonic()-self.last_scanner_save>=5:
                 with a.pg() as db:
                     with db.transaction():
                         a.STORE.fence(db)
-                        db.execute("insert into pandora_win_runtime_state(name,payload) values('scanner',%s::jsonb) on conflict(name) do update set payload=excluded.payload,updated_at=clock_timestamp()",(json.dumps(snapshot),))
-                        for event in snapshot.get('events',[]):
-                            self.event(db,event['action'],event['symbol'],event['reason'],snapshot)
-                            if event['symbol'] in to_clear:
-                                if event['action']!='ROTATE_OUT':
-                                    self.event(db,'ROTATE_OUT',event['symbol'],'no_position_and_activity_faded',event)
-                                db.execute('delete from pandora_win_watchlist where symbol=%s',(event['symbol'],))
-                self.last_scanner_save=time.time()
-            # A failed commit must not erase a live watch or publish the failed
-            # selection. Account serialization also prevents rotation/entry races.
+                        self._write_runtime(db,'universe',universe_state if universe_state is not None else self.universe.to_dict())
+                        for event in snapshot.get('events',[]):self.event(db,event['action'],event.get('symbol'),event.get('reason'),event)
+                self.last_scanner_save=time.monotonic()
             with a.LOCK:
-                for symbol,previous in to_clear.items():
-                    if a.S.get('pandora_watch',{}).get(symbol)==previous:
-                        a.S.get('pandora_watch',{}).pop(symbol,None)
+                if universe_state is not None:self.universe=HourlyUniverse(state=universe_state)
                 a.S['bybit_discovery']=snapshot
-            self.last_scanner_at=observed
+            self.last_scanner_at=float(snapshot.get('at',0))
             return True
 
     def semantic_open(self,db,symbol,position):
+        clone=FlowStrategy(self.strategy.to_dict())
+        previous=clone.get_state(symbol).get('close_ack')
+        clone.on_open(symbol,position['side'],position['entry'])
         side='LONG' if position['side']>0 else 'SHORT'
-        previous=self.tokens.get(symbol,{})
-        prior_side=previous.get('last_closed_side')
-        kind=position['features'].get('entry_kind')
-        action=('REENTRY_'+side if kind=='REENTRY' else
-                'REVERSE_'+('LONG_TO_SHORT' if position['side']<0 else 'SHORT_TO_LONG')
-                if prior_side and prior_side!=position['side'] else 'OPEN_'+side)
-        self.event(db,action,symbol,'structure_and_fresh_executed_control',position)
-        state={**previous,'state':side,'action':action,'last_position_side':position['side'],'reason':'structure_and_fresh_executed_control'}
+        action='REENTRY_'+side if position['features'].get('entry_kind')=='REENTRY' else ('REVERSE_'+('LONG_TO_SHORT' if position['side']<0 else 'SHORT_TO_LONG') if previous and previous['side']!=position['side'] else 'OPEN_'+side)
+        self._write_runtime(db,'flow_strategy',clone.to_dict())
+        state=dict(state=side,action=action,reason='flow_confirmed_entry',last_position_side=position['side'])
         self.save_token(db,symbol,state)
-        # Publish memory only after caller commits via normal cycle/restore.
+        decision=copy.deepcopy(position['features'].get('flow_decision',{}))
+        decision['state_after']=side
+        self.event(db,action,symbol,'flow_confirmed_entry',dict(position=position,flow_decision=decision))
 
     def semantic_close(self,db,symbol,position,reason,price,pnl,watch):
+        clone=FlowStrategy(self.strategy.to_dict());clone.on_close(symbol,position['side'],price)
+        # Executions already received before the actual fill cannot count as
+        # independent post-close confirmation, even if queued for processing.
+        boundary=max(int(clone.tokens[symbol]['last_sequence']),
+            int(self.a.MARKET_OBS.event_status(symbol).get('latest_sequence',0)))
+        clone.tokens[symbol]['close_ack'].update(sequence=boundary,closed_event_sequence=boundary)
+        self._write_runtime(db,'flow_strategy',clone.to_dict())
         side='LONG' if position['side']>0 else 'SHORT'
-        self.event(db,'CLOSE_'+side,symbol,reason,dict(position=position,exit=price,pnl=pnl,watch=watch))
-        state={**self.tokens.get(symbol,{}),'state':'WAIT_REENTRY' if watch else 'SELECTED',
-               'action':'CLOSE_'+side,'last_closed_side':position['side'],'last_closed_reason':reason,
-               'last_closed_price':price,'last_closed_at':self.a.now()}
-        self.save_token(db,symbol,state)
+        self.save_token(db,symbol,dict(state='FLAT_AFTER_'+side,action='CLOSE_'+side,reason=reason,last_closed_side=position['side']))
+        decision=self.current_decision(symbol)
+        decision['state_after']='FLAT_AFTER_'+side
+        self.event(db,'CLOSE_'+side,symbol,reason,dict(position=position,exit=price,pnl=pnl,flow_decision=decision))
 
     def reload_token(self,symbol):
         with self.a.pg() as db:
             row=db.execute('select payload from pandora_win_token_state where symbol=%s',(symbol,)).fetchone()
-        if row:
-            with self.a.LOCK:self.tokens[symbol]=row['payload']
+            flow=db.execute("select payload from pandora_win_runtime_state where name='flow_strategy'").fetchone()
+        if row:self.tokens[symbol]=row['payload']
+        if flow:self.strategy=FlowStrategy(flow['payload'])
 
-    def refresh_after_lease(self):
-        """A standby may have restored before the previous writer's final commit."""
-        with self.a.pg() as db:
-            tokens={r['symbol']:r['payload'] for r in db.execute('select symbol,payload from pandora_win_token_state').fetchall()}
-            account=db.execute("select payload from pandora_win_runtime_state where name='account'").fetchone()
-        with self.a.LOCK:
-            self.tokens=tokens
-            self.a.S['_pandora_h1_runtime_verified']={}
-        if account:self.max_equity=max(self.max_equity,float(account['payload'].get('max_equity',500)))
+    def refresh_after_lease(self):self._restore()
+
+    def event_fresh(self,symbol):
+        quality=self.a.MARKET_OBS.flow_context(symbol)
+        return bool(quality.get('trade_data_fresh') and self.strategy.tokens.get(symbol,{}).get('sequence_valid',True))
+
+    def current_decision(self,symbol):
+        # Monitoring must not restore a read-only snapshot over a concurrent
+        # ingest/fill acknowledgement. The account lock is reentrant on writes.
+        with self.a.ACCOUNT_LOCK:
+            decision=self.strategy.evaluate(symbol,position=self.a.S.get('pandora_win_positions',{}).get(symbol),
+                selected_entry=symbol in self.universe.entry_symbols,policy=RiskPolicy.from_env(),data_fresh=self.event_fresh(symbol))
+            flow=decision.get('flow',{})
+            stamp=time.time()
+            flow['latest_trade_age_seconds']=max(0.,stamp-flow['latest_trade_epoch']) if flow.get('latest_trade_epoch') is not None else None
+            flow['latest_receive_age_seconds']=max(0.,stamp-flow['latest_receive_epoch']) if flow.get('latest_receive_epoch') is not None else None
+            return decision
+
+    def flow_snapshot(self,symbol):return self.current_decision(symbol).get('flow',{})
+    def entry_decision(self,symbol):return self.current_decision(symbol)
 
     def pyramid(self,symbol,analysis,flow,mark):
         a=self.a
         with a.ACCOUNT_LOCK:
             if not a.S.get('engine_active') or a.S.get('orders_enabled') or a.S.get('mode')!='PAPER_ONLY':return False
-            if not a.pandora_runtime_h1_verified(symbol,analysis):return False
             price=a.current_entry_price(symbol)
             if price is None or price!=mark:return False
             position=copy.deepcopy(a.S.get('pandora_win_positions',{}).get(symbol))
@@ -159,7 +178,8 @@ class PandoraRuntime:
             policy=RiskPolicy.from_env()
             # Re-read at allocation time; the caller's earlier flow is not proof
             # that the trade tape is still fresh after preceding DB work.
-            fresh_flow=a.MARKET_OBS.flow_context(symbol)
+            fresh_flow=self.flow_snapshot(symbol)
+            if not self.event_fresh(symbol):return False
             if not pyramid_decision(position,analysis,fresh_flow,mark,self.max_adds)[0]:return False
             flow=fresh_flow
             risk=a.risk_snapshot(policy)
@@ -195,133 +215,99 @@ class PandoraRuntime:
         a=self.a
         with a.ACCOUNT_LOCK:
             if not a.S.get('engine_active'):return
-            with a.LOCK:
-                a.S['_execution_started_epoch']=time.time()
-                a.S['_execution_running']=True
-                a.S['_execution_errors']={}
-            try:
-                self._cycle(prices)
+            with a.LOCK:a.S.update(_execution_running=True,_execution_errors={})
+            try:self._cycle(prices)
             except Exception as exc:
-                with a.LOCK:
-                    a.S['_execution_errors']['__cycle__']=type(exc).__name__+':'+str(exc)[:160]
+                with a.LOCK:a.S['_execution_errors']['__cycle__']=type(exc).__name__+':'+str(exc)[:160]
                 raise
             finally:
-                with a.LOCK:
-                    a.S['_execution_running']=False
-                    a.S['_execution_heartbeat']=time.time()
-                    a.S['_execution_ok']=not bool(a.S['_execution_errors'])
+                with a.LOCK:a.S.update(_execution_running=False,_execution_heartbeat=time.time(),_execution_ok=not bool(a.S.get('_execution_errors')))
 
     def _cycle(self,prices):
         a=self.a
-        with a.LOCK:
-            symbols=set(a.pandora_trade_symbols())|{s for s,t in self.tokens.items() if t.get('state')!='ROTATE_OUT'}
-        held=set(a.S.get('pandora_win_positions',{}))
-        for symbol in sorted(symbols,key=lambda s:(s not in held,s)):
-            try:
-                self._cycle_symbol(symbol,prices)
-            except LeaseLost:
-                raise
+        symbols=set(self.universe.entry_symbols)|set(a.S.get('pandora_win_positions',{}))
+        for symbol in sorted(symbols,key=lambda s:(s not in a.S.get('pandora_win_positions',{}),s)):
+            try:self._cycle_symbol(symbol,prices)
+            except LeaseLost:raise
             except Exception as exc:
-                # One malformed token or unavailable row must not prevent risk
-                # reduction for every other open position in this iteration.
-                error=type(exc).__name__+':'+str(exc)[:160]
-                with a.LOCK:
-                    a.S['_execution_errors'][symbol]=error
-                    a.S.setdefault('sources',{})['PandoraToken:'+symbol]={'ok':False,'error':error,'at':a.now()}
-        equity,used,free=a._pandora_margin_state()
-        if hasattr(a,'risk_snapshot'):a.risk_snapshot()
+                with a.LOCK:a.S['_execution_errors'][symbol]=type(exc).__name__+':'+str(exc)[:160]
+        equity,used,free=a._pandora_margin_state();a.risk_snapshot()
         self.max_equity=max(self.max_equity,equity)
-        with a.LOCK:a.S['pandora_account']=dict(max_equity=self.max_equity,current_exposure=sum(p['notional']*a.fresh_mark_price(s)/p['entry'] for s,p in a.S['pandora_win_positions'].items()) if a.S.get('margin_valuation',{}).get('complete',True) and all(a.fresh_mark_price(s) is not None for s in a.S['pandora_win_positions']) else None,used_margin=used,free_margin=free)
-        if time.time()-self.last_saved.get('account',0)>=5:
+        with a.LOCK:a.S['pandora_account']=dict(max_equity=self.max_equity,used_margin=used,free_margin=free)
+        if time.monotonic()-self.last_saved.get('checkpoint',0)>=5:
             with a.pg() as db:
                 with db.transaction():
                     a.STORE.fence(db)
-                    db.execute("insert into pandora_win_runtime_state(name,payload) values('account',%s::jsonb) on conflict(name) do update set payload=excluded.payload,updated_at=clock_timestamp()",(json.dumps(a.S['pandora_account']),))
-            self.last_saved['account']=time.time()
+                    self._write_runtime(db,'flow_strategy',self.strategy.to_dict())
+                    self._write_runtime(db,'universe',self.universe.to_dict())
+                    self._write_runtime(db,'account',a.S['pandora_account'])
+            self.last_saved['checkpoint']=time.monotonic()
 
     def _cycle_symbol(self,symbol,prices):
-        a=self.a
-        with a.LOCK:
-            selected=set((a.S.get('bybit_discovery') or {}).get('selected_symbols') or [])
-            pos=copy.deepcopy(a.S.get('pandora_win_positions',{}).get(symbol))
-            analysis=copy.deepcopy(a.S.get('_pandora_analysis',{}).get(symbol) or {})
-        flow=a.MARKET_OBS.flow_context(symbol)
-        mark=getattr(a,'fresh_mark_price',a.current_entry_price)(symbol)
-        context=dict(flow=flow,local=analysis,mark=mark,selected=symbol in selected)
-        if symbol not in selected and not pos:
-            if symbol in a.S.get('pandora_watch',{}):a._pandora_watch_clear(symbol,'token_rotated_out')
-            if self.tokens.get(symbol,{}).get('state')!='ROTATE_OUT':self.transition(symbol,'ROTATE_OUT','ROTATE_OUT','no_position_and_not_selected',context)
-            return
-        # Risk guards may use a genuinely fresh own-symbol mark even when
-        # checkpoint publication or the executed tape is unavailable. The app's
-        # guard must not make discretionary signal exits from stale flow.
-        if pos and mark is not None:
-            a.pandora_mark_positions({symbol:mark})
-            if symbol not in a.S['pandora_win_positions']:
-                self.reload_token(symbol)
-                # Only after the close commits: a NEW opposite confirmed local
-                # and live entry-control may open the reverse in this cycle.
-                with a.LOCK:latest=copy.deepcopy(a.S.get('_pandora_analysis',{}).get(symbol) or {})
-                if symbol in selected and int(latest.get('entry_side') or 0)==-int(pos['side']):
-                    a.pandora_flow_fast_entries({symbol:mark})
-                return
-        if not flow.get('trade_data_fresh') or mark is None:
-            self.transition(symbol,'WAIT_REENTRY' if not pos else ('LONG' if pos['side']>0 else 'SHORT'),
-                'FLOW_STALE','fresh_mark_required' if mark is None else 'fresh_executed_trade_required',context)
-            return
-        if pos:
-            current=a.S['pandora_win_positions'].get(symbol)
-            if not current or current.get('opened')!=pos.get('opened'):return
-            updated=mark_metrics(current,mark,flow,analysis,a.FEE)
-            # Defend against a row disappearing through an external writer as
-            # well as keeping normal operator-close transactions serialized.
-            live=a.S['pandora_win_positions'].get(symbol)
-            if not live or live.get('opened')!=pos.get('opened'):return
-            if time.time()-self.last_saved.get('position:'+symbol,0)>=1:
+        a=self.a;policy=RiskPolicy.from_env();selected=symbol in self.universe.entry_symbols
+        a.pandora_mark_positions({symbol:prices.get(symbol)})
+        position=a.S.get('pandora_win_positions',{}).get(symbol)
+        cursor=int(self.strategy.tokens.get(symbol,{}).get('last_sequence',0))
+        status=a.MARKET_OBS.event_status(symbol,cursor)
+        if status.get('gap'):
+            self.strategy.reset_observation(symbol,'Execution buffer gap; rebuild independent evidence.',sequence=int(status['oldest_sequence'])-1)
+            cursor=int(status['oldest_sequence'])-1
+        events=a.MARKET_OBS.events_after(symbol,cursor)
+        fresh=self.event_fresh(symbol)
+        decision=None
+        for event in events:
+            event_fresh=bool(fresh and -1<=time.time()-event['exchange_epoch']<=self.strategy.config.freshness_limit_seconds)
+            decision=self.strategy.ingest(symbol,event,position=position,selected_entry=selected,policy=policy,data_fresh=event_fresh)
+        if decision is None:decision=self.current_decision(symbol)
+        mark=a.fresh_mark_price(symbol)
+        if not fresh or mark is None:
+            decision=self.strategy.mark_data_uncertain(symbol,position=position,selected_entry=selected,policy=policy,
+                reason='Fresh sequenced executions and an independent current mark are required.')
+            if position:
+                protective=self.strategy.data_loss_protection(symbol,mark,position=position,mark_fresh=mark is not None,policy=policy)
+                if protective['action']=='CLOSE':
+                    a.pandora_close(symbol,mark,'data_loss_observed_structure_breach',watch_context={'flow_decision':protective})
+                    decision=protective
+        elif events and decision.get('new_event'):
+            if decision['action']=='CLOSE' and position:
+                a.pandora_close(symbol,mark,'executed_flow_control_transfer',watch_context={'flow_decision':decision})
+            elif decision['action'] in ('OPEN','REENTRY') and not position and selected:
+                if not a.pandora_open(symbol,decision['side'],decision['analysis'],execution_context=decision):
+                    rejection=a.S.get('pandora_executor_rejections',{}).get(symbol) or {}
+                    decision={**decision,'action':'WAIT','reason':rejection.get('reason','PAPER_ENTRY_NOT_COMMITTED')}
+            elif decision['action']=='HOLD' and position and selected:
+                self.pyramid(symbol,decision['analysis'],decision['flow'],mark)
+        current=a.S.get('pandora_win_positions',{}).get(symbol)
+        actual_state=self.strategy.tokens.get(symbol,{}).get('position_state',decision.get('position_state','FLAT'))
+        decision={**decision,'position_state':actual_state,'state_after':actual_state}
+        if current:
+            updated=mark_metrics(current,mark,decision.get('flow',{}),decision.get('analysis',{}),a.FEE) if mark is not None else current
+            updated.setdefault('features',{}).update(flow_decision=copy.deepcopy(decision),flow_regime=decision.get('flow_regime'),position_state=decision.get('position_state'))
+            with a.LOCK:live=a.S.get('pandora_win_positions',{}).get(symbol)
+            if not live or live.get('opened')!=current.get('opened'):return
+            if time.monotonic()-self.last_saved.get('position:'+symbol,0)>=1:
                 with a.pg() as db:
                     with db.transaction():
                         a.STORE.fence(db)
                         row=db.execute('update pandora_win_positions set features=%s::jsonb where symbol=%s and opened=%s returning symbol',
-                            (json.dumps(updated['features']),symbol,pos['opened'])).fetchone()
+                            (json.dumps(updated['features']),symbol,current['opened'])).fetchone()
                         if not row:
                             with a.LOCK:
-                                if a.S['pandora_win_positions'].get(symbol,{}).get('opened')==pos['opened']:
+                                if a.S.get('pandora_win_positions',{}).get(symbol,{}).get('opened')==current['opened']:
                                     a.S['pandora_win_positions'].pop(symbol,None)
                             return
-                self.last_saved['position:'+symbol]=time.time()
-            with a.LOCK:a.S['pandora_win_positions'][symbol]=updated
-            context.update(exit_control_state=copy.deepcopy(updated['features'].get('exit_control_state')),
-                exit_decision=copy.deepcopy(updated['features'].get('exit_decision')),
-                pressure_state=copy.deepcopy(updated['features'].get('pressure_state')))
-            side='LONG' if pos['side']>0 else 'SHORT'
-            added=symbol in selected and self.pyramid(symbol,analysis,flow,mark)
-            weakening=(flow.get('dominance_side')==-pos['side'] or flow.get('buy_absorbed' if pos['side']>0 else 'sell_absorbed'))
-            phase=side+'_PYRAMID' if added else side+'_WEAKENING' if weakening else side
-            self.transition(symbol,phase,'HOLD','confirmed_continuation_add' if added else (updated['features'].get('exit_decision') or {}).get('reason','observe_counterpressure' if weakening else 'same_side_control_or_no_confirmed_transfer'),context)
-        else:
-            if analysis.get('entry_blocked') and analysis.get('forming_local'):
-                forming=analysis['forming_local']
-                self.transition(symbol,'FORMING_'+forming['pivot_type'],forming['pivot_type']+'_FORMING',
-                    'old_anchor_extended_waiting_for_structure_confirmation',context)
-                return
-            if not a.pandora_runtime_h1_verified(symbol,analysis):
-                forming=analysis.get('forming_local') or {}
-                phase='FORMING_'+forming['pivot_type'] if forming else 'SELECTED'
-                self.transition(symbol,phase,'WAIT','fresh_local_structure_required',context);return
-            before=set(a.S['pandora_win_positions'])
-            a.pandora_flow_fast_entries({symbol:mark})
-            if symbol in a.S['pandora_win_positions'] and symbol not in before:
-                self.reload_token(symbol)
-            else:
-                phase='WAIT_REENTRY' if symbol in a.S.get('pandora_watch',{}) else ('LONG_READY' if analysis.get('entry_side')==1 else 'SHORT_READY')
-                self.transition(symbol,phase,'WAIT','waiting_for_executed_control_or_resumption',context)
+                self.last_saved['position:'+symbol]=time.monotonic()
+            with a.LOCK:
+                if a.S.get('pandora_win_positions',{}).get(symbol,{}).get('opened')==current['opened']:
+                    a.S['pandora_win_positions'][symbol]=updated
+        phase=decision.get('position_state') or ('FLAT' if not current else 'LONG' if current['side']>0 else 'SHORT')
+        context={'flow_decision':decision,'flow':decision.get('flow',{}),'position':copy.deepcopy(current),'mark':mark,
+                 'management_state':'ACTIVE_ENTRY' if selected else 'MANAGED_POSITION'}
+        self.transition(symbol,phase,decision['action'],decision['reason'],context)
 
     def snapshot(self):
-        with self.a.LOCK:
-            visible=set(self.a.pandora_trade_symbols())
-            tokens={symbol:copy.deepcopy(state) for symbol,state in self.tokens.items() if symbol in visible}
-        policy=RiskPolicy.from_env()
-        return dict(tokens=tokens,max_equity=self.max_equity,
-                    sizing_policy=dict(min_margin_fraction=policy.min_margin_fraction,max_entry_margin_fraction=policy.max_entry_margin_fraction,min_leverage=policy.min_leverage,max_leverage=policy.max_leverage,fixed_sl_tp=False,pnl_based_halts=False),
-                    pyramiding=dict(max_adds=self.max_adds,add_margin_fraction=self.add_fraction,
-                                    max_position_margin_fraction=self.position_fraction))
+        visible=set(self.a.pandora_runtime_symbols())
+        return dict(experiment_id=EXPERIMENT_ID,tokens={s:copy.deepcopy(v) for s,v in self.tokens.items() if s in visible},
+            max_equity=self.max_equity,universe=self.universe.to_dict(),flow_config=asdict(self.strategy.config),
+            sizing_policy=dict(min_margin_fraction=RiskPolicy.from_env().min_margin_fraction,min_leverage=RiskPolicy.from_env().min_leverage,max_leverage=RiskPolicy.from_env().max_leverage,fixed_sl_tp=False,pnl_based_halts=False),
+            pyramiding=dict(max_adds=self.max_adds,add_margin_fraction=self.add_fraction,max_position_margin_fraction=self.position_fraction))

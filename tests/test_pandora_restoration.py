@@ -1,10 +1,14 @@
-"""Regression contracts for the operator's H1 -> flow -> Pandora Win workflow."""
+"""Historical structure helpers plus retained transport and PAPER accounting contracts.
+
+Candle helper assertions do not define the flow-v2 application decision path.
+"""
 import copy
 import json
 import os
 from pathlib import Path
 import time
 import unittest
+import uuid
 from unittest.mock import patch
 
 import app
@@ -71,7 +75,7 @@ class CausalStructureTests(unittest.TestCase):
         self.assertEqual(analyze(rows,BASE+6*H+1000)['entry_side'],-1)
 
 
-class FlowContracts(unittest.TestCase):
+class LegacyFlowHelperContracts(unittest.TestCase):
     def test_entry_has_no_minute_candle_gate(self):
         f=flow();f['unrelated_display_metadata']='ignored'
         a=dict(ready=True,anchor_confirmed=True,h1_direction_anchor=True,entry_side=1)
@@ -140,14 +144,6 @@ class RuntimeContracts(unittest.TestCase):
         self.assertEqual(set(app.pandora_trade_symbols()),set(selected))
         self.assertTrue(set(selected).issubset(app.pandora_runtime_symbols()))
 
-    def test_verified_closed_hour_does_not_expire_after_90_seconds(self):
-        stamp=(BASE+6*H+1000)/1000
-        a=analyze(bars(),stamp*1000)
-        meta={k:a.get(k) for k in ('entry_side','signal_candle_time','pivot_candle_time','last_candle_time')}
-        meta['verified_at']=stamp
-        app.S['_pandora_h1_runtime_verified']={'BTC':meta}
-        self.assertTrue(app.pandora_runtime_h1_verified('BTC',a,stamp+300))
-        self.assertFalse(app.pandora_runtime_h1_verified('BTC',a,stamp+H/1000))
 
     def test_no_wait_holds_global_state_lock(self):
         import ast
@@ -181,28 +177,37 @@ class RuntimeContracts(unittest.TestCase):
 
 @unittest.skipUnless(os.getenv('PANDORA_TEST_DATABASE_URL_FILE'),'isolated PostgreSQL required')
 class PaperIntegration(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        import psycopg
-        from psycopg.rows import dict_row
-        cls.url=Path(os.environ['PANDORA_TEST_DATABASE_URL_FILE']).read_text().strip()
-        cls.connect=staticmethod(lambda:psycopg.connect(cls.url,autocommit=True,row_factory=dict_row))
-
     def setUp(self):
+        import psycopg
+        from psycopg import sql
+        from psycopg.rows import dict_row
+        self.url=Path(os.environ['PANDORA_TEST_DATABASE_URL_FILE']).read_text().strip()
+        self.schema='restore_'+uuid.uuid4().hex
+        with psycopg.connect(self.url,autocommit=True) as db:
+            db.execute(sql.SQL('create schema {}').format(sql.Identifier(self.schema)))
+        self.connect=lambda:psycopg.connect(self.url,autocommit=True,row_factory=dict_row,
+                                           options='-c search_path='+self.schema)
         self.saved=copy.deepcopy(app.S)
+        self.saved_runtime=app.WIN
         self.pgpatch=patch.object(app,'pg',self.connect);self.pgpatch.start()
+        self.schemapatch=patch.object(app,'EXPERIMENT_SCHEMA',self.schema);self.schemapatch.start()
+        app.initialize(app.pg,app.SCHEMA,schema=self.schema)
         app.pinit()
+        # This fixture verifies close/accounting directly, independently of the
+        # strategy runtime; full flow-v2 orchestration has separate acceptance.
+        app.WIN=None
         from engine_store import EngineStore
         self.store=EngineStore(self.connect)
         self.assertTrue(self.store.claim())
         self.storepatch=patch.object(app,'STORE',self.store);self.storepatch.start()
 
     def tearDown(self):
-        with self.connect() as db:
-            db.execute("delete from pandora_win_watchlist where symbol='TEST'")
-            db.execute("delete from pandora_win_trade_history where symbol='TEST'")
-        self.store.release();self.storepatch.stop();self.pgpatch.stop()
-        app.S.clear();app.S.update(self.saved)
+        import psycopg
+        from psycopg import sql
+        self.store.release();self.storepatch.stop();self.schemapatch.stop();self.pgpatch.stop()
+        app.S.clear();app.S.update(self.saved);app.WIN=self.saved_runtime
+        with psycopg.connect(self.url,autocommit=True) as db:
+            db.execute(sql.SQL('drop schema {} cascade').format(sql.Identifier(self.schema)))
 
     def test_exit_arms_durable_reentry_watch_and_retry_cannot_credit_twice(self):
         position=dict(symbol='TEST',side=1,entry=100,notional=250,margin=10,leverage=25,
@@ -221,8 +226,8 @@ class PaperIntegration(unittest.TestCase):
             self.assertEqual(db.execute("select count(*) n from pandora_win_trade_history where symbol='TEST'").fetchone()['n'],1)
             # Restore only this test's isolated account delta.
             db.execute('update pandora_win_account_state set equity=equity-%s,realized_pnl=realized_pnl-%s where id=1',(result['pnl'],result['pnl']))
-        self.assertEqual(watch['phase'],'WAIT_RESUMPTION')
-        self.assertTrue(watch['counter_pressure_seen'])
+        self.assertEqual(watch['phase'],'WAIT_INDEPENDENT_EXECUTIONS')
+        self.assertNotIn('counter_pressure_seen',watch)
         self.assertAlmostEqual(after-before,result['pnl'])
 
     def test_parallel_fences_do_not_serialize_unrelated_writes(self):

@@ -22,10 +22,13 @@ class PandoraHistoryTests(unittest.TestCase):
         with psycopg.connect(self.url,autocommit=True) as db:
             db.execute(sql.SQL('create schema {}').format(sql.Identifier(self.schema)))
         self.saved=copy.deepcopy(app.S)
+        self.saved_runtime=app.WIN
         self.connect=lambda:psycopg.connect(self.url,autocommit=True,row_factory=dict_row,
                                            options='-c search_path='+self.schema)
         self.pg_patch=patch.object(app,'pg',self.connect);self.pg_patch.start()
+        self.schema_patch=patch.object(app,'EXPERIMENT_SCHEMA',self.schema);self.schema_patch.start()
         self.store_patch=patch.object(app,'STORE',app.EngineStore(self.connect));self.store_patch.start()
+        app.initialize(app.pg,app.SCHEMA,schema=self.schema)
         app.pinit()
         with self.connect() as db:
             with db.cursor() as cursor:
@@ -43,7 +46,8 @@ class PandoraHistoryTests(unittest.TestCase):
                            "values('2026-10-01T00:00:00Z',%s,%s::jsonb)",(kind,'{"symbol":"BTC"}'))
 
     def tearDown(self):
-        self.store_patch.stop();self.pg_patch.stop();app.S.clear();app.S.update(self.saved)
+        self.store_patch.stop();self.schema_patch.stop();self.pg_patch.stop()
+        app.S.clear();app.S.update(self.saved);app.WIN=self.saved_runtime
         with psycopg.connect(self.url,autocommit=True) as db:
             db.execute(sql.SQL('drop schema {} cascade').format(sql.Identifier(self.schema)))
 

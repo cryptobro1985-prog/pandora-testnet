@@ -18,19 +18,26 @@ class BootstrapSafetyTests(unittest.TestCase):
     def test_first_start_is_clean_and_repeat_start_preserves_only_new_account(self):
         url=Path(os.environ['PANDORA_TEST_DATABASE_URL_FILE']).read_text().strip()
         schema='bootstrap_'+uuid.uuid4().hex
+        legacy_schema='bootstrap_old_'+uuid.uuid4().hex
         saved=copy.deepcopy(app.S)
         saved_runtime=app.WIN
         with psycopg.connect(url,autocommit=True) as db:
             db.execute(sql.SQL('create schema {}').format(sql.Identifier(schema)))
+            db.execute(sql.SQL('create schema {}').format(sql.Identifier(legacy_schema)))
         connect=lambda:psycopg.connect(url,autocommit=True,row_factory=dict_row,
                                       options='-c search_path='+schema)
         try:
-            with patch.object(app,'pg',connect),patch.object(app,'STORE',app.EngineStore(connect)):
-                with connect() as db:
+            with patch.object(app,'pg',connect),patch.object(app,'EXPERIMENT_SCHEMA',schema),\
+                    patch.object(app,'STORE',app.EngineStore(connect)):
+                # Previous account data lives in its own archive namespace;
+                # the new experiment starts in a dedicated empty namespace.
+                with psycopg.connect(url,autocommit=True,row_factory=dict_row,
+                                     options='-c search_path='+legacy_schema) as db:
                     db.execute('create table unrelated_account_state(id integer primary key,equity double precision,realized_pnl double precision)')
                     db.execute('insert into unrelated_account_state values(1,900000,899500)')
                     db.execute('create table unrelated_trade_history(symbol text,pnl double precision)')
                     db.execute("insert into unrelated_trade_history values('BTC',899500)")
+                app.initialize(app.pg,app.SCHEMA,schema=schema)
                 app.pinit()
                 with connect() as db:
                     account=db.execute('select equity,realized_pnl from pandora_win_account_state where id=1').fetchone()
@@ -53,7 +60,8 @@ class BootstrapSafetyTests(unittest.TestCase):
                     self.assertEqual(db.execute('select count(*) n from pandora_win_positions').fetchone()['n'],1)
                     self.assertEqual(db.execute("select count(*) n from pandora_win_audit_journal where event_id='preserve-me'").fetchone()['n'],1)
                     self.assertEqual(db.execute('select count(*) n from pandora_win_candle_checkpoints').fetchone()['n'],1)
-                    self.assertEqual(db.execute('select equity from unrelated_account_state where id=1').fetchone()['equity'],900000)
+                    self.assertEqual(db.execute(sql.SQL('select equity from {}.unrelated_account_state where id=1').format(
+                        sql.Identifier(legacy_schema))).fetchone()['equity'],900000)
                 self.assertEqual(app.S['pandora_equity'],750)
                 self.assertEqual(set(app.S['pandora_win_positions']),{'ETH'})
                 self.assertEqual({r['account'] for r in app.pandora_token_totals()},{'pandora_win'})
@@ -61,18 +69,19 @@ class BootstrapSafetyTests(unittest.TestCase):
             app.S.clear();app.S.update(saved);app.WIN=saved_runtime
             with psycopg.connect(url,autocommit=True) as db:
                 db.execute(sql.SQL('drop schema {} cascade').format(sql.Identifier(schema)))
+                db.execute(sql.SQL('drop schema {} cascade').format(sql.Identifier(legacy_schema)))
 
 
 class RotationReadinessTests(unittest.TestCase):
     def setUp(self):self.saved=copy.deepcopy(app.S)
     def tearDown(self):app.S.clear();app.S.update(self.saved)
 
-    def test_rotated_out_positions_and_watches_remain_subscribed(self):
+    def test_rotated_out_position_stays_managed_and_closed_old_watch_is_released(self):
         app.S['bybit_discovery']={'selected_symbols':['NEW']}
         app.S['pandora_win_positions']={'HELD':{}}
         app.S['pandora_watch']={'WATCHED':{}}
-        self.assertEqual(set(app.pandora_trade_symbols()),{'NEW','HELD','WATCHED'})
-        self.assertTrue({'NEW','HELD','WATCHED'}.issubset(app.pandora_runtime_symbols()))
+        self.assertEqual(set(app.pandora_trade_symbols()),{'NEW','HELD'})
+        self.assertEqual(set(app.pandora_runtime_symbols()),{'NEW','HELD'})
 
     def test_no_selected_market_cannot_report_risk_ready(self):
         app.S.update(engine_active=True,last_checkpoint=app.now(),bybit_discovery={},

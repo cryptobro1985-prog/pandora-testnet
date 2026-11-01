@@ -1,5 +1,6 @@
 """Concurrency, stale-input exits and transactional publication regressions."""
 import copy
+import json
 from contextlib import contextmanager
 import threading
 import time
@@ -9,6 +10,8 @@ from unittest.mock import patch
 
 from engine_store import LeaseLost
 from pandora_runtime import PandoraRuntime
+from pandora_flow_strategy import FlowStrategy
+from pandora_universe import HourlyUniverse
 import pandora_runtime
 
 
@@ -30,7 +33,8 @@ class FakeDB:
 
 def fake_runtime():
     a=SimpleNamespace(LOCK=threading.RLock(),ACCOUNT_LOCK=threading.RLock(),FEE=.00045)
-    a.S=dict(engine_active=True,bybit_discovery={'at':0,'selected_symbols':['BTC']},
+    a.S=dict(engine_active=True,mode='PAPER_ONLY',orders_enabled=False,
+             bybit_discovery={'at':0,'selected_symbols':['BTC']},
              pandora_win_positions={},pandora_watch={},_pandora_analysis={},sources={})
     a.now=lambda:'fixture'
     a.STORE=SimpleNamespace(fence=lambda db:None)
@@ -39,14 +43,19 @@ def fake_runtime():
     def connect():yield database
     a.pg=connect
     a.pandora_trade_symbols=lambda:tuple(a.S['bybit_discovery']['selected_symbols'])
-    a.MARKET_OBS=SimpleNamespace(flow_context=lambda symbol:{'trade_data_fresh':True})
+    a.MARKET_OBS=SimpleNamespace(flow_context=lambda symbol:{'trade_data_fresh':True},
+                                event_status=lambda symbol,cursor:{'gap':False},
+                                events_after=lambda symbol,cursor:[])
     a.current_entry_price=lambda symbol:None
     a.fresh_mark_price=lambda symbol:101
     a.pandora_mark_positions=lambda prices:None
     a._pandora_margin_state=lambda:(500.,0.,500.)
-    a.pandora_runtime_h1_verified=lambda *args:False
+    a.risk_snapshot=lambda *args:{'allowed':True,'equity':500.,'free_margin':500.,'portfolio_risk':0.}
     r=PandoraRuntime.__new__(PandoraRuntime)
-    r.a=a;r.tokens={};r.max_equity=500.;r.last_saved={'account':time.time()}
+    r.a=a;r.tokens={};r.max_equity=500.;r.last_saved={'checkpoint':time.monotonic()}
+    r.strategy=FlowStrategy()
+    r.universe=HourlyUniverse(state={'selected':[{'symbol':'BTC'}],
+                                   'last_refresh_at':0,'next_refresh_at':3600})
     r.last_scanner_save=0.;r.last_scanner_at=0.
     r.pyramid=lambda *args:False
     r.transition=lambda *args,**kwargs:None
@@ -84,7 +93,7 @@ class RuntimeSerializationTests(unittest.TestCase):
     def test_position_removed_at_metrics_boundary_is_never_resurrected(self):
         runtime,a,_=fake_runtime()
         a.S['pandora_win_positions']['BTC']=position()
-        runtime.last_saved['position:BTC']=time.time()
+        runtime.last_saved['position:BTC']=time.monotonic()
         def external_close(p,*args):
             updated=copy.deepcopy(p)
             a.S['pandora_win_positions'].pop('BTC')
@@ -99,11 +108,22 @@ class RuntimeSerializationTests(unittest.TestCase):
         database.updated=False
         runtime.cycle({'BTC':101})
         self.assertNotIn('BTC',a.S['pandora_win_positions'])
-        self.assertTrue(any('returning symbol' in q for q,_ in database.queries))
+        self.assertTrue(any('returning symbol' in q.lower() for q,_ in database.queries))
+
+    def test_failed_canonical_commit_does_not_publish_uncommitted_metrics(self):
+        runtime,a,database=fake_runtime()
+        a.S['pandora_win_positions']['BTC']=position()
+        before=copy.deepcopy(a.S['pandora_win_positions']['BTC'])
+        database.fail_commit=True
+        runtime.cycle({'BTC':101})
+        self.assertEqual(a.S['pandora_win_positions']['BTC'],before)
+        self.assertFalse(a.S['_execution_ok'])
+        self.assertIn('commit failed',a.S['_execution_errors']['BTC'])
 
     def test_one_token_error_does_not_block_other_positions_and_marks_readiness_failed(self):
         runtime,a,_=fake_runtime()
         a.S['bybit_discovery']['selected_symbols']=['BTC','ETH']
+        runtime.universe.selected=[{'symbol':'BTC'},{'symbol':'ETH'}]
         seen=[]
         def process(symbol,prices):
             seen.append(symbol)
@@ -118,6 +138,7 @@ class RuntimeSerializationTests(unittest.TestCase):
     def test_lost_lease_aborts_every_new_mutation_instead_of_continuing(self):
         runtime,a,_=fake_runtime()
         a.S['bybit_discovery']['selected_symbols']=['BTC','ETH']
+        runtime.universe.selected=[{'symbol':'BTC'},{'symbol':'ETH'}]
         seen=[]
         def process(symbol,prices):seen.append(symbol);raise LeaseLost('lease lost')
         runtime._cycle_symbol=process
@@ -149,10 +170,13 @@ class ScannerPublicationTests(unittest.TestCase):
         runtime,a,db=fake_runtime()
         a.S['pandora_watch']['OLD']={'exit_at':'old'}
         original=copy.deepcopy(a.S['bybit_discovery'])
+        original_universe=runtime.universe.to_dict()
         db.fail_commit=True
         with self.assertRaisesRegex(RuntimeError,'commit failed'):
-            runtime.scanner_snapshot(self.snapshot())
+            runtime.update_universe({'observations_ready':True,'ranked_rows':[{'symbol':'NEW'}]},held=())
         self.assertEqual(a.S['bybit_discovery'],original)
+        self.assertEqual(runtime.universe.to_dict(),original_universe)
+        self.assertEqual(runtime.universe.entry_symbols,('BTC',))
         self.assertIn('OLD',a.S['pandora_watch'])
 
     def test_fresh_position_snapshot_overrides_stale_rotate_out_decision(self):
@@ -161,10 +185,22 @@ class ScannerPublicationTests(unittest.TestCase):
         a.S['pandora_watch']['OLD']={'exit_at':'old'}
         self.assertTrue(runtime.scanner_snapshot(self.snapshot()))
         current=a.S['bybit_discovery']
-        self.assertEqual(current['states']['OLD'],'FADING')
+        self.assertEqual(current['states']['OLD'],'MANAGED_POSITION')
         self.assertIn('OLD',current['retained_open_positions'])
         self.assertIn('OLD',a.S['pandora_watch'])
         self.assertFalse(any('delete from pandora_win_watchlist' in q for q,_ in db.queries))
+
+    def test_committed_hourly_update_publishes_same_eligibility_and_schedule_as_database(self):
+        runtime,a,db=fake_runtime()
+        snapshot=runtime.update_universe({'observations_ready':True,
+                                         'ranked_rows':[{'symbol':'NEW'}]},held=())
+        self.assertEqual(runtime.universe.entry_symbols,('NEW',))
+        self.assertEqual(a.S['bybit_discovery']['selected_symbols'],['NEW'])
+        persisted=[json.loads(params[1]) for query,params in db.queries
+                   if query.startswith('insert into pandora_win_runtime_state') and params[0]=='universe']
+        self.assertEqual(len(persisted),1)
+        self.assertEqual(persisted[0]['selected_symbols'],snapshot['selected_symbols'])
+        self.assertEqual(persisted[0]['next_refresh_at'],runtime.universe.next_refresh_at)
 
     def test_older_selection_cannot_replace_newer_published_selection(self):
         runtime,a,_=fake_runtime()

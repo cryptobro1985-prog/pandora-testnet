@@ -17,6 +17,7 @@ from psycopg.rows import dict_row
 import app
 from accounting import paper_pnl
 from pandora_risk import plan_entry
+from pandora_flow_strategy import FlowStrategy
 
 
 @unittest.skipUnless(os.getenv('PANDORA_TEST_DATABASE_URL_FILE'),'isolated PostgreSQL required')
@@ -98,7 +99,7 @@ class ApplicationRiskAuditTests(unittest.TestCase):
         app.pandora_mark_positions({'BTC':98.})
         self.assertIn('BTC',app.S['pandora_win_positions'])
         # Neither a configured default stop nor giving back a large fraction of
-        # observed profit is an active strategy exit without flow/local transfer.
+        # observed profit is an active strategy exit without executed transfer.
         for mark in (110.,105.):
             app.S['_prices']['BTC']=mark;app.S['_price_received_epoch']['BTC']=time.time()
             app.pandora_mark_positions({'BTC':mark})
@@ -149,7 +150,8 @@ class ApplicationRiskAuditTests(unittest.TestCase):
 
     def test_failed_close_commit_preserves_cash_position_and_trade_count(self):
         position=self.seed_position(mark=98.)
-        with patch.object(app,'WIN',SimpleNamespace(semantic_close=lambda *args:(_ for _ in ()).throw(RuntimeError('audit failed')))):
+        with patch.object(app,'WIN',SimpleNamespace(flow_snapshot=lambda symbol:{},
+                semantic_close=lambda *args:(_ for _ in ()).throw(RuntimeError('audit failed')))):
             with self.assertRaisesRegex(RuntimeError,'audit failed'):
                 app.pandora_close('BTC',98,'risk_stop')
         with self.connect() as db:
@@ -165,30 +167,35 @@ class ApplicationRiskAuditTests(unittest.TestCase):
                      _execution_ok=False,_execution_heartbeat=stamp,_execution_errors={'BTC':'failed'},
                      _prices={'BTC':100},_price_received_epoch={'BTC':stamp},
                      _bybit_instruments={'BTC':{'observed_at':stamp}})
-        flow=SimpleNamespace(flow_context=lambda *args:{'trade_data_fresh':True,'evidence_ready':True})
-        with patch.object(app,'MARKET_OBS',flow),patch.object(app,'pandora_runtime_h1_verified',return_value=True):
+        runtime=SimpleNamespace(event_fresh=lambda symbol:True,
+                                flow_snapshot=lambda symbol:{'evidence_ready':True})
+        with patch.object(app,'WIN',runtime):
             failed=app.health_state()
             self.assertFalse(failed['risk_ready'])
             self.assertFalse(failed['execution_ok'])
-            app.S['_execution_ok']=True
+            self.assertTrue(all(failed['token_readiness']['BTC'].values()))
+            app.S.update(_execution_ok=True,_execution_errors={})
             self.assertTrue(app.health_state()['risk_ready'])
 
     def test_long_is_refused_if_buy_control_disappears_during_allocation(self):
         stamp=time.time()
-        analysis=dict(ready=True,anchor_confirmed=True,h1_direction_anchor=True,
-                      entry_side=1,pivot_type='LOCAL_LOW',pivot_price=99,
-                      signal_candle_time=1000,pivot_candle_time=500)
-        buying=dict(trade_data_fresh=True,latest_trade_age_seconds=0,latest_trade_epoch=stamp,
-                    buy_notional=200,sell_notional=100,price_direction=1,
-                    windows={},sustained_control_side=1,fast_control_side=1)
-        stopped={**buying,'sustained_control_side':0,'fast_control_side':-1}
+        strategy=FlowStrategy()
+        for sequence in range(1,11):
+            buying=strategy.ingest('BTC',dict(id='buy-'+str(sequence),sequence=sequence,
+                exchange_epoch=stamp-10+sequence,received_epoch=stamp-10+sequence,
+                price=99+sequence*.1,notional=100,aggressor_side=1))
+        self.assertEqual(buying['action'],'OPEN')
+        stopped={**buying,'action':'WAIT','side':0,'reason':'Buyer control disappeared.'}
         app.S.update(bybit_discovery={'selected_symbols':['BTC']},
-                     _pandora_analysis={'BTC':analysis},pandora_win_h1_direction={'BTC':analysis},
                      _bybit_instruments={'BTC':dict(max_leverage=50,observed_at=stamp)})
-        tape=SimpleNamespace(flow_context=unittest.mock.Mock(side_effect=[buying,stopped]))
-        with patch.object(app,'MARKET_OBS',tape),patch.object(app,'current_entry_price',return_value=100), \
-             patch.object(app,'pandora_runtime_h1_verified',return_value=True):
-            self.assertFalse(app.pandora_open('BTC',1,analysis))
+        runtime=SimpleNamespace(universe=SimpleNamespace(entry_symbols=('BTC',)),
+            event_fresh=lambda symbol:True,
+            entry_decision=unittest.mock.Mock(side_effect=[buying,stopped]))
+        with patch.object(app,'WIN',runtime),patch.object(app,'current_entry_price',return_value=100), \
+                patch.object(app,'plan_entry',wraps=app.plan_entry) as allocate:
+            self.assertFalse(app.pandora_open('BTC',1))
+        self.assertEqual(allocate.call_count,1)
+        self.assertEqual(runtime.entry_decision.call_count,2)
         self.assertEqual(app.S['pandora_executor_rejections']['BTC']['reason'],
                          'EXECUTED_CONTROL_CHANGED_DURING_ALLOCATION')
         with self.connect() as db:

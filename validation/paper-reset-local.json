@@ -1,0 +1,39 @@
+{
+  "environment": "local PostgreSQL / pandora_dev",
+  "production_reset_verified": false,
+  "experiment_id": "pandora_flow_v2",
+  "schema": "pandora_flow_v2",
+  "first_initialization": {
+    "closed_trades": 0,
+    "equity": 500.0,
+    "experiment_id": "pandora_flow_v2",
+    "initialized": true,
+    "open_positions": 0,
+    "realized_pnl": 0.0,
+    "schema": "pandora_flow_v2",
+    "starting_equity": 500.0,
+    "total_pnl": 0.0,
+    "unrealized_pnl": 0.0
+  },
+  "repeat_initialized": false,
+  "restart_preserved": true,
+  "old_namespace_unchanged": true,
+  "monitor": {
+    "starting_equity": 500.0,
+    "total_equity": 500.0,
+    "realized_pnl": 0.0,
+    "unrealized_pnl": 0.0,
+    "total_pnl_usdt": 0.0,
+    "total_pnl_percent": 0.0,
+    "closed_trades_count": 0
+  },
+  "empty_table_counts": {
+    "pandora_win_positions": 0,
+    "pandora_win_trade_history": 0,
+    "pandora_win_watchlist": 0,
+    "pandora_win_pyramid_adds": 0,
+    "pandora_win_token_state": 0,
+    "pandora_win_runtime_state": 0
+  },
+  "render_deployed": false
+}

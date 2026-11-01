@@ -1,0 +1,1097 @@
+{
+  "ok": true,
+  "roots": [
+    "app.pandora_open",
+    "app.pandora_mark_positions",
+    "app.pandora_flow_fast_entries",
+    "pandora_runtime.PandoraRuntime.pyramid",
+    "pandora_runtime.PandoraRuntime._cycle_symbol",
+    "pandora_win_core.pyramid_decision"
+  ],
+  "inspected_functions": [
+    "accounting.paper_pnl",
+    "app._pandora_margin_state",
+    "app.account_mutation",
+    "app.current_entry_price",
+    "app.fresh_mark_price",
+    "app.journal",
+    "app.log_learning_decision",
+    "app.now",
+    "app.pandora_close",
+    "app.pandora_flow_fast_entries",
+    "app.pandora_mark_positions",
+    "app.pandora_open",
+    "app.pg",
+    "app.publication_epoch",
+    "app.risk_snapshot",
+    "market_data.RollingMarketData._sequence",
+    "market_data.RollingMarketData.event_status",
+    "market_data.RollingMarketData.events_after",
+    "pandora_flow_strategy.FlowConfig.__post_init__",
+    "pandora_flow_strategy.FlowStrategy.__init__",
+    "pandora_flow_strategy.FlowStrategy._advance_structure",
+    "pandora_flow_strategy.FlowStrategy._analysis",
+    "pandora_flow_strategy.FlowStrategy._control",
+    "pandora_flow_strategy.FlowStrategy._decide",
+    "pandora_flow_strategy.FlowStrategy._metrics",
+    "pandora_flow_strategy.FlowStrategy._post_close_control",
+    "pandora_flow_strategy.FlowStrategy._regime",
+    "pandora_flow_strategy.FlowStrategy._sync_position",
+    "pandora_flow_strategy.FlowStrategy._token",
+    "pandora_flow_strategy.FlowStrategy.data_loss_protection",
+    "pandora_flow_strategy.FlowStrategy.evaluate",
+    "pandora_flow_strategy.FlowStrategy.get_state",
+    "pandora_flow_strategy.FlowStrategy.ingest",
+    "pandora_flow_strategy.FlowStrategy.mark_data_uncertain",
+    "pandora_flow_strategy.FlowStrategy.on_close",
+    "pandora_flow_strategy.FlowStrategy.on_open",
+    "pandora_flow_strategy.FlowStrategy.reset_observation",
+    "pandora_flow_strategy.FlowStrategy.restore",
+    "pandora_flow_strategy.FlowStrategy.to_dict",
+    "pandora_flow_strategy._MeasurementCache.__init__",
+    "pandora_flow_strategy._MeasurementCache._start",
+    "pandora_flow_strategy._MeasurementCache.append",
+    "pandora_flow_strategy._MeasurementCache.measure",
+    "pandora_flow_strategy._measure",
+    "pandora_flow_strategy._name",
+    "pandora_flow_strategy._number",
+    "pandora_flow_strategy._position_side",
+    "pandora_flow_strategy._side",
+    "pandora_risk.RiskPolicy.from_env",
+    "pandora_risk._blocked",
+    "pandora_risk._finite",
+    "pandora_risk._leverage",
+    "pandora_risk._loss_at_stop",
+    "pandora_risk._optional_budget",
+    "pandora_risk._selected_leverage",
+    "pandora_risk.adverse_distance",
+    "pandora_risk.existing_position_risk_plan",
+    "pandora_risk.plan_add",
+    "pandora_risk.plan_entry",
+    "pandora_risk.position_guard",
+    "pandora_risk.position_risk",
+    "pandora_risk.protective_stop",
+    "pandora_risk.signal_strength",
+    "pandora_runtime.PandoraRuntime._cycle",
+    "pandora_runtime.PandoraRuntime._cycle_symbol",
+    "pandora_runtime.PandoraRuntime._write_runtime",
+    "pandora_runtime.PandoraRuntime.current_decision",
+    "pandora_runtime.PandoraRuntime.cycle",
+    "pandora_runtime.PandoraRuntime.entry_decision",
+    "pandora_runtime.PandoraRuntime.event",
+    "pandora_runtime.PandoraRuntime.event_fresh",
+    "pandora_runtime.PandoraRuntime.flow_snapshot",
+    "pandora_runtime.PandoraRuntime.pyramid",
+    "pandora_runtime.PandoraRuntime.reload_token",
+    "pandora_runtime.PandoraRuntime.save_token",
+    "pandora_runtime.PandoraRuntime.semantic_close",
+    "pandora_runtime.PandoraRuntime.semantic_open",
+    "pandora_runtime.PandoraRuntime.transition",
+    "pandora_win_core.allocation",
+    "pandora_win_core.apply_add",
+    "pandora_win_core.mark_metrics",
+    "pandora_win_core.pyramid_decision"
+  ],
+  "dependencies": [
+    {
+      "from": "accounting.paper_pnl",
+      "to": "math.isfinite"
+    },
+    {
+      "from": "app._pandora_margin_state",
+      "to": "accounting.paper_pnl"
+    },
+    {
+      "from": "app._pandora_margin_state",
+      "to": "app.fresh_mark_price"
+    },
+    {
+      "from": "app._pandora_margin_state",
+      "to": "app.now"
+    },
+    {
+      "from": "app._pandora_margin_state",
+      "to": "copy.deepcopy"
+    },
+    {
+      "from": "app.account_mutation",
+      "to": "functools.wraps"
+    },
+    {
+      "from": "app.current_entry_price",
+      "to": "app.fresh_mark_price"
+    },
+    {
+      "from": "app.current_entry_price",
+      "to": "app.publication_epoch"
+    },
+    {
+      "from": "app.current_entry_price",
+      "to": "time.time"
+    },
+    {
+      "from": "app.fresh_mark_price",
+      "to": "math.isfinite"
+    },
+    {
+      "from": "app.fresh_mark_price",
+      "to": "time.time"
+    },
+    {
+      "from": "app.journal",
+      "to": "app.now"
+    },
+    {
+      "from": "app.journal",
+      "to": "app.pg"
+    },
+    {
+      "from": "app.journal",
+      "to": "json.dumps"
+    },
+    {
+      "from": "app.log_learning_decision",
+      "to": "app.journal"
+    },
+    {
+      "from": "app.now",
+      "to": "datetime.datetime.now"
+    },
+    {
+      "from": "app.pandora_close",
+      "to": "accounting.paper_pnl"
+    },
+    {
+      "from": "app.pandora_close",
+      "to": "app.log_learning_decision"
+    },
+    {
+      "from": "app.pandora_close",
+      "to": "app.now"
+    },
+    {
+      "from": "app.pandora_close",
+      "to": "app.pg"
+    },
+    {
+      "from": "app.pandora_close",
+      "to": "copy.deepcopy"
+    },
+    {
+      "from": "app.pandora_close",
+      "to": "json.dumps"
+    },
+    {
+      "from": "app.pandora_close",
+      "to": "pandora_runtime.PandoraRuntime.flow_snapshot"
+    },
+    {
+      "from": "app.pandora_close",
+      "to": "pandora_runtime.PandoraRuntime.reload_token"
+    },
+    {
+      "from": "app.pandora_close",
+      "to": "pandora_runtime.PandoraRuntime.semantic_close"
+    },
+    {
+      "from": "app.pandora_close",
+      "to": "pandora_win_core.mark_metrics"
+    },
+    {
+      "from": "app.pandora_flow_fast_entries",
+      "to": "pandora_runtime.PandoraRuntime.cycle"
+    },
+    {
+      "from": "app.pandora_mark_positions",
+      "to": "app.fresh_mark_price"
+    },
+    {
+      "from": "app.pandora_mark_positions",
+      "to": "app.pandora_close"
+    },
+    {
+      "from": "app.pandora_mark_positions",
+      "to": "app.pg"
+    },
+    {
+      "from": "app.pandora_mark_positions",
+      "to": "copy.deepcopy"
+    },
+    {
+      "from": "app.pandora_mark_positions",
+      "to": "json.dumps"
+    },
+    {
+      "from": "app.pandora_mark_positions",
+      "to": "pandora_risk.position_guard"
+    },
+    {
+      "from": "app.pandora_mark_positions",
+      "to": "pandora_runtime.PandoraRuntime.flow_snapshot"
+    },
+    {
+      "from": "app.pandora_mark_positions",
+      "to": "pandora_win_core.mark_metrics"
+    },
+    {
+      "from": "app.pandora_mark_positions",
+      "to": "time.monotonic"
+    },
+    {
+      "from": "app.pandora_open",
+      "to": "app.current_entry_price"
+    },
+    {
+      "from": "app.pandora_open",
+      "to": "app.journal"
+    },
+    {
+      "from": "app.pandora_open",
+      "to": "app.log_learning_decision"
+    },
+    {
+      "from": "app.pandora_open",
+      "to": "app.now"
+    },
+    {
+      "from": "app.pandora_open",
+      "to": "app.pg"
+    },
+    {
+      "from": "app.pandora_open",
+      "to": "app.risk_snapshot"
+    },
+    {
+      "from": "app.pandora_open",
+      "to": "copy.deepcopy"
+    },
+    {
+      "from": "app.pandora_open",
+      "to": "json.dumps"
+    },
+    {
+      "from": "app.pandora_open",
+      "to": "pandora_flow_strategy.FlowStrategy.get_state"
+    },
+    {
+      "from": "app.pandora_open",
+      "to": "pandora_risk.RiskPolicy.from_env"
+    },
+    {
+      "from": "app.pandora_open",
+      "to": "pandora_risk.plan_entry"
+    },
+    {
+      "from": "app.pandora_open",
+      "to": "pandora_runtime.PandoraRuntime.entry_decision"
+    },
+    {
+      "from": "app.pandora_open",
+      "to": "pandora_runtime.PandoraRuntime.event_fresh"
+    },
+    {
+      "from": "app.pandora_open",
+      "to": "pandora_runtime.PandoraRuntime.reload_token"
+    },
+    {
+      "from": "app.pandora_open",
+      "to": "pandora_runtime.PandoraRuntime.semantic_open"
+    },
+    {
+      "from": "app.pandora_open",
+      "to": "psycopg.Rollback"
+    },
+    {
+      "from": "app.pandora_open",
+      "to": "time.time"
+    },
+    {
+      "from": "app.pg",
+      "to": "pandora_experiment.configure_connection_args"
+    },
+    {
+      "from": "app.pg",
+      "to": "psycopg.connect"
+    },
+    {
+      "from": "app.publication_epoch",
+      "to": "datetime.datetime.fromisoformat"
+    },
+    {
+      "from": "app.risk_snapshot",
+      "to": "app._pandora_margin_state"
+    },
+    {
+      "from": "app.risk_snapshot",
+      "to": "copy.deepcopy"
+    },
+    {
+      "from": "app.risk_snapshot",
+      "to": "pandora_risk.RiskPolicy.from_env"
+    },
+    {
+      "from": "app.risk_snapshot",
+      "to": "pandora_risk.position_risk"
+    },
+    {
+      "from": "market_data.RollingMarketData.event_status",
+      "to": "market_data.RollingMarketData._sequence"
+    },
+    {
+      "from": "market_data.RollingMarketData.events_after",
+      "to": "market_data.RollingMarketData._sequence"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.__init__",
+      "to": "pandora_flow_strategy.FlowStrategy.restore"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy._advance_structure",
+      "to": "pandora_flow_strategy.FlowStrategy._control"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy._advance_structure",
+      "to": "pandora_flow_strategy._measure"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy._analysis",
+      "to": "copy.deepcopy"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy._decide",
+      "to": "copy.deepcopy"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy._decide",
+      "to": "pandora_flow_strategy.FlowStrategy._advance_structure"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy._decide",
+      "to": "pandora_flow_strategy.FlowStrategy._analysis"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy._decide",
+      "to": "pandora_flow_strategy.FlowStrategy._metrics"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy._decide",
+      "to": "pandora_flow_strategy.FlowStrategy._post_close_control"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy._decide",
+      "to": "pandora_flow_strategy.FlowStrategy._regime"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy._decide",
+      "to": "pandora_flow_strategy._name"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy._metrics",
+      "to": "copy.deepcopy"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy._metrics",
+      "to": "pandora_flow_strategy.FlowStrategy._control"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy._post_close_control",
+      "to": "pandora_flow_strategy.FlowStrategy._control"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy._post_close_control",
+      "to": "pandora_flow_strategy._measure"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy._sync_position",
+      "to": "pandora_flow_strategy.FlowStrategy._token"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy._sync_position",
+      "to": "pandora_flow_strategy.FlowStrategy.on_close"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy._sync_position",
+      "to": "pandora_flow_strategy.FlowStrategy.on_open"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy._sync_position",
+      "to": "pandora_flow_strategy._position_side"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.data_loss_protection",
+      "to": "pandora_flow_strategy.FlowStrategy._token"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.data_loss_protection",
+      "to": "pandora_flow_strategy._number"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.data_loss_protection",
+      "to": "pandora_flow_strategy._position_side"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.data_loss_protection",
+      "to": "pandora_risk.RiskPolicy"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.evaluate",
+      "to": "copy.deepcopy"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.evaluate",
+      "to": "pandora_flow_strategy.FlowStrategy._decide"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.evaluate",
+      "to": "pandora_flow_strategy.FlowStrategy._token"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.evaluate",
+      "to": "pandora_flow_strategy.FlowStrategy.mark_data_uncertain"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.evaluate",
+      "to": "pandora_flow_strategy._position_side"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.evaluate",
+      "to": "pandora_risk.RiskPolicy"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.get_state",
+      "to": "copy.deepcopy"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.get_state",
+      "to": "pandora_flow_strategy.FlowStrategy._token"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.ingest",
+      "to": "pandora_flow_strategy.FlowStrategy._decide"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.ingest",
+      "to": "pandora_flow_strategy.FlowStrategy._metrics"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.ingest",
+      "to": "pandora_flow_strategy.FlowStrategy._sync_position"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.ingest",
+      "to": "pandora_flow_strategy._number"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.ingest",
+      "to": "pandora_flow_strategy._side"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.ingest",
+      "to": "pandora_risk.RiskPolicy"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.mark_data_uncertain",
+      "to": "pandora_flow_strategy.FlowStrategy._decide"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.mark_data_uncertain",
+      "to": "pandora_flow_strategy.FlowStrategy._token"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.mark_data_uncertain",
+      "to": "pandora_flow_strategy._position_side"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.mark_data_uncertain",
+      "to": "pandora_risk.RiskPolicy"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.on_close",
+      "to": "pandora_flow_strategy.FlowStrategy._metrics"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.on_close",
+      "to": "pandora_flow_strategy.FlowStrategy._token"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.on_close",
+      "to": "pandora_flow_strategy._name"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.on_close",
+      "to": "pandora_flow_strategy._number"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.on_close",
+      "to": "pandora_flow_strategy._side"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.on_open",
+      "to": "pandora_flow_strategy.FlowStrategy._token"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.on_open",
+      "to": "pandora_flow_strategy._name"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.on_open",
+      "to": "pandora_flow_strategy._number"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.on_open",
+      "to": "pandora_flow_strategy._side"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.reset_observation",
+      "to": "copy.deepcopy"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.reset_observation",
+      "to": "pandora_flow_strategy.FlowStrategy._token"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.reset_observation",
+      "to": "pandora_flow_strategy._name"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.restore",
+      "to": "copy.deepcopy"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.to_dict",
+      "to": "copy.deepcopy"
+    },
+    {
+      "from": "pandora_flow_strategy.FlowStrategy.to_dict",
+      "to": "dataclasses.asdict"
+    },
+    {
+      "from": "pandora_flow_strategy._MeasurementCache.__init__",
+      "to": "collections.deque"
+    },
+    {
+      "from": "pandora_flow_strategy._MeasurementCache.__init__",
+      "to": "decimal.Decimal"
+    },
+    {
+      "from": "pandora_flow_strategy._MeasurementCache.__init__",
+      "to": "pandora_flow_strategy._MeasurementCache.append"
+    },
+    {
+      "from": "pandora_flow_strategy._MeasurementCache._start",
+      "to": "bisect.bisect_left"
+    },
+    {
+      "from": "pandora_flow_strategy._MeasurementCache.append",
+      "to": "decimal.Decimal"
+    },
+    {
+      "from": "pandora_flow_strategy._MeasurementCache.measure",
+      "to": "pandora_flow_strategy._MeasurementCache._start"
+    },
+    {
+      "from": "pandora_flow_strategy._number",
+      "to": "math.isfinite"
+    },
+    {
+      "from": "pandora_flow_strategy._position_side",
+      "to": "pandora_flow_strategy._side"
+    },
+    {
+      "from": "pandora_risk._finite",
+      "to": "math.isfinite"
+    },
+    {
+      "from": "pandora_risk._leverage",
+      "to": "math.floor"
+    },
+    {
+      "from": "pandora_risk._loss_at_stop",
+      "to": "accounting.paper_pnl"
+    },
+    {
+      "from": "pandora_risk._selected_leverage",
+      "to": "math.floor"
+    },
+    {
+      "from": "pandora_risk._selected_leverage",
+      "to": "pandora_risk._leverage"
+    },
+    {
+      "from": "pandora_risk._selected_leverage",
+      "to": "pandora_risk.signal_strength"
+    },
+    {
+      "from": "pandora_risk.adverse_distance",
+      "to": "pandora_risk._finite"
+    },
+    {
+      "from": "pandora_risk.plan_add",
+      "to": "accounting.paper_pnl"
+    },
+    {
+      "from": "pandora_risk.plan_add",
+      "to": "pandora_risk._blocked"
+    },
+    {
+      "from": "pandora_risk.plan_add",
+      "to": "pandora_risk._finite"
+    },
+    {
+      "from": "pandora_risk.plan_add",
+      "to": "pandora_risk._loss_at_stop"
+    },
+    {
+      "from": "pandora_risk.plan_add",
+      "to": "pandora_risk._optional_budget"
+    },
+    {
+      "from": "pandora_risk.plan_add",
+      "to": "pandora_risk._selected_leverage"
+    },
+    {
+      "from": "pandora_risk.plan_add",
+      "to": "pandora_risk.adverse_distance"
+    },
+    {
+      "from": "pandora_risk.plan_add",
+      "to": "pandora_risk.position_risk"
+    },
+    {
+      "from": "pandora_risk.plan_add",
+      "to": "pandora_risk.protective_stop"
+    },
+    {
+      "from": "pandora_risk.plan_entry",
+      "to": "math.floor"
+    },
+    {
+      "from": "pandora_risk.plan_entry",
+      "to": "pandora_risk._blocked"
+    },
+    {
+      "from": "pandora_risk.plan_entry",
+      "to": "pandora_risk._finite"
+    },
+    {
+      "from": "pandora_risk.plan_entry",
+      "to": "pandora_risk._loss_at_stop"
+    },
+    {
+      "from": "pandora_risk.plan_entry",
+      "to": "pandora_risk._optional_budget"
+    },
+    {
+      "from": "pandora_risk.plan_entry",
+      "to": "pandora_risk._selected_leverage"
+    },
+    {
+      "from": "pandora_risk.plan_entry",
+      "to": "pandora_risk.adverse_distance"
+    },
+    {
+      "from": "pandora_risk.position_guard",
+      "to": "accounting.paper_pnl"
+    },
+    {
+      "from": "pandora_risk.position_guard",
+      "to": "pandora_risk._finite"
+    },
+    {
+      "from": "pandora_risk.position_guard",
+      "to": "pandora_risk.existing_position_risk_plan"
+    },
+    {
+      "from": "pandora_risk.position_risk",
+      "to": "pandora_risk._finite"
+    },
+    {
+      "from": "pandora_risk.position_risk",
+      "to": "pandora_risk._loss_at_stop"
+    },
+    {
+      "from": "pandora_risk.protective_stop",
+      "to": "pandora_risk._finite"
+    },
+    {
+      "from": "pandora_risk.signal_strength",
+      "to": "pandora_risk._finite"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle",
+      "to": "app._pandora_margin_state"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle",
+      "to": "app.pg"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle",
+      "to": "app.risk_snapshot"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle",
+      "to": "pandora_flow_strategy.FlowStrategy.to_dict"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle",
+      "to": "pandora_runtime.PandoraRuntime._cycle_symbol"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle",
+      "to": "pandora_runtime.PandoraRuntime._write_runtime"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle",
+      "to": "time.monotonic"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle_symbol",
+      "to": "app.fresh_mark_price"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle_symbol",
+      "to": "app.pandora_close"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle_symbol",
+      "to": "app.pandora_mark_positions"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle_symbol",
+      "to": "app.pandora_open"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle_symbol",
+      "to": "app.pg"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle_symbol",
+      "to": "copy.deepcopy"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle_symbol",
+      "to": "json.dumps"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle_symbol",
+      "to": "market_data.RollingMarketData.event_status"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle_symbol",
+      "to": "market_data.RollingMarketData.events_after"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle_symbol",
+      "to": "pandora_flow_strategy.FlowStrategy.data_loss_protection"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle_symbol",
+      "to": "pandora_flow_strategy.FlowStrategy.ingest"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle_symbol",
+      "to": "pandora_flow_strategy.FlowStrategy.mark_data_uncertain"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle_symbol",
+      "to": "pandora_flow_strategy.FlowStrategy.reset_observation"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle_symbol",
+      "to": "pandora_risk.RiskPolicy.from_env"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle_symbol",
+      "to": "pandora_runtime.PandoraRuntime.current_decision"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle_symbol",
+      "to": "pandora_runtime.PandoraRuntime.event_fresh"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle_symbol",
+      "to": "pandora_runtime.PandoraRuntime.pyramid"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle_symbol",
+      "to": "pandora_runtime.PandoraRuntime.transition"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle_symbol",
+      "to": "pandora_win_core.mark_metrics"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle_symbol",
+      "to": "time.monotonic"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._cycle_symbol",
+      "to": "time.time"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime._write_runtime",
+      "to": "json.dumps"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.current_decision",
+      "to": "pandora_flow_strategy.FlowStrategy.evaluate"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.current_decision",
+      "to": "pandora_risk.RiskPolicy.from_env"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.current_decision",
+      "to": "pandora_runtime.PandoraRuntime.event_fresh"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.current_decision",
+      "to": "time.time"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.cycle",
+      "to": "pandora_runtime.PandoraRuntime._cycle"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.cycle",
+      "to": "time.time"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.entry_decision",
+      "to": "pandora_runtime.PandoraRuntime.current_decision"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.event",
+      "to": "app.now"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.event",
+      "to": "json.dumps"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.event_fresh",
+      "to": "market_data.RollingMarketData.flow_context"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.flow_snapshot",
+      "to": "pandora_runtime.PandoraRuntime.current_decision"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.pyramid",
+      "to": "app.current_entry_price"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.pyramid",
+      "to": "app.now"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.pyramid",
+      "to": "app.pg"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.pyramid",
+      "to": "app.risk_snapshot"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.pyramid",
+      "to": "copy.deepcopy"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.pyramid",
+      "to": "json.dumps"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.pyramid",
+      "to": "pandora_risk.RiskPolicy.from_env"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.pyramid",
+      "to": "pandora_risk.plan_add"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.pyramid",
+      "to": "pandora_risk.signal_strength"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.pyramid",
+      "to": "pandora_runtime.PandoraRuntime.event"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.pyramid",
+      "to": "pandora_runtime.PandoraRuntime.event_fresh"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.pyramid",
+      "to": "pandora_runtime.PandoraRuntime.flow_snapshot"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.pyramid",
+      "to": "pandora_win_core.apply_add"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.pyramid",
+      "to": "pandora_win_core.mark_metrics"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.pyramid",
+      "to": "pandora_win_core.pyramid_decision"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.pyramid",
+      "to": "time.time"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.reload_token",
+      "to": "app.pg"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.reload_token",
+      "to": "pandora_flow_strategy.FlowStrategy"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.save_token",
+      "to": "json.dumps"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.semantic_close",
+      "to": "market_data.RollingMarketData.event_status"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.semantic_close",
+      "to": "pandora_flow_strategy.FlowStrategy"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.semantic_close",
+      "to": "pandora_flow_strategy.FlowStrategy.on_close"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.semantic_close",
+      "to": "pandora_flow_strategy.FlowStrategy.to_dict"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.semantic_close",
+      "to": "pandora_runtime.PandoraRuntime._write_runtime"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.semantic_close",
+      "to": "pandora_runtime.PandoraRuntime.current_decision"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.semantic_close",
+      "to": "pandora_runtime.PandoraRuntime.event"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.semantic_close",
+      "to": "pandora_runtime.PandoraRuntime.save_token"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.semantic_open",
+      "to": "copy.deepcopy"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.semantic_open",
+      "to": "pandora_flow_strategy.FlowStrategy"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.semantic_open",
+      "to": "pandora_flow_strategy.FlowStrategy.get_state"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.semantic_open",
+      "to": "pandora_flow_strategy.FlowStrategy.on_open"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.semantic_open",
+      "to": "pandora_flow_strategy.FlowStrategy.to_dict"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.semantic_open",
+      "to": "pandora_runtime.PandoraRuntime._write_runtime"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.semantic_open",
+      "to": "pandora_runtime.PandoraRuntime.event"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.semantic_open",
+      "to": "pandora_runtime.PandoraRuntime.save_token"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.transition",
+      "to": "app.now"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.transition",
+      "to": "app.pg"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.transition",
+      "to": "pandora_runtime.PandoraRuntime.event"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.transition",
+      "to": "pandora_runtime.PandoraRuntime.save_token"
+    },
+    {
+      "from": "pandora_runtime.PandoraRuntime.transition",
+      "to": "time.monotonic"
+    },
+    {
+      "from": "pandora_win_core.allocation",
+      "to": "math.isfinite"
+    },
+    {
+      "from": "pandora_win_core.apply_add",
+      "to": "copy.deepcopy"
+    },
+    {
+      "from": "pandora_win_core.apply_add",
+      "to": "math.isfinite"
+    },
+    {
+      "from": "pandora_win_core.mark_metrics",
+      "to": "accounting.paper_pnl"
+    },
+    {
+      "from": "pandora_win_core.mark_metrics",
+      "to": "copy.deepcopy"
+    },
+    {
+      "from": "pandora_win_core.pyramid_decision",
+      "to": "accounting.paper_pnl"
+    },
+    {
+      "from": "pandora_win_core.pyramid_decision",
+      "to": "copy.deepcopy"
+    }
+  ],
+  "operational_boundaries": {
+    "engine_store": "single-writer lease and fence",
+    "pandora_universe": "hourly universe membership, never trade direction",
+    "psycopg": "transactional PAPER persistence"
+  },
+  "exact_operational_boundaries": {
+    "pandora_experiment.configure_connection_args": "validated experiment search path; no public fallback"
+  },
+  "freshness_only_boundary": {
+    "function": "market_data.RollingMarketData.flow_context",
+    "consumer": "pandora_runtime.PandoraRuntime.event_fresh",
+    "permitted_field": "trade_data_fresh"
+  },
+  "scoped_grep_hits": [],
+  "preserved_money_engine": {
+    "pandora_risk.py": {
+      "expected": "dcc3bee9df53696a08eddbefe36ed73e3d219a956f71d8cf101f0cc0184b6ef3",
+      "actual": "dcc3bee9df53696a08eddbefe36ed73e3d219a956f71d8cf101f0cc0184b6ef3",
+      "unchanged": true
+    },
+    "accounting.py": {
+      "expected": "310bdd2b1988fbe1b2a3d17adf0c7ec73eaa85391599f7a7517664e82553a11e",
+      "actual": "310bdd2b1988fbe1b2a3d17adf0c7ec73eaa85391599f7a7517664e82553a11e",
+      "unchanged": true
+    }
+  },
+  "violations": [],
+  "scope": "Active AST roots and reviewed project dependencies; historical/UI candle code is excluded."
+}

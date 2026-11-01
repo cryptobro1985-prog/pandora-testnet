@@ -5,7 +5,7 @@ Current and immediately preceding price-level auctions form a relative pressure
 comparison. This is an explicit causal heuristic, not a calibrated profitability
 or false-alarm guarantee. Transport freshness is a separate validity check.
 """
-from collections import deque
+from collections import deque, OrderedDict
 from pandora_flow import summarize
 import copy
 import math,threading,time
@@ -18,15 +18,67 @@ def _number(value):
 
 
 class RollingMarketData:
-    def __init__(self,max_symbols=64,max_trade_lag_seconds=60,freshness_seconds=60,max_seen_per_symbol=65536,**unused):
+    def __init__(self,max_symbols=64,max_trade_lag_seconds=60,freshness_seconds=60,max_seen_per_symbol=65536,max_events_per_symbol=8192,**unused):
+        if int(max_symbols)<1 or int(max_events_per_symbol)<1:raise ValueError('invalid execution buffer capacity')
         self.max_symbols=max_symbols;self.max_trade_lag_seconds=max_trade_lag_seconds
         self.freshness_seconds=freshness_seconds;self.max_seen_per_symbol=max_seen_per_symbol
         self._lock=threading.RLock();self._owners={};self._owner_heartbeats={};self._symbols={}
+        self.max_events_per_symbol=int(max_events_per_symbol)
+        # Transport reconnects reset flow coverage, but never recycle execution
+        # identities or sequence cursors. Heavy replay buffers use a bounded LRU.
+        self._execution_streams=OrderedDict();self._execution_sequences={}
         self._counters={'accepted':0,'duplicates':0,'invalid':0,'stale':0,'out_of_order':0,'outside_subscription':0,'dedup_overflows':0}
 
     @staticmethod
     def _new_symbol(epoch):
         return {'since':epoch,'seen':set(),'seen_queue':deque(),'latest_trade':None,'first_trade':None,'levels':deque(maxlen=2),'trades':deque(),'overflow_until':None,'revision':0,'flow_cache':None}
+
+    def _execution_stream(self,symbol):
+        stream=self._execution_streams.get(symbol)
+        if stream is None:
+            stream=dict(events=deque(maxlen=self.max_events_per_symbol),seen=set(),seen_queue=deque(),overflow_until=None)
+            self._execution_streams[symbol]=stream
+            while len(self._execution_streams)>self.max_symbols:self._execution_streams.popitem(last=False)
+        else:self._execution_streams.move_to_end(symbol)
+        return stream
+
+    @staticmethod
+    def _sequence(value):
+        sequence=int(value or 0)
+        if sequence<0 or sequence!=float(value or 0):raise ValueError('invalid execution sequence')
+        return sequence
+
+    def execution_sequences(self):
+        with self._lock:return dict(self._execution_sequences)
+
+    def restore_execution_sequences(self,sequences):
+        """Seed persisted cursors before sockets start after a process restart."""
+        with self._lock:
+            for symbol,value in (sequences or {}).items():
+                sequence=self._sequence(value);symbol=str(symbol)
+                if sequence>self._execution_sequences.get(symbol,0):
+                    self._execution_sequences[symbol]=sequence
+                    stream=self._execution_streams.get(symbol)
+                    if stream is not None:stream['events'].clear()
+
+    def events_after(self,symbol,sequence=0):
+        """Copy accepted executions in sequence order, without consuming them."""
+        sequence=self._sequence(sequence)
+        with self._lock:
+            stream=self._execution_streams.get(str(symbol))
+            return [dict(event) for event in stream['events'] if event['sequence']>sequence] if stream else []
+
+    def event_status(self,symbol,after_sequence=None):
+        """Report replay coverage so consumers can detect a missing prefix."""
+        cursor=None if after_sequence is None else self._sequence(after_sequence)
+        with self._lock:
+            symbol=str(symbol);stream=self._execution_streams.get(symbol)
+            events=stream['events'] if stream else ()
+            oldest=events[0]['sequence'] if events else None
+            latest=self._execution_sequences.get(symbol,0)
+            gap=cursor is not None and (cursor<oldest-1 if oldest is not None else cursor<latest)
+            return dict(oldest_sequence=oldest,latest_sequence=latest,buffered_events=len(events),
+                        gap=gap,latest_receive_epoch=events[-1]['received_epoch'] if events else None)
 
     def mark_connected(self,epoch=None,symbols=None,owner=None):
         epoch=time.time() if epoch is None else float(epoch);name='default' if owner is None else str(owner)
@@ -84,18 +136,23 @@ class RollingMarketData:
                     self._counters['stale']+=1;continue
                 if state['latest_trade'] is not None and stamp<state['latest_trade']:
                     self._counters['out_of_order']+=1;continue
-                seen=state['seen'];queue=state['seen_queue']
+                stream=self._execution_stream(symbol)
+                seen=stream['seen'];queue=stream['seen_queue']
+                state['seen']=seen;state['seen_queue']=queue
                 trades=state['trades']
                 while trades and received-trades[0][0]>610: trades.popleft()
                 while queue and received-queue[0][0]>self.max_trade_lag_seconds+2:
                     _,old=queue.popleft();seen.discard(old)
                 key=(millis,str(ident))
                 if key in seen:self._counters['duplicates']+=1;continue
-                if state['overflow_until'] is not None:
-                    if received<=state['overflow_until']:continue
-                    state=self._new_symbol(received);self._symbols[symbol]=state;seen=state['seen'];queue=state['seen_queue']
+                if stream['overflow_until'] is not None:
+                    state['overflow_until']=stream['overflow_until']
+                    if received<=stream['overflow_until']:continue
+                    stream['overflow_until']=None;seen.clear();queue.clear()
+                    state=self._new_symbol(received);self._symbols[symbol]=state
+                    state['seen']=seen;state['seen_queue']=queue
                 if len(seen)>=self.max_seen_per_symbol:
-                    state['overflow_until']=received+self.max_trade_lag_seconds+2
+                    state['overflow_until']=stream['overflow_until']=received+self.max_trade_lag_seconds+2
                     self._counters['dedup_overflows']+=1;continue
                 seen.add(key);queue.append((received,key))
                 levels=state['levels']
@@ -106,8 +163,14 @@ class RollingMarketData:
                 previous_event=state.get('decision_epoch')
                 state['decision_epoch']=stamp if previous_event is None else max(stamp,math.nextafter(previous_event,float('inf')))
                 state['revision']+=1
+                state['latest_receive_epoch']=received
                 if state['first_trade'] is None:state['first_trade']=stamp
                 trades.append((stamp,px,notional,side))
+                sequence=self._execution_sequences.get(symbol,0)+1
+                self._execution_sequences[symbol]=sequence
+                stream['events'].append(dict(id=str(ident),sequence=sequence,
+                    exchange_epoch=stamp,received_epoch=received,price=px,size=qty,
+                    notional=notional,aggressor_side=side,side=side))
                 accepted+=1
                 if accepted_rows is not None:accepted_rows.append(row)
             self._counters['accepted']+=accepted
@@ -124,6 +187,8 @@ class RollingMarketData:
              'latest_trade_age_seconds':None,'latest_trade_epoch':None,'observed_at_epoch':epoch,
              'freshness_limit_seconds':self.freshness_seconds,'volume_source':'bybit_v5_public_trade'}
         with self._lock:
+            status=self.event_status(symbol)
+            out.update(execution_sequence=status['latest_sequence'],latest_receive_epoch=status['latest_receive_epoch'])
             state=self._symbols.get(str(symbol))
             if state is None:return out
             fresh=any(str(symbol) in symbols and -1<=epoch-self._owner_heartbeats.get(owner,float('-inf'))<=self.freshness_seconds for owner,symbols in self._owners.items())
@@ -162,6 +227,8 @@ class RollingMarketData:
         r15,b15,s15=window(15)
         r30,b30,s30=window(30)
         out.update(trade_data_fresh=True,buy_notional=b60,sell_notional=s60,flow_imbalance=i60,
+                   buy_sell_ratio=b60/s60 if s60 else None,
+                   buy_trade_count=sum(r[3]=='B' for r in r60),sell_trade_count=sum(r[3]=='A' for r in r60),
                    buy_volume_15s=b15,sell_volume_15s=s15,trade_count_15s=len(r15),flow_imbalance_15s=imbalance(b15,s15),
                    buy_volume_30s=b30,sell_volume_30s=s30,trade_count_30s=len(r30),flow_imbalance_30s=imbalance(b30,s30),
                    buy_volume_60s=b60,sell_volume_60s=s60,trade_count_60s=len(r60),observed_notional_60s=b60+s60,

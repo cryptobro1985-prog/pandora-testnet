@@ -1,21 +1,22 @@
-# Pandora Win
+# PANDORA Flow v2 — PAPER
 
-Одна стратегия, один PAPER-счёт и один монитор.
+Одна flow-driven стратегия, один PAPER-счёт и один монитор. Bybit Public Trades определяют LONG/SHORT, удержание, выход, re-entry и reversal. TOP-5 выбирает рынки раз в час; направление выбирает executed BUY/SELL flow. Реальных ордеров нет.
 
-Pandora Win непрерывно наблюдает Bybit USDT Perpetual, выбирает до пяти активных токенов, определяет H1/M15 locals и фактический контроль исполненных покупок/продаж. LONG/SHORT, удержание, re-entry, reversal и pyramiding используют структуру цены и Public Trades. Реальных ордеров нет.
-
-При первом запуске выделенная схема таблиц `pandora_win_*` создаёт счёт **500 USDT**, без сделок и накопленного PnL. Повторный запуск сохраняет данные только этого счёта; автоматического обнуления при каждом deploy нет.
+Эксперимент `pandora_flow_v2` использует отдельную PostgreSQL-схему и начальный баланс **500 USDT**. Однократная инициализация оставляет старые таблицы архивом вне нового account/history. Restart восстанавливает новое состояние и не обнуляет его.
 
 - [Запуск, параметры и архитектура](README_PANDORA_WIN.md)
 - [Передача следующему разработчику](PANDORA_WIN_HANDOFF.md)
-- [Аудит инцидента 01.11.2026 и подтверждённые исправления](PANDORA_INCIDENT_AUDIT_2026-11-01.md)
-- [Полный пакет исходников PANDORA_WIN_COMPLETE.zip](PANDORA_WIN_COMPLETE.zip)
-- Монитор: `/`
-- JSON: `/api/pandora`
-- Сделки: `/api/pandora/history`
-- Журнал: `/api/pandora/events`
-- Read-only схема API: `/openapi.json`
+- [Готовая поставка: результаты, reset и все изменённые файлы](PANDORA_FLOW_V2_DELIVERY.md)
+- [Аудит старого decision path и proof нового](PANDORA_FLOW_V2_AUDIT.md)
+- [Полный исходный пакет PANDORA_FLOW_V2_COMPLETE.zip](PANDORA_FLOW_V2_COMPLETE.zip)
+- Монитор: `/`; JSON: `/api/pandora`
+- Сделки: `/api/pandora/history`; журнал: `/api/pandora/events`
+- Read-only API: `/openapi.json`
 
-Минимум нового входа — 10% текущего equity по марже и 10x. Маржа и плечо выбираются динамически с учётом executed flow, структуры, доступного обеспечения и контрактного максимума, не выше 50x. Фиксированных процентных SL/TP, MFE-выходов и PnL-пауз нет. Compounding пересчитывает следующую сделку по текущему балансу. Убытки не скрываются; прибыль и отсутствие ликвидаций не гарантируются.
+`pandora_risk.py` и `accounting.py` сохранены: dynamic margin/leverage, compounding, fees, slippage estimate и maintenance. Flow-only adapter передаёт risk engine наблюдаемую геометрию исполненных цен. MFE/MAE измеряются; fixed TP/SL и выход по проценту MFE отсутствуют.
 
-Проверки программы используют отдельную PostgreSQL и синтетический локальный WebSocket. Актуальные результаты находятся в `validation/`, если эти отчёты включены в сборку. Рыночное поведение и состояние Render требуют отдельного подтверждения.
+Проверки: `python scripts/run_release_tests.py --report validation/release-result.json` с отдельной тестовой PostgreSQL. Active dependency audit: `python scripts/audit_flow_decision_path.py --report validation/flow-decision-path.json`. Результаты software tests не являются бэктестом доходности.
+
+Отдельные результаты acceptance 1–16: `python scripts/run_flow_acceptance.py --report validation/flow-acceptance.json`.
+
+Ветка выпуска — `pandora-flow-v2`. **Render deploy требует отдельной команды пользователя.** Факт reset рабочей базы и live Bybit readiness подтверждаются только проверкой соответствующей среды.

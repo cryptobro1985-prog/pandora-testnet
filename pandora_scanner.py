@@ -96,6 +96,9 @@ class LiveScanner:
             if symbol not in instruments or not 0<=epoch-row.get('price_received',0)<=self.freshness or symbol not in histories:continue
             samples=histories[symbol]
             last=float(row['lastPrice']);turn=float(row['turnover24h'])
+            try:volume_24h=float(row.get('volume24h') or 0)
+            except (TypeError,ValueError,OverflowError):volume_24h=0.
+            if not math.isfinite(volume_24h) or volume_24h<0:volume_24h=0.
             change=float(row.get('price24hPcnt') or 0)
             def movement(seconds):
                 old=next((x for x in reversed(samples) if epoch-x[0]>=seconds),samples[0])
@@ -152,7 +155,7 @@ class LiveScanner:
                 exchange_ms=row.get('exchange_ms'),short_return=short,minute_return=minute,
                 movement_strength=abs(short),dominant_volume=max(fast.get('buy_volume',0),fast.get('sell_volume',0)),
                 eligible=eligible,fading=fading,short_volatility=short_volatility,active_correction=active_correction,
-                acceleration=short-minute/4,volatility=volatility,turnover_24h=turn,
+                acceleration=short-minute/4,volatility=volatility,turnover_24h=turn,volume_24h=volume_24h,
                 turnover_per_minute=turnover_velocity*60,executed_volume=medium.get('buy_volume',0)+medium.get('sell_volume',0),
                 volume_velocity=fast.get('volume_velocity',turnover_velocity),
                 volume_change=fast.get('volume_change',0),buy_volume=fast.get('buy_volume',0),
@@ -196,7 +199,7 @@ class LiveScanner:
             self.selected=symbols;self.candidates=[r['symbol'] for r in candidates]
             self.candidate_since={s:self.candidate_since.get(s,epoch) for s in self.candidates}
             self.last_snapshot=dict(at=epoch,selected_symbols=symbols,selected=selected,
-                top_movers=rows[:self.candidate_limit],candidate_symbols=list(self.candidates),
+                ranked_rows=rows,top_movers=rows[:self.candidate_limit],candidate_symbols=list(self.candidates),
                 retained_open_positions=[s for s in held if s not in symbols],
                 states=dict(self.states),events=events,selection_frozen=False,observations_ready=True,scan_seconds=1,
                 basis='streaming_tick_activity_and_executed_volume_equal_percentile_ranks')

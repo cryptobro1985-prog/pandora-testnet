@@ -20,7 +20,7 @@ def package(output):
         relative=path.relative_to(ROOT)
         if any(part in ('.git','.venv','__pycache__','node_modules') or part.startswith('.env') for part in relative.parts):continue
         if any(part.startswith('.') and part not in ('.github','.gitignore','.dockerignore') for part in relative.parts):continue
-        if path.suffix.lower() not in ('.py','.md','.txt','.json','.yaml','.yml','.sql') and path.name not in ('Dockerfile','.gitignore','.dockerignore') and relative.as_posix()!='validation/release.log':continue
+        if path.suffix.lower() not in ('.py','.md','.txt','.json','.yaml','.yml','.sql') and path.name not in ('Dockerfile','.gitignore','.dockerignore') and relative.as_posix() not in ('validation/release.log','validation/flow-acceptance.log'):continue
         files[relative.as_posix()]=path.read_bytes()
     report_path=ROOT/'validation/release-result.json'
     report=json.loads(report_path.read_text()) if report_path.exists() else {}
@@ -29,12 +29,12 @@ def package(output):
               'production_database_included':False,'files':{name:hashlib.sha256(data).hexdigest() for name,data in sorted(files.items())}}
     try:
         with zipfile.ZipFile(output,'x',compression=zipfile.ZIP_DEFLATED,compresslevel=9) as archive:
-            for name,data in sorted(files.items()):archive.writestr('PANDORA_WIN/'+name,data)
-            archive.writestr('PANDORA_WIN/MANIFEST.json',json.dumps(manifest,indent=2)+'\n')
+            for name,data in sorted(files.items()):archive.writestr('PANDORA_FLOW_V2/'+name,data)
+            archive.writestr('PANDORA_FLOW_V2/MANIFEST.json',json.dumps(manifest,indent=2)+'\n')
         with zipfile.ZipFile(output) as archive:
             if archive.testzip() is not None:raise RuntimeError('ZIP integrity check failed')
             for name,digest in manifest['files'].items():
-                if hashlib.sha256(archive.read('PANDORA_WIN/'+name)).hexdigest()!=digest:
+                if hashlib.sha256(archive.read('PANDORA_FLOW_V2/'+name)).hexdigest()!=digest:
                     raise RuntimeError('archive hash mismatch: '+name)
     except Exception:
         output.unlink(missing_ok=True)
