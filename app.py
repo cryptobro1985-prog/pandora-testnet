@@ -1244,7 +1244,7 @@ def build_dashboard_snapshot(history=None):
   position=next((p for p in positions if p['symbol']==symbol),{})
   features=position.get('features') or {}
   token=WIN.tokens.get(symbol,{}) if WIN is not None else {}
-  token_rows.append({**row,'price':state['_prices'].get(symbol,row.get('last')),
+  token_rows.append({**row,'price':fresh_mark_price(symbol),
    'confirmed_local':local.get('confirmed_local') or local,'forming_local':local.get('forming_local'),
    'forming_locals':local.get('forming_locals',[]),'direction':local.get('entry_side'),
    'buy_volume':flow.get('buy_notional'),'sell_volume':flow.get('sell_notional'),
