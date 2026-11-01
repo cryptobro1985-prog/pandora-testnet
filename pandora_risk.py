@@ -37,7 +37,7 @@ class RiskPolicy:
             if fraction is not None and not 0 < fraction <= 1:
                 raise ValueError('invalid optional loss budget')
         if self.profit_giveback_fraction is not None and not 0 < self.profit_giveback_fraction < 1:
-            raise ValueError('invalid optional legacy metadata')
+            raise ValueError('invalid optional default metadata')
         if not .10 <= self.min_margin_fraction <= self.max_entry_margin_fraction <= self.max_position_margin_fraction <= 1:
             raise ValueError('invalid entry margin range')
         if not 0 <= self.fee < .1 or not 0 <= self.slippage < .1:
@@ -151,7 +151,7 @@ def position_risk(position, stop_price=None, fee=.00045, slippage=.0005):
     plan=(position.get('features') or {}).get('risk_plan') or {}
     stop=stop_price if stop_price is not None else plan.get('stop_price')
     if not _finite(stop) or float(stop)<=0:
-        # Legacy positions have no proved stop: reserve their entire margin.
+        # default positions have no proved stop: reserve their entire margin.
         return max(0.,float(position.get('margin',0)))
     policy=RiskPolicy(fee=float(plan.get('fee',fee)),slippage=float(plan.get('slippage',slippage)))
     return _loss_at_stop(float(position['notional']),float(position['entry']),float(stop),int(position['side']),policy)
@@ -238,15 +238,15 @@ def protective_stop(position, fee=.00045):
     return float(reference) if _finite(reference) and float(reference)>0 else None
 
 
-def legacy_risk_plan(position, policy=None):
-    """Explicit conservative stop assumption for a position created before audit.
+def existing_position_risk_plan(position, policy=None):
+    """Explicit conservative stop assumption for a position missing an explicit risk plan.
 
     Preserve its actual notional/margin/leverage. Do not manufacture a smaller
-    past exposure or claim this legacy exposure met the new entry loss budget.
+    past exposure or claim this default exposure met the new entry loss budget.
     """
     policy=policy or RiskPolicy()
     entry=float(position['entry']);side=int(position['side'])
-    return RiskPlan(True,'LEGACY_EXPOSURE_NOT_ENTRY_BUDGET_VALIDATED',
+    return RiskPlan(True,'EXISTING_EXPOSURE_NOT_ENTRY_BUDGET_VALIDATED',
                     leverage=float(position['leverage']),margin=float(position['margin']),
                     notional=float(position['notional']),
                     stop_price=entry*(1-side*policy.minimum_adverse_move),
@@ -279,7 +279,7 @@ def plan_add(position, mark, additional_margin, equity, free_margin,
     if paper_pnl(old_notional,old_entry,mark,side,policy.fee)<=0:
         return _blocked('NO_ADD_TO_UNPROFITABLE_POSITION',policy)
     stop=protective_stop(position,policy.fee)
-    if stop is None:return _blocked('LEGACY_POSITION_REQUIRES_RISK_PLAN',policy)
+    if stop is None:return _blocked('EXISTING_POSITION_REQUIRES_RISK_PLAN',policy)
     distance=max(adverse_distance(mark,side,analysis,flow,policy),abs(mark-stop)/mark)
     leverage,strength=_selected_leverage(distance,contract_max_leverage,side,analysis,flow,policy)
     if leverage<policy.min_leverage:return _blocked('CONTRACT_OR_GEOMETRY_BELOW_MIN_LEVERAGE',policy)
@@ -320,7 +320,7 @@ def position_guard(position, mark, fee=.00045):
     if not _finite(mark) or float(mark)<=0:return None
     plan=(position.get('features') or {}).get('risk_plan') or {}
     if not plan:
-        plan=legacy_risk_plan(position,RiskPolicy(fee=fee))
+        plan=existing_position_risk_plan(position,RiskPolicy(fee=fee))
         position={**position,'features':{**(position.get('features') or {}),'risk_plan':plan}}
     mark=float(mark);side=int(position['side']);notional=float(position['notional']);entry=float(position['entry'])
     fee=float(plan.get('fee',fee));slippage=float(plan.get('slippage',.0005))

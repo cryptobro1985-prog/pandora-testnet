@@ -30,7 +30,7 @@ def flow_profile(flow,side):
  entry_control=control
  # Fast corroborated control can reduce existing risk without waiting for old
  # minute volume to expire. New entry/reentry still requires minute context.
- # Legacy explicit test flows without a fast key keep their sustained contract.
+ # default explicit test flows without a fast key keep their sustained contract.
  if 'windows' in flow:
   rich=int(flow.get('sustained_control_side') or 0)
   entry_control=rich if rich==dominant and rich in (-1,1) else 0

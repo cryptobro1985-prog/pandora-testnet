@@ -1,4 +1,4 @@
-"""Regression contracts for the operator's H1 -> flow -> Caterpillar workflow."""
+"""Regression contracts for the operator's H1 -> flow -> Pandora Win workflow."""
 import copy
 import json
 import os
@@ -8,10 +8,10 @@ import unittest
 from unittest.mock import patch
 
 import app
-from h1_structure import analyze
+from h1_structure import analyze, update_path
 from local_order_flow import initial_entry_candidate, pressure_exit, update_watch, reentry_ready
 from market_data import RollingMarketData
-from strategy1_monitor import render
+from pandora_monitor import render
 
 H=3_600_000
 BASE=1_780_002_000_000//H*H
@@ -53,6 +53,16 @@ class CausalStructureTests(unittest.TestCase):
     def test_gap_blocks_current_runtime_proof(self):
         rows=bars();rows.pop(3)
         self.assertEqual(analyze(rows,BASE+10*H+1000)['reason'],'gapped_h1_history')
+
+    def test_position_path_records_excursions_without_fixed_profit_lock(self):
+        for side in (-1,1):
+            position=dict(side=side,entry=100.,leverage=10.,features={})
+            position,_=update_path(position,100+side*2)
+            position,_=update_path(position,100-side)
+            features=position['features']
+            self.assertAlmostEqual(features['mfe_price_move'],.02)
+            self.assertAlmostEqual(features['mae_price_move'],-.01)
+            self.assertFalse(any(key.startswith('profit_lock') for key in features))
 
     def test_no_percentage_retracement_or_candle_color_gate(self):
         rows=bars()[:6]
@@ -122,21 +132,21 @@ class RuntimeContracts(unittest.TestCase):
     def tearDown(self):app.S.clear();app.S.update(self.saved)
 
     def test_subscriptions_do_not_depend_on_h1_readiness(self):
-        app.S['_local4_analysis']={};app.S['local_h1_direction']={}
-        selected=list(app.LOCAL_EXPERIMENT_SYMBOLS[:5])
+        app.S['_pandora_analysis']={};app.S['pandora_win_h1_direction']={}
+        selected=['BTC','ETH','SOL','NEAR','ZEC']
         app.S['bybit_discovery']={'selected_symbols':selected}
-        app.S['local_v12_positions']={};app.S['local_experiment_watch']={}
-        self.assertEqual(set(app.strategy1_trade_symbols()),set(selected))
-        self.assertTrue(set(selected).issubset(app.strategy1_runtime_symbols()))
+        app.S['pandora_win_positions']={};app.S['pandora_watch']={}
+        self.assertEqual(set(app.pandora_trade_symbols()),set(selected))
+        self.assertTrue(set(selected).issubset(app.pandora_runtime_symbols()))
 
     def test_verified_closed_hour_does_not_expire_after_90_seconds(self):
         stamp=(BASE+6*H+1000)/1000
         a=analyze(bars(),stamp*1000)
         meta={k:a.get(k) for k in ('entry_side','signal_candle_time','pivot_candle_time','last_candle_time')}
         meta['verified_at']=stamp
-        app.S['_local_h1_runtime_verified']={'BTC':meta}
-        self.assertTrue(app.strategy1_runtime_h1_verified('BTC',a,stamp+300))
-        self.assertFalse(app.strategy1_runtime_h1_verified('BTC',a,stamp+H/1000))
+        app.S['_pandora_h1_runtime_verified']={'BTC':meta}
+        self.assertTrue(app.pandora_runtime_h1_verified('BTC',a,stamp+300))
+        self.assertFalse(app.pandora_runtime_h1_verified('BTC',a,stamp+H/1000))
 
     def test_no_wait_holds_global_state_lock(self):
         import ast
@@ -150,18 +160,18 @@ class RuntimeContracts(unittest.TestCase):
     def test_quote_and_checkpoint_alone_never_claim_live_trade_readiness(self):
         stamp=time.time()
         app.S.update(engine_active=True,_last_poll_epoch=stamp,last_checkpoint=app.now(),
-                     _market_heartbeat=stamp,_coordinator_heartbeat=stamp,_local4_analysis={})
+                     _market_heartbeat=stamp,_coordinator_heartbeat=stamp,_pandora_analysis={})
         self.assertFalse(app.health_state()['risk_ready'])
-        self.assertEqual(set(app.health_state()['token_readiness']),set(app.strategy1_trade_symbols()))
+        self.assertEqual(set(app.health_state()['token_readiness']),set(app.pandora_trade_symbols()))
 
-    def test_removed_strategy_entrypoints_are_absent(self):
-        for name in ('emergency_profit_take','xnews','whale_liq_open','comparison_strategies_loop'):
-            self.assertFalse(hasattr(app,name))
+    def test_only_pandora_trade_loop_is_started(self):
+        source=Path(app.__file__).read_text()
+        self.assertIn('pandora_flow_fast_entries',source)
+        self.assertIn('pandora_live_state_loop',source)
 
-    def test_monitor_never_adds_benchmark_to_actual_result(self):
-        data=dict(strategy1_primary=dict(realized_pnl=0,unrealized_pnl=0,total_equity=500),health={},local_experiment_symbols=['BTC'])
+    def test_monitor_shows_only_the_supplied_account_result(self):
+        data=dict(pandora=dict(realized_pnl=0,unrealized_pnl=0,total_equity=500),health={},pandora_symbols=['BTC'])
         page=render(data)
-        self.assertNotIn('377.36',page)
         self.assertNotIn('● PAPER LIVE',page)
         self.assertIn('НЕ ГОТОВ',page)
         self.assertIn('500.0000',page)
@@ -188,8 +198,8 @@ class PaperIntegration(unittest.TestCase):
 
     def tearDown(self):
         with self.connect() as db:
-            db.execute("delete from local_v12_watchlist where symbol='TEST'")
-            db.execute("delete from local_v12_trade_history where symbol='TEST'")
+            db.execute("delete from pandora_win_watchlist where symbol='TEST'")
+            db.execute("delete from pandora_win_trade_history where symbol='TEST'")
         self.store.release();self.storepatch.stop();self.pgpatch.stop()
         app.S.clear();app.S.update(self.saved)
 
@@ -197,19 +207,19 @@ class PaperIntegration(unittest.TestCase):
         position=dict(symbol='TEST',side=1,entry=100,notional=250,margin=10,leverage=25,
                       opened='2026-10-31T00:00:00+00:00',t=1000,signal_candle_time=1000,features={})
         with self.connect() as db:
-            before=db.execute('select equity from local_v12_account_state where id=1').fetchone()['equity']
-            db.execute("""insert into local_v12_positions(symbol,side,entry,notional,margin,leverage,opened,opened_epoch,signal_candle_time,features)
+            before=db.execute('select equity from pandora_win_account_state where id=1').fetchone()['equity']
+            db.execute("""insert into pandora_win_positions(symbol,side,entry,notional,margin,leverage,opened,opened_epoch,signal_candle_time,features)
                           values('TEST',1,100,250,10,25,%s,1000,1000,'{}')""",(position['opened'],))
-        app.S['local_v12_positions']={'TEST':position}
-        result=app.local_experiment_close('TEST',99,'confirmed_counter_move_exit',watch_context={'flow_context':flow(-1)})
+        app.S['pandora_win_positions']={'TEST':position}
+        result=app.pandora_close('TEST',99,'confirmed_counter_move_exit',watch_context={'flow_context':flow(-1)})
         self.assertIsNotNone(result)
-        self.assertIsNone(app.local_experiment_close('TEST',99,'confirmed_counter_move_exit'))
+        self.assertIsNone(app.pandora_close('TEST',99,'confirmed_counter_move_exit'))
         with self.connect() as db:
-            watch=db.execute("select context from local_v12_watchlist where symbol='TEST'").fetchone()['context']
-            after=db.execute('select equity from local_v12_account_state where id=1').fetchone()['equity']
-            self.assertEqual(db.execute("select count(*) n from local_v12_trade_history where symbol='TEST'").fetchone()['n'],1)
+            watch=db.execute("select context from pandora_win_watchlist where symbol='TEST'").fetchone()['context']
+            after=db.execute('select equity from pandora_win_account_state where id=1').fetchone()['equity']
+            self.assertEqual(db.execute("select count(*) n from pandora_win_trade_history where symbol='TEST'").fetchone()['n'],1)
             # Restore only this test's isolated account delta.
-            db.execute('update local_v12_account_state set equity=equity-%s,realized_pnl=realized_pnl-%s where id=1',(result['pnl'],result['pnl']))
+            db.execute('update pandora_win_account_state set equity=equity-%s,realized_pnl=realized_pnl-%s where id=1',(result['pnl'],result['pnl']))
         self.assertEqual(watch['phase'],'WAIT_RESUMPTION')
         self.assertTrue(watch['counter_pressure_seen'])
         self.assertAlmostEqual(after-before,result['pnl'])

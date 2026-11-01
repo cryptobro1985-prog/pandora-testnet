@@ -1,4 +1,4 @@
-"""Bybit V5 public trade -> venue-neutral Strategy 1 events.
+"""Bybit V5 public trade -> venue-neutral Pandora Win events.
 
 Research / PAPER adapter. It does not place orders, infer missing ticks,
 or infer prices from another venue.
@@ -50,7 +50,7 @@ def validate_latency(trade, received_epoch_ms, max_age_ms=15000):
     return True, "fresh"
 
 
-def to_legacy_observation(trade):
+def to_observation(trade):
     """Adapt a validated trade to the existing RollingMarketData ingestion shape."""
     return {"coin": trade.symbol, "px": str(trade.price), "sz": str(trade.size),
             "time": trade.exchange_epoch_ms, "side": "B" if trade.aggressor_side == "BUY" else "A",

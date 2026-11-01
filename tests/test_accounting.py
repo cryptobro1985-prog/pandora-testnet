@@ -70,7 +70,7 @@ class TransactionTimeoutTests(unittest.TestCase):
         self.assertTrue(store.claim())
         self.assertEqual(conn.statements[0], ("SET LOCAL lock_timeout = '2s'", True))
         self.assertEqual(conn.statements[1], ("SET LOCAL statement_timeout = '5s'", True))
-        self.assertIn("INSERT INTO engine_lease", conn.statements[2][0])
+        self.assertIn("INSERT INTO pandora_win_engine_lease", conn.statements[2][0])
         self.assertTrue(conn.statements[2][1])
 
     def test_fence_applies_timeouts_before_row_lock(self):

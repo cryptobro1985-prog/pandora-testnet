@@ -1,76 +1,66 @@
-# Pandora Win — audited PAPER source
+# Pandora Win — PAPER
 
-Глубокий аудит и актуальные правила риска: [DEEP_AUDIT.md](DEEP_AUDIT.md). Монитор обновлён для телефона; JSON API1.1 и read-only `/openapi.json` доступны для внешнего клиента/ChatGPT. Убытки не скрываются; 100% win rate не гарантируется.
+Pandora Win — единственная стратегия приложения. Python 3.12, PostgreSQL 17, Bybit V5 Public REST/WebSocket. Приватные торговые API и реальные ордера не используются.
 
-Python 3.12, PostgreSQL 17, Bybit V5 public REST/WebSocket. Реальные ордера и приватные торговые API отсутствуют. Старт новой базы — $500; существующий баланс и история при старте сохраняются.
+## Чистый счёт и сохранение состояния
 
-## Архитектура и файлы
+Приложение использует только выделенное пространство таблиц `pandora_win_*`. При первом создании счёта баланс равен **500 USDT**, список сделок пуст, realized PnL равен нулю. Следующие запуски восстанавливают позиции, баланс, locals, MFE/MAE, доливки, scanner selection и ожидания перезахода этого счёта. Данные не стираются при каждом restart/deploy.
 
-| Файл | Ответственность |
+Текущее приложение не читает и не объединяет другие пространства таблиц. Физическое удаление данных за пределами `pandora_win_*` не является частью штатного запуска. Доступ к рабочей базе и факт применения изменений на Render должны подтверждаться отдельно.
+
+## Компоненты
+
+| Файл | Назначение |
 | --- | --- |
-| `app.py` | Супервизор потоков, HTTP, PostgreSQL, lease, атомарные открытия/закрытия, восстановление свечей |
-| `pandora_scanner.py` | Все рыночные ticker streams, относительный ranking, Top-5, кандидатный пул, FADING/ROTATE_OUT |
-| `pandora_flow.py`, `market_data.py` | Public Trades, notional/quantity, окна, скорость объёма, dominance, price response |
-| `exchange_trade_adapter.py`, `bybit_market_stream.py` | Нормализация Bybit, ACK, reconnect, дедупликация, контроль времени и свежести |
-| `h1_structure.py`, `pandora_locals.py` | Подтверждённые H1-локалы, online forming-extremes, закрытая M15-структура |
-| `local_order_flow.py` | Вход, поглощённые откаты, структурное подтверждение выхода, зеркальный re-entry |
-| `pandora_risk.py` | Динамическая маржа и плечо 10–50x, stress geometry и модель maintenance; без SL/TP |
-| `pandora_api.py` | JSON contract1.1 и read-only OpenAPI |
-| `pandora_win_core.py` | Compounding, state machine доливок, quantity-weighted average entry, MFE/MAE |
-| `pandora_runtime.py` | Состояния токенов, управление LONG/SHORT, pyramiding, semantic audit, восстановление |
-| `engine_store.py`, `accounting.py` | Single-writer lease/fence, линейный perpetual PnL и моделируемые комиссии |
-| `strategy1_monitor.py` | Монитор, выбранные токены, позиция/сила сторон/MFE, доливки и действия |
-| `scripts/run_release_tests.py`, `tests/` | Проверки программы на синтетических данных, PostgreSQL и loopback WebSocket |
-| `scripts/package_source.py` | Полный source ZIP без секретов/баз/venv, SHA-256 manifest |
+| `app.py` | HTTP, супервизор, состояние счёта, атомарные открытия/закрытия, восстановление |
+| `pandora_scanner.py` | Market-wide tickers, ranking, активная пятёрка и ротация |
+| `market_data.py`, `pandora_flow.py` | Executed BUY/SELL volume, окна, velocity, dominance и price response |
+| `exchange_trade_adapter.py`, `bybit_market_stream.py` | Bybit normalization, timestamps, ACK, reconnect, deduplication и freshness |
+| `h1_structure.py`, `pandora_locals.py` | Confirmed/forming H1 locals и online M15 confirmation |
+| `local_order_flow.py` | Вход, наблюдение отката, структурный выход и re-entry |
+| `pandora_win_core.py`, `pandora_risk.py` | Compounding, pyramiding, average entry, MFE/MAE, динамическое обеспечение/плечо |
+| `pandora_runtime.py` | State machine токена, управление позицией и журнал решений |
+| `pandora_bootstrap.py`, `pandora_decisions.py` | Приоритетная загрузка H1/M15 и понятные стадии ENTRY/WAIT |
+| `engine_store.py`, `accounting.py` | Single-writer lease/fence и расчёт net PAPER PnL |
+| `pandora_monitor.py`, `pandora_api.py` | Мобильный монитор и read-only API |
+| `scripts/run_release_tests.py`, `tests/` | Проверки программы с отдельной PostgreSQL и локальным WebSocket |
+| `scripts/package_source.py` | Полный ZIP исходников и SHA-256 manifest без секретов/баз/venv |
 
-Сравнительные движки 1.1/1.3/1.4 сохранены для совместимости с существующими данными, но их торговые циклы по умолчанию выключены. Основной работающий движок — Pandora Win.
+## Scanner и ротация
 
-## Scanner
+Metadata REST выбирает Trading LinearPerpetual с расчётом в USDT. Шардированные WebSocket наблюдают тикеры всего этого рынка. REST используется для bootstrap/recovery и данных, которых нет в потоке.
 
-Metadata REST отбирает только Trading LinearPerpetual с расчётом в USDT. Шардированные WebSocket получают tickers по всему разрешённому рынку. REST tickers используется для bootstrap/recovery при отсутствии свежего потока. Ranking обновляется раз в секунду из сообщений, а не из 60-секундного REST polling.
+Ranking обновляется раз в секунду: текущие movement/acceleration, наблюдаемая volatility, turnover, executed volume/velocity/change, BUY/SELL participation, trade rate, устойчивость движения и доступная ликвидность. Признаки получают равные относительные percentile ranks; это не обучение и не оптимизация доходности.
 
-Параметры ranking: текущий 15s/60s price movement, acceleration, наблюдаемая volatility, turnover/скорость turnover, executed volume и его изменение, BUY volume, trade count/rate, устойчивость изменения цены и доступный spread. Используется средний относительный percentile rank, без обучения и подбора весов. SELL volume хранится отдельно и участвует в executed imbalance/control и price response; число сделок не заменяет объём.
+Public Trades прогреваются для кандидатного пула (по умолчанию 30), выбранных пяти и удерживаемых позиций/watch. Затихший токен уступает место активному. Один stale-токен не замораживает весь scanner; глобально недоступные данные сохраняют selection без выдуманной ротации. Активная высокообъёмная коррекция может оставаться кандидатом для SHORT. Открытая позиция исключённого токена продолжает получать управление до закрытия. При недостатке подходящих свежих рынков список содержит меньше пяти.
 
-Все market tickers наблюдаются постоянно. Executed tape прогревается для ограниченного кандидатного пула (по умолчанию 30), выбранных пяти и удерживаемых позиций/watch. Это ограничивает нагрузку, сохраняя быстрое обнаружение новых кандидатов по market-wide tickers. Новый токен не получает торговое разрешение до свежего собственного public-trade потока и структуры. При недостатке свежих активных кандидатов список может содержать меньше пяти — отсутствующие данные не подставляются.
+## Locals и executed control
 
-После ротации открытая позиция остаётся подписанной и управляемой в FADING. Новые входы и доливки по исключённому токену не создаются. После закрытия он получает ROTATE_OUT; старый watch не запускает повторную торговлю по затухшему токену.
+Confirmed H1 local сравнивается с четырьмя предыдущими закрытыми H1. Последующая закрытая структура подтверждает экстремум. Forming local обновляется только по реально наблюдавшейся свече; исторический окончательный OHLC не используется как будущая информация. Confirmed и forming показаны отдельно. Пробитый экстремум или stale forming блокирует новые входы от непроверенной структуры.
 
-## Locals, LONG и SHORT
+Закрытая M15-структура после наблюдавшегося экстремума вместе с подтверждённым executed control может подтвердить направление до следующего закрытого H1. Один wick не переворачивает направление.
 
-H1-экстремум сравнивается с четырьмя предыдущими закрытыми H1. Последующий закрытый H1 с более низким high подтверждает LOCAL HIGH; с более высоким low — LOCAL LOW. Два одновременных неоднозначных подтверждения не выбирают направление. Разрывы/устаревшая история отклоняются.
+Окна 5/15/30/60/180/300 секунд содержат фактический USD notional и quantity: BUY/SELL, imbalance/change, count/rate, volume velocity/acceleration, dominance duration и price response. Количество сделок не заменяет их объём. Неполные окна явно помечены; наблюдения не экстраполируются.
 
-Формирующаяся свеча читается только с фактической меткой её online-наблюдения. Forming low/high обновляется при новых экстремумах, сохраняя отдельный `confirmed_local`. Если прежний low/high пробит в сторону его продолжения, новые входы от старого local блокируются до подтверждения. Исторический окончательный OHLC незакрытой на момент решения свечи не используется как будто был известен заранее.
+Новый вход и re-entry требуют согласованного entry-контекста и актуального local. Для подтверждённого структурного выхода используется отдельный быстрый контроль 5/15s, чтобы минутный объём не задерживал захват контроля другой стороной. Нужны минимум 15 секунд реально наблюдавшегося tape, а не просто время жизни сокета. Перед записью входа поток проверяется повторно: исчезнувший BUY-control не разрешает LONG.
 
-Закрытая последовательная M15-структура после наблюдавшегося экстремума вместе с устойчивым executed control может подтвердить executable direction раньше следующего закрытого H1. Исторический H1-anchor остаётся видимым отдельно; источник подтверждения записывается. Один wick сам по себе не переворачивает направление.
+## LONG/SHORT, re-entry и reversal
 
-LONG требует разрешающей структуры и BUY executed majority с подтверждающим движением цены; SHORT зеркален. Поток, mark, contract leverage и актуальная проверка H1 повторно проверяются при выделении маржи. Старый restored-anchor не даёт права на новый риск до проверки текущих свечей процессом.
+LONG открывается при разрешающей структуре и подтверждённом BUY control; SHORT зеркален. Первый встречный импульс сам по себе не закрывает сильное движение. Свежий благоприятный экстремум поглощает малый откат; встречный контроль и структурный пробой/неудачный ретест подтверждают выход. Новый противоположный local с контролем другой стороны может завершить позицию и разрешить отдельное открытие обратной стороны.
 
-## Executed flow и удержание
+Re-entry требует зеркального подтверждения окончания отката и возвращения control. Число последовательных re-entry не ограничено. Фиксированных процентных SL/TP, MFE-giveback выходов, дневных PnL-пауз и остановки после серии убытков нет. MFE/MAE/giveback измеряются и сохраняются. Модельное исчерпание maintenance учитывается честно, а не заменяется положительным результатом.
 
-Окна 5/15/30/60/180/300 секунд содержат фактические исполнения. Публикуются BUY/SELL USD и quantity, imbalance/change, trade count/rate, volume velocity/acceleration, dominance duration, price response и absorption. Неполное окно явно помечено `complete=false`, его объём не экстраполируется в «готовую статистику».
+## Маржа, плечо и pyramiding
 
-Первое встречное давление переводит позицию в наблюдение. Новый благоприятный экстремум поглощает малый откат; его размер и граница сохраняются. Выход требует встречного executed control и структурного пробоя предыдущего поглощённого отката либо неудачного ретеста продолжения. Подтверждённый противоположный local с устойчивым встречным контролем также завершает позицию. По итоговому ТЗ процентного SL/TP/MFE-giveback выхода нет: закрытие определяется сменой executed control и структурой цены. MFE остаётся статистикой.
+Новый вход — **не менее 10% текущего equity по марже и не ниже 10x**. Подтверждение объёмом, реакция цены и структура динамически выбирают маржу 10–30% и плечо 10–50x, затем применяются контрактный максимум, доступное обеспечение и модельная геометрия adverse range/maintenance/costs. Если минимальная сделка не обеспечена, она отклоняется целиком.
 
-MFE/MAE, peak MFE USD, текущий PnL, giveback, flow/local state, average entry и pyramid level обновляются по живым данным и checkpoint в PostgreSQL примерно раз в секунду. Финальная цена/контекст и giveback сохраняются при закрытии.
+После закрытия net PnL меняет баланс, который участвует в следующем расчёте: compounding работает и после прибыли, и после убытка. Изменение плеча само по себе не создаёт equity.
 
-## Re-entry, reversal и pyramiding
+ADD возможен только в прибыльную позицию при валидном local, новом ценовом импульсе и усилении executed side-volume/velocity. Запрос добавки масштабируется силой сигнала: базовые 10% × (0.5 + signal_strength), то есть 5–15% equity до ограничений обеспечения. По умолчанию максимум две доливки и до 40% equity по общей марже позиции. Эти параметры управляют экспозицией, не являются SL/TP или PnL-паузой.
 
-Re-entry сохраняет сторону/структуру выхода и требует зеркального подтверждения завершения отката с возвращением executed control. Счётчик последовательных re-entry не ограничен. Новый подтверждённый противоположный local и fresh executed control разрешают LONG↔SHORT; закрытие предыдущей стороны и открытие новой имеют отдельные атомарные записи и semantic reversal event. Незавершённое открытие после рестарта может быть продолжено без повторного начисления PnL.
+Каждая доливка хранится отдельно. Average entry = суммарный entry notional / суммарное количество контрактов. Total notional, average entry, маржа, плечо и ADD-запись обновляются одной fenced-транзакцией. Ранее внесённый collateral не освобождается как мнимая прибыль; выбранное contract leverage и эффективное notional/retained margin показаны отдельно.
 
-Pyramiding — отдельная state machine. Позиция должна быть прибыльной после моделируемых комиссий, local должен оставаться валидным, несколько наблюдаемых flow-окон — подтверждать сторону, а цена и executed side-volume/velocity — превосходить предыдущий импульс. При absorption, старом событии, недостатке маржи или достижении явного risk cap доливки нет. После ADD состояние возвращается в ожидание нового импульса.
-
-По умолчанию максимум две доливки. Запрошенная добавка маржи динамически масштабируется силой сигнала: базовые 10% × (0.5 + signal_strength), то есть 5–15% текущего equity до ограничений collateral/плеча. Общая маржа одной позиции — до 40% equity. Это объявленные ограничения риска, не найденные оптимизацией параметры. Каждая ADD хранится отдельно со временем, ценой, объёмом, маржой, total notional, average entry, flow/locals и MFE до/после. Average entry = суммарный entry notional / суммарное количество контрактов. Финальный PnL равен сумме PnL отдельных входов при той же цене выхода.
-
-Базовая новая позиция — динамически10–30% текущего mark-to-market equity по марже, плечо10–50x с ограничением contract maximum и модельной maintenance-геометрией. Ниже10%/10x позиция не открывается; недостаток обеспечения означает пропуск, не маленькую частичную позицию. Сумма следующего входа считается после фактического PnL предыдущих закрытий: compounding работает в обе стороны. Паузы по дневному PnL, просадке или серии убытков отсутствуют. Stress-reference — только планировочная оценка, не stop/TP. Результат modeled maintenance breach учитывается честно и может быть отрицательным.
-
-
-## Persistence, state machine и audit
-
-Канонические таблицы `local_v12_*` сохранены. Добавлены `pandora_token_state`, `pandora_runtime_state`, `pandora_pyramid_adds`. Lease/fence защищает каждого писателя и атомарные изменения денег. На restart восстанавливаются позиции, усреднённый вход, доливки, MFE/MAE, local/pending, scanner selection, watch и account; свежесть рыночных наблюдений не восстанавливается из старого checkpoint.
-
-Состояния: SELECTED, FORMING_LOCAL_LOW/HIGH, LONG/SHORT_READY, LONG/SHORT, LONG/SHORT_PYRAMID, LONG/SHORT_WEAKENING, WAIT_REENTRY, FADING, ROTATE_OUT. Audit включает выбор/ротацию токена, forming/confirmed local, OPEN/ADD/CLOSE, REENTRY/REVERSE, HOLD/WAIT и FLOW_STALE с market context. Повторяющиеся HOLD/WAIT checkpoint журналируются с ограниченной частотой; позиции/деньги журналируются транзакционно. История автоматически не удаляется.
-
-## Запуск PAPER
+## Запуск
 
 ```bash
 python3.12 -m venv .venv
@@ -80,45 +70,51 @@ export DATABASE_URL='postgresql://USER:PASSWORD@HOST:5432/pandora_paper'
 python app.py
 ```
 
-URL выше — шаблон. Используйте отдельную PAPER PostgreSQL и задавайте реальные учётные данные безопасно в окружении. Для public Bybit не нужен API key. Не запускайте второй engine на той же базе. Перед обновлением действующей базы используйте штатный backup PostgreSQL.
+URL — шаблон. Задавайте настоящее подключение безопасно в окружении Render/машины, не в исходниках и не в чате. Для Public Bybit не нужен API key. Не запускайте два движка на одном PAPER-счёте. Нужен HTTPS/WSS доступ к `api.bybit.com` и `stream.bybit.com`; сохраняйте TLS verification и CA/proxy окружения.
 
-| Переменная | Значение по умолчанию / назначение |
+Основные параметры:
+
+| Переменная | По умолчанию |
 | --- | --- |
 | `DATABASE_URL` | Обязательное PostgreSQL-подключение |
 | `PORT` | `10000` |
-| `PANDORA_SCAN_CANDIDATES` | `30`, кандидатный executed-flow pool |
-| `PANDORA_SCANNER_SHARDS` | `4`, 1–8 market ticker sockets |
-| `BYBIT_AUX_WS_SHARDS` | `2`, kline/quote shards |
-| `PANDORA_MAX_ADDS` | `2`, максимальное число ADD на позицию |
-| `PANDORA_ADD_MARGIN_FRACTION` | `0.10`, доля equity на ADD |
-| `PANDORA_MAX_POSITION_MARGIN_FRACTION` | `0.40`, предел маржи позиции с ADD |
-| `PANDORA_COMPARISON_ENGINES` | `0`, включать старые сравнения только явным `1` |
+| `PANDORA_SCAN_CANDIDATES` | `30` |
+| `PANDORA_SCANNER_SHARDS` | `4` |
+| `BYBIT_AUX_WS_SHARDS` | `2` |
+| `PANDORA_MIN_MARGIN_FRACTION` / `PANDORA_MAX_ENTRY_MARGIN_FRACTION` | `0.10` / `0.30` |
+| `PANDORA_MIN_LEVERAGE` / `PANDORA_MAX_LEVERAGE` | `10` / `50` |
+| `PANDORA_MAX_ADDS` | `2` |
+| `PANDORA_ADD_MARGIN_FRACTION` | `0.10` до масштабирования сигналом |
+| `PANDORA_MAX_POSITION_MARGIN_FRACTION` | `0.40` |
 | `PANDORA_CONTROL_TOKEN` | Необязательный bearer для ручного PAPER-close |
-| `RENDER_EXTERNAL_URL` | Keepalive; локально задайте адрес своего локального сервера |
+| `RENDER_EXTERNAL_URL` | Адрес своего сервиса для keepalive |
 | `RENDER_GIT_COMMIT` | Версия в health/monitor |
 
-Нужен HTTPS/WSS доступ к `api.bybit.com`, `stream.bybit.com`. Сохраняйте TLS verification и CA/proxy окружения. Никаких реальных ключей/secret/database dumps в ZIP нет.
+Stress-reference в risk plan служит только планированию размера, не является stop-приказом. Maintenance — приближённая PAPER-оценка; default assumptions могут ограничить плечо ниже 50x. Funding, реальные fills, slippage и биржевые tiers этой моделью не подтверждаются. Прибыль, 100% win rate и отсутствие ликвидации не гарантируются.
 
-HTTP: `/`, `/openapi.json`, `/api/pandora` (также `/api/dashboard`), `/api/strategy1/history`, `/api/strategy1/events`, `/health`, `/health/risk`. JSON содержит account, пять token rows, открытые/закрытые позиции, adds, re-entries, reversals, rotations и подробные flow/local contexts. История сделок и событий поддерживает cursor pagination. HTTP 200 `/health` означает работающий процесс, а не доступность рыночной торговли.
+## Старт, монитор и API
+
+После восстановления счёта сразу запускаются metadata/ticker/WS workers. H1/M15 для выбранных пяти загружается в отдельном pool из пяти workers, фоновые кандидаты — в одном worker. Общий history limiter — 5 REST-запросов/с, приоритет перечитывается каждые 0.2s; ошибка одного контракта имеет собственный backoff. Обзор начинается без искусственной задержки, фактическая готовность зависит от сети, Bybit, структуры и наблюдений tape.
+
+Монитор `/` адаптирован для телефона. Keyed JSON polling каждые 2s сохраняет карточки, их порядок, вкладку и прокрутку. У позиции видны первый вход/время/local, средний вход после доливок, текущие confirmed/forming locals, net PnL USDT/% от маржи. PnL счёта считается от starting equity. Stale mark показывает недоступный PnL, не положительное число из устаревшего кэша.
+
+`GET /api/pandora` возвращает корневой объект `pandora`: account, выбранные токены, startup, позиции, сделки, ADDs, journal и runtime. `startup` показывает обзор контрактов и ENTRY/WAIT с причинами. Готовый сигнал не считается committed позицией до записи исполнителя.
+
+- `/api/pandora/history` — сделки с cursor pagination.
+- `/pandora/history` — страница сделок.
+- `/api/pandora/events` — журнал решений.
+- `/openapi.json` — read-only HTTP-схема для совместимого клиента ChatGPT.
+- `/health` — состояние процесса.
+- `/health/risk` — свежесть данных и успешное исполнение; недоступные данные дают неготовность.
+
+Публикация source-кода и наличие OpenAPI не означают автоматического подключения клиента ChatGPT или подтверждённого deploy на Render.
 
 ## Проверка программы
 
-Установите `requirements-dev.txt`; укажите `DATABASE_URL` отдельной тестовой базы и `PANDORA_TEST_DATABASE_URL_FILE` с тем же URL. Запустите `python scripts/run_release_tests.py --report validation/release-result.json`. Интеграции не должны быть пропущены. Это синтетические функциональные проверки, а не бэктест, оптимизация или расчёт исторической доходности. Дальнейшая проверка рыночного поведения проводится отдельно.
+Установите `requirements-dev.txt`. Укажите `DATABASE_URL` отдельной тестовой PostgreSQL и `PANDORA_TEST_DATABASE_URL_FILE` с тем же URL. Запустите:
 
-## Уточнения после глубокого аудита
+```bash
+python scripts/run_release_tests.py --report validation/release-result.json
+```
 
-Полный отчёт и актуальные параметры — DEEP_AUDIT.md. Фиксированных SL/TP/MFE-процентов и PnL-пауз нет. Минимумы нового входа —10% текущего equity и10x; максимум плеча50x при допустимой контрактной/model geometry. Добавление плеча не создаёт equity и не освобождает старый collateral. Биржевая liquidation-модель здесь не воспроизводится точно.
-
-Входу нужен15-секундный реально наблюдавшийся tape, подтверждающие объёмы/price response и local. Быстрый5/15s контрконтроль для выхода отделён от60s entry-контекста, чтобы старый объём не задерживал закрытие. Stale mark блокирует новый риск; новый убыток не создаёт паузу. Убыточные строки не удаляются из статистики.
-
-Монитор обновляет keyed DOM из JSON каждые2 секунды. Порядок карточек меняется только вручную кнопкой rank; вкладка и прокрутка сохраняются. Scanner pool и все locals доступны раскрывающимися секциями. PnL счёта — USDT/% от starting equity, сделки — USDT/% от её маржи. `/api/pandora` публикует timestamps, источник readiness и причины отказов. Read-only `/openapi.json` можно импортировать в совместимый клиент ChatGPT; это не автоматическое подключение клиента и не подтверждение deploy на Render.
-
-## Холодный запуск на Render и данные каждой позиции
-
-После восстановления PostgreSQL сразу запускаются параллельные metadata/ticker/WS workers. Для выбранной пятёрки и сохранённых позиций используется отдельный history pool из5 workers; background-кандидат занимает отдельный1 worker. Общий limiter H1/M15 REST —5 запросов/с; очередь не накапливает сотни прежних кандидатов. Приоритет перечитывается каждые0.2с. Ошибка одного контракта имеет собственный backoff. Subscription refresh —1с вместо прежних5с.
-
-`pandora_bootstrap.py` управляет загрузкой H1/M15, `pandora_decisions.py` формирует read-only стадии и причины ожидания. `/api/pandora` содержит `strategy1_primary.startup`: выбранные/целевые токены, количество просмотренных контрактов, ready/open/wait counts и history progress. У каждого токена есть `decision.action`, `reason`, человеческое `message`, `data_ready`. Готовый сигнал без committed позиции показывается как ожидание исполнителя, не как выдуманный вход.
-
-Обзор рынка начинается без искусственной стартовой задержки. Фактическая скорость зависит от Bybit и сети. Для устойчивого BUY/SELL всё равно нужны минимум15 секунд реально наблюдавшихся исполнений и актуальная структура; bootstrap не подменяет эти данные историческими окончательными свечами. До готовности показывается конкретное ожидание; после готовности executor может открыть PAPER-позицию без дополнительного таймера.
-
-Каждая позиция публикует `entry_price` (первый вход), `entry_time`, `average_entry` (после доливок), `entry_local`, `current_local`, `pnl_usdt` и `pnl_percent` от её маржи. Точка/локал первого входа не переписываются новым local или средней ценой. При stale mark PnL недоступен, а не взят из старой положительной метрики. Закрытая история также содержит первый/средний вход, local входа и net PnL USDT/%.
+Runner не принимает пропущенные интеграционные проверки как готовность. Проверки используют синтетические входы, настоящий loopback WebSocket и PostgreSQL, а не бэктест/оптимизацию доходности. Секреты, базы, venv и Git metadata в source ZIP не включаются.

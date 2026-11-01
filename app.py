@@ -18,36 +18,26 @@ from psycopg.rows import dict_row
 from accounting import paper_pnl
 from engine_store import EngineStore,LeaseLost
 from market_data import RollingMarketData
-from dual_market_data import DualMarketData
 from bybit_market_stream import run_bybit_stream
-from h1_structure import analyze as analyze_hype_h1,pending_extreme as local_pending_extreme,update_path as hype_update_path,POLICY as HYPE_SWING_POLICY
-from local_order_flow import POLICY as LOCAL4_FLOW_POLICY,entry_candidate as local4_entry_candidate,initial_entry_candidate as local4_initial_entry_candidate,pressure_exit as local4_pressure_exit,update_watch as local4_update_watch,reentry_ready as local4_reentry_ready
-from strategy11_engine import LegacyStrategy11
-from strategy13_engine import Strategy13
-from strategy14_engine import Strategy14
+from h1_structure import analyze as analyze_pandora_h1,pending_extreme as local_pending_extreme,update_path as update_position_path,POLICY as PANDORA_LOCAL_POLICY
+from local_order_flow import POLICY as PANDORA_FLOW_POLICY,entry_candidate as pandora_flow_entry_candidate,initial_entry_candidate as pandora_flow_initial_entry_candidate,pressure_exit as pandora_flow_pressure_exit,update_watch as pandora_flow_update_watch,reentry_ready as pandora_flow_reentry_ready
 
-LOCAL_EXPERIMENT_SYMBOLS=('INIT','NEAR','BTC','SOL','ETH','LIT','HYPE','ZEC','TAO','GRASS','BIRB','BEAM','LSK')
-LOCAL_EXPERIMENT_STARTING_EQUITY=500.0
-LOCAL_EXPERIMENT_MARGIN_FRACTION=.20
-LOCAL_EXPERIMENT_MAX_POSITIONS=None
+PANDORA_STARTING_EQUITY=500.0
+PANDORA_MARGIN_FRACTION=.20
 PANDORA_WIN_NAME="Pandora Win"
 DISCOVERY_MAX_SELECTED=5
 DISCOVERY_SCAN_SECONDS=1
-S1_ONLY_MODE=True
 FEE=.00045
 LOCK=threading.RLock();ACCOUNT_LOCK=threading.RLock();SHUTDOWN=threading.Event();TRADE_WAKE=threading.Event()
 START=time.time()
 S={'mode':'PAPER_ONLY','orders_enabled':False,'engine_active':False,'engine_error':None,
  'sources':{},'_prices':{},'_price_received_epoch':{},'_timeline':{},'_hist':{},'_last_poll_epoch':0,
  'last_poll':None,'last_checkpoint':None,'last_market_error':None,'market_count':0,
- 'local_v12_positions':{},'local_experiment_watch':{},'local_h1_direction':{},'_local4_analysis':{},
- 'local_experiment_equity':500.,'local_experiment_realized_pnl':0.,'local_experiment_trades':0}
-MARKET_OBS=DualMarketData(max_symbols=256,max_trade_lag_seconds=15,freshness_seconds=15,max_seen_per_symbol=65536)
-LEGACY_MARKET_OBS=MARKET_OBS.legacy
+ 'pandora_win_positions':{},'pandora_watch':{},'pandora_win_h1_direction':{},'_pandora_analysis':{},
+ 'pandora_equity':500.,'pandora_realized_pnl':0.,'pandora_trades':0}
+MARKET_OBS=RollingMarketData(max_symbols=256,max_trade_lag_seconds=15,freshness_seconds=15,max_seen_per_symbol=65536)
 MARKET_AUX_OBS=RollingMarketData(max_symbols=64)
 _LOCAL_CANDLE_CACHE={};_LOCAL_CANDLE_CACHE_LOCK=threading.RLock();_LOCAL_CANDLE_CHECKPOINTED={}
-STRATEGY1_HISTORY_TABLES={'strategy1':'local_v12_trade_history','legacy_s1':'local_s1_trade_history',
- 'legacy_s2':'local_s2_trade_history','legacy_s3':'local_s3_trade_history','legacy_h1':'hype_swing_trade_history','legacy_shared':'trade_history'}
 
 def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
@@ -57,76 +47,58 @@ def publication_epoch(value):
 
 def pg():return psycopg.connect(os.environ['DATABASE_URL'],autocommit=True,row_factory=dict_row,connect_timeout=5)
 STORE=EngineStore(pg)
-S11=None
-S13=None
-S14=None
 WIN=None
 HISTORY_BOOTSTRAP=None
 
 def journal(kind,event_id,payload):
- with pg() as db:db.execute('insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,%s,%s,%s::jsonb)',(now(),event_id,kind,json.dumps(payload,default=str)))
+ with pg() as db:db.execute('insert into pandora_win_audit_journal(recorded_at,event_id,kind,payload) values(%s,%s,%s,%s::jsonb)',(now(),event_id,kind,json.dumps(payload,default=str)))
 
 def log_learning_decision(ident,strategy,symbol,side,action,reason,entry_price=None,score=None,leverage=1,features=None,ts=None):
  # Supplementary decision journal. The authoritative OPEN/CLOSE is atomic with the ledger.
- try:journal('strategy1_decision',ident,dict(symbol=symbol,side=side,action=action,reason=reason,features=features or {}));return True
+ try:journal('pandora_decision',ident,dict(symbol=symbol,side=side,action=action,reason=reason,features=features or {}));return True
  except Exception:return False
 
-def apply_local4_user_reset():
- # Historical reset entrypoint retained for compatibility. Startup must never
- # delete ledgers, positions, checkpoints or reset existing account equity.
- return False
 
 SCHEMA=(
- "CREATE TABLE IF NOT EXISTS pandora_risk_sessions(day text PRIMARY KEY,opening_equity double precision NOT NULL,peak_equity double precision NOT NULL,halted boolean NOT NULL DEFAULT false,reason text,updated_at timestamptz NOT NULL DEFAULT clock_timestamp())",
- "CREATE TABLE IF NOT EXISTS local_v12_account_state(id integer PRIMARY KEY,equity double precision NOT NULL,realized_pnl double precision NOT NULL,started_at text NOT NULL,updated_at text NOT NULL)",
- "CREATE TABLE IF NOT EXISTS local_v12_positions(symbol text PRIMARY KEY,side integer NOT NULL,entry double precision NOT NULL,notional double precision NOT NULL,margin double precision NOT NULL,leverage double precision NOT NULL,opened text NOT NULL,opened_epoch double precision NOT NULL,signal_candle_time bigint,features jsonb NOT NULL DEFAULT '{}'::jsonb)",
- "CREATE TABLE IF NOT EXISTS local_v12_trade_history(id bigserial PRIMARY KEY,opened text,closed text,symbol text,side integer,entry double precision,exit double precision,pnl double precision,reason text,margin double precision,notional double precision,leverage double precision,features jsonb NOT NULL DEFAULT '{}'::jsonb)",
- "CREATE TABLE IF NOT EXISTS local_v12_watchlist(symbol text PRIMARY KEY,side integer NOT NULL,origin_signal_candle bigint,exit_price double precision,exit_at text NOT NULL,expires_epoch double precision NOT NULL DEFAULT 0,reentries integer NOT NULL DEFAULT 0,context jsonb NOT NULL DEFAULT '{}'::jsonb)",
- "CREATE TABLE IF NOT EXISTS local_h1_direction(symbol text PRIMARY KEY,analysis jsonb NOT NULL)",
- "CREATE TABLE IF NOT EXISTS local_v12_signal_journal(id text PRIMARY KEY,ts text NOT NULL,candle_time bigint,action text NOT NULL,side integer,price double precision,features jsonb NOT NULL DEFAULT '{}'::jsonb)",
- "CREATE TABLE IF NOT EXISTS audit_journal(id bigserial PRIMARY KEY,recorded_at text NOT NULL,event_id text,kind text NOT NULL,payload jsonb NOT NULL)",
- "CREATE TABLE IF NOT EXISTS local_candle_checkpoints(symbol text NOT NULL,interval text NOT NULL,candles jsonb NOT NULL,saved_at timestamptz NOT NULL DEFAULT clock_timestamp(),PRIMARY KEY(symbol,interval))",
- "CREATE TABLE IF NOT EXISTS local_v12_live_state(id integer PRIMARY KEY,ts text NOT NULL,commit text,prices jsonb NOT NULL DEFAULT '{}'::jsonb,positions jsonb NOT NULL DEFAULT '{}'::jsonb,unrealized_pnl double precision NOT NULL DEFAULT 0,total_equity double precision NOT NULL DEFAULT 0,price_age_seconds double precision,source text)",
- "CREATE INDEX IF NOT EXISTS local_experiment_trade_closed_idx ON local_v12_trade_history(closed DESC)",
- "CREATE INDEX IF NOT EXISTS audit_journal_kind_time_idx ON audit_journal(kind,recorded_at)")
+ "CREATE TABLE IF NOT EXISTS pandora_win_account_state(id integer PRIMARY KEY,equity double precision NOT NULL,realized_pnl double precision NOT NULL,started_at text NOT NULL,updated_at text NOT NULL)",
+ "CREATE TABLE IF NOT EXISTS pandora_win_positions(symbol text PRIMARY KEY,side integer NOT NULL,entry double precision NOT NULL,notional double precision NOT NULL,margin double precision NOT NULL,leverage double precision NOT NULL,opened text NOT NULL,opened_epoch double precision NOT NULL,signal_candle_time bigint,features jsonb NOT NULL DEFAULT '{}'::jsonb)",
+ "CREATE TABLE IF NOT EXISTS pandora_win_trade_history(id bigserial PRIMARY KEY,opened text,closed text,symbol text,side integer,entry double precision,exit double precision,pnl double precision,reason text,margin double precision,notional double precision,leverage double precision,features jsonb NOT NULL DEFAULT '{}'::jsonb)",
+ "CREATE TABLE IF NOT EXISTS pandora_win_watchlist(symbol text PRIMARY KEY,side integer NOT NULL,origin_signal_candle bigint,exit_price double precision,exit_at text NOT NULL,expires_epoch double precision NOT NULL DEFAULT 0,reentries integer NOT NULL DEFAULT 0,context jsonb NOT NULL DEFAULT '{}'::jsonb)",
+ "CREATE TABLE IF NOT EXISTS pandora_win_h1_direction(symbol text PRIMARY KEY,analysis jsonb NOT NULL)",
+ "CREATE TABLE IF NOT EXISTS pandora_win_signal_journal(id text PRIMARY KEY,ts text NOT NULL,candle_time bigint,action text NOT NULL,side integer,price double precision,features jsonb NOT NULL DEFAULT '{}'::jsonb)",
+ "CREATE TABLE IF NOT EXISTS pandora_win_audit_journal(id bigserial PRIMARY KEY,recorded_at text NOT NULL,event_id text,kind text NOT NULL,payload jsonb NOT NULL)",
+ "CREATE TABLE IF NOT EXISTS pandora_win_candle_checkpoints(symbol text NOT NULL,interval text NOT NULL,candles jsonb NOT NULL,saved_at timestamptz NOT NULL DEFAULT clock_timestamp(),PRIMARY KEY(symbol,interval))",
+ "CREATE TABLE IF NOT EXISTS pandora_win_live_state(id integer PRIMARY KEY,ts text NOT NULL,commit text,prices jsonb NOT NULL DEFAULT '{}'::jsonb,positions jsonb NOT NULL DEFAULT '{}'::jsonb,unrealized_pnl double precision NOT NULL DEFAULT 0,total_equity double precision NOT NULL DEFAULT 0,price_age_seconds double precision,source text)",
+ "CREATE INDEX IF NOT EXISTS pandora_win_trade_closed_idx ON pandora_win_trade_history(closed DESC)",
+ "CREATE INDEX IF NOT EXISTS pandora_win_audit_kind_time_idx ON pandora_win_audit_journal(kind,recorded_at)")
 
 def restore_state():
  with pg() as db:
-  account=db.execute('select * from local_v12_account_state where id=1').fetchone()
-  positions=db.execute('select * from local_v12_positions').fetchall()
-  watches=db.execute('select * from local_v12_watchlist').fetchall()
-  anchors=db.execute('select * from local_h1_direction').fetchall()
-  count=db.execute('select count(*) n from local_v12_trade_history').fetchone()['n']
+  account=db.execute('select * from pandora_win_account_state where id=1').fetchone()
+  positions=db.execute('select * from pandora_win_positions').fetchall()
+  watches=db.execute('select * from pandora_win_watchlist').fetchall()
+  anchors=db.execute('select * from pandora_win_h1_direction').fetchall()
+  count=db.execute('select count(*) n from pandora_win_trade_history').fetchone()['n']
  with LOCK:
-  S['local_experiment_equity']=float(account['equity']);S['local_experiment_realized_pnl']=float(account['realized_pnl'])
-  S['local_experiment_started_at']=account['started_at'];S['local_experiment_trades']=int(count)
-  S['local_v12_positions']={r['symbol']:{**dict(r),'t':float(r['opened_epoch'])} for r in positions}
-  S['local_experiment_watch']={r['symbol']:dict(r) for r in watches}
-  S['local_h1_direction']={r['symbol']:r['analysis'] for r in anchors}
-  S['_local4_analysis']=copy.deepcopy(S['local_h1_direction'])
+  S['pandora_equity']=float(account['equity']);S['pandora_realized_pnl']=float(account['realized_pnl'])
+  S['pandora_started_at']=account['started_at'];S['pandora_trades']=int(count)
+  S['pandora_win_positions']={r['symbol']:{**dict(r),'t':float(r['opened_epoch'])} for r in positions}
+  S['pandora_watch']={r['symbol']:dict(r) for r in watches}
+  S['pandora_win_h1_direction']={r['symbol']:r['analysis'] for r in anchors}
+  S['_pandora_analysis']=copy.deepcopy(S['pandora_win_h1_direction'])
 
 def pinit():
  with pg() as db:
   with db.transaction():
    for query in SCHEMA:db.execute(query)
-   db.execute('insert into local_v12_account_state(id,equity,realized_pnl,started_at,updated_at) values(1,500,0,%s,%s) on conflict(id) do nothing',(now(),now()))
+   db.execute('insert into pandora_win_account_state(id,equity,realized_pnl,started_at,updated_at) values(1,500,0,%s,%s) on conflict(id) do nothing',(now(),now()))
  EngineStore(pg).migrate()
- apply_local4_user_reset()
  restore_state()
- global S11,S13,S14,WIN
+ global WIN
  WIN=PandoraRuntime(sys.modules[__name__])
- S11=LegacyStrategy11(pg,STORE,LEGACY_MARKET_OBS,current_entry_price,
-  lambda: copy.deepcopy(S.get("_prices",{})),paper_pnl,FEE,now,_local_m15_candles)
- S11.ensure_schema("reset_2026_11_01_exact_848b3c6_clean_500_v2")
- S13=Strategy13(pg,STORE,current_entry_price,lambda: copy.deepcopy(S.get("_prices",{})),paper_pnl,FEE,now)
- S13.ensure_schema("reset_2026_10_31_strategy13_pure_h1_500_v1")
- S14=Strategy14(pg,STORE,MARKET_OBS,current_entry_price,lambda: copy.deepcopy(S.get("_prices",{})),paper_pnl,FEE,now)
- S14.ensure_schema("reset_2026_10_31_strategy14_848b3c6_500_v1")
  with pg() as db:
-  seeds=db.execute("select candles from local_candle_checkpoints where interval in ('1h','15m')").fetchall()
-  prior_discovery=db.execute("select payload from audit_journal where kind='strategy1_discovery_scan' order by id desc limit 1").fetchone()
- if prior_discovery and not WIN.scanner.last_snapshot:
-  with LOCK:S["bybit_discovery"]=copy.deepcopy(prior_discovery["payload"])
+  seeds=db.execute("select candles from pandora_win_candle_checkpoints where interval in ('1h','15m')").fetchall()
+
  for row in seeds:
   rows=row['candles'] or []
   if rows and all(r.get('venue')=='bybit' for r in rows):accept_local_candles([{**r,'_live_ingestion':False} for r in rows],history=True)
@@ -139,7 +111,7 @@ def accept_local_candles(data,history=False):
   for row in rows:
    if not isinstance(row,dict) or row.get('i') not in ('1h','15m'):continue
    symbol=row.get('s')
-   if symbol not in set(strategy1_runtime_symbols()):continue
+   if symbol not in set(pandora_runtime_symbols()):continue
    try:
     t,T=int(row['t']),int(row['T']);o,h,l,c,v=[float(row[k]) for k in ('o','h','l','c','v')]
     if not all(math.isfinite(x) for x in (o,h,l,c,v)) or min(o,h,l,c)<=0 or v<0:continue
@@ -183,12 +155,12 @@ def checkpoint_local_candles():
   with db.transaction():
    STORE.fence(db)
    for key,token,rows in pending:
-    db.execute('insert into local_candle_checkpoints(symbol,interval,candles,saved_at) values(%s,%s,%s::jsonb,clock_timestamp()) on conflict(symbol,interval) do update set candles=excluded.candles,saved_at=excluded.saved_at',(key[0],key[1],json.dumps(rows)))
+    db.execute('insert into pandora_win_candle_checkpoints(symbol,interval,candles,saved_at) values(%s,%s,%s::jsonb,clock_timestamp()) on conflict(symbol,interval) do update set candles=excluded.candles,saved_at=excluded.saved_at',(key[0],key[1],json.dumps(rows)))
  for key,token,rows in pending:
   _LOCAL_CANDLE_CHECKPOINTED[key]=token
   _LOCAL_CANDLE_CHECKPOINTED[('saved',key)]=wall
 
-def _local_h1_candles(symbol):
+def _pandora_h1_candles(symbol):
  with _LOCAL_CANDLE_CACHE_LOCK:item=_LOCAL_CANDLE_CACHE.get((symbol,'1h',120))
  if not item:raise RuntimeError('closed_h1_history_unavailable:'+symbol)
  return copy.deepcopy(item[1]),int(time.time()*1000)
@@ -206,19 +178,19 @@ def account_mutation(fn):
   with ACCOUNT_LOCK:return fn(*args,**kwargs)
  return run
 
-def strategy1_runtime_symbols():
+def pandora_runtime_symbols():
  with LOCK:
   hot=tuple((S.get("bybit_discovery") or {}).get("selected_symbols") or ())
-  held=tuple(S.get("local_v12_positions",{}));watched=tuple(S.get("local_experiment_watch",{}))
+  held=tuple(S.get("pandora_win_positions",{}));watched=tuple(S.get("pandora_watch",{}))
  with LOCK:pool=tuple((S.get('bybit_discovery') or {}).get('candidate_symbols') or ())
- return tuple(dict.fromkeys(hot+held+watched+pool+tuple(LOCAL_EXPERIMENT_SYMBOLS)))
+ return tuple(dict.fromkeys(hot+held+watched+pool))
 
-def strategy1_runtime_h1_verified(symbol,analysis=None,now_epoch=None):
+def pandora_runtime_h1_verified(symbol,analysis=None,now_epoch=None):
  # Persisted H1 anchors are valid for display and managing an already-open position,
  # but a NEW entry/re-entry must be backed by an H1 scan performed by THIS process.
  # This prevents deploy/lease takeover from reopening a stale regime before current
  # closed H1 candles have been re-read.
- with LOCK:meta=copy.deepcopy(S.get("_local_h1_runtime_verified",{}).get(symbol))
+ with LOCK:meta=copy.deepcopy(S.get("_pandora_h1_runtime_verified",{}).get(symbol))
  if not meta:return False
  try:
   now_epoch=float(time.time() if now_epoch is None else now_epoch)
@@ -244,7 +216,7 @@ def strategy1_runtime_h1_verified(symbol,analysis=None,now_epoch=None):
    return False
  return side in (-1,1) and signal>0 and pivot>0
 
-def strategy1_confirmed_h1(a):
+def pandora_confirmed_h1(a):
  # Confirmed H1 LOCAL_HIGH -> SHORT or LOCAL_LOW -> LONG; no other trade filter.
  if not isinstance(a,dict):return False
  try:
@@ -257,12 +229,12 @@ def strategy1_confirmed_h1(a):
   a.get("h1_direction_anchor") and not a.get("entry_blocked") and
   a.get("pivot_type")==expected and math.isfinite(price) and price>0 and signal>0)
 
-def strategy1_trade_symbols():
+def pandora_trade_symbols():
  # Discovery selects new markets; retain positions and watches through rotation.
  # H1 verification is a separate allocation gate, never a subscription gate.
  with LOCK:
   hot=tuple((S.get("bybit_discovery") or {}).get("selected_symbols") or ())
-  held=tuple(S.get("local_v12_positions",{}));watched=tuple(S.get("local_experiment_watch",{}))
+  held=tuple(S.get("pandora_win_positions",{}));watched=tuple(S.get("pandora_watch",{}))
  return tuple(dict.fromkeys(hot+held+watched))
 
 def bybit_volatility_discovery_loop():
@@ -290,7 +262,7 @@ def bybit_volatility_discovery_loop():
     except Exception as error:
      with LOCK:S['sources']['ScannerBootstrap']={'ok':False,'error':str(error)[:160],'at':now()}
    with LOCK:
-    instruments=copy.deepcopy(S.get('_bybit_instruments',{}));held=tuple(S.get('local_v12_positions',{}))
+    instruments=copy.deepcopy(S.get('_bybit_instruments',{}));held=tuple(S.get('pandora_win_positions',{}))
    snapshot=scanner.rank(instruments,MARKET_OBS.flow_context,held)
    WIN.scanner_snapshot(snapshot)
    with LOCK:S['sources']['BybitDiscovery']={'ok':bool(snapshot['selected_symbols']),'at':now(),'selected':len(snapshot['selected_symbols']),'mode':'LIVE_STREAM'}
@@ -369,8 +341,8 @@ def accept_market_prices(mids):
  TRADE_WAKE.set()
  return valid
 
-def local_h1_direction(rows,now_ms,symbol):
- analysis=analyze_hype_h1(rows,now_ms,symbol)
+def pandora_win_h1_direction(rows,now_ms,symbol):
+ analysis=analyze_pandora_h1(rows,now_ms,symbol)
  try:m15_rows,_=_local_m15_candles(symbol)
  except RuntimeError:m15_rows=[]
  detailed=live_locals(rows,m15_rows,now_ms,symbol)
@@ -379,18 +351,18 @@ def local_h1_direction(rows,now_ms,symbol):
   # Fresh H1 cache may lag during deploy/lease handoff. Keep the latest
   # confirmed directional anchor usable instead of blanking the symbol.
   fallback=_local_persisted_anchor(symbol)
-  if fallback and fallback.get("policy")==HYPE_SWING_POLICY and int(fallback.get("entry_side") or 0) in (-1,1):
+  if fallback and fallback.get("policy")==PANDORA_LOCAL_POLICY and int(fallback.get("entry_side") or 0) in (-1,1):
    recovered={**fallback,"ready":False,"stale_source_reason":analysis.get("reason"),
-     "anchor_recovered_from":"latest_valid_strategy1_observation",
+     "anchor_recovered_from":"latest_valid_pandora_observation",
      **local_pending_extreme(rows,now_ms,int(fallback.get("entry_side") or 0),fallback.get("pivot_price"))}
    recovered.update(entry_blocked=True,entry_block_reason="current_h1_history_not_verified")
    try:
     with pg() as db:
      with db.transaction():
       STORE.fence(db)
-      db.execute("insert into local_h1_direction(symbol,analysis) values(%s,%s::jsonb) on conflict(symbol) do update set analysis=excluded.analysis",
+      db.execute("insert into pandora_win_h1_direction(symbol,analysis) values(%s,%s::jsonb) on conflict(symbol) do update set analysis=excluded.analysis",
        (symbol,json.dumps(recovered)))
-    with LOCK:S.setdefault("local_h1_direction",{})[symbol]=copy.deepcopy(recovered)
+    with LOCK:S.setdefault("pandora_win_h1_direction",{})[symbol]=copy.deepcopy(recovered)
    except Exception:
     pass
    return recovered
@@ -401,17 +373,17 @@ def local_h1_direction(rows,now_ms,symbol):
  if trusted and int(trusted.get("entry_side") or 0) in (-1,1):
   trusted_t=int(trusted.get("signal_candle_time") or 0)
   fresh_t=int(analysis.get("signal_candle_time") or 0)
-  if trusted_t>fresh_t and trusted.get("policy")==HYPE_SWING_POLICY:
+  if trusted_t>fresh_t and trusted.get("policy")==PANDORA_LOCAL_POLICY:
    analysis={**trusted,"ready":True,"last_candle_time":analysis.get("last_candle_time"),
     **local_pending_extreme(rows,now_ms,int(trusted.get("entry_side") or 0),trusted.get("pivot_price")),
     "anchor_guard":"newest_confirmed_anchor_wins"}
  if analysis.get("live_structural_flip"):
   analysis["signal_candle_time"]=analysis.get("pivot_candle_time") or analysis.get("signal_candle_time")
- with LOCK:prior=copy.deepcopy(S.get("local_h1_direction",{}).get(symbol))
+ with LOCK:prior=copy.deepcopy(S.get("pandora_win_h1_direction",{}).get(symbol))
  if prior:
   prior_t=int(prior.get("signal_candle_time") or 0);new_t=int(analysis.get("signal_candle_time") or 0)
   prior_side=int(prior.get("entry_side") or 0);new_side=int(analysis.get("entry_side") or 0)
-  if prior_t>new_t and prior.get("policy")==HYPE_SWING_POLICY:
+  if prior_t>new_t and prior.get("policy")==PANDORA_LOCAL_POLICY:
    # A shorter restart cache must never roll a newer persisted H1 anchor back.
    analysis={**prior,"ready":True,"last_candle_time":analysis.get("last_candle_time"),
      **local_pending_extreme(rows,now_ms,prior_side)}
@@ -430,11 +402,11 @@ def local_h1_direction(rows,now_ms,symbol):
   # This keeps every analyzed symbol directionally usable until a newer confirmed
   # opposite pivot supersedes it; pending extremes remain diagnostic-only.
   fallback=_local_persisted_anchor(symbol)
-  if fallback and fallback.get("policy")==HYPE_SWING_POLICY and int(fallback.get("entry_side") or 0) in (-1,1):
+  if fallback and fallback.get("policy")==PANDORA_LOCAL_POLICY and int(fallback.get("entry_side") or 0) in (-1,1):
    analysis={**fallback,"ready":True,
      "last_candle_time":analysis.get("last_candle_time"),
      **local_pending_extreme(rows,now_ms,int(fallback.get("entry_side") or 0),fallback.get("pivot_price")),
-     "anchor_recovered_from":"latest_valid_strategy1_observation"}
+     "anchor_recovered_from":"latest_valid_pandora_observation"}
   else:
    return analysis
  for key in ('confirmed_local','forming_local','forming_locals','live_structure_fresh'):
@@ -446,7 +418,7 @@ def local_h1_direction(rows,now_ms,symbol):
  # final active anchor, so the 500ms executor cannot outrun H1 reconciliation.
  if analysis.get("ready") and analysis.get("anchor_confirmed") and int(analysis.get("entry_side") or 0) in (-1,1):
   with LOCK:
-   S.setdefault("_local_h1_runtime_verified",{})[symbol]={
+   S.setdefault("_pandora_h1_runtime_verified",{})[symbol]={
     "verified_at":time.time(),"observed_at_ms":int(now_ms),
     "last_candle_time":int(analysis.get("last_candle_time") or 0),
     "entry_side":int(analysis.get("entry_side") or 0),
@@ -460,12 +432,12 @@ def local_h1_direction(rows,now_ms,symbol):
  forming_changed=local_fingerprint(prior)!=local_fingerprint(analysis)
  changed=anchor_changed or forming_changed
  stamp=time.time()
- with LOCK:last=float(S.setdefault("_local_h1_persist_epoch",{}).get(symbol,0) or 0)
+ with LOCK:last=float(S.setdefault("_pandora_h1_persist_epoch",{}).get(symbol,0) or 0)
  if changed or stamp-last>=30:
   with pg() as db:
    with db.transaction():
     STORE.fence(db)
-    db.execute("insert into local_h1_direction(symbol,analysis) values(%s,%s::jsonb) on conflict(symbol) do update set analysis=excluded.analysis",
+    db.execute("insert into pandora_win_h1_direction(symbol,analysis) values(%s,%s::jsonb) on conflict(symbol) do update set analysis=excluded.analysis",
       (symbol,json.dumps(analysis)))
   if WIN is not None and changed:
    with pg() as db:
@@ -476,8 +448,8 @@ def local_h1_direction(rows,now_ms,symbol):
      for forming in analysis.get('forming_locals',[]) if forming_changed else []:
       WIN.event(db,forming['pivot_type']+'_FORMING',symbol,'observed_online_extreme',forming)
   with LOCK:
-   S.setdefault("local_h1_direction",{})[symbol]=copy.deepcopy(analysis)
-   S["_local_h1_persist_epoch"][symbol]=stamp
+   S.setdefault("pandora_win_h1_direction",{})[symbol]=copy.deepcopy(analysis)
+   S["_pandora_h1_persist_epoch"][symbol]=stamp
  return analysis
 
 def _local_persisted_anchor(symbol):
@@ -504,22 +476,22 @@ def _local_persisted_anchor(symbol):
    "entry_block_reason":None,"reason":"persisted_confirmed_h1_local","anchor_source":origin})
 
  with LOCK:
-  add_candidate(copy.deepcopy(S.get("local_h1_direction",{}).get(symbol)),"memory_canonical")
-  add_candidate(copy.deepcopy(S.get("local_v12_positions",{}).get(symbol)),"open_position")
-  add_candidate(copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol)),"reentry_watch")
+  add_candidate(copy.deepcopy(S.get("pandora_win_h1_direction",{}).get(symbol)),"memory_canonical")
+  add_candidate(copy.deepcopy(S.get("pandora_win_positions",{}).get(symbol)),"open_position")
+  add_candidate(copy.deepcopy(S.get("pandora_watch",{}).get(symbol)),"reentry_watch")
  try:
   with pg() as db:
-   durable=db.execute("select analysis from local_h1_direction where symbol=%s",(symbol,)).fetchone()
+   durable=db.execute("select analysis from pandora_win_h1_direction where symbol=%s",(symbol,)).fetchone()
    if durable:add_candidate(durable,"durable_canonical")
    # Sort by the actual H1 signal time, NOT journal write time.
-   rows=db.execute("""select side,candle_time,features from local_v12_signal_journal
+   rows=db.execute("""select side,candle_time,features from pandora_win_signal_journal
      where features->>'symbol'=%s and action in ('OBSERVE','OPEN','REENTRY')
      order by coalesce(nullif(features->>'signal_candle_time','')::bigint,candle_time) desc,
               coalesce(nullif(features->>'pivot_candle_time','')::bigint,0) desc, ts desc
      limit 12""",(symbol,)).fetchall()
    for row in rows:add_candidate(row,"signal_journal")
    # Executed trades are another durable proof of the H1 anchor used at entry.
-   trades=db.execute("""select side,features from local_v12_trade_history
+   trades=db.execute("""select side,features from pandora_win_trade_history
      where symbol=%s order by coalesce(nullif(features->>'signal_candle_time','')::bigint,0) desc, closed desc
      limit 6""",(symbol,)).fetchall()
    for row in trades:add_candidate(row,"trade_history")
@@ -531,10 +503,10 @@ def _local_persisted_anchor(symbol):
  best["anchor_candidates_checked"]=len(candidates)
  return best
 
-def _local_experiment_margin_state():
+def _pandora_margin_state():
  with LOCK:
-  realized_equity=float(S.get('local_experiment_equity',500))
-  positions=copy.deepcopy(S.get('local_v12_positions',{}))
+  realized_equity=float(S.get('pandora_equity',500))
+  positions=copy.deepcopy(S.get('pandora_win_positions',{}))
  used=sum(max(0.,float(p.get('margin',0))) for p in positions.values())
  unrealized=0.;missing=[]
  for symbol,pos in positions.items():
@@ -554,9 +526,9 @@ def risk_day():
 
 def risk_snapshot(policy=None):
  policy=policy or RiskPolicy.from_env()
- equity,used,free=_local_experiment_margin_state()
+ equity,used,free=_pandora_margin_state()
  with LOCK:
-  positions=copy.deepcopy(S.get('local_v12_positions',{}))
+  positions=copy.deepcopy(S.get('pandora_win_positions',{}))
   complete=bool(S.get('margin_valuation',{}).get('complete'))
  modeled=sum(position_risk(p,fee=FEE,slippage=policy.slippage) for p in positions.values())
  allowed=complete and equity>0 and free>0
@@ -570,56 +542,56 @@ def risk_snapshot(policy=None):
  with LOCK:S['risk_circuit']=state
  return state
 
-def _local_experiment_watch_clear(symbol,reason):
- with LOCK:watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
+def _pandora_watch_clear(symbol,reason):
+ with LOCK:watch=copy.deepcopy(S.get("pandora_watch",{}).get(symbol))
  if not watch:return False
  with pg() as db:
   with db.transaction():
    STORE.fence(db)
-   db.execute("delete from local_v12_watchlist where symbol=%s",(symbol,))
-   db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'local_experiment_watch_cleared',%s::jsonb)",
+   db.execute("delete from pandora_win_watchlist where symbol=%s",(symbol,))
+   db.execute("insert into pandora_win_audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'pandora_watch_cleared',%s::jsonb)",
      (now(),json.dumps({"symbol":symbol,"reason":reason,"watch":watch},default=str)))
- with LOCK:S.setdefault("local_experiment_watch",{}).pop(symbol,None)
+ with LOCK:S.setdefault("pandora_watch",{}).pop(symbol,None)
  return True
 
 @account_mutation
-def _local_experiment_watch_observe(symbol,watch,mark,execution_context,flow,stamp):
- updated=local4_update_watch(watch,mark,execution_context,flow,stamp)
+def _pandora_watch_observe(symbol,watch,mark,execution_context,flow,stamp):
+ updated=pandora_flow_update_watch(watch,mark,execution_context,flow,stamp)
  before=(watch or {}).get("context") or {};context=updated.get("context") or {}
  changed=before.get("phase")!=context.get("phase")
- with LOCK:last=float(S.setdefault("_local_experiment_watch_persist_epoch",{}).get(symbol,0) or 0)
+ with LOCK:last=float(S.setdefault("_pandora_watch_persist_epoch",{}).get(symbol,0) or 0)
  if changed or stamp-last>=1:
   with pg() as db:
    with db.transaction():
     STORE.fence(db)
-    db.execute("update local_v12_watchlist set context=%s::jsonb where symbol=%s and exit_at=%s",
+    db.execute("update pandora_win_watchlist set context=%s::jsonb where symbol=%s and exit_at=%s",
       (json.dumps(context,default=str),symbol,watch.get("exit_at")))
     if changed:
-     db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'local_experiment_caterpillar_phase',%s::jsonb)",
+     db.execute("insert into pandora_win_audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'pandora_flow_phase',%s::jsonb)",
        (now(),json.dumps({"symbol":symbol,"side":watch.get("side"),"phase":context.get("phase"),"context":context},default=str)))
-  with LOCK:S["_local_experiment_watch_persist_epoch"][symbol]=stamp
+  with LOCK:S["_pandora_watch_persist_epoch"][symbol]=stamp
  with LOCK:
-  live=S.get("local_experiment_watch",{}).get(symbol)
-  if live and live.get("exit_at")==watch.get("exit_at"):S["local_experiment_watch"][symbol]=copy.deepcopy(updated)
+  live=S.get("pandora_watch",{}).get(symbol)
+  if live and live.get("exit_at")==watch.get("exit_at"):S["pandora_watch"][symbol]=copy.deepcopy(updated)
  return updated
 
 @account_mutation
-def local_experiment_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution_context=None,watch=None):
+def pandora_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution_context=None,watch=None):
  def reject(reason):
   payload={"symbol":symbol,"reason":reason,"at":now(),"entry_kind":entry_kind,
     "signal_candle_time":(analysis or {}).get("signal_candle_time")}
   with LOCK:
-   previous=S.setdefault("strategy1_executor_rejections",{}).get(symbol) or {}
-   S["strategy1_executor_rejections"][symbol]=payload
+   previous=S.setdefault("pandora_executor_rejections",{}).get(symbol) or {}
+   S["pandora_executor_rejections"][symbol]=payload
   if previous.get("reason")!=reason or previous.get("signal_candle_time")!=payload["signal_candle_time"]:
-   try:journal("strategy1_entry_rejected",None,payload)
+   try:journal("pandora_entry_rejected",None,payload)
    except Exception:pass
   return False
- if symbol not in set(strategy1_trade_symbols()) or int(side or 0) not in (-1,1):return reject("ENTRY_STATE_REVALIDATION_FAILED")
- if not strategy1_confirmed_h1(analysis):return reject("H1_NOT_CONFIRMED")
+ if symbol not in set(pandora_trade_symbols()) or int(side or 0) not in (-1,1):return reject("ENTRY_STATE_REVALIDATION_FAILED")
+ if not pandora_confirmed_h1(analysis):return reject("H1_NOT_CONFIRMED")
  # Fail closed for NEW risk until this runtime has revalidated the current H1 book.
  # Hydrated/persisted anchors may manage existing risk but may not create fresh risk.
- if not strategy1_runtime_h1_verified(symbol,analysis):return reject("CURRENT_CLOSED_H1_NOT_VERIFIED")
+ if not pandora_runtime_h1_verified(symbol,analysis):return reject("CURRENT_CLOSED_H1_NOT_VERIFIED")
  if S.get("mode")!="PAPER_ONLY" or S.get("orders_enabled") or not analysis.get("ready"):return reject("ENTRY_STATE_REVALIDATION_FAILED")
  if not analysis.get("h1_direction_anchor") or int(analysis.get("entry_side") or 0)!=int(side):return reject("ENTRY_STATE_REVALIDATION_FAILED")
  if analysis.get("entry_blocked"):return reject("ENTRY_STATE_REVALIDATION_FAILED")
@@ -630,10 +602,10 @@ def local_experiment_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution
  # Revalidate the H1 side plus fresh executed-flow executed control before adding risk.
  stamp=time.time()
  flow=MARKET_OBS.flow_context(symbol,stamp)
- selection=(local4_entry_candidate(symbol,analysis,execution_context,flow,stamp) if entry_kind=="REENTRY"
-            else local4_initial_entry_candidate(symbol,analysis,execution_context,flow,stamp))
+ selection=(pandora_flow_entry_candidate(symbol,analysis,execution_context,flow,stamp) if entry_kind=="REENTRY"
+            else pandora_flow_initial_entry_candidate(symbol,analysis,execution_context,flow,stamp))
  if not selection["eligible"]:return reject(selection["reason"])
- with LOCK:current_anchor=copy.deepcopy(S.get("local_h1_direction",{}).get(symbol))
+ with LOCK:current_anchor=copy.deepcopy(S.get("pandora_win_h1_direction",{}).get(symbol))
  if current_anchor and (int(current_anchor.get("entry_side") or 0)!=int(side) or
      int(current_anchor.get("signal_candle_time") or 0)!=int(analysis.get("signal_candle_time") or 0)):return reject("ENTRY_STATE_REVALIDATION_FAILED")
  price=current_entry_price(symbol)
@@ -641,13 +613,13 @@ def local_experiment_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution
  if entry_kind=="REENTRY":
   if not watch or int(watch.get("side") or 0)!=int(side):return reject("ENTRY_STATE_REVALIDATION_FAILED")
   if int(analysis.get("entry_side") or 0)==-int(side):return reject("ENTRY_STATE_REVALIDATION_FAILED")
-  with LOCK:live_watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
+  with LOCK:live_watch=copy.deepcopy(S.get("pandora_watch",{}).get(symbol))
   if not live_watch or live_watch.get("exit_at")!=watch.get("exit_at"):return reject("ENTRY_STATE_REVALIDATION_FAILED")
-  if not local4_reentry_ready(side,execution_context,price,live_watch,flow,stamp):return reject("WAIT_REENTRY_RESUMPTION")
+  if not pandora_flow_reentry_ready(side,execution_context,price,live_watch,flow,stamp):return reject("WAIT_REENTRY_RESUMPTION")
  with LOCK:instrument=copy.deepcopy(S.get("_bybit_instruments",{}).get(symbol))
  if not instrument or time.time()-float(instrument.get("observed_at",0))>86400:return reject("BYBIT_CONTRACT_CONSTRAINTS_UNAVAILABLE")
  leverage=min(50.0,float(instrument["max_leverage"]))
- with LOCK:allocation_blocked=not S.get("engine_active") or symbol in S.get("local_v12_positions",{})
+ with LOCK:allocation_blocked=not S.get("engine_active") or symbol in S.get("pandora_win_positions",{})
  if allocation_blocked:return reject("ENGINE_STANDBY_OR_POSITION_ALREADY_OPEN")
  # Risk budget, not maximum nominal leverage, governs exposure.
  policy=RiskPolicy.from_env()
@@ -663,10 +635,10 @@ def local_experiment_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution
  # Recheck the actual tape after planning. A historical BUY majority must
  # never admit LONG if current buying has stopped while allocation ran.
  latest_flow=MARKET_OBS.flow_context(symbol,time.time())
- latest_selection=(local4_entry_candidate(symbol,analysis,execution_context,latest_flow,time.time()) if entry_kind=='REENTRY'
-                   else local4_initial_entry_candidate(symbol,analysis,execution_context,latest_flow,time.time()))
+ latest_selection=(pandora_flow_entry_candidate(symbol,analysis,execution_context,latest_flow,time.time()) if entry_kind=='REENTRY'
+                   else pandora_flow_initial_entry_candidate(symbol,analysis,execution_context,latest_flow,time.time()))
  if not latest_selection.get('eligible'):return reject('EXECUTED_CONTROL_CHANGED_DURING_ALLOCATION')
- with LOCK:latest_anchor=copy.deepcopy(S.get('_local4_analysis',{}).get(symbol) or {})
+ with LOCK:latest_anchor=copy.deepcopy(S.get('_pandora_analysis',{}).get(symbol) or {})
  if latest_anchor and (latest_anchor.get('entry_blocked') or latest_anchor.get('live_structure_fresh') is False or
      int(latest_anchor.get('entry_side') or 0)!=int(side) or
      int(latest_anchor.get('signal_candle_time') or 0)!=int(analysis.get('signal_candle_time') or 0)):
@@ -677,7 +649,7 @@ def local_experiment_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution
  origin_signal=int(analysis.get("signal_candle_time") or 0)
  claim_token=int((execution_context or {}).get("candle_time") or origin_signal)
  features={**analysis,"symbol":symbol,"strategy_name":PANDORA_WIN_NAME,"experiment":PANDORA_WIN_NAME,
-  "policy":HYPE_SWING_POLICY,"caterpillar_policy":LOCAL4_FLOW_POLICY,"entry_kind":entry_kind,
+  "policy":PANDORA_LOCAL_POLICY,"flow_policy":PANDORA_FLOW_POLICY,"entry_kind":entry_kind,
   "candidate_selection":selection,
   "origin_h1_signal_candle":origin_signal,"swing_reentries":reentries,
   "reference_margin_fraction":plan.chosen_margin_fraction,"minimum_margin_fraction":policy.min_margin_fraction,"reference_leverage":policy.max_leverage,"risk_plan":plan.to_dict(),
@@ -685,11 +657,10 @@ def local_experiment_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution
   "actual_margin":margin,"free_margin_before":free,"mark_to_market_equity_at_entry":equity,
   "exposure_fill_ratio":exposure_fill_ratio,"leverage":leverage,"leverage_source":"bybit_instruments_info",
   "mfe_price_move":0.0,"mae_price_move":0.0,"mfe_roe_pct":0.0,"mae_roe_pct":0.0,
-  "entry_mark":price,"profit_lock_armed":False,
+  "entry_mark":price,
   "pressure_state":{"best":int(side)*price,"noise":float((((watch or {}).get("context") or {}).get("resumption_state") or {}).get("noise") or 0.),
     "barrier":(-float((((watch or {}).get("context") or {}).get("resumption_state") or {}).get("candidate",{}).get("retest_best")) if (((watch or {}).get("context") or {}).get("resumption_state") or {}).get("candidate",{}).get("retest_best") is not None else None),"phase":"HOLDING"},
-  "profit_lock_mode":"m1_executed_flow_weakening",
-  
+
   "reentry_watch":copy.deepcopy(watch) if entry_kind=="REENTRY" else None,
   "estimated_round_trip_cost_move":2*FEE+0.0004,"execution_cost_budget_only":True}
  fast=(flow.get('windows') or {}).get('15',{})
@@ -705,16 +676,16 @@ def local_experiment_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution
  with pg() as db:
   with db.transaction():
    STORE.fence(db)
-   claim=db.execute("""insert into local_v12_signal_journal(id,ts,candle_time,action,side,price,features)
+   claim=db.execute("""insert into pandora_win_signal_journal(id,ts,candle_time,action,side,price,features)
      values(%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(id) do nothing returning id""",
      (claim_id,opened,claim_token,"REENTRY" if entry_kind=="REENTRY" else "OPEN",int(side),price,json.dumps(features,default=str))).fetchone()
    if not claim:return reject("SIGNAL_ALREADY_EXECUTED")
-   row=db.execute("""insert into local_v12_positions(symbol,side,entry,notional,margin,leverage,opened,opened_epoch,signal_candle_time,features)
+   row=db.execute("""insert into pandora_win_positions(symbol,side,entry,notional,margin,leverage,opened,opened_epoch,signal_candle_time,features)
      values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb) on conflict(symbol) do nothing returning symbol""",
      (symbol,int(side),price,notional,margin,leverage,opened,epoch,origin_signal,json.dumps(features,default=str))).fetchone()
    if not row:raise psycopg.Rollback()
-   if entry_kind=="REENTRY":db.execute("delete from local_v12_watchlist where symbol=%s",(symbol,))
-   db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'local_experiment_trade_opened',%s::jsonb)",
+   if entry_kind=="REENTRY":db.execute("delete from pandora_win_watchlist where symbol=%s",(symbol,))
+   db.execute("insert into pandora_win_audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'pandora_trade_opened',%s::jsonb)",
     (now(),json.dumps({"strategy":PANDORA_WIN_NAME,"symbol":symbol,"side":int(side),"entry_kind":entry_kind,
       "entry":price,"reason":selection["reason"],"signal_candle_time":origin_signal,
       "margin":margin,"notional":notional,"target_notional":target_notional,
@@ -722,33 +693,33 @@ def local_experiment_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution
    if WIN is not None:WIN.semantic_open(db,symbol,pos)
  if not row:return reject("POSITION_WRITE_CONFLICT")
  with LOCK:
-  S.setdefault("local_v12_positions",{})[symbol]=pos
-  if entry_kind=="REENTRY":S.setdefault("local_experiment_watch",{}).pop(symbol,None)
- log_learning_decision("LOCAL12:%s:%s:%s:%s"%(symbol,entry_kind,claim_token,int(side)),
+  S.setdefault("pandora_win_positions",{})[symbol]=pos
+  if entry_kind=="REENTRY":S.setdefault("pandora_watch",{}).pop(symbol,None)
+ log_learning_decision("PANDORA_WIN:%s:%s:%s:%s"%(symbol,entry_kind,claim_token,int(side)),
    PANDORA_WIN_NAME,symbol,side,"OPEN" if entry_kind!="REENTRY" else "REENTRY",
    "confirmed_local_entry",price,None,leverage,features,opened)
  if WIN is not None:WIN.reload_token(symbol)
  return True
 
 @account_mutation
-def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None):
- with LOCK:pos=copy.deepcopy(S.get("local_v12_positions",{}).get(symbol))
+def pandora_close(symbol,price,reason,analysis=None,watch_context=None):
+ with LOCK:pos=copy.deepcopy(S.get("pandora_win_positions",{}).get(symbol))
  if not pos:return None
  price=float(price)
- pos=mark_metrics(pos,price,MARKET_OBS.flow_context(symbol),analysis or S.get('_local4_analysis',{}).get(symbol,{}) or {},FEE)
+ pos=mark_metrics(pos,price,MARKET_OBS.flow_context(symbol),analysis or S.get('_pandora_analysis',{}).get(symbol,{}) or {},FEE)
  pnl=paper_pnl(pos["notional"],pos["entry"],price,pos["side"],FEE)
  features=copy.deepcopy(pos.get("features") or {})
  if analysis:features["exit_analysis"]=analysis
  if watch_context:features["executed_flow_exit_context"]=watch_context
  features["actual_exit_reason"]=reason;features["actual_exit_mark"]=price
  watch=None
- if reason in ("confirmed_counter_move_exit","executed_flow_profit_flip_exit","executed_flow_risk_flip_exit","executed_flow_control_loss_exit","m1_m3_m5_dominance_mfe_exit","m1_mfe_preservation_exit","m1_counterflow_exit","m1_m3_m5_mfe_preservation_exit","m1_m3_m5_risk_exit","m1_m3_confirmed_counterflow_exit"):
+ if reason == "confirmed_counter_move_exit":
   watch={"symbol":symbol,"side":int(pos["side"]),
    "origin_signal_candle":int(features.get("origin_h1_signal_candle") or pos.get("signal_candle_time") or 0),
    "exit_price":price,"exit_at":now(),"expires_epoch":0.0,
    "reentries":int(features.get("swing_reentries",0) or 0),"context":{**copy.deepcopy(watch_context or {}),"exit_pressure_state":copy.deepcopy(features.get("pressure_state") or {})}}
   # Preserve the exchange timestamp of the opposite executed-flow event so
-  # Caterpillar re-entry can only happen on a later M1/M3/M5 resumption.
+  # Re-entry must follow a later executed-flow resumption.
   opposite_flow_exit=True
   flow_at_exit=(watch_context or {}).get("flow_context") or {}
   try:
@@ -760,190 +731,143 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
   except (KeyError,TypeError,ValueError,OverflowError):opposite_epoch=None
   confirmed_opposite=bool(opposite_flow_exit and opposite_epoch is not None)
   watch["context"].update(phase="WAIT_RESUMPTION" if confirmed_opposite else "WAIT_PULLBACK",
-    counter_pressure_seen=confirmed_opposite,caterpillar_policy=LOCAL4_FLOW_POLICY)
+    counter_pressure_seen=confirmed_opposite,flow_policy=PANDORA_FLOW_POLICY)
   if confirmed_opposite:watch["context"]["last_opposite_trade_epoch"]=opposite_epoch
  with pg() as db:
   with db.transaction():
    STORE.fence(db)
-   row=db.execute("delete from local_v12_positions where symbol=%s and opened=%s returning symbol",
+   row=db.execute("delete from pandora_win_positions where symbol=%s and opened=%s returning symbol",
      (symbol,pos["opened"])).fetchone()
    if not row:return None
-   acct=db.execute("""update local_v12_account_state
+   acct=db.execute("""update pandora_win_account_state
      set equity=equity+%s,realized_pnl=realized_pnl+%s,updated_at=%s where id=1 returning equity,realized_pnl""",
      (pnl,pnl,now())).fetchone()
-   db.execute("""insert into local_v12_trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,margin,notional,leverage,features)
+   db.execute("""insert into pandora_win_trade_history(opened,closed,symbol,side,entry,exit,pnl,reason,margin,notional,leverage,features)
      values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
      (pos["opened"],now(),symbol,pos["side"],pos["entry"],price,pnl,reason,pos["margin"],pos["notional"],
       pos["leverage"],json.dumps(features,default=str)))
    if watch:
-    db.execute("""insert into local_v12_watchlist(symbol,side,origin_signal_candle,exit_price,exit_at,expires_epoch,reentries,context)
+    db.execute("""insert into pandora_win_watchlist(symbol,side,origin_signal_candle,exit_price,exit_at,expires_epoch,reentries,context)
       values(%s,%s,%s,%s,%s,%s,%s,%s::jsonb)
       on conflict(symbol) do update set side=excluded.side,origin_signal_candle=excluded.origin_signal_candle,
       exit_price=excluded.exit_price,exit_at=excluded.exit_at,expires_epoch=excluded.expires_epoch,
       reentries=excluded.reentries,context=excluded.context""",
       (symbol,watch["side"],watch["origin_signal_candle"],watch["exit_price"],watch["exit_at"],0.0,
        watch["reentries"],json.dumps(watch["context"],default=str)))
-   db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'local_experiment_trade_closed',%s::jsonb)",
+   db.execute("insert into pandora_win_audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'pandora_trade_closed',%s::jsonb)",
      (now(),json.dumps({"strategy":PANDORA_WIN_NAME,"symbol":symbol,"side":pos["side"],"entry":pos["entry"],
        "exit":price,"pnl":pnl,"reason":reason,"equity":float(acct["equity"]),"watch_armed":bool(watch),
        "leverage":pos["leverage"],"exposure_fill_ratio":features.get("exposure_fill_ratio")},default=str)))
    if WIN is not None:WIN.semantic_close(db,symbol,pos,reason,price,pnl,watch)
  with LOCK:
-  S.setdefault("local_v12_positions",{}).pop(symbol,None)
-  if watch:S.setdefault("local_experiment_watch",{})[symbol]=watch
-  S["local_experiment_equity"]=float(acct["equity"])
-  S["local_experiment_realized_pnl"]=float(acct["realized_pnl"])
-  S["local_experiment_trades"]=int(S.get("local_experiment_trades",0) or 0)+1
- log_learning_decision("LOCAL12:CLOSE:%s:%s"%(symbol,pos.get("opened")),
+  S.setdefault("pandora_win_positions",{}).pop(symbol,None)
+  if watch:S.setdefault("pandora_watch",{})[symbol]=watch
+  S["pandora_equity"]=float(acct["equity"])
+  S["pandora_realized_pnl"]=float(acct["realized_pnl"])
+  S["pandora_trades"]=int(S.get("pandora_trades",0) or 0)+1
+ log_learning_decision("PANDORA_WIN:CLOSE:%s:%s"%(symbol,pos.get("opened")),
    PANDORA_WIN_NAME,symbol,pos["side"],"CLOSED",reason,pos["entry"],None,
    pos["leverage"],features,pos.get("opened"))
  if WIN is not None:WIN.reload_token(symbol)
  return {"symbol":symbol,"pnl":pnl,"reason":reason,"equity":float(acct["equity"])}
 
 @account_mutation
-def local_experiment_mark_positions(prices):
+def pandora_mark_positions(prices):
  with LOCK:
   received=dict(S.get("_price_received_epoch",{}))
   prices={symbol:price for symbol,price in prices.items() if 0<=time.time()-received.get(symbol,0)<=10}
- with LOCK:positions=copy.deepcopy(S.get("local_v12_positions",{}))
+ with LOCK:positions=copy.deepcopy(S.get("pandora_win_positions",{}))
  for symbol,pos in positions.items():
   mark=prices.get(symbol)
   if not mark:continue
   flow=MARKET_OBS.flow_context(symbol,time.time())
-  anchor=copy.deepcopy(S.get('_local4_analysis',{}).get(symbol) or {})
+  anchor=copy.deepcopy(S.get('_pandora_analysis',{}).get(symbol) or {})
   updated=mark_metrics(pos,float(mark),flow,anchor,FEE)
-  updated,liq=hype_update_path(updated,float(mark))
+  updated,liq=update_position_path(updated,float(mark))
   # No percentage SL/TP or MFE giveback exit: planned reference prices
   # describe stress geometry only. The PAPER maintenance outcome is still
   # modeled honestly when collateral is exhausted.
   guard=position_guard(updated,float(mark),FEE)
   with LOCK:
-   if S.get('local_v12_positions',{}).get(symbol,{}).get('opened')==pos.get('opened'):
-    S['local_v12_positions'][symbol]=updated
+   if S.get('pandora_win_positions',{}).get(symbol,{}).get('opened')==pos.get('opened'):
+    S['pandora_win_positions'][symbol]=updated
   if guard:
-   local_experiment_close(symbol,float(mark),guard,anchor);continue
+   pandora_close(symbol,float(mark),guard,anchor);continue
   f=updated.setdefault("features",{})
-  # Strategy 1 MFE protection: preserve trend profits; exits are confirmed by executed-flow control transfer.
+  # Pandora Win MFE protection: preserve trend profits; exits are confirmed by executed-flow control transfer.
   entry=float(updated.get("entry") or 0);side=int(updated.get("side") or 0);markf=float(mark)
   move=side*(markf/entry-1.0) if entry>0 and side in (-1,1) else 0.0
   mfe=max(float(f.get("mfe_price_move",0) or 0),move)
   f["mfe_price_move"]=mfe;f["mfe_roe_pct"]=mfe*float(updated.get("leverage") or 25.0)*100.0
-  f.update(caterpillar_policy=LOCAL4_FLOW_POLICY,profit_lock_armed=False,
-    profit_lock_mode="executed_control_and_price_structure_only",
+  f.update(flow_policy=PANDORA_FLOW_POLICY,
     current_price_move=move,mfe_giveback_move=max(0.0,mfe-move))
   with LOCK:
-   live=S.get("local_v12_positions",{}).get(symbol)
-   if live and live.get("opened")==pos.get("opened"):S["local_v12_positions"][symbol]=updated
-  with LOCK:anchor=copy.deepcopy(S.get('_local4_analysis',{}).get(symbol) or {})
-  if MARKET_OBS.flow_context(symbol,time.time()).get('trade_data_fresh') and MARKET_OBS.flow_context(symbol,time.time()).get('fast_control_side',MARKET_OBS.flow_context(symbol,time.time()).get('sustained_control_side'))==-int(pos['side']) and strategy1_runtime_h1_verified(symbol,anchor) and int(anchor.get('entry_side') or 0)==-int(pos['side']) and int(anchor.get('signal_candle_time') or 0)>int(pos.get('signal_candle_time') or 0):
-   local_experiment_close(symbol,float(mark),'opposite_confirmed_h1_local',anchor)
+   live=S.get("pandora_win_positions",{}).get(symbol)
+   if live and live.get("opened")==pos.get("opened"):S["pandora_win_positions"][symbol]=updated
+  with LOCK:anchor=copy.deepcopy(S.get('_pandora_analysis',{}).get(symbol) or {})
+  if MARKET_OBS.flow_context(symbol,time.time()).get('trade_data_fresh') and MARKET_OBS.flow_context(symbol,time.time()).get('fast_control_side',MARKET_OBS.flow_context(symbol,time.time()).get('sustained_control_side'))==-int(pos['side']) and pandora_runtime_h1_verified(symbol,anchor) and int(anchor.get('entry_side') or 0)==-int(pos['side']) and int(anchor.get('signal_candle_time') or 0)>int(pos.get('signal_candle_time') or 0):
+   pandora_close(symbol,float(mark),'opposite_confirmed_h1_local',anchor)
    continue
   flow=MARKET_OBS.flow_context(symbol,time.time())
-  reason=local4_pressure_exit(updated,None,float(mark),flow) if flow.get('trade_data_fresh') else None
+  reason=pandora_flow_pressure_exit(updated,None,float(mark),flow) if flow.get('trade_data_fresh') else None
   with LOCK:
-   if S.get("local_v12_positions",{}).get(symbol,{}).get("opened")==pos.get("opened"):
-    S["local_v12_positions"][symbol]=updated
+   if S.get("pandora_win_positions",{}).get(symbol,{}).get("opened")==pos.get("opened"):
+    S["pandora_win_positions"][symbol]=updated
   if reason:
-   local_experiment_close(symbol,float(mark),reason,watch_context={"flow_context":flow,"observed_at":now()})
+   pandora_close(symbol,float(mark),reason,watch_context={"flow_context":flow,"observed_at":now()})
    continue
   stamp=time.time()
-  with LOCK:last=float(S.setdefault("_local_experiment_path_persist_epoch",{}).get(symbol,0) or 0)
+  with LOCK:last=float(S.setdefault("_pandora_path_persist_epoch",{}).get(symbol,0) or 0)
   if stamp-last<1:continue
   with pg() as db:
    with db.transaction():
     STORE.fence(db)
-    db.execute("update local_v12_positions set features=%s::jsonb where symbol=%s and opened=%s",
+    db.execute("update pandora_win_positions set features=%s::jsonb where symbol=%s and opened=%s",
       (json.dumps(updated["features"]),symbol,pos["opened"]))
-  with LOCK:S["_local_experiment_path_persist_epoch"][symbol]=stamp
+  with LOCK:S["_pandora_path_persist_epoch"][symbol]=stamp
 
-def _local_entry_resumption_context(symbol,side,analysis,flow):
- # Exact operator rule: do not chase an already-running move. First observe
- # opposite M1 executed-flow, then enter on the first flip back to the H1 side.
- if int(side or 0) not in (-1,1) or not isinstance(flow,dict) or not flow.get("trade_data_fresh"):
-  return None
- try:
-  coverage=float(flow.get("trade_coverage_seconds") or 0)
-  raw180=float(flow.get("flow_imbalance_180s"))
-  raw300=float(flow.get("flow_imbalance_300s"))
-  price300=float(flow.get("price_return_300s"))
- except (TypeError,ValueError,OverflowError):
-  return None
- if coverage<300 or not all(math.isfinite(x) for x in (raw180,raw300,price300)):
-  with LOCK:S.setdefault("_local_entry_flow_state",{}).pop(symbol,None)
-  return None
- try:
-  value=float(flow.get("flow_imbalance"))
-  value180=float(flow.get("flow_imbalance_180s"))
-  value300=float(flow.get("flow_imbalance_300s"))
- except (TypeError,ValueError,OverflowError):return None
- if not all(math.isfinite(x) for x in (value,value180,value300)):return None
- aligned_values=(float(side)*value,float(side)*value180,float(side)*value300)
- votes=[1 if x>0 else -1 if x<0 else 0 for x in aligned_values]
- vote_sum=sum(votes)
- sign=1 if vote_sum>0 else -1 if vote_sum<0 else 0
- signal=int((analysis or {}).get("signal_candle_time") or 0)
- with LOCK:
-  states=S.setdefault("_local_entry_flow_state",{})
-  state=copy.deepcopy(states.get(symbol) or {})
-  if int(state.get("side") or 0)!=int(side) or int(state.get("signal_candle_time") or 0)!=signal:
-   state={"side":int(side),"signal_candle_time":signal,"counter_seen":False,"last_sign":0}
-  prior=int(state.get("last_sign") or 0)
-  if sign<0:state["counter_seen"]=True
-  ready=bool(state.get("counter_seen") and sign>0 and prior<=0)
-  state["last_sign"]=sign
-  state["last_flow_imbalance"]=value
-  state["last_flow_imbalance_180s"]=value180
-  state["last_flow_imbalance_300s"]=value300
-  state["last_dominance_vote"]=sign
-  state["updated_at"]=time.time()
-  states[symbol]=state
- if not ready:return None
- try:event_epoch=float(flow.get("volume_window_end_epoch"))-float(flow.get("latest_trade_age_seconds"))
- except (TypeError,ValueError,OverflowError):event_epoch=time.time()
- return {"resumption_observed":True,"flow_imbalance":value,"flow_imbalance_180s":value180,
-   "flow_imbalance_300s":value300,"dominance_vote":sign,"flow_event_epoch":event_epoch}
 
 @account_mutation
-def local4_fast_entries(prices):
+def pandora_flow_fast_entries(prices):
  # Pandora Win execution:
  # confirmed H1 local owns direction; current top-five pump supplies the universe.
  # Enter as soon as real Bybit executed flow strongly controls that H1 side.
- # Exit is handled by local4_pressure_exit on a strong opposite takeover; the
+ # Exit is handled by pandora_flow_pressure_exit on a strong opposite takeover; the
  # resulting watch re-enters only after control genuinely returns.
- for symbol in strategy1_trade_symbols():
+ for symbol in pandora_trade_symbols():
   with LOCK:
-   if symbol in S.get("local_v12_positions",{}):continue
-   analysis=copy.deepcopy(S.get("_local4_analysis",{}).get(symbol))
-   watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
+   if symbol in S.get("pandora_win_positions",{}):continue
+   analysis=copy.deepcopy(S.get("_pandora_analysis",{}).get(symbol))
+   watch=copy.deepcopy(S.get("pandora_watch",{}).get(symbol))
   mark=prices.get(symbol)
   if not analysis or not mark:continue
-  if not strategy1_runtime_h1_verified(symbol,analysis):continue
+  if not pandora_runtime_h1_verified(symbol,analysis):continue
   side=int(analysis.get("entry_side") or 0)
   if watch and int(watch.get("side") or 0)==-side:
-   _local_experiment_watch_clear(symbol,"opposite_h1_pivot_invalidated_watch");watch=None
+   _pandora_watch_clear(symbol,"opposite_h1_pivot_invalidated_watch");watch=None
   flow=MARKET_OBS.flow_context(symbol,time.time())
   if watch:
-   watch=_local_experiment_watch_observe(symbol,watch,float(mark),None,flow,time.time())
-   if local4_reentry_ready(side,None,mark,watch,flow,time.time()):
-    local_experiment_open(symbol,side,analysis,"REENTRY",{"resumption_observed":True,"strategy":PANDORA_WIN_NAME},watch)
+   watch=_pandora_watch_observe(symbol,watch,float(mark),None,flow,time.time())
+   if pandora_flow_reentry_ready(side,None,mark,watch,flow,time.time()):
+    pandora_open(symbol,side,analysis,"REENTRY",{"resumption_observed":True,"strategy":PANDORA_WIN_NAME},watch)
   else:
-   selection=local4_initial_entry_candidate(symbol,analysis,None,flow,time.time())
+   selection=pandora_flow_initial_entry_candidate(symbol,analysis,None,flow,time.time())
    if selection.get("eligible"):
-    local_experiment_open(symbol,side,analysis,"ORDER_FLOW",{"pandora_win_direct_control":True,"strategy":PANDORA_WIN_NAME})
+    pandora_open(symbol,side,analysis,"ORDER_FLOW",{"pandora_win_direct_control":True,"strategy":PANDORA_WIN_NAME})
 
-def strategy1_entry_diagnostic_snapshot(prices):
+def pandora_entry_diagnostic_snapshot(prices):
  # Read-only decision audit: one structured record per candidate every 30 seconds.
  # This does NOT create orders, alter trading gates or introduce strategies.
  rows=[]
- for symbol in strategy1_runtime_symbols():
+ for symbol in pandora_runtime_symbols():
   with LOCK:
-   analysis=copy.deepcopy(S.get("_local4_analysis",{}).get(symbol))
-   position=copy.deepcopy(S.get("local_v12_positions",{}).get(symbol))
-   watch=copy.deepcopy(S.get("local_experiment_watch",{}).get(symbol))
-  record={"symbol":symbol,"h1_ready":strategy1_confirmed_h1(analysis),
+   analysis=copy.deepcopy(S.get("_pandora_analysis",{}).get(symbol))
+   position=copy.deepcopy(S.get("pandora_win_positions",{}).get(symbol))
+   watch=copy.deepcopy(S.get("pandora_watch",{}).get(symbol))
+  record={"symbol":symbol,"h1_ready":pandora_confirmed_h1(analysis),
           "position_open":bool(position),"watch_active":bool(watch),
           "entry_side":(analysis or {}).get("entry_side"),
-          "executor_rejection":copy.deepcopy(S.get("strategy1_executor_rejections",{}).get(symbol))}
+          "executor_rejection":copy.deepcopy(S.get("pandora_executor_rejections",{}).get(symbol))}
   try:
    if position:
     record["reason"]="POSITION_ALREADY_OPEN"
@@ -951,7 +875,7 @@ def strategy1_entry_diagnostic_snapshot(prices):
     record["reason"]="H1_NOT_CONFIRMED_OR_BLOCKED"
    elif not prices.get(symbol):
     record["reason"]="MARK_UNAVAILABLE"
-   elif not strategy1_runtime_h1_verified(symbol,analysis):
+   elif not pandora_runtime_h1_verified(symbol,analysis):
     record["reason"]="H1_RUNTIME_VERIFICATION_NOT_READY"
    elif not S.get("engine_active"):
     record["reason"]="ENGINE_STANDBY"
@@ -968,11 +892,11 @@ def strategy1_entry_diagnostic_snapshot(prices):
      ctx=watch.get("context") or {}
      record["watch_phase"]=ctx.get("phase")
      record["counter_pressure_seen"]=bool(ctx.get("counter_pressure_seen"))
-     record["reason"]="REENTRY_READY" if local4_reentry_ready(
+     record["reason"]="REENTRY_READY" if pandora_flow_reentry_ready(
        int(analysis.get("entry_side") or 0),None,prices[symbol],watch,flow,time.time()
        ) else "WAIT_REENTRY_COUNTERFLOW_OR_RESUMPTION"
     else:
-     selection=local4_initial_entry_candidate(symbol,analysis,None,flow,time.time())
+     selection=pandora_flow_initial_entry_candidate(symbol,analysis,None,flow,time.time())
      record["reason"]="ENTRY_SIGNAL_READY" if selection.get("eligible") else selection.get("reason","UNCLASSIFIED")
   except Exception as exc:
    record["reason"]="DIAGNOSTIC_ERROR"
@@ -983,13 +907,13 @@ def strategy1_entry_diagnostic_snapshot(prices):
   reason=row["reason"];summary[reason]=summary.get(reason,0)+1
  with LOCK:stream_state={k:copy.deepcopy(v) for k,v in S.get("sources",{}).items() if k.startswith("MarketTradeStream:")}
  snapshot={"at":now(),"symbols":len(rows),"reason_counts":summary,"tokens":rows,"trade_streams":stream_state}
- with LOCK:S["strategy1_entry_diagnostics"]=snapshot
- try:journal("strategy1_entry_diagnostics",None,snapshot)
+ with LOCK:S["pandora_entry_diagnostics"]=snapshot
+ try:journal("pandora_entry_diagnostics",None,snapshot)
  except Exception as exc:
-  with LOCK:S["strategy1_entry_diagnostics_error"]=type(exc).__name__+":"+str(exc)[:140]
+  with LOCK:S["pandora_entry_diagnostics_error"]=type(exc).__name__+":"+str(exc)[:140]
  return snapshot
 
-def local_experiment_risk_loop():
+def pandora_risk_loop():
  # Protect observed peaks even while H1/execution context history fetches or scans are slow.
  # Use only fresh streamed/cached marks; never spend additional REST budget.
  last_entry_diagnostics=0.0
@@ -1002,16 +926,14 @@ def local_experiment_risk_loop():
    if active and prices:
     if WIN is not None:WIN.cycle(prices)
     else:
-     local_experiment_mark_positions(prices)
-     local4_fast_entries(prices)
+     pandora_mark_positions(prices)
+     pandora_flow_fast_entries(prices)
     checkpoint_local_candles()
-    if os.getenv('PANDORA_COMPARISON_ENGINES','0')=='1' and S11 is not None:S11.cycle(strategy1_runtime_symbols(),prices)
-    if os.getenv('PANDORA_COMPARISON_ENGINES','0')=='1' and S14 is not None:S14.cycle(strategy1_runtime_symbols(),prices)
 
-    with LOCK:S["sources"]["LocalRisk"]={"ok":True,"ready":True,"last_check":now(),"mode":"PANDORA_WIN_H1_LOCAL_TOP5_EXECUTED_FLOW","symbols":list(strategy1_trade_symbols()),"error":None}
+    with LOCK:S["sources"]["LocalRisk"]={"ok":True,"ready":True,"last_check":now(),"mode":"PANDORA_WIN_H1_LOCAL_TOP5_EXECUTED_FLOW","symbols":list(pandora_trade_symbols()),"error":None}
    if time.time()-last_entry_diagnostics>=30:
     last_entry_diagnostics=time.time()
-    strategy1_entry_diagnostic_snapshot(prices)
+    pandora_entry_diagnostic_snapshot(prices)
   except LeaseLost as exc:
    with LOCK:
     S["engine_active"]=False;S["engine_error"]=str(exc)
@@ -1021,19 +943,19 @@ def local_experiment_risk_loop():
   TRADE_WAKE.wait(1)
   TRADE_WAKE.clear()
 
-def local_experiment_stats():
+def pandora_stats():
  try:
   with pg() as db:
    agg=db.execute("""select count(*) as trades,sum(case when pnl>0 then 1 else 0 end) as wins,
       coalesce(sum(pnl),0) as pnl,avg(pnl) as avg_pnl
-      from local_v12_trade_history""").fetchone()
+      from pandora_win_trade_history""").fetchone()
    cutoff=(datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(hours=24)).isoformat()
    daily=db.execute("""select count(*) as trades,sum(case when pnl>0 then 1 else 0 end) as wins,
-      coalesce(sum(pnl),0) as pnl from local_v12_trade_history where closed >= %s""",(cutoff,)).fetchone()
+      coalesce(sum(pnl),0) as pnl from pandora_win_trade_history where closed >= %s""",(cutoff,)).fetchone()
    rows=db.execute("""select symbol,count(*) as trades,sum(case when pnl>0 then 1 else 0 end) as wins,
       coalesce(sum(pnl),0) as pnl,avg(pnl) as avg_pnl,
       avg(coalesce((features->>'exposure_fill_ratio')::double precision,1)) as avg_fill
-      from local_v12_trade_history group by symbol order by symbol""").fetchall()
+      from pandora_win_trade_history group by symbol order by symbol""").fetchall()
   n=int(agg["trades"] or 0);w=int(agg["wins"] or 0)
   dn=int(daily["trades"] or 0);dw=int(daily["wins"] or 0)
   return {"rolling_24h":{"trades":dn,"wins":dw,"win_rate":round(dw/dn,4) if dn else None,"realized_pnl":float(daily["pnl"] or 0)},"trades":n,"wins":w,"win_rate":round(w/n,4) if n else None,"realized_pnl":float(agg["pnl"] or 0),
@@ -1044,17 +966,17 @@ def local_experiment_stats():
       "avg_exposure_fill_ratio":float(r["avg_fill"]) if r["avg_fill"] is not None else None} for r in rows}}
  except Exception as exc:return {"error":type(exc).__name__+":"+str(exc)[:160]}
 
-def strategy1_live_state_loop():
- # Process-independent Strategy 1 mark-to-market snapshot for the monitor.
- # The lease owner publishes one compact row per second from the live allMids cache.
+def pandora_live_state_loop():
+ # Process-independent Pandora Win mark-to-market snapshot for the monitor.
+ # The lease owner publishes one compact row per second from the live Bybit price cache.
  while not SHUTDOWN.is_set():
   try:
    with LOCK:
     active=bool(S.get("engine_active"))
     prices=copy.deepcopy(S.get("_prices",{}))
     price_epoch=float(S.get("_last_poll_epoch",0) or 0)
-    positions=copy.deepcopy(S.get("local_v12_positions",{}))
-    realized_equity=float(S.get("local_experiment_equity",LOCAL_EXPERIMENT_STARTING_EQUITY) or LOCAL_EXPERIMENT_STARTING_EQUITY)
+    positions=copy.deepcopy(S.get("pandora_win_positions",{}))
+    realized_equity=float(S.get("pandora_equity",PANDORA_STARTING_EQUITY) or PANDORA_STARTING_EQUITY)
    if active and prices and price_epoch>0:
     pos_state={};unreal=0.0
     for symbol,pos in positions.items():
@@ -1066,11 +988,11 @@ def strategy1_live_state_loop():
       "leverage":float(pos.get("leverage",25) or 25),"opened":pos.get("opened"),"unrealized_pnl":pnl,
       "features":copy.deepcopy(pos.get("features") or {})}
     age=max(0.0,time.time()-price_epoch)
-    payload_prices={s:float(prices[s]) for s in LOCAL_EXPERIMENT_SYMBOLS if s in prices}
+    payload_prices={s:float(prices[s]) for s in pandora_runtime_symbols() if s in prices}
     with pg() as db:
      with db.transaction():
       STORE.fence(db)
-      db.execute("""insert into local_v12_live_state(id,ts,commit,prices,positions,unrealized_pnl,total_equity,price_age_seconds,source)
+      db.execute("""insert into pandora_win_live_state(id,ts,commit,prices,positions,unrealized_pnl,total_equity,price_age_seconds,source)
        values(1,%s,%s,%s::jsonb,%s::jsonb,%s,%s,%s,'bybit_v5_public_linear')
        on conflict(id) do update set ts=excluded.ts,commit=excluded.commit,prices=excluded.prices,
        positions=excluded.positions,unrealized_pnl=excluded.unrealized_pnl,total_equity=excluded.total_equity,
@@ -1078,18 +1000,18 @@ def strategy1_live_state_loop():
        (now(),os.getenv("RENDER_GIT_COMMIT"),json.dumps(payload_prices),json.dumps(pos_state,default=str),
         unreal,realized_equity+unreal,age))
     with LOCK:S["last_checkpoint"]=now()
-    with LOCK:S["strategy1_live_state"]={"ts":now(),"price_age_seconds":age,"prices":payload_prices,
+    with LOCK:S["pandora_live_state"]={"ts":now(),"price_age_seconds":age,"prices":payload_prices,
       "unrealized_pnl":unreal,"total_equity":realized_equity+unreal,"positions":pos_state}
   except Exception as exc:
-   with LOCK:S["sources"]["Strategy1LiveState"]={"ok":False,"last_check":now(),
+   with LOCK:S["sources"]["PandoraLiveState"]={"ok":False,"last_check":now(),
      "error":type(exc).__name__+":"+str(exc)[:160]}
   else:
-   with LOCK:S["sources"]["Strategy1LiveState"]={"ok":True,"last_check":now(),
+   with LOCK:S["sources"]["PandoraLiveState"]={"ok":True,"last_check":now(),
      "mode":"durable_1s_bybit_marks","interval_seconds":1}
   SHUTDOWN.wait(1)
 
 def bybit_local_history(symbol,interval="1h",limit=120):
- """Read-only Bybit V5 kline bootstrap converted to the legacy candle shape."""
+ """Read-only Bybit V5 kline bootstrap converted to the normalized candle shape."""
  bybit_interval={"1h":"60","15m":"15"}.get(interval)
  if not bybit_interval:raise ValueError("unsupported_bybit_interval:"+str(interval))
  url="https://api.bybit.com/v5/market/kline?"+urllib.parse.urlencode({
@@ -1106,20 +1028,15 @@ def bybit_local_history(symbol,interval="1h",limit=120):
   except (IndexError,TypeError,ValueError):continue
  return rows
 
-def strategy1_token_totals():
- # All-time ledger aggregates; display namespaces separately, never sum mirrored books.
- result=[]
+def pandora_token_totals():
  with pg() as db:
-  for account,table in STRATEGY1_HISTORY_TABLES.items():
-   if not _historical_table_exists(db,table):continue
-   for row in db.execute(f"""select symbol,count(*) as closed_trades,
-      coalesce(sum(pnl),0) as realized_pnl,sum(case when pnl>0 then 1 else 0 end) as wins
-      from {table} group by symbol order by symbol""").fetchall():
-    result.append({"account":account,**dict(row)})
- return result
+  rows=db.execute("""select symbol,count(*) as closed_trades,
+   coalesce(sum(pnl),0) as realized_pnl,sum(case when pnl>0 then 1 else 0 end) as wins
+   from pandora_win_trade_history group by symbol order by symbol""").fetchall()
+ return [{'account':'pandora_win',**dict(row)} for row in rows]
 
-def strategy1_history_page(account="strategy1",before_id=None,limit=100,symbol=None):
- if account not in STRATEGY1_HISTORY_TABLES:raise ValueError("unknown_account")
+def pandora_history_page(account="pandora_win",before_id=None,limit=100,symbol=None):
+ if account!="pandora_win":raise ValueError("unknown_account")
  limit=max(1,min(500,int(limit)));params=[];conditions=[]
  if before_id is not None:
   conditions.append("id < %s");params.append(int(before_id))
@@ -1128,21 +1045,20 @@ def strategy1_history_page(account="strategy1",before_id=None,limit=100,symbol=N
  where=" where "+" and ".join(conditions) if conditions else ""
  params.append(limit+1)
  with pg() as db:
-  if not _historical_table_exists(db,STRATEGY1_HISTORY_TABLES[account]):return {'account':account,'trades':[],'next_before_id':None,'symbol':symbol}
-  rows=[dict(r) for r in db.execute(f"select * from {STRATEGY1_HISTORY_TABLES[account]}{where} order by id desc limit %s",tuple(params)).fetchall()]
+  rows=[dict(r) for r in db.execute(f"select * from pandora_win_trade_history{where} order by id desc limit %s",tuple(params)).fetchall()]
  more=len(rows)>limit;rows=rows[:limit]
  rows=[trade_monitor_snapshot(trade) for trade in rows]
  return {"account":account,"trades":rows,"next_before_id":rows[-1]["id"] if rows and more else None,
   "basis":"all_recorded_rows_without_pnl_exclusions","symbol":symbol}
 
-def strategy1_event_page(before_id=None,limit=100):
+def pandora_event_page(before_id=None,limit=100):
  limit=max(1,min(500,int(limit)));params=[]
  before=" and id < %s" if before_id is not None else ""
  if before_id is not None:params.append(int(before_id))
  params.append(limit+1)
  with pg() as db:
-  rows=[dict(r) for r in db.execute("""select id,recorded_at,kind,payload from audit_journal
-   where (kind in ('local_experiment_trade_opened','local_experiment_trade_closed') or left(kind,8)='pandora_')"""+before+
+  rows=[dict(r) for r in db.execute("""select id,recorded_at,kind,payload from pandora_win_audit_journal
+   where (kind in ('pandora_trade_opened','pandora_trade_closed') or left(kind,8)='pandora_')"""+before+
    " order by id desc limit %s",tuple(params)).fetchall()]
  more=len(rows)>limit;rows=rows[:limit]
  return {"events":rows,"next_before_id":rows[-1]["id"] if rows and more else None}
@@ -1158,17 +1074,17 @@ def trade_monitor_snapshot(row):
   pnl_percent=float(trade['pnl'])/margin*100 if trade.get('pnl') is not None and margin>0 else None)
  return trade
 
-def local_v10_history(limit=100):
+def pandora_history(limit=100):
  # Actual immutable account ledger, including all historical outcomes.
  with pg() as db:
   rows=db.execute("""select id,opened,closed,symbol,side,entry,exit,pnl,
-    reason,margin,notional,leverage,features from local_v12_trade_history
+    reason,margin,notional,leverage,features from pandora_win_trade_history
     order by closed desc,id desc limit %s""",(int(limit),)).fetchall()
  return [trade_monitor_snapshot(row) for row in rows]
 
-def local_v10_today_pnl():
+def pandora_today_pnl():
  with pg() as db:
-  return float(db.execute("""select coalesce(sum(pnl),0) as pnl from local_v12_trade_history
+  return float(db.execute("""select coalesce(sum(pnl),0) as pnl from pandora_win_trade_history
     where closed::timestamptz >= date_trunc('day',now())""").fetchone()["pnl"])
 
 def engine_coordinator():
@@ -1190,8 +1106,8 @@ def engine_coordinator():
 
 def needs_local_history(symbol):
  try:
-  h1_rows,stamp=_local_h1_candles(symbol);m15_rows,_=_local_m15_candles(symbol)
-  if not analyze_hype_h1(h1_rows,stamp,symbol).get('ready'):return True
+  h1_rows,stamp=_pandora_h1_candles(symbol);m15_rows,_=_local_m15_candles(symbol)
+  if not analyze_pandora_h1(h1_rows,stamp,symbol).get('ready'):return True
   latest=max(int(row['t']) for row in h1_rows if int(row['T'])<=stamp-1000)
   expected=int((stamp-1000)//3600000*3600000-3600000)
   m15=sorted((row for row in m15_rows if int(row['T'])<=stamp-1000),key=lambda row:int(row['t']))
@@ -1206,11 +1122,11 @@ def market_history_bootstrap():
  def selected():
   with LOCK:return tuple((S.get('bybit_discovery') or {}).get('selected_symbols') or ()) if S.get('engine_active') else ()
  def retained():
-  with LOCK:return tuple(dict.fromkeys(tuple(S.get('local_v12_positions',{}))+tuple(S.get('local_experiment_watch',{})))) if S.get('engine_active') else ()
+  with LOCK:return tuple(dict.fromkeys(tuple(S.get('pandora_win_positions',{}))+tuple(S.get('pandora_watch',{})))) if S.get('engine_active') else ()
  def candidates():
   if not S.get('engine_active'):return ()
   with LOCK:pool=tuple((S.get('bybit_discovery') or {}).get('candidate_symbols') or ())
-  return pool+(LOCAL_EXPERIMENT_SYMBOLS if os.getenv('PANDORA_COMPARISON_ENGINES','0')=='1' else ())
+  return pool
  def accept(rows,history=True):
   if S.get('engine_active'):accept_local_candles(rows,history=history)
  def checkpoint():
@@ -1222,23 +1138,20 @@ def market_history_bootstrap():
   needs_local_history,selected,retained,candidates)
  HISTORY_BOOTSTRAP.run()
 
-def local_experiment_loop():
+def pandora_loop():
  while not SHUTDOWN.is_set():
   if not S['engine_active']:SHUTDOWN.wait(.5);continue
-  for symbol in strategy1_runtime_symbols():
+  for symbol in pandora_runtime_symbols():
    try:
-    rows,stamp=_local_h1_candles(symbol);analysis=local_h1_direction(rows,stamp,symbol)
-    with LOCK:S.setdefault('_local4_analysis',{})[symbol]=analysis
-    if os.getenv('PANDORA_COMPARISON_ENGINES','0')=='1' and S11 is not None:S11.scan_h1(symbol,rows,stamp)
-    if os.getenv('PANDORA_COMPARISON_ENGINES','0')=='1' and S13 is not None:S13.scan_h1(symbol,rows,stamp)
-    if os.getenv('PANDORA_COMPARISON_ENGINES','0')=='1' and S14 is not None:S14.scan_h1(symbol,rows,stamp)
+    rows,stamp=_pandora_h1_candles(symbol);analysis=pandora_win_h1_direction(rows,stamp,symbol)
+    with LOCK:S.setdefault('_pandora_analysis',{})[symbol]=analysis
    except Exception as error:
     with LOCK:S['sources']['H1Scan:'+symbol]={'ok':False,'last_check':now(),'error':type(error).__name__+':'+str(error)[:140]}
   TRADE_WAKE.set();SHUTDOWN.wait(1)
 
 def _stream_group(trades):
  count=2 if trades else max(1,min(8,int(os.getenv('BYBIT_AUX_WS_SHARDS','2'))))
- def symbols():return set(strategy1_runtime_symbols())
+ def symbols():return set(pandora_runtime_symbols())
  def worker(index):
   key=('MarketTradeStream:' if trades else 'MarketQuotes:')+str(index)
   def report(state):
@@ -1263,11 +1176,11 @@ def health_state():
  stamp=time.time();tokens={}
  with LOCK:
   active=S['engine_active'];checkpoint=publication_epoch(S.get('last_checkpoint'))
-  anchors=copy.deepcopy(S.get('_local4_analysis',{}));received=dict(S['_price_received_epoch'])
+  anchors=copy.deepcopy(S.get('_pandora_analysis',{}));received=dict(S['_price_received_epoch'])
   instruments=copy.deepcopy(S.get('_bybit_instruments',{}))
- for symbol in strategy1_trade_symbols():
+ for symbol in pandora_trade_symbols():
   instrument=instruments.get(symbol) or {}
-  tokens[symbol]={'h1':strategy1_runtime_h1_verified(symbol,anchors.get(symbol),stamp),
+  tokens[symbol]={'h1':pandora_runtime_h1_verified(symbol,anchors.get(symbol),stamp),
    'executed_flow':bool(MARKET_OBS.flow_context(symbol,stamp).get('trade_data_fresh')),
    'evidence_ready':bool(MARKET_OBS.flow_context(symbol,stamp).get('evidence_ready')),
    'mark':0<=stamp-received.get(symbol,0)<=10,
@@ -1282,14 +1195,12 @@ def health_state():
   'token_readiness':tokens,'checkpoint_age_seconds':checkpoint_age,
   'market_age_seconds':stamp-S['_last_poll_epoch'] if S['_last_poll_epoch'] else None}
 
-def _historical_table_exists(db,name):
- return db.execute('select to_regclass(%s) as name',(name,)).fetchone()['name'] is not None
 
 def dashboard_history_loop():
  while not SHUTDOWN.is_set():
   try:
-   value={'trades':local_v10_history(300),'token_totals':strategy1_token_totals(),
-    'events':strategy1_event_page(limit=50),'at':now(),'error':None}
+   value={'trades':pandora_history(300),'token_totals':pandora_token_totals(),
+    'events':pandora_event_page(limit=50),'at':now(),'error':None}
    with LOCK:S['_dashboard_history']=value
   except Exception as error:
    with LOCK:S.setdefault('_dashboard_history',{})['error']=type(error).__name__+':'+str(error)[:160]
@@ -1299,7 +1210,7 @@ def build_dashboard_snapshot(history=None):
  with LOCK:state=copy.deepcopy(S)
  history=history if history is not None else state.get('_dashboard_history',{})
  positions=[];unreal=0.;all_marks=True
- for symbol,pos in state['local_v12_positions'].items():
+ for symbol,pos in state['pandora_win_positions'].items():
   stamp=state['_price_received_epoch'].get(symbol,0)
   mark=state['_prices'].get(symbol) if 0<=time.time()-stamp<=10 else None
   pnl=paper_pnl(pos['notional'],pos['entry'],mark,pos['side'],FEE) if mark is not None else None
@@ -1309,19 +1220,19 @@ def build_dashboard_snapshot(history=None):
    'entry_price':(pos.get('features') or {}).get('original_entry',(pos.get('features') or {}).get('entry_mark',pos['entry'])),
    'entry_time':pos['opened'],'average_entry':pos['entry'],
    'entry_local':{k:(pos.get('features') or {}).get(k) for k in ('pivot_type','pivot_price','pivot_candle_time','signal_candle_time','confirmation_source')},
-   'current_local':state.get('_local4_analysis',{}).get(symbol) or state.get('local_h1_direction',{}).get(symbol) or {},
+   'current_local':state.get('_pandora_analysis',{}).get(symbol) or state.get('pandora_win_h1_direction',{}).get(symbol) or {},
    'pnl_usdt':pnl,'mark':mark,'unrealized_pnl':pnl,'margin_usd':pos['margin'],'notional_usd':pos['notional'],'leverage':pos['leverage'],'effective_leverage':pos['notional']/pos['margin'] if pos['margin'] else None,'pnl_percent':pnl/pos['margin']*100 if pnl is not None and pos['margin'] else None,'features':pos.get('features') or {}})
  details={}
- for symbol in strategy1_runtime_symbols():
+ for symbol in pandora_runtime_symbols():
   flow=MARKET_OBS.flow_context(symbol)
-  anchor=state.get('_local4_analysis',{}).get(symbol) or state['local_h1_direction'].get(symbol) or {}
-  details[symbol]={'h1_local':anchor,'flow_context':flow,'last_action':(state.get('strategy1_executor_rejections',{}).get(symbol) or {}).get('reason')}
- primary={'starting_equity':500.,'realized_equity':state['local_experiment_equity'],
-  'realized_pnl':state['local_experiment_realized_pnl'],'unrealized_pnl':unreal if all_marks else None,
-  'total_equity':state['local_experiment_equity']+unreal if all_marks else None,
+  anchor=state.get('_pandora_analysis',{}).get(symbol) or state['pandora_win_h1_direction'].get(symbol) or {}
+  details[symbol]={'h1_local':anchor,'flow_context':flow,'last_action':(state.get('pandora_executor_rejections',{}).get(symbol) or {}).get('reason')}
+ primary={'starting_equity':500.,'realized_equity':state['pandora_equity'],
+  'realized_pnl':state['pandora_realized_pnl'],'unrealized_pnl':unreal if all_marks else None,
+  'total_equity':state['pandora_equity']+unreal if all_marks else None,
   'open_positions':positions,'closed_trades':history.get('trades',[]),'token_totals':history.get('token_totals'),
-  'events':history.get('events',{}),'watch':state['local_experiment_watch'],'h1_durable':state['local_h1_direction'],
-  'engine':{'details':details,'symbols':list(strategy1_runtime_symbols())},
+  'events':history.get('events',{}),'watch':state['pandora_watch'],'h1_durable':state['pandora_win_h1_direction'],
+  'engine':{'details':details,'symbols':list(pandora_runtime_symbols())},
   'risk':state.get('risk_circuit',{}),'margin_valuation':state.get('margin_valuation',{}),
   'account':state.get('pandora_account',{}),'runtime':WIN.snapshot() if WIN is not None else {}}
  selected_rows=(state.get('bybit_discovery') or {}).get('selected') or []
@@ -1347,14 +1258,14 @@ def build_dashboard_snapshot(history=None):
  checkpoint=publication_epoch(state.get('last_checkpoint'))
  checkpoint_ready=checkpoint is not None and 0<=time.time()-checkpoint<=15
  for token in token_rows:
-  symbol=token['symbol'];rejection=state.get('strategy1_executor_rejections',{}).get(symbol) or {}
+  symbol=token['symbol'];rejection=state.get('pandora_executor_rejections',{}).get(symbol) or {}
   rejected_at=publication_epoch(rejection.get('at'))
   recent_reason=rejection.get('reason') if rejected_at and 0<=time.time()-rejected_at<5 else None
   token['decision']=entry_status(symbol,token['local_state'],token['flow_state'],token.get('position'),
-   state.get('local_experiment_watch',{}).get(symbol),active=bool(state.get('engine_active')),
+   state.get('pandora_watch',{}).get(symbol),active=bool(state.get('engine_active')),
    scanner_ready=not (state.get('bybit_discovery') or {}).get('selection_frozen',False),
    instrument_ready=symbol in state.get('_bybit_instruments',{}),
-   h1_verified=strategy1_runtime_h1_verified(symbol,token['local_state']),
+   h1_verified=pandora_runtime_h1_verified(symbol,token['local_state']),
    mark=fresh_mark_price(symbol),checkpoint_ready=checkpoint_ready,rejection=recent_reason,stamp=time.time())
   if not token.get('position'):
    token['action_reason_code']=token['decision']['reason']
@@ -1366,7 +1277,7 @@ def build_dashboard_snapshot(history=None):
   with WIN.scanner.lock:observed=len(WIN.scanner.markets)
  primary['startup']=startup_snapshot(state,token_rows,observed_markets=observed,
   history=HISTORY_BOOTSTRAP.snapshot() if HISTORY_BOOTSTRAP is not None else {})
- totals=[row for row in history.get('token_totals') or [] if row.get('account')=='strategy1']
+ totals=[row for row in history.get('token_totals') or [] if row.get('account')=='pandora_win']
  closed_count=sum(int(row.get('closed_trades') or 0) for row in totals)
  wins=sum(int(row.get('wins') or 0) for row in totals)
  primary['statistics']={'closed_trades':closed_count,'wins':wins,'nonwinning':closed_count-wins,'win_rate_percent':wins/closed_count*100 if closed_count else None,'basis':'all_canonical_closed_trades_including_losses'} if history.get('token_totals') is not None else None
@@ -1378,26 +1289,22 @@ def build_dashboard_snapshot(history=None):
  primary['pyramid_adds']=[]
  if WIN is not None:
   with pg() as db:
-   primary['pyramid_adds']=[{**row['payload'],'symbol':row['symbol'],'opened':row['opened']} for row in db.execute('select symbol,opened,payload from pandora_pyramid_adds order by id desc limit 200').fetchall()]
+   primary['pyramid_adds']=[{**row['payload'],'symbol':row['symbol'],'opened':row['opened']} for row in db.execute('select symbol,opened,payload from pandora_win_pyramid_adds order by id desc limit 200').fetchall()]
  primary['re_entries']=[t for t in history.get('trades',[]) if (t.get('features') or {}).get('entry_kind')=='REENTRY']
  primary['reversals']=[t for t in history.get('events',{}).get('events',[]) if str(t.get('kind','')).startswith('pandora_REVERSE_')]
  primary['token_rotations']=[t for t in history.get('events',{}).get('events',[]) if t.get('kind') in ('pandora_TOKEN_ROTATED','pandora_ROTATE_OUT')]
- legacy=S11.snapshot() if S11 is not None else {}
- s13=S13.snapshot() if S13 is not None else {}
- s14=S14.snapshot() if S14 is not None else {}
  return {'api_version':API_VERSION,'snapshot_id':int(time.time()*1000),'mode':'PAPER_ONLY',
   'freshness':{'market_at':state.get('last_poll'),'history_at':history.get('at'),'scanner_at':(state.get('bybit_discovery') or {}).get('at'),'execution_at':state.get('_execution_heartbeat')},
-  'strategy1_primary':primary,'strategy11_legacy':legacy,'strategy13':s13,'strategy14':s14,
-  'local_experiment_symbols':list(strategy1_runtime_symbols()),'base_symbols':list(LOCAL_EXPERIMENT_SYMBOLS),
+  'pandora':primary,
+  'pandora_symbols':list(pandora_runtime_symbols()),
   'discovery':state.get('bybit_discovery',{}),
-  'health':health_state(),'sources':state['sources'],'strategy1_entry_diagnostics':state.get('strategy1_entry_diagnostics',{}),
+  'health':health_state(),'sources':state['sources'],'pandora_entry_diagnostics':state.get('pandora_entry_diagnostics',{}),
   'history_error':history.get('error'),'history_updated_at':history.get('at'),'positions':[],'snapshot_at':now()}
 
 def dashboard():return build_dashboard_snapshot()
 def html_dashboard(data):
- from strategy1_monitor import render
+ from pandora_monitor import render
  return render(data)
-def html_strategy1_only(data):return html_dashboard(data)
 
 class Handler(BaseHTTPRequestHandler):
  def log_message(self,*args):pass
@@ -1414,13 +1321,13 @@ class Handler(BaseHTTPRequestHandler):
     result=health_state();self.send(200 if result['healthy' if path=='/health' else 'risk_ready'] else 503,result)
    elif path=='/':self.send(200,html_dashboard(dashboard()),'text/html; charset=utf-8')
    elif path in ('/api/dashboard','/api/pandora','/status'):self.send(200,dashboard())
-   elif path in ('/api/strategy1/history','/strategy1/history'):
-    result=strategy1_history_page(args.get('account',['strategy1'])[0],args.get('before',[None])[0],int(args.get('limit',['100'])[0]),args.get('symbol',[None])[0])
-    if path=='/strategy1/history':
-     from strategy1_monitor import render_history
+   elif path in ('/api/pandora/history','/pandora/history'):
+    result=pandora_history_page('pandora_win',args.get('before',[None])[0],int(args.get('limit',['100'])[0]),args.get('symbol',[None])[0])
+    if path=='/pandora/history':
+     from pandora_monitor import render_history
      self.send(200,render_history(result),'text/html; charset=utf-8')
     else:self.send(200,result)
-   elif path=='/api/strategy1/events':self.send(200,strategy1_event_page(args.get('before',[None])[0],int(args.get('limit',['100'])[0])))
+   elif path=='/api/pandora/events':self.send(200,pandora_event_page(args.get('before',[None])[0],int(args.get('limit',['100'])[0])))
    else:self.send(404,{'error':'not_found'})
   except (ValueError,TypeError):self.send(400,{'error':'invalid_request'})
   except Exception:self.send(503,{'error':'temporarily_unavailable','history_preserved':True})
@@ -1431,12 +1338,12 @@ class Handler(BaseHTTPRequestHandler):
   try:
    size=int(self.headers.get('Content-Length','0'))
    if not 0<size<=4096:raise ValueError('invalid_length')
-   request=json.loads(self.rfile.read(size));symbols=list(S['local_v12_positions']) if request.get('all') else [request.get('symbol')]
+   request=json.loads(self.rfile.read(size));symbols=list(S['pandora_win_positions']) if request.get('all') else [request.get('symbol')]
    results=[]
    for symbol in symbols:
     price=current_entry_price(symbol)
     if price is None:results.append({'symbol':symbol,'error':'fresh_mark_unavailable'});continue
-    results.append(local_experiment_close(symbol,price,'operator_paper_close'))
+    results.append(pandora_close(symbol,price,'operator_paper_close'))
    self.send(200,{'results':results})
   except (ValueError,TypeError):self.send(400,{'error':'invalid_request'})
   except Exception:self.send(503,{'error':'close_not_confirmed'})
@@ -1466,8 +1373,8 @@ def main():
     with LOCK:S['sources'][label]={'ok':False,'last_check':now(),'error':type(error).__name__+':'+str(error)[:160]}
    SHUTDOWN.wait(1)
  jobs=[('lease',engine_coordinator),('contracts',bybit_instruments_loop),('discovery',bybit_volatility_discovery_loop),('trades',market_trade_stream),('quotes',market_aux_stream),
-  ('h1_history',market_history_bootstrap),('h1_scan',local_experiment_loop),('execution',local_experiment_risk_loop),
-  ('checkpoint',strategy1_live_state_loop),('history',dashboard_history_loop),('keepalive',render_keepalive_loop)]
+  ('h1_history',market_history_bootstrap),('h1_scan',pandora_loop),('execution',pandora_risk_loop),
+  ('checkpoint',pandora_live_state_loop),('history',dashboard_history_loop),('keepalive',render_keepalive_loop)]
  workers=[threading.Thread(target=supervise,args=job,daemon=True,name=job[0]) for job in jobs]
  for worker in workers:worker.start()
  try:server.serve_forever()

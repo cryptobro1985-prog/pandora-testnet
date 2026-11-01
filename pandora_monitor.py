@@ -193,7 +193,7 @@ def _trade_view(trade):
 
 
 def _tokens(data):
-    primary = data.get('strategy1_primary') or {}
+    primary = data.get('pandora') or {}
     if primary.get('tokens'):
         return primary['tokens']
     discovery = data.get('discovery') or {}
@@ -234,7 +234,7 @@ def _shell(body, script=''):
 
 
 def render(data):
-    p = data.get('strategy1_primary') or {}; health = data.get('health') or {}
+    p = data.get('pandora') or {}; health = data.get('health') or {}
     account = p.get('account') or {}; risk = p.get('risk') or {}; valuation = p.get('margin_valuation') or {}
     start, equity, total, percent = _summary(p)
     status = 'PAPER ГОТОВ' if health.get('risk_ready') else 'НЕ ГОТОВ'
@@ -268,7 +268,7 @@ def render(data):
             ('Trades / сек.','trades',_n(t.get('trade_velocity'))),('Executed tape','tape','FRESH' if t.get('flow_fresh') else 'WARMING / STALE')]))
     body+=_collection('candidates',candidate_cards,'Пул кандидатов ещё не сформирован.')+'</details>'
     details=(p.get('engine') or {}).get('details') or {};durable=p.get('h1_durable') or {}
-    symbols=list(dict.fromkeys(list(details)+list(durable)+list(data.get('local_experiment_symbols') or [])))
+    symbols=list(dict.fromkeys(list(details)+list(durable)+list(data.get('pandora_symbols') or [])))
     body+='<details class="scanner-details"><summary>Все наблюдаемые локалы <span id="count-locals">'+str(len(symbols))+'</span></summary>'
     local_cards=[]
     for symbol in symbols:
@@ -282,13 +282,11 @@ def render(data):
     body+=_collection('locals',local_cards,'Наблюдений локальной структуры пока нет.')+'</details></section>'
     body += '<section id="panel-positions" class="tab-panel" hidden><div class="section-head"><h2>Открытые позиции</h2><span class="tag">Включая токены вне Discovery</span></div>'
     body += _collection('positions', [_card(str(t.get('symbol'))+':'+str(t.get('opened')), *_position_view(t), kind='position-card') for t in p.get('open_positions') or []], 'Открытых позиций нет.')+'</section>'
-    body += '<section id="panel-history" class="tab-panel" hidden><div class="section-head"><h2>Закрытые сделки</h2><a class="secondary" href="/strategy1/history">Полная история ↗</a></div>'
+    body += '<section id="panel-history" class="tab-panel" hidden><div class="section-head"><h2>Закрытые сделки</h2><a class="secondary" href="/pandora/history">Полная история ↗</a></div>'
     body += _collection('trades', [_card(str(t.get('id', str(t.get('symbol'))+':'+str(t.get('opened'))+':'+str(t.get('closed')))), *_trade_view(t), kind='trade-card') for t in (p.get('closed_trades') or [])[:30]], 'Закрытых сделок пока нет.')
-    body += '<h3 class="section-caption">Раздельные итоги счетов и токенов</h3>'
-    totals = p.get('token_totals')
-    body += '<p id="totals-unavailable" class="sub"'+(' hidden' if totals is not None else '')+'>Агрегаты недоступны; нулевой PnL не подставляется.</p>'
-    rows = [_card(str(t.get('account'))+':'+str(t.get('symbol')), str(t.get('account'))+' · '+str(t.get('symbol')), 'Без суммирования независимых счетов', [('Сделок', 'trades', t.get('closed_trades')), ('Realized PnL', 'pnl', _m(t.get('realized_pnl')), _tone(t.get('realized_pnl')))]) for t in totals or []]
-    body += _collection('totals', rows, 'Нет записанных итогов.')+'</section>'
+    if p.get('token_totals') is None:
+        body += '<p class="sub">Агрегаты недоступны; нулевой PnL не подставляется.</p>'
+    body += '</section>'
     body += '<section id="panel-audit" class="tab-panel" hidden><div class="section-head"><h2>PYRAMID ADDS</h2><span class="tag">Каждая доливка записана отдельно</span></div>'
     adds = []
     for add in p.get('pyramid_adds') or []:
@@ -302,22 +300,23 @@ def render(data):
         payload = e.get('payload') or {}
         event_cards.append(_card(str(e.get('id')), e.get('kind'), e.get('recorded_at'), [('Токен', 'symbol', payload.get('symbol')), ('Причина', 'reason', payload.get('reason'))], kind='event-card'))
     body += _collection('events', event_cards, 'Журнал действий пока пуст.')+'</section>'
-    body += '<footer><span>Pandora Win · PAPER ONLY</span><a href="/api/pandora">JSON API для ChatGPT ↗</a><a href="/api/strategy1/events">Журнал API ↗</a><a href="/health/risk">Risk readiness ↗</a></footer>'
+    body += '<footer><span>Pandora Win · PAPER ONLY</span><a href="/api/pandora">JSON API для ChatGPT ↗</a><a href="/api/pandora/events">Журнал API ↗</a><a href="/health/risk">Risk readiness ↗</a></footer>'
     # JSON is consumed as text, never evaluated. Escape all HTML-significant chars
     # so a symbol/reason cannot terminate the script element.
-    bootstrap = json.dumps(_json_safe(data), ensure_ascii=False, default=str, allow_nan=False).replace('&', '\\u0026').replace('<', '\\u003c').replace('>', '\\u003e')
+    bootstrap_data = {**data, 'pandora': {k:v for k,v in p.items() if k != 'token_totals'}}
+    bootstrap = json.dumps(_json_safe(bootstrap_data), ensure_ascii=False, default=str, allow_nan=False).replace('&', '\\u0026').replace('<', '\\u003c').replace('>', '\\u003e')
     return _shell(body, '<script type="application/json" id="initial-state">'+bootstrap+'</script><script>'+SCRIPT+'</script>')
 
 
 def render_history(page):
-    account = page.get('account') or 'strategy1'; args = {'account': account}
+    args = {}
     if page.get('symbol'):
         args['symbol'] = page['symbol']
-    links = '<a class="secondary" href="/">← Pandora Win</a><a class="secondary" href="/strategy1/history?'+_e(urlencode(args))+'">Новейшие сделки</a>'
+    links = '<a class="secondary" href="/">← Pandora Win</a><a class="secondary" href="/pandora/history?'+_e(urlencode(args))+'">Новейшие сделки</a>'
     if page.get('next_before_id') is not None:
-        links += '<a class="secondary" href="/strategy1/history?'+_e(urlencode({**args, 'before': page['next_before_id']}))+'">Более ранние сделки →</a>'
+        links += '<a class="secondary" href="/pandora/history?'+_e(urlencode({**args, 'before': page['next_before_id']}))+'">Более ранние сделки →</a>'
     cards = [_card(str(t.get('id')), *_trade_view(t), kind='trade-card') for t in page.get('trades') or []]
-    body = '<header class="masthead"><div><p class="eyebrow">PAPER LEDGER / '+_e(account)+'</p><h1>Pandora <span>Win</span></h1><h2>Полная история сделок</h2></div><span class="mode">PAPER ONLY</span></header><nav class="history-links">'+links+'</nav>'+_collection('trades', cards, 'Сделок по этому фильтру нет.')+'<nav class="history-links">'+links+'</nav>'
+    body = '<header class="masthead"><div><p class="eyebrow">PANDORA WIN · PAPER LEDGER</p><h1>Pandora <span>Win</span></h1><h2>Полная история сделок</h2></div><span class="mode">PAPER ONLY</span></header><nav class="history-links">'+links+'</nav>'+_collection('trades', cards, 'Сделок по этому фильтру нет.')+'<nav class="history-links">'+links+'</nav>'
     return _shell(body)
 
 
@@ -350,20 +349,20 @@ function tradeView(t){const f=t.features||{},margin=t.margin??t.margin_usd;retur
 function makeCard(key,view){const article=document.createElement('article');article.dataset.key=String(key);article.className='terminal-card '+view.kind;const heading=document.createElement('div');heading.className='card-heading';for(const [tag,name] of [['h3','title'],['small','subtitle']]){const parent=document.createElement(tag),span=document.createElement('span');span.dataset.field=name;parent.append(span);heading.append(parent);}article.append(heading);const dl=document.createElement('dl');dl.className='metric-grid';for(const m of view.metrics){const block=document.createElement('div');block.className='metric';const dt=document.createElement('dt');text(dt,m.label);const dd=document.createElement('dd'),span=document.createElement('span');span.dataset.field=m.name;dd.append(span);block.append(dt,dd);dl.append(block);}article.append(dl);return article;}
 function fillCard(card,view){text(card.querySelector('[data-field="title"]'),view.title);text(card.querySelector('[data-field="subtitle"]'),view.subtitle);for(const m of view.metrics){const element=card.querySelector('[data-field="'+m.name+'"]');text(element,m.value);if(element)element.className=m.kind||'';}}
 function syncList(id,rows,key,view,preserveOrder=false){const box=$(id);if(!box)return;const existing=new Map(Array.from(box.children).map(c=>[c.dataset.key,c])),wanted=new Set();rows.forEach((row,index)=>{const k=String(key(row)),v=view(row);wanted.add(k);let card=existing.get(k);if(!card){card=makeCard(k,v);box.append(card);}fillCard(card,v);if(!preserveOrder&&box.children[index]!==card)box.insertBefore(card,box.children[index]||null);});for(const [k,card]of existing)if(!wanted.has(k))card.remove();$(id+'-empty').hidden=rows.length>0;}
-function tokens(data){const p=data.strategy1_primary||{};if(p.tokens&&p.tokens.length)return p.tokens;const d=data.discovery||{},details=(p.engine||{}).details||{},selected=new Map((d.selected||[]).map(t=>[t.symbol,t]));return(d.selected_symbols||[]).map(s=>({...selected.get(s),symbol:s,confirmed_local:(details[s]||{}).h1_local||(p.h1_durable||{})[s]||{},flow_state:(details[s]||{}).flow_context||{},state:'SCANNING'}));}
+function tokens(data){const p=data.pandora||{};if(p.tokens&&p.tokens.length)return p.tokens;const d=data.discovery||{},details=(p.engine||{}).details||{},selected=new Map((d.selected||[]).map(t=>[t.symbol,t]));return(d.selected_symbols||[]).map(s=>({...selected.get(s),symbol:s,confirmed_local:(details[s]||{}).h1_local||(p.h1_durable||{})[s]||{},flow_state:(details[s]||{}).flow_context||{},state:'SCANNING'}));}
 function anchor(){const nodes=document.querySelectorAll('.tab-panel:not([hidden]) .terminal-card');for(const node of nodes){const rect=node.getBoundingClientRect();if(rect.bottom>0&&rect.top<innerHeight)return {node,top:rect.top};}return null;}
-function update(data){const keep=anchor(),p=data.strategy1_primary||{},h=data.health||{},account=p.account||{},risk=p.risk||{},valuation=p.margin_valuation||{},start=number(p.starting_equity??500),realized=number(p.realized_pnl),unreal=number(p.unrealized_pnl),total=realized!==null&&unreal!==null?realized+unreal:null,totalPct=total!==null&&start>0?total/start*100:null;
+function update(data){const keep=anchor(),p=data.pandora||{},h=data.health||{},account=p.account||{},risk=p.risk||{},valuation=p.margin_valuation||{},start=number(p.starting_equity??500),realized=number(p.realized_pnl),unreal=number(p.unrealized_pnl),total=realized!==null&&unreal!==null?realized+unreal:null,totalPct=total!==null&&start>0?total/start*100:null;
 for(const[key,value,valueTone]of [['equity',money(p.total_equity),''],['total-pnl',money(total),tone(total)],['total-pct',pct(totalPct),tone(totalPct)],['start',money(start),''],['realized',money(p.realized_pnl),tone(p.realized_pnl)],['unrealized',money(p.unrealized_pnl),tone(p.unrealized_pnl)],['max-equity',money(p.max_equity),''],['exposure',money(p.current_exposure),''],['free-margin',money(account.free_margin),''],['used-margin',money(account.used_margin),'']]){const node=$('account-'+key);text(node,value);node.className=valueTone;}
 text($('readiness'),h.risk_ready?'PAPER ГОТОВ':'НЕ ГОТОВ');$('readiness').className=h.risk_ready?'positive':'warning';text($('risk-reason'),risk.reason||h.engine_error||Object.values(h.execution_errors||{})[0]||(valuation.complete===false?'PORTFOLIO_MARKS_STALE':h.risk_ready?'Fresh market data · PAPER only':'Ожидание актуальных данных / проверки исполнителя'));text($('update-time'),data.snapshot_at||'Время снимка недоступно');const startup=startupView(p);text($('startup-stage'),startup.stage);text($('startup-status'),startup.status);text($('startup-reason'),startup.reason);
 const candidates=(data.discovery||{}).top_movers||[];text($('count-candidates'),candidates.length);syncList('candidates',candidates,t=>t.symbol,t=>cardView(t.symbol,'RANK '+(t.rank??'—'),[metric('Score','score',fmt(t.pandora_win_score)),metric('Цена','price',fmt(t.last)),metric('Текущий импульс %','move',pct(t.scan_return_pct)),metric('Turnover / мин.','turnover',money(t.turnover_per_minute)),metric('BUY USD','buy',money(t.buy_volume)),metric('SELL USD','sell',money(t.sell_volume)),metric('Trades / сек.','trades',fmt(t.trade_velocity)),metric('Executed tape','tape',t.flow_fresh?'FRESH':'WARMING / STALE')]),true);
-const details=(p.engine||{}).details||{},durable=p.h1_durable||{},localSymbols=Array.from(new Set([...Object.keys(details),...Object.keys(durable),...(data.local_experiment_symbols||[])]));text($('count-locals'),localSymbols.length);syncList('locals',localSymbols,s=>s,s=>{const l=(details[s]||{}).h1_local||durable[s]||{},forming=l.forming_local||(l.pending_pivot_type?{pivot_type:l.pending_pivot_type,pivot_price:l.pending_pivot_price}:{});return cardView(s,side(l.entry_side),[metric('Confirmed local','confirmed',local(l.confirmed_local||l)),metric('Forming local','forming',local(forming)),metric('Разрешение входа','entry_state',l.entry_blocked?'BLOCKED':l.ready?'READY':'WAIT'),metric('Причина','reason',l.entry_block_reason||l.reason||l.confirmation_source)]);},true);
-const selected=tokens(data);text($('count-discovery'),selected.length);text($('count-positions'),(p.open_positions||[]).length);syncList('tokens',selected,t=>t.symbol,tokenView,true);syncList('positions',p.open_positions||[],p=>p.symbol+':'+p.opened,positionView,true);syncList('trades',(p.closed_trades||[]).slice(0,30),t=>t.id??(t.symbol+':'+t.opened+':'+t.closed),tradeView);syncList('totals',p.token_totals||[],t=>t.account+':'+t.symbol,t=>cardView(t.account+' · '+t.symbol,'Без суммирования независимых счетов',[metric('Сделок','trades',t.closed_trades),metric('Realized PnL','pnl',money(t.realized_pnl),tone(t.realized_pnl))]));$('totals-unavailable').hidden=p.token_totals!==null&&p.token_totals!==undefined;
+const details=(p.engine||{}).details||{},durable=p.h1_durable||{},localSymbols=Array.from(new Set([...Object.keys(details),...Object.keys(durable),...(data.pandora_symbols||[])]));text($('count-locals'),localSymbols.length);syncList('locals',localSymbols,s=>s,s=>{const l=(details[s]||{}).h1_local||durable[s]||{},forming=l.forming_local||(l.pending_pivot_type?{pivot_type:l.pending_pivot_type,pivot_price:l.pending_pivot_price}:{});return cardView(s,side(l.entry_side),[metric('Confirmed local','confirmed',local(l.confirmed_local||l)),metric('Forming local','forming',local(forming)),metric('Разрешение входа','entry_state',l.entry_blocked?'BLOCKED':l.ready?'READY':'WAIT'),metric('Причина','reason',l.entry_block_reason||l.reason||l.confirmation_source)]);},true);
+const selected=tokens(data);text($('count-discovery'),selected.length);text($('count-positions'),(p.open_positions||[]).length);syncList('tokens',selected,t=>t.symbol,tokenView,true);syncList('positions',p.open_positions||[],p=>p.symbol+':'+p.opened,positionView,true);syncList('trades',(p.closed_trades||[]).slice(0,30),t=>t.id??(t.symbol+':'+t.opened+':'+t.closed),tradeView);
 syncList('adds',p.pyramid_adds||[],a=>a.symbol+':'+a.opened+':'+a.add_number,a=>cardView(a.symbol+' · ADD '+a.add_number,a.timestamp,[metric('Цена','price',fmt(a.price)),metric('Average entry','average',fmt(a.average_entry)),metric('Added margin','margin',money(a.added_margin)),metric('Added notional','notional',money(a.added_notional)),metric('MFE до ADD','before',money(a.mfe_before_add)),metric('MFE после ADD','after',money(a.mfe_after_add))]));syncList('events',((p.events||{}).events||[]).slice(0,40),e=>e.id,e=>cardView(e.kind,e.recorded_at,[metric('Токен','symbol',(e.payload||{}).symbol),metric('Причина','reason',(e.payload||{}).reason)],'event-card'));
 if(keep&&keep.node.isConnected){const delta=keep.node.getBoundingClientRect().top-keep.top;if(Math.abs(delta)>1)window.scrollBy(0,delta);}latest=data;}
 function tab(name){activeTab=name;document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.tab===name)));document.querySelectorAll('.tab-panel').forEach(p=>p.hidden=p.id!=='panel-'+name);try{sessionStorage.setItem('pandora-tab',name);}catch{}}
 document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>tab(b.dataset.tab)));try{const saved=sessionStorage.getItem('pandora-tab');if(['discovery','positions','history','audit'].includes(saved))tab(saved);}catch{}
 $('sort-rank').addEventListener('click',()=>{const keep=anchor(),box=$('tokens'),ranking=new Map(tokens(latest).map(t=>[String(t.symbol),number(t.rank)??999]));Array.from(box.children).sort((a,b)=>(ranking.get(a.dataset.key)??999)-(ranking.get(b.dataset.key)??999)).forEach(node=>box.append(node));if(keep&&keep.node.isConnected)window.scrollBy(0,keep.node.getBoundingClientRect().top-keep.top);});
-async function poll(){if(busy||document.hidden)return;busy=true;const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),8000);try{const response=await fetch('/api/pandora',{cache:'no-store',signal:controller.signal,headers:{Accept:'application/json'}});if(!response.ok)throw Error('HTTP '+response.status);const data=await response.json();if(!data||!data.strategy1_primary||!data.health)throw Error('Неверный формат API');update(data);lastGood=Date.now();text($('connection-state'),'JSON подключён · '+new Date(lastGood).toLocaleTimeString());$('connection-state').className='positive';}catch(error){text($('connection-state'),'Нет обновления · '+String(error.message)+' · показан последний снимок');$('connection-state').className='negative';text($('readiness'),'НЕТ СВЕЖЕГО API');$('readiness').className='negative';}finally{clearTimeout(timeout);busy=false;}}
+async function poll(){if(busy||document.hidden)return;busy=true;const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),8000);try{const response=await fetch('/api/pandora',{cache:'no-store',signal:controller.signal,headers:{Accept:'application/json'}});if(!response.ok)throw Error('HTTP '+response.status);const data=await response.json();if(!data||!data.pandora||!data.health)throw Error('Неверный формат API');update(data);lastGood=Date.now();text($('connection-state'),'JSON подключён · '+new Date(lastGood).toLocaleTimeString());$('connection-state').className='positive';}catch(error){text($('connection-state'),'Нет обновления · '+String(error.message)+' · показан последний снимок');$('connection-state').className='negative';text($('readiness'),'НЕТ СВЕЖЕГО API');$('readiness').className='negative';}finally{clearTimeout(timeout);busy=false;}}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)poll();});setInterval(poll,2000);poll();
 })();
 '''

@@ -4,15 +4,14 @@ import uuid,time
 class LeaseLost(RuntimeError):pass
 
 class EngineStore:
-    def __init__(self, connect, fee=0.00045, reset=100.0):
+    def __init__(self, connect):
         self.connect = connect
         self.owner = uuid.uuid4().hex
-        self.fee, self.reset = fee, reset
         self._lease_deadline = 0.0
 
     def has_lease_record(self):
         with self.connect() as c:
-            return c.execute("SELECT 1 FROM engine_lease WHERE name='paper'").fetchone() is not None
+            return c.execute("SELECT 1 FROM pandora_win_engine_lease WHERE name='pandora_win'").fetchone() is not None
 
     def claim(self):
         # Render blue/green startup restoration can exceed 30 seconds. Keep enough
@@ -23,11 +22,11 @@ class EngineStore:
             with self.connect() as c:
                 with c.transaction():
                     self._transaction_timeouts(c)
-                    row = c.execute("""INSERT INTO engine_lease(name,owner,expires_at,heartbeat_at)
-                        VALUES('paper',%s,clock_timestamp()+interval '120 seconds',clock_timestamp())
+                    row = c.execute("""INSERT INTO pandora_win_engine_lease(name,owner,expires_at,heartbeat_at)
+                        VALUES('pandora_win',%s,clock_timestamp()+interval '120 seconds',clock_timestamp())
                         ON CONFLICT(name) DO UPDATE SET owner=excluded.owner,
                           expires_at=excluded.expires_at,heartbeat_at=excluded.heartbeat_at
-                        WHERE engine_lease.owner=excluded.owner OR engine_lease.expires_at<clock_timestamp()
+                        WHERE pandora_win_engine_lease.owner=excluded.owner OR pandora_win_engine_lease.expires_at<clock_timestamp()
                         RETURNING owner""", (self.owner,)).fetchone()
                     if row is not None:self._lease_deadline = time.monotonic()+115.0
                     else:self._lease_deadline = 0.0
@@ -51,7 +50,7 @@ class EngineStore:
         # Transactional row lock prevents ownership changing during a write.
         # Works with Neon pooled connections; no session advisory lock needed.
         self._transaction_timeouts(c)
-        row = c.execute("""SELECT owner FROM engine_lease WHERE name='paper'
+        row = c.execute("""SELECT owner FROM pandora_win_engine_lease WHERE name='pandora_win'
             AND owner=%s AND expires_at>clock_timestamp() FOR SHARE""", (self.owner,)).fetchone()
         if row is None:
             raise LeaseLost("paper engine lease lost")
@@ -59,8 +58,8 @@ class EngineStore:
     def release(self):
         self._lease_deadline = 0.0
         with self.connect() as c:
-            c.execute("UPDATE engine_lease SET expires_at=clock_timestamp() WHERE name='paper' AND owner=%s", (self.owner,))
+            c.execute("UPDATE pandora_win_engine_lease SET expires_at=clock_timestamp() WHERE name='pandora_win' AND owner=%s", (self.owner,))
 
     def migrate(self):
         with self.connect() as db:
-            db.execute("CREATE TABLE IF NOT EXISTS engine_lease(name text PRIMARY KEY,owner text NOT NULL,expires_at timestamptz NOT NULL,heartbeat_at timestamptz NOT NULL)")
+            db.execute("CREATE TABLE IF NOT EXISTS pandora_win_engine_lease(name text PRIMARY KEY,owner text NOT NULL,expires_at timestamptz NOT NULL,heartbeat_at timestamptz NOT NULL)")

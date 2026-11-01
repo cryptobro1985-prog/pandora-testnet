@@ -31,20 +31,20 @@ class FakeDB:
 def fake_runtime():
     a=SimpleNamespace(LOCK=threading.RLock(),ACCOUNT_LOCK=threading.RLock(),FEE=.00045)
     a.S=dict(engine_active=True,bybit_discovery={'at':0,'selected_symbols':['BTC']},
-             local_v12_positions={},local_experiment_watch={},_local4_analysis={},sources={})
+             pandora_win_positions={},pandora_watch={},_pandora_analysis={},sources={})
     a.now=lambda:'fixture'
     a.STORE=SimpleNamespace(fence=lambda db:None)
     database=FakeDB()
     @contextmanager
     def connect():yield database
     a.pg=connect
-    a.strategy1_trade_symbols=lambda:tuple(a.S['bybit_discovery']['selected_symbols'])
+    a.pandora_trade_symbols=lambda:tuple(a.S['bybit_discovery']['selected_symbols'])
     a.MARKET_OBS=SimpleNamespace(flow_context=lambda symbol:{'trade_data_fresh':True})
     a.current_entry_price=lambda symbol:None
     a.fresh_mark_price=lambda symbol:101
-    a.local_experiment_mark_positions=lambda prices:None
-    a._local_experiment_margin_state=lambda:(500.,0.,500.)
-    a.strategy1_runtime_h1_verified=lambda *args:False
+    a.pandora_mark_positions=lambda prices:None
+    a._pandora_margin_state=lambda:(500.,0.,500.)
+    a.pandora_runtime_h1_verified=lambda *args:False
     r=PandoraRuntime.__new__(PandoraRuntime)
     r.a=a;r.tokens={};r.max_equity=500.;r.last_saved={'account':time.time()}
     r.last_scanner_save=0.;r.last_scanner_at=0.
@@ -83,22 +83,22 @@ class RuntimeSerializationTests(unittest.TestCase):
 
     def test_position_removed_at_metrics_boundary_is_never_resurrected(self):
         runtime,a,_=fake_runtime()
-        a.S['local_v12_positions']['BTC']=position()
+        a.S['pandora_win_positions']['BTC']=position()
         runtime.last_saved['position:BTC']=time.time()
         def external_close(p,*args):
             updated=copy.deepcopy(p)
-            a.S['local_v12_positions'].pop('BTC')
+            a.S['pandora_win_positions'].pop('BTC')
             return updated
         with patch.object(pandora_runtime,'mark_metrics',external_close):
             runtime.cycle({'BTC':101})
-        self.assertNotIn('BTC',a.S['local_v12_positions'])
+        self.assertNotIn('BTC',a.S['pandora_win_positions'])
 
     def test_zero_row_canonical_update_does_not_publish_phantom_features(self):
         runtime,a,database= fake_runtime()
-        a.S['local_v12_positions']['BTC']=position()
+        a.S['pandora_win_positions']['BTC']=position()
         database.updated=False
         runtime.cycle({'BTC':101})
-        self.assertNotIn('BTC',a.S['local_v12_positions'])
+        self.assertNotIn('BTC',a.S['pandora_win_positions'])
         self.assertTrue(any('returning symbol' in q for q,_ in database.queries))
 
     def test_one_token_error_does_not_block_other_positions_and_marks_readiness_failed(self):
@@ -128,16 +128,16 @@ class RuntimeSerializationTests(unittest.TestCase):
 
     def test_fresh_mark_risk_guard_runs_despite_stale_flow_and_entry_checkpoint(self):
         runtime,a,_=fake_runtime()
-        a.S['local_v12_positions']['BTC']=position()
+        a.S['pandora_win_positions']['BTC']=position()
         a.MARKET_OBS.flow_context=lambda symbol:{'trade_data_fresh':False}
         seen=[]
         def guard(prices):
             seen.append(prices)
-            a.S['local_v12_positions'].pop('BTC')
-        a.local_experiment_mark_positions=guard
+            a.S['pandora_win_positions'].pop('BTC')
+        a.pandora_mark_positions=guard
         runtime.cycle({'BTC':101})
         self.assertEqual(seen,[{'BTC':101}])
-        self.assertNotIn('BTC',a.S['local_v12_positions'])
+        self.assertNotIn('BTC',a.S['pandora_win_positions'])
 
 
 class ScannerPublicationTests(unittest.TestCase):
@@ -147,24 +147,24 @@ class ScannerPublicationTests(unittest.TestCase):
 
     def test_failed_commit_keeps_prior_selection_and_watch_in_memory(self):
         runtime,a,db=fake_runtime()
-        a.S['local_experiment_watch']['OLD']={'exit_at':'old'}
+        a.S['pandora_watch']['OLD']={'exit_at':'old'}
         original=copy.deepcopy(a.S['bybit_discovery'])
         db.fail_commit=True
         with self.assertRaisesRegex(RuntimeError,'commit failed'):
             runtime.scanner_snapshot(self.snapshot())
         self.assertEqual(a.S['bybit_discovery'],original)
-        self.assertIn('OLD',a.S['local_experiment_watch'])
+        self.assertIn('OLD',a.S['pandora_watch'])
 
     def test_fresh_position_snapshot_overrides_stale_rotate_out_decision(self):
         runtime,a,db=fake_runtime()
-        a.S['local_v12_positions']['OLD']={**position(),'symbol':'OLD'}
-        a.S['local_experiment_watch']['OLD']={'exit_at':'old'}
+        a.S['pandora_win_positions']['OLD']={**position(),'symbol':'OLD'}
+        a.S['pandora_watch']['OLD']={'exit_at':'old'}
         self.assertTrue(runtime.scanner_snapshot(self.snapshot()))
         current=a.S['bybit_discovery']
         self.assertEqual(current['states']['OLD'],'FADING')
         self.assertIn('OLD',current['retained_open_positions'])
-        self.assertIn('OLD',a.S['local_experiment_watch'])
-        self.assertFalse(any('delete from local_v12_watchlist' in q for q,_ in db.queries))
+        self.assertIn('OLD',a.S['pandora_watch'])
+        self.assertFalse(any('delete from pandora_win_watchlist' in q for q,_ in db.queries))
 
     def test_older_selection_cannot_replace_newer_published_selection(self):
         runtime,a,_=fake_runtime()

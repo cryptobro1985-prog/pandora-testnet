@@ -76,12 +76,12 @@ class SelectedMarketExecutionTests(unittest.TestCase):
         self.obs=RollingMarketData(freshness_seconds=60,max_seen_per_symbol=65536)
         self.patches.extend([patch.object(app,'STORE',self.store),patch.object(app,'MARKET_OBS',self.obs)])
         for item in self.patches[1:]:item.start()
-        app.S.update(engine_active=True,mode='PAPER_ONLY',orders_enabled=False,local_v12_positions={},
-                     local_experiment_watch={},local_h1_direction={},_local4_analysis={},_prices={},_price_received_epoch={},
-                     local_experiment_equity=500.,local_experiment_realized_pnl=0.,last_checkpoint=app.now())
-        selected=(*app.LOCAL_EXPERIMENT_SYMBOLS[:4],'HYPE')
+        app.S.update(engine_active=True,mode='PAPER_ONLY',orders_enabled=False,pandora_win_positions={},
+                     pandora_watch={},pandora_win_h1_direction={},_pandora_analysis={},_prices={},_price_received_epoch={},
+                     pandora_equity=500.,pandora_realized_pnl=0.,last_checkpoint=app.now())
+        selected=('BTC','ETH','SOL','NEAR','HYPE')
         if 'simultaneous' in self._testMethodName:
-            selected=app.LOCAL_EXPERIMENT_SYMBOLS
+            selected=('BTC','ETH','SOL','NEAR','HYPE','ZEC','TAO','GRASS','BIRB','BEAM','LSK','LIT','INIT')
         app.S['bybit_discovery']={'selected_symbols':list(selected[:5])}
         stamp=time.time();hour=3600000;last=(int(stamp*1000)//hour)*hour
         self.sides={symbol:1 if i%2==0 else -1 for i,symbol in enumerate(selected)}
@@ -91,9 +91,9 @@ class SelectedMarketExecutionTests(unittest.TestCase):
         for symbol,side in self.sides.items():
             prices=values if side>0 else [(200-o,200-l,200-h,200-c) for o,h,l,c in values]
             rows=[dict(t=last-(6-i)*hour,T=last-(5-i)*hour-1,o=o,h=h,l=l,c=c,v=100) for i,(o,h,l,c) in enumerate(prices)]
-            analysis=app.local_h1_direction(rows,int(stamp*1000),symbol)
+            analysis=app.pandora_win_h1_direction(rows,int(stamp*1000),symbol)
             self.assertEqual(analysis['entry_side'],side)
-            app.S['_local4_analysis'][symbol]=analysis
+            app.S['_pandora_analysis'][symbol]=analysis
         app.S['_bybit_instruments']={symbol:dict(max_leverage=10 if symbol=='HYPE' else 25,observed_at=stamp) for symbol in self.sides}
         self.server=BybitFixtureServer();self.stop=threading.Event();self.reports=[]
         self.transport=threading.Thread(target=run_bybit_stream,args=(self.obs,self.stop,lambda:set(self.sides),self.reports.append),
@@ -142,50 +142,50 @@ class SelectedMarketExecutionTests(unittest.TestCase):
             self.send(symbol,side,1)
             entry=100+side*.1
             self.send(symbol,side,1,entry)
-            app.local4_fast_entries({symbol:entry})
-            self.assertIn(symbol,app.S['local_v12_positions'])
-            self.assertEqual(app.S['local_v12_positions'][symbol]['side'],side)
-            position=app.S['local_v12_positions'][symbol]
+            app.pandora_flow_fast_entries({symbol:entry})
+            self.assertIn(symbol,app.S['pandora_win_positions'])
+            self.assertEqual(app.S['pandora_win_positions'][symbol]['side'],side)
+            position=app.S['pandora_win_positions'][symbol]
             self.assertGreaterEqual(position['leverage'],10)
             self.assertGreaterEqual(position['margin']+1e-8,.10*position['features']['mark_to_market_equity_at_entry'])
             if symbol=='HYPE':
-                self.assertGreaterEqual(app.S['local_v12_positions'][symbol]['leverage'],10)
-                self.assertLessEqual(app.S['local_v12_positions'][symbol]['leverage'],10)
+                self.assertGreaterEqual(app.S['pandora_win_positions'][symbol]['leverage'],10)
+                self.assertLessEqual(app.S['pandora_win_positions'][symbol]['leverage'],10)
             tiny=entry-side*.05
             self.send(symbol,-side,.01,tiny)
-            app.local_experiment_mark_positions({symbol:tiny})
-            self.assertIn(symbol,app.S['local_v12_positions'])
+            app.pandora_mark_positions({symbol:tiny})
+            self.assertIn(symbol,app.S['pandora_win_positions'])
             best=entry+side*.1
             self.send(symbol,side,3,best)
-            app.local_experiment_mark_positions({symbol:best})
-            self.assertIn(symbol,app.S['local_v12_positions'])
+            app.pandora_mark_positions({symbol:best})
+            self.assertIn(symbol,app.S['pandora_win_positions'])
             exit_price=best-side*.4
             self.send(symbol,-side,9,exit_price)
-            app.local_experiment_mark_positions({symbol:exit_price})
-            self.assertNotIn(symbol,app.S['local_v12_positions'])
+            app.pandora_mark_positions({symbol:exit_price})
+            self.assertNotIn(symbol,app.S['pandora_win_positions'])
             extreme=exit_price-side*.3
             for control,size,price in [(-side,27,extreme),(side,81,extreme+side*.2),(-side,243,extreme+side*.1)]:
                 self.send(symbol,control,size,price)
-                app.local4_fast_entries({symbol:price})
-                self.assertNotIn(symbol,app.S['local_v12_positions'])
+                app.pandora_flow_fast_entries({symbol:price})
+                self.assertNotIn(symbol,app.S['pandora_win_positions'])
             resumed=extreme+side*.5
             self.send(symbol,side,729,resumed)
-            app.local4_fast_entries({symbol:resumed})
-            self.assertEqual(app.S['local_v12_positions'][symbol]['features']['entry_kind'],'REENTRY')
+            app.pandora_flow_fast_entries({symbol:resumed})
+            self.assertEqual(app.S['pandora_win_positions'][symbol]['features']['entry_kind'],'REENTRY')
             final=extreme-side*.1
             self.send(symbol,-side,2187,final)
-            app.local_experiment_mark_positions({symbol:final})
-            self.assertNotIn(symbol,app.S['local_v12_positions'])
+            app.pandora_mark_positions({symbol:final})
+            self.assertNotIn(symbol,app.S['pandora_win_positions'])
         with self.connect() as db:
-            trades=db.execute('select symbol,count(*) n,sum(pnl) pnl from local_v12_trade_history group by symbol').fetchall()
+            trades=db.execute('select symbol,count(*) n,sum(pnl) pnl from pandora_win_trade_history group by symbol').fetchall()
             self.assertEqual({r['symbol']:r['n'] for r in trades},{s:2 for s in self.sides})
-            self.assertEqual(db.execute('select count(*) n from local_v12_positions').fetchone()['n'],0)
-            account=db.execute('select equity,realized_pnl from local_v12_account_state where id=1').fetchone()
+            self.assertEqual(db.execute('select count(*) n from pandora_win_positions').fetchone()['n'],0)
+            account=db.execute('select equity,realized_pnl from pandora_win_account_state where id=1').fetchone()
             pnl=sum(r['pnl'] for r in trades)
             self.assertAlmostEqual(account['equity'],500+pnl)
             self.assertAlmostEqual(account['realized_pnl'],pnl)
-            for kind in ('local_experiment_trade_opened','local_experiment_trade_closed'):
-                self.assertEqual(db.execute('select count(*) n from audit_journal where kind=%s',(kind,)).fetchone()['n'],2*len(self.sides))
+            for kind in ('pandora_trade_opened','pandora_trade_closed'):
+                self.assertEqual(db.execute('select count(*) n from pandora_win_audit_journal where kind=%s',(kind,)).fetchone()['n'],2*len(self.sides))
         self.assertEqual(self.obs.stats()['accepted'],11*len(self.sides))
         self.evidence('selected-market-wire.json',{'tokens':{r['symbol']:{'opens':2,'closes':r['n'],'reentries':1,
             'pnl_net_fees':r['pnl']} for r in trades},'accepted_frames':11*len(self.sides),'closed_trades':2*len(self.sides),
@@ -202,23 +202,23 @@ class SelectedMarketExecutionTests(unittest.TestCase):
         symbols=list(self.sides)
         for offset in range(0,len(symbols),5):
             app.S['bybit_discovery']={'selected_symbols':symbols[offset:offset+5]}
-            app.local4_fast_entries(prices)
-        equity,used,free=app._local_experiment_margin_state()
-        self.assertGreater(len(app.S['local_v12_positions']),0)
+            app.pandora_flow_fast_entries(prices)
+        equity,used,free=app._pandora_margin_state()
+        self.assertGreater(len(app.S['pandora_win_positions']),0)
         self.assertLessEqual(used,equity+1e-7)
         self.assertGreaterEqual(free,0)
-        self.assertLess(len(app.S['local_v12_positions']),len(self.sides))  # Whole entry floors prohibit a tiny last-slot partial fill.
-        total_risk=sum(app.position_risk(p) for p in app.S['local_v12_positions'].values())
-        for position in app.S['local_v12_positions'].values():
+        self.assertLess(len(app.S['pandora_win_positions']),len(self.sides))  # Whole entry floors prohibit a tiny last-slot partial fill.
+        total_risk=sum(app.position_risk(p) for p in app.S['pandora_win_positions'].values())
+        for position in app.S['pandora_win_positions'].values():
             self.assertGreaterEqual(position['leverage'],10)
             self.assertGreaterEqual(position['margin']+1e-8,.10*position['features']['mark_to_market_equity_at_entry'])
-        rejected=set(self.sides)-set(app.S['local_v12_positions'])
+        rejected=set(self.sides)-set(app.S['pandora_win_positions'])
         for symbol in rejected:
-            reason=app.S['strategy1_executor_rejections'][symbol]['reason']
+            reason=app.S['pandora_executor_rejections'][symbol]['reason']
             self.assertIn(reason,('INSUFFICIENT_FREE_MARGIN','MIN_ENTRY_MARGIN_UNFUNDED','CONTRACT_OR_GEOMETRY_BELOW_MIN_LEVERAGE','OPTIONAL_RISK_CAP_BELOW_ENTRY_MINIMUM'))
-        self.evidence('margin-capacity.json',{'simultaneous_positions':len(app.S['local_v12_positions']),
+        self.evidence('margin-capacity.json',{'simultaneous_positions':len(app.S['pandora_win_positions']),
             'equity_after_modeled_fees':equity,'reserved_margin':used,'free_margin':free,
-            'rejected':{symbol:app.S['strategy1_executor_rejections'][symbol]['reason'] for symbol in sorted(rejected)},
+            'rejected':{symbol:app.S['pandora_executor_rejections'][symbol]['reason'] for symbol in sorted(rejected)},
             'modeled_stop_risk':total_risk,'default_portfolio_risk_cap':None,
             'minimum_entry_margin_fraction':.10,'minimum_leverage':10,
             'sizing':'whole entries at >=10% current equity margin and >=10x; reject rather than undersize when risk budget cannot fund the minimum'})

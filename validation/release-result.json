@@ -1,5 +1,5 @@
 {
-  "suite": "active_strategy1_release",
+  "suite": "active_pandora_release",
   "modules": [
     "tests.test_accounting",
     "tests.test_api_contract",
@@ -7,6 +7,10 @@
     "tests.test_bootstrap_safety",
     "tests.test_bybit_stream_restoration",
     "tests.test_monitor_audit",
+    "tests.test_pandora_end_to_end",
+    "tests.test_pandora_h1_runtime_guard",
+    "tests.test_pandora_history_preservation",
+    "tests.test_pandora_restoration",
     "tests.test_pandora_win",
     "tests.test_position_monitor",
     "tests.test_pressure_structure",
@@ -14,13 +18,9 @@
     "tests.test_runtime_audit",
     "tests.test_signal_audit",
     "tests.test_startup_bootstrap",
-    "tests.test_startup_decisions",
-    "tests.test_strategy1_end_to_end",
-    "tests.test_strategy1_h1_runtime_guard",
-    "tests.test_strategy1_history_preservation",
-    "tests.test_strategy1_restoration"
+    "tests.test_startup_decisions"
   ],
-  "tests_run": 140,
+  "tests_run": 143,
   "failures": [],
   "errors": [],
   "skipped": [],

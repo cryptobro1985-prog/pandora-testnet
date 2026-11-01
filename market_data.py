@@ -28,7 +28,7 @@ class RollingMarketData:
         return {'since':epoch,'seen':set(),'seen_queue':deque(),'latest_trade':None,'first_trade':None,'levels':deque(maxlen=2),'trades':deque(),'overflow_until':None}
 
     def mark_connected(self,epoch=None,symbols=None,owner=None):
-        epoch=time.time() if epoch is None else float(epoch);name='legacy' if owner is None else str(owner)
+        epoch=time.time() if epoch is None else float(epoch);name='default' if owner is None else str(owner)
         with self._lock:
             selected=set(str(s) for s in (symbols or ()))
             if owner is None:self._owners.clear();self._owner_heartbeats.clear()
@@ -45,7 +45,7 @@ class RollingMarketData:
             self._symbols={s:state for s,state in self._symbols.items() if s in wanted}
 
     def set_subscriptions(self,symbols,epoch=None,owner=None):
-        epoch=time.time() if epoch is None else float(epoch);name='legacy' if owner is None else str(owner)
+        epoch=time.time() if epoch is None else float(epoch);name='default' if owner is None else str(owner)
         with self._lock:
             self._owners[name]=set(str(s) for s in symbols)
             wanted=set().union(*self._owners.values())

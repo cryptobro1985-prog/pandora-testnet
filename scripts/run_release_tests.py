@@ -26,7 +26,7 @@ def main():
     os.chdir(ROOT)
     suite=unittest.defaultTestLoader.loadTestsFromNames(MODULES)
     result=unittest.TextTestRunner(verbosity=2).run(suite)
-    report={'suite':'active_strategy1_release','modules':list(MODULES),'tests_run':result.testsRun,
+    report={'suite':'active_pandora_release','modules':list(MODULES),'tests_run':result.testsRun,
             'failures':[str(case) for case,_ in result.failures],
             'errors':[str(case) for case,_ in result.errors],
             'skipped':[{'test':str(case),'reason':reason} for case,reason in result.skipped],

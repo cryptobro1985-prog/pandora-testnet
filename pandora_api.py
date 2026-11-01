@@ -14,8 +14,8 @@ def openapi(base_url):
     paths={}
     for path,summary in (
         ('/api/pandora','Current PAPER account, scanner, locals, positions, risk and source timestamps'),
-        ('/api/strategy1/history','Immutable closed-trade history with net PnL in USDT and percent'),
-        ('/api/strategy1/events','Decision and rotation journal with market context'),
+        ('/api/pandora/history','Immutable closed-trade history with net PnL in USDT and percent'),
+        ('/api/pandora/events','Decision and rotation journal with market context'),
         ('/health','Process health; does not imply fresh market readiness'),
         ('/health/risk','Fresh data and execution readiness; 503 when blocked'),
     ):

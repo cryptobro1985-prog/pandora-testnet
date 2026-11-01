@@ -1,6 +1,6 @@
-"""Bybit V5 public linear WebSocket for Strategy 1 PAPER market data.
+"""Bybit V5 public linear WebSocket for Pandora Win PAPER market data.
 
-# Strategy 1 live transport: stale-tape recovery/reconnect is intentionally fail-closed.
+# Pandora Win live transport: stale-tape recovery/reconnect is intentionally fail-closed.
 
 One venue for executed flow, marks and closed H1 candles. Public only: no
 authentication and no order placement. Fails closed on stale trade tape.
@@ -12,7 +12,7 @@ import websocket
 import urllib.parse
 import urllib.request
 
-from exchange_trade_adapter import normalize_bybit_public_trade, validate_latency, to_legacy_observation
+from exchange_trade_adapter import normalize_bybit_public_trade, validate_latency, to_observation
 
 DEFAULT_URL = "wss://stream.bybit.com/v5/public/linear"
 
@@ -138,7 +138,7 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                             if not ok:
                                 stale_trades += 1
                                 continue
-                            batch.append(to_legacy_observation(trade))
+                            batch.append(to_observation(trade))
                             sym = str(getattr(trade, "symbol", "") or row.get("s") or "")
                             if sym.endswith("USDT"): sym = sym[:-4]
                             exch = trade.exchange_epoch_ms / 1000.0
@@ -208,14 +208,14 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
 
                 epoch = time.time()
                 # The socket being alive is not proof that Bybit accepted our trade topics.
-                # Fail fast on a missing subscription ACK instead of leaving Strategy 1
+                # Fail fast on a missing subscription ACK instead of leaving Pandora Win
                 # indefinitely in READY_FOR_EXECUTED_FLOW with an apparently live socket.
                 if subscribe_trades and epoch >= subscription_ack_deadline and not trade_topics_confirmed:
                     raise RuntimeError("bybit_trade_subscription_ack_timeout")
                 # A live heartbeat is not enough: Bybit can leave a shard draining an
                 # old/replayed publicTrade backlog. Quiet symbols are fine, but repeated stale
                 # trade rows while no execution has been accepted means the tape is unusable.
-                # Recover the recent tail best-effort, then recycle only this shard so Strategy 1
+                # Recover the recent tail best-effort, then recycle only this shard so Pandora Win
                 # can rebuild fresh executed-flow without resetting the rest of the runtime.
                 if subscribe_trades and epoch - last_trade_receive > 30 and stale_trades >= 10:
                     raise RuntimeError("bybit_trade_tape_stale_backlog")

@@ -6,7 +6,7 @@ from market_data import RollingMarketData
 from pandora_flow import summarize
 from pandora_locals import live_locals, execution_anchor
 from pandora_scanner import LiveScanner
-from tests.test_strategy1_restoration import bars, BASE, H
+from tests.test_pandora_restoration import bars, BASE, H
 
 
 class SignalEvidenceTests(unittest.TestCase):

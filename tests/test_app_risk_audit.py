@@ -36,12 +36,12 @@ class ApplicationRiskAuditTests(unittest.TestCase):
         for binding in self.patches:binding.start()
         with self.connect() as db:
             for query in app.SCHEMA:db.execute(query)
-            db.execute('insert into local_v12_account_state values(1,500,0,%s,%s)',(app.now(),app.now()))
+            db.execute('insert into pandora_win_account_state values(1,500,0,%s,%s)',(app.now(),app.now()))
         self.store.migrate()
         self.assertTrue(self.store.claim())
         app.S.update(engine_active=True,orders_enabled=False,mode='PAPER_ONLY',
-            local_experiment_equity=500.,local_experiment_realized_pnl=0.,local_experiment_trades=0,
-            local_v12_positions={},local_experiment_watch={},local_h1_direction={},_local4_analysis={},
+            pandora_equity=500.,pandora_realized_pnl=0.,pandora_trades=0,
+            pandora_win_positions={},pandora_watch={},pandora_win_h1_direction={},_pandora_analysis={},
             _prices={},_price_received_epoch={},risk_circuit={},margin_valuation={})
 
     def tearDown(self):
@@ -57,10 +57,10 @@ class ApplicationRiskAuditTests(unittest.TestCase):
             margin=plan['margin'],leverage=plan['leverage'],opened=app.now(),t=time.time(),
             signal_candle_time=1,features={'risk_plan':plan})
         with self.connect() as db:
-            db.execute('insert into local_v12_positions values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)',
+            db.execute('insert into pandora_win_positions values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)',
                 ('BTC',1,100.,position['notional'],position['margin'],position['leverage'],position['opened'],
                  position['t'],1,json.dumps(position['features'])))
-        app.S['local_v12_positions']={'BTC':position}
+        app.S['pandora_win_positions']={'BTC':position}
         app.S['_prices']={'BTC':mark};app.S['_price_received_epoch']={'BTC':time.time()}
         return position
 
@@ -71,7 +71,7 @@ class ApplicationRiskAuditTests(unittest.TestCase):
         self.assertFalse(status['allowed'])
         self.assertEqual(status['reason'],'PORTFOLIO_MARKS_STALE')
         self.assertEqual(status['free_margin'],0)
-        self.assertEqual(app.S['local_experiment_equity'],500)
+        self.assertEqual(app.S['pandora_equity'],500)
         self.assertEqual(app.S['margin_valuation']['missing_marks'],['BTC'])
 
     def test_stale_checkpoint_and_flow_do_not_disable_fresh_mark_stop_or_hide_loss(self):
@@ -79,50 +79,50 @@ class ApplicationRiskAuditTests(unittest.TestCase):
         app.S['last_checkpoint']=(datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(minutes=1)).isoformat()
         self.assertIsNone(app.current_entry_price('BTC'))
         self.assertEqual(app.fresh_mark_price('BTC'),50)
-        app.local_experiment_mark_positions({'BTC':50.})
-        self.assertNotIn('BTC',app.S['local_v12_positions'])
+        app.pandora_mark_positions({'BTC':50.})
+        self.assertNotIn('BTC',app.S['pandora_win_positions'])
         expected=paper_pnl(position['notional'],100,50,1,app.FEE)
         self.assertLess(expected,0)
         with self.connect() as db:
-            history=db.execute('select * from local_v12_trade_history').fetchone()
-            equity=db.execute('select equity from local_v12_account_state where id=1').fetchone()['equity']
+            history=db.execute('select * from pandora_win_trade_history').fetchone()
+            equity=db.execute('select equity from pandora_win_account_state where id=1').fetchone()['equity']
         self.assertAlmostEqual(history['pnl'],expected)
         self.assertEqual(history['exit'],50)
         self.assertEqual(history['reason'],'modeled_maintenance_breach')
         self.assertAlmostEqual(equity,500+expected)
-        self.assertEqual(app.local_experiment_stats()['win_rate'],0)
+        self.assertEqual(app.pandora_stats()['win_rate'],0)
 
     def test_stale_flow_does_not_turn_fixed_stop_or_mfe_giveback_into_an_exit(self):
         self.seed_position(mark=98.)
         app.S['last_checkpoint']=(datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(minutes=1)).isoformat()
-        app.local_experiment_mark_positions({'BTC':98.})
-        self.assertIn('BTC',app.S['local_v12_positions'])
-        # Neither a configured legacy stop nor giving back a large fraction of
+        app.pandora_mark_positions({'BTC':98.})
+        self.assertIn('BTC',app.S['pandora_win_positions'])
+        # Neither a configured default stop nor giving back a large fraction of
         # observed profit is an active strategy exit without flow/local transfer.
         for mark in (110.,105.):
             app.S['_prices']['BTC']=mark;app.S['_price_received_epoch']['BTC']=time.time()
-            app.local_experiment_mark_positions({'BTC':mark})
-            self.assertIn('BTC',app.S['local_v12_positions'])
+            app.pandora_mark_positions({'BTC':mark})
+            self.assertIn('BTC',app.S['pandora_win_positions'])
         with self.connect() as db:
-            self.assertEqual(db.execute('select count(*) n from local_v12_trade_history').fetchone()['n'],0)
+            self.assertEqual(db.execute('select count(*) n from pandora_win_trade_history').fetchone()['n'],0)
 
     def test_historical_halt_row_and_stale_memory_do_not_pause_funded_trading(self):
         day=app.risk_day() if hasattr(app,'risk_day') else datetime.date.today().isoformat()
         with self.connect() as db:
-            db.execute("create table if not exists pandora_risk_sessions(day text primary key,opening_equity double precision not null,peak_equity double precision not null,halted boolean not null default false,reason text,updated_at timestamptz not null default clock_timestamp())")
-            db.execute("insert into pandora_risk_sessions(day,opening_equity,peak_equity,halted,reason) values(%s,500,1000,true,'DAILY_LOSS_LIMIT')",(day,))
+            db.execute("create table if not exists unrelated_runtime_state(day text primary key,opening_equity double precision not null,peak_equity double precision not null,halted boolean not null default false,reason text,updated_at timestamptz not null default clock_timestamp())")
+            db.execute("insert into unrelated_runtime_state(day,opening_equity,peak_equity,halted,reason) values(%s,500,1000,true,'DAILY_LOSS_LIMIT')",(day,))
         app.S['risk_circuit']={'day':day,'allowed':False,'reason':'DAILY_LOSS_LIMIT'}
         status=app.risk_snapshot()
         self.assertTrue(status['allowed'])
         self.assertIsNone(status.get('reason'))
         with self.connect() as db:
-            historical=db.execute('select halted,reason from pandora_risk_sessions where day=%s',(day,)).fetchone()
+            historical=db.execute('select halted,reason from unrelated_runtime_state where day=%s',(day,)).fetchone()
         self.assertTrue(historical['halted'])
         self.assertEqual(historical['reason'],'DAILY_LOSS_LIMIT')
 
     def test_loss_close_does_not_latch_a_pause_but_cash_and_marks_still_gate_new_risk(self):
         position=self.seed_position(mark=98.)
-        result=app.local_experiment_close('BTC',98,'confirmed_counter_move_exit')
+        result=app.pandora_close('BTC',98,'confirmed_counter_move_exit')
         self.assertLess(result['pnl'],0)
         app.restore_state()
         status=app.risk_snapshot()
@@ -135,15 +135,15 @@ class ApplicationRiskAuditTests(unittest.TestCase):
         self.assertGreaterEqual(next_plan.leverage,10)
         self.assertLessEqual(next_plan.margin,status['free_margin'])
         with self.connect() as db:
-            row=db.execute('select count(*) n,min(pnl) loss from local_v12_trade_history').fetchone()
+            row=db.execute('select count(*) n,min(pnl) loss from pandora_win_trade_history').fetchone()
         self.assertEqual(row['n'],1)
         self.assertLess(row['loss'],0)
         self.seed_position()
         app.S['_price_received_epoch']['BTC']=time.time()-60
         self.assertFalse(app.risk_snapshot()['allowed'])
         with self.connect() as db:
-            db.execute('delete from local_v12_positions')
-            db.execute('update local_v12_account_state set equity=0 where id=1')
+            db.execute('delete from pandora_win_positions')
+            db.execute('update pandora_win_account_state set equity=0 where id=1')
         app.restore_state()
         self.assertFalse(app.risk_snapshot()['allowed'])
 
@@ -151,13 +151,13 @@ class ApplicationRiskAuditTests(unittest.TestCase):
         position=self.seed_position(mark=98.)
         with patch.object(app,'WIN',SimpleNamespace(semantic_close=lambda *args:(_ for _ in ()).throw(RuntimeError('audit failed')))):
             with self.assertRaisesRegex(RuntimeError,'audit failed'):
-                app.local_experiment_close('BTC',98,'risk_stop')
+                app.pandora_close('BTC',98,'risk_stop')
         with self.connect() as db:
-            self.assertEqual(db.execute('select count(*) n from local_v12_positions').fetchone()['n'],1)
-            self.assertEqual(db.execute('select count(*) n from local_v12_trade_history').fetchone()['n'],0)
-            self.assertEqual(db.execute('select equity from local_v12_account_state where id=1').fetchone()['equity'],500)
-        self.assertEqual(app.S['local_v12_positions']['BTC']['notional'],position['notional'])
-        self.assertEqual(app.S['local_experiment_equity'],500)
+            self.assertEqual(db.execute('select count(*) n from pandora_win_positions').fetchone()['n'],1)
+            self.assertEqual(db.execute('select count(*) n from pandora_win_trade_history').fetchone()['n'],0)
+            self.assertEqual(db.execute('select equity from pandora_win_account_state where id=1').fetchone()['equity'],500)
+        self.assertEqual(app.S['pandora_win_positions']['BTC']['notional'],position['notional'])
+        self.assertEqual(app.S['pandora_equity'],500)
 
     def test_execution_failure_prevents_risk_ready_despite_fresh_market_gates(self):
         stamp=time.time()
@@ -166,7 +166,7 @@ class ApplicationRiskAuditTests(unittest.TestCase):
                      _prices={'BTC':100},_price_received_epoch={'BTC':stamp},
                      _bybit_instruments={'BTC':{'observed_at':stamp}})
         flow=SimpleNamespace(flow_context=lambda *args:{'trade_data_fresh':True,'evidence_ready':True})
-        with patch.object(app,'MARKET_OBS',flow),patch.object(app,'strategy1_runtime_h1_verified',return_value=True):
+        with patch.object(app,'MARKET_OBS',flow),patch.object(app,'pandora_runtime_h1_verified',return_value=True):
             failed=app.health_state()
             self.assertFalse(failed['risk_ready'])
             self.assertFalse(failed['execution_ok'])
@@ -183,13 +183,13 @@ class ApplicationRiskAuditTests(unittest.TestCase):
                     windows={},sustained_control_side=1,fast_control_side=1)
         stopped={**buying,'sustained_control_side':0,'fast_control_side':-1}
         app.S.update(bybit_discovery={'selected_symbols':['BTC']},
-                     _local4_analysis={'BTC':analysis},local_h1_direction={'BTC':analysis},
+                     _pandora_analysis={'BTC':analysis},pandora_win_h1_direction={'BTC':analysis},
                      _bybit_instruments={'BTC':dict(max_leverage=50,observed_at=stamp)})
         tape=SimpleNamespace(flow_context=unittest.mock.Mock(side_effect=[buying,stopped]))
         with patch.object(app,'MARKET_OBS',tape),patch.object(app,'current_entry_price',return_value=100), \
-             patch.object(app,'strategy1_runtime_h1_verified',return_value=True):
-            self.assertFalse(app.local_experiment_open('BTC',1,analysis))
-        self.assertEqual(app.S['strategy1_executor_rejections']['BTC']['reason'],
+             patch.object(app,'pandora_runtime_h1_verified',return_value=True):
+            self.assertFalse(app.pandora_open('BTC',1,analysis))
+        self.assertEqual(app.S['pandora_executor_rejections']['BTC']['reason'],
                          'EXECUTED_CONTROL_CHANGED_DURING_ALLOCATION')
         with self.connect() as db:
-            self.assertEqual(db.execute('select count(*) n from local_v12_positions').fetchone()['n'],0)
+            self.assertEqual(db.execute('select count(*) n from pandora_win_positions').fetchone()['n'],0)

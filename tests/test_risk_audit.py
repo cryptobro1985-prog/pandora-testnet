@@ -130,7 +130,7 @@ class MaintenanceModelTests(unittest.TestCase):
         self.assertLess(actual,reference)
         self.assertLess(actual,0)
 
-    def test_legacy_exposure_has_maintenance_check_without_rewriting_size_or_stopping_at_reference(self):
+    def test_existing_exposure_has_maintenance_check_without_rewriting_size_or_stopping_at_reference(self):
         p=dict(entry=100,notional=2500,margin=100,leverage=25,side=1,features={})
         self.assertIsNone(position_guard(p,98.9))
         self.assertEqual(position_guard(p,90),'modeled_maintenance_breach')
@@ -165,7 +165,7 @@ class AggregateAddTests(unittest.TestCase):
                         portfolio_risk=position_risk(p),policy=RiskPolicy(position_risk_fraction=.05))
         if capped.allowed:self.assertLessEqual(capped.estimated_loss,capped.risk_budget+1e-8)
 
-    def test_no_add_to_losing_position_or_legacy_without_geometry_reference(self):
+    def test_no_add_to_losing_position_or_existing_without_geometry_reference(self):
         p=self.base()
         self.assertFalse(plan_add(p,99,50,500,400,100,{},{}).allowed)
         p['features']={}
