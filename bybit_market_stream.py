@@ -46,7 +46,8 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                      url=DEFAULT_URL, on_mids=None, on_candles=None,
                      candle_symbols=(), on_regime_candles=None,
                      regime_symbols=(), subscribe_trades=True,
-                     symbol_filter=None, candle_filter=None, on_trade_mids=None, worker_name="primary"):
+                     symbol_filter=None, candle_filter=None, on_trade_mids=None, worker_name="primary",
+                     on_accepted_trades=None, on_capture_event=None):
     """Persistent Bybit linear stream with dynamic subscriptions and stale watchdog."""
     backoff = 1.0
     while not stop.is_set():
@@ -103,6 +104,8 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
 
             now = time.time()
             observations.mark_connected(now, selected, owner=worker_name)
+            if on_capture_event is not None and subscribe_trades:
+                on_capture_event("socket_connected",worker_name,None,{"subscriptions_requested":sorted(selected)})
             last_received = now
             last_ping = 0.0
             last_report = 0.0
@@ -137,6 +140,7 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                     topic = str(message.get("topic") or "")
                     if topic.startswith("publicTrade."):
                         batch = []
+                        raw_sequences = {}
                         for row in message.get("data") or []:
                             trade = normalize_bybit_public_trade(row)
                             if trade is not None and (trade.symbol not in selected or topic != "publicTrade."+_pair(trade.symbol)):
@@ -146,6 +150,9 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                                 stale_trades += 1
                                 continue
                             batch.append(to_observation(trade))
+                            try:
+                                raw_sequences[(trade.symbol, "bybit:"+trade.trade_id,trade.exchange_epoch_ms)]=row.get("seq")
+                            except (KeyError,TypeError,ValueError):pass
                             sym = str(getattr(trade, "symbol", "") or row.get("s") or "")
                             if sym.endswith("USDT"): sym = sym[:-4]
                             exch = trade.exchange_epoch_ms / 1000.0
@@ -159,6 +166,10 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                                     prev = sequence_by_symbol.get(sym)
                                     if prev is not None and seq < prev:
                                         sequence_gaps += 1
+                                        if on_capture_event is not None:
+                                            on_capture_event("sequence_regression",worker_name,sym,
+                                                {"previous_sequence":prev,"received_sequence":seq,
+                                                 "exchange_epoch_ms":trade.exchange_epoch_ms})
                                     sequence_by_symbol[sym] = max(seq, prev or seq)
                                 except (TypeError, ValueError):
                                     pass
@@ -167,6 +178,13 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                             accepted = observations.ingest_trades(batch, last_received,owner=worker_name,accepted_rows=accepted_rows)
                             accepted_trades += accepted
                             if accepted:last_trade_receive = last_received
+                            if accepted_rows and on_accepted_trades is not None:
+                                try:on_accepted_trades(accepted_rows,last_received,worker_name,raw_sequences)
+                                except Exception as rec_exc:
+                                    if on_capture_event is not None:
+                                        on_capture_event("recorder_ingest_exception",worker_name,None,
+                                            {"error":type(rec_exc).__name__+":"+str(rec_exc)[:150],
+                                             "unrecorded_accepted":len(accepted_rows)})
                             packet_lag=last_received-max(float(row['time'])/1000 for row in batch)
                             if packet_lag>5:
                                 if backlog_since is None:backlog_since=last_received
@@ -307,6 +325,11 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                     last_report = epoch
         except Exception as exc:
             observations.mark_disconnected(owner=worker_name)
+            if on_capture_event is not None and subscribe_trades:
+                try:on_capture_event("socket_disconnected",worker_name,None,
+                    {"error":type(exc).__name__+":"+str(exc)[:160],
+                     "reconnect_backoff_seconds":backoff})
+                except Exception:pass
             report({"ok": False, "mode": "bybit_v5_public_linear", "worker": worker_name,
                     "error": type(exc).__name__ + ":" + str(exc)[:160],
                     "reconnect_backoff_seconds": backoff})
