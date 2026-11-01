@@ -26,7 +26,7 @@ from local_order_flow import POLICY as PANDORA_FLOW_POLICY,entry_candidate as pa
 
 PANDORA_STARTING_EQUITY=400.0 if v2_enabled() else 500.0
 PANDORA_MARGIN_FRACTION=.20
-PANDORA_WIN_NAME="Pandora Flow V2" if v2_enabled() else "Pandora Win"
+PANDORA_WIN_NAME="Pandora Pump V3" if v2_enabled() and os.getenv("PANDORA_PUMP_V3","0")=="1" else "Pandora Flow V2" if v2_enabled() else "Pandora Win"
 DISCOVERY_MAX_SELECTED=5
 DISCOVERY_SCAN_SECONDS=1
 FEE=.00045
