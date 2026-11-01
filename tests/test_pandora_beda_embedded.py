@@ -16,6 +16,10 @@ class BedaEmbeddedTests(unittest.TestCase):
    self.assertTrue(target.is_file(),name)
    compile(target.read_text(),str(target),"exec")
   self.assertGreater((VENDOR/"pandora_flow_strategy.py").stat().st_size,30000)
+ def test_render_docker_image_includes_independent_beda_source(self):
+  docker=(ROOT/"Dockerfile").read_text()
+  self.assertIn("COPY pandora_beda/ ./pandora_beda/",docker)
+  self.assertTrue((VENDOR/"scripts/reset_paper_experiment.py").is_file())
  def test_isolated_schema_and_unchanged_paper_capital(self):
   spec=importlib.util.spec_from_file_location("beda_config_only",VENDOR/"pandora_experiment.py")
   module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
