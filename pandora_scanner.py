@@ -11,6 +11,10 @@ import time
 import websocket
 
 
+# Quote-denominated daily volume floor for Bybit linear USDT perpetuals.
+MIN_DAILY_TURNOVER_USDT = 1_000_000.0
+
+
 class LiveScanner:
     def __init__(self, top=5, candidate_limit=30, freshness=15):
         if not 1<=int(top)<=5 or not int(top)<=int(candidate_limit)<=128 or not 0<float(freshness)<=60:raise ValueError('invalid scanner bounds')
@@ -96,6 +100,8 @@ class LiveScanner:
             if symbol not in instruments or not 0<=epoch-row.get('price_received',0)<=self.freshness or symbol not in histories:continue
             samples=histories[symbol]
             last=float(row['lastPrice']);turn=float(row['turnover24h'])
+            if turn < MIN_DAILY_TURNOVER_USDT:
+                continue  # Exclude illiquid contracts regardless of pump percentage.
             change=float(row.get('price24hPcnt') or 0)
             def movement(seconds):
                 old=next((x for x in reversed(samples) if epoch-x[0]>=seconds),samples[0])
