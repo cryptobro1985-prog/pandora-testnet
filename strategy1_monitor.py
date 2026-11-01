@@ -56,11 +56,22 @@ def _history(primary):
           _n(f.get("mfe_roe_pct"),2),_n(f.get("mae_roe_pct"),2)])
     return rows
 
+def _has_local(a):
+    return isinstance(a,dict) and a.get("pivot_type") in ("LOCAL_HIGH","LOCAL_LOW") and a.get("pivot_price") not in (None,"") and a.get("entry_side") not in (None,"")
+
+def _pick_local(sym,source,details=None):
+    details=details or {}
+    live=(details.get(sym) or {}).get("h1_local") or {}
+    durable=source.get(sym) or {}
+    # Runtime details can temporarily contain a non-confirmed/partial H1 object
+    # while the durable confirmed pivot is still valid for monitor display.
+    return live if _has_local(live) else durable if _has_local(durable) else live or durable or {}
+
 def _pivot_rows(symbols,source,details=None):
     rows=[];details=details or {}
     for sym in symbols:
-        a=(details.get(sym) or {}).get("h1_local") or source.get(sym) or {}
-        rows.append([sym,a.get("pivot_type"),_n(a.get("pivot_price")),_side(a.get("entry_side")),
+        a=_pick_local(sym,source,details)
+        rows.append([sym,a.get("pivot_type") or "SCANNING",_n(a.get("pivot_price")),_side(a.get("entry_side")) if _has_local(a) else "WAIT",
           a.get("pending_pivot_type") or "—",a.get("policy") or a.get("pivot_confirmation_policy") or "—"])
     return rows
 
@@ -83,7 +94,9 @@ def render(data):
         x=selected.get(sym) or {}
         ch=x.get("change_24h_pct")
         move="PUMP" if isinstance(ch,(int,float)) and ch>0 else "DUMP" if isinstance(ch,(int,float)) and ch<0 else "FLAT"
-        loc=(cur_details.get(sym) or {}).get("h1_local") or cur_h1.get(sym) or legacy_h1.get(sym) or {}
+        loc=_pick_local(sym,cur_h1,cur_details)
+        if not _has_local(loc):
+            loc=legacy_h1.get(sym) or loc
         disc_rows.append([sym,move,_n(ch,2),_n(x.get("range_24h_pct"),2),_m(x.get("turnover_24h")),x.get("last"),loc.get("pivot_type") or "SCANNING",_side(loc.get("entry_side")) if loc else "WAIT"])
 
     def panel(title,subtitle,primary,pivots):
