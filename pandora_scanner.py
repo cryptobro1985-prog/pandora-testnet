@@ -79,7 +79,18 @@ class LiveScanner:
             prior=list(saved.get("selected_symbols") or [])
             refresh=float(saved.get("next_refresh_at") or 0)
             if refresh and epoch<refresh and saved.get("experiment")==ACTIVE_FLOW_EXPERIMENT:
-                saved.update(at=epoch,events=[],retained_open_positions=sorted(set(held)-set(prior)))
+                # Freeze the hourly MEMBERSHIP, not the freshness flag. A
+                # restart/disconnect can mark the snapshot selection_frozen;
+                # continuing to reuse that flag blocks all PAPER entries for
+                # the rest of the hour even after live tickers recover.
+                ready=any(symbol in instruments and symbol in markets and
+                    0<=epoch-float(markets[symbol].get("price_received") or 0)<=self.freshness
+                    for symbol in prior)
+                saved.update(at=epoch,events=[],
+                    retained_open_positions=sorted(set(held)-set(prior)),
+                    selection_frozen=not ready,observations_ready=bool(ready))
+                if ready:saved.pop("reason",None)
+                else:saved["reason"]="fresh_selected_ticker_required"
                 self.last_snapshot=copy.deepcopy(saved)
                 return saved
         fresh=[(s,r) for s,r in markets.items() if s in instruments and
