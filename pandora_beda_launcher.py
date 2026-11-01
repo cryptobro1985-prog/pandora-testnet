@@ -57,7 +57,7 @@ class BedaBridge:
       if result.returncode:
        # Only whitelisted error categories are emitted; database URIs,
        # role names and passwords are never logged.
-       problem=re.search(r'PAPER initialization failed \\(([A-Za-z]+)(?:; category=([A-Z_]+))?\\)',result.stderr)
+       problem=re.search(r'PAPER initialization failed \(([A-Za-z]+)(?:; category=([A-Z_]+))?\)',result.stderr)
        reason=(problem.group(1)+":"+str(problem.group(2) or "UNCLASSIFIED")) if problem else (
           "SCRIPT_EXIT_"+str(result.returncode))
        self._publish(online=False,status="INIT_FAILED",error=reason)
