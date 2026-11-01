@@ -1375,11 +1375,21 @@ def build_dashboard_snapshot(history=None):
    token['action_reason']=token['decision']['message']
    token['last_action']=token['decision']['action']
  primary['tokens']=token_rows
+ primary['flow_v2']=v2_enabled()
+ primary['strategy_name']=PANDORA_WIN_NAME
+ primary['experiment_id']=V2_EXPERIMENT if v2_enabled() else PANDORA_WIN_NAME
  observed=0
  if WIN is not None:
   with WIN.scanner.lock:observed=len(WIN.scanner.markets)
  primary['startup']=startup_snapshot(state,token_rows,observed_markets=observed,
   history=HISTORY_BOOTSTRAP.snapshot() if HISTORY_BOOTSTRAP is not None else {})
+ if v2_enabled():
+  scanner=state.get('bybit_discovery') or {}
+  primary['startup']={'stage':'RUNNING' if state.get('engine_active') else 'WAIT_LEASE',
+   'status':'RUNNING' if state.get('engine_active') else 'WAITING',
+   'reason':'Hourly TOP-5 with $1m+ 24h turnover; executed BUY/SELL control, no H1/M15 trade gates.',
+   'selected_symbols':scanner.get('selected_symbols') or [],
+   'next_refresh_at':scanner.get('next_refresh_at')}
  totals=[row for row in history.get('token_totals') or [] if row.get('account')=='pandora_win']
  closed_count=sum(int(row.get('closed_trades') or 0) for row in totals)
  wins=sum(int(row.get('wins') or 0) for row in totals)
