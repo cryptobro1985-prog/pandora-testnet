@@ -1023,7 +1023,7 @@ def strategy1_live_state_loop():
 
 def bybit_local_history(symbol,interval="1h",limit=120):
  """Read-only Bybit V5 kline bootstrap converted to the legacy candle shape."""
- bybit_interval="60" if interval=="1h" else None
+ bybit_interval={"1h":"60","15m":"15"}.get(interval)
  if not bybit_interval:raise ValueError("unsupported_bybit_interval:"+str(interval))
  url="https://api.bybit.com/v5/market/kline?"+urllib.parse.urlencode({
   "category":"linear","symbol":str(symbol)+"USDT","interval":bybit_interval,"limit":int(limit)})
@@ -1034,7 +1034,7 @@ def bybit_local_history(symbol,interval="1h",limit=120):
  rows=[]
  for x in reversed(raw):
   try:
-   start=int(x[0]);rows.append({"s":str(symbol),"i":interval,"t":start,"T":start+int({"1h":3600000}[interval]),
+   start=int(x[0]);rows.append({"s":str(symbol),"i":interval,"t":start,"T":start+int({"1h":3600000,"15m":900000}[interval]),
     "o":str(x[1]),"h":str(x[2]),"l":str(x[3]),"c":str(x[4]),"v":str(x[5]),"n":0,"venue":"bybit"})
   except (IndexError,TypeError,ValueError):continue
  return rows
@@ -1113,9 +1113,11 @@ def market_history_bootstrap():
    if SHUTDOWN.is_set():return
    try:
     rows=bybit_local_history(symbol)
+    m15_rows=bybit_local_history(symbol,"15m",48)
     accept_local_candles(rows,history=True)
+    accept_local_candles(m15_rows,history=True)
     checkpoint_local_candles()
-    with LOCK:S['sources']['H1History:'+symbol]={'ok':True,'last_check':now(),'rows':len(rows)}
+    with LOCK:S['sources']['H1History:'+symbol]={'ok':True,'last_check':now(),'rows':len(rows),'m15_rows':len(m15_rows)}
    except Exception as error:
     with LOCK:S['sources']['H1History:'+symbol]={'ok':False,'last_check':now(),'error':type(error).__name__+':'+str(error)[:160]}
   SHUTDOWN.wait(30)
