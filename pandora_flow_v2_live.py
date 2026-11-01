@@ -130,8 +130,29 @@ def exit_reason(position,mark,flow):
  symbol=position['symbol']
  features=position.setdefault('features',{})
  with _PUMP_LOCK:
-  if symbol not in _PUMP_STATES:
-   seed=features.get('v3_structure_snapshot') or (features.get('candidate_selection') or {}).get('structure')
+  # A restarted worker may have observed a few weak/noisy ticks before it
+  # loads the live position, leaving its per-symbol phase at OBSERVING.
+  # Never discard an established pump merely because the process restarted:
+  # combine the durable position entry structure with its latest snapshot,
+  # without overriding an actual CORRECTION_CONFIRMED.
+  entry_seed=(features.get('candidate_selection') or {}).get('structure') or {}
+  snapshot=features.get('v3_structure_snapshot') or {}
+  cached=_PUMP_STATES.get(symbol) or {}
+  if (isinstance(entry_seed,dict) and entry_seed.get('pump_seen')
+      and isinstance(snapshot,dict) and snapshot.get('phase')=='OBSERVING'
+      and cached.get('phase') not in ('PUMP','CORRECTION_CONFIRMED')):
+   restored=copy.deepcopy(entry_seed)
+   restored['phase']='PUMP'
+   restored['pump_seen']=True
+   restored['peak_price']=max(float(entry_seed.get('peak_price') or 0),
+                             float(snapshot.get('peak_price') or 0))
+   restored['last_event_epoch']=max(float(entry_seed.get('last_event_epoch') or 0),
+                                    float(snapshot.get('last_event_epoch') or 0),
+                                    float(cached.get('last_event_epoch') or 0))
+   restored['observed_price']=snapshot.get('observed_price') or mark
+   _PUMP_STATES[symbol]=restored
+  elif symbol not in _PUMP_STATES:
+   seed=snapshot or entry_seed
    if isinstance(seed,dict) and seed:_PUMP_STATES[symbol]=copy.deepcopy(seed)
  state=_pump_observe(symbol,flow,mark)
  features['v3_structure_snapshot']=copy.deepcopy(state)
