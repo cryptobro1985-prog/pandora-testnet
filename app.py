@@ -1,4 +1,4 @@
-"""PANDORA PAPER: H1 direction and event-driven executed-flow Caterpillar."""
+"""PANDORA PAPER: Pandora Win — H1 locals + rotating Bybit pump scanner + executed-flow control."""
 import copy,datetime,functools,hashlib,html,json,math,os,re,signal,threading,time
 import urllib.request,urllib.parse
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
@@ -19,8 +19,9 @@ LOCAL_EXPERIMENT_SYMBOLS=('INIT','NEAR','BTC','SOL','ETH','LIT','HYPE','ZEC','TA
 LOCAL_EXPERIMENT_STARTING_EQUITY=500.0
 LOCAL_EXPERIMENT_MARGIN_FRACTION=.20
 LOCAL_EXPERIMENT_MAX_POSITIONS=None
-DISCOVERY_MAX_SELECTED=3
-DISCOVERY_SCAN_SECONDS=900
+PANDORA_WIN_NAME="Pandora Win"
+DISCOVERY_MAX_SELECTED=5
+DISCOVERY_SCAN_SECONDS=60
 S1_ONLY_MODE=True
 FEE=.00045
 LOCK=threading.RLock();ACCOUNT_LOCK=threading.RLock();SHUTDOWN=threading.Event();TRADE_WAKE=threading.Event()
@@ -249,40 +250,61 @@ def strategy1_confirmed_h1(a):
   a.get("pivot_type")==expected and math.isfinite(price) and price>0 and signal>0)
 
 def strategy1_trade_symbols():
+ # Pandora Win trades only the current five scanner leaders plus positions/watches
+ # already in flight. Other base symbols stay scanned for H1 diagnostics/A-B engines.
  with LOCK:
   analyses=copy.deepcopy(S.get("_local4_analysis",{}));durable=copy.deepcopy(S.get("local_h1_direction",{}))
- return tuple(sym for sym in strategy1_runtime_symbols()
+  hot=tuple((S.get("bybit_discovery") or {}).get("selected_symbols") or ())
+  held=tuple(S.get("local_v12_positions",{}));watched=tuple(S.get("local_experiment_watch",{}))
+ candidates=tuple(dict.fromkeys(hot+held+watched))
+ return tuple(sym for sym in candidates
   if strategy1_confirmed_h1(analyses.get(sym)) or strategy1_confirmed_h1(durable.get(sym)))
 
 def bybit_volatility_discovery_loop():
+ # Pandora Win: refresh the five strongest live PUMP candidates every minute.
+ # Ranking is market-relative, not a hard % gate: positive 24h direction, newest
+ # scan momentum, 24h range and turnover activity. Open positions remain tracked
+ # even after a token rotates out of the top five.
+ previous={}
  while not SHUTDOWN.is_set():
   try:
    req=urllib.request.Request("https://api.bybit.com/v5/market/tickers?category=linear",
-    headers={"User-Agent":"pandora-paper/1.0","Accept":"application/json"})
+    headers={"User-Agent":"pandora-win/1.0","Accept":"application/json"})
    with urllib.request.urlopen(req,timeout=12) as response:payload=json.load(response)
    if int(payload.get("retCode",-1))!=0:raise RuntimeError("bybit_tickers_failed")
    with LOCK:instruments=set((S.get("_bybit_instruments") or {}).keys())
-   rows=[]
+   rows=[];epoch=time.time()
    for x in (payload.get("result") or {}).get("list") or []:
     pair=str(x.get("symbol") or "")
     if not pair.endswith("USDT"):continue
     symbol=pair[:-4]
-    if symbol in LOCAL_EXPERIMENT_SYMBOLS:continue
     if instruments and symbol not in instruments:continue
     try:
      last=float(x.get("lastPrice") or 0);chg=float(x.get("price24hPcnt") or 0)*100.0
      high=float(x.get("highPrice24h") or 0);low=float(x.get("lowPrice24h") or 0);turn=float(x.get("turnover24h") or 0)
     except (TypeError,ValueError,OverflowError):continue
-    if not all(math.isfinite(v) for v in (last,chg,high,low,turn)) or last<=0 or low<=0 or turn<=0:continue
+    if not all(math.isfinite(v) for v in (last,chg,high,low,turn)) or last<=0 or low<=0 or turn<=0 or chg<=0:continue
     rng=(high/low-1.0)*100.0 if high>0 else 0.0
+    prev=previous.get(symbol) or {}
+    prev_last=float(prev.get("last") or 0);prev_turn=float(prev.get("turnover") or 0);prev_epoch=float(prev.get("epoch") or 0)
+    scan_ret=((last/prev_last)-1.0)*100.0 if prev_last>0 else 0.0
+    elapsed=max(1.0,epoch-prev_epoch) if prev_epoch>0 else 0.0
+    turn_velocity=max(0.0,turn-prev_turn)/(elapsed/60.0) if elapsed>0 and turn>=prev_turn else 0.0
+    # Relative score only chooses the five hottest pumps; it is not an entry gate.
+    score=(max(0.0,scan_ret)*8.0)+(chg*1.0)+(rng*.35)+(math.log10(max(turn_velocity,1.0))*.8)
     rows.append({"symbol":symbol,"pair":pair,"change_24h_pct":round(chg,3),
-      "range_24h_pct":round(rng,3),"turnover_24h":round(turn,2),"last":last,
-      "move":"PUMP" if chg>0 else "DUMP" if chg<0 else "FLAT"})
-   rows.sort(key=lambda r:(abs(r["change_24h_pct"]),r["turnover_24h"]),reverse=True)
+      "scan_return_pct":round(scan_ret,4),"range_24h_pct":round(rng,3),
+      "turnover_24h":round(turn,2),"turnover_per_minute":round(turn_velocity,2),
+      "last":last,"move":"PUMP","pandora_win_score":round(score,4)})
+    previous[symbol]={"last":last,"turnover":turn,"epoch":epoch}
+   rows.sort(key=lambda r:(r["pandora_win_score"],r["scan_return_pct"],r["turnover_per_minute"]),reverse=True)
    selected=rows[:DISCOVERY_MAX_SELECTED]
    selected_symbols=[r["symbol"] for r in selected]
-   snapshot={"at":now(),"basis":"Bybit linear USDT · strongest absolute 24h PUMP/DUMP movers · rotate every 15m",
+   with LOCK:held=list(S.get("local_v12_positions",{}))
+   snapshot={"at":now(),"strategy":PANDORA_WIN_NAME,
+    "basis":"Bybit linear USDT · top 5 positive pumps · 60s rotation · live scan momentum + volatility + turnover",
     "selected_symbols":selected_symbols,"selected":selected,"top_movers":rows[:20],
+    "retained_open_positions":[x for x in held if x not in selected_symbols],
     "selection_frozen":False,"scan_seconds":DISCOVERY_SCAN_SECONDS}
    with LOCK:S["bybit_discovery"]=snapshot
    journal("strategy1_discovery_scan",None,snapshot)
@@ -291,7 +313,8 @@ def bybit_volatility_discovery_loop():
    with LOCK:S["sources"]["BybitDiscovery"]={"ok":False,"last_check":now(),"error":type(exc).__name__+":"+str(exc)[:160]}
    delay=30
   else:
-   with LOCK:S["sources"]["BybitDiscovery"]={"ok":True,"last_check":now(),"selected":len(selected),"error":None}
+   with LOCK:S["sources"]["BybitDiscovery"]={"ok":True,"last_check":now(),"strategy":PANDORA_WIN_NAME,
+    "selected":len(selected),"error":None}
   SHUTDOWN.wait(delay)
 
 def bybit_instruments_loop():
@@ -617,7 +640,7 @@ def local_experiment_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution
  reentries=(int(watch.get("reentries") or 0)+1) if entry_kind=="REENTRY" and watch else 0
  origin_signal=int(analysis.get("signal_candle_time") or 0)
  claim_token=int((execution_context or {}).get("candle_time") or origin_signal)
- features={**analysis,"symbol":symbol,"strategy_name":"Caterpillar 1.0","experiment":"Caterpillar 1.0",
+ features={**analysis,"symbol":symbol,"strategy_name":PANDORA_WIN_NAME,"experiment":PANDORA_WIN_NAME,
   "policy":HYPE_SWING_POLICY,"caterpillar_policy":LOCAL4_FLOW_POLICY,"entry_kind":entry_kind,
   "candidate_selection":selection,
   "origin_h1_signal_candle":origin_signal,"swing_reentries":reentries,
@@ -650,7 +673,7 @@ def local_experiment_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution
    if not row:raise psycopg.Rollback()
    if entry_kind=="REENTRY":db.execute("delete from local_v12_watchlist where symbol=%s",(symbol,))
    db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'local_experiment_trade_opened',%s::jsonb)",
-    (now(),json.dumps({"strategy":"local_12token_h1_execution_context","symbol":symbol,"side":int(side),"entry_kind":entry_kind,
+    (now(),json.dumps({"strategy":PANDORA_WIN_NAME,"symbol":symbol,"side":int(side),"entry_kind":entry_kind,
       "entry":price,"reason":selection["reason"],"signal_candle_time":origin_signal,
       "margin":margin,"notional":notional,"target_notional":target_notional,
       "exposure_fill_ratio":exposure_fill_ratio,"leverage":leverage,"equity":equity,"free_margin_before":free},default=str)))
@@ -659,7 +682,7 @@ def local_experiment_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution
   S.setdefault("local_v12_positions",{})[symbol]=pos
   if entry_kind=="REENTRY":S.setdefault("local_experiment_watch",{}).pop(symbol,None)
  log_learning_decision("LOCAL12:%s:%s:%s:%s"%(symbol,entry_kind,claim_token,int(side)),
-   "local_12token_h1_execution_context",symbol,side,"OPEN" if entry_kind!="REENTRY" else "REENTRY",
+   PANDORA_WIN_NAME,symbol,side,"OPEN" if entry_kind!="REENTRY" else "REENTRY",
    "confirmed_local_entry",price,None,leverage,features,opened)
  return True
 
@@ -712,7 +735,7 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
       (symbol,watch["side"],watch["origin_signal_candle"],watch["exit_price"],watch["exit_at"],0.0,
        watch["reentries"],json.dumps(watch["context"],default=str)))
    db.execute("insert into audit_journal(recorded_at,event_id,kind,payload) values(%s,null,'local_experiment_trade_closed',%s::jsonb)",
-     (now(),json.dumps({"strategy":"local_12token_h1_execution_context","symbol":symbol,"side":pos["side"],"entry":pos["entry"],
+     (now(),json.dumps({"strategy":PANDORA_WIN_NAME,"symbol":symbol,"side":pos["side"],"entry":pos["entry"],
        "exit":price,"pnl":pnl,"reason":reason,"equity":float(acct["equity"]),"watch_armed":bool(watch),
        "leverage":pos["leverage"],"exposure_fill_ratio":features.get("exposure_fill_ratio")},default=str)))
  with LOCK:
@@ -722,7 +745,7 @@ def local_experiment_close(symbol,price,reason,analysis=None,watch_context=None)
   S["local_experiment_realized_pnl"]=float(acct["realized_pnl"])
   S["local_experiment_trades"]=int(S.get("local_experiment_trades",0) or 0)+1
  log_learning_decision("LOCAL12:CLOSE:%s:%s"%(symbol,pos.get("opened")),
-   "local_12token_h1_execution_context",symbol,pos["side"],"CLOSED",reason,pos["entry"],None,
+   PANDORA_WIN_NAME,symbol,pos["side"],"CLOSED",reason,pos["entry"],None,
    pos["leverage"],features,pos.get("opened"))
  return {"symbol":symbol,"pnl":pnl,"reason":reason,"equity":float(acct["equity"])}
 
@@ -819,8 +842,11 @@ def _local_entry_resumption_context(symbol,side,analysis,flow):
 
 @account_mutation
 def local4_fast_entries(prices):
- # H1 sets direction. Execution happens only on live M1 control transitions:
- # counter-flow -> H1-side resumption. M3/M5 are telemetry, never gates.
+ # Pandora Win execution:
+ # confirmed H1 local owns direction; current top-five pump supplies the universe.
+ # Enter as soon as real Bybit executed flow strongly controls that H1 side.
+ # Exit is handled by local4_pressure_exit on a strong opposite takeover; the
+ # resulting watch re-enters only after control genuinely returns.
  for symbol in strategy1_trade_symbols():
   with LOCK:
    if symbol in S.get("local_v12_positions",{}):continue
@@ -836,11 +862,11 @@ def local4_fast_entries(prices):
   if watch:
    watch=_local_experiment_watch_observe(symbol,watch,float(mark),None,flow,time.time())
    if local4_reentry_ready(side,None,mark,watch,flow,time.time()):
-    local_experiment_open(symbol,side,analysis,"REENTRY",{"resumption_observed":True},watch)
+    local_experiment_open(symbol,side,analysis,"REENTRY",{"resumption_observed":True,"strategy":PANDORA_WIN_NAME},watch)
   else:
-   transition=_local_entry_resumption_context(symbol,side,analysis,flow)
-   if transition and local4_initial_entry_candidate(symbol,analysis,transition,flow,time.time())["eligible"]:
-    local_experiment_open(symbol,side,analysis,"ORDER_FLOW",transition)
+   selection=local4_initial_entry_candidate(symbol,analysis,None,flow,time.time())
+   if selection.get("eligible"):
+    local_experiment_open(symbol,side,analysis,"ORDER_FLOW",{"pandora_win_direct_control":True,"strategy":PANDORA_WIN_NAME})
 
 def strategy1_entry_diagnostic_snapshot(prices):
  # Read-only decision audit: one structured record per candidate every 30 seconds.
@@ -916,7 +942,7 @@ def local_experiment_risk_loop():
     if S11 is not None:S11.cycle(strategy1_runtime_symbols(),prices)
     if S14 is not None:S14.cycle(strategy1_runtime_symbols(),prices)
 
-    with LOCK:S["sources"]["LocalRisk"]={"ok":True,"ready":True,"last_check":now(),"mode":"H1_STREAM_fast_paper_execution","symbols":list(strategy1_trade_symbols()),"error":None}
+    with LOCK:S["sources"]["LocalRisk"]={"ok":True,"ready":True,"last_check":now(),"mode":"PANDORA_WIN_H1_LOCAL_TOP5_EXECUTED_FLOW","symbols":list(strategy1_trade_symbols()),"error":None}
    if time.time()-last_entry_diagnostics>=30:
     last_entry_diagnostics=time.time()
     strategy1_entry_diagnostic_snapshot(prices)
