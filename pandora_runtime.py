@@ -5,6 +5,7 @@ import time
 
 from engine_store import LeaseLost
 from pandora_scanner import LiveScanner
+from pandora_flow_v2_live import enabled as v2_enabled, analysis_for_flow as v2_analysis, entry_candidate as v2_candidate
 from pandora_locals import execution_anchor
 from pandora_win_core import allocation, pyramid_decision, apply_add, mark_metrics
 from pandora_risk import RiskPolicy, plan_add, position_risk, signal_strength
@@ -18,8 +19,8 @@ class PandoraRuntime:
         self.position_fraction=float(app.os.getenv('PANDORA_MAX_POSITION_MARGIN_FRACTION','0.40'))
         if not 0<=self.max_adds<=20 or not 0<self.add_fraction<=self.position_fraction<=1:
             raise ValueError('invalid explicit pyramiding risk configuration')
-        self.tokens={};self.last_saved={};self.max_equity=500.;self.last_scanner_save=0;self.last_scanner_at=0
-        self.max_equity=max(self.max_equity,float(app.S.get('pandora_equity',500)))
+        self.tokens={};self.last_saved={};self.max_equity=400. if v2_enabled() else 500.;self.last_scanner_save=0;self.last_scanner_at=0
+        self.max_equity=max(self.max_equity,float(app.S.get('pandora_equity',400 if v2_enabled() else 500)))
         with app.pg() as db:
             db.execute("create table if not exists pandora_win_token_state(symbol text primary key,payload jsonb not null,updated_at timestamptz not null default clock_timestamp())")
             db.execute("create table if not exists pandora_win_runtime_state(name text primary key,payload jsonb not null,updated_at timestamptz not null default clock_timestamp())")
@@ -142,7 +143,7 @@ class PandoraRuntime:
         a=self.a
         with a.ACCOUNT_LOCK:
             if not a.S.get('engine_active') or a.S.get('orders_enabled') or a.S.get('mode')!='PAPER_ONLY':return False
-            if not a.pandora_runtime_h1_verified(symbol,analysis):return False
+            if not v2_enabled() and not a.pandora_runtime_h1_verified(symbol,analysis):return False
             price=a.current_entry_price(symbol)
             if price is None or price!=mark:return False
             position=copy.deepcopy(a.S.get('pandora_win_positions',{}).get(symbol))
@@ -240,6 +241,7 @@ class PandoraRuntime:
             self.last_saved['account']=time.time()
 
     def _cycle_symbol(self,symbol,prices):
+        if v2_enabled():return self._cycle_symbol_v2(symbol,prices)
         a=self.a
         with a.LOCK:
             selected=set((a.S.get('bybit_discovery') or {}).get('selected_symbols') or [])
@@ -315,6 +317,57 @@ class PandoraRuntime:
             else:
                 phase='WAIT_REENTRY' if symbol in a.S.get('pandora_watch',{}) else ('LONG_READY' if analysis.get('entry_side')==1 else 'SHORT_READY')
                 self.transition(symbol,phase,'WAIT','waiting_for_executed_control_or_resumption',context)
+
+    def _cycle_symbol_v2(self,symbol,prices):
+        """Flow-only decisions; keep existing PAPER ledger and risk manager."""
+        a=self.a
+        with a.LOCK:
+            selected=set((a.S.get('bybit_discovery') or {}).get('selected_symbols') or ())
+            pos=copy.deepcopy(a.S.get('pandora_win_positions',{}).get(symbol))
+        if symbol not in selected and pos is None:
+            if symbol in a.S.get('pandora_watch',{}):
+                a._pandora_watch_clear(symbol,'token_rotated_out_no_open_position')
+            return
+        flow=a.MARKET_OBS.flow_context(symbol)
+        mark=a.fresh_mark_price(symbol)
+        context={'flow':flow,'mark':mark,'selected':symbol in selected,'flow_v2':True}
+        if pos:
+            if mark is None:
+                self.transition(symbol,'DATA_UNCERTAIN','FLOW_STALE','fresh_mark_missing',context)
+                return
+            a.pandora_mark_positions({symbol:mark})
+            with a.LOCK:
+                latest=copy.deepcopy(a.S.get('pandora_win_positions',{}).get(symbol))
+            if not latest:
+                self.reload_token(symbol)
+                return
+            side=int(latest['side'])
+            if not flow.get('trade_data_fresh'):
+                self.transition(symbol,'DATA_UNCERTAIN','FLOW_STALE','fresh_executed_tape_required',context)
+                return
+            analysis=v2_analysis(side,flow,mark)
+            added=symbol in selected and self.pyramid(symbol,analysis,flow,mark)
+            features=latest.get('features') or {}
+            self.transition(symbol,
+                ('LONG' if side>0 else 'SHORT')+('_PYRAMID' if added else ''),
+                'HOLD','confirmed_flow_impulse_add' if added else
+                    (features.get('exit_decision') or {}).get('reason','flow_control_intact'),context)
+            return
+        if symbol not in selected:return
+        if mark is None or not flow.get('trade_data_fresh'):
+            self.transition(symbol,'WAIT','FLOW_STALE','fresh_bybit_tape_or_mark_required',context)
+            return
+        candidate=v2_candidate(symbol,flow)
+        if not candidate.get('eligible'):
+            self.transition(symbol,'WAIT','WAIT',candidate.get('reason','no_confirmed_flow_control'),context)
+            return
+        a.pandora_flow_fast_entries({symbol:mark})
+        with a.LOCK:
+            opened=copy.deepcopy(a.S.get('pandora_win_positions',{}).get(symbol))
+        if opened:
+            self.reload_token(symbol)
+        else:
+            self.transition(symbol,'WAIT','WAIT','flow_signal_waiting_ledger_or_risk_validation',context)
 
     def snapshot(self):
         with self.a.LOCK:
