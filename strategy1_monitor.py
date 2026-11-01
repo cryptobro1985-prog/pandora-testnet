@@ -72,10 +72,12 @@ def _pivot_rows(symbols,source,details=None):
     for sym in symbols:
         a=_pick_local(sym,source,details)
         pending=a.get("pending_pivot_type")
-        local_label=(str(pending)+" · FORMING") if pending else (a.get("pivot_type") or "SCANNING")
-        shown_price=a.get("pending_pivot_price") if pending else a.get("pivot_price")
+        promoted=bool(a.get("live_structural_flip")) and pending==a.get("pivot_type") and a.get("pending_pivot_price")==a.get("pivot_price")
+        local_label=(a.get("pivot_type") or "SCANNING") if promoted else ((str(pending)+" · FORMING") if pending else (a.get("pivot_type") or "SCANNING"))
+        shown_price=a.get("pivot_price") if promoted else (a.get("pending_pivot_price") if pending else a.get("pivot_price"))
+        pending_label="PROMOTED LIVE" if promoted else ((str(pending)+" @ "+_n(a.get("pending_pivot_price"))) if pending else "—")
         rows.append([sym,local_label,_n(shown_price),_side(a.get("entry_side")) if _has_local(a) else "WAIT",
-          (str(pending)+" @ "+_n(a.get("pending_pivot_price"))) if pending else "—",a.get("policy") or a.get("pivot_confirmation_policy") or "—"])
+          pending_label,a.get("policy") or a.get("pivot_confirmation_policy") or "—"])
     return rows
 
 def render(data):
