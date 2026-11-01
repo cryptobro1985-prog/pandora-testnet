@@ -46,6 +46,14 @@ class PumpStructureTests(unittest.TestCase):
     break_event_epoch=1002,break_price=106)
   pos=dict(symbol="ESPORTS",side=-1,features={})
   self.assertIsNone(exit_reason(pos,105.2,tape(1003,105.2,.1,.001),s))
+ def test_short_exits_on_buyer_takeover_without_60s_turn(self):
+  s=dict(phase="CORRECTION_CONFIRMED",peak_price=110.,peak_support=109.45,
+    break_event_epoch=1002,break_price=106)
+  p=dict(symbol="ESPORTS",side=-1,features={})
+  f=tape(1003,105.5,.7,.003)
+  f["windows"]["60"]["price_return"]=-.04
+  f["windows"]["60"]["imbalance"]=-.3
+  self.assertEqual(exit_reason(p,105.5,f,s),"confirmed_counter_move_exit")
  def test_no_data_short(self):
   f=tape(1000,100,-.8,-.02)
   self.assertFalse(candidate("ESPORTS",f,{})["eligible"])
