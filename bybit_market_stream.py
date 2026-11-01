@@ -148,6 +148,13 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                             ok, _reason = validate_latency(trade, int(last_received * 1000), max_age_ms=15000)
                             if not ok:
                                 stale_trades += 1
+                                if on_capture_event is not None and (stale_trades == 1 or stale_trades % 100 == 0):
+                                    try:on_capture_event("rejected_public_trade",worker_name,
+                                        getattr(trade,"symbol",None),{
+                                            "reason":_reason,"rejected_count":stale_trades,
+                                            "exchange_epoch_ms":getattr(trade,"exchange_epoch_ms",None),
+                                            "receive_epoch_ms":int(last_received*1000)})
+                                    except Exception:pass
                                 continue
                             batch.append(to_observation(trade))
                             try:
