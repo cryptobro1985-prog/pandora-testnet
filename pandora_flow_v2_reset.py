@@ -13,6 +13,10 @@ TABLES=("pandora_win_positions","pandora_win_trade_history",
         "pandora_win_pyramid_adds")
 
 def reset_once(pg,store,now):
+    import os
+    if os.getenv('PANDORA_PUMP_V3','0')=='1':
+        from pandora_pump_v3_reset import reset_once as new_paper_experiment
+        return new_paper_experiment(pg,store,now)
     """Run strictly after acquiring the sole writer lease, before enabling executor.
 
     Existing rows are copied into dedicated snapshot tables inside the same
