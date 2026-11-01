@@ -389,6 +389,8 @@ def local_h1_direction(rows,now_ms,symbol):
    analysis={**trusted,"ready":True,"last_candle_time":analysis.get("last_candle_time"),
     **local_pending_extreme(rows,now_ms,int(trusted.get("entry_side") or 0),trusted.get("pivot_price")),
     "anchor_guard":"newest_confirmed_anchor_wins"}
+ if analysis.get("live_structural_flip"):
+  analysis["signal_candle_time"]=analysis.get("pivot_candle_time") or analysis.get("signal_candle_time")
  with LOCK:prior=copy.deepcopy(S.get("local_h1_direction",{}).get(symbol))
  if prior:
   prior_t=int(prior.get("signal_candle_time") or 0);new_t=int(analysis.get("signal_candle_time") or 0)
