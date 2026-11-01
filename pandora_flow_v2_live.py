@@ -127,5 +127,12 @@ def entry_candidate(symbol,flow,*,last_exit_event=0):
 
 def exit_reason(position,mark,flow):
  if not _pump_mode():return _V2_EXIT(position,mark,flow)
- state=_pump_observe(position['symbol'],flow,mark)
+ symbol=position['symbol']
+ features=position.setdefault('features',{})
+ with _PUMP_LOCK:
+  if symbol not in _PUMP_STATES:
+   seed=features.get('v3_structure_snapshot') or (features.get('candidate_selection') or {}).get('structure')
+   if isinstance(seed,dict) and seed:_PUMP_STATES[symbol]=copy.deepcopy(seed)
+ state=_pump_observe(symbol,flow,mark)
+ features['v3_structure_snapshot']=copy.deepcopy(state)
  return _pump_exit(position,mark,flow,state)
