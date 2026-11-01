@@ -99,3 +99,33 @@ def exit_reason(position,mark,flow):
              "flow_imbalance":flow.get("flow_imbalance"),"event_epoch":event,
              "mark":mark,"adverse_from_entry":adverse,"giveback_from_peak":change}
     return "confirmed_counter_move_exit" if count>=COUNTER_CONFIRM_NEW_TRADES else None
+
+# Optional V3 pump structure, off by default until tested deployment.
+from pandora_pump_structure import advance as _pump_advance, candidate as _pump_candidate, exit_reason as _pump_exit
+import threading
+_PUMP_LOCK=threading.RLock()
+_PUMP_STATES={}
+_V2_ENTRY=entry_candidate
+_V2_EXIT=exit_reason
+
+def _pump_mode():
+ import os
+ return enabled() and os.getenv('PANDORA_PUMP_V3','0')=='1'
+
+def _pump_observe(symbol,flow,mark=None):
+ with _PUMP_LOCK:
+  prior=_PUMP_STATES.get(symbol)
+  value=_pump_advance(prior,flow,mark if mark is not None else (flow or {}).get('last_price'))
+  _PUMP_STATES[symbol]=value
+  return copy.deepcopy(value)
+
+def entry_candidate(symbol,flow,*,last_exit_event=0):
+ if not _pump_mode():return _V2_ENTRY(symbol,flow,last_exit_event=last_exit_event)
+ state=_pump_observe(symbol,flow)
+ return dict(_pump_candidate(symbol,flow,state,last_exit_event),
+             flow_v2=True,event_epoch=event_epoch(flow))
+
+def exit_reason(position,mark,flow):
+ if not _pump_mode():return _V2_EXIT(position,mark,flow)
+ state=_pump_observe(position['symbol'],flow,mark)
+ return _pump_exit(position,mark,flow,state)
