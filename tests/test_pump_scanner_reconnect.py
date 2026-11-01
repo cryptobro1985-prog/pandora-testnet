@@ -20,7 +20,9 @@ class ScannerReconnectV3(unittest.TestCase):
     self.assertTrue(sc.ingest(dict(symbol=sym+"USDT",lastPrice="1",
      turnover24h="2000000",price24hPcnt=".2"),1010000,received=1010))
    partial=sc.rank(instruments,lambda *_:{},(),1010)
-   self.assertTrue(partial["selection_frozen"])
+   # Valid symbols are not globally blocked by one quiet ticker.
+   self.assertFalse(partial["selection_frozen"])
+   self.assertEqual(partial["fresh_selected_count"],4)
    self.assertTrue(sc.ingest(dict(symbol="FOURUSDT",lastPrice="1",
     turnover24h="2000000",price24hPcnt=".2"),1011000,received=1011))
    recovered=sc.rank(instruments,lambda *_:{},(),1011)
