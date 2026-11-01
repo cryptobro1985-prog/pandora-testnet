@@ -23,6 +23,24 @@ class PumpAdapterTest(unittest.TestCase):
    self.assertFalse(adapter.entry_candidate("ESPORTS",decline)["eligible"])
    follow=tape(1003,105,-.8,-.02)
    self.assertEqual(adapter.entry_candidate("ESPORTS",follow)["side"],-1)
+ def test_observing_on_restart_recovers_confirmed_entry_pump(self):
+  with patch.dict(os.environ,{"PANDORA_FLOW_V2":"1","PANDORA_PUMP_V3":"1"}):
+   entry=dict(phase="PUMP",pump_seen=True,peak_price=110.,
+     peak_support=108.,observed_price=109.,last_event_epoch=1000.)
+   observing=dict(phase="OBSERVING",pump_seen=False,peak_price=105.,
+     peak_support=105.,observed_price=105.,last_event_epoch=1001.)
+   with adapter._PUMP_LOCK:
+    adapter._PUMP_STATES["ESPORTS"]=dict(observing)
+   p=dict(symbol="ESPORTS",side=1,entry=100.,features={
+     "candidate_selection":{"structure":dict(entry)},
+     "v3_structure_snapshot":dict(observing)})
+   f=tape(1002,105.5,.05,.001)
+   self.assertIsNone(adapter.exit_reason(p,105.5,f))
+   saved=p["features"]["v3_structure_snapshot"]
+   self.assertEqual(saved["phase"],"PUMP")
+   self.assertTrue(saved["pump_seen"])
+   self.assertEqual(saved["peak_price"],110.)
+   self.assertEqual(saved["peak_support"],108.)
  def test_persisted_position_restores_structure(self):
   with patch.dict(os.environ,{"PANDORA_FLOW_V2":"1","PANDORA_PUMP_V3":"1"}):
    adapter.entry_candidate("ESPORTS",tape(1000,100))
