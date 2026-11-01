@@ -928,7 +928,25 @@ def pandora_entry_diagnostic_snapshot(prices):
           "entry_side":(analysis or {}).get("entry_side"),
           "executor_rejection":copy.deepcopy(S.get("pandora_executor_rejections",{}).get(symbol))}
   try:
-   if position:
+   if v2_enabled():
+    # Flow V2 has no H1 gate. Mirror its read-only entry decision instead.
+    flow=MARKET_OBS.flow_context(symbol,time.time())
+    last_exit=((watch or {}).get("context") or {}).get("last_opposite_trade_epoch",0)
+    candidate=v2_entry_candidate(symbol,flow,last_exit_event=last_exit)
+    record.update({"h1_ready":None,"flow_v2":True,"entry_side":candidate["side"],
+      "trade_data_fresh":bool(flow.get("trade_data_fresh")),
+      "latest_trade_age_seconds":flow.get("latest_trade_age_seconds"),
+      "pressure_phase":flow.get("pressure_phase")})
+    if position:record["reason"]="POSITION_ALREADY_OPEN"
+    elif symbol not in ((S.get("bybit_discovery") or {}).get("selected_symbols") or ()):
+     record["reason"]="NOT_IN_FLOW_V2_SELECTION"
+    elif not prices.get(symbol) or current_entry_price(symbol) is None:
+     record["reason"]="MARK_UNAVAILABLE"
+    elif not S.get("engine_active"):record["reason"]="ENGINE_STANDBY"
+    elif symbol not in S.get("_bybit_instruments",{}):
+     record["reason"]="BYBIT_CONTRACT_CONSTRAINTS_UNAVAILABLE"
+    else:record["reason"]="ENTRY_SIGNAL_READY" if candidate["eligible"] else candidate["reason"]
+   elif position:
     record["reason"]="POSITION_ALREADY_OPEN"
    elif not record["h1_ready"]:
     record["reason"]="H1_NOT_CONFIRMED_OR_BLOCKED"
