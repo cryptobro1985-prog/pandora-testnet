@@ -75,6 +75,9 @@ class RawFlowRecorder:
             db.execute("""CREATE INDEX IF NOT EXISTS pandora_flow_capture_events_at_idx
                 ON pandora_flow_capture_events(recorded_at DESC)""")
         with self.lock:self.schema_ready=True
+        self.notice('capture_started',details={'experiment':EXPERIMENT,
+             'source':'accepted_bybit_public_trades',
+             'history_before_this_time':'not_backfilled'})
 
     def ingest(self, rows, received_at, worker, sequences=None):
         """Non-blocking fast path; never synchronously writes PostgreSQL."""
@@ -96,8 +99,10 @@ class RawFlowRecorder:
                     self.dropped+=1
                     self.last_drop_epoch=time.time()
                 # Explicitly record lost coverage. DB may be unavailable.
-                self.notice("capture_queue_overflow",worker,row[0],
-                            dict(exchange_epoch_ms=row[2],trade_id=row[1]),quiet=True)
+                if self.dropped==1 or self.dropped%100==0:
+                    self.notice('capture_queue_overflow',worker,row[0],
+                                dict(dropped_total=self.dropped,
+                                     exchange_epoch_ms=row[2],trade_id=row[1]),quiet=True)
 
     def notice(self,event,worker=None,symbol=None,details=None,quiet=False):
         record=(str(event),str(worker) if worker is not None else None,
@@ -161,6 +166,10 @@ class RawFlowRecorder:
                 with self.lock:
                     self.db_errors+=1
                     self.last_error=type(exc).__name__+":"+str(exc)[:160]
+                    errors=self.db_errors
+                if errors==1 or errors%10==0:
+                    self.notice('capture_db_write_error',details={'error':self.last_error,
+                                 'error_count':errors,'pending_batch':len(pending)})
                 # Don't lose pending batch in transient failures. Backpressure
                 # will be observable as queue overflow, not silently ignored.
                 if stop.wait(1):
