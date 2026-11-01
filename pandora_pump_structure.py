@@ -23,7 +23,8 @@ def seller(f):
   and n(a.get("imbalance"))<=-.25 and n(b.get("imbalance"))<=-.20
   and n(a.get("sell_volume"))>=1.7*n(a.get("buy_volume"))
   and n(b.get("sell_volume"))>n(b.get("buy_volume"))
-  and n(b.get("price_return"))<0
+  and n(b.get("price_return"))<0 and n(c.get("price_return"))<0
+  and n(c.get("imbalance"))<=-.10
   and (n(c.get("volume_velocity"))<=0 or n(a.get("volume_velocity"))>=.7*n(c.get("volume_velocity")))
   and not f.get("sell_absorbed"))
 def advance(old,f,mark):
@@ -49,7 +50,7 @@ def advance(old,f,mark):
   return s
  if rising or buy:s["pump_seen"]=True
  decline=(peak-price)/peak
- threshold=max(.002,1.5*n(a.get("price_range_fraction")))
+ threshold=max(.01,2*n(a.get("price_range_fraction")))
  if s.get("pump_seen") and support>0 and price<support and decline>=threshold and sell:
   s.update(phase="CORRECTION_CONFIRMED",break_confirmed=True,
    break_event_epoch=e,break_price=price,correction_low=price,
