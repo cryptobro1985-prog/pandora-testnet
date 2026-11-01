@@ -11,7 +11,7 @@ import psycopg
 from psycopg import sql
 
 
-EXPERIMENT_ID = "pandora_flow_v2"
+EXPERIMENT_ID = "pandora_beda"
 SCHEMA_NAME = EXPERIMENT_ID
 STARTING_EQUITY = 500.0
 REGISTRY_TABLE = "pandora_win_experiment_registry"
