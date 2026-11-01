@@ -2,6 +2,8 @@
 
 Ветка GitHub: `pandora-flow-v2`. Базовая версия: `953a888`. `main` и Render deploy не изменяются этой поставкой. PAPER ONLY.
 
+Во время работы удалённый `main` независимо продвинулся до `e3f6968` с отдельными Pump V3 / $400 изменениями. Они сохранены в `main`; эта ветка реализует именно переданное ТЗ Flow v2 / $500 и не подменяет параллельную версию.
+
 ## Результат
 
 Новый эксперимент `pandora_flow_v2`: поток Bybit Public Trades определяет направление и подтверждения, а час выбирает только entry universe. Нормальные OPEN/CLOSE/REENTRY/REVERSAL требуют новых принятых executions; polling не наращивает evidence. Риск, sizing, leverage, fees/slippage estimate, maintenance и compounding сохранены в исходных `pandora_risk.py`/`accounting.py`; SHA-256 совпадают с baseline.

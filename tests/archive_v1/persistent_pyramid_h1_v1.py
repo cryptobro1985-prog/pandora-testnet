@@ -87,4 +87,3 @@ class PersistentPyramidTests(unittest.TestCase):
         app.WIN.cycle({symbol:99})
         with self.connect() as db:
             self.assertEqual(db.execute("select count(*) n from pandora_win_audit_journal where kind='pandora_REVERSE_LONG_TO_SHORT'").fetchone()['n'],1)
-

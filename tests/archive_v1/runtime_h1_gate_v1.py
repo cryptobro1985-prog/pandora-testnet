@@ -17,4 +17,3 @@ class RuntimeH1GateV1(unittest.TestCase):
         app.S['_pandora_h1_runtime_verified']={'BTC':meta}
         self.assertTrue(app.pandora_runtime_h1_verified('BTC',a,stamp+300))
         self.assertFalse(app.pandora_runtime_h1_verified('BTC',a,stamp+H/1000))
-
