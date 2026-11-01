@@ -805,16 +805,17 @@ def pandora_mark_positions(prices):
    live=S.get("pandora_win_positions",{}).get(symbol)
    if live and live.get("opened")==pos.get("opened"):S["pandora_win_positions"][symbol]=updated
   with LOCK:anchor=copy.deepcopy(S.get('_pandora_analysis',{}).get(symbol) or {})
-  if MARKET_OBS.flow_context(symbol,time.time()).get('trade_data_fresh') and MARKET_OBS.flow_context(symbol,time.time()).get('fast_control_side',MARKET_OBS.flow_context(symbol,time.time()).get('sustained_control_side'))==-int(pos['side']) and pandora_runtime_h1_verified(symbol,anchor) and int(anchor.get('entry_side') or 0)==-int(pos['side']) and int(anchor.get('signal_candle_time') or 0)>int(pos.get('signal_candle_time') or 0):
-   pandora_close(symbol,float(mark),'opposite_confirmed_h1_local',anchor)
-   continue
   flow=MARKET_OBS.flow_context(symbol,time.time())
-  reason=pandora_flow_pressure_exit(updated,None,float(mark),flow) if flow.get('trade_data_fresh') else None
+  opposite_local=bool(pandora_runtime_h1_verified(symbol,anchor)
+   and int(anchor.get('entry_side') or 0)==-int(pos['side'])
+   and int(anchor.get('signal_candle_time') or 0)>int(pos.get('signal_candle_time') or 0))
+  reason=pandora_flow_pressure_exit(updated,None,float(mark),flow,opposite_local_confirmed=opposite_local)
   with LOCK:
    if S.get("pandora_win_positions",{}).get(symbol,{}).get("opened")==pos.get("opened"):
     S["pandora_win_positions"][symbol]=updated
   if reason:
-   pandora_close(symbol,float(mark),reason,watch_context={"flow_context":flow,"observed_at":now()})
+   pandora_close(symbol,float(mark),reason,analysis=anchor if opposite_local else None,
+    watch_context={"flow_context":flow,"observed_at":now()})
    continue
   stamp=time.time()
   with LOCK:last=float(S.setdefault("_pandora_path_persist_epoch",{}).get(symbol,0) or 0)

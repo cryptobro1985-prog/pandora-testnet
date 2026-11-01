@@ -2,6 +2,7 @@
 import copy
 import json
 import os
+import time
 import unittest
 
 from accounting import paper_pnl
@@ -176,6 +177,10 @@ class PersistentPyramidTests(unittest.TestCase):
         self.send(symbol,1,3,100.2)
         app.WIN.cycle({symbol:100.2})
         self.send(symbol,-1,90,99)
+        app.WIN.cycle({symbol:99})
+        self.assertIn(symbol,app.S['pandora_win_positions'])
+        time.sleep(3.05)
+        self.send(symbol,-1,1,99)
         app.WIN.cycle({symbol:99})
         self.assertNotIn(symbol,app.S['pandora_win_positions'])
         self.assertIn(symbol,app.S['pandora_watch'])

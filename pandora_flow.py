@@ -2,6 +2,9 @@
 import math
 
 WINDOWS = (5, 15, 30, 60, 180, 300)
+# 0.20 imbalance means at least 60/40 executed notional. A bare majority
+# is useful context, but is not sufficient evidence of trading control.
+MIN_CONTROL_IMBALANCE = 0.20
 
 
 def summarize(trades, epoch, coverage):
@@ -78,19 +81,23 @@ def summarize(trades, epoch, coverage):
     fast_bias=1 if active[0]['imbalance']>0 else -1 if active[0]['imbalance']<0 else 0
     fast_response='buy_price_response' if fast_bias>0 else 'sell_price_response'
     fast_confirmed=bool(fast_bias and windows['15']['complete'] and all(
-        w['complete'] and w['trade_count']>=2 and w['imbalance']*fast_bias>0
+        w['complete'] and w['trade_count']>=2
+        and w['imbalance']*fast_bias>=MIN_CONTROL_IMBALANCE
         and w[fast_response]>0 for w in active) and last_direction==fast_bias)
     fast_control=fast_bias if fast_confirmed else 0
     # Old minute volume must not veto a structurally confirmed risk-reducing
     # exit. New entries/reentries retain the conservative minute corroboration.
     response_key='buy_price_response' if control>0 else 'sell_price_response'
-    sustained=bool(control and fast_control==control and minute[response_key]>0)
+    sustained=bool(control and fast_control==control
+                   and minute['imbalance']*control>=MIN_CONTROL_IMBALANCE
+                   and minute[response_key]>0)
     return dict(windows=windows, volume_velocity=minute['volume_velocity'],
                 trade_velocity=minute['trade_velocity'], imbalance_change=minute['imbalance_change'],
                 volume_acceleration=windows['15']['volume_acceleration'],
                 dominance_side=control, dominance_duration=dominance_duration,
                 fast_control_side=fast_control,context_control_side=control,
                 sustained_control_side=control if sustained else 0,
+                minimum_control_imbalance=MIN_CONTROL_IMBALANCE,
                 evidence_ready=windows['15']['complete'],evidence_required_seconds=15,
                 buy_price_response=minute['buy_price_response'],
                 sell_price_response=minute['sell_price_response'],

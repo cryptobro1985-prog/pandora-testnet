@@ -5,7 +5,10 @@ consecutive traded-price auctions is a transparent causal hypothesis; its live
 signal quality must be measured rather than inferred from synthetic tests.
 """
 import copy,math
+from pandora_flow import MIN_CONTROL_IMBALANCE
 POLICY='H1 direction; executed pressure and causal price response'
+EXIT_CONTROL_CONFIRM_SECONDS=3.0
+EXIT_CONTROL_MAX_EVENT_GAP_SECONDS=5.0
 
 
 def _f(value):
@@ -24,7 +27,8 @@ def flow_profile(flow,side):
  age=_f(flow.get('latest_trade_age_seconds'));limit=_f(flow.get('freshness_limit_seconds')) or 60.
  buy,sell=(_f(flow.get(k)) for k in ('buy_notional','sell_notional'))
  if age is None or not 0<=age<=limit or buy is None or sell is None or min(buy,sell)<0 or buy+sell<=0:return None
- dominant=1 if buy>sell else -1 if sell>buy else 0
+ imbalance=(buy-sell)/(buy+sell)
+ dominant=1 if imbalance>=MIN_CONTROL_IMBALANCE else -1 if imbalance<=-MIN_CONTROL_IMBALANCE else 0
  direction=int(flow.get('price_direction') or 0)
  control=dominant if dominant==direction and direction in (-1,1) else 0
  entry_control=control
@@ -113,15 +117,45 @@ def advance_structure(state,direction,mark,control,event_epoch):
     return out,False
 
 
-def pressure_exit(position,execution_context,mark,flow):
+def _confirmed_counter_control(position,profile):
+    """Require a continuous observed takeover; polling cannot age evidence.
+
+    State lives in the position's durable features. Any neutral/own-side or
+    stale observation resets it. A long gap between executions also resets it.
+    """
+    features=position.setdefault('features',{})
+    event=profile['event_epoch'] if profile else None
+    previous=features.get('exit_control_state') or {}
+    if not profile or not profile['counter_takeover'] or event is None:
+        features['exit_control_state']={'phase':'HOLD','observed_seconds':0.}
+        return False
+    last=_f(previous.get('last_event_epoch'))
+    start=_f(previous.get('first_event_epoch'))
+    if start is None or last is None or event<last or event-last>EXIT_CONTROL_MAX_EVENT_GAP_SECONDS:
+        start=event
+    duration=max(0.,event-start)
+    ready=duration>=EXIT_CONTROL_CONFIRM_SECONDS
+    features['exit_control_state']={'phase':'CONFIRMED' if ready else 'OBSERVING',
+        'first_event_epoch':start,'last_event_epoch':event,'observed_seconds':duration,
+        'required_seconds':EXIT_CONTROL_CONFIRM_SECONDS,'control_side':profile['control_side']}
+    return ready
+
+
+def pressure_exit(position,execution_context,mark,flow,*,opposite_local_confirmed=False):
     side=int((position or {}).get('side') or 0);entry=_f((position or {}).get('entry'));price=_f(mark)
     profile=flow_profile(flow,side)
-    if entry is None or entry<=0 or price is None or price<=0 or profile is None:return None
+    if entry is None or entry<=0 or price is None or price<=0 or profile is None:
+        _confirmed_counter_control(position,None)
+        return None
     features=position.setdefault('features',{})
     state=features.get('pressure_state') or {'best':side*entry,'noise':0.,'phase':'HOLDING'}
+    # A defended/fresh favorable extreme invalidates an earlier takeover timer.
+    at_favorable_extreme=side*price>=float(state.get('best',side*entry))
+    takeover=_confirmed_counter_control(position,None if at_favorable_extreme else profile)
     state,confirmed=advance_structure(state,side,price,profile['control_side'],profile['event_epoch'])
     features['pressure_state']=state
-    return 'confirmed_counter_move_exit' if confirmed else None
+    if takeover and opposite_local_confirmed:return 'opposite_confirmed_h1_local'
+    return 'confirmed_counter_move_exit' if confirmed and takeover else None
 
 
 def update_watch(watch,mark,execution_context,flow,stamp):

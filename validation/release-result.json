@@ -6,6 +6,7 @@
     "tests.test_app_risk_audit",
     "tests.test_bootstrap_safety",
     "tests.test_bybit_stream_restoration",
+    "tests.test_control_hysteresis",
     "tests.test_monitor_audit",
     "tests.test_pandora_end_to_end",
     "tests.test_pandora_h1_runtime_guard",
@@ -20,7 +21,7 @@
     "tests.test_startup_bootstrap",
     "tests.test_startup_decisions"
   ],
-  "tests_run": 143,
+  "tests_run": 155,
   "failures": [],
   "errors": [],
   "skipped": [],

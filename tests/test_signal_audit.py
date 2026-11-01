@@ -32,7 +32,9 @@ class SignalEvidenceTests(unittest.TestCase):
                 self.assertEqual(flow['sustained_control_side'],0)
                 position=dict(side=side,entry=100,features={'pressure_state':dict(
                     best=side*(100+side*10),noise=.1,barrier=side*(100+side*9),phase='HOLDING')})
-                self.assertEqual(pressure_exit(position,None,mark,flow),'confirmed_counter_move_exit')
+                self.assertIsNone(pressure_exit(position,None,mark,flow))
+                later={**flow,'latest_trade_epoch':1023,'decision_event_epoch':1023}
+                self.assertEqual(pressure_exit(position,None,mark,later),'confirmed_counter_move_exit')
                 analysis=dict(ready=True,anchor_confirmed=True,h1_direction_anchor=True,entry_side=-side)
                 self.assertFalse(initial_entry_candidate('BTC',analysis,None,flow,1020)['eligible'])
 
