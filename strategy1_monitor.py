@@ -71,8 +71,11 @@ def _pivot_rows(symbols,source,details=None):
     rows=[];details=details or {}
     for sym in symbols:
         a=_pick_local(sym,source,details)
-        rows.append([sym,a.get("pivot_type") or "SCANNING",_n(a.get("pivot_price")),_side(a.get("entry_side")) if _has_local(a) else "WAIT",
-          a.get("pending_pivot_type") or "—",a.get("policy") or a.get("pivot_confirmation_policy") or "—"])
+        pending=a.get("pending_pivot_type")
+        local_label=(str(pending)+" · FORMING") if pending else (a.get("pivot_type") or "SCANNING")
+        shown_price=a.get("pending_pivot_price") if pending else a.get("pivot_price")
+        rows.append([sym,local_label,_n(shown_price),_side(a.get("entry_side")) if _has_local(a) else "WAIT",
+          (str(pending)+" @ "+_n(a.get("pending_pivot_price"))) if pending else "—",a.get("policy") or a.get("pivot_confirmation_policy") or "—"])
     return rows
 
 def render(data):
