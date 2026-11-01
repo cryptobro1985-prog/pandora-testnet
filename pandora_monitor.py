@@ -289,7 +289,7 @@ def render(data):
     start, equity, total, percent = _summary(p)
     status = 'PAPER ГОТОВ' if health.get('risk_ready') else 'НЕ ГОТОВ'
     reason = risk.get('reason') or health.get('engine_error') or next(iter((health.get('execution_errors') or {}).values()), None) or ('PORTFOLIO_MARKS_STALE' if valuation.get('complete') is False else 'Ожидание актуальных данных / проверки исполнителя' if not health.get('risk_ready') else 'Fresh market data · PAPER only')
-    body = '<header class="masthead"><div><p class="eyebrow">BYBIT USDT PERPETUAL · PAPER TERMINAL</p><h1>Pandora <span>Win</span><b class="brand-mark">✦</b></h1><p class="brand-sub">PRICE STRUCTURE / EXECUTED FLOW / CAPITAL CONTROL</p></div><div class="connection"><span class="mode">PAPER ONLY</span><strong id="readiness" class="'+('positive' if health.get('risk_ready') else 'warning')+'">'+_e(status)+'</strong><small id="connection-state" role="status" aria-live="polite">JSON · обновление каждую секунду</small><small id="update-time">'+_e(data.get('snapshot_at'))+'</small></div></header>'
+    body = '<header class="masthead"><div><p class="eyebrow">BYBIT USDT PERPETUAL · PAPER TERMINAL</p><h1>Pandora <span>'+('Flow V2' if p.get('flow_v2') else 'Win')+'</span><b class="brand-mark">✦</b></h1><p class="brand-sub">EXECUTED FLOW / HOURLY TOP-5 / CAPITAL CONTROL</p></div><div class="connection"><span class="mode">PAPER ONLY</span><strong id="readiness" class="'+('positive' if health.get('risk_ready') else 'warning')+'">'+_e(status)+'</strong><small id="connection-state" role="status" aria-live="polite">JSON · обновление каждую секунду</small><small id="update-time">'+_e(data.get('snapshot_at'))+'</small></div></header>'
     startup_stage, startup_status, startup_reason = _startup_view(p)
     body += '<section class="startup-panel" aria-label="Первичный обзор рынка"><b>ЗАПУСК / ПЕРВИЧНЫЙ ОБЗОР</b><div class="startup-grid"><strong id="startup-stage">'+_e(startup_stage)+'</strong><span id="startup-status">'+_e(startup_status)+'</span></div><p id="startup-reason">'+_e(startup_reason)+'</p></section>'
     body += '<section class="account-panel" aria-labelledby="account-title"><div class="section-head"><h2 id="account-title">Общий счёт</h2><span class="tag">USDT · только фактический PAPER PnL</span></div><div class="account-grid">'
@@ -317,19 +317,22 @@ def render(data):
             ('BUY USD','buy',_m(t.get('buy_volume'))),('SELL USD','sell',_m(t.get('sell_volume'))),
             ('Trades / сек.','trades',_n(t.get('trade_velocity'))),('Executed tape','tape','FRESH' if t.get('flow_fresh') else 'WARMING / STALE')]))
     body+=_collection('candidates',candidate_cards,'Пул кандидатов ещё не сформирован.')+'</details>'
-    details=(p.get('engine') or {}).get('details') or {};durable=p.get('h1_durable') or {}
-    symbols=_local_symbols(data)
-    body+='<details class="scanner-details"><summary>Локалы текущего наблюдения (до 100) <span id="count-locals">'+str(len(symbols))+'</span></summary>'
-    local_cards=[]
-    for symbol in symbols:
-        local_state=(details.get(symbol) or {}).get('h1_local') or durable.get(symbol) or {}
-        confirmed=local_state.get('confirmed_local') or local_state
-        forming=local_state.get('forming_local') or ({'pivot_type':local_state.get('pending_pivot_type'),'pivot_price':local_state.get('pending_pivot_price')} if local_state.get('pending_pivot_type') else {})
-        local_cards.append(_card(symbol,symbol,_side(local_state.get('entry_side')),[
-            ('Confirmed local','confirmed',_local_text(confirmed)),('Forming local','forming',_local_text(forming)),
-            ('Разрешение входа','entry_state','BLOCKED' if local_state.get('entry_blocked') else 'READY' if local_state.get('ready') else 'WAIT'),
-            ('Причина','reason',local_state.get('entry_block_reason') or local_state.get('reason') or local_state.get('confirmation_source'))]))
-    body+=_collection('locals',local_cards,'Наблюдений локальной структуры пока нет.')+'</details></section>'
+    if not p.get('flow_v2'):
+        details=(p.get('engine') or {}).get('details') or {};durable=p.get('h1_durable') or {}
+        symbols=_local_symbols(data)
+        body+='<details class="scanner-details"><summary>Локалы текущего наблюдения (до 100) <span id="count-locals">'+str(len(symbols))+'</span></summary>'
+        local_cards=[]
+        for symbol in symbols:
+            local_state=(details.get(symbol) or {}).get('h1_local') or durable.get(symbol) or {}
+            confirmed=local_state.get('confirmed_local') or local_state
+            forming=local_state.get('forming_local') or ({'pivot_type':local_state.get('pending_pivot_type'),'pivot_price':local_state.get('pending_pivot_price')} if local_state.get('pending_pivot_type') else {})
+            local_cards.append(_card(symbol,symbol,_side(local_state.get('entry_side')),[
+                ('Confirmed local','confirmed',_local_text(confirmed)),('Forming local','forming',_local_text(forming)),
+                ('Разрешение входа','entry_state','BLOCKED' if local_state.get('entry_blocked') else 'READY' if local_state.get('ready') else 'WAIT'),
+                ('Причина','reason',local_state.get('entry_block_reason') or local_state.get('reason') or local_state.get('confirmation_source'))]))
+        body+=_collection('locals',local_cards,'Наблюдений локальной структуры пока нет.')+'</details></section>'
+    else:
+        body+='</section>'
     body += '<section id="panel-positions" class="tab-panel" hidden><div class="section-head"><h2>Открытые позиции</h2><span class="tag">Включая токены вне Discovery</span></div>'
     body += _collection('positions', [_card(str(t.get('symbol'))+':'+str(t.get('opened')), *_position_view(t), kind='position-card') for t in p.get('open_positions') or []], 'Открытых позиций нет.')+'</section>'
     body += '<section id="panel-history" class="tab-panel" hidden><div class="section-head"><h2>Закрытые сделки</h2><a class="secondary" href="/pandora/history">Полная история ↗</a></div>'
