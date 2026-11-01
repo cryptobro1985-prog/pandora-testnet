@@ -82,11 +82,14 @@ class LiveScanner:
                 # A restart can freeze a restored hourly selection before
                 # ticker subscriptions are fresh. Recover readiness without
                 # rotating the selected five before their scheduled refresh.
-                verified=bool(prior) and all(
-                    sym in instruments and sym in markets and
-                    0<=epoch-float(markets[sym].get("price_received") or 0)<=self.freshness
-                    for sym in prior)
+                fresh_selected=sum(
+                    1 for sym in prior if sym in instruments and sym in markets
+                    and 0<=epoch-float(markets[sym].get("price_received") or 0)<=self.freshness)
+                # Individual positions still require their own fresh mark
+                # and trade tape; one missing ticker must not freeze others.
+                verified=fresh_selected>0
                 saved.update(at=epoch,events=[],
+                    fresh_selected_count=fresh_selected,
                     selection_frozen=not verified,
                     observations_ready=verified,
                     retained_open_positions=sorted(set(held)-set(prior)))
