@@ -1562,8 +1562,10 @@ def main():
  jobs=[('lease',engine_coordinator),('contracts',bybit_instruments_loop),('discovery',bybit_volatility_discovery_loop),('trades',market_trade_stream),('quotes',market_aux_stream),
   *((('h1_history',market_history_bootstrap),('h1_scan',pandora_loop)) if not v2_enabled() else ()),('execution',pandora_risk_loop),
   ('checkpoint',pandora_live_state_loop),('history',dashboard_history_loop),('keepalive',render_keepalive_loop),
-  ('pandora_beda',lambda:BEDA.run(SHUTDOWN)),
-  ('beda_baseline',pandora_beda_comparison_baseline_loop)]
+  # Legacy Beda A/B worker is opt-in; do not run reset_paper_experiment on Caterpillar.
+  *((('pandora_beda',lambda:BEDA.run(SHUTDOWN)),
+     ('beda_baseline',pandora_beda_comparison_baseline_loop))
+    if os.getenv('PANDORA_ENABLE_BEDA','0')=='1' else ())]
  workers=[threading.Thread(target=supervise,args=job,daemon=True,name=job[0]) for job in jobs]
  for worker in workers:worker.start()
  try:server.serve_forever()
