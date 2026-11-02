@@ -85,8 +85,7 @@ class FlowContracts(unittest.TestCase):
             self.assertIsNone(tick(1,side,1000))
             self.assertIsNone(tick(.9,-side,1001))
             self.assertIsNone(tick(1.2,side,1002))
-            self.assertIsNone(tick(.7,-side,1003))
-            self.assertEqual(tick(.7,-side,1006),'confirmed_counter_move_exit')
+            self.assertEqual(tick(.7,-side,1003),'confirmed_counter_move_exit')
             for count in range(15):
                 w=dict(side=side,exit_price=100,reentries=count,context={})
                 for delta,control,epoch in [(-1,-side,1004),(-.8,side,1005),(-.9,-side,1006)]:
