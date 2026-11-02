@@ -77,6 +77,15 @@ class ControlHysteresisTests(unittest.TestCase):
             self.assertEqual(pressure_exit(p,None,100+side*8,{},opposite_local_confirmed=True),
                              'opposite_confirmed_h1_local')
 
+    def test_numerically_flat_auction_does_not_fake_opposite_price_control(self):
+        rows=[(980,100,1,'A'),(981,100,1,'B'),
+              (996,100.0,30,'A'),(997,100.2,70,'B'),
+              (998,99.6,30,'A'),(999,100.0,70,'B')]
+        result=summarize(rows,1000,20)
+        self.assertGreater(result['windows']['5']['imbalance'],.2)
+        self.assertAlmostEqual(result['windows']['5']['price_return'],0.,places=12)
+        self.assertEqual(result['fast_control_side'],1)
+
     def test_absorbed_notional_majority_yields_control_to_price_impact(self):
         for side in (-1,1):
             own='B' if side>0 else 'A';other='A' if side>0 else 'B'
