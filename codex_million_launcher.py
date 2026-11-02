@@ -10,7 +10,7 @@ class CodexBridge:
  def __init__(self):
   self.lock=threading.RLock();self.process=None
   self.root=Path("/app/codex_engine")
-  self.state={"online":False,"status":"STARTING","experiment":"codex_million_dollar","positions":[],"trades":[],"tokens":[]}
+  self.state={"online":False,"status":"STARTING","experiment":"codex_million_dollar","positions":[],"trades":[],"tokens":[]};self._last_log=None
  def snapshot(self):
   with self.lock:r=copy.deepcopy(self.state)
   if r.get("last_good_epoch") and time.time()-r["last_good_epoch"]>25:r["online"]=False;r["status"]="STALE"
@@ -42,6 +42,10 @@ class CodexBridge:
    sources=payload.get("sources") or {},entry_diagnostics=payload.get("strategy1_entry_diagnostics") or {},
    risk_ready=h.get("risk_ready"),health=h,health_error=h.get("engine_error"),
    frozen_revision="a01bc1d0c9c216ddb28c75b31fb42e1248867a0d",error=None)
+  summary=(h.get("engine_active"),len(p.get("tokens") or []),len(p.get("open_positions") or []),len(p.get("closed_trades") or []),(payload.get("discovery") or {}).get("selection_frozen"))
+  if summary!=self._last_log:
+   self._last_log=summary
+   print("[CODEX_MILLION] engine_active=%s discovery=%s open=%s closed=%s selection_frozen=%s risk_ready=%s" % (summary[0],summary[1],summary[2],summary[3],summary[4],h.get("risk_ready")),flush=True)
  def run(self,stop):
   env=os.environ.copy();env.pop("PGOPTIONS",None);env.update(PORT="10002",DATABASE_URL=self._isolated_url(),PYTHONUNBUFFERED="1",
    PANDORA_ENABLE_BEDA="0",PANDORA_COMPARISON_ENGINES="0",
@@ -51,7 +55,11 @@ class CodexBridge:
     self._publish(online=False,status="STARTING_ENGINE")
     self.process=subprocess.Popen([sys.executable,"app.py"],cwd=self.root,env=env)
    try:self._poll()
-   except Exception as exc:self._publish(online=False,status="WAITING_API",error=type(exc).__name__)
+   except Exception as exc:
+    self._publish(online=False,status="WAITING_API",error=type(exc).__name__+":"+str(exc)[:160])
+    summary=("ERROR",type(exc).__name__,str(exc)[:120])
+    if summary!=self._last_log:
+     self._last_log=summary;print("[CODEX_MILLION] poll_error=%s:%s" % (type(exc).__name__,str(exc)[:160]),flush=True)
    stop.wait(5)
   if self.process is not None and self.process.poll() is None:
    try:self.process.terminate();self.process.wait(timeout=6)
