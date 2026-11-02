@@ -1180,17 +1180,17 @@ def engine_coordinator():
    owned=STORE.claim()
    if owned and not S['engine_active']:
     with ACCOUNT_LOCK:
-     if v2_enabled():
-      migrated=v2_reset_once(pg,STORE,now)
-      if migrated:
-       with LOCK:
-        S['bybit_discovery']={}
-        S['pandora_watch']={}
-        S['pandora_win_h1_direction']={}
-        S['_pandora_analysis']={}
-       if WIN is not None:
-        WIN.scanner.restore({})
-        WIN.max_equity=400.
+     from pandora_fixed_five_reset import reset_once as fixed_reset_once
+     migrated=fixed_reset_once(pg,STORE,now)
+     if migrated:
+      with LOCK:
+       S['bybit_discovery']={}
+       S['pandora_watch']={}
+       S['pandora_win_h1_direction']={}
+       S['_pandora_analysis']={}
+      if WIN is not None:
+       WIN.scanner.restore({})
+       WIN.max_equity=500.
      restore_state()
      if WIN is not None:WIN.refresh_after_lease()
    with LOCK:S['engine_active']=owned;S['engine_error']=None if owned else 'standby: another engine owns the lease'
