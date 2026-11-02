@@ -20,8 +20,8 @@ class CodexBridge:
  def _isolated_url(self):
   base=os.environ["DATABASE_URL"]
   with psycopg.connect(base,autocommit=True) as db:db.execute("CREATE SCHEMA IF NOT EXISTS codex_million")
-  u=urllib.parse.urlsplit(base);q=urllib.parse.parse_qsl(u.query,keep_blank_values=True)
-  q=[x for x in q if x[0]!="options"];q.append(("options","-csearch_path=codex_million"))
+  # Keep the same reachable DATABASE_URL as PANDORA. PostgreSQL's PGOPTIONS
+  # applies the schema at connection startup without rewriting the host/URL.
   return base
  def _poll(self):
   req=urllib.request.Request("http://127.0.0.1:10002/api/pandora",headers={"Accept":"application/json","User-Agent":"pandora-codex-bridge"})
@@ -34,7 +34,7 @@ class CodexBridge:
    discovery=payload.get("discovery") or {},events=p.get("events") or {},statistics=p.get("statistics"),
    risk_ready=h.get("risk_ready"),health_error=h.get("engine_error"),error=None)
  def run(self,stop):
-  env=os.environ.copy();env.update(PORT="10002",DATABASE_URL=self._isolated_url(),PYTHONUNBUFFERED="1",PANDORA_ENABLE_BEDA="0")
+  env=os.environ.copy();env.update(PORT="10002",DATABASE_URL=self._isolated_url(),PGOPTIONS="-c search_path=codex_million",PYTHONUNBUFFERED="1",PANDORA_ENABLE_BEDA="0")
   while not stop.is_set():
    if self.process is None or self.process.poll() is not None:
     self._publish(online=False,status="STARTING_ENGINE")
