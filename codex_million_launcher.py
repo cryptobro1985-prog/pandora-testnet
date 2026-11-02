@@ -49,6 +49,7 @@ class CodexBridge:
  def run(self,stop):
   env=os.environ.copy();env.pop("PGOPTIONS",None);env.update(PORT="10002",DATABASE_URL=self._isolated_url(),PYTHONUNBUFFERED="1",
    PANDORA_ENABLE_BEDA="0",PANDORA_COMPARISON_ENGINES="0",
+   PANDORA_SCAN_CANDIDATES="128",PANDORA_DISCOVERY_SCAN_SECONDS="60",
    RENDER_EXTERNAL_URL="http://127.0.0.1:10002")
   while not stop.is_set():
    if self.process is None or self.process.poll() is not None:
