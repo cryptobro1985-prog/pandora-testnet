@@ -38,6 +38,8 @@ class IncidentLocalTests(unittest.TestCase):
             promoted=execution_anchor(detailed,dict(trade_data_fresh=True,sustained_control_side=side))
             self.assertEqual(promoted['entry_side'],side)
             self.assertFalse(promoted['entry_blocked'])
+            self.assertEqual(promoted['local_low'],side>0)
+            self.assertEqual(promoted['local_high'],side<0)
             self.assertEqual(promoted['confirmation_source'],'closed_M15_structure_and_executed_control')
             self.assertEqual(promoted['confirmed_local'],detailed['confirmed_local'])
             self.assertEqual(promoted['execution_local']['entry_side'],side)
