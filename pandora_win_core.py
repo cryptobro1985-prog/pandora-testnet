@@ -23,7 +23,7 @@ def allocation(equity, free, max_leverage, fraction=.20, fee=.00045):
     return dict(margin=margin,leverage=leverage,notional=margin*leverage)
 
 
-def pyramid_decision(position, analysis, flow, mark, max_adds=2):
+def pyramid_decision(position, analysis, flow, mark, max_adds=4):
     """Require profit, valid structure, stronger executed impulse and a new price extreme."""
     side=int(position['side']);f=position.get('features') or {}
     state=copy.deepcopy(f.get('pyramid_state') or {})
