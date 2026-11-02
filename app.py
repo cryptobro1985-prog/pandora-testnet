@@ -859,7 +859,10 @@ def pandora_mark_positions(prices):
    live=S.get("pandora_win_positions",{}).get(symbol)
    if live and live.get("opened")==pos.get("opened"):S["pandora_win_positions"][symbol]=updated
   with LOCK:anchor=copy.deepcopy(S.get('_pandora_analysis',{}).get(symbol) or {})
-  opposite_local=bool(not v2_enabled() and pandora_runtime_h1_verified(symbol,anchor)
+  # Existing risk is managed by the current confirmed active local even
+  # during deploy/reconnect warm-up. Runtime verification is an allocation gate
+  # for NEW risk, not permission to keep an old position against the local.
+  opposite_local=bool(not v2_enabled() and pandora_confirmed_h1(anchor)
    and int(anchor.get('entry_side') or 0)==-int(pos['side']))
   if opposite_local:
    pandora_close(symbol,float(mark),"opposite_active_local_emergency_exit",analysis=anchor,
