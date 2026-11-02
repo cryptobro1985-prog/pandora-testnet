@@ -4,7 +4,6 @@ from zoneinfo import ZoneInfo
 from pandora_api import API_VERSION, openapi, json_safe
 from pandora_decisions import entry_status, startup_snapshot
 from pandora_bootstrap import HistoryBootstrap
-from pandora_beda_launcher import BEDA
 from pandora_runtime import PandoraRuntime
 from codex_million_launcher import CODEX
 from pandora_scanner import ticker_worker
@@ -1497,46 +1496,6 @@ class Handler(BaseHTTPRequestHandler):
   except Exception:self.send(503,{'error':'close_not_confirmed'})
 
 
-def pandora_beda_comparison_baseline_loop():
- # Persist the exact A/B start once, only after the independent Beda engine
- # answers its own PAPER endpoint. Never rewrite the V3 or Beda ledgers.
- ident='PANDORA_V3_BEDA_6H_20261102'
- while not SHUTDOWN.is_set():
-  try:
-   snapshot=BEDA.snapshot()
-   if not snapshot.get('online'):
-    SHUTDOWN.wait(5);continue
-   with pg() as db:
-    db.execute("""CREATE TABLE IF NOT EXISTS pandora_beda_ab_sessions(
-      session_id text PRIMARY KEY,started_at timestamptz NOT NULL,
-      ends_at timestamptz NOT NULL,v3_realized_equity double precision,
-      v3_total_equity double precision,beda_realized_equity double precision,
-      beda_total_equity double precision,v3_positions integer,
-      beda_positions integer,v3_closed_count integer,beda_closed_count integer)""")
-    db.execute("""INSERT INTO pandora_beda_ab_sessions
-      (session_id,started_at,ends_at,v3_realized_equity,v3_total_equity,
-       beda_realized_equity,beda_total_equity,v3_positions,beda_positions,
-       v3_closed_count,beda_closed_count)
-      SELECT %s,clock_timestamp(),clock_timestamp()+interval '6 hours',
-       (SELECT equity FROM public.pandora_win_account_state WHERE id=1),
-       (SELECT total_equity FROM public.pandora_win_live_state WHERE id=1),
-       (SELECT equity FROM pandora_beda.pandora_win_account_state WHERE id=1),
-       %s,
-       (SELECT count(*) FROM public.pandora_win_positions),
-       (SELECT count(*) FROM pandora_beda.pandora_win_positions),
-       (SELECT count(*) FROM public.pandora_win_trade_history),
-       (SELECT count(*) FROM pandora_beda.pandora_win_trade_history)
-       ON CONFLICT (session_id) DO NOTHING""",
-       (ident,snapshot.get('equity')))
-    row=db.execute('SELECT * FROM pandora_beda_ab_sessions WHERE session_id=%s',(ident,)).fetchone()
-   with LOCK:S['beda_comparison_session']=dict(row)
-   return
-  except Exception as exc:
-   with LOCK:S['sources']['BedaComparison']={'ok':False,'last_check':now(),
-       'error':type(exc).__name__}
-  SHUTDOWN.wait(5)
-
-
 def render_keepalive_loop():
  # Free Render sleeps after 15 minutes without inbound traffic. During PAPER A/B
  # tests, keep the public health endpoint active without touching trading logic.
@@ -1562,11 +1521,7 @@ def main():
    SHUTDOWN.wait(1)
  jobs=[('lease',engine_coordinator),('contracts',bybit_instruments_loop),('discovery',bybit_volatility_discovery_loop),('trades',market_trade_stream),('quotes',market_aux_stream),
   *((('h1_history',market_history_bootstrap),('h1_scan',pandora_loop)) if not v2_enabled() else ()),('execution',pandora_risk_loop),
-  ('checkpoint',pandora_live_state_loop),('history',dashboard_history_loop),('keepalive',render_keepalive_loop),('codex_million',lambda:CODEX.run(SHUTDOWN)),
-  # Legacy Beda A/B worker is opt-in; do not run reset_paper_experiment on Caterpillar.
-  *((('pandora_beda',lambda:BEDA.run(SHUTDOWN)),
-     ('beda_baseline',pandora_beda_comparison_baseline_loop))
-    if os.getenv('PANDORA_ENABLE_BEDA','0')=='1' else ())]
+  ('checkpoint',pandora_live_state_loop),('history',dashboard_history_loop),('keepalive',render_keepalive_loop),('codex_million',lambda:CODEX.run(SHUTDOWN))]
  workers=[threading.Thread(target=supervise,args=job,daemon=True,name=job[0]) for job in jobs]
  for worker in workers:worker.start()
  try:server.serve_forever()
