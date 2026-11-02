@@ -205,6 +205,11 @@ def update_watch(watch,mark,execution_context,flow,stamp):
     if profile['counter_takeover']:
         context['counter_pressure_seen']=True
         context['last_opposite_trade_epoch']=event
+        # Preserve the actual observed pullback extreme. This is causal market
+        # structure, not a percentage stop or an invented threshold.
+        x=side*price
+        prior=_f(context.get('counter_extreme_x'))
+        context['counter_extreme_x']=x if prior is None else min(prior,x)
         context['phase']='WAIT_RESUMPTION'
         context['resumption_confirmed']=False
     elif context.get('counter_pressure_seen') and profile['resumed']:
