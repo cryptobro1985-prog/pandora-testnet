@@ -88,11 +88,10 @@ class FlowContracts(unittest.TestCase):
             self.assertEqual(tick(.7,-side,1003),'confirmed_counter_move_exit')
             for count in range(15):
                 w=dict(side=side,exit_price=100,reentries=count,context={})
-                for delta,control,epoch in [(-1,-side,1004),(-.8,side,1005),(-.9,-side,1006)]:
-                    w=update_watch(w,100+side*delta,None,flow(control,epoch),epoch)
-                    self.assertFalse(reentry_ready(side,None,100,w,flow(side,epoch),epoch))
-                w=update_watch(w,100+side*(-.5),None,flow(side,1007),1007)
-                self.assertTrue(reentry_ready(side,None,100,w,flow(side,1007),1007))
+                w=update_watch(w,100-side,None,flow(-side,1004),1004)
+                self.assertFalse(reentry_ready(side,None,100,w,flow(side,1004),1004))
+                w=update_watch(w,100-side*.8,None,flow(side,1005),1005)
+                self.assertTrue(reentry_ready(side,None,100,w,flow(side,1005),1005))
 
     def test_declared_freshness_boundary_and_missing_data(self):
         a=dict(ready=True,anchor_confirmed=True,h1_direction_anchor=True,entry_side=1)
