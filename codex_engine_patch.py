@@ -63,7 +63,7 @@ def market_history_bootstrap():
   with LOCK:return tuple(dict.fromkeys(tuple(S.get('local_v12_positions',{}))+tuple(S.get('local_experiment_watch',{})))) if S.get('engine_active') else ()
  def candidates():
   if not S.get('engine_active'):return ()
-  with LOCK:return tuple(((S.get('bybit_discovery') or {}).get('candidate_symbols') or ())[:5])
+  with LOCK:return tuple(((S.get('bybit_discovery') or {}).get('candidate_symbols') or ())[:50])
  def report(symbol,value):
   with LOCK:S['sources']['H1History:'+symbol]={**value,'last_check':now()}
   TRADE_WAKE.set()
@@ -94,8 +94,9 @@ new_rank="""   raw_snapshot=scanner.rank(instruments,MARKET_OBS.flow_context,hel
    for row in ranked:
     symbol=row.get('symbol');anchor=anchors.get(symbol) or {}
     try:
-     local_ok=bool(anchor.get('anchor_confirmed') and anchor.get('pivot_type') and
-      float(anchor.get('pivot_price') or 0)>0 and int(anchor.get('entry_side') or 0) in (-1,1))
+     local_ok=bool(anchor.get('ready') and anchor.get('anchor_confirmed') and anchor.get('pivot_type') and
+      float(anchor.get('pivot_price') or 0)>0 and int(anchor.get('entry_side') or 0) in (-1,1) and
+      not anchor.get('entry_blocked') and anchor.get('live_structure_fresh') is not False)
     except (TypeError,ValueError,OverflowError):
      local_ok=False
     if row.get('eligible') and local_ok:
@@ -103,7 +104,7 @@ new_rank="""   raw_snapshot=scanner.rank(instruments,MARKET_OBS.flow_context,hel
      candidate['_activation_flow_ready']=bool(row.get('flow_fresh'))
      candidate['_activation_local_live']=bool(anchor.get('live_structure_fresh') is not False and not anchor.get('entry_blocked'))
      ready.append(candidate)
-   ready.sort(key=lambda row:(not row.get('_activation_flow_ready'),not row.get('_activation_local_live'),int(row.get('rank') or 999999),row.get('symbol') or ''))
+   ready.sort(key=lambda row:(not row.get('_activation_flow_ready'),int(row.get('rank') or 999999),row.get('symbol') or ''))
    chosen=ready[:DISCOVERY_MAX_SELECTED]
    symbols=[row['symbol'] for row in chosen]
    # Do not publish a raw no-local basket. During startup keep the prior
@@ -114,8 +115,9 @@ new_rank="""   raw_snapshot=scanner.rank(instruments,MARKET_OBS.flow_context,hel
      if symbol in symbols:continue
      anchor=anchors.get(symbol) or {}
      try:
-      local_ok=bool(anchor.get('anchor_confirmed') and anchor.get('pivot_type') and
-       float(anchor.get('pivot_price') or 0)>0 and int(anchor.get('entry_side') or 0) in (-1,1))
+      local_ok=bool(anchor.get('ready') and anchor.get('anchor_confirmed') and anchor.get('pivot_type') and
+       float(anchor.get('pivot_price') or 0)>0 and int(anchor.get('entry_side') or 0) in (-1,1) and
+       not anchor.get('entry_blocked') and anchor.get('live_structure_fresh') is not False)
      except (TypeError,ValueError,OverflowError):
       local_ok=False
      if local_ok and symbol in prior_rows:
@@ -126,7 +128,7 @@ new_rank="""   raw_snapshot=scanner.rank(instruments,MARKET_OBS.flow_context,hel
     row.pop('_activation_flow_ready',None);row.pop('_activation_local_live',None)
    snapshot['selected']=chosen[:DISCOVERY_MAX_SELECTED]
    snapshot['selected_symbols']=symbols[:DISCOVERY_MAX_SELECTED]
-   snapshot['activation_basis']='confirmed_h1_local_then_fresh_executed_flow_then_rank'
+   snapshot['activation_basis']='fresh_unblocked_confirmed_local_then_executed_flow_then_rank'
    snapshot['raw_selected_symbols']=raw_snapshot.get('selected_symbols') or []
    events=[]
    for symbol in active_before:
@@ -148,5 +150,9 @@ new_rank="""   raw_snapshot=scanner.rank(instruments,MARKET_OBS.flow_context,hel
    with LOCK:S['sources']['BybitDiscovery']={'ok':bool(snapshot['selected_symbols']),'at':now(),'selected':len(snapshot['selected_symbols']),'mode':'LIVE_STREAM_LOCAL_READY'}"""
 if old_rank not in s: raise SystemExit("Codex scanner publish signature changed")
 s=s.replace(old_rank,new_rank)
+
+# Spread the broader candidate flow warmup across four Bybit trade sockets.
+s=s.replace("count=2 if trades else max(1,min(8,int(os.getenv('BYBIT_AUX_WS_SHARDS','2'))))",
+            "count=4 if trades else max(1,min(8,int(os.getenv('BYBIT_AUX_WS_SHARDS','2'))))")
 
 p.write_text(s)
