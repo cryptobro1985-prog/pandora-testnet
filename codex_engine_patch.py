@@ -107,10 +107,11 @@ new_rank="""   raw_snapshot=scanner.rank(instruments,MARKET_OBS.flow_context,hel
       float(anchor.get('pivot_price') or 0)>0 and int(anchor.get('entry_side') or 0) in (-1,1))
     except (TypeError,ValueError,OverflowError):
      local_ok=False
-    if row.get('eligible') and local_ok:
+    local_live=bool(anchor.get('live_structure_fresh') is True and not anchor.get('entry_blocked'))
+    if row.get('eligible') and local_ok and local_live:
      candidate=dict(row)
      candidate['_activation_flow_ready']=bool(row.get('flow_fresh'))
-     candidate['_activation_local_live']=bool(anchor.get('live_structure_fresh') is not False and not anchor.get('entry_blocked'))
+     candidate['_activation_local_live']=True
      ready.append(candidate)
    ready.sort(key=lambda row:(not row.get('_activation_local_live'),not row.get('_activation_flow_ready'),int(row.get('rank') or 999999),row.get('symbol') or ''))
    ready_by_symbol={row.get('symbol'):row for row in ready}
@@ -123,7 +124,8 @@ new_rank="""   raw_snapshot=scanner.rank(instruments,MARKET_OBS.flow_context,hel
      anchor=anchors.get(symbol) or {}
      try:
       keep=bool(anchor.get('anchor_confirmed') and anchor.get('pivot_type') and
-       float(anchor.get('pivot_price') or 0)>0 and int(anchor.get('entry_side') or 0) in (-1,1))
+       float(anchor.get('pivot_price') or 0)>0 and int(anchor.get('entry_side') or 0) in (-1,1) and
+       anchor.get('live_structure_fresh') is True and not anchor.get('entry_blocked'))
      except (TypeError,ValueError,OverflowError):
       keep=False
      if row and keep:chosen.append(dict(row))
@@ -144,7 +146,8 @@ new_rank="""   raw_snapshot=scanner.rank(instruments,MARKET_OBS.flow_context,hel
      anchor=anchors.get(symbol) or {}
      try:
       local_ok=bool(anchor.get('anchor_confirmed') and anchor.get('pivot_type') and
-       float(anchor.get('pivot_price') or 0)>0 and int(anchor.get('entry_side') or 0) in (-1,1))
+       float(anchor.get('pivot_price') or 0)>0 and int(anchor.get('entry_side') or 0) in (-1,1) and
+       anchor.get('live_structure_fresh') is True and not anchor.get('entry_blocked'))
      except (TypeError,ValueError,OverflowError):
       local_ok=False
      if local_ok and symbol in prior_rows:
@@ -155,7 +158,7 @@ new_rank="""   raw_snapshot=scanner.rank(instruments,MARKET_OBS.flow_context,hel
     row.pop('_activation_flow_ready',None);row.pop('_activation_local_live',None)
    snapshot['selected']=chosen[:DISCOVERY_MAX_SELECTED]
    snapshot['selected_symbols']=symbols[:DISCOVERY_MAX_SELECTED]
-   snapshot['activation_basis']='confirmed_local_sticky_top5_refreshing_structure_and_flow'
+   snapshot['activation_basis']='fresh_unblocked_confirmed_local_top5_per_token_readiness'
    snapshot['raw_selected_symbols']=raw_snapshot.get('selected_symbols') or []
    events=[]
    for symbol in active_before:
@@ -181,6 +184,14 @@ s=s.replace(old_rank,new_rank)
 # Spread the broader candidate flow warmup across four Bybit trade sockets.
 s=s.replace("count=2 if trades else max(1,min(8,int(os.getenv('BYBIT_AUX_WS_SHARDS','2'))))",
             "count=4 if trades else max(1,min(8,int(os.getenv('BYBIT_AUX_WS_SHARDS','2'))))")
+
+# Readiness is per token. One warming/stale selected market must not globally
+# block another selected market whose H1, executed flow, evidence, mark and
+# contract are all ready. The executor still revalidates every symbol itself.
+old_health="and bool(tokens) and all(all(r.values()) for r in tokens.values()))"
+new_health="and bool(tokens) and any(all(r.values()) for r in tokens.values()))"
+if old_health not in s: raise SystemExit("Codex health readiness signature changed")
+s=s.replace(old_health,new_health)
 
 # Surface frozen child worker failures in Render logs; supervisor otherwise only
 # stores them in memory and makes a broken Discovery look like an empty monitor.
