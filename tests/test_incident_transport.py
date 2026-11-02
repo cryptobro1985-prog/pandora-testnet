@@ -58,10 +58,15 @@ class FlowReadIncidentTests(unittest.TestCase):
         self.assertGreater(second,first)
         self.assertLess(second-first,.001)
 
-    def test_reconnect_cannot_reuse_cached_fresh_tape(self):
-        obs=self.observations();self.assertTrue(obs.flow_context('BTC',1020)['trade_data_fresh'])
-        obs.mark_disconnected(owner='test');obs.mark_connected(1020.05,['BTC'],owner='test')
+    def test_short_reconnect_keeps_history_but_requires_new_execution(self):
+        obs=self.observations();before=obs.flow_context('BTC',1020)
+        self.assertTrue(before['trade_data_fresh'])
+        obs.mark_disconnected(1020.01,owner='test');obs.mark_connected(1020.05,['BTC'],owner='test')
         self.assertFalse(obs.flow_context('BTC',1020.1)['trade_data_fresh'])
+        obs.ingest_trades([trade(1020.11,102,'after-reconnect')],1020.11,owner='test')
+        after=obs.flow_context('BTC',1020.12)
+        self.assertTrue(after['trade_data_fresh'])
+        self.assertGreater(after['trade_coverage_seconds'],before['trade_coverage_seconds'])
 
 
 class StreamIncidentTests(unittest.TestCase):
