@@ -23,7 +23,7 @@ s=s.replace(old_wait,new_wait)
 # candidates. Pre-warm only the next five candidates plus the active basket,
 # retained positions/watches and the base symbols.
 old_pool="with LOCK:pool=tuple((S.get('bybit_discovery') or {}).get('candidate_symbols') or ())"
-new_pool="with LOCK:pool=tuple(((S.get('bybit_discovery') or {}).get('candidate_symbols') or ())[:5])"
+new_pool="with LOCK:pool=tuple((S.get('bybit_discovery') or {}).get('candidate_symbols') or ())"
 if old_pool not in s: raise SystemExit("Codex runtime-symbol pool signature changed")
 s=s.replace(old_pool,new_pool)
 
@@ -99,7 +99,11 @@ new_rank="""   raw_snapshot=scanner.rank(instruments,MARKET_OBS.flow_context,hel
     except (TypeError,ValueError,OverflowError):
      local_ok=False
     if row.get('eligible') and local_ok:
-     ready.append(row)
+     candidate=dict(row)
+     candidate['_activation_flow_ready']=bool(row.get('flow_fresh'))
+     candidate['_activation_local_live']=bool(anchor.get('live_structure_fresh') is not False and not anchor.get('entry_blocked'))
+     ready.append(candidate)
+   ready.sort(key=lambda row:(not row.get('_activation_flow_ready'),not row.get('_activation_local_live'),int(row.get('rank') or 999999),row.get('symbol') or ''))
    chosen=ready[:DISCOVERY_MAX_SELECTED]
    symbols=[row['symbol'] for row in chosen]
    # Do not publish a raw no-local basket. During startup keep the prior
@@ -118,9 +122,11 @@ new_rank="""   raw_snapshot=scanner.rank(instruments,MARKET_OBS.flow_context,hel
       chosen.append(prior_rows[symbol]);symbols.append(symbol)
       if len(symbols)>=DISCOVERY_MAX_SELECTED:break
    snapshot=copy.deepcopy(raw_snapshot)
+   for row in chosen:
+    row.pop('_activation_flow_ready',None);row.pop('_activation_local_live',None)
    snapshot['selected']=chosen[:DISCOVERY_MAX_SELECTED]
    snapshot['selected_symbols']=symbols[:DISCOVERY_MAX_SELECTED]
-   snapshot['activation_basis']='highest_ranked_candidates_with_confirmed_h1_local'
+   snapshot['activation_basis']='confirmed_h1_local_then_fresh_executed_flow_then_rank'
    snapshot['raw_selected_symbols']=raw_snapshot.get('selected_symbols') or []
    events=[]
    for symbol in active_before:
