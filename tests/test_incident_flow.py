@@ -48,41 +48,15 @@ class IncidentFlowTests(unittest.TestCase):
             result=observed(rows,1040,40)
             self.assertEqual(result['exit_control_side'],0)
 
-    def test_brief_neutral_print_pauses_without_erasing_observed_counter_seconds(self):
+    def test_confirmed_counter_control_is_not_delayed_by_timer_or_structure_gate(self):
         for side in (-1,1):
             p=position(side);mark=100+side*8
-            for epoch in (1000,1001):
-                self.assertIsNone(pressure_exit(p,None,mark,flow(-side,epoch)))
-            self.assertIsNone(pressure_exit(p,None,mark,flow(-side,1002,.501)))
-            self.assertEqual(p['features']['exit_control_state']['phase'],'PAUSED')
-            self.assertEqual(p['features']['exit_control_state']['observed_seconds'],1)
-            self.assertIsNone(pressure_exit(p,None,mark,flow(-side,1003)))
-            self.assertEqual(p['features']['exit_control_state']['observed_seconds'],1)
-            self.assertEqual(pressure_exit(p,None,mark,flow(-side,1005)),'confirmed_counter_move_exit')
-            self.assertTrue(p['features']['exit_decision']['counter_control_ready'])
+            self.assertEqual(pressure_exit(p,None,mark,flow(-side,1000)),
+                             'confirmed_counter_move_exit')
+            self.assertEqual(p['features']['exit_control_state']['phase'],'CONFIRMED')
 
-    def test_neutral_time_and_repolls_do_not_add_counter_evidence(self):
+    def test_stale_flow_is_unknown_and_cannot_trigger_exit(self):
         for side in (-1,1):
             p=position(side);mark=100+side*8
-            self.assertIsNone(pressure_exit(p,None,mark,flow(-side,1000)))
-            for epoch in (1001,1003,1004):
-                self.assertIsNone(pressure_exit(p,None,mark,flow(-side,epoch,.501)))
-            self.assertIsNone(pressure_exit(p,None,mark,flow(-side,1005)))
-            for _ in range(4):self.assertIsNone(pressure_exit(p,None,mark,flow(-side,1005)))
-            self.assertEqual(p['features']['exit_control_state']['observed_seconds'],0)
-
-    def test_true_own_side_control_cancels_accumulated_counter_evidence(self):
-        for side in (-1,1):
-            p=position(side);mark=100+side*8
-            for epoch in (1000,1002):self.assertIsNone(pressure_exit(p,None,mark,flow(-side,epoch)))
-            self.assertIsNone(pressure_exit(p,None,mark,flow(side,1003)))
-            self.assertEqual(p['features']['exit_control_state']['observed_seconds'],0)
-            self.assertIsNone(pressure_exit(p,None,mark,flow(-side,1004)))
-
-    def test_stale_flow_is_unknown_and_cannot_look_like_confirmed_hold(self):
-        for side in (-1,1):
-            p=position(side);mark=100+side*8
-            self.assertIsNone(pressure_exit(p,None,mark,flow(-side,1000)))
             self.assertIsNone(pressure_exit(p,None,mark,{}))
             self.assertEqual(p['features']['exit_control_state']['phase'],'UNKNOWN')
-            self.assertEqual(p['features']['exit_control_state']['observed_seconds'],0)
