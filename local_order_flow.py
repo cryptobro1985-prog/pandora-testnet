@@ -38,7 +38,7 @@ def flow_profile(flow,side):
  # default explicit test flows without a fast key keep their sustained contract.
  if 'windows' in flow:
   rich=int(flow.get('sustained_control_side') or 0)
-  entry_control=rich if rich in (-1,1) else 0
+  entry_control=rich if rich==dominant and rich in (-1,1) else 0
   fast=int(flow.get('fast_control_side') or 0) if 'fast_control_side' in flow else entry_control
   exit_side=int(flow.get('exit_control_side',fast) or 0)
   control=exit_side if exit_side in (-1,1) else 0
@@ -174,43 +174,50 @@ def pressure_exit(position,execution_context,mark,flow,*,opposite_local_confirme
             'reason':'fresh_executed_flow_and_valid_mark_required'}
         return None
     state=features.get('pressure_state') or {'best':side*entry,'noise':0.,'phase':'HOLDING'}
-    state,structure=advance_structure(state,side,price,profile['control_side'],profile['event_epoch'])
+    state,confirmed=advance_structure(state,side,price,profile['control_side'],profile['event_epoch'])
     features['pressure_state']=state
     takeover=bool(profile['counter_takeover'])
-    features['exit_control_state']={'phase':'CONFIRMED' if takeover else 'HOLD',
-        'reason':'counter_control_confirmed' if takeover else 'counter_control_not_confirmed',
+    features['exit_control_state']={'phase':'CONFIRMED' if takeover and confirmed else 'OBSERVING' if takeover else 'HOLD',
+        'reason':'counter_control_and_price_transfer_confirmed' if takeover and confirmed
+            else 'price_transfer_not_confirmed' if takeover else 'counter_control_not_confirmed',
         'observed_seconds':0.,'control_side':profile['control_side'],
         'last_event_epoch':profile['event_epoch']}
-    features['exit_decision']={'counter_control_ready':takeover,'structure_ready':bool(structure),
+    features['exit_decision']={'counter_control_ready':takeover,'structure_ready':bool(confirmed),
         'opposite_local_confirmed':False,
         'control_basis':(flow or {}).get('exit_control_basis','explicit_flow'),
-        'reason':'confirmed_counter_move_exit' if takeover else 'counter_control_not_confirmed'}
-    return 'confirmed_counter_move_exit' if takeover else None
+        'reason':'confirmed_counter_move_exit' if takeover and confirmed
+            else 'price_structure_not_confirmed' if takeover else 'counter_control_not_confirmed'}
+    return 'confirmed_counter_move_exit' if takeover and confirmed else None
 
 def update_watch(watch,mark,execution_context,flow,stamp):
     out=copy.deepcopy(watch or {});side=int(out.get('side') or 0);price=_f(mark)
     if side not in (-1,1) or price is None or price<=0:return out
     context=out.setdefault('context',{});profile=flow_profile(flow,side)
     if profile is None:return out
-    event=profile['event_epoch']
     if profile['counter_takeover']:
         context['counter_pressure_seen']=True
-        context['last_opposite_trade_epoch']=event
-        context['phase']='WAIT_RESUMPTION'
-        context['resumption_confirmed']=False
-    elif context.get('counter_pressure_seen') and profile['resumed']:
-        previous=_f(context.get('last_opposite_trade_epoch'))
-        if previous is not None and event is not None and event>previous:
-            context.update(phase='REENTRY_READY',resumption_confirmed=True,confirmation_epoch=event)
-    elif not context.get('counter_pressure_seen'):
-        context['phase']='WAIT_COUNTER_CONTROL'
+        context['last_opposite_trade_epoch']=profile['event_epoch']
+    state=context.get('resumption_state')
+    if state is None:
+        original=context.get('exit_pressure_state') or {}
+        state={'best':-side*float(out.get('exit_price') or price),
+               'noise':max(0.,float(original.get('noise') or 0.)),
+               'barrier':-float(original['best']) if original.get('best') is not None else None,
+               'phase':'HOLDING'}
+    state,confirmed=advance_structure(state,-side,price,profile['control_side'],profile['event_epoch'])
+    context['resumption_state']=state
+    if confirmed and context.get('counter_pressure_seen'):
+        context.update(phase='REENTRY_READY',resumption_confirmed=True,confirmation_epoch=profile['event_epoch'])
+    elif not context.get('resumption_confirmed'):
+        context['phase']='WAIT_RESUMPTION_STRUCTURE' if context.get('counter_pressure_seen') else 'WAIT_COUNTER_CONTROL'
     context['last_observed_epoch']=stamp
     return out
+
 
 def reentry_ready(side,execution_context,mark,watch,flow,stamp):
     if not watch or int(watch.get('side') or 0)!=int(side or 0):return False
     context=watch.get('context') or {};profile=flow_profile(flow,side)
     previous=_f(context.get('last_opposite_trade_epoch'))
-    return bool(context.get('counter_pressure_seen') and profile and profile['resumed']
-        and previous is not None and profile['event_epoch'] is not None
-        and profile['event_epoch']>previous)
+    return bool(context.get('counter_pressure_seen') and context.get('resumption_confirmed') and
+        profile and profile['resumed'] and previous is not None and profile['event_epoch'] is not None and
+        profile['event_epoch']>previous)
