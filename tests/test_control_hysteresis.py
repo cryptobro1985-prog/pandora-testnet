@@ -58,59 +58,30 @@ class ControlHysteresisTests(unittest.TestCase):
             analysis=dict(ready=True,anchor_confirmed=True,h1_direction_anchor=True,entry_side=side)
             self.assertFalse(initial_entry_candidate('BTC',analysis,None,flow(side,1000,.501),1000)['eligible'])
 
-    def test_small_pullback_inside_observed_noise_holds_under_strong_counterflow(self):
+    def test_strong_counterflow_with_price_response_exits_immediately(self):
         for side in (-1,1):
             p=position(side)
-            for epoch in (1000,1001,1003,1004):
-                self.assertIsNone(pressure_exit(p,None,100+side*9.8,flow(-side,epoch)))
+            self.assertEqual(pressure_exit(p,None,100+side*8,flow(-side,1000)),
+                             'confirmed_counter_move_exit')
+            self.assertTrue(p['features']['exit_decision']['counter_control_ready'])
 
-    def test_weak_counterflow_never_closes_even_after_a_price_break(self):
+    def test_weak_counterflow_never_closes(self):
         for side in (-1,1):
             p=position(side)
             for epoch in range(1000,1010):
                 self.assertIsNone(pressure_exit(p,None,100+side*8,flow(-side,epoch,.501)))
 
-    def test_strong_structural_transfer_requires_three_seconds_of_new_executions(self):
-        for side in (-1,1):
-            p=position(side);mark=100+side*8
-            for epoch in (1000,1001,1002.9):
-                self.assertIsNone(pressure_exit(p,None,mark,flow(-side,epoch)))
-            p=copy.deepcopy(p)  # Features survive a normal state checkpoint.
-            self.assertEqual(pressure_exit(p,None,mark,flow(-side,1003)),'confirmed_counter_move_exit')
-
-    def test_repolling_the_same_execution_cannot_confirm_takeover(self):
+    def test_confirmed_opposite_local_bypasses_flow_confirmation(self):
         for side in (-1,1):
             p=position(side)
-            for _ in range(20):
-                self.assertIsNone(pressure_exit(p,None,100+side*8,flow(-side,1000)))
-            self.assertEqual(p['features']['exit_control_state']['observed_seconds'],0)
-
-    def test_neutral_own_side_stale_and_gapped_observations_reset_confirmation(self):
-        for side in (-1,1):
-            for interruption in (flow(-side,1002,.501),flow(side,1002),{},flow(-side,1007)):
-                p=position(side);mark=100+side*8
-                self.assertIsNone(pressure_exit(p,None,mark,flow(-side,1000)))
-                self.assertIsNone(pressure_exit(p,None,mark,interruption))
-                self.assertIsNone(pressure_exit(p,None,mark,flow(-side,1008)))
-
-    def test_favorable_extreme_cancels_the_previous_takeover_timer(self):
-        for side in (-1,1):
-            p=position(side)
-            self.assertIsNone(pressure_exit(p,None,100+side*8,flow(-side,1000)))
-            self.assertIsNone(pressure_exit(p,None,100+side*11,flow(-side,1003),opposite_local_confirmed=True))
-            self.assertEqual(p['features']['exit_control_state']['observed_seconds'],0)
-
-    def test_confirmed_opposite_local_cannot_bypass_counterflow_confirmation(self):
-        for side in (-1,1):
-            p=position(side);mark=100+side*8
-            self.assertIsNone(pressure_exit(p,None,mark,flow(-side,1000),opposite_local_confirmed=True))
-            self.assertIsNone(pressure_exit(p,None,mark,flow(-side,1001,.501),opposite_local_confirmed=True))
-            self.assertIsNone(pressure_exit(p,None,mark,flow(-side,1002),opposite_local_confirmed=True))
-            self.assertEqual(pressure_exit(p,None,mark,flow(-side,1005),opposite_local_confirmed=True),
+            self.assertEqual(pressure_exit(p,None,100+side*8,{},opposite_local_confirmed=True),
                              'opposite_confirmed_h1_local')
 
-    def test_sustained_opposite_flow_without_structural_transfer_still_holds(self):
+    def test_absorbed_notional_majority_yields_control_to_price_impact(self):
         for side in (-1,1):
-            p=position(side);p['features']['pressure_state'].pop('barrier')
-            for epoch in (1000,1001,1003):
-                self.assertIsNone(pressure_exit(p,None,100+side*8,flow(-side,epoch)))
+            own='B' if side>0 else 'A';other='A' if side>0 else 'B'
+            rows=[(980,100,1,'B'),(981,100,1,'A'),
+                  (996,100,30,other),(997,100+side*.1,70,own),
+                  (998,100+side*.05,70,own),(999,100-side*.2,30,other)]
+            result=summarize(rows,1000,20)
+            self.assertEqual(result['fast_control_side'],-side)
