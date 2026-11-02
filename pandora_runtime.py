@@ -14,7 +14,7 @@ from pandora_risk import RiskPolicy, plan_add, position_risk, signal_strength
 class PandoraRuntime:
     def __init__(self, app):
         self.a=app;self.scanner=LiveScanner(candidate_limit=int(app.os.getenv('PANDORA_SCAN_CANDIDATES','30')))
-        self.max_adds=int(app.os.getenv('PANDORA_MAX_ADDS','2'))
+        self.max_adds=int(app.os.getenv('PANDORA_MAX_ADDS','4'))
         self.add_fraction=float(app.os.getenv('PANDORA_ADD_MARGIN_FRACTION','0.10'))
         self.position_fraction=float(app.os.getenv('PANDORA_MAX_POSITION_MARGIN_FRACTION','0.40'))
         if not 0<=self.max_adds<=20 or not 0<self.add_fraction<=self.position_fraction<=1:
