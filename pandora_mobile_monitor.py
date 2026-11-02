@@ -55,7 +55,7 @@ def render(data):
         margin=t.get("margin_usd",t.get("margin"))
         pnl=t.get("pnl_usdt",t.get("unrealized_pnl"))
         fraction=(float(pnl)/float(margin)*100) if _finite(pnl) is not None and _finite(margin) is not None and float(margin)>0 else None
-        positions.append(f'<article><div class="heading"><b>{e(t.get("symbol"))}</b><strong class="{e(_side(t.get("side")).lower())}">{e(_side(t.get("side")))}</strong></div><div class="kv"><span>Маржа без плеча</span><b>{e(number(margin))} $</b><span>Плечо</span><b>{e(t.get("leverage"))}x</b><span>Вход / средняя</span><b>{e(_price(t.get("average_entry",t.get("entry"))))}</b><span>PnL</span><b class="{("long" if (pnl or 0)>=0 else "short")}">{e(money(pnl))} · {e(pct(fraction))}</b><span>ADD</span><b>{e(f.get("pyramid_level",0))}</b></div></article>')
+        positions.append(f'<article><div class="heading"><b>{e(t.get("symbol"))}</b><strong class="{e(_side(t.get("side")).lower())}">{e(_side(t.get("side")))}</strong></div><div class="kv"><span>Маржа без плеча</span><b>{e(number(margin))} $</b><span>Плечо</span><b>{e(t.get("leverage"))}x</b><span>Вход / средняя</span><b>{e(_price(t.get("average_entry",t.get("entry"))))}</b><span>Цена сейчас</span><b>{e(_price(t.get("mark",t.get("current_price",t.get("price")))))}</b><span>PnL</span><b class="{("long" if (pnl or 0)>=0 else "short")}">{e(money(pnl))} · {e(pct(fraction))}</b><span>ADD</span><b>{e(f.get("pyramid_level",0))}</b></div></article>')
     history=[]
     for t in (p.get("closed_trades") or [])[:30]:
         margin=t.get("margin",t.get("margin_usd")); pnl=t.get("pnl")
