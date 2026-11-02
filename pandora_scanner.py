@@ -1,44 +1,23 @@
-"""Streaming all-market USDT perpetual ranking and deterministic top-five rotation."""
+"""Live quotes and executed flow for the user's fixed comparison cohort."""
 from collections import deque
-from bisect import bisect_left
 import copy
 import hashlib
 import json
 import math
 import threading
 import time
-
 import websocket
-from pandora_flow_v2_live import enabled as v2_enabled, MIN_TURNOVER_24H, EXPERIMENT as ACTIVE_FLOW_EXPERIMENT
 
-
+FIXED_SYMBOLS=("ARIA","LYN","ESPORTS","1000CAT","SOPH")
+EXPERIMENT="PANDORA_FIXED_FIVE_20261102"
 class LiveScanner:
     def __init__(self, top=5, candidate_limit=30, freshness=15):
-        if not 1<=int(top)<=5 or not int(top)<=int(candidate_limit)<=128 or not 0<float(freshness)<=60:raise ValueError('invalid scanner bounds')
-        self.top=int(top); self.candidate_limit=int(candidate_limit); self.freshness=float(freshness)
-        self.lock=threading.RLock(); self.markets={}; self.histories={}; self.selected=[]
-        self.candidates=[]; self.states={}; self.last_snapshot={}; self.flow_samples={}; self.pump_context=set()
+        self.top=5;self.candidate_limit=5;self.freshness=float(freshness)
+        self.lock=threading.RLock();self.markets={};self.histories={}
+        self.selected=list(FIXED_SYMBOLS);self.candidates=list(FIXED_SYMBOLS)
+        self.states={s:"SELECTED" for s in FIXED_SYMBOLS};self.last_snapshot={}
+        self.flow_samples={};self.pump_context=set()
         self.selected_since={};self.candidate_since={};self.fade_since={}
-
-    @staticmethod
-    def _stable_top(rows, previous, limit, since, epoch):
-        """Warm actual tape before marginal rank noise churns subscriptions.
-
-        A clearly stronger challenger can replace a warmed incumbent. Invalid
-        tickers/faded rows are excluded by the caller, even during warmup.
-        """
-        by_symbol={row['symbol']:row for row in rows}
-        chosen=[by_symbol[s] for s in previous if s in by_symbol][:limit]
-        for challenger in rows:
-            if any(row['symbol']==challenger['symbol'] for row in chosen):continue
-            if len(chosen)<limit:chosen.append(challenger);continue
-            replaceable=[row for row in chosen if epoch-since.get(row['symbol'],epoch)>=15]
-            if not replaceable:continue
-            weakest=min(replaceable,key=lambda row:(row['pandora_win_score'],row['symbol']))
-            if challenger['pandora_win_score']>weakest['pandora_win_score']+.05:
-                chosen.remove(weakest);chosen.append(challenger)
-        return sorted(chosen,key=lambda row:(-row['pandora_win_score'],row['symbol']))
-
     def ingest(self, row, exchange_ms, received=None):
         if not isinstance(row,dict):return False
         try:
@@ -49,6 +28,7 @@ class LiveScanner:
         if not pair.endswith('USDT') or not -1<=received-exchange_ms/1000<=self.freshness:
             return False
         symbol=pair[:-4]
+        if symbol not in FIXED_SYMBOLS:return False
         with self.lock:
             prior=self.markets.get(symbol,{})
             if float(exchange_ms)<prior.get('exchange_ms',0):return False
@@ -71,241 +51,45 @@ class LiveScanner:
             while history and received-history[0][0]>300:history.popleft()
         return True
 
-    def _rank_v2(self,instruments,held,epoch):
-        """Hourly rising Bybit USDT perpetual TOP-5; no intrahour rotations."""
-        with self.lock:
-            saved=copy.deepcopy(self.last_snapshot or {})
-            markets=copy.deepcopy(self.markets)
-            prior=list(saved.get("selected_symbols") or [])
-            refresh=float(saved.get("next_refresh_at") or 0)
-            if refresh and epoch<refresh and saved.get("experiment")==ACTIVE_FLOW_EXPERIMENT:
-                # A restart can freeze a restored hourly selection before
-                # ticker subscriptions are fresh. Recover readiness without
-                # rotating the selected five before their scheduled refresh.
-                fresh_selected=sum(
-                    1 for sym in prior if sym in instruments and sym in markets
-                    and 0<=epoch-float(markets[sym].get("price_received") or 0)<=self.freshness)
-                # Individual positions still require their own fresh mark
-                # and trade tape; one missing ticker must not freeze others.
-                verified=fresh_selected>0
-                saved.update(at=epoch,events=[],
-                    fresh_selected_count=fresh_selected,
-                    selection_frozen=not verified,
-                    observations_ready=verified,
-                    retained_open_positions=sorted(set(held)-set(prior)))
-                self.selected=prior
-                self.last_snapshot=copy.deepcopy(saved)
-                return saved
-        fresh=[(s,r) for s,r in markets.items() if s in instruments and
-               0<=epoch-float(r.get("price_received") or 0)<=self.freshness]
-        if not fresh:
-            frozen={**saved,"at":epoch,"events":[],"selection_frozen":True,
-                "observations_ready":False,"selected_symbols":prior,
-                "retained_open_positions":sorted(set(held)-set(prior)),
-                "reason":"fresh_bybit_tickers_required_for_hourly_top5",
-                "experiment":ACTIVE_FLOW_EXPERIMENT}
-            with self.lock:self.last_snapshot=copy.deepcopy(frozen)
-            return frozen
-        rows=[]
-        for symbol,row in fresh:
-            try:
-                if float(row.get("turnover24h") or 0)<MIN_TURNOVER_24H:continue
-                change=float(row.get("price24hPcnt") or 0)
-                price=float(row.get("lastPrice") or 0)
-                turnover=float(row.get("turnover24h") or 0)
-                if not math.isfinite(change+price+turnover) or price<=0 or change<=0:continue
-            except (TypeError,ValueError,OverflowError):continue
-            rows.append(dict(symbol=symbol,rank=0,last=price,
-               price_received=row.get("price_received"),change_24h_pct=change*100,
-               turnover_24h=turnover,turnover_per_minute=0,move="PUMP",
-               pandora_win_score=change,flow_fresh=False,eligible=True))
-        rows.sort(key=lambda r:(-r["change_24h_pct"],-r["turnover_24h"],r["symbol"]))
-        for i,r in enumerate(rows):r["rank"]=i+1
-        selected=rows[:self.top];symbols=[r["symbol"] for r in selected]
-        events=[]
-        for symbol in prior:
-            if symbol not in symbols:
-                events.append(dict(action="TOKEN_ROTATED",symbol=symbol,
-                                   state="FADING" if symbol in held else "ROTATE_OUT",
-                                   reason="hourly_top5_refresh"))
-        for symbol in symbols:
-            if symbol not in prior:events.append(dict(action="TOKEN_SELECTED",symbol=symbol,
-                                     reason="hourly_rising_top5_min_1m_turnover"))
-        snapshot=dict(at=epoch,selected_at=epoch,next_refresh_at=epoch+3600,
-            experiment=ACTIVE_FLOW_EXPERIMENT,selected_symbols=symbols,
-            selected=selected,top_movers=rows[:self.candidate_limit],
-            candidate_symbols=[r["symbol"] for r in rows[:self.candidate_limit]],
-            retained_open_positions=sorted(set(held)-set(symbols)),
-            states={s:"SELECTED" for s in symbols},events=events,
-            selection_frozen=False,observations_ready=True,scan_seconds=3600,
-            min_turnover_24h_usdt=MIN_TURNOVER_24H,
-            missing_candidates=max(0,self.top-len(symbols)),
-            basis="hourly_bybit_24h_positive_price_change_and_min_1m_usdt_turnover")
-        with self.lock:
-            self.selected=symbols
-            self.candidates=snapshot["candidate_symbols"]
-            self.states=snapshot["states"]
-            self.last_snapshot=copy.deepcopy(snapshot)
-        return snapshot
 
-    def rank(self, instruments, flow_getter, held=(), epoch=None):
+    def rank(self,instruments,flow_getter,held=(),epoch=None):
         epoch=time.time() if epoch is None else float(epoch)
-        if v2_enabled():return self._rank_v2(instruments,held,epoch)
         with self.lock:
-            markets=copy.deepcopy(self.markets)
-            histories={s:list(h) for s,h in self.histories.items()}
-            previous=list(self.selected)
-            previous_candidates=list(self.candidates)
-            retained_snapshot=copy.deepcopy(self.last_snapshot)
-            prior_flow=copy.deepcopy(self.flow_samples)
-            pump_context=set(self.pump_context)|set(previous)|set(held)
-        fresh={s for s,r in markets.items() if s in instruments and 0<=epoch-r.get('price_received',0)<=self.freshness and s in histories}
-        if not instruments or not fresh:
-            # Absence of restored observations is an outage, not proof of fading.
-            snapshot={**retained_snapshot,'at':epoch,'selected_symbols':previous,
-                'selected':retained_snapshot.get('selected',[]),'events':[],
-                'selection_frozen':True,'observations_ready':False,
-                'reason':'waiting_for_current_universe_and_selected_tickers',
-                'states':dict(self.states),'candidate_symbols':retained_snapshot.get('candidate_symbols',[]),
-                'retained_open_positions':[s for s in held if s not in previous]}
-            with self.lock:self.last_snapshot=copy.deepcopy(snapshot)
+            rows=[]
+            for slot,symbol in enumerate(FIXED_SYMBOLS,1):
+                quote=self.markets.get(symbol,{})
+                price=float(quote.get("lastPrice") or 0)
+                age=epoch-float(quote.get("price_received") or 0)
+                fresh=symbol in instruments and price>0 and 0<=age<=self.freshness
+                flow=flow_getter(symbol,epoch) or {}
+                window=(flow.get("windows") or {}).get("300",{})
+                rows.append(dict(symbol=symbol,slot=slot,rank=None,last=price if price>0 else None,
+                    price_received=quote.get("price_received"),eligible=fresh,
+                    flow_fresh=bool(flow.get("trade_data_fresh")),
+                    buy_volume=window.get("buy_volume"),sell_volume=window.get("sell_volume"),
+                    change_24h_pct=float(quote.get("price24hPcnt") or 0)*100,
+                    turnover_24h=float(quote.get("turnover24h") or 0),
+                    pandora_win_score=0.,move="FIXED",selected=True,
+                    reason="fixed_user_cohort" if fresh else "waiting_for_fresh_contract_quote"))
+            ready=any(r["eligible"] for r in rows)
+            snapshot=dict(at=epoch,experiment=EXPERIMENT,selected_symbols=list(FIXED_SYMBOLS),
+                selected=rows,top_movers=rows,candidate_symbols=list(FIXED_SYMBOLS),
+                retained_open_positions=sorted(set(held)-set(FIXED_SYMBOLS)),
+                states={s:"SELECTED" for s in FIXED_SYMBOLS},events=[],
+                selection_frozen=not ready,observations_ready=ready,
+                selected_at=self.last_snapshot.get("selected_at",epoch),
+                next_refresh_at=None,selection_interval_seconds=None,scan_seconds=1,
+                missing_candidates=sum(not r["eligible"] for r in rows),
+                basis="fixed_user_cohort_no_ranking_no_rotation")
+            self.selected=list(FIXED_SYMBOLS);self.candidates=list(FIXED_SYMBOLS)
+            self.last_snapshot=copy.deepcopy(snapshot)
             return snapshot
-        rows=[];flow_samples={}
-        for symbol,row in markets.items():
-            if symbol not in instruments or not 0<=epoch-row.get('price_received',0)<=self.freshness or symbol not in histories:continue
-            samples=histories[symbol]
-            last=float(row['lastPrice']);turn=float(row['turnover24h'])
-            change=float(row.get('price24hPcnt') or 0)
-            def movement(seconds):
-                old=next((x for x in reversed(samples) if epoch-x[0]>=seconds),samples[0])
-                return last/old[1]-1
-            short,minute=movement(15),movement(60)
-            # A correction in a previously active pump remains interesting for
-            # SHORT while executed participation persists. A stopped tape does
-            # not stay selected merely because its old daily return is positive.
-            bootstrapping=epoch-samples[0][0]<15
-            raw_flow=flow_getter(symbol,epoch) or {}
-            prior=prior_flow.get(symbol,{})
-            known=bool(prior.get('known') or raw_flow.get('latest_trade_epoch') is not None or raw_flow.get('windows'))
-            flow=raw_flow if raw_flow.get('trade_data_fresh') else {}
-            windows=flow.get('windows') or {}; fast=windows.get('15',{})
-            rapid=windows.get('5',fast);medium=windows.get('60',{})
-            recent_prices=[x[1] for x in samples if epoch-x[0]<=15]
-            short_volatility=(max(recent_prices)-min(recent_prices))/last if recent_prices else 0.
-            rapid_volume=float(rapid.get('buy_volume',0))+float(rapid.get('sell_volume',0))
-            quiet=bool(windows and (rapid_volume<=0 or int(rapid.get('trade_count',0))==0))
-            velocity=float(fast.get('volume_velocity',0));rapid_velocity=float(rapid.get('volume_velocity',0))
-            # A tiny one-second decline is ordinary market variation. Keep the
-            # pre-decline reference while confirming material loss of activity.
-            reference=float(prior.get('fade_reference_velocity',prior.get('velocity',0)))
-            volume_faded=bool(reference>0 and velocity<reference*.5 and rapid_velocity<=float(prior.get('rapid_velocity',0)))
-            movement_faded=bool(prior and abs(short)<=float(prior.get('movement',0)) and short_volatility<=float(prior.get('short_volatility',0)))
-            current_control=int(flow.get('fast_control_side') or flow.get('sustained_control_side') or 0)
-            # Tiny sample-to-sample declines are not a fade while executions
-            # still drive price. Relative ranking can replace it with a stronger
-            # market; forced removal requires lost control or a quiet tape.
-            warming=bool(symbol in previous and epoch-self.selected_since.get(symbol,epoch)<15)
-            declining=bool(known and (not flow or (volume_faded and movement_faded and not current_control)))
-            if declining:self.fade_since.setdefault(symbol,epoch)
-            else:self.fade_since.pop(symbol,None)
-            fading=bool(known and not warming and (quiet or (declining and epoch-self.fade_since[symbol]>=15)))
-            flow_samples[symbol]=dict(known=known,velocity=velocity,rapid_velocity=rapid_velocity,
-                movement=abs(short),short_volatility=short_volatility,
-                fade_reference_velocity=reference if declining else velocity)
-            current_pump=short>0 or minute>0 or (bootstrapping and change>0)
-            if current_pump:pump_context.add(symbol)
-            active_correction=bool(symbol in pump_context and known and flow and not fading and (short<0 or minute<0))
-            if not (current_pump or active_correction):continue
-            eligible=not fading
-            spread=None
-            try:
-                bid=float(row.get('bid1Price') or 0);ask=float(row.get('ask1Price') or 0)
-                if bid>0 and ask>=bid:spread=(ask-bid)/last
-            except (ValueError,TypeError):pass
-            prices=[x[1] for x in samples]
-            volatility=(max(prices)-min(prices))/last if prices else 0
-            consistency=sum(b[1]>a[1] for a,b in zip(samples,samples[1:]))/max(1,len(samples)-1)
-            elapsed=max(.001,samples[-1][0]-samples[0][0])
-            turnover_velocity=max(0.,turn-samples[0][2])/elapsed
-            rows.append(dict(symbol=symbol,last=last,price_received=row.get('price_received'),
-                exchange_ms=row.get('exchange_ms'),short_return=short,minute_return=minute,
-                movement_strength=abs(short),dominant_volume=max(fast.get('buy_volume',0),fast.get('sell_volume',0)),
-                eligible=eligible,fading=fading,short_volatility=short_volatility,active_correction=active_correction,
-                acceleration=short-minute/4,volatility=volatility,turnover_24h=turn,
-                turnover_per_minute=turnover_velocity*60,executed_volume=medium.get('buy_volume',0)+medium.get('sell_volume',0),
-                volume_velocity=fast.get('volume_velocity',turnover_velocity),
-                volume_change=fast.get('volume_change',0),buy_volume=fast.get('buy_volume',0),
-                sell_volume=fast.get('sell_volume',0),trade_count=fast.get('trade_count',0),
-                trade_velocity=fast.get('trade_velocity',0),persistence=consistency,
-                liquidity=1/(1+spread) if spread is not None else 0,
-                spread=spread,flow_fresh=bool(flow.get('trade_data_fresh')),
-                change_24h_pct=change*100,scan_return_pct=short*100,
-                range_24h_pct=volatility*100,move='CORRECTION' if active_correction else 'PUMP',bootstrap=bootstrapping))
-        # Equal cross-sectional percentile ranks: no fitted weights or indicators.
-        fields=('movement_strength','acceleration','volatility','turnover_per_minute','turnover_24h',
-                'executed_volume','volume_velocity','volume_change','dominant_volume',
-                'trade_count','trade_velocity','persistence','liquidity')
-        for row in rows:row['pandora_win_score']=0.
-        for field in fields:
-            values=sorted(row[field] for row in rows)
-            for row in rows:
-                row['pandora_win_score']+=bisect_left(values,row[field])/max(1,len(rows)-1)/len(fields)
-        rows.sort(key=lambda r:(-r['pandora_win_score'],r['symbol']))
-        for rank,row in enumerate(rows,1):row['rank']=rank
-        eligible=[r for r in rows if r['eligible']]
-        # Selection is a four-hour trading cohort. Ranking and tape monitoring
-        # continue continuously, but a rank fluctuation cannot rotate the
-        # five symbols mid-session. Unavailable quotes block entries elsewhere.
-        refresh_interval=4*3600
-        last_selection_at=float(retained_snapshot.get('selected_at') or 0)
-        if previous and last_selection_at <= 0:
-            last_selection_at=epoch  # upgrade an existing live cohort in place
-        refresh_due=not previous or epoch>=last_selection_at+refresh_interval
-        if refresh_due:
-            selected=eligible[:self.top]
-            symbols=[r['symbol'] for r in selected]
-            selection_at=epoch if symbols else last_selection_at
-        else:
-            live_by_symbol={row['symbol']:row for row in rows}
-            former={row['symbol']:row for row in retained_snapshot.get('selected',[]) if row.get('symbol')}
-            selected=[live_by_symbol.get(sym,former.get(sym,{'symbol':sym})) for sym in previous]
-            symbols=list(previous)
-            selection_at=last_selection_at
-        events=[]
-        with self.lock:
-            for symbol in previous:
-                if symbol not in symbols:
-                    state='FADING' if symbol in held else 'ROTATE_OUT'
-                    self.states[symbol]=state
-                    events.append(dict(action='TOKEN_ROTATED',symbol=symbol,state=state,reason='stronger_live_candidate_or_faded_activity'))
-            for symbol,state in list(self.states.items()):
-                if state=='FADING' and symbol not in held and symbol not in symbols:
-                    self.states[symbol]='ROTATE_OUT'
-                    events.append(dict(action='ROTATE_OUT',symbol=symbol,state='ROTATE_OUT',reason='retained_position_closed'))
-            for symbol in symbols:
-                self.states[symbol]='SELECTED'
-                if symbol not in previous:events.append(dict(action='TOKEN_SELECTED',symbol=symbol,reason='live_cross_sectional_top_five'))
-            self.flow_samples.update(flow_samples);self.pump_context=pump_context
-            candidates=self._stable_top(eligible,previous_candidates,self.candidate_limit,self.candidate_since,epoch)
-            self.selected_since={s:self.selected_since.get(s,epoch) for s in symbols}
-            self.selected=symbols;self.candidates=[r['symbol'] for r in candidates]
-            self.candidate_since={s:self.candidate_since.get(s,epoch) for s in self.candidates}
-            self.last_snapshot=dict(at=epoch,selected_symbols=symbols,selected=selected,
-                top_movers=rows[:self.candidate_limit],candidate_symbols=list(self.candidates),
-                retained_open_positions=[s for s in held if s not in symbols],
-                states=dict(self.states),events=events,selection_frozen=False,observations_ready=True,
-                selected_at=selection_at,next_refresh_at=selection_at+refresh_interval,
-                selection_interval_seconds=refresh_interval,scan_seconds=1,
-                basis='continuous_live_market_scan_with_four_hour_locked_top_five')
-            return copy.deepcopy(self.last_snapshot)
 
     def restore(self,snapshot):
-        # Restored ranking is visible, but cannot create fresh live observations.
         with self.lock:
-            self.last_snapshot=copy.deepcopy(snapshot or {})
-            self.selected=list(self.last_snapshot.get('selected_symbols') or [])
-            self.states=dict(self.last_snapshot.get('states') or {})
-
+            self.last_snapshot={}
+            self.selected=list(FIXED_SYMBOLS);self.candidates=list(FIXED_SYMBOLS)
+            self.states={s:"SELECTED" for s in FIXED_SYMBOLS}
 
 def ticker_worker(scanner, stop, instruments_getter, report, shard=0, shards=4,
                   url='wss://stream.bybit.com/v5/public/linear'):
@@ -314,7 +98,7 @@ def ticker_worker(scanner, stop, instruments_getter, report, shard=0, shards=4,
     while not stop.is_set():
         ws=None
         try:
-            universe=set(instruments_getter())
+            universe=set(instruments_getter()) & set(FIXED_SYMBOLS)
             selected={s for s in universe if int(hashlib.sha1(s.encode()).hexdigest()[:8],16)%shards==shard}
             if not selected:stop.wait(1);continue
             ws=websocket.create_connection(url,timeout=8,enable_multithread=True);ws.settimeout(2)
@@ -330,7 +114,7 @@ def ticker_worker(scanner, stop, instruments_getter, report, shard=0, shards=4,
                 if stamp-last>30 or (pending and stamp-started>15):raise RuntimeError('scanner_stale_or_ack_timeout')
                 if stamp-refresh>60:
                     refresh=stamp
-                    if set(instruments_getter())!=universe:break
+                    if set(instruments_getter()) & set(FIXED_SYMBOLS)!=universe:break
                 try:raw=ws.recv()
                 except websocket.WebSocketTimeoutException:continue
                 if not raw:raise RuntimeError('scanner_socket_closed')
