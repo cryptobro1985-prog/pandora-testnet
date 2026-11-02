@@ -67,9 +67,16 @@ def _candidate(symbol,analysis,flow):
 
 def initial_entry_candidate(symbol,analysis,execution_context,flow,stamp):return _candidate(symbol,analysis,flow)
 def entry_candidate(symbol,analysis,execution_context,flow,stamp):
- out=_candidate(symbol,analysis,flow)
- if out['eligible']:out['reason']='h1_executed_control_reentry'
- return out
+ side=int((analysis or {}).get('entry_side') or 0)
+ h1=bool((analysis or {}).get('ready') and (analysis or {}).get('anchor_confirmed')
+     and (analysis or {}).get('h1_direction_anchor') and not (analysis or {}).get('entry_blocked')
+     and side in (-1,1))
+ profile=flow_profile(flow,side)
+ eligible=bool(h1 and profile and profile['resumed'])
+ reason='h1_executed_control_reentry' if eligible else 'waiting_for_h1_local' if not h1 else 'waiting_for_valid_executed_flow' if profile is None else 'waiting_for_executed_control_resumption'
+ return {'symbol':symbol,'side':side,'eligible':eligible,'reason':reason,'policy':POLICY,
+         'aligned_pressure':profile['aligned_pressure'] if profile else None,
+         'event_epoch':profile['event_epoch'] if profile else None}
 
 
 def advance_structure(state,direction,mark,control,event_epoch):
