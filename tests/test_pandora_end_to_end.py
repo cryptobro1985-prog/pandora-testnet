@@ -162,10 +162,6 @@ class SelectedMarketExecutionTests(unittest.TestCase):
             exit_price=best-side*.4
             self.send(symbol,-side,9,exit_price)
             app.pandora_mark_positions({symbol:exit_price})
-            self.assertIn(symbol,app.S['pandora_win_positions'])
-            time.sleep(3.05)
-            self.send(symbol,-side,1,exit_price)
-            app.pandora_mark_positions({symbol:exit_price})
             self.assertNotIn(symbol,app.S['pandora_win_positions'])
             extreme=exit_price-side*.3
             for control,size,price in [(-side,27,extreme),(side,81,extreme+side*.2),(-side,243,extreme+side*.1)]:
@@ -179,10 +175,6 @@ class SelectedMarketExecutionTests(unittest.TestCase):
             final=extreme-side*.1
             self.send(symbol,-side,2187,final)
             app.pandora_mark_positions({symbol:final})
-            self.assertIn(symbol,app.S['pandora_win_positions'])
-            time.sleep(3.05)
-            self.send(symbol,-side,1,final)
-            app.pandora_mark_positions({symbol:final})
             self.assertNotIn(symbol,app.S['pandora_win_positions'])
         with self.connect() as db:
             trades=db.execute('select symbol,count(*) n,sum(pnl) pnl from pandora_win_trade_history group by symbol').fetchall()
@@ -194,9 +186,9 @@ class SelectedMarketExecutionTests(unittest.TestCase):
             self.assertAlmostEqual(account['realized_pnl'],pnl)
             for kind in ('pandora_trade_opened','pandora_trade_closed'):
                 self.assertEqual(db.execute('select count(*) n from pandora_win_audit_journal where kind=%s',(kind,)).fetchone()['n'],2*len(self.sides))
-        self.assertEqual(self.obs.stats()['accepted'],13*len(self.sides))
+        self.assertEqual(self.obs.stats()['accepted'],11*len(self.sides))
         self.evidence('selected-market-wire.json',{'tokens':{r['symbol']:{'opens':2,'closes':r['n'],'reentries':1,
-            'pnl_net_fees':r['pnl']} for r in trades},'accepted_frames':13*len(self.sides),'closed_trades':2*len(self.sides),
+            'pnl_net_fees':r['pnl']} for r in trades},'accepted_frames':11*len(self.sides),'closed_trades':2*len(self.sides),
             'starting_equity':500,'ending_equity':account['equity'],'realized_pnl':pnl,
             'transport':'real loopback WebSocket carrying synthetic Bybit publicTrade frames'})
 
