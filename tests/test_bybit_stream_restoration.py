@@ -47,10 +47,10 @@ class BybitStreamContracts(unittest.TestCase):
         _,marks,_,_=self.stream([invalid,self.trade(900000)])
         self.assertEqual(marks,[])
 
-    def test_delta_ticker_never_refreshes_unchanged_symbols(self):
+    def test_delta_ticker_refreshes_cached_unchanged_mark(self):
         _,marks,_,_=self.stream([{'topic':'tickers.BTCUSDT','data':{'symbol':'BTCUSDT','lastPrice':'100'}},
                                {'topic':'tickers.BTCUSDT','data':{'symbol':'BTCUSDT','fundingRate':'0.001'}}])
-        self.assertEqual(marks,[{'BTC':'100'}])
+        self.assertEqual(marks,[{'BTC':'100'},{'BTC':'100'}])
 
     def test_same_millisecond_distinct_trade_updates_mark(self):
         _,marks,_,_=self.stream([self.trade(1000500,'100','a'),self.trade(1000500,'101','b')])
