@@ -49,4 +49,11 @@ for old_name,new_name in mapping.items():reset=reset.replace(old_name,new_name)
 reset=reset.replace("PANDORA_FIXED_FIVE_20261102","CODEX_FIXED_FIVE_20261102")
 reset=reset.replace("pandora_win_legacy_fixed5_20261102_","codex_legacy_fixed5_20261102_")
 (p.parent/"pandora_fixed_five_reset.py").write_text(reset)
+
+# Limit all frozen history/quote/trade work to the same user cohort.
+s=s.replace("LOCAL_EXPERIMENT_SYMBOLS=('INIT','NEAR','BTC','SOL','ETH','LIT','HYPE','ZEC','TAO','GRASS','BIRB','BEAM','LSK')",
+            "LOCAL_EXPERIMENT_SYMBOLS=('ARIA','LYN','ESPORTS','1000CAT','SOPH')")
+s=s.replace("count=2 if trades else max(1,min(8,int(os.getenv('BYBIT_AUX_WS_SHARDS','2'))))","count=5 if trades else max(1,min(8,int(os.getenv('BYBIT_AUX_WS_SHARDS','2'))))")
+s=s.replace("stable_shard=lambda symbol:int(hashlib.sha1(str(symbol).encode()).hexdigest()[:8],16)%count","stable_shard=lambda symbol:('ARIA','LYN','ESPORTS','1000CAT','SOPH').index(symbol) if trades and symbol in ('ARIA','LYN','ESPORTS','1000CAT','SOPH') else int(hashlib.sha1(str(symbol).encode()).hexdigest()[:8],16)%count")
+
 p.write_text(s)
