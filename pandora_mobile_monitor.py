@@ -14,10 +14,23 @@ def pct(v):
     x=_finite(v)
     return "—" if x is None else f"{x:+,.2f}%"
 def local(t):
-    a=t.get("execution_local") or (t.get("local_state") or {}).get("execution_local") or t.get("confirmed_local") or {}
-    if not isinstance(a,dict): a={}
-    p=a.get("confirmed_local") or a
-    return str(p.get("pivot_type") or "WAIT"),_price(p.get("pivot_price"))
+    state=t.get("local_state") or {}
+    confirmed=t.get("confirmed_local") or state.get("confirmed_local") or {}
+    execution=t.get("execution_local") or state.get("execution_local") or {}
+    forming=t.get("forming_local") or state.get("forming_local") or {}
+    if not isinstance(confirmed,dict): confirmed={}
+    if not isinstance(execution,dict): execution={}
+    if not isinstance(forming,dict): forming={}
+    active=execution if execution.get("pivot_type") and execution.get("pivot_price") is not None else confirmed
+    valid=bool(active.get("pivot_type") and active.get("pivot_price") is not None)
+    blocked=bool(t.get("entry_blocked",state.get("entry_blocked",False)))
+    live=state.get("live_structure_fresh",True) is not False
+    raw_side=t.get("direction") or t.get("entry_side") or active.get("entry_side")
+    direction=_side(raw_side) if valid and live and not blocked else "WAIT"
+    forming_text=(str(forming.get("pivot_type"))+" · "+_price(forming.get("pivot_price"))) if forming.get("pivot_type") else "—"
+    return (str(active.get("pivot_type") or "WAIT"),_price(active.get("pivot_price")),
+            direction,forming_text,("НЕ ПОДТВЕРЖДЕНО" if not valid else
+            "BLOCKED" if blocked else "STALE" if not live else "CONFIRMED"))
 def render(data):
     p=data.get("pandora") or {}
     start,equity,total,total_pct=_summary(p)
@@ -32,11 +45,10 @@ def render(data):
     sections=[]
     for t in _tokens(data)[:5]:
         name=t.get("symbol")
-        typ,level=local(t)
+        typ,level,direction,forming,structure_status=local(t)
         pos=t.get("position") or {}
-        direction=_side(t.get("direction") or t.get("entry_side"))
         state=_side(pos.get("side")) if pos else "НЕТ"
-        sections.append(f'<article><div class="heading"><b>{e(name)}</b><strong class="{e(direction.lower())}">{e(direction)}</strong></div><div class="kv"><span>Local</span><b>{e(typ)} · {e(level)}</b><span>Цена</span><b>{e(_price(t.get("price")))}</b><span>Сделка</span><b>{e(state)}</b></div></article>')
+        sections.append(f'<article><div class="heading"><b>{e(name)}</b><strong class="{e(direction.lower())}">{e(direction)}</strong></div><div class="kv"><span>Local</span><b>{e(typ)} · {e(level)}</b><span>Формируется</span><b>{e(forming)}</b><span>Структура</span><b>{e(structure_status)}</b><span>Цена</span><b>{e(_price(t.get("price")))}</b><span>Сделка</span><b>{e(state)}</b></div></article>')
     positions=[]
     for t in p.get("open_positions") or []:
         f=t.get("features") or {}
