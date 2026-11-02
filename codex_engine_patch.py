@@ -15,7 +15,7 @@ s=s.replace(old,new)
 # 15s executed-flow evidence can finish. Keep market ticker ingestion continuous,
 # but hold each active TOP-5 basket for one minute so locals/flow can become usable.
 old_wait="   TRADE_WAKE.set();SHUTDOWN.wait(1)\n finally:\n  for worker in workers:worker.join(3)"
-new_wait="   TRADE_WAKE.set();SHUTDOWN.wait(float(os.getenv('PANDORA_DISCOVERY_SCAN_SECONDS','60')))\n finally:\n  for worker in workers:worker.join(3)"
+new_wait="   TRADE_WAKE.set();SHUTDOWN.wait(float(os.getenv('PANDORA_DISCOVERY_SCAN_SECONDS','1')))\n finally:\n  for worker in workers:worker.join(3)"
 if old_wait not in s: raise SystemExit("Codex discovery loop signature changed")
 s=s.replace(old_wait,new_wait)
 
