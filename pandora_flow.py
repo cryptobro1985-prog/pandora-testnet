@@ -52,7 +52,7 @@ def summarize(trades, epoch, coverage):
             complete=coverage>=seconds,
         )
     minute = windows['60']
-    control = 1 if minute['imbalance']>0 else -1 if minute['imbalance']<0 else 0
+    dominance = 1 if minute['imbalance']>0 else -1 if minute['imbalance']<0 else 0
     # Reconstruct the rolling 60s majority at both executions and expirations.
     # Expiring trades can change control even when no new execution arrives.
     balance=0.;dominance_start=epoch;previous_control=0
@@ -69,18 +69,22 @@ def summarize(trades, epoch, coverage):
         observed_control=1 if balance>0 else -1 if balance<0 else 0
         if observed_control!=previous_control:dominance_start=stamp
         previous_control=observed_control
-    if previous_control!=control:dominance_start=epoch
-    dominance_duration=max(0.,epoch-dominance_start) if control else 0.
+    if previous_control!=dominance:dominance_start=epoch
+    dominance_duration=max(0.,epoch-dominance_start) if dominance else 0.
     # A few identical bootstrap prints do not establish independent horizons.
     # 15 seconds of actual observed tape are required, not just socket uptime.
     active=[windows[str(n)] for n in (5,15)]
     # A single contrary print cannot erase multi-trade executed control.
     # Price response is evaluated over each window, not by the last tick alone.
-    def window_control(window, require_net_response=False):
+    def window_control(window, require_net_response=False, require_complete=True):
         bias=1 if window['imbalance']>=MIN_CONTROL_IMBALANCE else -1 if window['imbalance']<=-MIN_CONTROL_IMBALANCE else 0
-        response='buy_price_response' if bias>0 else 'sell_price_response'
-        if not (bias and window['complete'] and window['trade_count']>=2 and window[response]>0):return 0
-        if require_net_response and window['price_return']*bias<=0:return 0
+        if not bias or (require_complete and not window['complete']) or window['trade_count']<2:return 0
+        move=1 if window['price_return']>0 else -1 if window['price_return']<0 else 0
+        own='buy_price_response' if bias>0 else 'sell_price_response'
+        opposite='sell_price_response' if bias>0 else 'buy_price_response'
+        if move==-bias and window[opposite]>0:return -bias
+        if window[own]<=0:return 0
+        if require_net_response and move!=bias:return 0
         return bias
     fast_bias=window_control(active[0])
     fast_control=fast_bias if fast_bias and window_control(active[1])==fast_bias else 0
@@ -93,17 +97,15 @@ def summarize(trades, epoch, coverage):
     exit_basis='fast_5_15' if fast_control else 'confirmed_15_30' if slow_exit else 'unconfirmed'
     # Old minute volume must not veto a structurally confirmed risk-reducing
     # exit. New entries/reentries retain the conservative minute corroboration.
-    response_key='buy_price_response' if control>0 else 'sell_price_response'
-    sustained=bool(control and fast_control==control
-                   and minute['imbalance']*control>=MIN_CONTROL_IMBALANCE
-                   and minute[response_key]>0)
+    context_control=window_control(minute,True,require_complete=False)
+    sustained=bool(context_control and fast_control==context_control)
     return dict(windows=windows, volume_velocity=minute['volume_velocity'],
                 trade_velocity=minute['trade_velocity'], imbalance_change=minute['imbalance_change'],
                 volume_acceleration=windows['15']['volume_acceleration'],
-                dominance_side=control, dominance_duration=dominance_duration,
-                fast_control_side=fast_control,context_control_side=control,
+                dominance_side=dominance, dominance_duration=dominance_duration,
+                fast_control_side=fast_control,context_control_side=context_control,
                 exit_control_side=exit_control,exit_control_basis=exit_basis,
-                sustained_control_side=control if sustained else 0,
+                sustained_control_side=context_control if sustained else 0,
                 minimum_control_imbalance=MIN_CONTROL_IMBALANCE,
                 evidence_ready=windows['15']['complete'],evidence_required_seconds=15,
                 buy_price_response=minute['buy_price_response'],
