@@ -2,7 +2,7 @@
 Runs the frozen Codex revision in a separate process and PostgreSQL schema.
 No private exchange API and no real orders.
 """
-import copy,json,os,subprocess,sys,threading,time,urllib.request,urllib.parse
+import copy,json,os,socket,subprocess,sys,threading,time,urllib.request,urllib.parse
 from pathlib import Path
 import psycopg
 
