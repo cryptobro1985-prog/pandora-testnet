@@ -1465,6 +1465,7 @@ class Handler(BaseHTTPRequestHandler):
     result=health_state();self.send(200 if result['healthy' if path=='/health' else 'risk_ready'] else 503,result)
    elif path=='/':self.send(200,html_dashboard(dashboard()),'text/html; charset=utf-8')
    elif path in ('/api/dashboard','/api/pandora','/status'):self.send(200,dashboard())
+   elif path=='/api/codex':self.send(200,CODEX.snapshot())
    elif path in ('/api/pandora/history','/pandora/history'):
     result=pandora_history_page('pandora_win',args.get('before',[None])[0],int(args.get('limit',['100'])[0]),args.get('symbol',[None])[0])
     if path=='/pandora/history':
