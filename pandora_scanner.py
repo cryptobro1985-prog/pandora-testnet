@@ -253,8 +253,24 @@ class LiveScanner:
         rows.sort(key=lambda r:(-r['pandora_win_score'],r['symbol']))
         for rank,row in enumerate(rows,1):row['rank']=rank
         eligible=[r for r in rows if r['eligible']]
-        selected=self._stable_top(eligible,previous,self.top,self.selected_since,epoch)
-        symbols=[r['symbol'] for r in selected]
+        # Selection is a four-hour trading cohort. Ranking and tape monitoring
+        # continue continuously, but a rank fluctuation cannot rotate the
+        # five symbols mid-session. Unavailable quotes block entries elsewhere.
+        refresh_interval=4*3600
+        last_selection_at=float(retained_snapshot.get('selected_at') or 0)
+        if previous and last_selection_at <= 0:
+            last_selection_at=epoch  # upgrade an existing live cohort in place
+        refresh_due=not previous or epoch>=last_selection_at+refresh_interval
+        if refresh_due:
+            selected=eligible[:self.top]
+            symbols=[r['symbol'] for r in selected]
+            selection_at=epoch if symbols else last_selection_at
+        else:
+            live_by_symbol={row['symbol']:row for row in rows}
+            former={row['symbol']:row for row in retained_snapshot.get('selected',[]) if row.get('symbol')}
+            selected=[live_by_symbol.get(sym,former.get(sym,{'symbol':sym})) for sym in previous]
+            symbols=list(previous)
+            selection_at=last_selection_at
         events=[]
         with self.lock:
             for symbol in previous:
@@ -277,8 +293,10 @@ class LiveScanner:
             self.last_snapshot=dict(at=epoch,selected_symbols=symbols,selected=selected,
                 top_movers=rows[:self.candidate_limit],candidate_symbols=list(self.candidates),
                 retained_open_positions=[s for s in held if s not in symbols],
-                states=dict(self.states),events=events,selection_frozen=False,observations_ready=True,scan_seconds=1,
-                basis='streaming_tick_activity_and_executed_volume_equal_percentile_ranks')
+                states=dict(self.states),events=events,selection_frozen=False,observations_ready=True,
+                selected_at=selection_at,next_refresh_at=selection_at+refresh_interval,
+                selection_interval_seconds=refresh_interval,scan_seconds=1,
+                basis='continuous_live_market_scan_with_four_hour_locked_top_five')
             return copy.deepcopy(self.last_snapshot)
 
     def restore(self,snapshot):
