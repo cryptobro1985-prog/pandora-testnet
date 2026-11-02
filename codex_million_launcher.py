@@ -25,7 +25,7 @@ class CodexBridge:
   return base
  def _poll(self):
   req=urllib.request.Request("http://127.0.0.1:10002/api/pandora",headers={"Accept":"application/json","User-Agent":"pandora-codex-bridge"})
-  with urllib.request.urlopen(req,timeout=4) as resp:payload=json.load(resp)
+  with urllib.request.urlopen(req,timeout=20) as resp:payload=json.load(resp)
   # Frozen Codex revision a01bc1d0 publishes its live strategy as
   # "strategy1_primary" (newer PANDORA builds use "pandora"). Accept both
   # shapes so the bridge exposes the ACTUAL Codex scanner/positions/history.
@@ -60,7 +60,7 @@ class CodexBridge:
     summary=("ERROR",type(exc).__name__,str(exc)[:120])
     if summary!=self._last_log:
      self._last_log=summary;print("[CODEX_MILLION] poll_error=%s:%s" % (type(exc).__name__,str(exc)[:160]),flush=True)
-   stop.wait(5)
+   stop.wait(10)
   if self.process is not None and self.process.poll() is None:
    try:self.process.terminate();self.process.wait(timeout=6)
    except Exception:
