@@ -7,6 +7,5 @@ COPY requirements.txt .
 RUN --mount=type=secret,id=proxy_ca if [ -f /run/secrets/proxy_ca ]; then PIP_CERT=/run/secrets/proxy_ca pip install --no-cache-dir -r requirements.txt; else pip install --no-cache-dir -r requirements.txt; fi
 COPY *.py ./
 RUN git clone https://github.com/cryptobro1985-prog/pandora-testnet.git /app/codex_engine && cd /app/codex_engine && git checkout a01bc1d0c9c216ddb28c75b31fb42e1248867a0d && rm -rf .git && python /app/codex_engine_patch.py
-COPY pandora_beda/ ./pandora_beda/
 EXPOSE 10000
 CMD ["python","app.py"]
