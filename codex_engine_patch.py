@@ -90,6 +90,15 @@ new_rank="""   raw_snapshot=scanner.rank(instruments,MARKET_OBS.flow_context,hel
     anchors=copy.deepcopy(S.get('local_h1_direction',{}))
     active_before=tuple((S.get('bybit_discovery') or {}).get('selected_symbols') or ())
    ranked=list(raw_snapshot.get('top_movers') or raw_snapshot.get('selected') or [])
+   # Continuous scanner prices are a resilient public Bybit mark source. Keep
+   # PAPER marks fresh every second even while quote WS subscriptions rebalance.
+   try:
+    accept_market_prices({row['symbol']:row.get('last') for row in ranked if row.get('symbol') and row.get('last')})
+   except Exception:
+    pass
+   with LOCK:
+    prior_selected_rows={row.get('symbol'):copy.deepcopy(row) for row in ((S.get('bybit_discovery') or {}).get('selected') or []) if row.get('symbol')}
+    last_rotation=float(S.get('_codex_selection_rotated_at',0) or 0)
    ready=[]
    for row in ranked:
     symbol=row.get('symbol');anchor=anchors.get(symbol) or {}
@@ -105,8 +114,29 @@ new_rank="""   raw_snapshot=scanner.rank(instruments,MARKET_OBS.flow_context,hel
      candidate['_activation_local_live']=bool(anchor.get('live_structure_fresh') is not False and not anchor.get('entry_blocked'))
      ready.append(candidate)
    ready.sort(key=lambda row:(not row.get('_activation_flow_ready'),int(row.get('rank') or 999999),row.get('symbol') or ''))
-   chosen=ready[:DISCOVERY_MAX_SELECTED]
+   ready_by_symbol={row.get('symbol'):row for row in ready}
+   # Once five local-ready symbols are active, hold them for one minute. This
+   # keeps H1/M15, mark and executed-flow evidence from being reset every second.
+   chosen=[]
+   if active_before and time.time()-last_rotation<60:
+    for symbol in active_before:
+     row=ready_by_symbol.get(symbol) or prior_selected_rows.get(symbol)
+     anchor=anchors.get(symbol) or {}
+     try:
+      keep=bool(anchor.get('ready') and anchor.get('anchor_confirmed') and anchor.get('pivot_type') and
+       float(anchor.get('pivot_price') or 0)>0 and int(anchor.get('entry_side') or 0) in (-1,1) and
+       not anchor.get('entry_blocked') and anchor.get('live_structure_fresh') is not False)
+     except (TypeError,ValueError,OverflowError):
+      keep=False
+     if row and keep:chosen.append(dict(row))
+   for row in ready:
+    if row.get('symbol') not in {x.get('symbol') for x in chosen}:
+     chosen.append(row)
+    if len(chosen)>=DISCOVERY_MAX_SELECTED:break
+   chosen=chosen[:DISCOVERY_MAX_SELECTED]
    symbols=[row['symbol'] for row in chosen]
+   if tuple(symbols)!=tuple(active_before) and len(symbols)>=len(active_before):
+    with LOCK:S['_codex_selection_rotated_at']=time.time()
    # Do not publish a raw no-local basket. During startup keep the prior
    # confirmed-local basket until enough ranked candidates are prepared.
    if len(symbols)<DISCOVERY_MAX_SELECTED:
