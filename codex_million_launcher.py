@@ -22,7 +22,7 @@ class CodexBridge:
   with psycopg.connect(base,autocommit=True) as db:db.execute("CREATE SCHEMA IF NOT EXISTS codex_million")
   u=urllib.parse.urlsplit(base);q=urllib.parse.parse_qsl(u.query,keep_blank_values=True)
   q=[x for x in q if x[0]!="options"];q.append(("options","-csearch_path=codex_million"))
-  return urllib.parse.urlunsplit((u.scheme,u.netloc,u.path,urllib.parse.urlencode(q),u.fragment))
+  return base
  def _poll(self):
   req=urllib.request.Request("http://127.0.0.1:10002/api/pandora",headers={"Accept":"application/json","User-Agent":"pandora-codex-bridge"})
   with urllib.request.urlopen(req,timeout=4) as resp:payload=json.load(resp)
