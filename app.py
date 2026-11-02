@@ -1447,7 +1447,7 @@ def dashboard():
   _DASHBOARD_CACHE.update(at=time.monotonic(),value=value)
   return value
 def html_dashboard(data):
- from pandora_monitor import render
+ from pandora_mobile_monitor import render
  return render(data)
 
 class Handler(BaseHTTPRequestHandler):
