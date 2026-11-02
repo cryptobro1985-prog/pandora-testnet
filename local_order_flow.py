@@ -44,7 +44,7 @@ def flow_profile(flow,side):
   control=exit_side if exit_side in (-1,1) else 0
  return {'event_epoch':_event_epoch(flow),'aligned_pressure':side*(buy-sell)/(buy+sell),'control_side':control,
          'entry_control_side':entry_control,
-         'aligned_control':entry_control==side,'resumed':entry_control==side,'counter_takeover':control==-side,
+         'aligned_control':entry_control==side,'resumed':control==side,'counter_takeover':control==-side,
          'weakening':direction==-side or side*(buy-sell)<0,'price_direction':direction}
 
 
@@ -194,30 +194,25 @@ def update_watch(watch,mark,execution_context,flow,stamp):
     if side not in (-1,1) or price is None or price<=0:return out
     context=out.setdefault('context',{});profile=flow_profile(flow,side)
     if profile is None:return out
+    event=profile['event_epoch']
     if profile['counter_takeover']:
         context['counter_pressure_seen']=True
-        context['last_opposite_trade_epoch']=profile['event_epoch']
-    state=context.get('resumption_state')
-    if state is None:
-        original=context.get('exit_pressure_state') or {}
-        state={'best':-side*float(out.get('exit_price') or price),
-               'noise':max(0.,float(original.get('noise') or 0.)),
-               'barrier':-float(original['best']) if original.get('best') is not None else None,
-               'phase':'HOLDING'}
-    state,confirmed=advance_structure(state,-side,price,profile['control_side'],profile['event_epoch'])
-    context['resumption_state']=state
-    if confirmed and context.get('counter_pressure_seen'):
-        context.update(phase='REENTRY_READY',resumption_confirmed=True,confirmation_epoch=profile['event_epoch'])
-    elif not context.get('resumption_confirmed'):
-        context['phase']='WAIT_RESUMPTION_STRUCTURE' if context.get('counter_pressure_seen') else 'WAIT_COUNTER_CONTROL'
+        context['last_opposite_trade_epoch']=event
+        context['phase']='WAIT_RESUMPTION'
+        context['resumption_confirmed']=False
+    elif context.get('counter_pressure_seen') and profile['resumed']:
+        previous=_f(context.get('last_opposite_trade_epoch'))
+        if previous is not None and event is not None and event>previous:
+            context.update(phase='REENTRY_READY',resumption_confirmed=True,confirmation_epoch=event)
+    elif not context.get('counter_pressure_seen'):
+        context['phase']='WAIT_COUNTER_CONTROL'
     context['last_observed_epoch']=stamp
     return out
-
 
 def reentry_ready(side,execution_context,mark,watch,flow,stamp):
     if not watch or int(watch.get('side') or 0)!=int(side or 0):return False
     context=watch.get('context') or {};profile=flow_profile(flow,side)
     previous=_f(context.get('last_opposite_trade_epoch'))
-    return bool(context.get('counter_pressure_seen') and context.get('resumption_confirmed') and
-        profile and profile['resumed'] and previous is not None and profile['event_epoch'] is not None and
-        profile['event_epoch']>previous)
+    return bool(context.get('counter_pressure_seen') and profile and profile['resumed']
+        and previous is not None and profile['event_epoch'] is not None
+        and profile['event_epoch']>previous)
