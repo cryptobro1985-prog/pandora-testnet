@@ -191,9 +191,13 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                         for row in rows:
                             pair = str(row.get("symbol") or "")
                             price = row.get("lastPrice")
-                            if pair.endswith("USDT") and price not in (None, ""):
-                                mids[pair[:-4]] = price
-                                changed[pair[:-4]] = price
+                            if not pair.endswith("USDT"):
+                                continue
+                            symbol=pair[:-4]
+                            if price not in (None, ""):
+                                mids[symbol] = price
+                            if symbol in mids:
+                                changed[symbol] = mids[symbol]
                         if changed:
                             on_mids(changed)
                     elif topic.startswith("kline."):
