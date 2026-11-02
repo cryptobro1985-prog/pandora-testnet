@@ -1,0 +1,30 @@
+name: Pandora Neon database backup
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pgdump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Install PostgreSQL client
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+      - name: Export and validate
+        env:
+          DATABASE_URL: ${{ secrets.PANDORA_BACKUP_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$DATABASE_URL" || { echo "PANDORA_BACKUP_DATABASE_URL secret missing"; exit 1; }
+          pg_dump --format=custom --compress=9 --no-owner --no-acl --dbname="$DATABASE_URL" --file=PANDORA_NEON_FULL.dump
+          pg_restore --list PANDORA_NEON_FULL.dump > /dev/null
+          sha256sum PANDORA_NEON_FULL.dump > PANDORA_NEON_FULL.sha256
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: PANDORA_NEON_FULL
+          path: |
+            PANDORA_NEON_FULL.dump
+            PANDORA_NEON_FULL.sha256
+          retention-days: 7
+          if-no-files-found: error
