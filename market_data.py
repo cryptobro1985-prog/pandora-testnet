@@ -26,7 +26,7 @@ class RollingMarketData:
 
     @staticmethod
     def _new_symbol(epoch):
-        return {'since':epoch,'seen':set(),'seen_queue':deque(),'latest_trade':None,'latest_trade_id':None,'latest_receive_epoch':None,'latest_trade_price':None,'latest_trade_quantity':None,'first_trade':None,'levels':deque(maxlen=2),'trades':deque(),'overflow_until':None,'revision':0,'flow_cache':None}
+        return {'since':epoch,'seen':set(),'seen_queue':deque(),'latest_trade':None,'latest_trade_id':None,'latest_receive_epoch':None,'latest_trade_price':None,'latest_trade_quantity':None,'first_trade':None,'levels':deque(maxlen=2),'trades':deque(),'overflow_until':None,'revision':0,'flow_cache':None,'connected_epoch':epoch,'disconnected_epoch':None,'post_connect_trade_seen':False}
 
     def mark_connected(self,epoch=None,symbols=None,owner=None):
         epoch=time.time() if epoch is None else float(epoch);name='default' if owner is None else str(owner)
@@ -36,14 +36,39 @@ class RollingMarketData:
             other_owned=set().union(*(v for k,v in self._owners.items() if k!=name)) if any(k!=name for k in self._owners) else set()
             self._owners[name]=selected;self._owner_heartbeats[name]=epoch
             wanted=set().union(*self._owners.values())
-            self._symbols={s:(self._symbols.get(s) if s in other_owned and self._symbols.get(s) is not None else self._new_symbol(epoch) if s in selected else self._symbols.get(s,self._new_symbol(epoch))) for s in wanted}
+            kept={}
+            for symbol in wanted:
+                state=self._symbols.get(symbol)
+                if state is None:
+                    state=self._new_symbol(epoch)
+                elif symbol in selected and symbol not in other_owned:
+                    disconnected=_number(state.get('disconnected_epoch'))
+                    if disconnected is not None and epoch-disconnected>self.freshness_seconds:
+                        state=self._new_symbol(epoch)
+                    else:
+                        state['connected_epoch']=epoch
+                        state['disconnected_epoch']=None
+                        state['post_connect_trade_seen']=False
+                        state['flow_cache']=None
+                kept[symbol]=state
+            self._symbols=kept
 
     def mark_disconnected(self,epoch=None,owner=None):
+        epoch=time.time() if epoch is None else float(epoch)
         with self._lock:
-            if owner is None:self._owners.clear();self._owner_heartbeats.clear()
-            else:self._owners.pop(str(owner),None);self._owner_heartbeats.pop(str(owner),None)
-            wanted=set().union(*self._owners.values()) if self._owners else set()
-            self._symbols={s:state for s,state in self._symbols.items() if s in wanted}
+            if owner is None:
+                owned=set().union(*self._owners.values()) if self._owners else set()
+                self._owners.clear();self._owner_heartbeats.clear()
+            else:
+                name=str(owner);owned=set(self._owners.get(name,set()))
+                self._owners.pop(name,None);self._owner_heartbeats.pop(name,None)
+            for symbol in owned:
+                state=self._symbols.get(symbol)
+                still_owned=any(symbol in symbols for symbols in self._owners.values())
+                if state is not None and not still_owned:
+                    state['disconnected_epoch']=epoch
+                    state['post_connect_trade_seen']=False
+                    state['flow_cache']=None
 
     def set_subscriptions(self,symbols,epoch=None,owner=None):
         epoch=time.time() if epoch is None else float(epoch);name='default' if owner is None else str(owner)
@@ -110,6 +135,7 @@ class RollingMarketData:
                 previous_event=state.get('decision_epoch')
                 state['decision_epoch']=stamp if previous_event is None else max(stamp,math.nextafter(previous_event,float('inf')))
                 state['revision']+=1
+                state['post_connect_trade_seen']=True
                 if state['first_trade'] is None:state['first_trade']=stamp
                 trades.append((stamp,px,notional,side))
                 accepted+=1
@@ -136,7 +162,7 @@ class RollingMarketData:
                        latest_exchange_trade_id=state.get('latest_trade_id'),latest_receive_epoch=state.get('latest_receive_epoch'),
                        latest_trade_price=state.get('latest_trade_price'),latest_trade_quantity=state.get('latest_trade_quantity'),
                        accepted_revision=state.get('revision'))
-            if not fresh or state['overflow_until'] is not None or age is None or not 0<=age<=self.freshness_seconds:return out
+            if not fresh or not state.get('post_connect_trade_seen') or state['overflow_until'] is not None or age is None or not 0<=age<=self.freshness_seconds:return out
             trades=state['trades']
             while trades and epoch-trades[0][0]>610: trades.popleft()
             if not trades:return out
