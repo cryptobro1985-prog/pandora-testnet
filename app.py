@@ -475,17 +475,22 @@ def _local_persisted_anchor(symbol):
  def add_candidate(source,origin):
   if not source:return
   features=copy.deepcopy(source.get("features") or source.get("context") or source.get("analysis") or source)
-  side=int(source.get("side") or features.get("entry_side") or 0)
+  execution=features.get("execution_local") if isinstance(features.get("execution_local"),dict) else {}
+  side=int(features.get("entry_side") or execution.get("entry_side") or 0)
   if side not in (-1,1):return
   pivot_price=features.get("pivot_price")
+  if pivot_price is None:pivot_price=execution.get("pivot_price")
   if pivot_price is None:return
-  signal=int(features.get("signal_candle_time") or features.get("origin_h1_signal_candle")
-   or source.get("signal_candle_time") or source.get("origin_signal_candle") or source.get("candle_time") or 0)
-  pivot=int(features.get("pivot_candle_time") or signal or 0)
+  signal=int(features.get("signal_candle_time") or execution.get("signal_candle_time")
+   or features.get("origin_h1_signal_candle") or source.get("signal_candle_time")
+   or source.get("origin_signal_candle") or source.get("candle_time") or 0)
+  pivot=int(features.get("pivot_candle_time") or execution.get("pivot_candle_time") or signal or 0)
   if signal<=0:return
   candidates.append({**features,"ready":True,"persisted":True,"anchor_confirmed":True,"h1_direction_anchor":True,
-   "pivot_type":features.get("pivot_type") or ("LOCAL_HIGH" if side<0 else "LOCAL_LOW"),
+   "pivot_type":features.get("pivot_type") or execution.get("pivot_type") or ("LOCAL_HIGH" if side<0 else "LOCAL_LOW"),
    "pivot_price":pivot_price,"entry_side":side,"signal_candle_time":signal,"pivot_candle_time":pivot,
+   "local_low":side>0,"local_high":side<0,
+   "state":"CONFIRMED_LOCAL_LOW" if side>0 else "CONFIRMED_LOCAL_HIGH",
    "policy":features.get("policy"),"entry_blocked":bool(features.get("entry_blocked")),
    "entry_block_reason":features.get("entry_block_reason"),"reason":"persisted_confirmed_h1_local","anchor_source":origin})
 
@@ -845,16 +850,19 @@ def pandora_mark_positions(prices):
    live=S.get("pandora_win_positions",{}).get(symbol)
    if live and live.get("opened")==pos.get("opened"):S["pandora_win_positions"][symbol]=updated
   with LOCK:anchor=copy.deepcopy(S.get('_pandora_analysis',{}).get(symbol) or {})
-  flow=MARKET_OBS.flow_context(symbol,time.time())
   opposite_local=bool(not v2_enabled() and pandora_runtime_h1_verified(symbol,anchor)
-   and int(anchor.get('entry_side') or 0)==-int(pos['side'])
-   and int(anchor.get('signal_candle_time') or 0)>int(pos.get('signal_candle_time') or 0))
-  reason=(v2_exit_reason(updated,float(mark),flow) if v2_enabled() else pandora_flow_pressure_exit(updated,None,float(mark),flow,opposite_local_confirmed=opposite_local))
+   and int(anchor.get('entry_side') or 0)==-int(pos['side']))
+  if opposite_local:
+   pandora_close(symbol,float(mark),"opposite_active_local_emergency_exit",analysis=anchor,
+    watch_context={"observed_at":now(),"basis":"active_local_direction_change"})
+   continue
+  flow=MARKET_OBS.flow_context(symbol,time.time())
+  reason=(v2_exit_reason(updated,float(mark),flow) if v2_enabled() else pandora_flow_pressure_exit(updated,None,float(mark),flow))
   with LOCK:
    if S.get("pandora_win_positions",{}).get(symbol,{}).get("opened")==pos.get("opened"):
     S["pandora_win_positions"][symbol]=updated
   if reason:
-   pandora_close(symbol,float(mark),reason,analysis=anchor if opposite_local else None,
+   pandora_close(symbol,float(mark),reason,
     watch_context={"flow_context":flow,"observed_at":now()})
    continue
   stamp=time.time()
