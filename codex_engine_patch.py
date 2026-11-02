@@ -103,9 +103,8 @@ new_rank="""   raw_snapshot=scanner.rank(instruments,MARKET_OBS.flow_context,hel
    for row in ranked:
     symbol=row.get('symbol');anchor=anchors.get(symbol) or {}
     try:
-     local_ok=bool(anchor.get('ready') and anchor.get('anchor_confirmed') and anchor.get('pivot_type') and
-      float(anchor.get('pivot_price') or 0)>0 and int(anchor.get('entry_side') or 0) in (-1,1) and
-      not anchor.get('entry_blocked') and anchor.get('live_structure_fresh') is not False)
+     local_ok=bool(anchor.get('anchor_confirmed') and anchor.get('pivot_type') and
+      float(anchor.get('pivot_price') or 0)>0 and int(anchor.get('entry_side') or 0) in (-1,1))
     except (TypeError,ValueError,OverflowError):
      local_ok=False
     if row.get('eligible') and local_ok:
@@ -113,7 +112,7 @@ new_rank="""   raw_snapshot=scanner.rank(instruments,MARKET_OBS.flow_context,hel
      candidate['_activation_flow_ready']=bool(row.get('flow_fresh'))
      candidate['_activation_local_live']=bool(anchor.get('live_structure_fresh') is not False and not anchor.get('entry_blocked'))
      ready.append(candidate)
-   ready.sort(key=lambda row:(not row.get('_activation_flow_ready'),int(row.get('rank') or 999999),row.get('symbol') or ''))
+   ready.sort(key=lambda row:(not row.get('_activation_local_live'),not row.get('_activation_flow_ready'),int(row.get('rank') or 999999),row.get('symbol') or ''))
    ready_by_symbol={row.get('symbol'):row for row in ready}
    # Once five local-ready symbols are active, hold them for one minute. This
    # keeps H1/M15, mark and executed-flow evidence from being reset every second.
@@ -123,9 +122,8 @@ new_rank="""   raw_snapshot=scanner.rank(instruments,MARKET_OBS.flow_context,hel
      row=ready_by_symbol.get(symbol) or prior_selected_rows.get(symbol)
      anchor=anchors.get(symbol) or {}
      try:
-      keep=bool(anchor.get('ready') and anchor.get('anchor_confirmed') and anchor.get('pivot_type') and
-       float(anchor.get('pivot_price') or 0)>0 and int(anchor.get('entry_side') or 0) in (-1,1) and
-       not anchor.get('entry_blocked') and anchor.get('live_structure_fresh') is not False)
+      keep=bool(anchor.get('anchor_confirmed') and anchor.get('pivot_type') and
+       float(anchor.get('pivot_price') or 0)>0 and int(anchor.get('entry_side') or 0) in (-1,1))
      except (TypeError,ValueError,OverflowError):
       keep=False
      if row and keep:chosen.append(dict(row))
@@ -145,9 +143,8 @@ new_rank="""   raw_snapshot=scanner.rank(instruments,MARKET_OBS.flow_context,hel
      if symbol in symbols:continue
      anchor=anchors.get(symbol) or {}
      try:
-      local_ok=bool(anchor.get('ready') and anchor.get('anchor_confirmed') and anchor.get('pivot_type') and
-       float(anchor.get('pivot_price') or 0)>0 and int(anchor.get('entry_side') or 0) in (-1,1) and
-       not anchor.get('entry_blocked') and anchor.get('live_structure_fresh') is not False)
+      local_ok=bool(anchor.get('anchor_confirmed') and anchor.get('pivot_type') and
+       float(anchor.get('pivot_price') or 0)>0 and int(anchor.get('entry_side') or 0) in (-1,1))
      except (TypeError,ValueError,OverflowError):
       local_ok=False
      if local_ok and symbol in prior_rows:
@@ -158,7 +155,7 @@ new_rank="""   raw_snapshot=scanner.rank(instruments,MARKET_OBS.flow_context,hel
     row.pop('_activation_flow_ready',None);row.pop('_activation_local_live',None)
    snapshot['selected']=chosen[:DISCOVERY_MAX_SELECTED]
    snapshot['selected_symbols']=symbols[:DISCOVERY_MAX_SELECTED]
-   snapshot['activation_basis']='fresh_unblocked_confirmed_local_then_executed_flow_then_rank'
+   snapshot['activation_basis']='confirmed_local_sticky_top5_refreshing_structure_and_flow'
    snapshot['raw_selected_symbols']=raw_snapshot.get('selected_symbols') or []
    events=[]
    for symbol in active_before:
