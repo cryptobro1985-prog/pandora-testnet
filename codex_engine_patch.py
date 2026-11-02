@@ -155,4 +155,11 @@ s=s.replace(old_rank,new_rank)
 s=s.replace("count=2 if trades else max(1,min(8,int(os.getenv('BYBIT_AUX_WS_SHARDS','2'))))",
             "count=4 if trades else max(1,min(8,int(os.getenv('BYBIT_AUX_WS_SHARDS','2'))))")
 
+# Surface frozen child worker failures in Render logs; supervisor otherwise only
+# stores them in memory and makes a broken Discovery look like an empty monitor.
+s=s.replace(
+"   except Exception as error:\n    with LOCK:S['sources'][label]={'ok':False,'last_check':now(),'error':type(error).__name__+':'+str(error)[:160]}",
+"   except Exception as error:\n    print('[CODEX_CHILD_ERROR]',label,type(error).__name__+':'+str(error)[:240],flush=True)\n    with LOCK:S['sources'][label]={'ok':False,'last_check':now(),'error':type(error).__name__+':'+str(error)[:160]}"
+)
+
 p.write_text(s)
