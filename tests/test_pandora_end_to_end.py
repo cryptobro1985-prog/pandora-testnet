@@ -171,6 +171,10 @@ class SelectedMarketExecutionTests(unittest.TestCase):
             resumed=extreme+side*.5
             self.send(symbol,side,729,resumed)
             app.pandora_flow_fast_entries({symbol:resumed})
+            self.assertIn(symbol,app.S['pandora_win_positions'],
+                msg='reentry rejection='+str(app.S.get('pandora_executor_rejections',{}).get(symbol))+
+                    ' watch='+str(app.S.get('pandora_watch',{}).get(symbol))+
+                    ' flow='+str(self.obs.flow_context(symbol)))
             self.assertEqual(app.S['pandora_win_positions'][symbol]['features']['entry_kind'],'REENTRY')
             final=extreme-side*.1
             self.send(symbol,-side,2187,final)
