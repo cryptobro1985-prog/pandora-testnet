@@ -5,7 +5,7 @@ change realized equity. The full entry/exit commission is accounted on close.
 """
 import copy
 import math
-from accounting import paper_pnl
+from accounting import paper_pnl, position_pnl
 
 STARTING_EQUITY=500.
 MARGIN_FRACTION=.20
@@ -36,8 +36,11 @@ def pyramid_decision(position, analysis, flow, mark, max_adds=4):
     reason='WAIT_NEW_IMPULSE'
     if level>=max_adds:reason='MAX_ADDS_REACHED'
     elif not flow.get('trade_data_fresh'):reason='FLOW_STALE'
-    elif paper_pnl(position['notional'],position['entry'],mark,side)<=0:reason='POSITION_NOT_PROFITABLE'
+    elif position_pnl(position,mark)<=0:reason='POSITION_NOT_PROFITABLE'
     elif analysis.get('entry_blocked') or not analysis.get('anchor_confirmed') or int(analysis.get('entry_side') or 0)!=side:reason='LOCAL_STRUCTURE_NOT_ALIGNED'
+    elif analysis.get('pivot_price') is not None and side*(float(mark)-float(analysis['pivot_price']))<=0:reason='LOCAL_REFERENCE_BROKEN_BY_MARK'
+    elif flow.get('fast_control_side')==-side or flow.get('exit_control_side')==-side:reason='COUNTER_CONTROL_BLOCKS_ADD'
+    elif (f.get('exit_control_state') or {}).get('phase') in ('OBSERVING','CONFIRMED'):reason='COUNTER_CONFIRMATION_BLOCKS_ADD'
     elif flow.get('sustained_control_side')!=side:reason='WAIT_SUSTAINED_CONTROL'
     elif flow.get('buy_absorbed' if side>0 else 'sell_absorbed'):reason='EXECUTED_VOLUME_ABSORBED'
     elif event<=float(state.get('last_add_event',0)):reason='EVENT_ALREADY_CONSUMED'
@@ -68,9 +71,15 @@ def apply_add(position, mark, margin, flow, analysis, timestamp, *, added_notion
                 added_notional=added_notional,total_notional=total,average_entry=average,
                 flow_state=copy.deepcopy(flow),buy_volume=flow.get('buy_notional'),
                 sell_volume=flow.get('sell_notional'),local_state=copy.deepcopy(analysis),
+                previous_margin=float(out['margin']),previous_entry=float(out['entry']),
+                previous_notional=float(out['notional']),
                 mfe_before_add=features.get('peak_mfe_usd',0),
+                segment_mfe_before_add=features.get('segment_mfe_usd',0),
+                segment_mfe_pct_before_add=features.get('segment_mfe_pct',0),
                 mfe_after_add=features.get('peak_mfe_usd',0))
     features.setdefault('pyramid_adds',[]).append(record)
+    features['segment_mfe_usd']=0.;features['segment_mae_usd']=0.
+    features['segment_mfe_pct']=0.;features['segment_start_mark']=mark
     features['original_entry']=features.get('original_entry',out['entry'])
     features['pyramid_level']=level
     features['pyramid_state']=dict(phase='WAIT_NEW_IMPULSE',last_impulse_price=mark,
@@ -84,11 +93,16 @@ def apply_add(position, mark, margin, flow, analysis, timestamp, *, added_notion
 
 def mark_metrics(position,mark,flow,analysis,fee=.00045):
     out=copy.deepcopy(position);f=out.setdefault('features',{})
-    pnl=paper_pnl(out['notional'],out['entry'],mark,out['side'],fee)
+    pnl=position_pnl(out,mark,fee)
     peak=max(float(f.get('peak_mfe_usd',0)),pnl)
     worst=min(float(f.get('mae_usd',0)),pnl)
     f.update(current_mark=mark,current_pnl_usd=pnl,current_pnl_pct=pnl/float(out['margin'])*100,
              peak_mfe_usd=peak,mfe_usd=peak,mae_usd=worst,mfe_giveback_usd=peak-pnl,
+             peak_mfe_pct=max(float(f.get('peak_mfe_pct',0)),pnl/float(out['margin'])*100),
+             segment_mfe_usd=max(float(f.get('segment_mfe_usd',0)),pnl),
+             segment_mae_usd=min(float(f.get('segment_mae_usd',0)),pnl),
+             segment_mfe_pct=max(float(f.get('segment_mfe_pct',0)),pnl/float(out['margin'])*100),
+             mfe_capture_ratio=pnl/peak if peak>0 else None,
              average_entry=out['entry'],pyramid_level=int(f.get('pyramid_level',0)),
              buy_volume=flow.get('buy_notional'),sell_volume=flow.get('sell_notional'),
              flow_imbalance=flow.get('flow_imbalance'),flow_state=copy.deepcopy(flow),

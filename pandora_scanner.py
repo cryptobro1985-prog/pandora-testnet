@@ -12,6 +12,12 @@ import websocket
 from pandora_flow_v2_live import enabled as v2_enabled, MIN_TURNOVER_24H, EXPERIMENT as ACTIVE_FLOW_EXPERIMENT
 
 
+MIN_PAPER_TURNOVER_24H=10_000_000.
+MAX_SPREAD_FRACTION=.002
+MIN_TOP_BOOK_NOTIONAL=1_000.
+FADE_CONFIRM_SECONDS=180.
+
+
 class LiveScanner:
     def __init__(self, top=5, candidate_limit=30, freshness=15):
         if not 1<=int(top)<=5 or not int(top)<=int(candidate_limit)<=128 or not 0<float(freshness)<=60:raise ValueError('invalid scanner bounds')
@@ -60,6 +66,7 @@ class LiveScanner:
                 for field in ('price24hPcnt','bid1Price','ask1Price'):
                     if merged.get(field) not in (None,'') and not math.isfinite(float(merged[field])):return False
             except (ValueError,TypeError):return False
+            merged['book_received']=received if any(row.get(k) not in (None,'') for k in ('bid1Price','ask1Price','bid1Size','ask1Size')) else prior.get('book_received',0)
             merged['price_received']=received if row.get('lastPrice') not in (None,'') else prior.get('price_received',0)
             self.markets[symbol]=merged
             if row.get('lastPrice') in (None,''):return True
@@ -70,6 +77,22 @@ class LiveScanner:
             else:history.append(sample)
             while history and received-history[0][0]>300:history.popleft()
         return True
+
+    def entry_liquidity_ready(self, symbol, epoch=None):
+        """Recheck live admission at execution, including after a cohort locks."""
+        epoch=time.time() if epoch is None else float(epoch)
+        with self.lock:row=dict(self.markets.get(symbol) or {})
+        try:
+            price=float(row.get('lastPrice') or 0)
+            bid=float(row.get('bid1Price') or 0);ask=float(row.get('ask1Price') or 0)
+            buy=bid*float(row.get('bid1Size') or 0);sell=ask*float(row.get('ask1Size') or 0)
+            turnover=float(row.get('turnover24h') or 0)
+            return bool(all(math.isfinite(x) for x in (price,bid,ask,buy,sell,turnover))
+                and price>0 and 0<bid<=ask and turnover>=MIN_PAPER_TURNOVER_24H
+                and 0<=epoch-float(row.get('price_received') or 0)<=self.freshness
+                and 0<=epoch-float(row.get('book_received') or 0)<=self.freshness
+                and (ask-bid)/price<=MAX_SPREAD_FRACTION and min(buy,sell)>=MIN_TOP_BOOK_NOTIONAL)
+        except (TypeError,ValueError,OverflowError):return False
 
     def _rank_v2(self,instruments,held,epoch):
         """Hourly rising Bybit USDT perpetual TOP-5; no intrahour rotations."""
@@ -175,6 +198,7 @@ class LiveScanner:
             if symbol not in instruments or not 0<=epoch-row.get('price_received',0)<=self.freshness or symbol not in histories:continue
             samples=histories[symbol]
             last=float(row['lastPrice']);turn=float(row['turnover24h'])
+            if turn<MIN_PAPER_TURNOVER_24H:continue
             change=float(row.get('price24hPcnt') or 0)
             def movement(seconds):
                 old=next((x for x in reversed(samples) if epoch-x[0]>=seconds),samples[0])
@@ -205,32 +229,43 @@ class LiveScanner:
             # still drive price. Relative ranking can replace it with a stronger
             # market; forced removal requires lost control or a quiet tape.
             warming=bool(symbol in previous and epoch-self.selected_since.get(symbol,epoch)<15)
-            declining=bool(known and (not flow or (volume_faded and movement_faded and not current_control)))
+            rate=float(rapid.get('trade_velocity',0))
+            rate_reference=float(prior.get('fade_reference_rate',prior.get('rate',0)))
+            rate_faded=rate_reference>0 and rate<rate_reference*.5
+            # Missing/stale observations are uncertainty, never evidence of a dead market.
+            declining=bool(flow and known and (quiet or (volume_faded and rate_faded and movement_faded and not current_control)))
             if declining:self.fade_since.setdefault(symbol,epoch)
             else:self.fade_since.pop(symbol,None)
-            fading=bool(known and not warming and (quiet or (declining and epoch-self.fade_since[symbol]>=15)))
+            fading=bool(not warming and declining and epoch-self.fade_since[symbol]>=FADE_CONFIRM_SECONDS)
             flow_samples[symbol]=dict(known=known,velocity=velocity,rapid_velocity=rapid_velocity,
-                movement=abs(short),short_volatility=short_volatility,
+                movement=abs(short),short_volatility=short_volatility,rate=rate,
+                fade_reference_rate=rate_reference if declining else rate,
                 fade_reference_velocity=reference if declining else velocity)
             current_pump=short>0 or minute>0 or (bootstrapping and change>0)
             if current_pump:pump_context.add(symbol)
             active_correction=bool(symbol in pump_context and known and flow and not fading and (short<0 or minute<0))
-            if not (current_pump or active_correction):continue
+            # Both rising markets and fresh falling impulses can qualify.
+            active_correction=bool(flow and not fading and (short<0 or minute<0))
+            if not (current_pump or active_correction or symbol in previous):continue
             eligible=not fading
-            spread=None
+            spread=None;bid_depth=ask_depth=0.
             try:
                 bid=float(row.get('bid1Price') or 0);ask=float(row.get('ask1Price') or 0)
+                bid_depth=bid*float(row.get('bid1Size') or 0);ask_depth=ask*float(row.get('ask1Size') or 0)
                 if bid>0 and ask>=bid:spread=(ask-bid)/last
             except (ValueError,TypeError):pass
+            book_fresh=0<=epoch-float(row.get('book_received') or 0)<=self.freshness
+            liquid=bool(spread is not None and spread<=MAX_SPREAD_FRACTION and book_fresh and min(bid_depth,ask_depth)>=MIN_TOP_BOOK_NOTIONAL)
             prices=[x[1] for x in samples]
             volatility=(max(prices)-min(prices))/last if prices else 0
-            consistency=sum(b[1]>a[1] for a,b in zip(samples,samples[1:]))/max(1,len(samples)-1)
+            eligible=bool(not fading and liquid and flow and fast.get('trade_count',0)>0 and not bootstrapping and short_volatility>0)
+            consistency=sum((b[1]>a[1] if short>=0 else b[1]<a[1]) for a,b in zip(samples,samples[1:]))/max(1,len(samples)-1)
             elapsed=max(.001,samples[-1][0]-samples[0][0])
             turnover_velocity=max(0.,turn-samples[0][2])/elapsed
             rows.append(dict(symbol=symbol,last=last,price_received=row.get('price_received'),
                 exchange_ms=row.get('exchange_ms'),short_return=short,minute_return=minute,
                 movement_strength=abs(short),dominant_volume=max(fast.get('buy_volume',0),fast.get('sell_volume',0)),
-                eligible=eligible,fading=fading,short_volatility=short_volatility,active_correction=active_correction,
+                eligible=eligible,fading=fading,liquidity_ready=liquid,short_volatility=short_volatility,active_correction=active_correction,
                 acceleration=short-minute/4,volatility=volatility,turnover_24h=turn,
                 turnover_per_minute=turnover_velocity*60,executed_volume=medium.get('buy_volume',0)+medium.get('sell_volume',0),
                 volume_velocity=fast.get('volume_velocity',turnover_velocity),
@@ -271,13 +306,18 @@ class LiveScanner:
             selected=[live_by_symbol.get(sym,former.get(sym,{'symbol':sym})) for sym in previous]
             symbols=list(previous)
             selection_at=last_selection_at
+            # Replace only one confirmed faded member. Stale quotes alone do not rotate.
+            faded=next((sym for sym in previous if live_by_symbol.get(sym,{}).get('fading')),None)
+            replacement=next((r for r in eligible if r['symbol'] not in previous),None)
+            if faded and replacement:
+                index=symbols.index(faded);symbols[index]=replacement['symbol'];selected[index]=replacement
         events=[]
         with self.lock:
             for symbol in previous:
                 if symbol not in symbols:
                     state='FADING' if symbol in held else 'ROTATE_OUT'
                     self.states[symbol]=state
-                    events.append(dict(action='TOKEN_ROTATED',symbol=symbol,state=state,reason='stronger_live_candidate_or_faded_activity'))
+                    events.append(dict(action='TOKEN_ROTATED',symbol=symbol,state=state,reason='scheduled_four_hour_refresh' if refresh_due else 'confirmed_180s_activity_fade'))
             for symbol,state in list(self.states.items()):
                 if state=='FADING' and symbol not in held and symbol not in symbols:
                     self.states[symbol]='ROTATE_OUT'
@@ -286,7 +326,7 @@ class LiveScanner:
                 self.states[symbol]='SELECTED'
                 if symbol not in previous:events.append(dict(action='TOKEN_SELECTED',symbol=symbol,reason='live_cross_sectional_top_five'))
             self.flow_samples.update(flow_samples);self.pump_context=pump_context
-            candidates=self._stable_top(eligible,previous_candidates,self.candidate_limit,self.candidate_since,epoch)
+            candidates=self._stable_top([r for r in rows if r['liquidity_ready']],previous_candidates,self.candidate_limit,self.candidate_since,epoch)
             self.selected_since={s:self.selected_since.get(s,epoch) for s in symbols}
             self.selected=symbols;self.candidates=[r['symbol'] for r in candidates]
             self.candidate_since={s:self.candidate_since.get(s,epoch) for s in self.candidates}
@@ -296,6 +336,10 @@ class LiveScanner:
                 states=dict(self.states),events=events,selection_frozen=False,observations_ready=True,
                 selected_at=selection_at,next_refresh_at=selection_at+refresh_interval,
                 selection_interval_seconds=refresh_interval,scan_seconds=1,
+                last_rotation_at=epoch if events else retained_snapshot.get('last_rotation_at'),
+                last_rotation_events=events or retained_snapshot.get('last_rotation_events',[]),
+                fade_since=dict(self.fade_since),flow_samples=copy.deepcopy(self.flow_samples),
+                min_turnover_24h_usdt=MIN_PAPER_TURNOVER_24H,
                 basis='continuous_live_market_scan_with_four_hour_locked_top_five')
             return copy.deepcopy(self.last_snapshot)
 
@@ -305,6 +349,10 @@ class LiveScanner:
             self.last_snapshot=copy.deepcopy(snapshot or {})
             self.selected=list(self.last_snapshot.get('selected_symbols') or [])
             self.states=dict(self.last_snapshot.get('states') or {})
+            self.candidates=list(self.last_snapshot.get('candidate_symbols') or [])
+            # Require a new continuous observed fade after reconnect; retain the cohort clock.
+            self.flow_samples=copy.deepcopy(self.last_snapshot.get('flow_samples') or {})
+            self.fade_since={}
 
 
 def ticker_worker(scanner, stop, instruments_getter, report, shard=0, shards=4,

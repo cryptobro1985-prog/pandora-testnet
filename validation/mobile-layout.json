@@ -1,0 +1,56 @@
+[
+  {
+    "width": 320,
+    "scroll": 320,
+    "buttons": 0,
+    "mark": true,
+    "title": "PANDORA PAPER",
+    "text": "PANDORA \u00b7 PAPER ONLYWAIT\u0411\u0430\u043b\u0430\u043d\u0441 (\u0440\u0435\u0430\u043b\u0438\u0437\u043e\u0432\u0430\u043d\u043d\u044b\u0439)\u2014Equity \u0441 \u043e\u0442\u043a\u0440\u044b\u0442\u044b\u043c PnL\u2014\u041e\u0431\u0449\u0438\u0439 PnL\u2014PnL \u043e\u0442 \u0441\u0442\u0430\u0440\u0442\u043e\u0432\u043e\u0433\u043e \u043a\u0430\u043f",
+    "fixture": "synthetic HTML layout only"
+  },
+  {
+    "width": 320,
+    "scroll": 320,
+    "buttons": 0,
+    "mark": false,
+    "title": "PANDORA PAPER",
+    "text": "PANDORA \u00b7 PAPER ONLYWAIT\u0411\u0430\u043b\u0430\u043d\u0441 (\u0440\u0435\u0430\u043b\u0438\u0437\u043e\u0432\u0430\u043d\u043d\u044b\u0439)+500.00 USDTEquity \u0441 \u043e\u0442\u043a\u0440\u044b\u0442\u044b\u043c PnL+500.00 USDT\u041e\u0431\u0449\u0438\u0439 PnL",
+    "fixture": "actual HTTP HTML rendered offline"
+  },
+  {
+    "width": 360,
+    "scroll": 360,
+    "buttons": 0,
+    "mark": true,
+    "title": "PANDORA PAPER",
+    "text": "PANDORA \u00b7 PAPER ONLYWAIT\u0411\u0430\u043b\u0430\u043d\u0441 (\u0440\u0435\u0430\u043b\u0438\u0437\u043e\u0432\u0430\u043d\u043d\u044b\u0439)\u2014Equity \u0441 \u043e\u0442\u043a\u0440\u044b\u0442\u044b\u043c PnL\u2014\u041e\u0431\u0449\u0438\u0439 PnL\u2014PnL \u043e\u0442 \u0441\u0442\u0430\u0440\u0442\u043e\u0432\u043e\u0433\u043e \u043a\u0430\u043f",
+    "fixture": "synthetic HTML layout only"
+  },
+  {
+    "width": 360,
+    "scroll": 360,
+    "buttons": 0,
+    "mark": false,
+    "title": "PANDORA PAPER",
+    "text": "PANDORA \u00b7 PAPER ONLYWAIT\u0411\u0430\u043b\u0430\u043d\u0441 (\u0440\u0435\u0430\u043b\u0438\u0437\u043e\u0432\u0430\u043d\u043d\u044b\u0439)+500.00 USDTEquity \u0441 \u043e\u0442\u043a\u0440\u044b\u0442\u044b\u043c PnL+500.00 USDT\u041e\u0431\u0449\u0438\u0439 PnL",
+    "fixture": "actual HTTP HTML rendered offline"
+  },
+  {
+    "width": 412,
+    "scroll": 412,
+    "buttons": 0,
+    "mark": true,
+    "title": "PANDORA PAPER",
+    "text": "PANDORA \u00b7 PAPER ONLYWAIT\u0411\u0430\u043b\u0430\u043d\u0441 (\u0440\u0435\u0430\u043b\u0438\u0437\u043e\u0432\u0430\u043d\u043d\u044b\u0439)\u2014Equity \u0441 \u043e\u0442\u043a\u0440\u044b\u0442\u044b\u043c PnL\u2014\u041e\u0431\u0449\u0438\u0439 PnL\u2014PnL \u043e\u0442 \u0441\u0442\u0430\u0440\u0442\u043e\u0432\u043e\u0433\u043e \u043a\u0430\u043f",
+    "fixture": "synthetic HTML layout only"
+  },
+  {
+    "width": 412,
+    "scroll": 412,
+    "buttons": 0,
+    "mark": false,
+    "title": "PANDORA PAPER",
+    "text": "PANDORA \u00b7 PAPER ONLYWAIT\u0411\u0430\u043b\u0430\u043d\u0441 (\u0440\u0435\u0430\u043b\u0438\u0437\u043e\u0432\u0430\u043d\u043d\u044b\u0439)+500.00 USDTEquity \u0441 \u043e\u0442\u043a\u0440\u044b\u0442\u044b\u043c PnL+500.00 USDT\u041e\u0431\u0449\u0438\u0439 PnL",
+    "fixture": "actual HTTP HTML rendered offline"
+  }
+]

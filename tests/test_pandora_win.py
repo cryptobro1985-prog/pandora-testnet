@@ -35,33 +35,24 @@ class ExecutedStrengthTests(unittest.TestCase):
 
 
 class ScannerTests(unittest.TestCase):
-    def test_live_acceleration_beats_old_daily_pump_and_retains_open_rotations(self):
-        scanner=LiveScanner()
-        instruments={str(i):{} for i in range(7)}
-        for i in range(7):
-            scanner.ingest(dict(symbol=str(i)+'USDT',lastPrice='100',turnover24h='1000000',price24hPcnt='0.1'),1000000,1000)
-        first=scanner.rank(instruments,lambda *args:{},epoch=1000)
-        self.assertEqual(len(first['selected_symbols']),5)
-        held=first['selected_symbols'][0]
-        for i in range(7):
-            scanner.ingest(dict(symbol=str(i)+'USDT',lastPrice=str(99 if str(i)==held else 101+i),turnover24h=str(1001000+i*100)),1020000,1020)
-        second=scanner.rank(instruments,lambda *args:{},held=[held],epoch=1020)
-        self.assertNotIn(held,second['selected_symbols'])
-        self.assertIn(held,second['retained_open_positions'])
-        self.assertEqual(second['states'][held],'FADING')
-        third=scanner.rank(instruments,lambda *args:{},epoch=1020)
-        self.assertEqual(third['states'][held],'ROTATE_OUT')
+    def test_live_acceleration_does_not_churn_existing_cohort(self):
+        from tests.test_incident_scanner import warm,ticker,tape
+        scanner=LiveScanner(top=1);warm(scanner)
+        for epoch in (1020,1036):
+            ticker(scanner,'OLD',epoch,111);ticker(scanner,'HOT',epoch,100+(epoch-1020)*5)
+            snapshot=scanner.rank({'OLD':{},'HOT':{}},lambda *args:tape(),held=['OLD'],epoch=epoch)
+        self.assertEqual(snapshot['selected_symbols'],['OLD'])
+        self.assertIn('HOT',snapshot['candidate_symbols'])
 
     def test_stale_regressing_or_restored_observations_cannot_create_live_selection(self):
-        scanner=LiveScanner()
-        row=dict(symbol='BTCUSDT',lastPrice='100',turnover24h='1000',price24hPcnt='.5')
+        from tests.test_incident_scanner import warm
+        scanner=LiveScanner(top=1);snapshot=warm(scanner)
+        row=dict(symbol='OLDUSDT',lastPrice=100,turnover24h=20000000,price24hPcnt=.5)
         self.assertFalse(scanner.ingest(row,1000000,1020))
-        self.assertTrue(scanner.ingest(row,1020000,1020))
-        self.assertFalse(scanner.ingest(row,1019000,1020))
-        snapshot=scanner.rank({'BTC':{}},lambda *a:{},epoch=1020)
+        self.assertFalse(scanner.ingest(row,1015000,1016))
         restored=LiveScanner();restored.restore(snapshot)
-        new=restored.rank({'BTC':{}},lambda *a:{},epoch=1020)
-        self.assertEqual(new['selected_symbols'],['BTC'])
+        new=restored.rank({'OLD':{}},lambda *a:{},epoch=1020)
+        self.assertEqual(new['selected_symbols'],['OLD'])
         self.assertTrue(new['selection_frozen'])
 
 

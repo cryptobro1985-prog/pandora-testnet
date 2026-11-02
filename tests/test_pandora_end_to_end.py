@@ -119,6 +119,8 @@ class SelectedMarketExecutionTests(unittest.TestCase):
         self.wait_for(lambda:self.obs.stats()['accepted']>count)
         self.wait_for(lambda:app.S.get('_prices',{}).get(symbol)==price)
         self.assertTrue(self.obs.flow_context(symbol)['trade_data_fresh'])
+        from tests.test_incident_scanner import ticker
+        ticker(app.WIN.scanner,symbol,time.time(),price)
         app.S['last_checkpoint']=app.now()  # bounded fixture heartbeat after committed schema/lease setup
 
     def evidence(self,name,payload):

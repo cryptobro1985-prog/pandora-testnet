@@ -144,6 +144,7 @@ class PandoraRuntime:
         with a.ACCOUNT_LOCK:
             if not a.S.get('engine_active') or a.S.get('orders_enabled') or a.S.get('mode')!='PAPER_ONLY':return False
             if not v2_enabled() and not a.pandora_runtime_h1_verified(symbol,analysis):return False
+            if not v2_enabled() and not self.scanner.entry_liquidity_ready(symbol):return False
             price=a.current_entry_price(symbol)
             if price is None or price!=mark:return False
             position=copy.deepcopy(a.S.get('pandora_win_positions',{}).get(symbol))

@@ -128,34 +128,32 @@ class ScannerObservationTests(unittest.TestCase):
                     trade_count=0 if quiet else 10,trade_velocity=0 if quiet else 2,volume_change=0)
         return dict(trade_data_fresh=True,latest_trade_epoch=1020,windows={str(n):dict(window) for n in (5,15,60)})
 
-    def test_individual_stale_price_does_not_freeze_new_live_candidate(self):
-        scanner=LiveScanner(top=1)
-        scanner.ingest(dict(symbol='OLDUSDT',lastPrice=100,turnover24h=1000,price24hPcnt=.1),1000000,1000)
-        scanner.rank({'OLD':{},'NEW':{}},lambda *args:{},epoch=1000)
-        scanner.ingest(dict(symbol='NEWUSDT',lastPrice=100,turnover24h=2000,price24hPcnt=.2),1020000,1020)
-        current=scanner.rank({'OLD':{},'NEW':{}},lambda *args:{},held=['OLD'],epoch=1020)
+    def test_individual_stale_price_does_not_freeze_other_observations_or_rotate(self):
+        from tests.test_incident_scanner import warm,ticker,tape
+        scanner=LiveScanner(top=1);warm(scanner)
+        ticker(scanner,'NEW',1036,102)
+        current=scanner.rank({'OLD':{},'NEW':{}},lambda *args:tape(),held=['OLD'],epoch=1036)
         self.assertFalse(current['selection_frozen'])
-        self.assertEqual(current['selected_symbols'],['NEW'])
-        self.assertIn('OLD',current['retained_open_positions'])
+        self.assertEqual(current['selected_symbols'],['OLD'])
+        self.assertIn('NEW',current['candidate_symbols'])
 
-    def test_new_hot_token_replaces_known_quiet_tape_without_losing_held_position(self):
-        scanner=LiveScanner(top=1);instruments={'OLD':{},'NEW':{}}
-        scanner.ingest(dict(symbol='OLDUSDT',lastPrice=100,turnover24h=1000,price24hPcnt=.1),1000000,1000)
-        scanner.rank(instruments,lambda *args:self.tape(),epoch=1000)
-        scanner.ingest(dict(symbol='OLDUSDT',lastPrice=101,turnover24h=1001),1020000,1020)
-        scanner.ingest(dict(symbol='NEWUSDT',lastPrice=100,turnover24h=2000,price24hPcnt=.1),1020000,1020)
-        current=scanner.rank(instruments,lambda symbol,*args:self.tape(quiet=symbol=='OLD'),held=['OLD'],epoch=1020)
-        self.assertEqual(current['selected_symbols'],['NEW'])
-        self.assertEqual(current['states']['OLD'],'FADING')
-        self.assertIn('OLD',current['retained_open_positions'])
-        self.assertTrue(next(r for r in current['top_movers'] if r['symbol']=='OLD')['fading'])
+    def test_short_quiet_interval_cannot_evict_held_market(self):
+        from tests.test_incident_scanner import warm,ticker,tape
+        scanner=LiveScanner(top=1);warm(scanner)
+        for epoch in (1020,1036):
+            ticker(scanner,'OLD',epoch,111);ticker(scanner,'NEW',epoch,100+(epoch-1020))
+            current=scanner.rank({'OLD':{},'NEW':{}},lambda s,*args:tape(0,0) if s=='OLD' else tape(),held=['OLD'],epoch=epoch)
+        self.assertEqual(current['selected_symbols'],['OLD'])
+        self.assertFalse(current['events'])
 
     def test_high_participation_correction_remains_eligible_for_short(self):
+        from tests.test_incident_scanner import ticker
         scanner=LiveScanner(top=1);instruments={'BTC':{}}
-        for epoch,price in ((1000,100),(1020,110)):
-            scanner.ingest(dict(symbol='BTCUSDT',lastPrice=price,turnover24h=1000+epoch,price24hPcnt=.1),epoch*1000,epoch)
+        for epoch,price in ((1000,100),(1010,105),(1020,110)):
+            ticker(scanner,'BTC',epoch,price)
             scanner.rank(instruments,lambda *args:self.tape(),epoch=epoch)
-        scanner.ingest(dict(symbol='BTCUSDT',lastPrice=108,turnover24h=3000),1040000,1040)
+        ticker(scanner,'BTC',1030,109)
+        ticker(scanner,'BTC',1040,108)
         current=scanner.rank(instruments,lambda *args:self.tape(1000,side=-1),epoch=1040)
         self.assertEqual(current['selected_symbols'],['BTC'])
         self.assertTrue(current['selected'][0]['active_correction'])
@@ -193,11 +191,11 @@ class ScannerContinuityTests(unittest.TestCase):
                         trade_count=10,trade_velocity=2,volume_change=0)
             return dict(trade_data_fresh=True,latest_trade_epoch=1021,fast_control_side=1,
                         sustained_control_side=1,windows={str(n):dict(window) for n in (5,15,60)})
-        scanner.ingest(dict(symbol='BTCUSDT',lastPrice=100,turnover24h=1000,price24hPcnt=.1),1000000,1000)
-        scanner.rank({'BTC':{}},lambda *a:tape(100),epoch=1000)
-        scanner.ingest(dict(symbol='BTCUSDT',lastPrice=101,turnover24h=1100),1020000,1020)
+        from tests.test_incident_scanner import warm,ticker
+        warm(scanner,('BTC',))
+        ticker(scanner,'BTC',1020,112)
         scanner.rank({'BTC':{}},lambda *a:tape(100),epoch=1020)
-        scanner.ingest(dict(symbol='BTCUSDT',lastPrice=101,turnover24h=1101),1021000,1021)
+        ticker(scanner,'BTC',1021,112)
         result=scanner.rank({'BTC':{}},lambda *a:tape(99),epoch=1021)
         self.assertEqual(result['selected_symbols'],['BTC'])
         self.assertFalse(result['selected'][0]['fading'])

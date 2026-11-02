@@ -162,6 +162,7 @@ def pressure_exit(position,execution_context,mark,flow,*,opposite_local_confirme
     profile=flow_profile(flow,side)
     if entry is None or entry<=0 or price is None or price<=0 or profile is None:
         _confirmed_counter_control(position,None)
+        position.setdefault('features',{}).setdefault('pressure_state',{})['counter_structure_latched']=False
         position.setdefault('features',{})['exit_decision']={
             'counter_control_ready':False,'structure_ready':False,
             'opposite_local_confirmed':bool(opposite_local_confirmed),
@@ -175,7 +176,13 @@ def pressure_exit(position,execution_context,mark,flow,*,opposite_local_confirme
         features['exit_control_state']={'phase':'HOLD','reason':'favorable_extreme_defended','observed_seconds':0.}
         takeover=False
     else:takeover=_confirmed_counter_control(position,profile)
+    previous_event=_f(state.get('last_event_epoch'))
+    latched=bool(state.get('counter_structure_latched') and previous_event is not None
+        and 0<=profile['event_epoch']-previous_event<=EXIT_CONTROL_MAX_EVENT_GAP_SECONDS
+        and profile['control_side']==-side and not at_favorable_extreme)
     state,confirmed=advance_structure(state,side,price,profile['control_side'],profile['event_epoch'])
+    confirmed=bool(confirmed or latched)
+    state['counter_structure_latched']=confirmed and profile['control_side']==-side
     features['pressure_state']=state
     features['exit_decision']={'counter_control_ready':takeover,'structure_ready':bool(confirmed),
         'opposite_local_confirmed':bool(opposite_local_confirmed),
@@ -190,8 +197,13 @@ def update_watch(watch,mark,execution_context,flow,stamp):
     out=copy.deepcopy(watch or {});side=int(out.get('side') or 0);price=_f(mark)
     if side not in (-1,1) or price is None or price<=0:return out
     context=out.setdefault('context',{});profile=flow_profile(flow,side)
-    if profile is None:return out
+    if profile is None:
+        context.pop('resumption_confirmed',None);context.pop('confirmation_epoch',None)
+        context.pop('resumption_state',None)
+        return out
     if profile['counter_takeover']:
+        context.pop('resumption_confirmed',None)
+        context.pop('confirmation_epoch',None)
         context['counter_pressure_seen']=True
         context['last_opposite_trade_epoch']=profile['event_epoch']
     state=context.get('resumption_state')
@@ -217,4 +229,4 @@ def reentry_ready(side,execution_context,mark,watch,flow,stamp):
     previous=_f(context.get('last_opposite_trade_epoch'))
     return bool(context.get('counter_pressure_seen') and context.get('resumption_confirmed') and
         profile and profile['resumed'] and previous is not None and profile['event_epoch'] is not None and
-        profile['event_epoch']>previous)
+        profile['event_epoch']>previous and float(context.get('confirmation_epoch') or 0)>previous)

@@ -21,3 +21,15 @@ def paper_pnl(notional, entry, exit_price, side, fee=0.00045):
     if not math.isfinite(exit_notional) or not math.isfinite(pnl):
         raise ValueError("paper accounting overflow")
     return pnl
+
+
+def position_pnl(position, mark, fee=0.00045):
+    """Net PAPER valuation including a frozen two-leg slippage cost model.
+
+    Existing positions without the new feature keep their original accounting.
+    Slippage is an explicit notional cost estimate, not a claim of exchange fills.
+    """
+    net=paper_pnl(position['notional'],position['entry'],mark,position['side'],fee)
+    slip=float((position.get('features') or {}).get('paper_slippage_fraction',0))
+    if not math.isfinite(slip) or not 0<=slip<.1:raise ValueError('invalid PAPER slippage fraction')
+    return net-slip*float(position['notional'])*(1+float(mark)/float(position['entry']))

@@ -68,6 +68,7 @@ def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL, require_fresh=True):
     if any(b["t"]-a["t"] != 3_600_000 for a,b in zip(candles,candles[1:])):
         return {**base, "reason": "gapped_h1_history"}
     high = low = anchor = None
+    confirmed_high = confirmed_low = None
     for i, bar in enumerate(candles):
         confirmations = []
         if high is not None:
@@ -99,6 +100,8 @@ def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL, require_fresh=True):
                         "preceding_hours": PIVOT_LOOKBACK},
                     "local_low": side > 0, "local_high": side < 0,
                 }
+                if side>0:confirmed_low=dict(anchor)
+                else:confirmed_high=dict(anchor)
         if i >= PIVOT_LOOKBACK:
             prior = candles[i-PIVOT_LOOKBACK:i]
             if bar["h"] >= max(x["h"] for x in prior):
@@ -108,7 +111,7 @@ def _analyze_h1_pivot(rows, now_ms, symbol=SYMBOL, require_fresh=True):
     return {**base, "ready": True, "interval": INTERVAL,
             "entry_side": 0, "pivot_type": None, "pivot_price": None,
             "long_weakening": False, "short_weakening": False,
-            **(anchor or {})}
+            **(anchor or {}), "last_confirmed_high":confirmed_high,"last_confirmed_low":confirmed_low}
 
 
 def analyze(rows, now_ms, symbol=SYMBOL):

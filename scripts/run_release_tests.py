@@ -1,6 +1,8 @@
 """Run the complete active PAPER release suite; fail if integration DB is absent."""
 import argparse
 import json
+import hashlib
+from datetime import datetime, timezone
 import os
 from pathlib import Path
 import sys
@@ -24,9 +26,11 @@ def main():
     if os.getenv('DATABASE_URL')!=Path(binding).read_text().strip():
         parser.error('DATABASE_URL must match the isolated test database binding')
     os.chdir(ROOT)
+    started_at=datetime.now(timezone.utc).isoformat()
+    source_hashes={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in ROOT.rglob('*.py') if not any(x in p.parts for x in ('.venv','.git','__pycache__'))}
     suite=unittest.defaultTestLoader.loadTestsFromNames(MODULES)
     result=unittest.TextTestRunner(verbosity=2).run(suite)
-    report={'suite':'active_pandora_release','modules':list(MODULES),'tests_run':result.testsRun,
+    report={'started_at':started_at,'completed_at':datetime.now(timezone.utc).isoformat(),'source_sha256':source_hashes,'suite':'active_pandora_release','modules':list(MODULES),'tests_run':result.testsRun,
             'failures':[str(case) for case,_ in result.failures],
             'errors':[str(case) for case,_ in result.errors],
             'skipped':[{'test':str(case),'reason':reason} for case,reason in result.skipped],

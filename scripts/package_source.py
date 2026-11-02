@@ -20,11 +20,13 @@ def package(output):
         relative=path.relative_to(ROOT)
         if any(part in ('.git','.venv','__pycache__','node_modules') or part.startswith('.env') for part in relative.parts):continue
         if any(part.startswith('.') and part not in ('.github','.gitignore','.dockerignore') for part in relative.parts):continue
-        if path.suffix.lower() not in ('.py','.md','.txt','.json','.yaml','.yml','.sql') and path.name not in ('Dockerfile','.gitignore','.dockerignore') and relative.as_posix()!='validation/release.log':continue
+        if path.suffix.lower() not in ('.py','.md','.txt','.json','.yaml','.yml','.sql','.sh','.csv') and path.name not in ('Dockerfile','.gitignore','.dockerignore') and relative.as_posix()!='validation/release.log':continue
         files[relative.as_posix()]=path.read_bytes()
     report_path=ROOT/'validation/release-result.json'
     report=json.loads(report_path.read_text()) if report_path.exists() else {}
-    status=('PAPER_RELEASE_TESTS_PASSED_LIVE_UNVERIFIED' if report.get('successful') and report.get('tests_run',0)>0 and not report.get('skipped') else 'UNVERIFIED_SOURCE_SNAPSHOT')
+    tested_sources=report.get('source_sha256') or {}
+    matched=bool(tested_sources) and all(name in files and hashlib.sha256(files[name]).hexdigest()==digest for name,digest in tested_sources.items())
+    status=('PAPER_RELEASE_TESTS_PASSED_LIVE_UNVERIFIED' if matched and report.get('successful') and report.get('tests_run',0)>0 and not report.get('skipped') else 'UNVERIFIED_SOURCE_SNAPSHOT')
     manifest={'format':1,'status':status,
               'production_database_included':False,'files':{name:hashlib.sha256(data).hexdigest() for name,data in sorted(files.items())}}
     try:

@@ -69,6 +69,8 @@ def live_locals(h1_rows, m15_rows, now_ms, symbol):
     out = dict(confirmed)
     out['confirmed_local'] = {k:confirmed.get(k) for k in (
         'pivot_type','pivot_price','pivot_candle_time','signal_candle_time','entry_side')}
+    out['last_confirmed_high']=confirmed.get('last_confirmed_high')
+    out['last_confirmed_low']=confirmed.get('last_confirmed_low')
     m15_anchor=_closed_m15_local(m15_rows,now_ms)
     out['m15_confirmed_local']=m15_anchor if m15_anchor and (
         m15_anchor['signal_candle_time']>int(confirmed.get('signal_candle_time') or 0)
@@ -125,6 +127,10 @@ def live_locals(h1_rows, m15_rows, now_ms, symbol):
                 candidate.update(confirmation_candle_time=b['t'],confirmation_close_time=b['T'])
     # Do not allocate from a broken old low/high while its extension is pending.
     side=int(confirmed.get('entry_side') or 0)
+    pivot=_f(confirmed.get('pivot_price'))
+    after=[r for r in closed if r['t']>int(confirmed.get('pivot_candle_time') or 0)]
+    if pivot is not None and any(r['l']<=pivot if side>0 else r['h']>=pivot for r in after):
+        out.update(entry_blocked=True,entry_block_reason='confirmed_local_broken_in_closed_history')
     invalidated=any(c['entry_side']==side and (
         c['pivot_price']<float(confirmed.get('pivot_price') or 0) if side>0
         else c['pivot_price']>float(confirmed.get('pivot_price') or float('inf')))

@@ -8,7 +8,7 @@ from typing import Optional
 import math
 import os
 
-from accounting import paper_pnl
+from accounting import paper_pnl, position_pnl
 
 
 @dataclass(frozen=True)
@@ -325,7 +325,7 @@ def position_guard(position, mark, fee=.00045):
     mark=float(mark);side=int(position['side']);notional=float(position['notional']);entry=float(position['entry'])
     fee=float(plan.get('fee',fee));slippage=float(plan.get('slippage',.0005))
     maintenance=float(plan.get('maintenance_rate',.01))
-    equity=float(position['margin'])+paper_pnl(notional,entry,mark,side,fee)
+    equity=float(position['margin'])+position_pnl(position,mark,fee)
     current_notional=notional*mark/entry
     if equity<=current_notional*(maintenance+slippage):
         return 'modeled_maintenance_breach'
