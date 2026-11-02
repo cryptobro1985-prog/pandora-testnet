@@ -1250,14 +1250,14 @@ def pandora_loop():
   TRADE_WAKE.set();SHUTDOWN.wait(1)
 
 def _stream_group(trades):
- count=2 if trades else max(1,min(8,int(os.getenv('BYBIT_AUX_WS_SHARDS','2'))))
+ count=5 if trades else max(1,min(8,int(os.getenv('BYBIT_AUX_WS_SHARDS','2'))))
  def symbols():return set(pandora_runtime_symbols())
  def worker(index):
   key=('MarketTradeStream:' if trades else 'MarketQuotes:')+str(index)
   def report(state):
    with LOCK:S['sources'][key]={'last_check':now(),**state}
   def quote(prices):accept_market_prices(prices);TRADE_WAKE.set()
-  stable_shard=lambda symbol:int(hashlib.sha1(str(symbol).encode()).hexdigest()[:8],16)%count
+  stable_shard=lambda symbol:('ARIA','LYN','ESPORTS','1000CAT','SOPH').index(symbol) if trades and symbol in ('ARIA','LYN','ESPORTS','1000CAT','SOPH') else int(hashlib.sha1(str(symbol).encode()).hexdigest()[:8],16)%count
   run_bybit_stream(MARKET_OBS if trades else MARKET_AUX_OBS,SHUTDOWN,symbols,report,
    symbol_filter=lambda symbol:stable_shard(symbol)==index,
    candle_filter=lambda symbol:stable_shard(symbol)==index,
