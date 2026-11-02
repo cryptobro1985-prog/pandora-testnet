@@ -97,15 +97,17 @@ def summarize(trades, epoch, coverage):
     exit_basis='fast_5_15' if fast_control else 'confirmed_15_30' if slow_exit else 'unconfirmed'
     # Old minute volume must not veto a structurally confirmed risk-reducing
     # exit. New entries/reentries retain the conservative minute corroboration.
-    context_control=window_control(minute,True,require_complete=False)
-    sustained=bool(context_control and fast_control==context_control)
+    response_key='buy_price_response' if dominance>0 else 'sell_price_response'
+    sustained=bool(dominance and fast_control==dominance
+                   and minute['imbalance']*dominance>=MIN_CONTROL_IMBALANCE
+                   and minute[response_key]>0)
     return dict(windows=windows, volume_velocity=minute['volume_velocity'],
                 trade_velocity=minute['trade_velocity'], imbalance_change=minute['imbalance_change'],
                 volume_acceleration=windows['15']['volume_acceleration'],
                 dominance_side=dominance, dominance_duration=dominance_duration,
-                fast_control_side=fast_control,context_control_side=context_control,
+                fast_control_side=fast_control,context_control_side=dominance,
                 exit_control_side=exit_control,exit_control_basis=exit_basis,
-                sustained_control_side=context_control if sustained else 0,
+                sustained_control_side=dominance if sustained else 0,
                 minimum_control_imbalance=MIN_CONTROL_IMBALANCE,
                 evidence_ready=windows['15']['complete'],evidence_required_seconds=15,
                 buy_price_response=minute['buy_price_response'],
