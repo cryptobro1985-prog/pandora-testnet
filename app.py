@@ -689,6 +689,13 @@ def pandora_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution_context=
  reentries=(int(watch.get("reentries") or 0)+1) if entry_kind=="REENTRY" and watch else 0
  origin_signal=int(analysis.get("signal_candle_time") or 0)
  claim_token=int((execution_context or {}).get("candle_time") or origin_signal)
+ watch_context=(watch or {}).get("context") or {}
+ counter_barrier=watch_context.get("counter_extreme_x") if entry_kind=="REENTRY" else None
+ old_resumption=watch_context.get("resumption_state") or {}
+ old_candidate=old_resumption.get("candidate") or {}
+ old_retest=old_candidate.get("retest_best")
+ if counter_barrier is None and old_retest is not None:
+  counter_barrier=-float(old_retest)
  features={**analysis,"symbol":symbol,"strategy_name":PANDORA_WIN_NAME,"experiment":PANDORA_WIN_NAME,
   "policy":PANDORA_LOCAL_POLICY,"flow_policy":PANDORA_FLOW_POLICY,"entry_kind":entry_kind,
   "candidate_selection":selection,
@@ -699,8 +706,10 @@ def pandora_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution_context=
   "exposure_fill_ratio":exposure_fill_ratio,"leverage":leverage,"leverage_source":"bybit_instruments_info",
   "mfe_price_move":0.0,"mae_price_move":0.0,"mfe_roe_pct":0.0,"mae_roe_pct":0.0,
   "entry_mark":price,
-  "pressure_state":{"best":int(side)*price,"noise":float((((watch or {}).get("context") or {}).get("resumption_state") or {}).get("noise") or 0.),
-    "barrier":(-float((((watch or {}).get("context") or {}).get("resumption_state") or {}).get("candidate",{}).get("retest_best")) if (((watch or {}).get("context") or {}).get("resumption_state") or {}).get("candidate",{}).get("retest_best") is not None else None),"phase":"HOLDING"},
+  "pressure_state":{"best":int(side)*price,
+    "noise":float(old_resumption.get("noise") or 0.),
+    "barrier":float(counter_barrier) if counter_barrier is not None else None,
+    "phase":"HOLDING"},
 
   "reentry_watch":copy.deepcopy(watch) if entry_kind=="REENTRY" else None,
   "estimated_round_trip_cost_move":2*FEE+0.0004,"execution_cost_budget_only":True}
