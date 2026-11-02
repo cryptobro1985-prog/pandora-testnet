@@ -77,4 +77,70 @@ replacement=bootstrap_code+"\ndef local_experiment_loop():"
 s,n=re.subn(pattern,replacement,s,flags=re.S)
 if n!=1: raise SystemExit("Codex market_history_bootstrap signature changed")
 
+
+# Active Codex basket must be tradeable, not merely the five fastest ticker
+# changes. Rank the market continuously, then activate the highest-ranked
+# candidates that already have a durable confirmed H1 local. The selected-first
+# bootstrap immediately refreshes those locals and executed-flow subscriptions.
+old_rank="""   snapshot=scanner.rank(instruments,MARKET_OBS.flow_context,held)
+   WIN.scanner_snapshot(snapshot)
+   with LOCK:S['sources']['BybitDiscovery']={'ok':bool(snapshot['selected_symbols']),'at':now(),'selected':len(snapshot['selected_symbols']),'mode':'LIVE_STREAM'}"""
+new_rank="""   raw_snapshot=scanner.rank(instruments,MARKET_OBS.flow_context,held)
+   with LOCK:
+    anchors=copy.deepcopy(S.get('local_h1_direction',{}))
+    active_before=tuple((S.get('bybit_discovery') or {}).get('selected_symbols') or ())
+   ranked=list(raw_snapshot.get('top_movers') or raw_snapshot.get('selected') or [])
+   ready=[]
+   for row in ranked:
+    symbol=row.get('symbol');anchor=anchors.get(symbol) or {}
+    try:
+     local_ok=bool(anchor.get('anchor_confirmed') and anchor.get('pivot_type') and
+      float(anchor.get('pivot_price') or 0)>0 and int(anchor.get('entry_side') or 0) in (-1,1))
+    except (TypeError,ValueError,OverflowError):
+     local_ok=False
+    if row.get('eligible') and local_ok:
+     ready.append(row)
+   chosen=ready[:DISCOVERY_MAX_SELECTED]
+   symbols=[row['symbol'] for row in chosen]
+   # Do not publish a raw no-local basket. During startup keep the prior
+   # confirmed-local basket until enough ranked candidates are prepared.
+   if len(symbols)<DISCOVERY_MAX_SELECTED:
+    prior_rows={row.get('symbol'):row for row in ranked}
+    for symbol in active_before:
+     if symbol in symbols:continue
+     anchor=anchors.get(symbol) or {}
+     try:
+      local_ok=bool(anchor.get('anchor_confirmed') and anchor.get('pivot_type') and
+       float(anchor.get('pivot_price') or 0)>0 and int(anchor.get('entry_side') or 0) in (-1,1))
+     except (TypeError,ValueError,OverflowError):
+      local_ok=False
+     if local_ok and symbol in prior_rows:
+      chosen.append(prior_rows[symbol]);symbols.append(symbol)
+      if len(symbols)>=DISCOVERY_MAX_SELECTED:break
+   snapshot=copy.deepcopy(raw_snapshot)
+   snapshot['selected']=chosen[:DISCOVERY_MAX_SELECTED]
+   snapshot['selected_symbols']=symbols[:DISCOVERY_MAX_SELECTED]
+   snapshot['activation_basis']='highest_ranked_candidates_with_confirmed_h1_local'
+   snapshot['raw_selected_symbols']=raw_snapshot.get('selected_symbols') or []
+   events=[]
+   for symbol in active_before:
+    if symbol not in snapshot['selected_symbols']:
+     events.append(dict(action='TOKEN_ROTATED',symbol=symbol,state='FADING' if symbol in held else 'ROTATE_OUT',
+      reason='replaced_by_higher_ranked_local_ready_candidate'))
+   for symbol in snapshot['selected_symbols']:
+    if symbol not in active_before:
+     events.append(dict(action='TOKEN_SELECTED',symbol=symbol,reason='ranked_candidate_with_confirmed_h1_local'))
+   snapshot['events']=events
+   states=dict(raw_snapshot.get('states') or {})
+   for symbol in active_before:
+    if symbol not in snapshot['selected_symbols']:states[symbol]='FADING' if symbol in held else 'ROTATE_OUT'
+   for symbol in snapshot['selected_symbols']:states[symbol]='SELECTED'
+   snapshot['states']=states
+   with scanner.lock:
+    scanner.selected=list(snapshot['selected_symbols']);scanner.states=dict(states);scanner.last_snapshot=copy.deepcopy(snapshot)
+   WIN.scanner_snapshot(snapshot)
+   with LOCK:S['sources']['BybitDiscovery']={'ok':bool(snapshot['selected_symbols']),'at':now(),'selected':len(snapshot['selected_symbols']),'mode':'LIVE_STREAM_LOCAL_READY'}"""
+if old_rank not in s: raise SystemExit("Codex scanner publish signature changed")
+s=s.replace(old_rank,new_rank)
+
 p.write_text(s)
