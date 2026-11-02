@@ -149,8 +149,11 @@ def execution_anchor(analysis, flow):
     if (analysis.get('live_structure_fresh',True) and m15.get('m15_confirmation')
             and flow.get('trade_data_fresh')
             and flow.get('sustained_control_side')==m15.get('entry_side')):
+        promoted_side=int(m15.get('entry_side') or 0)
         return _with_execution_local({**analysis,**m15,'ready':True,'anchor_confirmed':True,
                 'h1_direction_anchor':True,'entry_blocked':False,'entry_block_reason':None,
+                'local_low':promoted_side>0,'local_high':promoted_side<0,
+                'state':'CONFIRMED_LOCAL_LOW' if promoted_side>0 else 'CONFIRMED_LOCAL_HIGH',
                 'confirmation_source':'closed_M15_structure_and_executed_control'})
     forming=analysis.get('forming_local') or {}
     side=int(forming.get('entry_side') or 0)
@@ -159,6 +162,8 @@ def execution_anchor(analysis, flow):
         return _with_execution_local(analysis)
     return _with_execution_local({**analysis,**forming,'ready':True,'anchor_confirmed':True,
             'h1_direction_anchor':True,'entry_blocked':False,'entry_block_reason':None,
+            'local_low':side>0,'local_high':side<0,
+            'state':'CONFIRMED_LOCAL_LOW' if side>0 else 'CONFIRMED_LOCAL_HIGH',
             'signal_candle_time':int(forming['confirmation_candle_time']),
             'signal_candle_close_time':int(forming['confirmation_close_time']),
             'confirmation_source':'observed_H1_extreme_closed_M15_and_executed_control'})
