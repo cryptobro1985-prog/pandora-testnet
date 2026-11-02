@@ -30,4 +30,51 @@ s=s.replace(old_pool,new_pool)
 # Faster read-only diagnostics while the active five are warming.
 s=s.replace("if time.time()-last_entry_diagnostics>=30:","if time.time()-last_entry_diagnostics>=5:")
 
+
+# Give the frozen Codex engine the bounded selected-first history bootstrap from
+# the current repository. This keeps the active TOP-5 ahead of background names.
+import shutil, re
+bootstrap_src=Path("/app/pandora_bootstrap.py")
+bootstrap_dst=Path("/app/codex_engine/pandora_bootstrap.py")
+if bootstrap_src.exists():
+ shutil.copyfile(bootstrap_src,bootstrap_dst)
+if "from pandora_bootstrap import HistoryBootstrap" not in s:
+ s=s.replace("from pandora_runtime import PandoraRuntime\n",
+             "from pandora_runtime import PandoraRuntime\nfrom pandora_bootstrap import HistoryBootstrap\n")
+
+bootstrap_code=r'''def needs_local_history(symbol):
+ try:
+  h1_rows,stamp=_local_h1_candles(symbol);m15_rows,_=_local_m15_candles(symbol)
+  closed_h1=[r for r in h1_rows if int(r['T'])<=stamp-1000]
+  closed_m15=sorted((r for r in m15_rows if int(r['T'])<=stamp-1000),key=lambda r:int(r['t']))
+  if len(closed_h1)<6 or len(closed_m15)<5:return True
+  latest_h1=max(int(r['t']) for r in closed_h1)
+  expected=int((stamp-1000)//3600000*3600000-3600000)
+  if latest_h1<expected:return True
+  if not 0<=stamp-int(closed_m15[-1]['T'])<1020000:return True
+  return False
+ except Exception:return True
+
+def market_history_bootstrap():
+ global HISTORY_BOOTSTRAP
+ def selected():
+  with LOCK:return tuple((S.get('bybit_discovery') or {}).get('selected_symbols') or ()) if S.get('engine_active') else ()
+ def retained():
+  with LOCK:return tuple(dict.fromkeys(tuple(S.get('local_v12_positions',{}))+tuple(S.get('local_experiment_watch',{})))) if S.get('engine_active') else ()
+ def candidates():
+  if not S.get('engine_active'):return ()
+  with LOCK:return tuple(((S.get('bybit_discovery') or {}).get('candidate_symbols') or ())[:5])
+ def report(symbol,value):
+  with LOCK:S['sources']['H1History:'+symbol]={**value,'last_check':now()}
+  TRADE_WAKE.set()
+ HISTORY_BOOTSTRAP=HistoryBootstrap(SHUTDOWN,bybit_local_history,accept_local_candles,
+  checkpoint_local_candles,report,needs_local_history,selected,retained,candidates,
+  selected_workers=5,background_workers=1,requests_per_second=5,poll_interval=.2,retry_min=3,retry_max=20)
+ HISTORY_BOOTSTRAP.run()
+'''
+pattern=r"def market_history_bootstrap\(\):\n.*?\ndef local_experiment_loop\(\):"
+replacement=bootstrap_code+"\ndef local_experiment_loop():"
+s,n=re.subn(pattern,replacement,s,flags=re.S)
+if n!=1: raise SystemExit("Codex market_history_bootstrap signature changed")
+
 p.write_text(s)
