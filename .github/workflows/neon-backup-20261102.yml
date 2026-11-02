@@ -1,0 +1,23 @@
+name: Neon backup
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install pg_dump
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Export
+        env:
+          DATABASE_URL: ${{ secrets.PANDORA_BACKUP_DATABASE_URL }}
+        run: |
+          test -n "$DATABASE_URL"
+          pg_dump --format=custom --no-owner --no-acl --dbname="$DATABASE_URL" --file=pandora.dump
+          pg_restore --list pandora.dump >/dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pandora-backup
+          path: pandora.dump
+          retention-days: 1
