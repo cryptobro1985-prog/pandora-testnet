@@ -79,7 +79,9 @@ def summarize(trades, epoch, coverage):
     def window_control(window, require_net_response=False, require_complete=True):
         bias=1 if window['imbalance']>=MIN_CONTROL_IMBALANCE else -1 if window['imbalance']<=-MIN_CONTROL_IMBALANCE else 0
         if not bias or (require_complete and not window['complete']) or window['trade_count']<2:return 0
-        move=1 if window['price_return']>0 else -1 if window['price_return']<0 else 0
+        # Ignore only floating-point roundoff around an exactly flat auction.
+        price_return=float(window['price_return'] or 0.)
+        move=1 if price_return>1e-10 else -1 if price_return<-1e-10 else 0
         own='buy_price_response' if bias>0 else 'sell_price_response'
         opposite='sell_price_response' if bias>0 else 'buy_price_response'
         if move==-bias and window[opposite]>0:return -bias
