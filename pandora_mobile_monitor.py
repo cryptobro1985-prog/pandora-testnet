@@ -1,9 +1,66 @@
 """Compact read-only PAPER dashboard for narrow Samsung screens."""
-import html
+import html, os
 from datetime import datetime, timezone
+import psycopg
+from psycopg.rows import dict_row
 from pandora_monitor import _summary, _tokens, _finite, _price, _side
 
 def e(v): return html.escape(str("—" if v is None else v),quote=True)
+def _db():
+    return psycopg.connect(os.environ['DATABASE_URL'],autocommit=True,row_factory=dict_row,connect_timeout=3)
+
+def _durable_pandora_positions():
+    try:
+        with _db() as db:
+            row=db.execute("select positions from public.pandora_win_live_state where id=1").fetchone()
+        out=[]
+        for symbol,p in ((row or {}).get("positions") or {}).items():
+            out.append({"symbol":symbol,"side":p.get("side"),"entry":p.get("entry"),"average_entry":p.get("entry"),
+                "mark":p.get("mark"),"margin_usd":p.get("margin"),"notional_usd":p.get("notional"),
+                "leverage":p.get("leverage"),"opened":p.get("opened"),"unrealized_pnl":p.get("unrealized_pnl"),
+                "pnl_usdt":p.get("unrealized_pnl"),"features":p.get("features") or {}})
+        return out
+    except Exception:
+        return []
+
+def _durable_codex_snapshot():
+    try:
+        with _db() as db:
+            scan=db.execute("select payload from codex_million.pandora_runtime_state where name='scanner'").fetchone()
+            live=db.execute("select positions,total_equity,unrealized_pnl from codex_million.local_v12_live_state where id=1").fetchone()
+            acct=db.execute("select equity,realized_pnl from codex_million.local_v12_account_state where id=1").fetchone()
+            trades=db.execute("select opened,closed,symbol,side,entry,exit,pnl,reason,margin,notional,leverage,features from codex_million.local_v12_trade_history order by id desc limit 50").fetchall()
+            payload=(scan or {}).get("payload") or {}
+            selected=payload.get("selected") or []
+            symbols=[str(x.get("symbol")) for x in selected if x.get("symbol")]
+            locals_rows=db.execute("select symbol,analysis from codex_million.local_h1_direction where symbol=any(%s)",(symbols,)).fetchall() if symbols else []
+        locals_map={r["symbol"]:r["analysis"] for r in locals_rows}
+        live_positions=(live or {}).get("positions") or {}
+        positions=[]
+        for symbol,p in live_positions.items():
+            positions.append({"symbol":symbol,"side":p.get("side"),"entry":p.get("entry"),"average_entry":p.get("entry"),
+                "mark":p.get("mark"),"margin_usd":p.get("margin"),"notional_usd":p.get("notional"),
+                "leverage":p.get("leverage"),"opened":p.get("opened"),"unrealized_pnl":p.get("unrealized_pnl"),
+                "pnl_usdt":p.get("unrealized_pnl"),"features":p.get("features") or {}})
+        posmap={p["symbol"]:p for p in positions}
+        tokens=[]
+        for row in selected[:5]:
+            symbol=row.get("symbol"); local=locals_map.get(symbol) or {}
+            buy=row.get("buy_volume"); sell=row.get("sell_volume")
+            dominance=1 if (buy or 0)>(sell or 0) else -1 if (sell or 0)>(buy or 0) else 0
+            tokens.append({**row,"price":row.get("last"),"confirmed_local":local.get("confirmed_local") or local,
+                "execution_local":local.get("execution_local") or local,"local_state":local,
+                "direction":local.get("entry_side"),"buy_volume":buy,"sell_volume":sell,
+                "flow_state":{"trade_data_fresh":bool(row.get("flow_fresh")),"dominance_side":dominance},
+                "state":"SELECTED","position":posmap.get(symbol) or {}})
+        return {"online":True,"status":"RUNNING","starting_equity":500.0,
+            "equity":(live or {}).get("total_equity") if live else (acct or {}).get("equity"),
+            "realized_pnl":(acct or {}).get("realized_pnl",0),"unrealized_pnl":(live or {}).get("unrealized_pnl",0) if live else 0,
+            "positions":positions,"trades":[dict(x) for x in trades],"tokens":tokens,
+            "discovery":payload,"frozen_revision":"a01bc1d0c9c216ddb28c75b31fb42e1248867a0d"}
+    except Exception:
+        return {}
+
 def money(v):
     x=_finite(v)
     return "—" if x is None else f"{x:+,.2f} $"
@@ -33,6 +90,10 @@ def local(t):
             "BLOCKED" if blocked else "STALE" if not live else "CONFIRMED"))
 def render(data):
     p=data.get("pandora") or {}
+    if not (p.get("open_positions") or []):
+        durable_positions=_durable_pandora_positions()
+        if durable_positions:
+            p={**p,"open_positions":durable_positions}
     start,equity,total,total_pct=_summary(p)
     now=datetime.now(timezone.utc)
     started=p.get("started_at") or p.get("start_time") or data.get("started_at")
@@ -62,6 +123,10 @@ def render(data):
         percent=(float(pnl)/float(margin)*100) if _finite(pnl) is not None and _finite(margin) is not None and float(margin)>0 else None
         history.append(f'<article><div class="heading"><b>{e(t.get("symbol"))} · {e(_side(t.get("side")))}</b><strong class="{("long" if (pnl or 0)>=0 else "short")}">{e(money(pnl))}</strong></div><div class="kv"><span>PnL / маржа</span><b>{e(pct(percent))}</b><span>Вход → выход</span><b>{e(_price(t.get("entry")))} → {e(_price(t.get("exit")))}</b><span>Закрытие</span><b>{e(t.get("closed"))}</b><span>Причина</span><b>{e(t.get("reason"))}</b></div></article>')
     codex=data.get("codex") or {}
+    if len(codex.get("tokens") or [])<5 or (not codex.get("positions") and not codex.get("trades")):
+        durable_codex=_durable_codex_snapshot()
+        if durable_codex:
+            codex={**codex,**durable_codex}
     cstart=_finite(codex.get("starting_equity"))
     cequity=_finite(codex.get("equity"))
     ctotal=_finite(codex.get("total_pnl_usdt"))
