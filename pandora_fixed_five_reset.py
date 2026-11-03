@@ -1,9 +1,9 @@
 """Lease-fenced, one-time PAPER experiment migration. No real orders."""
 import json
 
-EXPERIMENT="PANDORA_FIXED_FIVE_20261102"
+EXPERIMENT="CATERPILLAR_EVENT_FLOW_10_20261103"
 EQUITY=500.0
-LEGACY_PREFIX="pandora_win_legacy_fixed5_20261102_"
+LEGACY_PREFIX="pandora_win_legacy_before_eventflow10_20261103_"
 # Auditable, static allowlist: never delete tables outside pandora_win namespace.
 TABLES=("pandora_win_positions","pandora_win_trade_history",
         "pandora_win_watchlist","pandora_win_h1_direction",
