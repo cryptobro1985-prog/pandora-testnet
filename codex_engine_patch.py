@@ -177,3 +177,56 @@ s=s.replace('watch["context"].update(phase="WAIT_RESUMPTION" if confirmed_opposi
     flow_exit_trade_count=int(flow_at_exit.get("event_trade_count_total") or 0))''')
 
 p.write_text(s)
+
+
+# Explicit SHORT10 PAPER overlay. Preserve the real H1 local in state/monitor,
+# but execute the requested short-only experiment against that observed structure.
+s=s.replace('''  side=int(analysis.get("entry_side") or 0)
+  if watch and int(watch.get("side") or 0)==-side:''',
+'''  market_side=int(analysis.get("entry_side") or 0)
+  forced_short=os.getenv("CODEX_FORCE_SHORT10","0")=="1"
+  side=-1 if forced_short else market_side
+  execution_analysis=copy.deepcopy(analysis)
+  if forced_short:
+   execution_analysis.update(execution_side_override=-1,execution_bias="SHORT10_PAPER",
+    market_entry_side=market_side,market_pivot_type=analysis.get("pivot_type"),
+    market_pivot_price=analysis.get("pivot_price"))
+  if watch and int(watch.get("side") or 0)==-side:''')
+s=s.replace('''   selection=local4_initial_entry_candidate(symbol,analysis,None,flow,time.time())
+   if selection.get("eligible"):
+    local_experiment_open(symbol,side,analysis,"ORDER_FLOW",{"pandora_win_direct_control":True,"strategy":PANDORA_WIN_NAME})''',
+'''   selection=local4_initial_entry_candidate(symbol,execution_analysis,None,flow,time.time())
+   if selection.get("eligible"):
+    local_experiment_open(symbol,side,execution_analysis,"ORDER_FLOW",{"pandora_win_direct_control":True,"strategy":PANDORA_WIN_NAME})''')
+# In forced-short PAPER mode, structural freshness is still required, but the
+# market's latest LOW/LONG direction is not allowed to veto the explicit test side.
+s=s.replace(''' if not strategy1_confirmed_h1(analysis):return reject("H1_NOT_CONFIRMED")''',
+''' forced_short=bool(os.getenv("CODEX_FORCE_SHORT10","0")=="1" and int(side or 0)==-1 and (analysis or {}).get("execution_bias")=="SHORT10_PAPER")
+ if not forced_short and not strategy1_confirmed_h1(analysis):return reject("H1_NOT_CONFIRMED")
+ if forced_short and not ((analysis or {}).get("ready") and (analysis or {}).get("anchor_confirmed") and (analysis or {}).get("h1_direction_anchor") and not (analysis or {}).get("entry_blocked")):return reject("H1_NOT_CONFIRMED")''')
+s=s.replace(''' if not strategy1_runtime_h1_verified(symbol,analysis):return reject("CURRENT_CLOSED_H1_NOT_VERIFIED")''',
+''' verify_analysis=analysis
+ if forced_short:
+  verify_analysis={**analysis,"entry_side":analysis.get("market_entry_side"),"pivot_type":analysis.get("market_pivot_type"),"pivot_price":analysis.get("market_pivot_price")}
+ if not strategy1_runtime_h1_verified(symbol,verify_analysis):return reject("CURRENT_CLOSED_H1_NOT_VERIFIED")''')
+s=s.replace(''' if not analysis.get("h1_direction_anchor") or int(analysis.get("entry_side") or 0)!=int(side):return reject("ENTRY_STATE_REVALIDATION_FAILED")''',
+''' if not analysis.get("h1_direction_anchor") or (not forced_short and int(analysis.get("entry_side") or 0)!=int(side)):return reject("ENTRY_STATE_REVALIDATION_FAILED")''')
+s=s.replace(''' if current_anchor and (int(current_anchor.get("entry_side") or 0)!=int(side) or
+     int(current_anchor.get("signal_candle_time") or 0)!=int(analysis.get("signal_candle_time") or 0)):return reject("ENTRY_STATE_REVALIDATION_FAILED")''',
+''' if current_anchor and ((not forced_short and int(current_anchor.get("entry_side") or 0)!=int(side)) or
+     int(current_anchor.get("signal_candle_time") or 0)!=int(analysis.get("signal_candle_time") or 0)):return reject("ENTRY_STATE_REVALIDATION_FAILED")''')
+s=s.replace(''' if latest_anchor and (latest_anchor.get('entry_blocked') or latest_anchor.get('live_structure_fresh') is False or
+     int(latest_anchor.get('entry_side') or 0)!=int(side) or
+     int(latest_anchor.get('signal_candle_time') or 0)!=int(analysis.get('signal_candle_time') or 0)):''',
+''' if latest_anchor and (latest_anchor.get('entry_blocked') or latest_anchor.get('live_structure_fresh') is False or
+     (not forced_short and int(latest_anchor.get('entry_side') or 0)!=int(side)) or
+     int(latest_anchor.get('signal_candle_time') or 0)!=int(analysis.get('signal_candle_time') or 0)):''')
+# Diagnostics evaluate the same forced SHORT side as the executor.
+s=s.replace('''     selection=local4_initial_entry_candidate(symbol,analysis,None,flow,time.time())
+     record["candidate"]=selection''',
+'''     diagnostic_analysis=copy.deepcopy(analysis)
+     if os.getenv("CODEX_FORCE_SHORT10","0")=="1":
+      diagnostic_analysis["execution_side_override"]=-1
+     selection=local4_initial_entry_candidate(symbol,diagnostic_analysis,None,flow,time.time())
+     record["candidate"]=selection
+     record["execution_side"]=-1 if os.getenv("CODEX_FORCE_SHORT10","0")=="1" else record.get("entry_side")''')
