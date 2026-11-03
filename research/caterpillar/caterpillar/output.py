@@ -11,8 +11,11 @@ import sys
 
 from . import __version__
 
-STREAMS = ("trades", "signals", "rejected_signals", "locals", "structure", "flow_events",
-           "mfe_analysis", "post_exit", "hypothesis_outcomes", "data_quality", "raw_trades", "candles")
+STREAMS = ("trades", "signals", "rejected_signals", "locals", "local_hypotheses",
+           "entry_hypotheses", "structure", "flow_events", "price_response",
+           "large_participant_events", "positions", "mfe_analysis", "exit_hypotheses",
+           "reentry_hypotheses", "post_exit", "hypothesis_outcomes", "data_quality",
+           "raw_trades", "candles", "market_context", "hourly_snapshots")
 
 
 def finite_number(value):
@@ -157,36 +160,82 @@ class Profile:
 
 
 class Output:
-    def __init__(self, directory, config, symbols, mode, metadata=None):
+    def __init__(self, directory, config, symbols, mode, metadata=None, resume=False):
         self.root = Path(directory)
-        # Refuse mixed runs or accidental overwrite. A run has one immutable config.
         self.root.mkdir(parents=True, exist_ok=True)
-        if any(self.root.iterdir()):
-            raise ValueError("Output directory must be empty: " + str(self.root))
-        # A simultaneous second process can pass the emptiness check above. An
-        # exclusive claim prevents two writers from mixing/truncating one run.
+        self.lock_handle = (self.root/".run.lock").open("a+")
         try:
-            with (self.root/".run.lock").open("x"):
-                pass
-        except FileExistsError:
-            raise ValueError("Output directory is already claimed: " + str(self.root)) from None
+            import fcntl
+            fcntl.flock(self.lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except (ImportError, BlockingIOError, OSError):
+            self.lock_handle.close()
+            raise ValueError("Output directory is already claimed by another process: " + str(self.root)) from None
+        self.lock_handle.seek(0)
+        self.lock_handle.truncate()
+        self.lock_handle.write(json.dumps({"pid": os.getpid(), "host": socket.gethostname(),
+                                           "claimed_at": datetime.now(timezone.utc).isoformat()}))
+        self.lock_handle.flush()
+
         self.handles = {}
-        try:
-            for name in STREAMS:
-                self.handles[name] = (self.root / (name+".jsonl")).open("w", encoding="utf-8")
-        except Exception:
-            for handle in self.handles.values():
-                handle.close()
-            raise
-        self.meta = {"schema_version": 2, "mode": mode, "symbols": list(symbols), "config": asdict(config),
-                     "config_sha256": config.digest, "created_at": datetime.now(timezone.utc).isoformat(),
-                     "package_version": __version__, "package_source_sha256": package_source_sha256(),
-                     "python": sys.version, "platform": platform.platform(), "metadata": metadata or {},
-                     "local_timeframe": "1h", "paper_only": True, "funding": "not included; outputs are net of fees/slippage, before funding",
-                     "fill_model": "next eligible public trade plus adverse fixed slippage; unlimited hypothetical liquidity, no queue or market impact",
-                     "timestamp_policy": "exchange event time; confirmation/action time distinct from extreme time",
-                     "status": "running"}
-        self.save_json("run_manifest.json", self.meta)
+        if resume:
+            checkpoint_path = self.root/"checkpoint.json"
+            manifest_path = self.root/"run_manifest.json"
+            if not checkpoint_path.is_file() or not manifest_path.is_file():
+                self.lock_handle.close()
+                raise ValueError("Resume requires checkpoint.json and run_manifest.json")
+            checkpoint = json.loads(checkpoint_path.read_text())
+            manifest = json.loads(manifest_path.read_text())
+            if (manifest.get("schema_version") != 3 or manifest.get("mode") != mode
+                    or manifest.get("symbols") != list(symbols)
+                    or manifest.get("config_sha256") != config.digest):
+                self.lock_handle.close()
+                raise ValueError("Resume manifest does not match mode/symbols/config/schema")
+            offsets = checkpoint.get("output_offsets", {})
+            try:
+                for name in STREAMS:
+                    path = self.root/(name+".jsonl")
+                    if not path.exists():
+                        path.touch()
+                    offset = offsets.get(name)
+                    if offset is None:
+                        raise ValueError("Checkpoint lacks output offset for "+name)
+                    with path.open("rb+") as raw:
+                        raw.truncate(int(offset))
+                    self.handles[name] = path.open("a", encoding="utf-8")
+            except Exception:
+                for handle in self.handles.values():
+                    handle.close()
+                self.lock_handle.close()
+                raise
+            self.meta = manifest
+            self.meta["status"] = "running"
+            self.meta.setdefault("resumed_at", []).append(datetime.now(timezone.utc).isoformat())
+            self.meta["package_version"] = __version__
+            self.meta["package_source_sha256"] = package_source_sha256()
+            self.save_json("run_manifest.json", self.meta)
+        else:
+            leftovers = [p for p in self.root.iterdir() if p.name != ".run.lock"]
+            if leftovers:
+                self.lock_handle.close()
+                raise ValueError("Output directory must be empty for a new run: " + str(self.root))
+            try:
+                for name in STREAMS:
+                    self.handles[name] = (self.root / (name+".jsonl")).open("w", encoding="utf-8")
+            except Exception:
+                for handle in self.handles.values():
+                    handle.close()
+                self.lock_handle.close()
+                raise
+            self.meta = {"schema_version": 3, "mode": mode, "symbols": list(symbols), "config": asdict(config),
+                         "config_sha256": config.digest, "created_at": datetime.now(timezone.utc).isoformat(),
+                         "package_version": __version__, "package_source_sha256": package_source_sha256(),
+                         "python": sys.version, "platform": platform.platform(), "metadata": metadata or {},
+                         "local_timeframe": "1h", "paper_only": True,
+                         "funding": "not included; outputs are net of fees/slippage, before funding",
+                         "fill_model": "next eligible public trade plus adverse fixed slippage; unlimited hypothetical liquidity, no queue or market impact",
+                         "timestamp_policy": "exchange event time; confirmation/action time distinct from extreme time",
+                         "status": "running"}
+            self.save_json("run_manifest.json", self.meta)
 
     def emit(self, stream, row):
         self.handles[stream].write(json.dumps(row, allow_nan=False, separators=(",", ":"))+"\n")
@@ -194,6 +243,10 @@ class Output:
     def flush(self):
         for handle in self.handles.values():
             handle.flush()
+
+    def stream_offsets(self):
+        self.flush()
+        return {name: handle.tell() for name, handle in self.handles.items()}
 
     def save_json(self, name, obj):
         path = self.root / name
@@ -207,6 +260,8 @@ class Output:
         finally:
             for handle in self.handles.values():
                 handle.close()
+            if getattr(self, "lock_handle", None) is not None:
+                self.lock_handle.close()
 
     def _finish(self, profiles, summary, config, status):
         self.flush()
