@@ -273,9 +273,12 @@ def historical(engine, cache, start, end, allow_ohlcv=False, resume=False):
     if start >= end or end > datetime.now(timezone.utc):
         raise ValueError("Require start < end <= now")
     source = Archives(cache)
-    progress_path = engine.output.root/"historical_progress.json"
+    output_root = getattr(engine.output, "root", None)
+    progress_path = output_root/"historical_progress.json" if output_root is not None else None
     expected = {"start": start.isoformat(), "end": end.isoformat(),
                 "symbols": list(engine.states)}
+    if resume and progress_path is None:
+        raise ValueError("Resume requires an output root with persistent checkpoints")
     if resume:
         if progress_path.is_file():
             progress = json.loads(progress_path.read_text())
@@ -344,11 +347,15 @@ def historical(engine, cache, start, end, allow_ohlcv=False, resume=False):
                 "accepted": coverage["accepted"],
                 "completed_at": datetime.now(timezone.utc).isoformat(),
             }
-            engine.output.save_json("historical_progress.json", progress)
-            engine.resume_extra["historical_progress"] = progress
+            if progress_path is not None and hasattr(engine.output, "save_json"):
+                engine.output.save_json("historical_progress.json", progress)
+            if hasattr(engine, "resume_extra"):
+                engine.resume_extra["historical_progress"] = progress
             engine.output.flush()
-            engine.checkpoint("historical_segment", extra=engine.resume_extra)
-            engine.maybe_status("historical_progress")
+            if hasattr(engine, "checkpoint"):
+                engine.checkpoint("historical_segment", extra=getattr(engine, "resume_extra", {}))
+            if hasattr(engine, "maybe_status"):
+                engine.maybe_status("historical_progress")
             print(f"{symbol} {day:%Y-%m-%d}: {coverage['status']}; accepted={coverage['accepted']}", flush=True)
         day += timedelta(days=1)
     return "incomplete_coverage" if incomplete else "completed"
