@@ -202,10 +202,19 @@ class RollingMarketData:
         control=dominant if direction==dominant and direction else 0
         r15,b15,s15=window(15)
         r30,b30,s30=window(30)
-        out.update(trade_data_fresh=True,buy_notional=b60,sell_notional=s60,flow_imbalance=i60,
+        r180,b180,s180=window(180)
+        r300,b300,s300=window(300)
+        windows={
+            "30":{"complete":coverage>=30 and bool(r30),"buy":b30,"sell":s30,"count":len(r30),"imbalance":imbalance(b30,s30)},
+            "180":{"complete":coverage>=180 and bool(r180),"buy":b180,"sell":s180,"count":len(r180),"imbalance":imbalance(b180,s180)},
+            "300":{"complete":coverage>=300 and bool(r300),"buy":b300,"sell":s300,"count":len(r300),"imbalance":imbalance(b300,s300)},
+        }
+        out.update(trade_data_fresh=True,evidence_ready=bool(windows["30"]["complete"] and windows["180"]["complete"]),
+                   windows=windows,buy_notional=b60,sell_notional=s60,flow_imbalance=i60,
                    buy_volume_15s=b15,sell_volume_15s=s15,trade_count_15s=len(r15),flow_imbalance_15s=imbalance(b15,s15),
                    buy_volume_30s=b30,sell_volume_30s=s30,trade_count_30s=len(r30),flow_imbalance_30s=imbalance(b30,s30),
                    buy_volume_60s=b60,sell_volume_60s=s60,trade_count_60s=len(r60),observed_notional_60s=b60+s60,
+                   buy_volume_180s=b180,sell_volume_180s=s180,trade_count_180s=len(r180),flow_imbalance_180s=imbalance(b180,s180),
                    volume_window_end_epoch=epoch,
                    price_direction=direction,control_side=control,previous_price=levels[0]['price'] if len(levels)==2 else None,
                    last_price=levels[-1]['price'],pressure_phase='CONTROL_CONFIRMED' if control else 'PRESSURE_WITHOUT_PRICE_CONFIRMATION',
