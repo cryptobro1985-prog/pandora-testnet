@@ -27,7 +27,7 @@ from local_order_flow import POLICY as PANDORA_FLOW_POLICY,entry_candidate as pa
 
 PANDORA_STARTING_EQUITY=400.0 if v2_enabled() else 500.0
 PANDORA_MARGIN_FRACTION=.20
-PANDORA_WIN_NAME="Pandora Pump V3" if v2_enabled() and os.getenv("PANDORA_PUMP_V3","0")=="1" else "Pandora Flow V2" if v2_enabled() else "Pandora Win"
+PANDORA_WIN_NAME="Pandora Pump V3" if v2_enabled() and os.getenv("PANDORA_PUMP_V3","0")=="1" else "Pandora Flow V2" if v2_enabled() else "Caterpillar Event Flow"
 DISCOVERY_MAX_SELECTED=5
 DISCOVERY_SCAN_SECONDS=1
 FEE=.00045
@@ -706,6 +706,9 @@ def pandora_open(symbol,side,analysis,entry_kind="ORDER_FLOW",execution_context=
   "exposure_fill_ratio":exposure_fill_ratio,"leverage":leverage,"leverage_source":"bybit_instruments_info",
   "mfe_price_move":0.0,"mae_price_move":0.0,"mfe_roe_pct":0.0,"mae_roe_pct":0.0,
   "entry_mark":price,
+  "flow_entry_buy_total":float(flow.get("event_buy_notional_total") or 0.),
+  "flow_entry_sell_total":float(flow.get("event_sell_notional_total") or 0.),
+  "flow_entry_trade_count":int(flow.get("event_trade_count_total") or 0),
   "pressure_state":{"best":int(side)*price,
     "noise":float(old_resumption.get("noise") or 0.),
     "barrier":float(counter_barrier) if counter_barrier is not None else None,
@@ -781,8 +784,11 @@ def pandora_close(symbol,price,reason,analysis=None,watch_context=None):
   except (KeyError,TypeError,ValueError,OverflowError):opposite_epoch=None
   profile=flow_profile(flow_at_exit,int(pos["side"]))
   confirmed_opposite=bool(opposite_flow_exit and opposite_epoch is not None and profile and profile["counter_takeover"])
-  watch["context"].update(phase="WAIT_RESUMPTION" if confirmed_opposite else "WAIT_COUNTER_CONTROL",
-    counter_pressure_seen=confirmed_opposite,flow_policy=PANDORA_FLOW_POLICY)
+  watch["context"].update(phase="WAIT_RESUMPTION",
+    counter_pressure_seen=True,flow_policy=PANDORA_FLOW_POLICY,
+    flow_exit_buy_total=float(flow_at_exit.get("event_buy_notional_total") or 0.),
+    flow_exit_sell_total=float(flow_at_exit.get("event_sell_notional_total") or 0.),
+    flow_exit_trade_count=int(flow_at_exit.get("event_trade_count_total") or 0))
   if confirmed_opposite:watch["context"]["last_opposite_trade_epoch"]=opposite_epoch
   if v2_enabled():
    # A later independent Bybit trade is required for any re-entry.
@@ -1264,7 +1270,26 @@ def pandora_loop():
    try:
     if v2_enabled():continue
     rows,stamp=_pandora_h1_candles(symbol);analysis=pandora_win_h1_direction(rows,stamp,symbol)
-    with LOCK:S.setdefault('_pandora_analysis',{})[symbol]=analysis
+    # Causal event-flow baseline: when THIS runtime first recognizes a new confirmed
+    # H1 anchor, start BUY/SELL accounting from the current Public Trades totals.
+    # Trading decisions then depend on subsequent executed notional, not elapsed time.
+    flow_now=MARKET_OBS.flow_context(symbol,time.time())
+    anchor_key=(int(analysis.get('entry_side') or 0),int(analysis.get('signal_candle_time') or 0),int(analysis.get('pivot_candle_time') or 0))
+    with LOCK:
+     baselines=S.setdefault('_pandora_flow_anchor_baseline',{})
+     baseline=baselines.get(symbol)
+     if not baseline or tuple(baseline.get('anchor_key') or ())!=anchor_key:
+      if flow_now.get('trade_data_fresh') and flow_now.get('event_trade_count_total') is not None:
+       baseline={'anchor_key':list(anchor_key),
+        'buy':float(flow_now.get('event_buy_notional_total') or 0.),
+        'sell':float(flow_now.get('event_sell_notional_total') or 0.),
+        'count':int(flow_now.get('event_trade_count_total') or 0)}
+       baselines[symbol]=baseline
+     if baseline:
+      analysis['flow_anchor_buy_total']=baseline['buy']
+      analysis['flow_anchor_sell_total']=baseline['sell']
+      analysis['flow_anchor_trade_count']=baseline['count']
+     S.setdefault('_pandora_analysis',{})[symbol]=analysis
    except Exception as error:
     with LOCK:S['sources']['H1Scan:'+symbol]={'ok':False,'last_check':now(),'error':type(error).__name__+':'+str(error)[:140]}
   TRADE_WAKE.set();SHUTDOWN.wait(1)
