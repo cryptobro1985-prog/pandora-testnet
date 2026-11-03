@@ -154,20 +154,27 @@ def synthesize(engine, status):
     universal = Counter()
     for symbol, profile in engine.profiles.items():
         result = profile.result()
-        entries = [x for x in _top_hypotheses(result, "/feature/", engine.config.min_evidence, 20)
-                   if "research_" in x["hypothesis"] and x["mean_net_bps"] > 0]
-        locals_ = [x for x in _top_hypotheses(result, "/local/", engine.config.min_evidence, 20)
+        feature_rows = _top_hypotheses(result, "/feature/", engine.config.min_evidence, 40)
+        entries = [x for x in feature_rows
+                   if "research_" in x["hypothesis"] and "research_hold_" not in x["hypothesis"]
+                   and "research_reentry_" not in x["hypothesis"] and x["mean_net_bps"] > 0]
+        holds = [x for x in feature_rows if "research_hold_" in x["hypothesis"] and x["mean_net_bps"] > 0]
+        reentries = [x for x in feature_rows if "research_reentry_" in x["hypothesis"] and x["mean_net_bps"] > 0]
+        locals_ = [x for x in _top_hypotheses(result, "/local/", engine.config.min_evidence, 30)
                    if x["mean_net_bps"] > 0]
         exits = [x for x in _top_hypotheses(result, "/exit/", engine.config.min_evidence, 20)
                  if x["mean_net_bps"] > 0]
-        for row in entries[:5] + locals_[:5] + exits[:5]:
+        for row in entries[:5] + holds[:5] + reentries[:5] + locals_[:5] + exits[:5]:
             universal[row["hypothesis"]] += 1
-        enough = any(x["observed_utc_days"] >= engine.config.min_evidence_days for x in entries + locals_ + exits)
+        all_rows = entries + holds + reentries + locals_ + exits
+        enough = any(x["observed_utc_days"] >= engine.config.min_evidence_days for x in all_rows)
         tokens[symbol] = {
             "evidence_status": "PRELIMINARY_MULTI_DAY" if enough else "INSUFFICIENT_DATA",
             "local_candidates": locals_[:8],
             "entry_candidates": entries[:8],
+            "hold_candidates": holds[:8],
             "exit_candidates": exits[:8],
+            "reentry_candidates": reentries[:8],
             "structure": engine.states[symbol].trend,
             "reentry_ready_count": sum(v for k, v in result["counts"].items() if k.startswith("research_reentry/ready/")),
             "reentry_rejected_count": sum(v for k, v in result["counts"].items() if k.startswith("research_reentry/rejected/")),
