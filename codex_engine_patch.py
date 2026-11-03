@@ -58,6 +58,18 @@ s=s.replace("stable_shard=lambda symbol:int(hashlib.sha1(str(symbol).encode()).h
 
 # Caterpillar Event Flow runtime wiring for the frozen child.
 s=s.replace("DISCOVERY_MAX_SELECTED=5","DISCOVERY_MAX_SELECTED=10")
+# Canonical H1 repair: embedded confirmed_local is a real candidate, not display-only.
+s=s.replace('''  execution=features.get("execution_local") if isinstance(features.get("execution_local"),dict) else {}
+  side=int(features.get("entry_side") or execution.get("entry_side") or 0)''','''  execution=features.get("execution_local") if isinstance(features.get("execution_local"),dict) else {}
+  confirmed=features.get("confirmed_local") if isinstance(features.get("confirmed_local"),dict) else {}
+  if confirmed and int(confirmed.get("entry_side") or 0) in (-1,1) and confirmed.get("pivot_price") is not None:
+   candidates.append({**features,**confirmed,"ready":True,"persisted":True,"anchor_confirmed":True,
+    "h1_direction_anchor":True,"local_low":int(confirmed.get("entry_side"))>0,
+    "local_high":int(confirmed.get("entry_side"))<0,
+    "state":"CONFIRMED_LOCAL_LOW" if int(confirmed.get("entry_side"))>0 else "CONFIRMED_LOCAL_HIGH",
+    "entry_blocked":False,"entry_block_reason":None,"reason":"embedded_confirmed_h1_local",
+    "anchor_source":origin+":confirmed_local"})
+  side=int(features.get("entry_side") or execution.get("entry_side") or 0)''')
 s=s.replace('"entry_mark":price,"profit_lock_armed":False,',
 '''"entry_mark":price,"profit_lock_armed":False,
   "flow_entry_buy_total":float(flow.get("event_buy_notional_total") or 0.),
