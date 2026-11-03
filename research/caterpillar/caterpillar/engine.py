@@ -9,6 +9,8 @@ from .h1 import H1Tracker
 
 from .model import Config, Local, Position, SYMBOLS, Trade, features
 from .output import Profile
+from .research_layer import MultiLocalResearch, dual_side_entry_research, emit_microstructure_research, reentry_research
+from .reporting import persist_status, synthesize
 
 
 @dataclass
@@ -45,6 +47,9 @@ class State:
     continuity_broken: bool = False
     h1: H1Tracker | None = None
     h1_confirmations: list = field(default_factory=list)
+    research_locals: MultiLocalResearch | None = None
+    market_context: dict = field(default_factory=dict)
+    market_context_last_emit: dict = field(default_factory=dict)
 
 
 class ResearchEngine:
@@ -58,12 +63,67 @@ class ResearchEngine:
         self.states = {s: State(s, history=deque(maxlen=self.config.baseline_blocks),
                                 books={m: Book() for m in self.config.exit_models},
                                 h1=H1Tracker(self.config.h1_lookback_bars)) for s in symbols}
+        for symbol, state in self.states.items():
+            state.research_locals = MultiLocalResearch(symbol)
         self.profiles = {s: Profile() for s in symbols}
         self.finished = False
         self.coverage = []
+        self.last_checkpoint_wall = time.monotonic()
+        self.last_status_wall = time.monotonic()
+        self.last_hourly_snapshot_wall = None
+        self.resume_extra = {}
 
     def emit(self, stream, s, ts, **data):
         self.output.emit(stream, {"ts": ts, "symbol": s.symbol, "event_seq": s.seq, **data})
+
+    def checkpoint(self, reason="periodic", extra=None):
+        from .stateio import dump_engine
+        payload = dump_engine(self, reason=reason, extra=extra or self.resume_extra)
+        self.output.save_json("checkpoint.json", payload)
+        self.last_checkpoint_wall = time.monotonic()
+        return payload
+
+    def restore_checkpoint(self):
+        import json
+        from .stateio import restore_engine
+        path = self.output.root/"checkpoint.json"
+        if not path.is_file():
+            raise ValueError("checkpoint.json not found")
+        payload = json.loads(path.read_text())
+        self.resume_extra = restore_engine(self, payload)
+        self.last_checkpoint_wall = time.monotonic()
+        self.last_status_wall = time.monotonic()
+        return self.resume_extra
+
+    def maybe_checkpoint(self, reason="periodic"):
+        if time.monotonic() - self.last_checkpoint_wall >= self.config.checkpoint_seconds:
+            self.checkpoint(reason)
+
+    def maybe_status(self, reason="heartbeat"):
+        now_mono = time.monotonic()
+        now_wall = time.time()
+        if now_mono - self.last_status_wall >= self.config.status_seconds:
+            persist_status(self, now_wall, reason=reason, hourly=False)
+            self.last_status_wall = now_mono
+        if (self.last_hourly_snapshot_wall is None
+                or now_wall - self.last_hourly_snapshot_wall >= self.config.hourly_snapshot_seconds):
+            persist_status(self, now_wall, reason="hourly", hourly=True)
+            self.last_hourly_snapshot_wall = now_wall
+
+    def on_market_context(self, symbol, ts, context):
+        if symbol not in self.states:
+            raise ValueError("Market context symbol outside configured universe")
+        s = self.states[symbol]
+        kind = context.get("kind")
+        if kind not in ("orderbook_l1", "liquidation"):
+            raise ValueError("Unknown market context kind")
+        s.market_context[kind] = context
+        last = s.market_context_last_emit.get(kind, 0.0)
+        # L1 can arrive at very high frequency. Keep latest state always, but
+        # persist at most 1 Hz per symbol. Liquidations are sparse and always emitted.
+        if kind == "liquidation" or ts - last >= 1.0:
+            self.emit("market_context", s, ts, context=context)
+            s.market_context_last_emit[kind] = ts
 
     def quality(self, symbol, ts, reason, **data):
         s = self.states[symbol]
@@ -97,6 +157,7 @@ class ResearchEngine:
         for row in s.post_exits:
             self.emit("post_exit", s, ts, status="CENSORED", reason=reason, observation=row)
         if reason == "evaluation_boundary":
+            s.research_locals = MultiLocalResearch(s.symbol)
             for group in s.locals.values():
                 for local in group:
                     if not local.invalidated:
@@ -108,6 +169,10 @@ class ResearchEngine:
             s.trend = "RANGE"
         else:
             s.h1.mark_gap()
+            if s.research_locals is not None:
+                s.research_locals.gap(
+                    ts, lambda stream, ts, **data: self.emit(stream, s, ts, **data),
+                    reason=reason)
         s.h1_confirmations.clear()
         s.block.clear()
         s.history.clear()
@@ -117,6 +182,7 @@ class ResearchEngine:
         s.sweeps.clear()
         s.defenses.clear()
         s.candle_history.clear()
+        s.market_context.clear()
 
     def _apply_h1(self, s, events, observed_at, seeded=False):
         for local, stage, reason in events:
@@ -140,6 +206,12 @@ class ResearchEngine:
             if self.record_raw:
                 self.emit("raw_trades", s, observed, event="H1_SEED", candle=candle, as_of=observed)
             self._apply_h1(s, events, observed, seeded=True)
+            if s.research_locals is not None and s.h1.history:
+                latest_flow = s.history[-1] if s.history else None
+                s.research_locals.on_closed_bar(
+                    s.h1.history[-1], observed, latest_flow,
+                    lambda stream, ts, **data: self.emit(stream, s, ts, **data),
+                    self.profiles[symbol], self.phase(observed), seeded=True)
         return accepted
 
     def on_trade(self, trade: Trade):
@@ -184,7 +256,15 @@ class ResearchEngine:
         if self.record_raw:
             self.emit("raw_trades", s, trade.ts, trade=asdict(trade))
         # Close an observed H1 and apply its structure before any pending fill.
-        self._apply_h1(s, s.h1.tick(trade), trade.ts)
+        before_h1 = len(s.h1.history)
+        h1_events = s.h1.tick(trade)
+        self._apply_h1(s, h1_events, trade.ts)
+        if len(s.h1.history) > before_h1 and s.research_locals is not None:
+            latest_flow = s.history[-1] if s.history else None
+            s.research_locals.on_closed_bar(
+                s.h1.history[-1], trade.ts, latest_flow,
+                lambda stream, ts, **data: self.emit(stream, s, ts, **data),
+                profile, self.phase(trade.ts), seeded=False)
         # Execute prior decisions on a later timestamp, never retrospectively at a local extremum.
         for model, book in s.books.items():
             if book.pending and book.pending["action"] != "CLOSE":
@@ -214,6 +294,8 @@ class ResearchEngine:
             self._evaluate(s, c)
             s.history.append(c)
             s.block.clear()
+        self.maybe_checkpoint("accepted_trade")
+        self.maybe_status("running")
         return True
 
     def _tick_sweeps(self, s, trade):
@@ -294,6 +376,11 @@ class ResearchEngine:
                        "current": asdict(s.h1.current) if s.h1.current else None,
                        "current_complete": s.h1.current_complete,
                        "pending": {kind: asdict(local) for kind, local in s.h1.pending.items()}},
+                "research_locals": {
+                    "pending": [asdict(x) for x in s.research_locals.pending.values()]
+                    if s.research_locals else []
+                },
+                "market_context": s.market_context or None,
                 "phase": self.phase(c["ts"]),
                 "config_sha256": self.config.digest}
 
@@ -342,6 +429,9 @@ class ResearchEngine:
                    "entry": None, "tags": list(dict.fromkeys(tags)), "phase": self.phase(c["ts"]), "snapshot": snapshot}
             forward_by_side[side] = row
             s.forecasts.append(row)
+        emit_microstructure_research(self, s, c, snapshot)
+        dual_side_entry_research(self, s, c, snapshot, forward_by_side)
+        reentry_research(self, s, c, snapshot, forward_by_side)
         for model, book in s.books.items():
             if book.pending:
                 continue
@@ -377,6 +467,13 @@ class ResearchEngine:
                           mfe_usd=p.mfe, mae_usd=p.mae, mfe_ts=p.mfe_ts, giveback_usd=giveback,
                           anchor_break_streak=book.break_streak, anchor_invalidated=book.anchor_invalidated,
                           giveback_ratio=giveback/p.mfe if p.mfe > 0 else None, exit_predicates=predicates, snapshot=snapshot)
+                self.emit("exit_hypotheses", s, c["ts"], model=model, position_id=p.ident,
+                          predicates=predicates, own_control=own, opposite_control=opposite,
+                          weakening=weakening, current_gross_usd=p.current,
+                          mfe_usd=p.mfe, mae_usd=p.mae, giveback_usd=giveback,
+                          snapshot=snapshot)
+                self.emit("positions", s, c["ts"], action="MARK", model=model,
+                          position=asdict(p), exit_predicates=predicates)
                 if predicates[model]:
                     reasons = [key for key, value in predicates.items() if value and key != "combined"]
                     book.pending = {"action": "CLOSE", "ts": c["ts"], "reasons": reasons, "snapshot": snapshot}
@@ -468,6 +565,7 @@ class ResearchEngine:
             if any(row[key] is not None and not math.isfinite(row[key]) for key in numeric_fields):
                 raise ValueError("Unrepresentable paper close")
             self.emit("trades", s, trade.ts, **row)
+            self.emit("positions", s, trade.ts, action="CLOSE", model=model, close=row)
             profile = self.profiles[s.symbol]
             profile.count(model+"/closed")
             for key, value in (("net_usd", net), ("mfe", p.mfe), ("mae", p.mae), ("giveback", p.mfe-gross)):
@@ -486,6 +584,7 @@ class ResearchEngine:
                                  "eligible_max_net_bps": None})
             if not any(r in order["reasons"] for r in ("local_invalidation", "structure_break", "opposite_local")):
                 book.watch = {"side": p.side, "local_id": p.local_id, "exit_id": exit_id, "exit_price": trade.price,
+                              "started_ts": trade.ts, "exit_mfe": p.mfe, "exit_mae": p.mae,
                               "correction_seen": False, "expires_seq": s.seq+cfg.post_exit_trades}
             else:
                 book.watch = None
@@ -533,6 +632,7 @@ class ResearchEngine:
             book.watch = None
             self.profiles[s.symbol].count(model+"/"+order["action"])
             self.emit("trades", s, trade.ts, action=order["action"], model=model, position=asdict(p), signal_ts=order["ts"])
+            self.emit("positions", s, trade.ts, action=order["action"], model=model, position=asdict(p), signal_ts=order["ts"])
             # A permitted signal can still be rejected or expire before its
             # execution. Only a successful PAPER fill qualifies its queued
             # forward observation as an executable entry conjunction.
@@ -634,6 +734,10 @@ class ResearchEngine:
                    "portfolio": "Independent fixed-notional hypothetical books; no shared equity, compounding or portfolio leverage claim.",
                    "quality_policy": "Censor and warm up after missing data; reject duplicates/late events; do not invent flow.",
                    "unproven": ["profitability", "optimal thresholds", "actor identity", "funding", "market impact", "full archive coverage"]}
+        strategy = synthesize(self, status)
+        summary["strategy_synthesis"] = strategy
+        self.output.save_json("strategy_synthesis.json", strategy)
+        persist_status(self, time.time(), reason="final", hourly=True)
         summary["aggregate_exit_books"] = {}
         for model in self.config.exit_models:
             samples = [p.metrics[model+"/net_usd"] for p in self.profiles.values() if model+"/net_usd" in p.metrics]
