@@ -5,6 +5,7 @@ import json
 import math
 from pathlib import Path
 import sys
+import time
 
 from .engine import ResearchEngine
 from .model import Config, SYMBOLS, finite_number
@@ -24,6 +25,11 @@ def main(argv=None):
     parser.add_argument("--cache", default=".cache/archives")
     parser.add_argument("--allow-ohlcv-fallback", action="store_true")
     parser.add_argument("--duration-seconds", type=float, default=21600)
+    parser.add_argument("--hours", type=float, help="Convenience alias for realtime duration in hours")
+    parser.add_argument("--days", type=int, help="Convenience historical lookback when --start-date is omitted")
+    parser.add_argument("--resume", action="store_true", help="Resume from checkpoint.json in the output directory")
+    parser.add_argument("--market-context", action="store_true", help="Realtime research only: log public L1 spread/depth and liquidation context")
+    parser.add_argument("--latest", action="store_true", help="hourly_report: render the latest research_status.json")
     parser.add_argument("--reorder-seconds", type=float, default=2)
     parser.add_argument("--max-lag-seconds", type=float, default=15)
     parser.add_argument("--input", type=Path)
