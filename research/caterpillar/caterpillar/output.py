@@ -253,7 +253,7 @@ class Output:
 
     def stream_offsets(self):
         self.flush()
-        return {name: handle.tell() for name, handle in self.handles.items()}
+        return {name: os.fstat(handle.fileno()).st_size for name, handle in self.handles.items()}
 
     def save_json(self, name, obj):
         path = self.root / name
