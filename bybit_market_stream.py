@@ -46,7 +46,8 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                      url=DEFAULT_URL, on_mids=None, on_candles=None,
                      candle_symbols=(), on_regime_candles=None,
                      regime_symbols=(), subscribe_trades=True,
-                     symbol_filter=None, candle_filter=None, on_trade_mids=None, worker_name="primary"):
+                     symbol_filter=None, candle_filter=None, on_trade_mids=None, worker_name="primary",
+                     on_subscription=None):
     """Persistent Bybit linear stream with dynamic subscriptions and stale watchdog."""
     backoff = 1.0
     while not stop.is_set():
@@ -220,6 +221,8 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                             pending_trade_since.pop(str(message.get("req_id") or ""),None)
                             confirmed_trade_symbols.update(acknowledged & selected)
                             trade_topics_confirmed = selected.issubset(confirmed_trade_symbols)
+                            if on_subscription is not None:
+                                on_subscription(trade_topics_confirmed)
                 except websocket.WebSocketTimeoutException:
                     if time.time() - last_received > 30:
                         raise RuntimeError("bybit_heartbeat_stale")
@@ -252,6 +255,8 @@ def run_bybit_stream(observations, stop, symbols_provider, report,
                             send("subscribe", ["tickers." + _pair(s) for s in sorted(added)])
                         selected = desired
                         trade_topics_confirmed = selected.issubset(confirmed_trade_symbols)
+                        if on_subscription is not None:
+                            on_subscription(trade_topics_confirmed)
                         for s in desired:
                             per_symbol_receive.setdefault(s, 0.0)
                             per_symbol_exchange.setdefault(s, 0.0)

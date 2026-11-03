@@ -1,0 +1,74 @@
+name: Caterpillar PAPER Runtime
+on:
+  push:
+    branches: [caterpillar-paper-runtime-v1]
+    paths: ['caterpillar_paper/**', 'tests_caterpillar/**', 'scripts/caterpillar_*.py', '.github/workflows/caterpillar-paper.yml', 'bybit_market_stream.py']
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: 'Runtime minutes (1–330; default 320)'
+        default: '320'
+        required: true
+      paper_symbols:
+        description: 'Optional five base symbols, comma separated; empty = live scanner'
+        default: ''
+      resume_run:
+        description: 'Optional completed run ID; empty = latest checkpoint on this branch'
+        default: ''
+permissions:
+  contents: write
+  actions: read
+  pages: write
+concurrency:
+  group: caterpillar-paper-single-engine
+  cancel-in-progress: false
+jobs:
+  paper:
+    runs-on: ubuntu-latest
+    # GitHub hosted jobs have a documented 6h execution limit. Reserve >=10m
+    # for tests/restore/artifact upload, and stop runtime at <=330m.
+    timeout-minutes: 350
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PAPER_SYMBOLS: ${{ inputs.paper_symbols || '' }}
+      RUN_MINUTES: ${{ inputs.minutes || '320' }}
+      RESUME_RUN: ${{ inputs.resume_run || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r research/caterpillar/requirements-lock.txt
+      - name: Dependency integrity
+        run: python -m pip check
+      - name: Critical PAPER tests
+        run: python -m unittest discover -s tests_caterpillar -v
+      - name: Existing causal research regressions
+        working-directory: research/caterpillar
+        run: python -m unittest discover -s tests -v
+      - name: Restore completed checkpoint
+        run: python scripts/caterpillar_restore.py --output "$RUNNER_TEMP/restore" --repository "$GITHUB_REPOSITORY" --branch "$GITHUB_REF_NAME" --run-id "$RESUME_RUN"
+      - name: Retrieve existing cross-token research evidence
+        run: python scripts/caterpillar_evidence.py "$GITHUB_REPOSITORY" "$RUNNER_TEMP/caterpillar-paper/research-evidence.json"
+      - name: Run isolated PAPER session
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=()
+          if test -f "$RUNNER_TEMP/restore/checkpoint.json"; then
+            args+=(--restore "$RUNNER_TEMP/restore/checkpoint.json")
+          fi
+          python -m caterpillar_paper --output "$RUNNER_TEMP/caterpillar-paper" --minutes "$RUN_MINUTES" --publish-repository "$GITHUB_REPOSITORY" "${args[@]}"
+      - name: Preserve full session and journal
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: caterpillar-checkpoint
+          path: |
+            ${{ runner.temp }}/caterpillar-paper/checkpoint.json
+            ${{ runner.temp }}/caterpillar-paper/journal.jsonl
+            ${{ runner.temp }}/caterpillar-paper/state.json
+            ${{ runner.temp }}/caterpillar-paper/research-evidence.json
+          if-no-files-found: warn
+          retention-days: 30

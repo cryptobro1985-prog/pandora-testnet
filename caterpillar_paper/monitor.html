@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><title>Pandora Caterpillar PAPER</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#10161e;color:#e8f0f5;font:16px system-ui,sans-serif}main{max-width:1050px;margin:auto;padding:12px}h1{font-size:23px}h2{font-size:19px}h3{margin:0 0 10px}small,.muted{color:#a7b7c6}section,.card{border:1px solid #354353;border-radius:12px;padding:14px;margin:12px 0;background:#17212d}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px}.metric{padding:9px;background:#202e3d;border-radius:8px}.value{font-size:21px;font-weight:700;overflow-wrap:anywhere}.positive{color:#71edb4}.negative{color:#ff9494}.badge{font-weight:700;border-radius:6px;padding:3px 8px;background:#344358}dl{display:grid;grid-template-columns:minmax(100px,1fr) minmax(0,2fr);gap:7px;margin:10px 0}dt{color:#a7b7c6}dd{margin:0;overflow-wrap:anywhere}summary{cursor:pointer;padding:10px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}#status{font-size:20px}button{padding:10px;border:0;border-radius:7px;background:#36516f;color:white}a{color:#98cdff}.reason{font-size:13px;overflow-wrap:anywhere}footer{padding:20px 0;color:#a7b7c6}
+</style></head><body><main>
+<h1>PANDORA CATERPILLAR <small>PAPER</small></h1>
+<section><span id="status" role="status">Ожидание снимка</span><p id="age">Нет подтверждённых данных</p><div id="identity" class="muted"></div><p>Только симуляция. GitHub передаёт снимки с задержкой; возраст данных отображается отдельно от состояния процесса.</p><button id="refresh">Обновить</button></section>
+<div class="grid" id="summary"></div>
+<section><h2>Состояние компонентов</h2><div id="health"></div></section>
+<h2>Активные токены · H1 · Flow</h2><div id="tokens"></div>
+<h2>Открытые позиции</h2><div id="positions"></div>
+<section><details open><summary>Закрытые сделки · сначала новые</summary><div id="history"></div></details></section>
+<section><details><summary>Кандидаты сканера</summary><div id="scanner"></div></details></section>
+<section><details><summary>Циклы Caterpillar и решения</summary><div id="events"></div></details></section>
+<section><details><summary>Версия, издержки и ограничения</summary><pre id="metadata"></pre></details></section>
+<footer>Local: только закрытые H1. Pivot candle и время подтверждения раздельны. MFE/MAE — диагностика. Реальных ордеров нет.</footer>
+</main><script>
+'use strict';
+const repository='__REPOSITORY__';
+const source=`https://raw.githubusercontent.com/${repository}/caterpillar-monitor-data/state.json`;
+let latest=null,busy=false,lastError='';
+const $=id=>document.getElementById(id);
+const node=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);if(cls)n.className=cls;return n;};
+const num=(x,d=2)=>typeof x==='number'&&Number.isFinite(x)?x.toLocaleString('ru-RU',{maximumFractionDigits:d}):'—';
+const date=x=>typeof x==='number'?new Date(x*1000).toLocaleString():'—';
+function pair(dl,key,value){dl.append(node('dt',key),node('dd',value));}
+function card(title,values,reason){const box=node('article',undefined,'card');box.append(node('h3',title));const dl=node('dl');for(const [key,value] of values)pair(dl,key,value);box.append(dl);if(reason)box.append(node('p',reason,'reason'));return box;}
+function render(s){
+ latest=s;const p=s.portfolio;$('identity').textContent=`Session ${s.session_id} · Run ${s.run_id} · Uptime ${num(s.uptime/3600)} ч`;
+ $('summary').replaceChildren(...[
+ ['Старт $',p.start_equity],['Equity $',p.equity],['PnL $',p.equity===null?null:p.equity-p.start_equity],['PnL %',p.equity===null?null:(p.equity/p.start_equity-1)*100],['Realized $',p.realized_pnl],['Unrealized net $',p.unrealized_pnl],['Max equity $',p.max_equity],['Max drawdown %',p.max_drawdown*100],['Маржа $',p.used_margin],['Свободно $',p.free_equity],['Notional $',p.gross_notional],['Открыто',s.positions.length],['Закрыто',s.closed_count]
+ ].map(([label,value])=>{const el=node('div',undefined,'metric');el.append(node('div',label,'muted'),node('div',num(value),'value'));return el;}));
+ const h=node('dl');pair(h,'Scanner',s.scanner.status||'WAIT');pair(h,'Public WS',s.transport?.subscription_confirmed?'ACK':'NO ACK');pair(h,'Engine',s.status);pair(h,'Checkpoint',date(s.checkpoint_at));pair(h,'Ошибки',JSON.stringify(s.errors||{}));$('health').replaceChildren(h);
+ $('tokens').replaceChildren(...s.tokens.map(t=>{const f=t.flow,l=t.local;return card(t.symbol,[
+ ['Rank / выбор',t.selection?.rank||t.selection?.reason||'—'],['Причина выбора',t.selection?.reason||'—'],['Mark',num(t.mark,8)],['Local',l?`${l.kind} @ ${num(l.price,8)} · ${l.valid?'VALID':'INVALID'}`:'UNCONFIRMED'],['Pivot candle UTC',l?new Date(l.pivot_time*1000).toISOString():'—'],['Подтверждён',date(l?.confirmed_time)],['Flow возраст',`${num(t.data_age,1)} s`],['BUY / SELL $',f?`${num(f.buy_notional)} / ${num(f.sell_notional)}`:'NO DATA'],['Effective control',f?(f.effective_control===1?'BUY':f.effective_control===-1?'SELL':'NEUTRAL'):'UNKNOWN'],['Imbalance',num(f?.imbalance,4)],['Response bps',num(f?.move_bps,4)],['BUY / SELL acceleration',f?`${num(f.buy_acceleration,4)} / ${num(f.sell_acceleration,4)}`:'—'],['State',t.state]
+ ],t.reason);}));
+ function position(p,closed){return card(`${p.symbol} · ${p.side===1?'LONG':'SHORT'} · ${p.kind}`, [
+ ['Entry',`${num(p.entry,8)} · ${date(p.opened)}`],[closed?'Exit':'Mark',closed?`${num(p.exit,8)} · ${date(p.closed)}`:num(p.mark,8)],['PnL $ / %',`${num(p.pnl)} / ${num(p.pnl_percent)}%`],['Margin / notional / leverage',`${num(p.margin)} / ${num(p.notional)} / ${num(p.leverage)}x`],['MFE $ / %',`${num(p.mfe)} / ${num(p.mfe_percent)}%`],['MAE $ / %',`${num(p.mae)} / ${num(p.mae_percent)}%`],['MFE / MAE время',`${date(p.mfe_ts)} / ${date(p.mae_ts)}`],['Длительность',`${num((closed?p.duration:p.holding_seconds)/60)} мин`],['Fees $',num(closed?p.fees:p.entry_fee)],['Slippage $',num((p.entry_slippage_usd||0)+(p.exit_slippage_usd||0))],['MFE captured / giveback',closed?`${num(p.mfe_captured_percent)}% / $${num(p.mfe_giveback)}`:'—'],['Cycle',p.cycle_id]],p.reason);}
+ $('positions').replaceChildren(...(s.positions.length?s.positions.map(p=>position(p,false)):[node('p','Открытых позиций нет. Причины ожидания указаны на карточках токенов.')]));
+ $('history').replaceChildren(...s.closed.map(p=>position(p,true)));if(!s.closed.length)$('history').append(node('p','Закрытых сделок нет.'));
+ $('scanner').replaceChildren(...(s.scanner.candidates||[]).map(c=>card(`${c.rank}. ${c.symbol}`,[['Recent move bps',num(c.recent_move_bps)],['Turnover 24h $',num(c.turnover24h)],['Spread bps',num(c.spread_bps)]],c.reason)));
+ $('events').replaceChildren(...(s.events||[]).map(e=>card(`${e.symbol||'SESSION'} → ${e.event}`,[['Время',date(e.timestamp)],['Cycle',e.cycle_id||'—'],['State',`${e.state_before||'—'} → ${e.state}`]],e.reason)));
+ $('metadata').textContent=JSON.stringify({metadata:s.metadata,config:s.config},null,2);age();
+}
+function age(){if(!latest)return;const seconds=Math.max(0,Date.now()/1000-latest.snapshot_at);const expired=seconds>90;const state=lastError?'ERROR':expired?'STALE':latest.status;$('status').textContent=state;$('status').className=state==='ONLINE'?'positive':'negative';$('age').textContent=`Последний снимок ${date(latest.snapshot_at)} · возраст ${num(seconds,0)} s${lastError?' · '+lastError:''}`;}
+async function poll(){if(busy)return;busy=true;try{const r=await fetch(source+'?t='+Math.floor(Date.now()/15000),{cache:'no-store',signal:AbortSignal.timeout(12000)});if(!r.ok)throw Error(`HTTP ${r.status}`);const s=await r.json();if(s.schema_version!==1||s.mode!=='PAPER_ONLY'||!Array.isArray(s.tokens))throw Error('Неверный формат снимка');lastError='';render(s);}catch(e){lastError=String(e.message);if(!latest)$('status').textContent='ERROR · '+lastError;age();}finally{busy=false;}}
+$('refresh').onclick=poll;setInterval(poll,15000);setInterval(age,1000);poll();
+</script></body></html>
