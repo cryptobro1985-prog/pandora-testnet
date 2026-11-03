@@ -27,7 +27,7 @@ def main():
   ev,_=h.seed(bars[k],day.timestamp())
   for loc,stage,reason in ev:
    if stage=="CONFIRMED":local=loc
- cash=START;pos=None;watch=None;trades=[];q=deque();nextb=day.timestamp()+3600;last=None;maxeq=START;maxdd=0.;entries=0;reentries=0
+ cash=START;pos=None;watch=None;trades=[];q=deque();nextb=day.timestamp()+3600;last=None;maxeq=START;maxdd=0.;entries=0;reentries=0;next_eval=day.timestamp()
  for t in it:
   last=t
   while t.ts>=nextb and nextb<end.timestamp():
@@ -60,6 +60,6 @@ def main():
    eq=cash+pos["qty"]*(t.price-pos["entry"])*pos["side"];maxeq=max(maxeq,eq);maxdd=max(maxdd,1-eq/maxeq)
  if pos and last:
   fill=last.price*(1-pos["side"]*SLIP);gross=pos["qty"]*(fill-pos["entry"])*pos["side"];ef=pos["qty"]*fill*FEE;pnl=gross-pos["entry_fee"]-ef;cash+=gross-ef;trades.append({**pos,"exit":fill,"closed":last.ts,"pnl":pnl,"fees":pos["entry_fee"]+ef,"reason":"EOD_MARK","mfe":pos["mfe"],"mae":pos["mae"]})
- pnl=sum(x["pnl"] for x in trades);r={"symbol":SYMBOL,"date":"2026-11-02","strategy":"Caterpillar old executed-flow cycle from 848b3c6/local_order_flow","start":START,"final":cash,"pnl":pnl,"return_pct":pnl/START*100,"trades":len(trades),"wins":sum(x["pnl"]>0 for x in trades),"losses":sum(x["pnl"]<=0 for x in trades),"entries":entries,"reentries":reentries,"fees":sum(x["fees"] for x in trades),"max_drawdown_pct":maxdd*100,"mfe_sum":sum(x["mfe"] for x in trades),"mae_sum":sum(x["mae"] for x in trades),"data":meta,"rules":{"counter_takeover":"15s<=-0.15,30s<=-0.10 plus 60s/relative confirmation","resumed":"15s>=0.18,30s>=0.12 plus 60s/relative confirmation","initial_control":"15s>=0.12,30s>=0.08","H1":"confirmed local LOW=LONG HIGH=SHORT"}}
+ pnl=sum(x["pnl"] for x in trades);r={"symbol":SYMBOL,"date":"2026-11-02","strategy":"Caterpillar old executed-flow cycle from 848b3c6/local_order_flow sampled at original 10s runtime loop cadence","start":START,"final":cash,"pnl":pnl,"return_pct":pnl/START*100,"trades":len(trades),"wins":sum(x["pnl"]>0 for x in trades),"losses":sum(x["pnl"]<=0 for x in trades),"entries":entries,"reentries":reentries,"fees":sum(x["fees"] for x in trades),"max_drawdown_pct":maxdd*100,"mfe_sum":sum(x["mfe"] for x in trades),"mae_sum":sum(x["mae"] for x in trades),"data":meta,"rules":{"counter_takeover":"15s<=-0.15,30s<=-0.10 plus 60s/relative confirmation","resumed":"15s>=0.18,30s>=0.12 plus 60s/relative confirmation","initial_control":"15s>=0.12,30s>=0.08","H1":"confirmed local LOW=LONG HIGH=SHORT"}}
  (a.output/"RESULT.json").write_text(json.dumps(r));(a.output/"TRADES.json").write_text(json.dumps(trades));print("OLD_CATERPILLAR_WLD_RESULT "+json.dumps(r),flush=True)
 if __name__=="__main__":main()
