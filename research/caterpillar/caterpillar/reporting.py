@@ -27,6 +27,25 @@ def _top_hypotheses(profile_result, prefix=None, min_n=1, limit=8):
         mean = row.get("mean_net_bps")
         if not _finite(mean):
             continue
+        detail = {}
+        parts = key.split("/")
+        metrics = profile_result.get("metrics", {})
+        if len(parts) == 4 and parts[1] == "feature":
+            base = "pattern/"+parts[2]+"/"+parts[3]+"/"
+            detail = {
+                "median_pnl_bps": (metrics.get(base+"net_bps") or {}).get("recent_median"),
+                "median_mfe_bps": (metrics.get(base+"mfe_bps") or {}).get("recent_median"),
+                "median_mae_bps": (metrics.get(base+"mae_bps") or {}).get("recent_median"),
+                "median_mfe_capture_ratio": (metrics.get(base+"mfe_capture_ratio") or {}).get("recent_median"),
+            }
+        elif len(parts) == 4 and parts[1] == "local":
+            base = "local_pattern/"+parts[2]+"/"+parts[3]+"/"
+            detail = {
+                "median_pnl_bps": (metrics.get(base+"close_bps") or {}).get("recent_median"),
+                "median_mfe_bps": (metrics.get(base+"mfe_bps") or {}).get("recent_median"),
+                "median_mae_bps": (metrics.get(base+"mae_bps") or {}).get("recent_median"),
+                "median_mfe_capture_ratio": (metrics.get(base+"mfe_capture_ratio") or {}).get("recent_median"),
+            }
         rows.append({
             "hypothesis": key,
             "samples": row["n"],
@@ -34,6 +53,7 @@ def _top_hypotheses(profile_result, prefix=None, min_n=1, limit=8):
             "mean_net_bps": mean,
             "observed_utc_days": row.get("observed_utc_days", 0),
             "daily_mean_median_net_bps": row.get("daily_mean_median_net_bps"),
+            **detail,
         })
     rows.sort(key=lambda x: (x["samples"] >= min_n, x["mean_net_bps"], x["samples"]), reverse=True)
     return rows[:limit]
