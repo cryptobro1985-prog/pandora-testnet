@@ -410,6 +410,16 @@ def _local_persisted_anchor(symbol):
   if not source:return
   features=copy.deepcopy(source.get("features") or source.get("context") or source.get("analysis") or source)
   execution=features.get("execution_local") if isinstance(features.get("execution_local"),dict) else {}
+  confirmed=features.get("confirmed_local") if isinstance(features.get("confirmed_local"),dict) else {}
+  # confirmed_local is a first-class structural candidate. Do not let a newer
+  # bookkeeping timestamp attached to an older top-level anchor outrank it.
+  if confirmed and int(confirmed.get("entry_side") or 0) in (-1,1) and confirmed.get("pivot_price") is not None:
+   candidates.append({**features,**confirmed,"ready":True,"persisted":True,"anchor_confirmed":True,
+    "h1_direction_anchor":True,"local_low":int(confirmed.get("entry_side"))>0,
+    "local_high":int(confirmed.get("entry_side"))<0,
+    "state":"CONFIRMED_LOCAL_LOW" if int(confirmed.get("entry_side"))>0 else "CONFIRMED_LOCAL_HIGH",
+    "entry_blocked":False,"entry_block_reason":None,"reason":"embedded_confirmed_h1_local",
+    "anchor_source":origin+":confirmed_local"})
   side=int(features.get("entry_side") or execution.get("entry_side") or 0)
   if side not in (-1,1):return
   pivot_price=features.get("pivot_price")
