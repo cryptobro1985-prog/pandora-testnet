@@ -263,53 +263,92 @@ def bootstrap_h1(engine, as_of, hours=24):
     return complete
 
 
-def historical(engine, cache, start, end, allow_ohlcv=False):
-    """Process one symbol/day at a time, chronological within each independent symbol.
+def historical(engine, cache, start, end, allow_ohlcv=False, resume=False):
+    """Process one symbol/day at a time with resumable, causal progress.
 
-    No shared capital/ranking/cross-symbol decisions; global timestamp merge is unnecessary.
-    Memory is bounded independently of the requested date range.
+    A checkpoint contains engine state plus stream offsets. If a process dies
+    mid-day, resume truncates append-only evidence to the last checkpoint and
+    skips archive rows older than the restored per-symbol last timestamp.
     """
     if start >= end or end > datetime.now(timezone.utc):
         raise ValueError("Require start < end <= now")
     source = Archives(cache)
-    incomplete = False
+    progress_path = engine.output.root/"historical_progress.json"
+    expected = {"start": start.isoformat(), "end": end.isoformat(),
+                "symbols": list(engine.states)}
+    if resume:
+        if progress_path.is_file():
+            progress = json.loads(progress_path.read_text())
+            if any(progress.get(k) != v for k, v in expected.items()):
+                raise ValueError("Historical progress does not match requested period/symbols")
+        else:
+            progress = {**expected, "segments": {}}
+    else:
+        progress = {**expected, "segments": {}}
+    completed = progress.setdefault("segments", {})
+    incomplete = any(row.get("status") != "observed" for row in completed.values())
     day = start.replace(hour=0, minute=0, second=0, microsecond=0)
     while day < end:
         day_end = min(day+timedelta(days=1), end)
         for symbol in engine.states:
-            coverage = {"symbol": symbol, "start": max(day, start).isoformat(), "end": day_end.isoformat(), "source": "executed_trades", "accepted": 0}
+            key = symbol+":"+day.date().isoformat()
+            if key in completed:
+                continue
+            state = engine.states[symbol]
+            resume_ts = state.last_ts if resume and state.last_ts is not None and day.timestamp() <= state.last_ts < (day+timedelta(days=1)).timestamp() else None
+            coverage = {"symbol": symbol, "start": max(day, start).isoformat(),
+                        "end": day_end.isoformat(), "source": "executed_trades",
+                        "accepted": 0, "resume_after_ts": resume_ts}
             try:
                 iterator, meta = source.trades(symbol, day)
                 coverage["archive"] = meta
-                seen = 0
+                seen = skipped = 0
                 for t in iterator:
-                    if start.timestamp() <= t.ts < end.timestamp():
-                        seen += 1
-                        coverage["accepted"] += int(engine.on_trade(t))
+                    if not start.timestamp() <= t.ts < end.timestamp():
+                        continue
+                    seen += 1
+                    if resume_ts is not None:
+                        if t.ts < resume_ts:
+                            skipped += 1
+                            continue
+                        if t.ts == resume_ts and t.trade_id in state.ids:
+                            skipped += 1
+                            continue
+                    coverage["accepted"] += int(engine.on_trade(t))
                 coverage["rows_in_range"] = seen
-                coverage["rejected"] = seen-coverage["accepted"]
-                if not coverage["accepted"]:
+                coverage["resume_skipped_rows"] = skipped
+                coverage["rejected"] = seen-skipped-coverage["accepted"]
+                if not coverage["accepted"] and resume_ts is None:
                     raise SourceError("No accepted trades in requested day/subrange")
                 coverage["status"] = "observed"
             except SourceError as exc:
                 incomplete = True
                 coverage.update(status="unavailable_or_partial", reason=str(exc))
-                # Keep failure markers chronological if a source changed after preflight.
                 gap_ts = max(max(day, start).timestamp(), engine.states[symbol].last_ts or 0)
                 engine.gap(symbol, gap_ts, "archive_unavailable_or_partial")
                 if allow_ohlcv:
                     count = 0
                     try:
                         for candle in candles(symbol, max(day, start), day_end, interval=60):
-                            # An hourly bar is visible only at its close; never synthesise tape.
                             engine.seed_h1(symbol, candle, as_of=candle["available_ts"])
                             engine.on_candle(symbol, candle)
                             count += 1
-                        coverage["ohlcv_fallback"] = {"bars": count, "interval_minutes": 60, "flow_available": False}
+                        coverage["ohlcv_fallback"] = {
+                            "bars": count, "interval_minutes": 60,
+                            "flow_available": False}
                     except SourceError as fallback_exc:
                         coverage["ohlcv_error"] = str(fallback_exc)
             engine.coverage.append(coverage)
+            completed[key] = {
+                "status": coverage["status"],
+                "accepted": coverage["accepted"],
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+            }
+            engine.output.save_json("historical_progress.json", progress)
+            engine.resume_extra["historical_progress"] = progress
             engine.output.flush()
+            engine.checkpoint("historical_segment", extra=engine.resume_extra)
+            engine.maybe_status("historical_progress")
             print(f"{symbol} {day:%Y-%m-%d}: {coverage['status']}; accepted={coverage['accepted']}", flush=True)
         day += timedelta(days=1)
     return "incomplete_coverage" if incomplete else "completed"
