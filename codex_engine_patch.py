@@ -88,6 +88,29 @@ s=s.replace("leverage=plan.leverage;margin=plan.margin;notional=plan.notional",
  if plan.allowed and float(instrument["max_leverage"])>=30.0:
   leverage=30.0;margin=equity*0.10;notional=margin*leverage''')
 s=s.replace("if side not in (-1,1):continue","if side!=-1:continue")
+# Open the first PAPER shorts immediately only when the engine's own confirmed
+# H1 structure currently points SHORT. These bootstrap fills are explicitly
+# labelled and subsequent management remains 30/180/300 + MFE.
+s=s.replace('''  else:
+   selection=pandora_flow_initial_entry_candidate(symbol,analysis,None,flow,time.time())
+   if selection.get("eligible"):
+    pandora_open(symbol,side,analysis,"ORDER_FLOW",{"pandora_win_direct_control":True,"strategy":PANDORA_WIN_NAME})''',
+'''  else:
+   selection=pandora_flow_initial_entry_candidate(symbol,analysis,None,flow,time.time())
+   bootstrap=bool(os.getenv("CODEX_SHORT10_BOOTSTRAP","0")=="1" and side==-1)
+   if selection.get("eligible") or bootstrap:
+    pandora_open(symbol,side,analysis,"BOOTSTRAP_SHORT" if bootstrap and not selection.get("eligible") else "ORDER_FLOW",
+      {"pandora_win_direct_control":bool(selection.get("eligible")),"bootstrap_short":bootstrap,"strategy":PANDORA_WIN_NAME})''')
+s=s.replace(''' if not selection["eligible"]:return reject(selection["reason"])''',
+''' bootstrap_short=bool(os.getenv("CODEX_SHORT10_BOOTSTRAP","0")=="1" and int(side)==-1 and int((analysis or {}).get("entry_side") or 0)==-1 and entry_kind=="BOOTSTRAP_SHORT")
+ if not selection["eligible"] and not bootstrap_short:return reject(selection["reason"])
+ if bootstrap_short:
+  selection={**selection,"eligible":True,"reason":"BOOTSTRAP_CONFIRMED_H1_LOCAL_HIGH_SHORT"}''')
+s=s.replace(''' if not latest_selection.get('eligible'):return reject('EXECUTED_CONTROL_CHANGED_DURING_ALLOCATION')''',
+''' if not latest_selection.get('eligible') and not bootstrap_short:return reject('EXECUTED_CONTROL_CHANGED_DURING_ALLOCATION')
+ if bootstrap_short:
+  latest_selection={**latest_selection,"eligible":True,"reason":"BOOTSTRAP_CONFIRMED_H1_LOCAL_HIGH_SHORT"}''')
+
 
 # Canonical H1 repair: embedded confirmed_local is a real candidate, not display-only.
 s=s.replace('''  execution=features.get("execution_local") if isinstance(features.get("execution_local"),dict) else {}
