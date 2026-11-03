@@ -351,116 +351,48 @@ def accept_market_prices(mids):
  return valid
 
 def pandora_win_h1_direction(rows,now_ms,symbol):
+ # Caterpillar direction is H1-only. M15/forming-local logic is deliberately
+ # excluded from trade authorization; executed Public Trades controls timing.
  analysis=analyze_pandora_h1(rows,now_ms,symbol)
- try:m15_rows,_=_local_m15_candles(symbol)
- except RuntimeError:m15_rows=[]
- detailed=live_locals(rows,m15_rows,now_ms,symbol)
- analysis=execution_anchor(detailed,MARKET_OBS.flow_context(symbol,now_ms/1000))
- if not analysis.get("ready") or not analysis.get("anchor_confirmed"):
-  # Fresh H1 cache may lag during deploy/lease handoff. Keep the latest
-  # confirmed directional anchor usable instead of blanking the symbol.
-  fallback=_local_persisted_anchor(symbol)
-  if fallback and fallback.get("policy")==PANDORA_LOCAL_POLICY and int(fallback.get("entry_side") or 0) in (-1,1):
-   recovered={**fallback,"ready":False,"stale_source_reason":analysis.get("reason"),
-     "anchor_recovered_from":"latest_valid_pandora_observation",
-     **local_pending_extreme(rows,now_ms,int(fallback.get("entry_side") or 0),fallback.get("pivot_price"))}
-   recovered.update(entry_blocked=True,entry_block_reason="current_h1_history_not_verified")
-   try:
-    with pg() as db:
-     with db.transaction():
-      STORE.fence(db)
-      db.execute("insert into pandora_win_h1_direction(symbol,analysis) values(%s,%s::jsonb) on conflict(symbol) do update set analysis=excluded.analysis",
-       (symbol,json.dumps(recovered)))
-    with LOCK:S.setdefault("pandora_win_h1_direction",{})[symbol]=copy.deepcopy(recovered)
-   except Exception:
-    pass
-   return recovered
-  return analysis
- # Universal monotonicity guard: a fresh reconstruction can never roll the
- # strategy back behind a newer confirmed anchor already proven by durable state.
  trusted=_local_persisted_anchor(symbol)
+ if not analysis.get("ready") or not analysis.get("anchor_confirmed") or int(analysis.get("entry_side") or 0) not in (-1,1):
+  if trusted and int(trusted.get("entry_side") or 0) in (-1,1):
+   return {**trusted,"ready":False,"entry_blocked":True,
+    "entry_block_reason":"current_closed_h1_not_verified",
+    "anchor_recovered_from":"latest_valid_h1_observation"}
+  return analysis
+ analysis["entry_blocked"]=False
+ analysis["entry_block_reason"]=None
+ analysis["confirmation_source"]="closed_H1_causal_structure"
+ analysis["execution_local"]={k:copy.deepcopy(analysis.get(k)) for k in
+  ("pivot_type","pivot_price","pivot_candle_time","signal_candle_time","entry_side","confirmation_source")}
  if trusted and int(trusted.get("entry_side") or 0) in (-1,1):
-  trusted_t=int(trusted.get("signal_candle_time") or 0)
-  fresh_t=int(analysis.get("signal_candle_time") or 0)
-  if trusted_t>fresh_t and trusted.get("policy")==PANDORA_LOCAL_POLICY:
-   analysis={**trusted,"ready":True,"last_candle_time":analysis.get("last_candle_time"),
-    **local_pending_extreme(rows,now_ms,int(trusted.get("entry_side") or 0),trusted.get("pivot_price")),
-    "anchor_guard":"newest_confirmed_anchor_wins"}
+  old=(int(trusted.get("signal_candle_time") or 0),int(trusted.get("pivot_candle_time") or 0))
+  new=(int(analysis.get("signal_candle_time") or 0),int(analysis.get("pivot_candle_time") or 0))
+  if old>new:
+   analysis={**trusted,"ready":True,"entry_blocked":False,"entry_block_reason":None,
+    "anchor_guard":"newest_confirmed_h1_anchor_wins"}
  with LOCK:prior=copy.deepcopy(S.get("pandora_win_h1_direction",{}).get(symbol))
- if prior:
-  prior_t=int(prior.get("signal_candle_time") or 0);new_t=int(analysis.get("signal_candle_time") or 0)
-  prior_side=int(prior.get("entry_side") or 0);new_side=int(analysis.get("entry_side") or 0)
-  if prior_t>new_t and prior.get("policy")==PANDORA_LOCAL_POLICY:
-   # A shorter restart cache must never roll a newer persisted H1 anchor back.
-   analysis={**prior,"ready":True,"last_candle_time":analysis.get("last_candle_time"),
-     **local_pending_extreme(rows,now_ms,prior_side)}
-  elif prior_side in (-1,1) and new_side in (-1,1) and new_side!=prior_side:
-   # Only a strictly newer closed-H1 structure changes direction.
-   # Current flow controls execution, independently of H1 confirmation.
-   if new_t<=prior_t:
-    analysis={**prior,"ready":True,"last_candle_time":analysis.get("last_candle_time"),
-      **local_pending_extreme(rows,now_ms,prior_side),
-      "anchor_guard":"blocked_non_new_opposite_pivot"}
-   else:
-    analysis["anchor_guard"]="newer_opposite_closed_h1_structure"
- if analysis.get("entry_side") not in (-1,1):
-  # Migration/restart recovery: if fresh reconstruction has no immediately
-  # confirmable swing, restore the newest previously observed confirmed H1 anchor.
-  # This keeps every analyzed symbol directionally usable until a newer confirmed
-  # opposite pivot supersedes it; pending extremes remain diagnostic-only.
-  fallback=_local_persisted_anchor(symbol)
-  if fallback and fallback.get("policy")==PANDORA_LOCAL_POLICY and int(fallback.get("entry_side") or 0) in (-1,1):
-   analysis={**fallback,"ready":True,
-     "last_candle_time":analysis.get("last_candle_time"),
-     **local_pending_extreme(rows,now_ms,int(fallback.get("entry_side") or 0),fallback.get("pivot_price")),
-     "anchor_recovered_from":"latest_valid_pandora_observation"}
-  else:
-   return analysis
- for key in ('confirmed_local','forming_local','forming_locals','live_structure_fresh','m15_confirmed_local'):
-  if key in detailed:analysis[key]=copy.deepcopy(detailed[key])
- proof=(detailed.get('m15_confirmed_local') or {}) if analysis.get('confirmation_source')=='closed_M15_structure_and_executed_control' else (detailed.get('forming_local') or {})
- promoted=bool(analysis.get('confirmation_source') in ('closed_M15_structure_and_executed_control','observed_H1_extreme_closed_M15_and_executed_control')
-  and detailed.get('live_structure_fresh',True) and proof.get('m15_confirmation')
-  and analysis.get('pivot_candle_time')==proof.get('pivot_candle_time')
-  and analysis.get('pivot_price')==proof.get('pivot_price')
-  and analysis.get('entry_side')==proof.get('entry_side'))
- if detailed.get('entry_blocked') and not promoted:
-  analysis['entry_blocked']=True;analysis['entry_block_reason']=detailed.get('entry_block_reason')
- analysis['execution_local']={**(analysis.get('execution_local') or {}),**{k:copy.deepcopy(analysis.get(k)) for k in ('pivot_type','pivot_price','pivot_candle_time','signal_candle_time','entry_side','confirmation_source')}}
- # Process-local proof that current CLOSED H1 candles were actually scanned.
- # This marker is written only AFTER all structural + flow guards select the
- # final active anchor, so the 500ms executor cannot outrun H1 reconciliation.
+ anchor_changed=not prior or any((prior or {}).get(k)!=analysis.get(k) for k in
+  ("signal_candle_time","pivot_type","pivot_price","entry_side"))
  if analysis.get("ready") and analysis.get("anchor_confirmed") and int(analysis.get("entry_side") or 0) in (-1,1):
-  with LOCK:
-   S.setdefault("_pandora_h1_runtime_verified",{})[symbol]={
-    "verified_at":time.time(),"observed_at_ms":int(now_ms),
-    "last_candle_time":int(analysis.get("last_candle_time") or 0),
-    "entry_side":int(analysis.get("entry_side") or 0),
-    "signal_candle_time":int(analysis.get("signal_candle_time") or 0),
-    "pivot_candle_time":int(analysis.get("pivot_candle_time") or 0),
-    "pivot_type":analysis.get("pivot_type"),"pivot_price":analysis.get("pivot_price")}
- def local_fingerprint(value):
-  value=value or {}
-  return tuple((x.get('pivot_type'),x.get('pivot_price'),x.get('pivot_candle_time'),x.get('m15_confirmation')) for x in value.get('forming_locals',[]))
- anchor_changed=(not prior or any((prior or {}).get(k)!=analysis.get(k) for k in ('policy','signal_candle_time','pivot_type','pivot_price')))
- forming_changed=local_fingerprint(prior)!=local_fingerprint(analysis)
- changed=anchor_changed or forming_changed
+  with LOCK:S.setdefault("_pandora_h1_runtime_verified",{})[symbol]={
+   "verified_at":time.time(),"observed_at_ms":int(now_ms),
+   "last_candle_time":int(analysis.get("last_candle_time") or 0),
+   "entry_side":int(analysis.get("entry_side") or 0),
+   "signal_candle_time":int(analysis.get("signal_candle_time") or 0),
+   "pivot_candle_time":int(analysis.get("pivot_candle_time") or 0),
+   "pivot_type":analysis.get("pivot_type"),"pivot_price":analysis.get("pivot_price")}
  stamp=time.time()
  with LOCK:last=float(S.setdefault("_pandora_h1_persist_epoch",{}).get(symbol,0) or 0)
- if changed or stamp-last>=30:
+ if anchor_changed or stamp-last>=30:
   with pg() as db:
    with db.transaction():
     STORE.fence(db)
     db.execute("insert into pandora_win_h1_direction(symbol,analysis) values(%s,%s::jsonb) on conflict(symbol) do update set analysis=excluded.analysis",
-      (symbol,json.dumps(analysis)))
-  if WIN is not None and changed:
-   with pg() as db:
-    with db.transaction():
-     STORE.fence(db)
-     if anchor_changed and analysis.get('anchor_confirmed'):
-      WIN.event(db,str(analysis.get('pivot_type'))+'_CONFIRMED',symbol,'closed_structure_confirmation',analysis)
-     for forming in analysis.get('forming_locals',[]) if forming_changed else []:
-      WIN.event(db,forming['pivot_type']+'_FORMING',symbol,'observed_online_extreme',forming)
+     (symbol,json.dumps(analysis)))
+    if WIN is not None and anchor_changed:
+     WIN.event(db,str(analysis.get("pivot_type"))+"_CONFIRMED",symbol,"closed_h1_causal_structure",analysis)
   with LOCK:
    S.setdefault("pandora_win_h1_direction",{})[symbol]=copy.deepcopy(analysis)
    S["_pandora_h1_persist_epoch"][symbol]=stamp
