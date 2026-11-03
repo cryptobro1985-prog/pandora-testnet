@@ -1236,7 +1236,7 @@ def _stream_group(trades):
   def report(state):
    with LOCK:S['sources'][key]={'last_check':now(),**state}
   def quote(prices):accept_market_prices(prices);TRADE_WAKE.set()
-  stable_shard=lambda symbol:('ARIA','LYN','ESPORTS','1000CAT','SOPH').index(symbol) if trades and symbol in ('ARIA','LYN','ESPORTS','1000CAT','SOPH') else int(hashlib.sha1(str(symbol).encode()).hexdigest()[:8],16)%count
+  stable_shard=lambda symbol:('INIT','NEAR','BTC','SOL','ETH','LIT','HYPE','ZEC','TAO','GRASS').index(symbol)%count if trades and symbol in ('INIT','NEAR','BTC','SOL','ETH','LIT','HYPE','ZEC','TAO','GRASS') else int(hashlib.sha1(str(symbol).encode()).hexdigest()[:8],16)%count
   run_bybit_stream(MARKET_OBS if trades else MARKET_AUX_OBS,SHUTDOWN,symbols,report,
    symbol_filter=lambda symbol:stable_shard(symbol)==index,
    candle_filter=lambda symbol:stable_shard(symbol)==index,
