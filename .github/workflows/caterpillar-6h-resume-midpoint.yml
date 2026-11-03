@@ -1,0 +1,56 @@
+name: Caterpillar 6H Resume Fixed Midpoint
+
+on:
+  push:
+    branches:
+      - research/caterpillar-full-research-v2
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  resume-fixed-part2:
+    if: contains(github.event.head_commit.message, '[resume-6h-fixed]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 220
+    defaults:
+      run:
+        working-directory: research/caterpillar
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip check
+      - name: Restore successful three-hour midpoint
+        uses: actions/download-artifact@v4
+        with:
+          name: caterpillar-6h-midpoint
+          path: ${{ runner.temp }}/caterpillar-run
+          github-token: ${{ github.token }}
+          run-id: 41601993083
+      - name: Resume fixed second three hours
+        run: |
+          python -m caterpillar realtime_audit --resume --output "$RUNNER_TEMP/caterpillar-run"
+        env:
+          PYTHONUNBUFFERED: "1"
+      - name: Render final report
+        if: always()
+        run: |
+          if test -f "$RUNNER_TEMP/caterpillar-run/research_status.json"; then
+            python -m caterpillar hourly_report --latest --output "$RUNNER_TEMP/caterpillar-run" || true
+          fi
+      - name: Upload fixed six-hour research
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: caterpillar-6h-final-fixed
+          path: ${{ runner.temp }}/caterpillar-run/**
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 6
