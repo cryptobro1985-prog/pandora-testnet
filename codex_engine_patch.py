@@ -52,9 +52,9 @@ reset=reset.replace("pandora_win_legacy_fixed5_20261102_","codex_legacy_fixed5_2
 
 # Limit all frozen history/quote/trade work to the same user cohort.
 s=s.replace("LOCAL_EXPERIMENT_SYMBOLS=('INIT','NEAR','BTC','SOL','ETH','LIT','HYPE','ZEC','TAO','GRASS','BIRB','BEAM','LSK')",
-            "LOCAL_EXPERIMENT_SYMBOLS=('INIT','NEAR','BTC','SOL','ETH','LIT','HYPE','ZEC','TAO','GRASS')")
+            "LOCAL_EXPERIMENT_SYMBOLS=('ZEC','HYPE','NEAR','SOL','ENA','1000PEPE','DOGE','SUI','AAVE','WLD')")
 s=s.replace("count=2 if trades else max(1,min(8,int(os.getenv('BYBIT_AUX_WS_SHARDS','2'))))","count=5 if trades else max(1,min(8,int(os.getenv('BYBIT_AUX_WS_SHARDS','2'))))")
-s=s.replace("stable_shard=lambda symbol:int(hashlib.sha1(str(symbol).encode()).hexdigest()[:8],16)%count","stable_shard=lambda symbol:('INIT','NEAR','BTC','SOL','ETH','LIT','HYPE','ZEC','TAO','GRASS').index(symbol)%count if trades and symbol in ('INIT','NEAR','BTC','SOL','ETH','LIT','HYPE','ZEC','TAO','GRASS') else int(hashlib.sha1(str(symbol).encode()).hexdigest()[:8],16)%count")
+s=s.replace("stable_shard=lambda symbol:int(hashlib.sha1(str(symbol).encode()).hexdigest()[:8],16)%count","stable_shard=lambda symbol:('ZEC','HYPE','NEAR','SOL','ENA','1000PEPE','DOGE','SUI','AAVE','WLD').index(symbol)%count if trades and symbol in ('ZEC','HYPE','NEAR','SOL','ENA','1000PEPE','DOGE','SUI','AAVE','WLD') else int(hashlib.sha1(str(symbol).encode()).hexdigest()[:8],16)%count")
 
 # Caterpillar Event Flow runtime wiring for the frozen child.
 s=s.replace("DISCOVERY_MAX_SELECTED=5","DISCOVERY_MAX_SELECTED=10")
