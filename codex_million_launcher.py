@@ -48,7 +48,7 @@ class CodexBridge:
    print("[CODEX_MILLION] engine_active=%s tokens=%s open=%s closed=%s selection_frozen=%s risk_ready=%s" % (summary[0],summary[1],summary[2],summary[3],summary[4],h.get("risk_ready")),flush=True)
   if time.time()-self._last_diag>=30:
    self._last_diag=time.time(); readiness=h.get('token_readiness') or {}; diagnostics={r.get('symbol'):r for r in ((payload.get('strategy1_entry_diagnostics') or {}).get('tokens') or []) if r.get('symbol')}
-   compact={s:{'h1':v.get('h1'),'flow':v.get('executed_flow'),'evidence':v.get('evidence_ready'),'mark':v.get('mark'),'contract':v.get('contract'),'entry':(diagnostics.get(s) or {}).get('reason')} for s,v in readiness.items()}
+   compact={s:{'h1':v.get('h1'),'flow':v.get('executed_flow'),'evidence':v.get('evidence_ready'),'mark':v.get('mark'),'contract':v.get('contract'),'side':(diagnostics.get(s) or {}).get('entry_side'),'entry':(diagnostics.get(s) or {}).get('reason'),'candidate':(diagnostics.get(s) or {}).get('candidate')} for s,v in readiness.items()}
    print('[CODEX_DIAG] '+json.dumps({'risk_ready':h.get('risk_ready'),'execution_ok':h.get('execution_ok'),'checkpoint_age':h.get('checkpoint_age_seconds'),'tokens':compact},separators=(',',':')),flush=True)
  def run(self,stop):
   env=os.environ.copy();env.pop("PGOPTIONS",None);env.update(PORT="10002",DATABASE_URL=self._isolated_url(),PYTHONUNBUFFERED="1",
