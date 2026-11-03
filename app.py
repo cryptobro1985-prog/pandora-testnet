@@ -710,14 +710,14 @@ def pandora_close(symbol,price,reason,analysis=None,watch_context=None):
  if watch_context:features["executed_flow_exit_context"]=watch_context
  features["actual_exit_reason"]=reason;features["actual_exit_mark"]=price
  watch=None
- if reason in ("confirmed_counter_move_exit","modeled_maintenance_breach"):
+ if reason.startswith("confirmed_counter_move_exit") or reason=="modeled_maintenance_breach":
   watch={"symbol":symbol,"side":int(pos["side"]),
    "origin_signal_candle":int(features.get("origin_h1_signal_candle") or pos.get("signal_candle_time") or 0),
    "exit_price":price,"exit_at":now(),"expires_epoch":0.0,
    "reentries":int(features.get("swing_reentries",0) or 0),"context":{**copy.deepcopy(watch_context or {}),"exit_pressure_state":copy.deepcopy(features.get("pressure_state") or {})}}
   # Preserve the exchange timestamp of the opposite executed-flow event so
   # Re-entry must follow a later executed-flow resumption.
-  opposite_flow_exit=reason=="confirmed_counter_move_exit"
+  opposite_flow_exit=reason.startswith("confirmed_counter_move_exit")
   flow_at_exit=(watch_context or {}).get("flow_context") or {}
   try:
    opposite_epoch=flow_at_exit.get("decision_event_epoch") or flow_at_exit.get("latest_trade_epoch")
