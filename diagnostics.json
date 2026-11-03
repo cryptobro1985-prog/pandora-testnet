@@ -22,11 +22,27 @@
     "build_type": null,
     "public": null
   },
+  "pages_create": {
+    "exit_code": 1,
+    "message": "Resource not accessible by integration",
+    "status": "403",
+    "html_url": null,
+    "errors": null
+  },
   "runs": [
     {
-      "id": 41682174389,
+      "id": 41683031721,
       "status": "pending",
       "conclusion": null,
+      "head_sha": "9332e3586c343650972f475e4fc36685931b61e5",
+      "html_url": "https://github.com/cryptobro1985-prog/pandora-testnet/actions/runs/41683031721",
+      "head_branch": "caterpillar-paper-runtime-v1",
+      "jobs": []
+    },
+    {
+      "id": 41682174389,
+      "status": "completed",
+      "conclusion": "cancelled",
       "head_sha": "16c0822f1985c2585551d68516b4ca89cd9d3fc5",
       "html_url": "https://github.com/cryptobro1985-prog/pandora-testnet/actions/runs/41682174389",
       "head_branch": "caterpillar-paper-runtime-v1",
@@ -119,5 +135,22 @@
     "http_status": 403,
     "url": "https://api.bybit.com/v5/market/time",
     "public_error_excerpt": "{\n    error:The Amazon CloudFront distribution is configured to block access from your country\n}"
+  },
+  "public_snapshot": {
+    "http_status": 200,
+    "url": "https://raw.githubusercontent.com/cryptobro1985-prog/pandora-testnet/caterpillar-monitor-data/state.json",
+    "pandora_marker": null,
+    "session_id": "a0d35022-e1a0-4c1d-aa57-5a9cbebfa25f",
+    "snapshot_at": 1793726337.5881069,
+    "status": "ERROR",
+    "run_id": "41681455983",
+    "positions": 0,
+    "active": 0,
+    "equity": 500.0
+  },
+  "stopped_empty_blocked_run": {
+    "id": 41681455983,
+    "request_exit": 0,
+    "message": null
   }
 }
