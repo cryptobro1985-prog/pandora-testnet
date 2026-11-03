@@ -186,6 +186,8 @@ class RollingMarketData:
             return rows,buy,sell
         def imbalance(buy,sell): return (buy-sell)/(buy+sell) if buy+sell else 0.
         r60,b60,s60=window(60)
+        # Event-flow decisions are valid as soon as the Public Trades transport is fresh.
+        out.update(trade_data_fresh=True,observation_basis='executed_public_trades_event_flow')
         if not r60 or b60+s60<=0:return out
         i60=imbalance(b60,s60)
         levels=[]
