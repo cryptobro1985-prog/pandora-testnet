@@ -87,7 +87,7 @@ def _window_consensus(flow,side):
 
 
 def _candidate(symbol,analysis,flow):
-    side=int((analysis or {}).get("entry_side") or 0)
+    side=int((analysis or {}).get("execution_side_override") or (analysis or {}).get("entry_side") or 0)
     h1=bool((analysis or {}).get("ready") and (analysis or {}).get("anchor_confirmed")
         and (analysis or {}).get("h1_direction_anchor") and not (analysis or {}).get("entry_blocked")
         and side in (-1,1))
