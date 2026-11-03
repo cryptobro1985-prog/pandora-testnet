@@ -28,7 +28,7 @@ function card(title,values,reason){const box=node('article',undefined,'card');bo
 function render(s){
  latest=s;const p=s.portfolio;$('identity').textContent=`Session ${s.session_id} · Run ${s.run_id} · Uptime ${num(s.uptime/3600)} ч`;
  $('summary').replaceChildren(...[
- ['Старт $',p.start_equity],['Equity $',p.equity],['PnL $',p.equity===null?null:p.equity-p.start_equity],['PnL %',p.equity===null?null:(p.equity/p.start_equity-1)*100],['Realized $',p.realized_pnl],['Unrealized net $',p.unrealized_pnl],['Max equity $',p.max_equity],['Max drawdown %',p.max_drawdown*100],['Маржа $',p.used_margin],['Свободно $',p.free_equity],['Notional $',p.gross_notional],['Открыто',s.positions.length],['Закрыто',s.closed_count]
+ ['Старт $',p.start_equity],['Equity mark $',p.equity],['Net при закрытии $',p.estimated_liquidation_equity],['PnL $',p.equity===null?null:p.equity-p.start_equity],['PnL %',p.equity===null?null:(p.equity/p.start_equity-1)*100],['Realized incl. entry fees $',p.realized_pnl],['Unrealized gross $',p.unrealized_pnl],['Max equity $',p.max_equity],['Max drawdown %',p.max_drawdown*100],['Маржа $',p.used_margin],['Свободно $',p.free_equity],['Notional $',p.gross_notional],['Открыто',s.positions.length],['Закрыто',s.closed_count]
  ].map(([label,value])=>{const el=node('div',undefined,'metric');el.append(node('div',label,'muted'),node('div',num(value),'value'));return el;}));
  const h=node('dl');pair(h,'Scanner',s.scanner.status||'WAIT');pair(h,'Public WS',s.transport?.subscription_confirmed?'ACK':'NO ACK');pair(h,'Engine',s.status);pair(h,'Checkpoint',date(s.checkpoint_at));pair(h,'Ошибки',JSON.stringify(s.errors||{}));$('health').replaceChildren(h);
  $('tokens').replaceChildren(...s.tokens.map(t=>{const f=t.flow,l=t.local;return card(t.symbol,[
