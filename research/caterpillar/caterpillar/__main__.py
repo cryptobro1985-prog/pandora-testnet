@@ -79,7 +79,9 @@ def main(argv=None):
             source_meta = json.loads(manifest_path.read_text())
             if not isinstance(source_meta, dict) or not isinstance(source_meta.get("config"), dict):
                 raise ValueError("Source manifest must contain a config object")
-        data = json.loads(args.config.read_text()) if args.config else source_meta["config"] if source_meta else {}
+        data = (json.loads(args.config.read_text()) if args.config else
+                source_meta["config"] if source_meta else
+                resume_meta["config"] if resume_meta else {})
         if not isinstance(data, dict) or not set(data) <= {f.name for f in fields(Config)}:
             raise ValueError("Unknown configuration keys or non-object config")
         if "exit_models" in data:
@@ -96,7 +98,8 @@ def main(argv=None):
             if split is not None and (not finite_number(split) or split < 0):
                 raise ValueError("Invalid source split_ts")
         end = utc_date(args.end_date) if args.end_date else datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        start = utc_date(args.start_date) if args.start_date else end-timedelta(days=60)
+        lookback_days = args.days if args.days is not None else 60
+        start = utc_date(args.start_date) if args.start_date else end-timedelta(days=lookback_days)
         if args.mode == "historical_research" and (start >= end or end > datetime.now(timezone.utc)
                 or (split is not None and not start.timestamp() < split < end.timestamp())):
             raise ValueError("Require start < split < end, or start < end without split")
@@ -104,8 +107,8 @@ def main(argv=None):
             raise ValueError("replay requires --input")
         if args.mode != "replay" and args.input:
             raise ValueError("--input is only supported for replay")
-        if args.mode != "historical_research" and (args.start_date or args.end_date or args.allow_ohlcv_fallback):
-            raise ValueError("--start-date, --end-date and OHLCV fallback apply only to historical_research")
+        if args.mode != "historical_research" and (args.start_date or args.end_date or args.allow_ohlcv_fallback or args.days is not None):
+            raise ValueError("--days, --start-date, --end-date and OHLCV fallback apply only to historical_research")
         if args.mode == "realtime_audit":
             if args.split_date:
                 raise ValueError("Realtime is a separate frozen out-of-sample run; --split-date applies to history/replay")
@@ -120,6 +123,8 @@ def main(argv=None):
         metadata["split_ts"] = split
         if args.mode == "realtime_audit":
             metadata["phase_policy"] = "evaluation from first realtime observation; configuration frozen before collection"
+            metadata["target_duration_seconds"] = args.duration_seconds
+            metadata["market_context_enabled"] = bool(args.market_context)
         if args.input:
             from .sources import file_sha
             metadata["input_sha256"] = file_sha(args.input)
@@ -127,17 +132,30 @@ def main(argv=None):
             metadata["source_manifest"] = {"sha256": file_sha(manifest_path), "package_version": source_meta.get("package_version"),
                                           "package_source_sha256": source_meta.get("package_source_sha256"),
                                           "schema_version": source_meta.get("schema_version"), "config_overridden": bool(args.config)}
-        output = Output(args.output, config, symbols, args.mode, metadata)
+        output = Output(args.output, config, symbols, args.mode, metadata, resume=args.resume)
     except (ValueError, OSError, TypeError) as exc:
         parser.error(str(exc))
     engine = ResearchEngine(output, config, symbols, split, args.record_trades)
+    if args.resume:
+        engine.restore_checkpoint()
     code, status = 0, "completed"
     try:
         if args.mode == "historical_research":
-            status = historical(engine, args.cache, start, end, args.allow_ohlcv_fallback)
+            status = historical(engine, args.cache, start, end, args.allow_ohlcv_fallback, resume=args.resume)
         elif args.mode == "realtime_audit":
             from .realtime import realtime
-            status = realtime(engine, args.duration_seconds, args.reorder_seconds, args.max_lag_seconds)
+            duration = args.duration_seconds
+            if args.resume:
+                try:
+                    created = datetime.fromisoformat(output.meta["created_at"]).timestamp()
+                    target = float(output.meta.get("metadata", {}).get("target_duration_seconds", duration))
+                    duration = max(1.0, target - max(0.0, time.time()-created))
+                except (KeyError, TypeError, ValueError):
+                    duration = args.duration_seconds
+            status = realtime(
+                engine, duration, args.reorder_seconds, args.max_lag_seconds,
+                market_context=args.market_context or bool(output.meta.get("metadata", {}).get("market_context_enabled")),
+                resume=args.resume)
         else:
             replay(engine, args.input)
             complete = True
