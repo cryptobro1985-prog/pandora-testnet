@@ -7,19 +7,31 @@ on:
       - 'scripts/old_caterpillar_wld_1d.py'
       - 'scripts/historical_9ce_local_order_flow.py'
       - '.github/workflows/exact-9ce-wld-replay.yml'
+permissions:
+  contents: write
 jobs:
   replay:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: caterpillar-paper-runtime-v1
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - name: Run exact historical replay
         run: python scripts/old_caterpillar_wld_1d.py --cache .cache/bybit --output replay_out
-      - name: Show result
-        run: cat replay_out/RESULT.json
+      - name: Publish deterministic result to branch
+        run: |
+          mkdir -p results/exact_9ce_wld_20261102
+          cp replay_out/RESULT.json results/exact_9ce_wld_20261102/RESULT.json
+          cp replay_out/TRADES.json results/exact_9ce_wld_20261102/TRADES.json
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add results/exact_9ce_wld_20261102
+          git commit -m "Store exact 9ce WLD replay result" || exit 0
+          git push origin HEAD:caterpillar-paper-runtime-v1
       - uses: actions/upload-artifact@v4
         with:
           name: exact-9ce-wld-replay
