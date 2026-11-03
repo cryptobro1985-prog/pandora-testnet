@@ -135,6 +135,9 @@ class RollingMarketData:
                 previous_event=state.get('decision_epoch')
                 state['decision_epoch']=stamp if previous_event is None else max(stamp,math.nextafter(previous_event,float('inf')))
                 state['revision']+=1
+                state['event_buy_notional_total']+=notional if side=='B' else 0.0
+                state['event_sell_notional_total']+=notional if side=='A' else 0.0
+                state['event_trade_count_total']+=1
                 state['post_connect_trade_seen']=True
                 if state['first_trade'] is None:state['first_trade']=stamp
                 trades.append((stamp,px,notional,side))
