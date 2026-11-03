@@ -14,36 +14,30 @@ STOP=threading.Event()
 def esc(v):
     return str(v if v is not None else "—").replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
 
-HTML='''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Codex Million · PAPER</title><style>
-:root{color-scheme:dark;font-family:system-ui;background:#070b16;color:#edf4ff}body{margin:0}.wrap{max-width:1500px;margin:auto;padding:24px}
-h1{font-size:38px;margin:0 0 4px}.sub{color:#9aabc8;font-size:13px;line-height:1.45}.top,.grid{display:grid;gap:10px}.top{grid-template-columns:repeat(5,1fr);margin:16px 0;position:sticky;top:0;z-index:5;background:#070b16;padding:8px 0}.tile,.card{border:1px solid #31405f;background:#10182a;border-radius:14px;padding:13px;min-width:0}.tile b{display:block;font-size:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tile small{color:#9aabc8}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.card h2{margin:0 0 10px;color:#6cddff;font-size:20px;display:flex;justify-content:space-between;gap:8px}.m{display:grid;grid-template-columns:minmax(92px,.8fr) minmax(0,1.2fr);gap:7px 10px;font:12px ui-monospace,monospace}.m span{min-width:0;overflow-wrap:anywhere}.m span:nth-child(odd){color:#9aabc8}.short{color:#ff829c;font-size:12px}.ok{color:#7ef5bb}.warn{color:#fff17b}.history{margin-top:18px;overflow:hidden}.tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch}table{width:100%;border-collapse:collapse;font-size:11px;min-width:620px}td,th{padding:7px;border-bottom:1px solid #26334d;text-align:left;white-space:nowrap}.research{margin:10px 0 14px;padding:10px 12px;border:1px solid #31405f;border-radius:12px;background:#0d1424;font-size:12px;color:#9aabc8}
-@media(max-width:600px){.wrap{padding:12px 10px 28px}h1{font-size:27px}.sub{font-size:11px}.top{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:10px 0}.tile{padding:9px 8px;border-radius:10px}.tile b{font-size:15px}.tile small{font-size:9px}.grid{grid-template-columns:1fr;gap:9px}.card{padding:11px}.card h2{font-size:18px}.m{font-size:11px;grid-template-columns:96px minmax(0,1fr);gap:6px 8px}.history h2{font-size:18px}}</style></head>
-<body><div class="wrap"><h1>Codex Million · SHORT10</h1><div class="sub">PAPER ONLY · 10% margin/token · 30x · flow 30/180/300 · MFE protection · fixed 10 tokens</div>
-<div id="top" class="top"></div><div id="research" class="research">6H Research: starting…</div><div id="grid" class="grid"></div><div class="history"><h2>Closed trades</h2><div id="history" class="tablewrap"></div></div></div>
+HTML=r'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Codex Million PAPER</title><style>
+:root{color-scheme:dark;font-family:system-ui;background:#070b16;color:#edf4ff}body{margin:0}.wrap{max-width:1200px;margin:auto;padding:12px}
+h1{font-size:28px;margin:0}.sub{color:#9aabc8;font-size:11px}.top,.grid{display:grid;gap:8px}.top{grid-template-columns:repeat(3,minmax(0,1fr));margin:12px 0}.tile,.card,.research{border:1px solid #31405f;background:#10182a;border-radius:12px;padding:10px;min-width:0}.tile b{display:block;font-size:15px}.tile small{font-size:9px;color:#9aabc8}.grid{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:10px}.card h2{margin:0 0 8px;color:#6cddff;font-size:18px}.m{display:grid;grid-template-columns:96px minmax(0,1fr);gap:6px 8px;font:11px ui-monospace,monospace}.m span:nth-child(odd){color:#9aabc8}.m span{overflow-wrap:anywhere}.ok{color:#7ef5bb}.warn{color:#fff17b}.history{margin-top:14px;overflow-x:auto}table{min-width:620px;width:100%;border-collapse:collapse;font-size:11px}td,th{padding:7px;border-bottom:1px solid #26334d;white-space:nowrap;text-align:left}
+@media(max-width:600px){.wrap{padding:10px}.grid{grid-template-columns:1fr}.top{position:sticky;top:0;background:#070b16;z-index:5}.card{padding:10px}}
+</style></head><body><div class="wrap"><h1>Codex Million · PAPER</h1><div class="sub">fixed 10 · H1 locals · executed flow · 30/180/300 · MFE/MAE</div>
+<div id="top" class="top"></div><div id="research" class="research">Research…</div><div id="grid" class="grid"></div><div class="history"><h2>Closed trades</h2><div id="history"></div></div></div>
 <script>
-const FIXED=['ZEC','HYPE','NEAR','SOL','ENA','1000PEPE','DOGE','SUI','AAVE','WLD']; const f=(x,d=2)=>x==null?'—':Number(x).toFixed(d), money=x=>x==null?'—':'
-function local(t){let a=t.local_state||t.current_local||t.confirmed_local||{};let c=a.confirmed_local||a;return (c.pivot_type||c.type||a.pivot_type||'—')+' '+(c.pivot_price??a.pivot_price??'—')}
-function row(k,v){return '<span>'+k+'</span><span>'+String(v??'—')+'</span>'}
-async function tick(){try{let [r,rr]=await Promise.all([fetch('/api/codex',{cache:'no-store'}),fetch('/api/research',{cache:'no-store'})]),d=await r.json(),rd=await rr.json();
-document.getElementById('research').innerHTML='6H Research: <b class="'+(rd.online?'ok':'warn')+'">'+String(rd.status||'—')+'</b> · '+(rd.online?'LIVE':'not running')+' · fixed 10 tokens · historical 30D runs separately';
-let acc=d.account||{};document.getElementById('top').innerHTML=[
-['STATUS',d.status],['EQUITY',money(d.equity)],['TOKENS',String((d.tokens||[]).length)+'/10'],['OPEN',String((d.positions||[]).length)],['RISK',d.risk_ready===true?'READY':'WARMING']
-].map(x=>'<div class="tile"><small>'+x[0]+'</small><b>'+x[1]+'</b></div>').join('');
-let pos={};for(let p of d.positions||[])pos[p.symbol]=p; let by={};for(let t of d.tokens||[])by[t.symbol]=t; let health=(d.health||{}).token_readiness||{}; let diag=d.entry_diagnostics||{}; let tokens=FIXED.map(s=>by[s]||{symbol:s,state:'WAITING_DATA'});
-document.getElementById('grid').innerHTML=tokens.map(t=>{let p=pos[t.symbol]||{},ft=p.features||{},flow=t.flow_context||t.flow_state||{},dir=t.direction??t.entry_side??(t.local_state||{}).entry_side,hr=health[t.symbol]||{},dg=diag[t.symbol]||{};
-return '<div class="card"><h2>'+t.symbol+' <span class="short">SHORT ONLY</span></h2><div class="m">'+
-row('Local H1',local(t))+row('Structure',t.structure_state||t.structure||t.state)+row('Direction',dir==-1?'SHORT':dir==1?'LONG':'—')+row('H1 ready',hr.h1===true?'YES':'NO')+row('Flow ready',hr.executed_flow===true?'YES':'NO')+row('Evidence',hr.evidence_ready===true?'YES':'NO')+row('Entry state',dg.reason||dg.status||t.action_reason||t.last_action||'WAITING')+
-row('Price',t.price??t.last)+row('BUY',f(t.buy_volume??flow.buy_notional,0))+row('SELL',f(t.sell_volume??flow.sell_notional,0))+
-row('30s',JSON.stringify((flow.windows||{})['30']||{}))+row('180s',JSON.stringify((flow.windows||{})['180']||{}))+row('300s',JSON.stringify((flow.windows||{})['300']||{}))+
-row('Position',(p.side==-1||p.side==='SHORT')?'SHORT':(p.side==1||p.side==='LONG')?'LONG':'—')+row('Entry',p.entry??p.entry_price)+row('Margin',money(p.margin??p.margin_usd))+row('Leverage',(p.leverage??'—')+'x')+
-row('PnL',money(p.unrealized_pnl??p.pnl_usdt))+row('Peak MFE',money(ft.peak_mfe_usd??ft.mfe_usd))+row('MAE',money(ft.mae_usd))+row('MFE giveback',money(ft.mfe_giveback_usd))+
-'</div></div>'}).join('');
-let tr=(d.trades||[]).slice(0,100);document.getElementById('history').innerHTML='<table><tr><th>Symbol</th><th>Side</th><th>PnL</th><th>MFE</th><th>Reason</th><th>Closed</th></tr>'+tr.map(x=>{let ft=x.features||{};return '<tr><td>'+x.symbol+'</td><td>'+ (x.side==-1?'SHORT':'LONG')+'</td><td>'+money(x.pnl)+'</td><td>'+money(ft.peak_mfe_usd??ft.mfe_usd)+'</td><td>'+String(x.reason||'—')+'</td><td>'+String(x.closed||'—')+'</td></tr>'}).join('')+'</table>';
-}catch(e){document.getElementById('top').innerHTML='<div class="tile warn">WAITING: '+e+'</div>'}}
-tick();setInterval(tick,1000);
+const FIXED=['ZEC','HYPE','NEAR','SOL','ENA','1000PEPE','DOGE','SUI','AAVE','WLD'];
+const num=(x,d=2)=>x==null?'—':Number(x).toFixed(d), money=x=>x==null?'—':'$'+num(x,2);
+const row=(k,v)=>'<span>'+k+'</span><span>'+String(v??'—')+'</span>';
+function loc(t){let a=t.local_state||t.confirmed_local||{},q=a.confirmed_local||a;return (q.pivot_type||q.kind||q.type||'—')+' '+(q.pivot_price??q.price??'—')}
+async function tick(){try{
+ const [r,rr]=await Promise.all([fetch('/api/codex',{cache:'no-store'}),fetch('/api/research',{cache:'no-store'})]);
+ const d=await r.json(), rd=await rr.json(), tokens=d.tokens||[], positions=d.positions||[], diag=d.entry_diagnostics||{}, ready=(d.health||{}).token_readiness||{};
+ document.getElementById('top').innerHTML=[['STATUS',d.status||'—'],['EQUITY',money(d.equity)],['TOKENS',tokens.length+'/10'],['OPEN',positions.length],['CLOSED',(d.trades||[]).length],['RISK',d.risk_ready===true?'READY':'WARMING']].map(x=>'<div class="tile"><small>'+x[0]+'</small><b>'+x[1]+'</b></div>').join('');
+ document.getElementById('research').innerHTML='6H Research: <b class="'+(rd.online?'ok':'warn')+'">'+(rd.status||'—')+'</b>';
+ let by=Object.fromEntries(tokens.map(x=>[x.symbol,x])), pos=Object.fromEntries(positions.map(x=>[x.symbol,x]));
+ document.getElementById('grid').innerHTML=FIXED.map(s=>{let t=by[s]||{symbol:s},p=pos[s]||{},f=p.features||{},fl=t.flow_context||t.flow_state||{},h=ready[s]||{},g=diag[s]||{},dir=t.direction??t.entry_side??(t.local_state||{}).entry_side;
+ return '<div class="card"><h2>'+s+'</h2><div class="m">'+row('Local H1',loc(t))+row('Structure',t.structure_state||t.structure||t.state||'WAITING_DATA')+row('Direction',dir==-1?'SHORT':dir==1?'LONG':'—')+row('H1 ready',h.h1?'YES':'NO')+row('Flow ready',h.executed_flow?'YES':'NO')+row('Evidence',h.evidence_ready?'YES':'NO')+row('Entry state',g.reason||g.status||t.action_reason||'WAITING')+row('Price',t.price??t.last)+row('BUY',num(t.buy_volume??fl.buy_notional,0))+row('SELL',num(t.sell_volume??fl.sell_notional,0))+row('Position',p.side==-1||p.side==='SHORT'?'SHORT':p.side==1||p.side==='LONG'?'LONG':'—')+row('Entry',p.entry??p.entry_price)+row('Margin',money(p.margin??p.margin_usd))+row('Leverage',(p.leverage??'—')+'x')+row('PnL',money(p.unrealized_pnl??p.pnl_usdt))+row('MFE',money(f.peak_mfe_usd??f.mfe_usd))+row('MAE',money(f.mae_usd))+'</div></div>'}).join('');
+ let tr=(d.trades||[]).slice(0,100);document.getElementById('history').innerHTML='<table><tr><th>Symbol</th><th>Side</th><th>PnL</th><th>Reason</th><th>Closed</th></tr>'+tr.map(x=>'<tr><td>'+x.symbol+'</td><td>'+(x.side==-1?'SHORT':'LONG')+'</td><td>'+money(x.pnl)+'</td><td>'+String(x.reason||'—')+'</td><td>'+String(x.closed||'—')+'</td></tr>').join('')+'</table>';
+}catch(e){document.getElementById('research').textContent='MONITOR ERROR: '+e}}
+tick();setInterval(tick,1500);
 </script></body></html>'''
-
 class H(BaseHTTPRequestHandler):
     def log_message(self,*args): pass
     def sendj(self,obj,code=200):
