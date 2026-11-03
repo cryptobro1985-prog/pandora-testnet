@@ -70,6 +70,22 @@ def dominance(flow):
     return 1 if buy>sell else -1 if sell>buy else 0
 
 
+def _window_consensus(flow,side):
+    windows=(flow or {}).get("windows") or {}
+    votes={}
+    for seconds in (60,108,300):
+        w=windows.get(str(seconds)) or windows.get(seconds) or {}
+        complete=bool(w.get("complete"))
+        imbalance=_f(w.get("imbalance"))
+        aligned=bool(complete and imbalance is not None and int(side)*imbalance>0)
+        votes[str(seconds)]={"complete":complete,"imbalance":imbalance,"aligned":aligned}
+    completed=[v for v in votes.values() if v["complete"]]
+    aligned_votes=sum(1 for v in completed if v["aligned"])
+    # 60 is the first read, 108 confirms the move, 300 supplies regime context.
+    # Entry/re-entry needs 108 aligned plus at least two aligned completed horizons.
+    return bool(votes["108"]["aligned"] and aligned_votes>=2),votes,aligned_votes
+
+
 def _candidate(symbol,analysis,flow):
     side=int((analysis or {}).get("entry_side") or 0)
     h1=bool((analysis or {}).get("ready") and (analysis or {}).get("anchor_confirmed")
@@ -77,13 +93,15 @@ def _candidate(symbol,analysis,flow):
         and side in (-1,1))
     profile=flow_profile(flow,side,(analysis or {}).get("flow_anchor_buy_total"),
         (analysis or {}).get("flow_anchor_sell_total"),(analysis or {}).get("flow_anchor_trade_count"))
-    eligible=bool(h1 and profile and profile["aligned_control"])
-    reason=("h1_event_flow_entry" if eligible else "waiting_for_h1_local" if not h1
-        else "waiting_for_fresh_executed_flow" if profile is None else "waiting_for_h1_side_executed_dominance")
+    consensus,votes,aligned_votes=_window_consensus(flow,side)
+    eligible=bool(h1 and profile and profile["aligned_control"] and consensus)
+    reason=("h1_flow_60_108_300_entry" if eligible else "waiting_for_h1_local" if not h1
+        else "waiting_for_fresh_executed_flow" if profile is None else "waiting_for_60_108_300_flow_confirmation")
     return {"symbol":symbol,"side":side,"eligible":eligible,"reason":reason,"policy":POLICY,
             "aligned_pressure":profile["aligned_pressure"] if profile else None,
             "event_epoch":profile["event_epoch"] if profile else None,
-            "buy_notional":profile["buy"] if profile else None,"sell_notional":profile["sell"] if profile else None}
+            "buy_notional":profile["buy"] if profile else None,"sell_notional":profile["sell"] if profile else None,
+            "window_votes":votes,"aligned_votes":aligned_votes}
 
 
 def initial_entry_candidate(symbol,analysis,execution_context,flow,stamp):
@@ -107,7 +125,7 @@ def pressure_exit(position,execution_context,mark,flow,*,opposite_local_confirme
         return None
     windows=flow.get("windows") or {}
     votes={}
-    for seconds in (60,180,300):
+    for seconds in (60,108,300):
         w=windows.get(str(seconds)) or windows.get(seconds) or {}
         complete=bool(w.get("complete"))
         imbalance=_f(w.get("imbalance"))
@@ -115,10 +133,10 @@ def pressure_exit(position,execution_context,mark,flow,*,opposite_local_confirme
             "counter":bool(complete and imbalance is not None and side*imbalance<0)}
     completed=[v for v in votes.values() if v["complete"]]
     counter_votes=sum(1 for v in completed if v["counter"])
-    # 60s is warning only. A normal flow exit needs the 180s context and
+    # 60s is warning only. A normal flow exit needs the 108s context and
     # agreement from at least two completed horizons. 300s becomes the regime
     # vote once available. Confirmed opposite H1 local bypasses this gate above.
-    confirmed=bool(profile["counter_takeover"] and votes["180"]["counter"] and counter_votes>=2)
+    confirmed=bool(profile["counter_takeover"] and votes["108"]["counter"] and counter_votes>=2)
     features["exit_decision"]={"reason":"counter_flow_60_180_300_confirmed" if confirmed else
         "counter_flow_waiting_60_180_300" if profile["counter_takeover"] else "own_side_executed_flow",
         "control_side":profile["control_side"],"buy_notional_since_entry":profile["buy"],
@@ -152,4 +170,7 @@ def reentry_ready(side,execution_context,mark,watch,flow,stamp):
     context=watch.get("context") or {}
     profile=flow_profile(flow,side,context.get("flow_exit_buy_total"),
         context.get("flow_exit_sell_total"),context.get("flow_exit_trade_count"))
-    return bool(profile and profile["resumed"])
+    consensus,votes,aligned_votes=_window_consensus(flow,side)
+    context["reentry_window_votes"]=votes
+    context["reentry_aligned_votes"]=aligned_votes
+    return bool(profile and profile["resumed"] and consensus)
