@@ -1,0 +1,61 @@
+name: Caterpillar 5 Token Strategy Synthesis
+
+on:
+  push:
+    branches: [research/caterpillar-full-research-v2]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  analyze:
+    if: contains(github.event.head_commit.message, '[synth-5]')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {symbol: AAVE, artifact_id: 13216296844}
+          - {symbol: DOGE, artifact_id: 13217067189}
+          - {symbol: SUI, artifact_id: 13217755862}
+          - {symbol: WLD, artifact_id: 13217654406}
+          - {symbol: 1000PEPE, artifact_id: 13218807932}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Download research artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ matrix.artifact_id }}
+        run: gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" > source.zip
+      - name: Extract research evidence
+        env:
+          SYMBOL: ${{ matrix.symbol }}
+        run: |
+          python - <<'PY'
+          import json,os,zipfile
+          s=os.environ['SYMBOL']
+          with zipfile.ZipFile('source.zip') as z:
+            names=z.namelist()
+            def readj(suffix):
+              n=next((x for x in names if x.endswith(suffix)),None)
+              return json.loads(z.read(n)) if n else {}
+            prof=readj('token_profiles.json'); summ=readj('research_summary.json'); syn=readj('strategy_synthesis.json')
+          p=prof.get(s+'_PROFILE',{})
+          counts=p.get('counts',{}); metrics=p.get('metrics',{}); hyp=p.get('hypotheses',{})
+          rows=[]
+          for k,v in hyp.items():
+            if not isinstance(v,dict): continue
+            rows.append({'hypothesis':k,'n':v.get('n',0),'positive_fraction':v.get('positive_fraction'),'mean_net_bps':v.get('mean_net_bps'),'days':v.get('observed_utc_days',0),'daily_median_bps':v.get('daily_mean_median_net_bps'),'positive_day_fraction':v.get('positive_day_fraction'),'delta_vs_baseline_bps':v.get('delta_vs_direction_baseline_bps')})
+          rows.sort(key=lambda x: ((x['days'] or 0)>=5,(x['n'] or 0)>=30,x['mean_net_bps'] if x['mean_net_bps'] is not None else -1e99),reverse=True)
+          def metric(prefix):
+            return {k:v for k,v in metrics.items() if k.startswith(prefix)}
+          out={'symbol':s,'counts':counts,'top_hypotheses':rows[:100],'pattern_metrics':metric('pattern/'),'synthesis':syn.get('tokens',{}).get(s,{}),'summary_open_books':summ.get('open_books_not_realized',{}).get(s,{})}
+          open('evidence.json','w').write(json.dumps(out,indent=2))
+          print(json.dumps({'symbol':s,'counts':counts,'top':rows[:12],'synthesis':out['synthesis']},indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: caterpillar-evidence-${{ matrix.symbol }}
+          path: evidence.json
+          retention-days: 14
