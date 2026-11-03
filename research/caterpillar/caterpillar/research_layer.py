@@ -132,10 +132,22 @@ class MultiLocalResearch:
             if row["bars_seen"] >= row["horizon_hours"]:
                 payload = {**row, "status": "COMPLETE", "completed_ts": observed_at}
                 emit("local_hypotheses", ts=observed_at, stage="OUTCOME", **payload)
-                base_key = f'{row["phase"]}/local/{row["kind"]}/{row["variant"]}_{row["horizon_hours"]}h'
+                label = f'{row["variant"]}_{row["horizon_hours"]}h'
+                base_key = f'{row["phase"]}/local/{row["kind"]}/{label}'
                 profile.outcome(base_key, close_move, ts=row["confirmed_ts"])
+                metric_base = f'local_pattern/{row["kind"]}/{label}/'
+                profile.add(metric_base+"close_bps", close_move)
+                profile.add(metric_base+"mfe_bps", row["mfe_bps"])
+                profile.add(metric_base+"mae_bps", row["mae_bps"])
+                profile.add(metric_base+"mfe_capture_ratio", close_move/row["mfe_bps"] if row["mfe_bps"] > 0 else None)
                 for tag in row.get("flow_evidence", []):
-                    profile.outcome(base_key+"+"+tag, close_move, ts=row["confirmed_ts"])
+                    tagged = label+"+"+tag
+                    profile.outcome(f'{row["phase"]}/local/{row["kind"]}/{tagged}', close_move, ts=row["confirmed_ts"])
+                    tagged_base = f'local_pattern/{row["kind"]}/{tagged}/'
+                    profile.add(tagged_base+"close_bps", close_move)
+                    profile.add(tagged_base+"mfe_bps", row["mfe_bps"])
+                    profile.add(tagged_base+"mae_bps", row["mae_bps"])
+                    profile.add(tagged_base+"mfe_capture_ratio", close_move/row["mfe_bps"] if row["mfe_bps"] > 0 else None)
             else:
                 remaining.append(row)
         self.outcomes = remaining
