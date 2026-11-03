@@ -162,6 +162,10 @@ def persist_status(engine, ts=None, reason="heartbeat", hourly=False):
     if hourly:
         engine.output.emit("hourly_snapshots", row)
         engine.output.flush()
+        # Render/background jobs may not have durable local storage. Emit the
+        # complete hourly snapshot to stdout as a recoverable observability
+        # surface; it contains public market research only and no secrets.
+        print("CATERPILLAR_HOURLY_SNAPSHOT "+json.dumps(row, ensure_ascii=False, separators=(",",":")), flush=True)
     return row
 
 
