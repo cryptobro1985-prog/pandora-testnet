@@ -50,7 +50,7 @@ reset=reset.replace("PANDORA_FIXED_FIVE_20261102","CODEX_FIXED_FIVE_20261102")
 reset=reset.replace("pandora_win_legacy_fixed5_20261102_","codex_legacy_fixed5_20261102_")
 reset = r'''"""One-shot Codex SHORT10 PAPER reset."""
 import json
-EXPERIMENT="CODEX_SHORT10_30_180_300_20261103"
+EXPERIMENT="CODEX_H1_60_180_300_20261103"
 EQUITY=500.0
 TABLES=("local_v12_positions","local_v12_trade_history","local_v12_watchlist",
         "local_h1_direction","local_v12_signal_journal","audit_journal",
@@ -87,7 +87,7 @@ s=s.replace("leverage=plan.leverage;margin=plan.margin;notional=plan.notional",
 '''leverage=plan.leverage;margin=plan.margin;notional=plan.notional
  if plan.allowed and float(instrument["max_leverage"])>=30.0:
   leverage=30.0;margin=equity*0.10;notional=margin*leverage''')
-s=s.replace("if side not in (-1,1):continue","if side!=1:continue")
+s=s.replace("if side not in (-1,1):continue","if side not in (-1,1):continue")
 # Make the PAPER entry audit expose the actual candidate/votes so zero-entry
 # states can be diagnosed from Render without guessing.
 s=s.replace('''     selection=local4_initial_entry_candidate(symbol,analysis,None,flow,time.time())
@@ -135,12 +135,12 @@ s=s.replace('''  else:
     pandora_open(symbol,side,analysis,"ORDER_FLOW",{"pandora_win_direct_control":True,"strategy":PANDORA_WIN_NAME})''',
 '''  else:
    selection=pandora_flow_initial_entry_candidate(symbol,analysis,None,flow,time.time())
-   bootstrap=bool(os.getenv("CODEX_SHORT10_BOOTSTRAP","0")=="1" and side==-1)
+   bootstrap=False
    if selection.get("eligible") or bootstrap:
     pandora_open(symbol,side,analysis,"BOOTSTRAP_SHORT" if bootstrap and not selection.get("eligible") else "ORDER_FLOW",
       {"pandora_win_direct_control":bool(selection.get("eligible")),"bootstrap_short":bootstrap,"strategy":PANDORA_WIN_NAME})''')
 s=s.replace(''' if not selection["eligible"]:return reject(selection["reason"])''',
-''' bootstrap_short=bool(os.getenv("CODEX_SHORT10_BOOTSTRAP","0")=="1" and int(side)==-1 and int((analysis or {}).get("entry_side") or 0)==-1 and entry_kind=="BOOTSTRAP_SHORT")
+''' bootstrap_short=False
  if not selection["eligible"] and not bootstrap_short:return reject(selection["reason"])
  if bootstrap_short:
   selection={**selection,"eligible":True,"reason":"BOOTSTRAP_CONFIRMED_H1_LOCAL_HIGH_SHORT"}''')
@@ -184,7 +184,7 @@ p.write_text(s)
 s=s.replace('''  side=int(analysis.get("entry_side") or 0)
   if watch and int(watch.get("side") or 0)==-side:''',
 '''  market_side=int(analysis.get("entry_side") or 0)
-  forced_short=os.getenv("CODEX_FORCE_SHORT10","0")=="1"
+  forced_short=False
   side=-1 if forced_short else market_side
   execution_analysis=copy.deepcopy(analysis)
   if forced_short:
@@ -201,7 +201,7 @@ s=s.replace('''   selection=local4_initial_entry_candidate(symbol,analysis,None,
 # In forced-short PAPER mode, structural freshness is still required, but the
 # market's latest LOW/LONG direction is not allowed to veto the explicit test side.
 s=s.replace(''' if not strategy1_confirmed_h1(analysis):return reject("H1_NOT_CONFIRMED")''',
-''' forced_short=bool(os.getenv("CODEX_FORCE_SHORT10","0")=="1" and int(side or 0)==-1 and (analysis or {}).get("execution_bias")=="SHORT10_PAPER")
+''' forced_short=False
  if not forced_short and not strategy1_confirmed_h1(analysis):return reject("H1_NOT_CONFIRMED")
  if forced_short and not ((analysis or {}).get("ready") and (analysis or {}).get("anchor_confirmed") and (analysis or {}).get("h1_direction_anchor") and not (analysis or {}).get("entry_blocked")):return reject("H1_NOT_CONFIRMED")''')
 s=s.replace(''' if not strategy1_runtime_h1_verified(symbol,analysis):return reject("CURRENT_CLOSED_H1_NOT_VERIFIED")''',
@@ -225,11 +225,11 @@ s=s.replace(''' if latest_anchor and (latest_anchor.get('entry_blocked') or late
 s=s.replace('''     selection=local4_initial_entry_candidate(symbol,analysis,None,flow,time.time())
      record["candidate"]=selection''',
 '''     diagnostic_analysis=copy.deepcopy(analysis)
-     if os.getenv("CODEX_FORCE_SHORT10","0")=="1":
+     if False:
       diagnostic_analysis["execution_side_override"]=-1
      selection=local4_initial_entry_candidate(symbol,diagnostic_analysis,None,flow,time.time())
      record["candidate"]=selection
-     record["execution_side"]=-1 if os.getenv("CODEX_FORCE_SHORT10","0")=="1" else record.get("entry_side")''')
+     record["execution_side"]=record.get("entry_side")''')
 
 # Persist all patches, including the SHORT10 overlay appended below the legacy patch block.
 p.write_text(s)
