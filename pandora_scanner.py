@@ -8,7 +8,7 @@ import threading
 import time
 import websocket
 
-FIXED_SYMBOLS=("INIT","NEAR","BTC","SOL","ETH","LIT","HYPE","ZEC","TAO","GRASS")
+FIXED_SYMBOLS=("ZEC","HYPE","NEAR","SOL","ENA","1000PEPE","DOGE","SUI","AAVE","WLD")
 EXPERIMENT="CATERPILLAR_EVENT_FLOW_10_20261103"
 class LiveScanner:
     def __init__(self, top=5, candidate_limit=30, freshness=15):
