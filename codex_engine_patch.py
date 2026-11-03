@@ -56,4 +56,18 @@ s=s.replace("LOCAL_EXPERIMENT_SYMBOLS=('INIT','NEAR','BTC','SOL','ETH','LIT','HY
 s=s.replace("count=2 if trades else max(1,min(8,int(os.getenv('BYBIT_AUX_WS_SHARDS','2'))))","count=5 if trades else max(1,min(8,int(os.getenv('BYBIT_AUX_WS_SHARDS','2'))))")
 s=s.replace("stable_shard=lambda symbol:int(hashlib.sha1(str(symbol).encode()).hexdigest()[:8],16)%count","stable_shard=lambda symbol:('INIT','NEAR','BTC','SOL','ETH','LIT','HYPE','ZEC','TAO','GRASS').index(symbol)%count if trades and symbol in ('INIT','NEAR','BTC','SOL','ETH','LIT','HYPE','ZEC','TAO','GRASS') else int(hashlib.sha1(str(symbol).encode()).hexdigest()[:8],16)%count")
 
+# Caterpillar Event Flow runtime wiring for the frozen child.
+s=s.replace("DISCOVERY_MAX_SELECTED=5","DISCOVERY_MAX_SELECTED=10")
+s=s.replace('"entry_mark":price,"profit_lock_armed":False,',
+'''"entry_mark":price,"profit_lock_armed":False,
+  "flow_entry_buy_total":float(flow.get("event_buy_notional_total") or 0.),
+  "flow_entry_sell_total":float(flow.get("event_sell_notional_total") or 0.),
+  "flow_entry_trade_count":int(flow.get("event_trade_count_total") or 0),''')
+s=s.replace('watch["context"].update(phase="WAIT_RESUMPTION" if confirmed_opposite else "WAIT_PULLBACK",\n    counter_pressure_seen=confirmed_opposite,caterpillar_policy=LOCAL4_FLOW_POLICY)',
+'''watch["context"].update(phase="WAIT_RESUMPTION",
+    counter_pressure_seen=True,caterpillar_policy=LOCAL4_FLOW_POLICY,
+    flow_exit_buy_total=float(flow_at_exit.get("event_buy_notional_total") or 0.),
+    flow_exit_sell_total=float(flow_at_exit.get("event_sell_notional_total") or 0.),
+    flow_exit_trade_count=int(flow_at_exit.get("event_trade_count_total") or 0))''')
+
 p.write_text(s)
