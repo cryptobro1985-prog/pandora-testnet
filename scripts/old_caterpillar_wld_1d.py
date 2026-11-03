@@ -7,7 +7,7 @@ from scripts.historical_224d_hype_h1_swing import analyze,position_exit,update_p
 from scripts.historical_9ce_local_order_flow import initial_entry_candidate,entry_candidate,pressure_exit,update_watch,reentry_ready
 
 SYMBOL="WLD"; START=500.; MARGIN=.20; LEV=25.; FEE=.00045
-FAST_CADENCE=.5; H1_SCAN_CADENCE=10.
+FAST_CADENCE=.5; H1_SCAN_CADENCE=10. # exact 9ce fast-risk/full-H1 loop cadences
 
 def candles_from_trades(src,start_day,end_day,seconds):
     d={}; day=start_day
