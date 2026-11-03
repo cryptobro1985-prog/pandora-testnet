@@ -36,8 +36,37 @@ def main(argv=None):
     parser.add_argument("--source-manifest", type=Path, help="Replay source config/phase; raw_trades.jsonl discovers its sibling run_manifest.json automatically")
     parser.add_argument("--record-trades", action="store_true", help="Write accepted raw trades; potentially very large")
     args = parser.parse_args(argv)
+    if args.mode == "hourly_report":
+        try:
+            if args.resume or args.market_context or args.input or args.start_date or args.end_date:
+                raise ValueError("hourly_report only needs --output and optional --latest")
+            from .reporting import render_hourly_report
+            print(render_hourly_report(args.output, latest=True), end="")
+            return 0
+        except (ValueError, OSError, json.JSONDecodeError) as exc:
+            parser.error(str(exc))
     try:
+        if args.hours is not None:
+            if not math.isfinite(args.hours) or args.hours <= 0:
+                raise ValueError("--hours must be finite and positive")
+            args.duration_seconds = args.hours*3600
+        if args.days is not None and (type(args.days) is not int or args.days < 1 or args.days > 366):
+            raise ValueError("--days must be an integer in [1, 366]")
+        if args.resume and args.mode == "replay":
+            raise ValueError("--resume is supported for historical_research and realtime_audit, not replay")
+        if args.market_context and args.mode != "realtime_audit":
+            raise ValueError("--market-context applies only to realtime_audit")
+        resume_meta = None
+        if args.resume:
+            manifest_path_resume = Path(args.output)/"run_manifest.json"
+            if not manifest_path_resume.is_file():
+                raise ValueError("--resume requires an existing run_manifest.json")
+            resume_meta = json.loads(manifest_path_resume.read_text())
+            if resume_meta.get("mode") != args.mode:
+                raise ValueError("Resume mode does not match run manifest")
         symbols = parse_symbols(args.symbols)
+        if resume_meta and args.symbols == ",".join(SYMBOLS):
+            symbols = tuple(resume_meta.get("symbols", symbols))
         source_meta = None
         manifest_path = args.source_manifest
         if args.mode == "replay" and args.input and manifest_path is None and args.input.name == "raw_trades.jsonl":
