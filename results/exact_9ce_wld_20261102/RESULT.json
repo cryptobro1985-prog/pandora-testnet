@@ -1,40 +1,39 @@
 {
   "symbol": "WLD",
   "date": "2026-11-02",
-  "strategy_commit": "224dff69db51da2d426fddf4ffc674c94f16349e",
-  "strategy": "Exact Strategy 1 \u2014 Restored Caterpillar runtime semantics from profitable 29-30 Oct code",
+  "strategy_commit": "9ce11ede1b2c0776c7f43b9e8b775737dbad018a",
+  "strategy": "Caterpillar LIVE runtime 9ce11ede \u2014 H1 local + pure M1/M3/M5 executed control",
   "start": 500.0,
-  "final": 489.41172221670314,
-  "pnl": -10.58827778329686,
-  "return_pct": -2.11765555665937,
-  "trades": 3,
-  "wins": 0,
-  "losses": 3,
-  "entries": 3,
-  "reentries": 0,
+  "final": 237.5566372123068,
+  "pnl": -262.4433627876932,
+  "return_pct": -52.48867255753864,
+  "trades": 133,
+  "wins": 34,
+  "losses": 99,
+  "entries": 5,
+  "reentries": 128,
   "pyramid_adds": 0,
-  "flow_exits": 3,
-  "h1_exits": 0,
-  "max_drawdown_pct": 2.646620227829377,
-  "mfe_net_sum": -1.452245883887009,
-  "giveback_vs_mfe_sum": 9.136031899409822,
+  "flow_exits": 130,
+  "h1_exits": 2,
+  "max_drawdown_pct": 52.48867255753864,
+  "mfe_net_sum": 209.57235226357233,
+  "giveback_vs_mfe_sum": 472.0157150512653,
   "decision_cadence_seconds": 5.0,
   "watch_phase_counts": {
-    "WAIT_PULLBACK": 3,
-    "WAIT_DIRECTIONAL_RESUMPTION": 5982
+    "WAIT_RESUMPTION": 4981
   },
   "fees_model": "original paper_pnl: 4.5 bps each leg; no added slippage/funding",
   "exactness_notes": [
-    "H1/M15 functions imported from historical_224d snapshot",
-    "flow uses historical market_data.RollingMarketData 5-second buckets",
-    "224d app helper thresholds copied without repair",
-    "known phase-name behavior preserved; no strategy fix added"
+    "H1 analyzer blob is identical between 224dff69 and 9ce11ede",
+    "entry/exit/reentry semantics copied from local_order_flow.py @ 9ce11ede",
+    "flow mirrors market_data.py 5-second bucket arithmetic @ 9ce11ede",
+    "single-symbol replay has no multi-symbol margin contention or runtime transport lag"
   ],
   "data": {
     "url": "https://public.bybit.com/trading/WLDUSDT/WLDUSDT2026-11-02.csv.gz",
     "sha256": "8a801d803501fb119f5840621744a734fd8acb25086f6d8c2255c9d258ae146b",
     "bytes": 5997350,
-    "downloaded_at": "2026-11-03T21:24:13.471278+00:00",
+    "downloaded_at": "2026-11-03T21:50:46.911005+00:00",
     "verification": "HTTPS and gzip CRC; SHA-256 records local reproducibility, not an independent publisher signature"
   }
 }
