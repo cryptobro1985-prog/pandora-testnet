@@ -192,10 +192,16 @@ class Output:
             checkpoint = json.loads(checkpoint_path.read_text())
             manifest = json.loads(manifest_path.read_text())
             current_source_hash = package_source_sha256()
-            if (manifest.get("schema_version") != 3 or manifest.get("mode") != mode
-                    or manifest.get("symbols") != list(symbols)
-                    or manifest.get("config_sha256") != config.digest
-                    or manifest.get("package_source_sha256") != current_source_hash):
+            # A realtime audit may be resumed after a research-code bugfix as long
+            # as its evidence schema, mode, universe and frozen trading config are
+            # unchanged.  Record both hashes so the code boundary stays auditable.
+            source_changed = manifest.get("package_source_sha256") != current_source_hash
+            structural_mismatch = (
+                manifest.get("schema_version") != 3 or manifest.get("mode") != mode
+                or manifest.get("symbols") != list(symbols)
+                or manifest.get("config_sha256") != config.digest
+            )
+            if structural_mismatch or (source_changed and mode != "realtime_audit"):
                 self.lock_handle.close()
                 raise ValueError("Resume manifest does not match mode/symbols/config/schema/source")
             offsets = checkpoint.get("output_offsets", {})
@@ -222,6 +228,8 @@ class Output:
                 "at": datetime.now(timezone.utc).isoformat(),
                 "package_version": __version__,
                 "package_source_sha256": current_source_hash,
+                "source_changed_from_original": source_changed,
+                "resume_policy": "realtime_bugfix_allowed_when_schema_mode_symbols_config_match",
             })
             self.save_json("run_manifest.json", self.meta)
         else:
