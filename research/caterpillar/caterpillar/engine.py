@@ -786,5 +786,8 @@ class ResearchEngine:
                 "closed_trades": sum(x.n for x in samples),
                 "net_usd_before_funding": total, "financial_total_status": total_status,
                 "note": "Sum of independent fixed-notional research books, not a shared-capital portfolio return"}
+        print("CATERPILLAR_FINAL_RESEARCH_SUMMARY "+json.dumps(
+            {"status": status, "strategy_synthesis": summary.get("strategy_synthesis"),
+             "coverage": self.coverage}, ensure_ascii=False, separators=(",",":")), flush=True)
         self.output.finish(self.profiles, summary, self.config, status)
         self.finished = True
