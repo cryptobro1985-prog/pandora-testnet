@@ -1,0 +1,123 @@
+{
+  "repository": {
+    "full_name": "cryptobro1985-prog/pandora-testnet",
+    "private": false,
+    "visibility": "public",
+    "has_pages": false,
+    "permissions": {
+      "admin": false,
+      "maintain": false,
+      "push": false,
+      "triage": false,
+      "pull": false
+    }
+  },
+  "api_read_exit": 0,
+  "pages": {
+    "exit_code": 1,
+    "status": "404",
+    "html_url": null,
+    "message": "Not Found",
+    "source": null,
+    "build_type": null,
+    "public": null
+  },
+  "runs": [
+    {
+      "id": 41682174389,
+      "status": "pending",
+      "conclusion": null,
+      "head_sha": "16c0822f1985c2585551d68516b4ca89cd9d3fc5",
+      "html_url": "https://github.com/cryptobro1985-prog/pandora-testnet/actions/runs/41682174389",
+      "head_branch": "caterpillar-paper-runtime-v1",
+      "jobs": []
+    },
+    {
+      "id": 41681455983,
+      "status": "in_progress",
+      "conclusion": null,
+      "head_sha": "9557d2531a214dcd389eb267b34e746fe637d764",
+      "html_url": "https://github.com/cryptobro1985-prog/pandora-testnet/actions/runs/41681455983",
+      "head_branch": "caterpillar-paper-runtime-v1",
+      "jobs": [
+        {
+          "name": "paper",
+          "status": "in_progress",
+          "conclusion": null,
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/setup-python@v5",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run python -m pip install -r research/caterpillar/requirements-lock.txt",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Dependency integrity",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Critical PAPER tests",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Existing causal research regressions",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Restore completed checkpoint",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Retrieve existing cross-token research evidence",
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run isolated PAPER session",
+              "status": "in_progress",
+              "conclusion": null
+            },
+            {
+              "name": "Preserve full session and journal",
+              "status": "pending",
+              "conclusion": null
+            },
+            {
+              "name": "Post Run actions/setup-python@v5",
+              "status": "pending",
+              "conclusion": null
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "pending",
+              "conclusion": null
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "bybit_rest": {
+    "http_status": 403,
+    "url": "https://api.bybit.com/v5/market/time",
+    "public_error_excerpt": "{\n    error:The Amazon CloudFront distribution is configured to block access from your country\n}"
+  }
+}
