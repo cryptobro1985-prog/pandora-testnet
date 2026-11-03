@@ -10,7 +10,7 @@ class CodexBridge:
  def __init__(self):
   self.lock=threading.RLock();self.process=None
   self.root=Path("/app/codex_engine")
-  self.state={"online":False,"status":"STARTING","experiment":"codex_million_dollar","positions":[],"trades":[],"tokens":[]};self._last_log=None
+  self.state={"online":False,"status":"STARTING","experiment":"codex_million_dollar","positions":[],"trades":[],"tokens":[]};self._last_log=None;self._last_diag=0
  def snapshot(self):
   with self.lock:r=copy.deepcopy(self.state)
   if r.get("last_good_epoch") and time.time()-r["last_good_epoch"]>25:r["online"]=False;r["status"]="STALE"
@@ -45,7 +45,11 @@ class CodexBridge:
   summary=(h.get("engine_active"),len(p.get("tokens") or []),len(p.get("open_positions") or []),len(p.get("closed_trades") or []),(payload.get("discovery") or {}).get("selection_frozen"))
   if summary!=self._last_log:
    self._last_log=summary
-   print("[CODEX_MILLION] engine_active=%s discovery=%s open=%s closed=%s selection_frozen=%s risk_ready=%s" % (summary[0],summary[1],summary[2],summary[3],summary[4],h.get("risk_ready")),flush=True)
+   print("[CODEX_MILLION] engine_active=%s tokens=%s open=%s closed=%s selection_frozen=%s risk_ready=%s" % (summary[0],summary[1],summary[2],summary[3],summary[4],h.get("risk_ready")),flush=True)
+  if time.time()-self._last_diag>=30:
+   self._last_diag=time.time(); readiness=h.get('token_readiness') or {}; diagnostics=payload.get('strategy1_entry_diagnostics') or {}
+   compact={s:{'h1':v.get('h1'),'flow':v.get('executed_flow'),'evidence':v.get('evidence_ready'),'mark':v.get('mark'),'contract':v.get('contract'),'entry':(diagnostics.get(s) or {}).get('reason')} for s,v in readiness.items()}
+   print('[CODEX_DIAG] '+json.dumps({'risk_ready':h.get('risk_ready'),'execution_ok':h.get('execution_ok'),'checkpoint_age':h.get('checkpoint_age_seconds'),'tokens':compact},separators=(',',':')),flush=True)
  def run(self,stop):
   env=os.environ.copy();env.pop("PGOPTIONS",None);env.update(PORT="10002",DATABASE_URL=self._isolated_url(),PYTHONUNBUFFERED="1",
    PANDORA_ENABLE_BEDA="0",PANDORA_COMPARISON_ENGINES="0",
