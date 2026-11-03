@@ -21,7 +21,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Run exact historical replay
-        run: python scripts/old_caterpillar_wld_1d.py --cache .cache/bybit --output replay_out
+        run: PYTHONPATH=. python scripts/old_caterpillar_wld_1d.py --cache .cache/bybit --output replay_out
       - name: Publish deterministic result to branch
         run: |
           mkdir -p results/exact_9ce_wld_20261102
