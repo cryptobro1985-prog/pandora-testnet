@@ -425,6 +425,22 @@ class ResearchEngine:
             anchor = self._anchor(s, side)
             if anchor and (c["price"]-anchor.price)*side > 0:
                 tags.append("confirmed_low" if side == 1 else "confirmed_high")
+            accel = c["buy_acceleration"] if side == 1 else c["sell_acceleration"]
+            trend_side = 1 if s.trend == "UPTREND" else -1 if s.trend == "DOWNTREND" else 0
+            # Predeclared causal conjunctions. These are evaluated as hypotheses,
+            # not searched exhaustively after seeing PnL.
+            if self._control(c, side) and accel is not None and accel > 0:
+                tags.append("combo_control_acceleration")
+                if anchor:
+                    tags.append("combo_local_control_acceleration")
+                if trend_side == side:
+                    tags.append("combo_trend_control_acceleration")
+                if c["large_trade_count"]:
+                    tags.append("combo_control_acceleration_large_trade")
+                if c["notional_z"] >= cfg.absorption_z:
+                    tags.append("combo_control_acceleration_volume_burst")
+            if c["imbalance"]*side < 0 and c["move_bps"]*side > c["price_scale_bps"]:
+                tags.append("combo_minority_flow_directional_response")
             row = {"seq": s.seq, "ts": c["ts"], "side": side, "signal_price": c["price"],
                    "entry": None, "tags": list(dict.fromkeys(tags)), "phase": self.phase(c["ts"]), "snapshot": snapshot}
             forward_by_side[side] = row
