@@ -97,9 +97,16 @@ def main(argv=None):
                 split = 0.0
             if split is not None and (not finite_number(split) or split < 0):
                 raise ValueError("Invalid source split_ts")
-        end = utc_date(args.end_date) if args.end_date else datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        lookback_days = args.days if args.days is not None else 60
-        start = utc_date(args.start_date) if args.start_date else end-timedelta(days=lookback_days)
+        if resume_meta and args.mode == "historical_research" and not args.start_date and not args.end_date and args.days is None:
+            saved_meta = resume_meta.get("metadata", {})
+            if not saved_meta.get("start") or not saved_meta.get("end"):
+                raise ValueError("Historical resume manifest lacks original start/end")
+            start = utc_date(saved_meta["start"])
+            end = utc_date(saved_meta["end"])
+        else:
+            end = utc_date(args.end_date) if args.end_date else datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+            lookback_days = args.days if args.days is not None else 60
+            start = utc_date(args.start_date) if args.start_date else end-timedelta(days=lookback_days)
         if args.mode == "historical_research" and (start >= end or end > datetime.now(timezone.utc)
                 or (split is not None and not start.timestamp() < split < end.timestamp())):
             raise ValueError("Require start < split < end, or start < end without split")
