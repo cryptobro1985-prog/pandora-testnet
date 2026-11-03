@@ -211,8 +211,8 @@ class RollingMarketData:
                    last_price=levels[-1]['price'],pressure_phase='CONTROL_CONFIRMED' if control else 'PRESSURE_WITHOUT_PRICE_CONFIRMATION',
                    observation_basis='executed_public_trades_m1_m3_m5',price_levels=len(levels))
         out.update(summarize(list(trades),epoch,coverage))
-        if coverage>=180:
-            r,b,s=window(180);out.update(flow_imbalance_180s=imbalance(b,s),trade_count_180s=len(r))
+        if coverage>=108:
+            r,b,s=window(108);out.update(flow_imbalance_108s=imbalance(b,s),trade_count_108s=len(r))
         if coverage>=300:
             r,b,s=window(300);i300=imbalance(b,s);price_start=r[0][1] if r else None;price_end=r[-1][1] if r else None
             out.update(buy_volume_300s=b,sell_volume_300s=s,trade_count_300s=len(r),flow_imbalance_300s=i300,
