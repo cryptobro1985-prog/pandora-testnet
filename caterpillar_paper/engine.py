@@ -145,6 +145,11 @@ class Engine:
             # live confirmations use actual observation time. Neither can fill past trades.
             bar['available_ts'] = bar['open_ts']+3600 if initial else observed_at
             events, _ = h1.seed(bar, observed_at)
+            position=self.s['positions'].get(symbol)
+            if position and bar['open_ts']+3600>position['opened']:
+                anchor=position['anchor']
+                broken=bar['low']<anchor['price'] if position['side']==1 else bar['high']>anchor['price']
+                if broken:position['structural_reason']='ORIGINAL_LOCAL_INVALIDATED'
             for local, stage, reason in events:
                 if stage != 'CONFIRMED':
                     continue
@@ -152,6 +157,9 @@ class Engine:
                 item.update(symbol=symbol, pivot_time=local.candle_open_ts, confirmed_time=local.confirmed_ts,
                             observed_at=observed_at, algorithm=METADATA['local_algorithm'], valid=True,
                             exact_pivot_timestamp=None, invalidation_reason=None)
+                if (position and (1 if local.kind=='LOW' else -1)==-position['side']
+                        and local.confirmed_ts>position['anchor']['confirmed_time']):
+                    position['structural_reason']='OPPOSITE_CONFIRMED_H1'
                 row['locals'].append(item); row['locals'] = row['locals'][-20:]
                 # Simultaneously confirmed high and low are ambiguous; no arbitrary side choice.
                 same = [x for x in row['locals'] if x['confirmed_time'] == item['confirmed_time']]
@@ -293,8 +301,9 @@ class Engine:
             opposite = local and local['valid'] and (1 if local['kind']=='LOW' else -1)==-p['side'] and local['confirmed_time']>p['anchor']['confirmed_time']
             breached = (price-p['anchor']['price'])*p['side']<0
             liquidation = p['margin']+gross <= p['quantity']*price*self.config.maintenance_fraction+p['quantity']*price*self.config.fee_bps/10000
-            if liquidation or opposite or breached:
-                self._close(symbol,price,ts,'MODELED_MAINTENANCE_BREACH' if liquidation else 'OPPOSITE_CONFIRMED_H1' if opposite else 'ORIGINAL_LOCAL_INVALIDATED')
+            structural=p.get('structural_reason')
+            if liquidation or opposite or breached or structural:
+                self._close(symbol,price,ts,'MODELED_MAINTENANCE_BREACH' if liquidation else 'OPPOSITE_CONFIRMED_H1' if opposite else structural or 'ORIGINAL_LOCAL_INVALIDATED')
                 self.save(); p=None
         pending = row['pending']
         if pending and ts>pending['ts']:

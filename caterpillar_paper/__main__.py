@@ -22,8 +22,11 @@ def main():
     parser.add_argument('--restore',type=Path)
     parser.add_argument('--publish-repository')
     parser.add_argument('--session-id')
+    parser.add_argument('--startup-timeout',type=float,default=180,
+                        help='Health deadline for first fresh complete market snapshot, not a trading cooldown')
     args=parser.parse_args()
     if not 0<args.minutes<=330:parser.error('--minutes must be in (0,330]')
+    if not 1<=args.startup_timeout<=1800:parser.error('--startup-timeout must be in [1,1800] seconds')
     args.output.mkdir(parents=True,exist_ok=True)
     lock=(args.output/'runtime.lock').open('w')
     fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -59,7 +62,7 @@ def main():
     for name,callback in [('market-rest',markets),('public-trades',lambda:StreamBridge(messages).run(stop,selected))]:
         threading.Thread(target=callback,name=name,daemon=True).start()
     for sig in (signal.SIGINT,signal.SIGTERM):signal.signal(sig,lambda *_:stop.set())
-    deadline=time.monotonic()+args.minutes*60
+    started_mono=time.monotonic(); deadline=started_mono+args.minutes*60
     last_snapshot=last_checkpoint=last_publish=0.; publisher=None; published=[]
     stream_generation=None
 
@@ -72,7 +75,7 @@ def main():
             published.append(('ok',commit))
         except Exception as exc:published.append(('error',str(exc)))
 
-    snapshot={}; fatal=False
+    snapshot={}; fatal=False; market_ready_once=False
     evidence_file=args.output/'research-evidence.json'
     evidence=json.loads(evidence_file.read_text()) if evidence_file.exists() else {'status':'NOT VERIFIED','tokens':{}}
     try:
@@ -116,12 +119,16 @@ def main():
                 snapshot['research_evidence']={'status':evidence['status'],'tokens':list(evidence.get('tokens',{})),
                     'rule_changes_applied':False,'issues':evidence.get('issues',[])}
                 if errors:snapshot['status']='ERROR'
+                market_ready_once=market_ready_once or snapshot['status']=='ONLINE'
                 atomic_json(args.output/'state.json',snapshot); last_snapshot=now
                 print(json.dumps({'timestamp':now,'status':snapshot['status'],'session_id':engine.s['session_id'],
                     'active':engine.s['active'],'positions':len(snapshot['positions']),
                     'equity':snapshot['portfolio']['equity'],'errors':errors},allow_nan=False),flush=True)
             if args.publish_repository and now-last_publish>=cfg.publish_seconds and (publisher is None or not publisher.is_alive()):
                 publisher=threading.Thread(target=publish_async,args=(snapshot,),daemon=True); publisher.start(); last_publish=now
+            if not market_ready_once and time.monotonic()-started_mono>args.startup_timeout:
+                errors['startup']='NO_FRESH_COMPLETE_MARKET_SNAPSHOT_WITHIN_HEALTH_DEADLINE'
+                fatal=True; break
     except Exception:
         fatal=True; raise
     finally:
@@ -133,6 +140,7 @@ def main():
             try:publish(args.publish_repository,snapshot)
             except Exception as exc:print('Final publication failed: '+str(exc),flush=True)
         store.db.close(); lock.close()
+    return 2 if fatal else 0
 
 
-if __name__=='__main__':main()
+if __name__=='__main__':raise SystemExit(main())

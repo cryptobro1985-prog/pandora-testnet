@@ -82,7 +82,7 @@ METADATA = {
     'entry_version': 'confirmed_H1+responsive_control+acceleration/v1',
     'exit_version': 'two_block_effective_transfer_or_structural/v1',
     'reentry_version': 'original_local+cost_scaled_correction+control+acceleration/v1',
-    'artifact_findings': 'NOT VERIFIED: remote Actions artifacts inaccessible at implementation time',
+    'artifact_findings': 'Five synthesis artifacts from run 41659751109 inspected; no universal Local/Entry/Reentry candidate validated',
     'liquidation_model': 'conservative isolated-margin maintenance approximation; gaps can exceed margin',
     'limitations': 'Funding, depth, market impact, queue priority and exact exchange liquidation not modeled',
 }

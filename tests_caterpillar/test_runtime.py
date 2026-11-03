@@ -145,6 +145,24 @@ class RuntimeTests(unittest.TestCase):
         self.assertNotIn('BTC',self.e.s['positions'])
         self.assertIn(self.e.s['closed'][-1]['reason'],('ORIGINAL_LOCAL_INVALIDATED','MODELED_MAINTENANCE_BREACH'))
 
+    def test_closed_h1_breach_cannot_be_erased_by_price_rebound(self):
+        self.open_position()
+        bar=dict(open_ts=36000,available_ts=39600,open=102,high=110,low=97,close=103,volume=100)
+        self.e.seed_h1('BTC',[bar],39700)
+        self.trade(102,ts=39700)
+        self.assertNotIn('BTC',self.e.s['positions'])
+        self.assertEqual(self.e.s['closed'][-1]['reason'],'ORIGINAL_LOCAL_INVALIDATED')
+
+    def test_ambiguous_new_locals_do_not_hide_emergency_exit(self):
+        self.open_position()
+        bars=[dict(open_ts=36000,available_ts=39600,open=102,high=115,low=97,close=103,volume=100),
+              dict(open_ts=39600,available_ts=43200,open=103,high=114,low=99,close=103,volume=100)]
+        self.e.seed_h1('BTC',bars,43300)
+        self.assertIsNone(self.e.s['symbols']['BTC']['local'])
+        self.trade(102,ts=43300)
+        self.assertNotIn('BTC',self.e.s['positions'])
+        self.assertEqual(self.e.s['closed'][-1]['reason'],'OPPOSITE_CONFIRMED_H1')
+
     def test_liquidation_loss_not_erased_or_capped(self):
         self.open_position(); self.trade(80,side=-1)
         self.assertEqual(self.e.s['closed'][-1]['reason'],'MODELED_MAINTENANCE_BREACH')
