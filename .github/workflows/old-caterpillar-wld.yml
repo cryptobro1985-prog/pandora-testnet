@@ -1,0 +1,25 @@
+name: Old Caterpillar WLD Replay
+on:
+  push:
+    branches: [caterpillar-paper-runtime-v1]
+    paths:
+      - scripts/old_caterpillar_wld_1d.py
+      - .github/workflows/old-caterpillar-wld.yml
+  workflow_dispatch:
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r research/caterpillar/requirements-lock.txt
+      - run: PYTHONPATH="$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/research/caterpillar" python scripts/old_caterpillar_wld_1d.py --cache "$RUNNER_TEMP/cache" --output "$RUNNER_TEMP/result"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: old-caterpillar-wld-result
+          path: |
+            ${{ runner.temp }}/result/RESULT.json
+            ${{ runner.temp }}/result/TRADES.json
