@@ -43,10 +43,13 @@ class Config:
     min_evidence: int = 30
     min_evidence_days: int = 5
     h1_lookback_bars: int = 4
+    checkpoint_seconds: int = 300
+    status_seconds: int = 20
+    hourly_snapshot_seconds: int = 3600
     exit_models: tuple[str, ...] = EXIT_MODELS
 
     def __post_init__(self):
-        for name in ("block_trades", "baseline_blocks", "warmup_blocks", "confirmation_blocks", "transfer_blocks", "post_exit_trades", "outcome_trades", "min_evidence", "min_evidence_days", "h1_lookback_bars"):
+        for name in ("block_trades", "baseline_blocks", "warmup_blocks", "confirmation_blocks", "transfer_blocks", "post_exit_trades", "outcome_trades", "min_evidence", "min_evidence_days", "h1_lookback_bars", "checkpoint_seconds", "status_seconds", "hourly_snapshot_seconds"):
             if type(getattr(self, name)) is not int:
                 raise ValueError(name + " must be an integer")
         if self.block_trades < 2 or self.warmup_blocks < 2 or self.baseline_blocks < self.warmup_blocks:
@@ -64,6 +67,8 @@ class Config:
             raise ValueError("min_evidence_days must be >= 2")
         if self.h1_lookback_bars < 2:
             raise ValueError("h1_lookback_bars must be >= 2")
+        if self.checkpoint_seconds < 1 or self.status_seconds < 1 or self.hourly_snapshot_seconds < 60:
+            raise ValueError("checkpoint/status/hourly intervals must be positive and hourly >= 60s")
         if self.fee_bps >= 10000 or self.slippage_bps >= 10000:
             raise ValueError("Costs must be below 10000 bps per side to preserve positive fill prices")
         if not finite_number(self.control_imbalance) or not 0 < self.control_imbalance < 1:
