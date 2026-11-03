@@ -1,0 +1,521 @@
+from __future__ import annotations
+
+from collections import OrderedDict, deque
+from dataclasses import asdict, dataclass, field
+import math
+
+from .model import Config, Local, Position, SYMBOLS, Trade, features
+from .output import Profile
+
+
+@dataclass
+class Book:
+    position: Position | None = None
+    pending: dict | None = None
+    watch: dict | None = None
+
+
+@dataclass
+class State:
+    symbol: str
+    block: list = field(default_factory=list)
+    history: deque = field(default_factory=deque)
+    candidate: Local | None = None
+    locals: dict = field(default_factory=lambda: {"LOW": deque(maxlen=2), "HIGH": deque(maxlen=2)})
+    ids: OrderedDict = field(default_factory=OrderedDict)
+    books: dict = field(default_factory=dict)
+    forecasts: deque = field(default_factory=deque)
+    post_exits: deque = field(default_factory=deque)
+    seq: int = 0
+    local_seq: int = 0
+    order_seq: int = 0
+    last_ts: float | None = None
+    last_price: float | None = None
+    trend: str = "RANGE"
+    break_counts: dict = field(default_factory=lambda: {"LOW": 0, "HIGH": 0})
+    sweeps: dict = field(default_factory=dict)
+    candle_last: float | None = None
+    candle_history: deque = field(default_factory=lambda: deque(maxlen=8))
+    defenses: dict = field(default_factory=dict)
+    continuity_broken: bool = False
+
+
+class ResearchEngine:
+    def __init__(self, output, config=None, symbols=SYMBOLS, split_ts=None, record_raw=False):
+        self.config = config or Config()
+        self.output = output
+        self.split_ts = split_ts
+        self.record_raw = record_raw
+        if not symbols or len(set(symbols)) != len(symbols) or not set(symbols) <= set(SYMBOLS):
+            raise ValueError("Only unique fixed-universe symbols are allowed")
+        self.states = {s: State(s, history=deque(maxlen=self.config.baseline_blocks),
+                                books={m: Book() for m in self.config.exit_models}) for s in symbols}
+        self.profiles = {s: Profile() for s in symbols}
+        self.finished = False
+        self.coverage = []
+
+    def emit(self, stream, s, ts, **data):
+        self.output.emit(stream, {"ts": ts, "symbol": s.symbol, "event_seq": s.seq, **data})
+
+    def quality(self, symbol, ts, reason, **data):
+        s = self.states[symbol]
+        self.profiles[symbol].count("quality/"+reason)
+        self.emit("data_quality", s, ts, reason=reason, **data)
+
+    def phase(self, ts):
+        return "evaluation" if self.split_ts is not None and ts >= self.split_ts else "discovery"
+
+    def _stage(self, s, local, ts, stage, **details):
+        self.profiles[s.symbol].count("local/"+stage)
+        self.emit("locals", s, ts, stage=stage, local=asdict(local), **details)
+
+    def gap(self, symbol, ts, reason):
+        """Missing observations censor positions and labels; never invent a gap fill."""
+        s = self.states[symbol]
+        s.continuity_broken = True
+        if self.record_raw:
+            self.emit("raw_trades", s, ts, event="GAP", reason=reason)
+        self.quality(symbol, ts, reason)
+        for model, book in s.books.items():
+            if book.position:
+                self.emit("trades", s, ts, action="CENSORED", model=model, reason=reason,
+                          position=asdict(book.position), counted_as_closed=False)
+                self.profiles[symbol].count(model+"/censored")
+            book.position = book.pending = book.watch = None
+        for row in s.forecasts:
+            self.emit("hypothesis_outcomes", s, ts, status="CENSORED", reason=reason, candidate=row)
+        for row in s.post_exits:
+            self.emit("post_exit", s, ts, status="CENSORED", reason=reason, observation=row)
+        if s.candidate:
+            s.candidate.status = "INVALIDATED"
+            self._stage(s, s.candidate, ts, "INVALIDATED", reason=reason)
+        for group in s.locals.values():
+            for local in group:
+                if not local.invalidated:
+                    local.invalidated = True
+                    local.status = "INVALIDATED"
+                    self._stage(s, local, ts, "INVALIDATED", reason=reason)
+        s.candidate = None
+        s.locals = {"LOW": deque(maxlen=2), "HIGH": deque(maxlen=2)}
+        s.block.clear()
+        s.history.clear()
+        s.forecasts.clear()
+        s.post_exits.clear()
+        s.break_counts = {"LOW": 0, "HIGH": 0}
+        s.sweeps.clear()
+        s.defenses.clear()
+        s.trend = "RANGE"
+
+    def on_trade(self, trade: Trade):
+        if self.finished:
+            raise RuntimeError("Run already finished")
+        if trade.symbol not in self.states:
+            raise ValueError("Symbol outside configured universe")
+        s, cfg = self.states[trade.symbol], self.config
+        if not trade.valid():
+            self.quality(trade.symbol, s.last_ts or 0, "invalid_trade")
+            return False
+        if trade.trade_id in s.ids:
+            self.quality(trade.symbol, trade.ts, "duplicate")
+            return False
+        # Remember rejected late IDs too. The feed adapter reorders within a bounded watermark.
+        s.ids[trade.trade_id] = None
+        if len(s.ids) > 100000:
+            s.ids.popitem(last=False)
+        if s.last_ts is not None and trade.ts < s.last_ts:
+            self.quality(trade.symbol, trade.ts, "late_trade", last_accepted_ts=s.last_ts)
+            return False
+        if not s.continuity_broken and s.last_ts is not None and trade.ts-s.last_ts > cfg.gap_seconds:
+            self.gap(trade.symbol, trade.ts, "observation_gap")
+        # The split is an actual held-out restart: no open positions/forward labels cross it.
+        if not s.continuity_broken and self.split_ts and s.last_ts is not None and s.last_ts < self.split_ts <= trade.ts:
+            self.gap(trade.symbol, trade.ts, "evaluation_boundary")
+        s.seq += 1
+        s.last_ts, s.last_price = trade.ts, trade.price
+        s.continuity_broken = False
+        profile = self.profiles[trade.symbol]
+        if profile.first is None:
+            profile.first = trade.ts
+        profile.last = trade.ts
+        profile.count("accepted_trades")
+        profile.add("trade_size_usd", trade.notional)
+        profile.add("trade_quantity", trade.quantity)
+        if self.record_raw:
+            self.emit("raw_trades", s, trade.ts, trade=asdict(trade))
+        # Execute prior decisions on a later timestamp, never retrospectively at a local extremum.
+        for model, book in s.books.items():
+            if book.pending and trade.ts > book.pending["ts"]:
+                self._fill(s, model, book, trade)
+            if book.position:
+                book.position.mark(trade.price, trade.ts, cfg.fee_bps, cfg.slippage_bps)
+            if book.watch and (trade.price-book.watch["exit_price"])*book.watch["side"] < 0:
+                book.watch["correction_seen"] = True
+        self._future_labels(s, trade)
+        # Local extremes observe every accepted tick, including ticks between block evaluations.
+        if s.candidate:
+            local = s.candidate
+            new_extreme = trade.price < local.price if local.kind == "LOW" else trade.price > local.price
+            if new_extreme:
+                local.price, local.extreme_ts, local.evidence = trade.price, trade.ts, 0
+                local.status = "UPDATED"
+                self._stage(s, local, trade.ts, "UPDATED", reason="NEW_LOWER_LOW" if local.kind == "LOW" else "NEW_HIGHER_HIGH")
+        self._tick_sweeps(s, trade)
+        s.block.append(trade)
+        if len(s.block) == cfg.block_trades:
+            c = features(s.block, s.history, cfg)
+            self._evaluate(s, c)
+            s.history.append(c)
+            s.block.clear()
+        return True
+
+    def _tick_sweeps(self, s, trade):
+        for kind, group in s.locals.items():
+            if not group or group[-1].invalidated:
+                continue
+            local = group[-1]
+            beyond = trade.price < local.price if kind == "LOW" else trade.price > local.price
+            sweep = s.sweeps.get(kind)
+            if beyond and sweep is None:
+                s.sweeps[kind] = {"local_id": local.ident, "ts": trade.ts, "price": trade.price}
+                self.emit("structure", s, trade.ts, event="SWEEP", kind=kind, local_id=local.ident)
+            elif not beyond and sweep is not None:
+                self.emit("structure", s, trade.ts, event="FALSE_BREAK", kind=kind, local_id=local.ident, sweep=sweep)
+                self.profiles[s.symbol].count("structure/FALSE_BREAK")
+                s.sweeps.pop(kind, None)
+
+    def _local_structure(self, s, c):
+        cfg = self.config
+        if not s.candidate:
+            kind = "LOW" if c["move_bps"] <= 0 else "HIGH"
+            # First candidate must have actually observed its extremum in this block.
+            extreme = min(s.block, key=lambda t: t.price) if kind == "LOW" else max(s.block, key=lambda t: t.price)
+            s.local_seq += 1
+            s.candidate = Local(s.local_seq, kind, extreme.price, extreme.ts, c["ts"])
+            self._stage(s, s.candidate, c["ts"], "FORMING")
+        local = s.candidate
+        side = 1 if local.kind == "LOW" else -1
+        excursion = (c["price"]/local.price-1)*side*10000
+        accel = c["buy_acceleration"] if side == 1 else c["sell_acceleration"]
+        opposing_accel = c["sell_acceleration"] if side == 1 else c["buy_acceleration"]
+        absorbed = c["sell_absorption"] if side == 1 else c["buy_absorption"]
+        reversal_evidence = ((opposing_accel is not None and opposing_accel < 0) or absorbed)
+        control = self._control(c, side) and accel is not None and accel > 0
+        ready = len(s.history) >= cfg.warmup_blocks
+        threshold = max(cfg.local_floor_bps, c["price_scale_bps"]*cfg.local_vol_multiplier)
+        # Extreme must predate the confirmation block: one final-bar OHLC cannot confirm itself.
+        qualifies = ready and local.extreme_ts < c["start_ts"] and excursion >= threshold and control and reversal_evidence
+        local.evidence = local.evidence+1 if qualifies else 0
+        confirmed = None
+        if local.evidence >= cfg.confirmation_blocks:
+            local.status, local.confirmed_ts = "CONFIRMED", c["ts"]
+            s.locals[local.kind].append(local)
+            self._stage(s, local, c["ts"], "CONFIRMED", flow=c, excursion_bps=excursion, threshold_bps=threshold)
+            confirmed = local
+            s.local_seq += 1
+            # The opposite forming local starts NOW, never backdated into the prior block.
+            s.candidate = Local(s.local_seq, "HIGH" if local.kind == "LOW" else "LOW", c["price"], c["ts"], c["ts"])
+            self._stage(s, s.candidate, c["ts"], "FORMING")
+        events = []
+        for kind, group in s.locals.items():
+            if not group or group[-1].invalidated:
+                continue
+            anchor = group[-1]
+            beyond = c["price"] < anchor.price if kind == "LOW" else c["price"] > anchor.price
+            break_side = -1 if kind == "LOW" else 1
+            s.break_counts[kind] = s.break_counts[kind]+1 if beyond and self._control(c, break_side) else 0
+            if s.break_counts[kind] >= cfg.transfer_blocks:
+                anchor.invalidated = True
+                anchor.status = "INVALIDATED"
+                self._stage(s, anchor, c["ts"], "INVALIDATED", reason="STRUCTURE_BREAK", flow=c)
+                events.append("STRUCTURE_BREAK")
+                s.sweeps.pop(kind, None)
+        previous_trend = s.trend
+        lows, highs = s.locals["LOW"], s.locals["HIGH"]
+        if len(lows) == len(highs) == 2:
+            if lows[-1].price > lows[0].price and highs[-1].price > highs[0].price:
+                s.trend = "UPTREND"
+            elif lows[-1].price < lows[0].price and highs[-1].price < highs[0].price:
+                s.trend = "DOWNTREND"
+            else:
+                s.trend = "RANGE"
+        if previous_trend != s.trend and previous_trend != "RANGE":
+            events.append("REVERSAL")
+        if c["buy_absorption"] or c["sell_absorption"]:
+            events.append("ABSORPTION")
+        dominant_accel = c["buy_acceleration"] if c["imbalance"] > 0 else c["sell_acceleration"]
+        if dominant_accel is not None and dominant_accel < 0 and abs(c["move_bps"]) < c["price_scale_bps"]*.5:
+            events.append("EXHAUSTION")
+        if abs(c["move_bps"]) >= threshold:
+            events.append("IMPULSE")
+        trend_side = 1 if s.trend == "UPTREND" else -1 if s.trend == "DOWNTREND" else 0
+        if trend_side and c["move_bps"]*trend_side < 0 and "STRUCTURE_BREAK" not in events:
+            events.append("PULLBACK")
+        for event in events:
+            self.profiles[s.symbol].count("structure/"+event)
+        self.emit("structure", s, c["ts"], trend=s.trend, events=events, confirmed_local_id=confirmed.ident if confirmed else None)
+        return confirmed, events
+
+    def _control(self, c, side):
+        return c["imbalance"]*side >= self.config.control_imbalance and c["move_bps"]*side > 0
+
+    def _anchor(self, s, side):
+        group = s.locals["LOW" if side == 1 else "HIGH"]
+        return group[-1] if group and not group[-1].invalidated else None
+
+    def _snapshot(self, s, c):
+        return {"flow": c, "trend": s.trend, "locals": {k: [asdict(x) for x in v] for k, v in s.locals.items()},
+                "forming": asdict(s.candidate) if s.candidate else None, "phase": self.phase(c["ts"]),
+                "config_sha256": self.config.digest}
+
+    def _evaluate(self, s, c):
+        profile, cfg = self.profiles[s.symbol], self.config
+        profile.count("flow_blocks")
+        for key in ("notional", "average_trade_size", "imbalance", "trade_intensity", "buy_efficiency_bps_per_10k",
+                    "sell_efficiency_bps_per_10k", "buy_acceleration", "sell_acceleration", "move_bps", "large_trade_count"):
+            profile.add("flow/"+key, c[key])
+        confirmed, events = self._local_structure(s, c)
+        for kind in ("LOW", "HIGH"):
+            anchor = self._anchor(s, 1 if kind == "LOW" else -1)
+            if anchor and abs(c["price"]/anchor.price-1)*10000 <= c["price_scale_bps"]:
+                profile.count("near_"+kind)
+                profile.add("near_"+kind+"/imbalance", c["imbalance"])
+                profile.add("near_"+kind+"/price_response_bps", c["move_bps"])
+                if c["buy_absorption"] or c["sell_absorption"]:
+                    prior_id, count = s.defenses.get(kind, (None, 0))
+                    count = count+1 if prior_id == anchor.ident else 1
+                    s.defenses[kind] = (anchor.ident, count)
+                    if count >= 2:
+                        events.append("REPEATED_DEFENSE")
+                        profile.count("near_"+kind+"/repeated_defense")
+                        self.emit("structure", s, c["ts"], event="REPEATED_DEFENSE", local_id=anchor.ident, observations=count)
+        self.emit("flow_events", s, c["ts"], flow=c, events=events)
+        snapshot = self._snapshot(s, c)
+        # Forward labels are quarantined, never passed into a decision.
+        for side in (-1, 1):
+            tags = ["SHORT" if side == -1 else "LONG"]
+            if self._control(c, side): tags.append("control")
+            if c["large_trade_count"]: tags.append("large_trades")
+            if c["notional_z"] >= cfg.absorption_z: tags.append("volume_burst")
+            if c["buy_absorption"]: tags.append("buy_absorption")
+            if c["sell_absorption"]: tags.append("sell_absorption")
+            if c["intensity_z"] is not None and c["intensity_z"] >= cfg.absorption_z: tags.append("intensity_burst")
+            if c["average_size_z"] >= cfg.absorption_z: tags.append("average_size_anomaly")
+            if c["move_bps"]*side > c["price_scale_bps"] and c["imbalance"]*side < 0: tags.append("efficient_minority_flow")
+            tags.extend(events)
+            s.forecasts.append({"seq": s.seq, "ts": c["ts"], "side": side, "signal_price": c["price"],
+                                "entry": None, "tags": tags, "phase": self.phase(c["ts"])})
+        for model, book in s.books.items():
+            if book.pending:
+                continue
+            if book.position:
+                p = book.position
+                p.bars += 1
+                own, opposite = self._control(c, p.side), self._control(c, -p.side)
+                p.opposite_streak = p.opposite_streak+1 if opposite else 0
+                own_accel = c["buy_acceleration"] if p.side == 1 else c["sell_acceleration"]
+                weakening = own_accel is not None and own_accel < 0 and c["move_bps"]*p.side <= 0
+                p.weakening_streak = p.weakening_streak+1 if weakening else 0
+                broken = (c["price"]-p.local_price)*p.side < 0 and p.opposite_streak >= cfg.transfer_blocks
+                opposite_local = confirmed is not None and ((confirmed.kind == "HIGH") == (p.side == 1))
+                predicates = {
+                    "flow_weakening": p.weakening_streak >= cfg.transfer_blocks,
+                    "opposite_flow": p.opposite_streak >= cfg.transfer_blocks,
+                    "price_reversal": p.opposite_streak >= cfg.transfer_blocks and c["move_bps"]*p.side <= -c["price_scale_bps"],
+                    "absorption": (c["buy_absorption"] if p.side == 1 else c["sell_absorption"]) and weakening,
+                    "mfe_recoil": p.mfe > 0 and p.mfe-p.current >= abs(p.quantity*p.entry*c["price_scale_bps"]/10000) and opposite and weakening,
+                    "local_invalidation": broken,
+                    "opposite_local": opposite_local,
+                    "structure_break": broken and "STRUCTURE_BREAK" in events,
+                }
+                predicates["combined"] = broken or opposite_local or (predicates["opposite_flow"] and (weakening or predicates["mfe_recoil"]))
+                giveback = p.mfe-p.current
+                self.emit("mfe_analysis", s, c["ts"], model=model, position_id=p.ident, current_gross_usd=p.current,
+                          mfe_usd=p.mfe, mae_usd=p.mae, mfe_ts=p.mfe_ts, giveback_usd=giveback,
+                          giveback_ratio=giveback/p.mfe if p.mfe > 0 else None, exit_predicates=predicates, snapshot=snapshot)
+                if predicates[model]:
+                    reasons = [key for key, value in predicates.items() if value and key != "combined"]
+                    book.pending = {"action": "CLOSE", "ts": c["ts"], "reasons": reasons, "snapshot": snapshot}
+                    self.emit("signals", s, c["ts"], action="EXIT", model=model, reasons=reasons, snapshot=snapshot)
+                else:
+                    label = "MICRO_COUNTER_FLOW" if opposite and p.opposite_streak < cfg.transfer_blocks else "PULLBACK" if c["move_bps"]*p.side < 0 else "HOLD"
+                    self.emit("signals", s, c["ts"], action="HOLD", label=label, model=model, position_id=p.ident, snapshot=snapshot)
+                continue
+            anchors = [x[-1] for x in s.locals.values() if x and not x[-1].invalidated]
+            newest = max(anchors, key=lambda x: x.confirmed_ts) if anchors else None
+            side = (1 if newest.kind == "LOW" else -1) if newest else (1 if c["imbalance"] >= 0 else -1)
+            if book.watch:
+                side = book.watch["side"]
+            anchor = self._anchor(s, side)
+            reasons = []
+            if len(s.history) < cfg.warmup_blocks: reasons.append("WARMUP")
+            if not anchor: reasons.append("NO_VALID_CONFIRMED_LOCAL")
+            elif (c["price"]-anchor.price)*side <= 0: reasons.append("BEYOND_LOCAL")
+            if not self._control(c, side): reasons.append("NO_PRICE_RESPONSIVE_CONTROL")
+            accel = c["buy_acceleration"] if side == 1 else c["sell_acceleration"]
+            if accel is None or accel <= 0: reasons.append("NO_ACCELERATION")
+            if c["buy_absorption"] if side == 1 else c["sell_absorption"]: reasons.append("OWN_ABSORPTION")
+            if (s.trend == "DOWNTREND" and side == 1) or (s.trend == "UPTREND" and side == -1): reasons.append("COUNTER_TREND")
+            if book.watch:
+                if not anchor or anchor.ident != book.watch["local_id"]: reasons.append("ORIGINAL_LOCAL_LOST")
+                if not book.watch["correction_seen"]: reasons.append("NO_CORRECTION_OBSERVED")
+                if book.watch["expires_seq"] < s.seq: reasons.append("REENTRY_HORIZON_EXPIRED")
+            action = "REENTRY" if book.watch else "OPEN"
+            if reasons:
+                self.emit("rejected_signals", s, c["ts"], action=action, side=side, model=model,
+                          label="FORBIDDEN_REENTRY" if book.watch else "REJECTED", reasons=reasons, snapshot=snapshot)
+                profile.count(model+"/"+("FORBIDDEN_REENTRY" if book.watch else "rejected"))
+                if book.watch and any(x in reasons for x in ("ORIGINAL_LOCAL_LOST", "REENTRY_HORIZON_EXPIRED")):
+                    book.watch = None
+            else:
+                book.pending = {"action": action, "ts": c["ts"], "side": side, "local_id": anchor.ident,
+                                "local_price": anchor.price, "snapshot": snapshot,
+                                "parent_exit": book.watch["exit_id"] if book.watch else None}
+                if book.watch:
+                    for observation in s.post_exits:
+                        if observation["exit_id"] == book.watch["exit_id"]:
+                            observation["eligible_reentry_seen"] = True
+                self.emit("signals", s, c["ts"], action=action, side=side, model=model, snapshot=snapshot)
+
+    def _fill(self, s, model, book, trade):
+        order, cfg = book.pending, self.config
+        book.pending = None
+        if order["action"] == "CLOSE":
+            p = book.position
+            p.mark(trade.price, trade.ts, cfg.fee_bps, cfg.slippage_bps)
+            price = trade.price*(1-p.side*cfg.slippage_bps/10000)
+            gross = (price-p.entry)*p.side*p.quantity
+            fees = (p.entry+price)*p.quantity*cfg.fee_bps/10000
+            net = gross-fees
+            row = {"action": "CLOSE", "model": model, "position": asdict(p), "exit_price": price,
+                   "exit_ts": trade.ts, "signal_ts": order["ts"], "gross_usd": gross, "fees_usd": fees,
+                   "net_usd_before_funding": net, "net_bps": net/(p.entry*p.quantity)*10000,
+                   "mfe_capture_ratio": gross/p.mfe if p.mfe > 0 else None,
+                   "net_mfe_capture_ratio": net/p.net_mfe if p.net_mfe > 0 else None,
+                   "mfe_giveback_usd": p.mfe-gross, "reasons": order["reasons"], "exit_snapshot": order["snapshot"]}
+            self.emit("trades", s, trade.ts, **row)
+            profile = self.profiles[s.symbol]
+            profile.count(model+"/closed")
+            for key, value in (("net_usd", net), ("mfe", p.mfe), ("mae", p.mae), ("giveback", p.mfe-gross)):
+                profile.add(model+"/"+key, value)
+            direction = "LONG" if p.side == 1 else "SHORT"
+            profile.outcome(self.phase(trade.ts)+"/exit/"+model+"/"+direction, row["net_bps"])
+            if p.reentry:
+                label = "GOOD_REENTRY" if net > 0 else "BAD_REENTRY"
+                profile.count(model+"/"+label)
+                self.emit("hypothesis_outcomes", s, trade.ts, status="COMPLETE", label=label, model=model, position_id=p.ident, net_usd=net)
+            exit_id = p.ident+"/exit"
+            s.post_exits.append({"exit_id": exit_id, "model": model, "side": p.side, "price": trade.price,
+                                 "exit_seq": s.seq, "exit_ts": trade.ts, "max_continuation_bps": 0.0,
+                                 "max_adverse_bps": 0.0, "reentered": False, "eligible_reentry_seen": False})
+            if not any(r in order["reasons"] for r in ("local_invalidation", "structure_break", "opposite_local")):
+                book.watch = {"side": p.side, "local_id": p.local_id, "exit_id": exit_id, "exit_price": trade.price,
+                              "correction_seen": False, "expires_seq": s.seq+cfg.post_exit_trades}
+            else:
+                book.watch = None
+            book.position = None
+        else:
+            anchor = self._anchor(s, order["side"])
+            if not anchor or anchor.ident != order["local_id"] or (trade.price-order["local_price"])*order["side"] <= 0:
+                self.emit("rejected_signals", s, trade.ts, action=order["action"], model=model, reasons=["LOCAL_INVALID_BEFORE_FILL"], signal=order)
+                return
+            price = trade.price*(1+order["side"]*cfg.slippage_bps/10000)
+            s.order_seq += 1
+            p = Position(f"{s.symbol}/{model}/{s.order_seq}", order["side"], price, trade.ts, cfg.notional/price,
+                         order["local_id"], order["local_price"], order["snapshot"],
+                         reentry=order["action"] == "REENTRY", parent_exit=order["parent_exit"], mfe_ts=trade.ts)
+            p.mark(trade.price, trade.ts, cfg.fee_bps, cfg.slippage_bps)
+            book.position = p
+            if p.parent_exit:
+                for watch in s.post_exits:
+                    if watch["exit_id"] == p.parent_exit:
+                        watch["reentered"] = True
+            book.watch = None
+            self.profiles[s.symbol].count(model+"/"+order["action"])
+            self.emit("trades", s, trade.ts, action=order["action"], model=model, position=asdict(p), signal_ts=order["ts"])
+
+    def _future_labels(self, s, trade):
+        cfg = self.config
+        remaining = deque()
+        for row in s.forecasts:
+            if row["entry"] is None and s.seq-row["seq"] > cfg.outcome_trades:
+                self.emit("hypothesis_outcomes", s, trade.ts, status="CENSORED", reason="no_later_timestamp_fill", candidate=row)
+                continue
+            if row["entry"] is None and trade.ts > row["ts"]:
+                row["entry"] = trade.price*(1+row["side"]*cfg.slippage_bps/10000)
+                row["entry_seq"] = s.seq
+            if row["entry"] is not None and s.seq-row["entry_seq"] >= cfg.outcome_trades:
+                exit_price = trade.price*(1-row["side"]*cfg.slippage_bps/10000)
+                net = ((exit_price-row["entry"])*row["side"]-(exit_price+row["entry"])*cfg.fee_bps/10000)/row["entry"]*10000
+                self.emit("hypothesis_outcomes", s, trade.ts, status="COMPLETE", candidate=row, net_bps=net)
+                direction = "LONG" if row["side"] == 1 else "SHORT"
+                for tag in row["tags"]:
+                    self.profiles[s.symbol].outcome(row["phase"]+"/feature/"+direction+"/"+tag, net)
+            else:
+                remaining.append(row)
+        s.forecasts = remaining
+        remaining = deque()
+        for row in s.post_exits:
+            move = (trade.price/row["price"]-1)*row["side"]*10000
+            row["max_continuation_bps"] = max(row["max_continuation_bps"], move)
+            row["max_adverse_bps"] = min(row["max_adverse_bps"], move)
+            if s.seq-row["exit_seq"] >= cfg.post_exit_trades:
+                cost = 2*(cfg.fee_bps+cfg.slippage_bps)
+                missed = row["eligible_reentry_seen"] and not row["reentered"] and row["max_continuation_bps"] > cost
+                label = "EARLY_EXIT_CANDIDATE" if row["max_continuation_bps"] > cost else "FAVORABLE_EXIT_CANDIDATE" if row["max_adverse_bps"] < -cost else "INCONCLUSIVE"
+                self.emit("post_exit", s, trade.ts, status="COMPLETE", **row, final_return_bps=move, label=label, missed_reentry_candidate=missed)
+                if missed:
+                    self.profiles[s.symbol].count(row["model"]+"/MISSED_REENTRY")
+            else:
+                remaining.append(row)
+        s.post_exits = remaining
+
+    def on_candle(self, symbol, candle):
+        """Explicit fallback. Closed OHLCV bars do not enter the trade/flow state machine."""
+        s = self.states[symbol]
+        ts = float(candle["available_ts"])
+        if s.candle_last is not None and ts <= s.candle_last:
+            self.quality(symbol, ts, "duplicate_or_late_candle")
+            return
+        s.candle_last = ts
+        prior = list(s.candle_history)
+        events = []
+        if prior:
+            if candle["low"] < min(x["low"] for x in prior): events.append("NEW_LOWER_LOW_UNCONFIRMED")
+            if candle["high"] > max(x["high"] for x in prior): events.append("NEW_HIGHER_HIGH_UNCONFIRMED")
+            if candle["close"] > max(x["high"] for x in prior): events.append("CLOSE_ABOVE_PRIOR_RANGE")
+            if candle["close"] < min(x["low"] for x in prior): events.append("CLOSE_BELOW_PRIOR_RANGE")
+        s.candle_history.append(candle)
+        self.profiles[symbol].count("ohlcv_only_bars")
+        self.emit("candles", s, ts, candle=candle, structure_observations=events, flow_available=False, paper_entries_enabled=False)
+
+    def finish(self, status="completed"):
+        if self.finished:
+            return
+        open_books = {}
+        for symbol, s in self.states.items():
+            open_books[symbol] = {m: {"position": asdict(b.position) if b.position else None,
+                                      "pending": b.pending, "watch": b.watch} for m, b in s.books.items()}
+            for model, b in s.books.items():
+                if b.position:
+                    self.emit("trades", s, s.last_ts, action="END_MARK", model=model, position=asdict(b.position), counted_as_closed=False)
+                if b.pending:
+                    self.emit("signals", s, s.last_ts, action="UNFILLED_AT_END", model=model, pending=b.pending)
+            for row in s.forecasts:
+                self.emit("hypothesis_outcomes", s, s.last_ts, status="CENSORED", reason="end_of_run", candidate=row)
+            for row in s.post_exits:
+                self.emit("post_exit", s, s.last_ts, status="CENSORED", reason="end_of_run", observation=row)
+        summary = {"status": status, "config_sha256": self.config.digest, "coverage": self.coverage,
+                   "split_ts": self.split_ts, "open_books_not_realized": open_books,
+                   "profiles": {s: p.result() for s, p in self.profiles.items()},
+                   "portfolio": "Independent fixed-notional hypothetical books; no shared equity, compounding or portfolio leverage claim.",
+                   "quality_policy": "Censor and warm up after missing data; reject duplicates/late events; do not invent flow.",
+                   "unproven": ["profitability", "optimal thresholds", "actor identity", "funding", "market impact", "full archive coverage"]}
+        summary["aggregate_exit_books"] = {}
+        for model in self.config.exit_models:
+            samples = [p.metrics[model+"/net_usd"] for p in self.profiles.values() if model+"/net_usd" in p.metrics]
+            summary["aggregate_exit_books"][model] = {
+                "closed_trades": sum(x.n for x in samples),
+                "net_usd_before_funding": sum(x.mean*x.n for x in samples),
+                "note": "Sum of independent fixed-notional research books, not a shared-capital portfolio return"}
+        self.output.finish(self.profiles, summary, self.config, status)
+        self.finished = True

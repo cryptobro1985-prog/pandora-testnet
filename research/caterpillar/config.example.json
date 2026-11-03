@@ -1,0 +1,30 @@
+{
+  "block_trades": 32,
+  "baseline_blocks": 256,
+  "warmup_blocks": 8,
+  "confirmation_blocks": 2,
+  "transfer_blocks": 2,
+  "local_floor_bps": 5.0,
+  "local_vol_multiplier": 1.5,
+  "control_imbalance": 0.15,
+  "absorption_z": 2.0,
+  "fee_bps": 4.5,
+  "slippage_bps": 2.0,
+  "notional": 1000.0,
+  "gap_seconds": 30.0,
+  "post_exit_trades": 256,
+  "outcome_trades": 128,
+  "large_trade_z": 3.0,
+  "min_evidence": 30,
+  "exit_models": [
+    "combined",
+    "flow_weakening",
+    "opposite_flow",
+    "price_reversal",
+    "absorption",
+    "mfe_recoil",
+    "local_invalidation",
+    "opposite_local",
+    "structure_break"
+  ]
+}
