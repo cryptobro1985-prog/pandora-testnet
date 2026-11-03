@@ -4,7 +4,6 @@ import argparse, json, math, csv, gzip
 from concurrent.futures import ThreadPoolExecutor
 
 from research.caterpillar.caterpillar.sources import Archives, archive_row
-from market_data import RollingMarketData
 from scripts.historical_224d_hype_h1_swing import analyze, analyze_m15, position_exit, update_path
 from scripts.historical_224d_local_caterpillar import update_watch
 
@@ -102,25 +101,49 @@ def main():
         with gzip.open(paths[d],"rt",newline="") as handle:
             for line,row in enumerate(csv.DictReader(handle),2):
                 yield archive_row(SYMBOL,row,line)
-    h1d={}; m15d={}
-    for d in days[:-1]:
+    def parse_history_day(d):
+        hd={}; md={}
         for x in file_trades(d):
-            bucket_update(h1d,x,3600)
-            if d>=day-timedelta(days=1): bucket_update(m15d,x,900)
+            bucket_update(hd,x,3600)
+            if d>=day-timedelta(days=1): bucket_update(md,x,900)
+        return hd,md
+    h1d={}; m15d={}
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        hist=list(pool.map(parse_history_day,days[:-1]))
+    for hd,md in hist:
+        h1d.update(hd); m15d.update(md)
 
-    # Exact RollingMarketData 5-second bucket semantics, warmed only by the
-    # final 10 minutes before midnight, with exchange time == receipt time.
-    obs=RollingMarketData(bucket_seconds=5,retention_seconds=600,max_symbols=8,max_trade_lag_seconds=360,freshness_seconds=15)
-    warm_start=day.timestamp()-600
-    obs.mark_connected(warm_start,[SYMBOL])
+    # Exact historical RollingMarketData flow_context bucket arithmetic,
+    # implemented directly to avoid per-trade lock/dedup overhead in replay.
+    flow_buckets={}; warm_start=day.timestamp()-600
+    def flow_ingest(x):
+        i=int(x.ts//5); b=flow_buckets.get(i); val=x.price*x.quantity; j=0 if int(x.side)==1 else 1
+        if b is None: b=flow_buckets[i]=[0.0,0.0,0,x.ts,x.price,x.ts,x.price]
+        b[j]+=val; b[2]+=1
+        if x.ts<b[3]: b[3],b[4]=x.ts,x.price
+        if x.ts>b[5]: b[5],b[6]=x.ts,x.price
+    def flow_context(epoch):
+        end=int(epoch//5)
+        def vols(seconds):
+            rr=[flow_buckets.get(i,(0.,0.,0)) for i in range(end-seconds//5+1,end+1)]
+            return sum(z[0] for z in rr),sum(z[1] for z in rr),sum(z[2] for z in rr)
+        def imb(b,s): return (b-s)/(b+s) if b+s else 0.0
+        cov=max(0.0,epoch-warm_start); b60,s60,c60=vols(60)
+        out={"trade_data_fresh":cov>=60,"latest_trade_age_seconds":0.0,"trade_coverage_seconds":cov,
+             "flow_imbalance":imb(b60,s60),"trade_count_60s":c60,"observed_notional_60s":b60+s60}
+        b15,s15,c15=vols(15); b30,s30,c30=vols(30)
+        out.update(flow_imbalance_15s=imb(b15,s15),flow_imbalance_30s=imb(b30,s30),trade_count_15s=c15,trade_count_30s=c30)
+        if cov>=180:
+            b,s,c=vols(180); out.update(flow_imbalance_180s=imb(b,s),trade_count_180s=c)
+        if cov>=300:
+            b,s,c=vols(300); out.update(flow_imbalance_300s=imb(b,s),trade_count_300s=c)
+        return out
     wit=file_trades(day-timedelta(days=1))
     tid=0
     for x in wit:
         if x.ts<warm_start: continue
         if x.ts>=day.timestamp(): break
-        tid+=1
-        obs.heartbeat(x.ts)
-        obs.ingest_trades([{"coin":SYMBOL,"px":x.price,"sz":x.quantity,"time":x.ts*1000,"tid":"w"+str(tid),"side":"B" if int(x.side)==1 else "A"}],x.ts)
+        tid+=1; flow_ingest(x)
 
     it=file_trades(day); meta=metas[-1]
     cash=START; pos=None; watch=None; trades=[]; next_decision=day.timestamp(); last=None
@@ -139,7 +162,7 @@ def main():
         analysis=analyze(hr,int(x.ts*1000),SYMBOL)
         side_for_m15=int((pos or watch or {}).get("side") or analysis.get("entry_side") or 1)
         m15=analyze_m15(mr,int(x.ts*1000),side_for_m15)
-        flow=obs.flow_context(SYMBOL,x.ts)
+        flow=flow_context(x.ts)
 
         if pos:
             pos,_liq=update_path(pos,x.price)
