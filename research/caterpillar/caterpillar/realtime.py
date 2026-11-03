@@ -192,7 +192,20 @@ def realtime(engine, duration=21600, reorder_seconds=2, max_lag_seconds=15,
     if resume:
         for symbol in engine.states:
             engine.gap(symbol, now, "process_resume_gap")
-    bootstrap_complete = bootstrap_h1(engine, now)
+    # H1 structure is mandatory for a trading audit.  A transient REST
+    # bootstrap failure must never consume realtime audit hours with no locals.
+    bootstrap_complete = False
+    bootstrap_attempt = 0
+    while not bootstrap_complete and bootstrap_attempt < 6:
+        bootstrap_attempt += 1
+        bootstrap_complete = bootstrap_h1(engine, time.time())
+        if not bootstrap_complete:
+            engine.output.flush()
+            if bootstrap_attempt < 6:
+                time.sleep(10)
+    if not bootstrap_complete:
+        engine.checkpoint("h1_bootstrap_failed")
+        raise SourceError("Mandatory H1 bootstrap unavailable; refusing flow-only audit")
     engine.maybe_status("realtime_start")
     deadline = time.monotonic()+duration
     connected = False
