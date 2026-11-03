@@ -1,0 +1,26 @@
+name: Exact 9ce Caterpillar WLD Replay
+on:
+  workflow_dispatch:
+  push:
+    branches: [caterpillar-paper-runtime-v1]
+    paths:
+      - 'scripts/old_caterpillar_wld_1d.py'
+      - 'scripts/historical_9ce_local_order_flow.py'
+      - '.github/workflows/exact-9ce-wld-replay.yml'
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run exact historical replay
+        run: python scripts/old_caterpillar_wld_1d.py --cache .cache/bybit --output replay_out
+      - name: Show result
+        run: cat replay_out/RESULT.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact-9ce-wld-replay
+          path: replay_out/
