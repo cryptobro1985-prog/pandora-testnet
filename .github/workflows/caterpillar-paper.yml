@@ -24,7 +24,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   paper:
-    runs-on: ubuntu-latest
+    # Set this repository variable to an authorized runner label whose location
+    # Bybit supports. No proxy/geographic bypass is configured by this workflow.
+    runs-on: ${{ vars.CATERPILLAR_RUNNER || 'ubuntu-latest' }}
     # GitHub hosted jobs have a documented 6h execution limit. Reserve >=10m
     # for tests/restore/artifact upload, and stop runtime at <=330m.
     timeout-minutes: 350
