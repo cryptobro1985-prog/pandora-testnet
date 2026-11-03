@@ -39,7 +39,7 @@ class CodexBridge:
    max_equity=p.get("max_equity"),account=p.get("account") or {},runtime=p.get("runtime") or {},
    pyramid_adds=p.get("pyramid_adds") or [],re_entries=p.get("re_entries") or [],
    reversals=p.get("reversals") or [],token_rotations=p.get("token_rotations") or [],
-   sources=payload.get("sources") or {},entry_diagnostics=payload.get("strategy1_entry_diagnostics") or {},
+   sources=payload.get("sources") or {},entry_diagnostics={r.get('symbol'):r for r in ((payload.get('strategy1_entry_diagnostics') or {}).get('tokens') or []) if r.get('symbol')},
    risk_ready=h.get("risk_ready"),health=h,health_error=h.get("engine_error"),
    frozen_revision="a01bc1d0c9c216ddb28c75b31fb42e1248867a0d",error=None)
   summary=(h.get("engine_active"),len(p.get("tokens") or []),len(p.get("open_positions") or []),len(p.get("closed_trades") or []),(payload.get("discovery") or {}).get("selection_frozen"))
@@ -47,7 +47,7 @@ class CodexBridge:
    self._last_log=summary
    print("[CODEX_MILLION] engine_active=%s tokens=%s open=%s closed=%s selection_frozen=%s risk_ready=%s" % (summary[0],summary[1],summary[2],summary[3],summary[4],h.get("risk_ready")),flush=True)
   if time.time()-self._last_diag>=30:
-   self._last_diag=time.time(); readiness=h.get('token_readiness') or {}; diagnostics=payload.get('strategy1_entry_diagnostics') or {}
+   self._last_diag=time.time(); readiness=h.get('token_readiness') or {}; diagnostics={r.get('symbol'):r for r in ((payload.get('strategy1_entry_diagnostics') or {}).get('tokens') or []) if r.get('symbol')}
    compact={s:{'h1':v.get('h1'),'flow':v.get('executed_flow'),'evidence':v.get('evidence_ready'),'mark':v.get('mark'),'contract':v.get('contract'),'entry':(diagnostics.get(s) or {}).get('reason')} for s,v in readiness.items()}
    print('[CODEX_DIAG] '+json.dumps({'risk_ready':h.get('risk_ready'),'execution_ok':h.get('execution_ok'),'checkpoint_age':h.get('checkpoint_age_seconds'),'tokens':compact},separators=(',',':')),flush=True)
  def run(self,stop):
