@@ -88,6 +88,14 @@ s=s.replace("leverage=plan.leverage;margin=plan.margin;notional=plan.notional",
  if plan.allowed and float(instrument["max_leverage"])>=30.0:
   leverage=30.0;margin=equity*0.10;notional=margin*leverage''')
 s=s.replace("if side not in (-1,1):continue","if side!=-1:continue")
+# Make the PAPER entry audit expose the actual candidate/votes so zero-entry
+# states can be diagnosed from Render without guessing.
+s=s.replace('''     selection=local4_initial_entry_candidate(symbol,analysis,None,flow,time.time())
+     record["reason"]="ENTRY_SIGNAL_READY" if selection.get("eligible") else selection.get("reason","UNCLASSIFIED")''',
+'''     selection=local4_initial_entry_candidate(symbol,analysis,None,flow,time.time())
+     record["candidate"]=selection
+     record["reason"]="ENTRY_SIGNAL_READY" if selection.get("eligible") else selection.get("reason","UNCLASSIFIED")''')
+
 # Global health must not fail because one low-activity token has no trade inside
 # the 15s freshness window. Entry gates remain strict per symbol.
 s=s.replace("bool(tokens) and all(all(r.values()) for r in tokens.values())",
