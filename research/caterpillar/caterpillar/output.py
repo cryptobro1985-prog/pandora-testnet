@@ -163,6 +163,10 @@ class Output:
     def __init__(self, directory, config, symbols, mode, metadata=None, resume=False):
         self.root = Path(directory)
         self.root.mkdir(parents=True, exist_ok=True)
+        preexisting = ([p for p in self.root.iterdir() if p.name != ".run.lock"]
+                       if not resume else None)
+        if preexisting:
+            raise ValueError("Output directory must be empty for a new run: " + str(self.root))
         self.lock_handle = (self.root/".run.lock").open("a+")
         try:
             import fcntl
@@ -214,10 +218,6 @@ class Output:
             self.meta["package_source_sha256"] = package_source_sha256()
             self.save_json("run_manifest.json", self.meta)
         else:
-            leftovers = [p for p in self.root.iterdir() if p.name != ".run.lock"]
-            if leftovers:
-                self.lock_handle.close()
-                raise ValueError("Output directory must be empty for a new run: " + str(self.root))
             try:
                 for name in STREAMS:
                     self.handles[name] = (self.root / (name+".jsonl")).open("w", encoding="utf-8")
