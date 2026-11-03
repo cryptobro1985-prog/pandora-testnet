@@ -1,3 +1,5 @@
+> **Research v2 branch:** the original causal engine is extended with competing H1-local hypotheses, dual-side entry research, hourly snapshots, resumable checkpoints and optional public L1/liquidation context. See [RUNBOOK_V2.md](RUNBOOK_V2.md) for current commands and [AUDIT_V2.md](AUDIT_V2.md) for the implementation audit. Production PANDORA is not modified.
+
 # Caterpillar: causal public-data research
 
 Самостоятельный PAPER/RESEARCH-инструмент. **Local High/Low определяются только по закрытым часовикам (H1); flow используется для исполнения и управления позицией.** Production PANDORA не импортируется и не изменяется. Нет приватных API, торговых ключей, отправки ордеров, deploy-команд или автоматической ротации.
