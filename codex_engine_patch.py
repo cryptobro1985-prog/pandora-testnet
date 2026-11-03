@@ -88,6 +88,11 @@ s=s.replace("leverage=plan.leverage;margin=plan.margin;notional=plan.notional",
  if plan.allowed and float(instrument["max_leverage"])>=30.0:
   leverage=30.0;margin=equity*0.10;notional=margin*leverage''')
 s=s.replace("if side not in (-1,1):continue","if side!=-1:continue")
+# Global health must not fail because one low-activity token has no trade inside
+# the 15s freshness window. Entry gates remain strict per symbol.
+s=s.replace("bool(tokens) and all(all(r.values()) for r in tokens.values())",
+            "bool(tokens) and any(all(r.values()) for r in tokens.values())")
+
 # Frozen revision health fields were declared but never updated. Wire them to
 # the actual PAPER execution loop so risk_ready reflects reality.
 s=s.replace('''   if active and prices:
