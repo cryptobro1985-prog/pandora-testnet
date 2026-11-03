@@ -1,71 +1,106 @@
 from datetime import datetime,timezone,timedelta
 from pathlib import Path
 from collections import deque
-import argparse,json,math
+import argparse,json,math,statistics
 from research.caterpillar.caterpillar.sources import Archives
-from research.caterpillar.caterpillar.h1 import H1Tracker
+from scripts.historical_224d_hype_h1_swing import analyze,analyze_m15,position_exit,update_path
+from scripts.historical_224d_local_caterpillar import update_watch
 
-SYMBOL="WLD"; START=500.; MARGIN=.20; LEV=25.; FEE=4.5/10000; SLIP=2/10000
+SYMBOL="WLD"; START=500.; MARGIN=.20; LEV=25.; FEE=.00045
 
-def h1bars(src,day):
- it,_=src.trades(SYMBOL,day); d={}
- for t in it:
-  h=math.floor(t.ts/3600)*3600;b=d.get(h)
-  if b is None:d[h]={"open_ts":h,"available_ts":h+3600,"open":t.price,"high":t.price,"low":t.price,"close":t.price,"volume":t.quantity,"timeframe":"1h","interval_minutes":60}
-  else:b["high"]=max(b["high"],t.price);b["low"]=min(b["low"],t.price);b["close"]=t.price;b["volume"]+=t.quantity
- return d
-def imb(q,now,sec):
- xs=[x for x in q if x[0]>=now-sec];buy=sum(x[2] for x in xs if x[3]==1);sell=sum(x[2] for x in xs if x[3]==-1);n=len(xs)
- return ((buy-sell)/(buy+sell) if buy+sell else None,n,buy,sell)
+def candles_from_trades(src,start_day,end_day,seconds):
+    d={}
+    day=start_day
+    while day<=end_day:
+        it,_=src.trades(SYMBOL,day)
+        for x in it:
+            k=int(x.ts//seconds)*seconds
+            b=d.get(k)
+            if b is None:d[k]={"t":k*1000,"T":(k+seconds)*1000-1,"o":x.price,"h":x.price,"l":x.price,"c":x.price,"v":x.quantity}
+            else:b["h"]=max(b["h"],x.price);b["l"]=min(b["l"],x.price);b["c"]=x.price;b["v"]+=x.quantity
+        day+=timedelta(days=1)
+    return [d[k] for k in sorted(d)]
+
+def paper_pnl(n,e,x,s):
+    out=n*(x/e);return (out-n)*s-FEE*(n+out)
+
+def flow(q,t,sec):
+    a=t-sec
+    xs=[x for x in q if x[0]>=a]
+    b=sum(x[2] for x in xs if x[3]==1);s=sum(x[2] for x in xs if x[3]==-1)
+    return ((b-s)/(b+s) if b+s else 0.),len(xs)
+
 def main():
- ap=argparse.ArgumentParser();ap.add_argument("--cache",type=Path,required=True);ap.add_argument("--output",type=Path,required=True);a=ap.parse_args();a.output.mkdir(parents=True,exist_ok=True)
- day=datetime(2026,11,2,tzinfo=timezone.utc);prev=day-timedelta(days=1);end=day+timedelta(days=1);src=Archives(a.cache)
- bars={**h1bars(src,prev),**h1bars(src,day)};it,meta=src.trades(SYMBOL,day)
- h=H1Tracker(4);local=None
- for k in sorted(bars):
-  if k>=day.timestamp():break
-  ev,_=h.seed(bars[k],day.timestamp())
-  for loc,stage,reason in ev:
-   if stage=="CONFIRMED":local=loc
- cash=START;pos=None;watch=None;trades=[];q=deque();nextb=day.timestamp()+3600;last=None;maxeq=START;maxdd=0.;entries=0;reentries=0;next_eval=day.timestamp()
- for t in it:
-  last=t
-  while t.ts>=nextb and nextb<end.timestamp():
-   b=bars.get(nextb-3600)
-   if b:
-    ev,_=h.seed(b,nextb)
-    for loc,stage,reason in ev:
-     if stage=="CONFIRMED":local=loc
-   nextb+=3600
-  q.append((t.ts,t.price*t.quantity,t.price*t.quantity,int(t.side)))
-  while q and q[0][0]<t.ts-300:q.popleft()
-  if t.ts < next_eval: continue
-  next_eval=t.ts+10.0
-  i60,n60,b60,s60=imb(q,t.ts,60);i180,n180,b180,s180=imb(q,t.ts,180);i300,n300,b300,s300=imb(q,t.ts,300)
-  if i60 is None:continue
-  side=1 if local and local.kind=="LOW" else -1 if local and local.kind=="HIGH" else 0
-  aligned=lambda x:side*x
-  coverage=(q[-1][0]-q[0][0]) if q else 0
-  vals=[aligned(i60)]
-  if coverage>=180 and i180 is not None: vals.append(aligned(i180))
-  if coverage>=300 and i300 is not None: vals.append(aligned(i300))
-  counter=bool(side and vals and all(x<0 for x in vals))
-  resumed=bool(side and vals and all(x>0 for x in vals))
-  control=resumed
-  if pos and side and side!=pos["side"]:
-   counter=True
-  if pos and counter:
-   fill=t.price*(1-pos["side"]*SLIP);gross=pos["qty"]*(fill-pos["entry"])*pos["side"];ef=pos["qty"]*fill*FEE;pnl=gross-pos["entry_fee"]-ef;cash+=gross-ef
-   trades.append({**pos,"exit":fill,"closed":t.ts,"pnl":pnl,"fees":pos["entry_fee"]+ef,"reason":"EXECUTED_FLOW_COUNTER_TAKEOVER","mfe":pos["mfe"],"mae":pos["mae"]})
-   watch={"side":pos["side"],"opposite_epoch":t.ts};pos=None
-  elif not pos and side and ((watch is None and control) or (watch and watch["side"]==side and t.ts>watch["opposite_epoch"] and resumed)):
-   kind="ENTRY" if watch is None else "REENTRY";margin=max(0,cash)*MARGIN;notional=margin*LEV;fill=t.price*(1+side*SLIP);qty=notional/fill;fee=notional*FEE;cash-=fee
-   pos={"side":side,"entry":fill,"opened":t.ts,"qty":qty,"margin":margin,"notional":notional,"entry_fee":fee,"kind":kind,"mfe":0.,"mae":0.};entries+=kind=="ENTRY";reentries+=kind=="REENTRY";watch=None
-  if pos:
-   exitmark=t.price*(1-pos["side"]*SLIP);net=pos["qty"]*(exitmark-pos["entry"])*pos["side"]-pos["entry_fee"]-pos["qty"]*exitmark*FEE;pos["mfe"]=max(pos["mfe"],net);pos["mae"]=min(pos["mae"],net)
-   eq=cash+pos["qty"]*(t.price-pos["entry"])*pos["side"];maxeq=max(maxeq,eq);maxdd=max(maxdd,1-eq/maxeq)
- if pos and last:
-  fill=last.price*(1-pos["side"]*SLIP);gross=pos["qty"]*(fill-pos["entry"])*pos["side"];ef=pos["qty"]*fill*FEE;pnl=gross-pos["entry_fee"]-ef;cash+=gross-ef;trades.append({**pos,"exit":fill,"closed":last.ts,"pnl":pnl,"fees":pos["entry_fee"]+ef,"reason":"EOD_MARK","mfe":pos["mfe"],"mae":pos["mae"]})
- pnl=sum(x["pnl"] for x in trades);r={"symbol":SYMBOL,"date":"2026-11-02","strategy":"Caterpillar 9ce11ede exact local_order_flow M1/M3/M5 semantics, original 10s runtime cadence","start":START,"final":cash,"pnl":pnl,"return_pct":pnl/START*100,"trades":len(trades),"wins":sum(x["pnl"]>0 for x in trades),"losses":sum(x["pnl"]<=0 for x in trades),"entries":entries,"reentries":reentries,"fees":sum(x["fees"] for x in trades),"max_drawdown_pct":maxdd*100,"mfe_sum":sum(x["mfe"] for x in trades),"mae_sum":sum(x["mae"] for x in trades),"data":meta,"rules":{"counter_takeover":"15s<=-0.15,30s<=-0.10 plus 60s/relative confirmation","resumed":"15s>=0.18,30s>=0.12 plus 60s/relative confirmation","initial_control":"15s>=0.12,30s>=0.08","H1":"confirmed local LOW=LONG HIGH=SHORT"}}
- (a.output/"RESULT.json").write_text(json.dumps(r));(a.output/"TRADES.json").write_text(json.dumps(trades));print("OLD_CATERPILLAR_WLD_RESULT "+json.dumps(r),flush=True)
+    ap=argparse.ArgumentParser();ap.add_argument("--cache",type=Path,required=True);ap.add_argument("--output",type=Path,required=True);a=ap.parse_args();a.output.mkdir(parents=True,exist_ok=True)
+    src=Archives(a.cache);day=datetime(2026,11,2,tzinfo=timezone.utc);end=day+timedelta(days=1)
+    # Exact runtime requested up to 120h H1 history and 12h M15 history.
+    h1=candles_from_trades(src,day-timedelta(days=5),day,3600)
+    m15=candles_from_trades(src,day-timedelta(days=1),day,900)
+    it,meta=src.trades(SYMBOL,day)
+    q=deque();cash=START;pos=None;watch=None;trades=[];adds=[];next_eval=day.timestamp();last=None;maxeq=START;maxdd=0.;last_anchor=None
+    for t in it:
+        last=t;q.append((t.ts,t.price,t.price*t.quantity,int(t.side)))
+        while q and q[0][0]<t.ts-305:q.popleft()
+        if t.ts<next_eval:continue
+        now=t.ts;next_eval=now+5.
+        ms=int(now*1000)
+        aa=analyze(h1,ms,SYMBOL)
+        if aa.get("ready") and aa.get("anchor_confirmed") and aa.get("entry_side") in (-1,1):
+            if last_anchor is None or int(aa.get("signal_candle_time") or 0)>=int(last_anchor.get("signal_candle_time") or 0):last_anchor=aa
+        a1=last_anchor or aa
+        side=int((pos or watch or {}).get("side") or a1.get("entry_side") or 1)
+        mm=analyze_m15(m15,ms,side)
+        i60,c60=flow(q,now,60);i180,c180=flow(q,now,180);i300,c300=flow(q,now,300)
+        coverage=(q[-1][0]-q[0][0]) if q else 0
+        flowctx={"trade_data_fresh":bool(q and now-q[-1][0]<=15 and coverage>=60),"latest_trade_age_seconds":now-q[-1][0] if q else None,
+          "trade_coverage_seconds":coverage,"flow_imbalance":i60,"flow_imbalance_180s":i180 if coverage>=180 else None,
+          "flow_imbalance_300s":i300 if coverage>=300 else None,"trade_count_60s":c60,"trade_count_180s":c180,"trade_count_300s":c300}
+        if pos:
+            pos,_=update_path(pos,t.price)
+            # exact _s1_pyramid_add
+            pf=pos.setdefault("features",{});fav=pos["side"]*(t.price/pos["entry"]-1);roe=fav*25*100
+            aligned=coverage>=300 and pos["side"]*i60>=.12 and pos["side"]*i180>=.08 and pos["side"]*i300>=.08
+            same=bool(a1.get("ready") and a1.get("anchor_confirmed") and int(a1.get("entry_side") or 0)==pos["side"])
+            if flowctx["trade_data_fresh"] and same and now-float(pf.get("pyramid_last_add_epoch") or 0)>=60 and roe>=20 and aligned:
+                # single-symbol MTM equity/free margin, as original comparison account
+                unreal=paper_pnl(pos["notional"],pos["entry"],t.price,pos["side"]);eq=cash+unreal;free=eq-pos["margin"];addm=max(.01,eq*.05)
+                if free+1e-9>=addm:
+                    addn=addm*25;oldn=pos["notional"];pos["entry"]=(pos["entry"]*oldn+t.price*addn)/(oldn+addn);pos["notional"]=oldn+addn;pos["margin"]+=addm;pf["pyramid_last_add_epoch"]=now;pf["pyramid_add_count"]=int(pf.get("pyramid_add_count") or 0)+1;adds.append({"t":now,"price":t.price,"margin":addm,"roe_before":roe})
+            h1exit="opposite_h1_local_emergency_exit" if a1.get("ready") and a1.get("anchor_confirmed") and int(a1.get("entry_side") or 0)==-pos["side"] else position_exit(pos,a1,t.price) if a1.get("ready") else None
+            weakening=False
+            if flowctx["trade_data_fresh"] and coverage>=180 and c60>=5 and c180>=12 and pos["side"]*i60<=-.18 and pos["side"]*i180<=-.08:
+                fav=pos["side"]*(t.price/pos["entry"]-1);peak=max(0.,float(pf.get("mfe_price_move") or 0),fav);typ=float(mm.get("median_range_move") or .008);recoil=max(.0007,min(.0018,typ*.12));weakening=(peak-fav>=recoil)
+            reason=h1exit or ("m1_m3_confirmed_counterflow_exit" if weakening else None)
+            if reason:
+                pnl=paper_pnl(pos["notional"],pos["entry"],t.price,pos["side"]);cash+=pnl
+                trades.append({**pos,"exit":t.price,"closed":now,"pnl":pnl,"reason":reason,"mfe_move":pf.get("mfe_price_move",0),"mae_move":pf.get("mae_price_move",0)})
+                if weakening:watch={"side":pos["side"],"origin_signal_candle":int(pos.get("signal_candle_time") or 0),"exit_price":t.price,"exit_at":now,"reentries":0,"context":{"phase":"WAIT_PULLBACK","counter_pressure_seen":False,"pullback_extreme":t.price,"anchor":pf.copy()}}
+                else:watch=None
+                pos=None
+        else:
+            if watch:
+                if a1.get("ready") and int(a1.get("entry_side") or 0)==-int(watch["side"]):watch=None
+                else:watch=update_watch(watch,t.price,mm,flowctx,now)
+            opened=False
+            if watch:
+                same=int(a1.get("entry_side") or 0)==int(watch["side"])
+                fresh=bool(a1.get("anchor_confirmed") and 0<=now-float(a1.get("signal_candle_close_time") or 0)/1000<=120)
+                newh=bool(a1.get("ready") and a1.get("h1_direction_anchor") and same and int(a1.get("signal_candle_time") or 0)>int(watch.get("origin_signal_candle") or 0))
+                # exact _s1_reentry_ready: phase must literally be WAIT_RESUMPTION
+                ctx=watch.get("context") or {};ext=float(ctx.get("pullback_extreme") or watch["exit_price"]);resume=max(.0005,min(.0012,float(mm.get("median_range_move") or .008)*.10))
+                rr=bool(ctx.get("phase")=="WAIT_RESUMPTION" and ctx.get("counter_pressure_seen") and flowctx["trade_data_fresh"] and coverage>=300 and
+                    side*i60>=.12 and side*i180>=.08 and side*i300>=.08 and int(mm.get("recovery_score") or 0)>=2 and int(mm.get("adverse_score") or 0)<=1 and side*(t.price/ext-1)>=resume)
+                if newh and fresh:opened=True;kind="H1_REENTRY"
+                elif rr:opened=True;kind="REENTRY"
+            else:
+                fresh=bool(a1.get("ready") and a1.get("anchor_confirmed") and a1.get("h1_direction_anchor") and 0<=now-float(a1.get("signal_candle_close_time") or 0)/1000<=120)
+                if fresh and int(a1.get("entry_side") or 0) in (-1,1):opened=True;kind="H1_CONFIRMED";side=int(a1["entry_side"])
+            if opened:
+                eq=cash;margin=max(.01,eq*.20);notional=margin*25;pos={"side":side,"entry":t.price,"opened":now,"notional":notional,"margin":margin,"leverage":25.,"signal_candle_time":int(a1.get("signal_candle_time") or 0),"kind":kind,"features":{"mfe_price_move":0.,"mae_price_move":0.,"pyramid_add_count":0}};watch=None
+        if pos:
+            eq=cash+paper_pnl(pos["notional"],pos["entry"],t.price,pos["side"]);maxeq=max(maxeq,eq);maxdd=max(maxdd,1-eq/maxeq)
+    if pos and last:
+        pnl=paper_pnl(pos["notional"],pos["entry"],last.price,pos["side"]);cash+=pnl;trades.append({**pos,"exit":last.price,"closed":last.ts,"pnl":pnl,"reason":"EOD_MARK","mfe_move":pos["features"].get("mfe_price_move",0),"mae_move":pos["features"].get("mae_price_move",0)})
+    r={"symbol":SYMBOL,"date":"2026-11-02","strategy_commit":"224dff69db51da2d426fddf4ffc674c94f16349e","strategy":"Restored profitable Caterpillar runtime exact thresholds/state semantics","start":START,"final":cash,"pnl":cash-START,"return_pct":(cash/START-1)*100,"trades":len(trades),"wins":sum(x["pnl"]>0 for x in trades),"losses":sum(x["pnl"]<=0 for x in trades),"pyramid_adds":len(adds),"max_drawdown_pct":maxdd*100,"fees_model":"original paper_pnl 4.5bps each leg, no added slippage","data":meta,"notes":"5s decision cadence; Bybit executed trades; H1/M15 candles reconstructed causally from same Bybit tape; exact historical H1/M15 analyzer vendored from commit 224dff69."}
+    (a.output/"RESULT.json").write_text(json.dumps(r,indent=2));(a.output/"TRADES.json").write_text(json.dumps(trades,indent=2));print("RESTORED_CATERPILLAR_WLD_RESULT "+json.dumps(r),flush=True)
 if __name__=="__main__":main()
