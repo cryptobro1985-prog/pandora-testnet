@@ -8,8 +8,8 @@ import threading
 import time
 import websocket
 
-FIXED_SYMBOLS=("ARIA","LYN","ESPORTS","1000CAT","SOPH")
-EXPERIMENT="PANDORA_FIXED_FIVE_20261102"
+FIXED_SYMBOLS=("INIT","NEAR","BTC","SOL","ETH","LIT","HYPE","ZEC","TAO","GRASS")
+EXPERIMENT="CATERPILLAR_EVENT_FLOW_10_20261103"
 class LiveScanner:
     def __init__(self, top=5, candidate_limit=30, freshness=15):
         self.top=5;self.candidate_limit=5;self.freshness=float(freshness)
@@ -80,7 +80,7 @@ class LiveScanner:
                 selected_at=self.last_snapshot.get("selected_at",epoch),
                 next_refresh_at=None,selection_interval_seconds=None,scan_seconds=1,
                 missing_candidates=sum(not r["eligible"] for r in rows),
-                basis="fixed_user_cohort_no_ranking_no_rotation")
+                basis="fixed_10_caterpillar_event_flow_no_rotation")
             self.selected=list(FIXED_SYMBOLS);self.candidates=list(FIXED_SYMBOLS)
             self.last_snapshot=copy.deepcopy(snapshot)
             return snapshot
