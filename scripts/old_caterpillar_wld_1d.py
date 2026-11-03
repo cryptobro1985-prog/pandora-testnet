@@ -24,11 +24,10 @@ def candles_from_trades(src,start_day,end_day,seconds):
 def paper_pnl(n,e,x,s):
     out=n*(x/e);return (out-n)*s-FEE*(n+out)
 
-def flow(q,t,sec):
-    a=t-sec
-    xs=[x for x in q if x[0]>=a]
-    b=sum(x[2] for x in xs if x[3]==1);s=sum(x[2] for x in xs if x[3]==-1)
-    return ((b-s)/(b+s) if b+s else 0.),len(xs)
+def flow(buckets,t,sec):
+    end=int(t//5);rows=[buckets.get(i,(0.,0.,0)) for i in range(end-sec//5+1,end+1)]
+    b=sum(x[0] for x in rows);s=sum(x[1] for x in rows);n=sum(x[2] for x in rows)
+    return ((b-s)/(b+s) if b+s else 0.),n
 
 def main():
     ap=argparse.ArgumentParser();ap.add_argument("--cache",type=Path,required=True);ap.add_argument("--output",type=Path,required=True);a=ap.parse_args();a.output.mkdir(parents=True,exist_ok=True)
@@ -37,9 +36,14 @@ def main():
     h1=candles_from_trades(src,day-timedelta(days=5),day,3600)
     m15=candles_from_trades(src,day-timedelta(days=1),day,900)
     it,meta=src.trades(SYMBOL,day)
-    q=deque();cash=START;pos=None;watch=None;trades=[];adds=[];next_eval=day.timestamp();last=None;maxeq=START;maxdd=0.;last_anchor=None;cur15=None;cached_a=None;last_h1_slot=None
+    buckets={};since=None;last_trade_ts=None;cash=START;pos=None;watch=None;trades=[];adds=[];next_eval=day.timestamp();last=None;maxeq=START;maxdd=0.;last_anchor=None;cur15=None;cached_a=None;last_h1_slot=None
     for t in it:
-        last=t;q.append((t.ts,t.price,t.price*t.quantity,int(t.side)))
+        last=t
+        bi=int(t.ts//5);bb=buckets.setdefault(bi,[0.,0.,0]);bb[0 if int(t.side)==1 else 1]+=t.price*t.quantity;bb[2]+=1
+        if since is None:since=t.ts
+        last_trade_ts=t.ts
+        floor=bi-65
+        for old in [x for x in buckets if x<floor]:del buckets[old]
         k15=int(t.ts//900)*900
         if cur15 is None or cur15["t"]!=k15*1000:
             cur15={"t":k15*1000,"T":(k15+900)*1000-1,"o":t.price,"h":t.price,"l":t.price,"c":t.price,"v":t.quantity}
@@ -59,7 +63,7 @@ def main():
         mm=analyze_m15(mrows,ms,side)
         i60,c60=flow(q,now,60);i180,c180=flow(q,now,180);i300,c300=flow(q,now,300)
         coverage=(q[-1][0]-q[0][0]) if q else 0
-        flowctx={"trade_data_fresh":bool(q and now-q[-1][0]<=15 and coverage>=60),"latest_trade_age_seconds":now-q[-1][0] if q else None,
+        flowctx={"trade_data_fresh":bool(last_trade_ts is not None and now-last_trade_ts<=15 and coverage>=60),"latest_trade_age_seconds":now-last_trade_ts if last_trade_ts is not None else None,
           "trade_coverage_seconds":coverage,"flow_imbalance":i60,"flow_imbalance_180s":i180 if coverage>=180 else None,
           "flow_imbalance_300s":i300 if coverage>=300 else None,"trade_count_60s":c60,"trade_count_180s":c180,"trade_count_300s":c300}
         if pos:
