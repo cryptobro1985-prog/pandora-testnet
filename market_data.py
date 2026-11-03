@@ -26,7 +26,7 @@ class RollingMarketData:
 
     @staticmethod
     def _new_symbol(epoch):
-        return {'since':epoch,'seen':set(),'seen_queue':deque(),'latest_trade':None,'latest_trade_id':None,'latest_receive_epoch':None,'latest_trade_price':None,'latest_trade_quantity':None,'first_trade':None,'levels':deque(maxlen=2),'trades':deque(),'overflow_until':None,'revision':0,'flow_cache':None,'connected_epoch':epoch,'disconnected_epoch':None,'post_connect_trade_seen':False}
+        return {'since':epoch,'seen':set(),'seen_queue':deque(),'latest_trade':None,'latest_trade_id':None,'latest_receive_epoch':None,'latest_trade_price':None,'latest_trade_quantity':None,'first_trade':None,'levels':deque(maxlen=2),'trades':deque(),'overflow_until':None,'revision':0,'flow_cache':None,'connected_epoch':epoch,'disconnected_epoch':None,'post_connect_trade_seen':False,'event_buy_notional_total':0.0,'event_sell_notional_total':0.0,'event_trade_count_total':0}
 
     def mark_connected(self,epoch=None,symbols=None,owner=None):
         epoch=time.time() if epoch is None else float(epoch);name='default' if owner is None else str(owner)
@@ -161,7 +161,10 @@ class RollingMarketData:
             out.update(latest_trade_epoch=latest,latest_trade_age_seconds=age,decision_event_epoch=state.get('decision_epoch'),
                        latest_exchange_trade_id=state.get('latest_trade_id'),latest_receive_epoch=state.get('latest_receive_epoch'),
                        latest_trade_price=state.get('latest_trade_price'),latest_trade_quantity=state.get('latest_trade_quantity'),
-                       accepted_revision=state.get('revision'))
+                       accepted_revision=state.get('revision'),
+                       event_buy_notional_total=state.get('event_buy_notional_total',0.0),
+                       event_sell_notional_total=state.get('event_sell_notional_total',0.0),
+                       event_trade_count_total=state.get('event_trade_count_total',0))
             if not fresh or not state.get('post_connect_trade_seen') or state['overflow_until'] is not None or age is None or not 0<=age<=self.freshness_seconds:return out
             trades=state['trades']
             while trades and epoch-trades[0][0]>610: trades.popleft()
