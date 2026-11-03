@@ -136,7 +136,17 @@ def pressure_exit(position,execution_context,mark,flow,*,opposite_local_confirme
     # 60s is warning only. A normal flow exit needs the 108s context and
     # agreement from at least two completed horizons. 300s becomes the regime
     # vote once available. Confirmed opposite H1 local bypasses this gate above.
-    confirmed=bool(profile["counter_takeover"] and votes["108"]["counter"] and counter_votes>=2)
+    # Caterpillar profit-preservation rule: ordinary counter-flow may harvest a
+    # move only after the position has actually had positive net excursion and
+    # has started giving some of that peak back. Losing positions are not churned
+    # by flow noise; opposite confirmed H1 local remains the independent emergency exit.
+    peak=float(features.get("peak_mfe_usd") or features.get("mfe_usd") or 0.0)
+    current=float(features.get("current_pnl_usd") or 0.0)
+    recoil=max(0.0,peak-current)
+    confirmed=bool(profile["counter_takeover"] and votes["108"]["counter"] and counter_votes>=2
+        and peak>0.0 and recoil>0.0 and current>0.0)
+    features["mfe_exit_state"]={"peak_mfe_usd":peak,"current_pnl_usd":current,
+        "mfe_giveback_usd":recoil,"profit_excursion_seen":peak>0.0}
     features["exit_decision"]={"reason":"counter_flow_60_180_300_confirmed" if confirmed else
         "counter_flow_waiting_60_180_300" if profile["counter_takeover"] else "own_side_executed_flow",
         "control_side":profile["control_side"],"buy_notional_since_entry":profile["buy"],
