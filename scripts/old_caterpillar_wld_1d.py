@@ -2,7 +2,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import argparse, json, math
 
-from research.caterpillar.caterpillar.sources import Archives
+from research.caterpillar.caterpillar.sources import Archives, candles
 from market_data import RollingMarketData
 from scripts.historical_224d_hype_h1_swing import analyze, analyze_m15, position_exit, update_path
 from scripts.historical_224d_local_caterpillar import update_watch
@@ -90,15 +90,15 @@ def main():
     a=ap.parse_args(); a.output.mkdir(parents=True,exist_ok=True)
     src=Archives(a.cache); day=datetime(2026,11,2,tzinfo=timezone.utc); end=day+timedelta(days=1)
 
-    # Build only historical CLOSED H1/M15 candles before the replay day.
-    h1d={}; m15d={}
-    d=day-timedelta(days=5)
-    metas=[]
-    while d<day:
-        it,meta=src.trades(SYMBOL,d); metas.append(meta)
-        for x in it:
-            bucket_update(h1d,x,3600); bucket_update(m15d,x,900)
-        d+=timedelta(days=1)
+    # Historical runtime consumed Bybit H1/M15 kline streams. Bootstrap the
+    # same closed candles from Bybit REST, then update the replay-day forming
+    # candles causally from the executed trade tape.
+    h1d={}; m15d={}; metas=[]
+    hist_start=day-timedelta(days=5)
+    for c in candles(SYMBOL,hist_start,day,interval=60):
+        k=int(c["open_ts"]); h1d[k]={"t":k*1000,"T":int(c["available_ts"]*1000)-1,"o":c["open"],"h":c["high"],"l":c["low"],"c":c["close"],"v":c["volume"]}
+    for c in candles(SYMBOL,day-timedelta(hours=12),day,interval=15):
+        k=int(c["open_ts"]); m15d[k]={"t":k*1000,"T":int(c["available_ts"]*1000)-1,"o":c["open"],"h":c["high"],"l":c["low"],"c":c["close"],"v":c["volume"]}
 
     # Exact RollingMarketData 5-second bucket semantics, warmed only by the
     # final 10 minutes before midnight, with exchange time == receipt time.
