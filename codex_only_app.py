@@ -22,7 +22,52 @@ h1{font-size:38px;margin:0 0 4px}.sub{color:#9aabc8;font-size:13px;line-height:1
 <body><div class="wrap"><h1>Codex Million · SHORT10</h1><div class="sub">PAPER ONLY · 10% margin/token · 30x · flow 30/180/300 · MFE protection · fixed 10 tokens</div>
 <div id="top" class="top"></div><div id="research" class="research">6H Research: starting…</div><div id="grid" class="grid"></div><div class="history"><h2>Closed trades</h2><div id="history" class="tablewrap"></div></div></div>
 <script>
-const f=(x,d=2)=>x==null?'—':Number(x).toFixed(d), money=x=>x==null?'—':'$'+f(x,2);
+const FIXED=['ZEC','HYPE','NEAR','SOL','ENA','1000PEPE','DOGE','SUI','AAVE','WLD']; const f=(x,d=2)=>x==null?'—':Number(x).toFixed(d), money=x=>x==null?'—':'
+function local(t){let a=t.local_state||t.current_local||t.confirmed_local||{};let c=a.confirmed_local||a;return (c.pivot_type||c.type||a.pivot_type||'—')+' '+(c.pivot_price??a.pivot_price??'—')}
+function row(k,v){return '<span>'+k+'</span><span>'+String(v??'—')+'</span>'}
+async function tick(){try{let [r,rr]=await Promise.all([fetch('/api/codex',{cache:'no-store'}),fetch('/api/research',{cache:'no-store'})]),d=await r.json(),rd=await rr.json();
+document.getElementById('research').innerHTML='6H Research: <b class="'+(rd.online?'ok':'warn')+'">'+String(rd.status||'—')+'</b> · '+(rd.online?'LIVE':'not running')+' · fixed 10 tokens · historical 30D runs separately';
+let acc=d.account||{};document.getElementById('top').innerHTML=[
+['STATUS',d.status],['EQUITY',money(d.equity)],['TOKENS',String((d.tokens||[]).length)+'/10'],['OPEN',String((d.positions||[]).length)],['RISK',d.risk_ready===true?'READY':'WARMING']
+].map(x=>'<div class="tile"><small>'+x[0]+'</small><b>'+x[1]+'</b></div>').join('');
+let pos={};for(let p of d.positions||[])pos[p.symbol]=p; let by={};for(let t of d.tokens||[])by[t.symbol]=t; let health=(d.health||{}).token_readiness||{}; let diag=d.entry_diagnostics||{}; let tokens=FIXED.map(s=>by[s]||{symbol:s,state:'WAITING_DATA'});
+document.getElementById('grid').innerHTML=tokens.map(t=>{let p=pos[t.symbol]||{},ft=p.features||{},flow=t.flow_context||t.flow_state||{},dir=t.direction??t.entry_side??(t.local_state||{}).entry_side,hr=health[t.symbol]||{},dg=diag[t.symbol]||{};
+return '<div class="card"><h2>'+t.symbol+' <span class="short">SHORT ONLY</span></h2><div class="m">'+
+row('Local H1',local(t))+row('Structure',t.structure_state||t.structure||t.state)+row('Direction',dir==-1?'SHORT':dir==1?'LONG':'—')+row('H1 ready',hr.h1===true?'YES':'NO')+row('Flow ready',hr.executed_flow===true?'YES':'NO')+row('Evidence',hr.evidence_ready===true?'YES':'NO')+row('Entry state',dg.reason||dg.status||t.action_reason||t.last_action||'WAITING')+
+row('Price',t.price??t.last)+row('BUY',f(t.buy_volume??flow.buy_notional,0))+row('SELL',f(t.sell_volume??flow.sell_notional,0))+
+row('30s',JSON.stringify((flow.windows||{})['30']||{}))+row('180s',JSON.stringify((flow.windows||{})['180']||{}))+row('300s',JSON.stringify((flow.windows||{})['300']||{}))+
+row('Position',(p.side==-1||p.side==='SHORT')?'SHORT':(p.side==1||p.side==='LONG')?'LONG':'—')+row('Entry',p.entry??p.entry_price)+row('Margin',money(p.margin??p.margin_usd))+row('Leverage',(p.leverage??'—')+'x')+
+row('PnL',money(p.unrealized_pnl??p.pnl_usdt))+row('Peak MFE',money(ft.peak_mfe_usd??ft.mfe_usd))+row('MAE',money(ft.mae_usd))+row('MFE giveback',money(ft.mfe_giveback_usd))+
+'</div></div>'}).join('');
+let tr=(d.trades||[]).slice(0,100);document.getElementById('history').innerHTML='<table><tr><th>Symbol</th><th>Side</th><th>PnL</th><th>MFE</th><th>Reason</th><th>Closed</th></tr>'+tr.map(x=>{let ft=x.features||{};return '<tr><td>'+x.symbol+'</td><td>'+ (x.side==-1?'SHORT':'LONG')+'</td><td>'+money(x.pnl)+'</td><td>'+money(ft.peak_mfe_usd??ft.mfe_usd)+'</td><td>'+String(x.reason||'—')+'</td><td>'+String(x.closed||'—')+'</td></tr>'}).join('')+'</table>';
+}catch(e){document.getElementById('top').innerHTML='<div class="tile warn">WAITING: '+e+'</div>'}}
+tick();setInterval(tick,1000);
+</script></body></html>'''
+
+class H(BaseHTTPRequestHandler):
+    def log_message(self,*args): pass
+    def sendj(self,obj,code=200):
+        b=json.dumps(obj,default=str).encode();self.send_response(code);self.send_header("Content-Type","application/json");self.send_header("Cache-Control","no-store");self.send_header("Content-Length",str(len(b)));self.end_headers();self.wfile.write(b)
+    def do_GET(self):
+        if self.path.startswith("/api/codex"): return self.sendj(CODEX.snapshot())
+        if self.path.startswith("/api/research"): return self.sendj(RESEARCH.snapshot())
+        if self.path.startswith("/health"): return self.sendj({"ok":True,"codex":CODEX.snapshot().get("status"),"research":RESEARCH.snapshot().get("status")})
+        b=HTML.encode();self.send_response(200);self.send_header("Content-Type","text/html; charset=utf-8");self.send_header("Cache-Control","no-store");self.send_header("Content-Length",str(len(b)));self.end_headers();self.wfile.write(b)
+
+def main():
+    for sig in (signal.SIGTERM,signal.SIGINT):
+        signal.signal(sig,lambda *_:STOP.set())
+    t=threading.Thread(target=CODEX.run,args=(STOP,),daemon=True,name="codex_million");t.start()
+    rt=threading.Thread(target=RESEARCH.run,args=(STOP,),daemon=True,name="caterpillar_research_6h");rt.start()
+    port=int(os.getenv("PORT","10000"));server=ThreadingHTTPServer(("0.0.0.0",port),H);server.timeout=1
+    print("[CODEX_ONLY] PAPER_ONLY port=%s"%port,flush=True)
+    try:
+        while not STOP.is_set():server.handle_request()
+    finally:
+        STOP.set();server.server_close();t.join(timeout=8);rt.join(timeout=8)
+
+if __name__=="__main__":main()
++f(x,2);
 function local(t){let a=t.local_state||t.current_local||t.confirmed_local||{};let c=a.confirmed_local||a;return (c.pivot_type||c.type||a.pivot_type||'—')+' '+(c.pivot_price??a.pivot_price??'—')}
 function row(k,v){return '<span>'+k+'</span><span>'+String(v??'—')+'</span>'}
 async function tick(){try{let [r,rr]=await Promise.all([fetch('/api/codex',{cache:'no-store'}),fetch('/api/research',{cache:'no-store'})]),d=await r.json(),rd=await rr.json();
