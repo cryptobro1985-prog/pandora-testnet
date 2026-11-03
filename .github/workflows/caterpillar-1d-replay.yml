@@ -15,7 +15,7 @@ jobs:
         with: {python-version: '3.12'}
       - run: python -m pip install -r research/caterpillar/requirements-lock.txt
       - name: Replay 2 Nov five-token PAPER account
-        run: python scripts/caterpillar_historical_paper_1d.py --cache "$RUNNER_TEMP/cache" --output "$RUNNER_TEMP/result"
+        run: PYTHONPATH="$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/research/caterpillar" python scripts/caterpillar_historical_paper_1d.py --cache "$RUNNER_TEMP/cache" --output "$RUNNER_TEMP/result"
       - name: Upload result
         if: always()
         uses: actions/upload-artifact@v4
