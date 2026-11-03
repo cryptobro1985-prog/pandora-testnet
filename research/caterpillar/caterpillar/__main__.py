@@ -154,8 +154,8 @@ def main(argv=None):
                     duration = args.duration_seconds
             status = realtime(
                 engine, duration, args.reorder_seconds, args.max_lag_seconds,
-                market_context=args.market_context or bool(output.meta.get("metadata", {}).get("market_context_enabled")),
-                resume=args.resume)
+                args.market_context or bool(output.meta.get("metadata", {}).get("market_context_enabled")),
+                args.resume)
         else:
             replay(engine, args.input)
             complete = True
