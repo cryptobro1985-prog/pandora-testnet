@@ -153,8 +153,7 @@ def main():
         if x.ts>=end.timestamp(): break
         last=x; tid+=1
         bucket_update(h1d,x,3600); bucket_update(m15d,x,900)
-        obs.heartbeat(x.ts)
-        obs.ingest_trades([{"coin":SYMBOL,"px":x.price,"sz":x.quantity,"time":x.ts*1000,"tid":"d"+str(tid),"side":"B" if int(x.side)==1 else "A"}],x.ts)
+        flow_ingest(x)
         if x.ts<next_decision: continue
         next_decision=x.ts+DECISION_CADENCE; decision_count+=1
 
