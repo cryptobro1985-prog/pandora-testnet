@@ -496,7 +496,11 @@ class ResearchEngine:
                     self.emit("signals", s, c["ts"], action="EXIT", model=model, reasons=reasons, snapshot=snapshot)
                 else:
                     label = "MICRO_COUNTER_FLOW" if opposite and p.opposite_streak < cfg.transfer_blocks else "PULLBACK" if c["move_bps"]*p.side < 0 else "HOLD"
-                    self.emit("signals", s, c["ts"], action="HOLD", label=label, model=model, position_id=p.ident, snapshot=snapshot)
+                    hold_tag = "research_hold_"+label.lower()+"_"+model
+                    forward_by_side[p.side]["tags"].append(hold_tag)
+                    profile.count("research_hold/"+label+"/"+model)
+                    self.emit("signals", s, c["ts"], action="HOLD", label=label, model=model, position_id=p.ident,
+                              research_tag=hold_tag, snapshot=snapshot)
                 continue
             anchors = [x[-1] for x in s.locals.values() if x and not x[-1].invalidated]
             newest = max(anchors, key=lambda x: x.confirmed_ts) if anchors else None
