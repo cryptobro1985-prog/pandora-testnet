@@ -41,13 +41,17 @@ def main():
   while q and q[0][0]<t.ts-300:q.popleft()
   if t.ts < next_eval: continue
   next_eval=t.ts+10.0
-  i15,n15,b15,s15=imb(q,t.ts,15);i30,n30,b30,s30=imb(q,t.ts,30);i60,n60,b60,s60=imb(q,t.ts,60)
-  if None in (i15,i30,i60) or n15<2 or n30<4 or n60<5:continue
+  i60,n60,b60,s60=imb(q,t.ts,60);i180,n180,b180,s180=imb(q,t.ts,180);i300,n300,b300,s300=imb(q,t.ts,300)
+  if i60 is None:continue
   side=1 if local and local.kind=="LOW" else -1 if local and local.kind=="HIGH" else 0
   aligned=lambda x:side*x
-  counter=side and aligned(i15)<=-.15 and aligned(i30)<=-.10 and (aligned(i15)<=aligned(i60)-.08 or aligned(i60)<=-.08)
-  resumed=side and aligned(i15)>=.18 and aligned(i30)>=.12 and (aligned(i15)>=aligned(i60)+.06 or aligned(i60)>=.08)
-  control=side and aligned(i15)>=.12 and aligned(i30)>=.08
+  coverage=(q[-1][0]-q[0][0]) if q else 0
+  vals=[aligned(i60)]
+  if coverage>=180 and i180 is not None: vals.append(aligned(i180))
+  if coverage>=300 and i300 is not None: vals.append(aligned(i300))
+  counter=bool(side and vals and all(x<0 for x in vals))
+  resumed=bool(side and vals and all(x>0 for x in vals))
+  control=resumed
   if pos and side and side!=pos["side"]:
    counter=True
   if pos and counter:
@@ -62,6 +66,6 @@ def main():
    eq=cash+pos["qty"]*(t.price-pos["entry"])*pos["side"];maxeq=max(maxeq,eq);maxdd=max(maxdd,1-eq/maxeq)
  if pos and last:
   fill=last.price*(1-pos["side"]*SLIP);gross=pos["qty"]*(fill-pos["entry"])*pos["side"];ef=pos["qty"]*fill*FEE;pnl=gross-pos["entry_fee"]-ef;cash+=gross-ef;trades.append({**pos,"exit":fill,"closed":last.ts,"pnl":pnl,"fees":pos["entry_fee"]+ef,"reason":"EOD_MARK","mfe":pos["mfe"],"mae":pos["mae"]})
- pnl=sum(x["pnl"] for x in trades);r={"symbol":SYMBOL,"date":"2026-11-02","strategy":"Caterpillar old executed-flow cycle from 848b3c6/local_order_flow sampled at original 10s runtime loop cadence","start":START,"final":cash,"pnl":pnl,"return_pct":pnl/START*100,"trades":len(trades),"wins":sum(x["pnl"]>0 for x in trades),"losses":sum(x["pnl"]<=0 for x in trades),"entries":entries,"reentries":reentries,"fees":sum(x["fees"] for x in trades),"max_drawdown_pct":maxdd*100,"mfe_sum":sum(x["mfe"] for x in trades),"mae_sum":sum(x["mae"] for x in trades),"data":meta,"rules":{"counter_takeover":"15s<=-0.15,30s<=-0.10 plus 60s/relative confirmation","resumed":"15s>=0.18,30s>=0.12 plus 60s/relative confirmation","initial_control":"15s>=0.12,30s>=0.08","H1":"confirmed local LOW=LONG HIGH=SHORT"}}
+ pnl=sum(x["pnl"] for x in trades);r={"symbol":SYMBOL,"date":"2026-11-02","strategy":"Caterpillar 9ce11ede exact local_order_flow M1/M3/M5 semantics, original 10s runtime cadence","start":START,"final":cash,"pnl":pnl,"return_pct":pnl/START*100,"trades":len(trades),"wins":sum(x["pnl"]>0 for x in trades),"losses":sum(x["pnl"]<=0 for x in trades),"entries":entries,"reentries":reentries,"fees":sum(x["fees"] for x in trades),"max_drawdown_pct":maxdd*100,"mfe_sum":sum(x["mfe"] for x in trades),"mae_sum":sum(x["mae"] for x in trades),"data":meta,"rules":{"counter_takeover":"15s<=-0.15,30s<=-0.10 plus 60s/relative confirmation","resumed":"15s>=0.18,30s>=0.12 plus 60s/relative confirmation","initial_control":"15s>=0.12,30s>=0.08","H1":"confirmed local LOW=LONG HIGH=SHORT"}}
  (a.output/"RESULT.json").write_text(json.dumps(r));(a.output/"TRADES.json").write_text(json.dumps(trades));print("OLD_CATERPILLAR_WLD_RESULT "+json.dumps(r),flush=True)
 if __name__=="__main__":main()
