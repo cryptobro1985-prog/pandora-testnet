@@ -88,6 +88,31 @@ s=s.replace("leverage=plan.leverage;margin=plan.margin;notional=plan.notional",
  if plan.allowed and float(instrument["max_leverage"])>=30.0:
   leverage=30.0;margin=equity*0.10;notional=margin*leverage''')
 s=s.replace("if side not in (-1,1):continue","if side!=-1:continue")
+# Frozen revision health fields were declared but never updated. Wire them to
+# the actual PAPER execution loop so risk_ready reflects reality.
+s=s.replace('''   if active and prices:
+    if WIN is not None:WIN.cycle(prices)''',
+'''   if active and prices:
+    with LOCK:
+     S["_execution_running"]=True
+     S["_execution_heartbeat"]=time.time()
+    if WIN is not None:WIN.cycle(prices)''')
+s=s.replace('''    with LOCK:S["sources"]["LocalRisk"]={"ok":True,"ready":True,"last_check":now(),"mode":"PANDORA_WIN_H1_LOCAL_TOP5_EXECUTED_FLOW","symbols":list(strategy1_trade_symbols()),"error":None}''',
+'''    with LOCK:
+     S["_execution_ok"]=True
+     S["_execution_running"]=True
+     S["_execution_heartbeat"]=time.time()
+     S["_execution_errors"]={}
+     S["sources"]["LocalRisk"]={"ok":True,"ready":True,"last_check":now(),"mode":"CODEX_SHORT10_30_180_300","symbols":list(strategy1_trade_symbols()),"error":None}''')
+s=s.replace('''  except Exception as exc:
+   with LOCK:S["_execution_ok"]=False''',
+'''  except Exception as exc:
+   with LOCK:
+    S["_execution_ok"]=False
+    S["_execution_running"]=True
+    S["_execution_heartbeat"]=time.time()
+    S["_execution_errors"]={"LocalRisk":type(exc).__name__+":"+str(exc)[:160]}''')
+
 # Open the first PAPER shorts immediately only when the engine's own confirmed
 # H1 structure currently points SHORT. These bootstrap fills are explicitly
 # labelled and subsequent management remains 30/180/300 + MFE.
