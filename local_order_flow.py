@@ -79,11 +79,13 @@ def _window_consensus(flow,side):
         imbalance=_f(w.get("imbalance"))
         aligned=bool(complete and imbalance is not None and int(side)*imbalance>0)
         votes[str(seconds)]={"complete":complete,"imbalance":imbalance,"aligned":aligned}
-    completed=[v for v in votes.values() if v["complete"]]
-    aligned_votes=sum(1 for v in completed if v["aligned"])
-    # 60s is the entry confirmation. Once it is complete and aligned with the
-    # confirmed H1 local, enter immediately; 180/300 are later context, not blockers.
-    return bool(votes["60"]["aligned"]),votes,aligned_votes
+    all_complete=all(votes[str(n)]["complete"] for n in (60,180,300))
+    aligned_votes=sum(1 for v in votes.values() if v["aligned"])
+    # 180s is mandatory; a decision requires all three horizons collected and
+    # 180s aligned with at least one of 60s/300s.
+    consensus=bool(all_complete and votes["180"]["aligned"] and
+        (votes["60"]["aligned"] or votes["300"]["aligned"]))
+    return consensus,votes,aligned_votes
 
 
 def _candidate(symbol,analysis,flow):
@@ -133,9 +135,9 @@ def pressure_exit(position,execution_context,mark,flow,*,opposite_local_confirme
             "counter":bool(complete and imbalance is not None and side*imbalance<0)}
     completed=[v for v in votes.values() if v["complete"]]
     counter_votes=sum(1 for v in completed if v["counter"])
-    # 60s is the fast confirmation. A normal flow exit needs the 180s context and
-    # agreement from at least two completed horizons. 300s becomes the regime
-    # vote once available. Confirmed opposite H1 local bypasses this gate above.
+    # All 60/180/300 horizons must be collected. A normal flow exit requires
+    # 180s counter-flow plus at least one agreeing 60s/300s horizon.
+    # Confirmed opposite H1 local remains the independent emergency exit above.
     # Caterpillar profit-preservation rule: ordinary counter-flow may harvest a
     # move only after the position has actually had positive net excursion and
     # has started giving some of that peak back. Losing positions are not churned
@@ -143,15 +145,12 @@ def pressure_exit(position,execution_context,mark,flow,*,opposite_local_confirme
     peak=float(features.get("peak_mfe_usd") or features.get("mfe_usd") or 0.0)
     current=float(features.get("current_pnl_usd") or 0.0)
     recoil=max(0.0,peak-current)
-    # Aggressive MFE preservation for the SHORT10 paper test: once a trade
-    # has positive peak excursion, a 60s counter-flow warning plus >=10% peak
-    # giveback can harvest the remaining profit before the slower 180/300
-    # confirmation. The slower path remains the normal structure/flow exit.
     giveback_fraction=(recoil/peak) if peak>0 else 0.0
-    fast_mfe_lock=bool(peak>0.0 and current>0.0 and votes["60"]["counter"]
-        and giveback_fraction>=0.10)
-    confirmed=bool(fast_mfe_lock or (profile["counter_takeover"] and votes["180"]["counter"]
-        and counter_votes>=2 and peak>0.0 and recoil>0.0 and current>0.0))
+    all_complete=all(votes[str(n)]["complete"] for n in (60,180,300))
+    fast_mfe_lock=False
+    confirmed=bool(all_complete and profile["counter_takeover"] and votes["180"]["counter"]
+        and (votes["60"]["counter"] or votes["300"]["counter"])
+        and peak>0.0 and recoil>0.0 and current>0.0)
     features["mfe_exit_state"]={"peak_mfe_usd":peak,"current_pnl_usd":current,
         "mfe_giveback_usd":recoil,"mfe_giveback_fraction":giveback_fraction,
         "fast_mfe_lock":fast_mfe_lock,"profit_excursion_seen":peak>0.0}
@@ -160,7 +159,7 @@ def pressure_exit(position,execution_context,mark,flow,*,opposite_local_confirme
         "control_side":profile["control_side"],"buy_notional_since_entry":profile["buy"],
         "sell_notional_since_entry":profile["sell"],"event_epoch":profile["event_epoch"],
         "window_votes":votes,"counter_votes":counter_votes}
-    return "confirmed_counter_move_exit_mfe_lock_60" if fast_mfe_lock else "confirmed_counter_move_exit_60_180_300" if confirmed else None
+    return "confirmed_counter_move_exit_60_180_300" if confirmed else None
 
 
 def update_watch(watch,mark,execution_context,flow,stamp):
