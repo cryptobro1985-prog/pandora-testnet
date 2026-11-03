@@ -8,7 +8,7 @@ from scripts.historical_848_hype_h1_swing import analyze,position_exit,update_pa
 from scripts.historical_848_local_order_flow import initial_entry_candidate,entry_candidate,pressure_exit,update_watch,reentry_ready
 
 SYMBOL="WLD"; START=500.; MARGIN=.20; LEV=25.; FEE=.00045
-ENTRY_CADENCE=10.; RISK_CADENCE=.5
+ENTRY_CADENCE=10.; RISK_CADENCE=.5 # historical 848 loop cadences
 
 def pnl(n,e,x,s):
     out=n*x/e
