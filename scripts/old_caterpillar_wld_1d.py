@@ -149,6 +149,7 @@ def main():
     cash=START; pos=None; watch=None; trades=[]; next_decision=day.timestamp(); last=None
     entries=reentries=pyramid_adds=flow_exits=h1_exits=0
     maxeq=START; maxdd=0.0; decision_count=0; phase_counts={}
+    analysis_cache=None; h1_slot=None
     for x in it:
         if x.ts>=end.timestamp(): break
         last=x; tid+=1
