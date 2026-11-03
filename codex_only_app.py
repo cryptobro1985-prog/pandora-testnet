@@ -18,7 +18,29 @@ HTML=r'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" 
 <title>Codex Million PAPER</title><style>
 :root{color-scheme:dark;font-family:system-ui;background:#070b16;color:#edf4ff}body{margin:0}.wrap{max-width:1200px;margin:auto;padding:12px}
 h1{font-size:28px;margin:0}.sub{color:#9aabc8;font-size:11px}.top,.grid{display:grid;gap:8px}.top{grid-template-columns:repeat(3,minmax(0,1fr));margin:12px 0}.tile,.card,.research{border:1px solid #31405f;background:#10182a;border-radius:12px;padding:10px;min-width:0}.tile b{display:block;font-size:15px}.tile small{font-size:9px;color:#9aabc8}.grid{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:10px}.card h2{margin:0 0 8px;color:#6cddff;font-size:18px}.m{display:grid;grid-template-columns:96px minmax(0,1fr);gap:6px 8px;font:11px ui-monospace,monospace}.m span:nth-child(odd){color:#9aabc8}.m span{overflow-wrap:anywhere}.ok{color:#7ef5bb}.warn{color:#fff17b}.history{margin-top:14px;overflow-x:auto}table{min-width:620px;width:100%;border-collapse:collapse;font-size:11px}td,th{padding:7px;border-bottom:1px solid #26334d;white-space:nowrap;text-align:left}
-@media(max-width:600px){.wrap{padding:10px}.grid{grid-template-columns:1fr}.top{position:sticky;top:0;background:#070b16;z-index:5}.card{padding:10px}}
+html,body{width:100%;max-width:100%;overflow-x:hidden}*{box-sizing:border-box}.wrap{width:100%}.history{max-width:100%}
+@media(max-width:768px){
+ body{overflow-x:hidden}.wrap{width:100%;max-width:100vw;padding:10px 10px 24px}
+ h1{font-size:22px}.sub{font-size:10px;line-height:1.35}
+ .top{grid-template-columns:repeat(2,minmax(0,1fr));position:static;margin:10px 0}
+ .tile{padding:9px}.tile b{font-size:14px}
+ .grid{grid-template-columns:1fr;gap:10px}.card{width:100%;min-width:0;padding:12px}
+ .m{grid-template-columns:minmax(82px,34%) minmax(0,1fr);font-size:11px}
+ .m span{min-width:0;white-space:normal;word-break:break-word}
+ .research{font-size:11px}.history{overflow:visible;width:100%}
+ .history table,.history tbody,.history tr,.history td{display:block;width:100%}
+ .history table{min-width:0}.history thead,.history th{display:none}
+ .history tr{margin:0 0 10px;padding:10px;border:1px solid #31405f;background:#10182a;border-radius:12px}
+ .history td{display:grid;grid-template-columns:90px minmax(0,1fr);gap:8px;border:0;padding:4px 0;white-space:normal;overflow-wrap:anywhere}
+ .history td:before{color:#9aabc8;font-size:10px}
+ .history td:nth-child(1):before{content:'Symbol'}.history td:nth-child(2):before{content:'Side'}
+ .history td:nth-child(3):before{content:'Entry'}.history td:nth-child(4):before{content:'Exit'}
+ .history td:nth-child(5):before{content:'PnL'}.history td:nth-child(6):before{content:'MFE'}
+ .history td:nth-child(7):before{content:'MAE'}.history td:nth-child(8):before{content:'Open reason'}
+ .history td:nth-child(9):before{content:'Close reason'}.history td:nth-child(10):before{content:'Opened'}
+ .history td:nth-child(11):before{content:'Closed'}
+}
+@media(max-width:380px){.wrap{padding-left:8px;padding-right:8px}.top{gap:6px}.m{grid-template-columns:78px minmax(0,1fr)}.card h2{font-size:17px}}
 </style></head><body><div class="wrap"><h1>Codex Million · PAPER</h1><div class="sub">fixed 10 · H1 locals · executed flow · 60/180/300 · MFE/MAE</div>
 <div id="top" class="top"></div><div id="research" class="research">Research…</div><div id="grid" class="grid"></div><div class="history"><h2>Closed trades</h2><div id="history"></div></div></div>
 <script>
@@ -34,7 +56,7 @@ async function tick(){try{
  let by=Object.fromEntries(tokens.map(x=>[x.symbol,x])), pos=Object.fromEntries(positions.map(x=>[x.symbol,x]));
  document.getElementById('grid').innerHTML=FIXED.map(s=>{let t=by[s]||{symbol:s},p=pos[s]||{},f=p.features||{},fl=t.flow_context||t.flow_state||{},h=ready[s]||{},g=diag[s]||{},dir=t.direction??t.entry_side??(t.local_state||{}).entry_side;
  return '<div class="card"><h2>'+s+'</h2><div class="m">'+row('Local H1',loc(t))+row('Structure',t.structure_state||t.structure||t.state||'WAITING_DATA')+row('Direction',dir==-1?'SHORT':dir==1?'LONG':'—')+row('H1 ready',h.h1?'YES':'NO')+row('Flow ready',h.executed_flow?'YES':'NO')+row('Evidence',h.evidence_ready?'YES':'NO')+row('Entry state',g.reason||g.status||t.action_reason||'WAITING')+row('Price',t.price??t.last)+row('BUY',num(t.buy_volume??fl.buy_notional,0))+row('SELL',num(t.sell_volume??fl.sell_notional,0))+row('Flow 60s',fl.windows?.['60']?.complete?'READY · '+num(fl.windows['60'].imbalance,3):'WARMING')+row('Flow 180s',fl.windows?.['180']?.complete?'READY · '+num(fl.windows['180'].imbalance,3):'WARMING')+row('Flow 300s',fl.windows?.['300']?.complete?'READY · '+num(fl.windows['300'].imbalance,3):'WARMING')+row('Position',p.side==-1||p.side==='SHORT'?'SHORT':p.side==1||p.side==='LONG'?'LONG':'—')+row('Entry',p.entry??p.entry_price)+row('Margin',money(p.margin??p.margin_usd))+row('Leverage',(p.leverage??'—')+'x')+row('PnL',money(p.unrealized_pnl??p.pnl_usdt))+row('MFE',money(f.peak_mfe_usd??f.mfe_usd))+row('MAE',money(f.mae_usd))+'</div></div>'}).join('');
- let tr=(d.trades||[]).slice(0,100);document.getElementById('history').innerHTML='<table><tr><th>Symbol</th><th>Side</th><th>Entry</th><th>Exit</th><th>PnL</th><th>MFE</th><th>MAE</th><th>Open reason</th><th>Close reason</th><th>Opened</th><th>Closed</th></tr>'+tr.map(x=>{let f=x.features||{};return '<tr><td>'+x.symbol+'</td><td>'+(x.side==-1?'SHORT':'LONG')+'</td><td>'+num(x.entry,8)+'</td><td>'+num(x.exit,8)+'</td><td>'+money(x.pnl)+'</td><td>'+money(f.peak_mfe_usd??f.mfe_usd)+'</td><td>'+money(f.mae_usd)+'</td><td>'+String(f.entry_reason??f.entry_kind??f.open_reason??'—')+'</td><td>'+String(x.reason||f.close_reason||'—')+'</td><td>'+String(x.opened||'—')+'</td><td>'+String(x.closed||'—')+'</td></tr>'}).join('')+'</table>';
+ let tr=(d.trades||[]).slice(0,100);document.getElementById('history').innerHTML='<table><thead><tr><th>Symbol</th><th>Side</th><th>Entry</th><th>Exit</th><th>PnL</th><th>MFE</th><th>MAE</th><th>Open reason</th><th>Close reason</th><th>Opened</th><th>Closed</th></tr></thead><tbody>'+tr.map(x=>{let f=x.features||{};return '<tr><td>'+x.symbol+'</td><td>'+(x.side==-1?'SHORT':'LONG')+'</td><td>'+num(x.entry,8)+'</td><td>'+num(x.exit,8)+'</td><td>'+money(x.pnl)+'</td><td>'+money(f.peak_mfe_usd??f.mfe_usd)+'</td><td>'+money(f.mae_usd)+'</td><td>'+String(f.entry_reason??f.entry_kind??f.open_reason??'—')+'</td><td>'+String(x.reason||f.close_reason||'—')+'</td><td>'+String(x.opened||'—')+'</td><td>'+String(x.closed||'—')+'</td></tr>'}).join('')+'</tbody></table>';
 }catch(e){document.getElementById('research').textContent='MONITOR ERROR: '+e}}
 tick();setInterval(tick,1500);
 </script></body></html>'''
