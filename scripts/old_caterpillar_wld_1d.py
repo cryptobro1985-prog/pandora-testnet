@@ -37,7 +37,7 @@ def main():
     h1=candles_from_trades(src,day-timedelta(days=5),day,3600)
     m15=candles_from_trades(src,day-timedelta(days=1),day,900)
     it,meta=src.trades(SYMBOL,day)
-    q=deque();cash=START;pos=None;watch=None;trades=[];adds=[];next_eval=day.timestamp();last=None;maxeq=START;maxdd=0.;last_anchor=None;cur15=None
+    q=deque();cash=START;pos=None;watch=None;trades=[];adds=[];next_eval=day.timestamp();last=None;maxeq=START;maxdd=0.;last_anchor=None;cur15=None;cached_a=None;last_h1_slot=None
     for t in it:
         last=t;q.append((t.ts,t.price,t.price*t.quantity,int(t.side)))
         k15=int(t.ts//900)*900
