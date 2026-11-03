@@ -1,7 +1,7 @@
 """Caterpillar event-driven execution from Bybit Public Trades.
 
 H1 local owns direction. Trading decisions use only cumulative executed BUY/SELL
-notional observed after a causal baseline. No M15, fixed 30/180/300 decision
+notional observed after a causal baseline. No M15, fixed 60/180/300 decision
 window, price-response confirmation, EMA/MACD/MFI, ROI gate or MFE stop.
 Wall-clock time is used only to reject stale transport.
 """
@@ -73,7 +73,7 @@ def dominance(flow):
 def _window_consensus(flow,side):
     windows=(flow or {}).get("windows") or {}
     votes={}
-    for seconds in (30,180,300):
+    for seconds in (60,180,300):
         w=windows.get(str(seconds)) or windows.get(seconds) or {}
         complete=bool(w.get("complete"))
         imbalance=_f(w.get("imbalance"))
@@ -81,9 +81,9 @@ def _window_consensus(flow,side):
         votes[str(seconds)]={"complete":complete,"imbalance":imbalance,"aligned":aligned}
     completed=[v for v in votes.values() if v["complete"]]
     aligned_votes=sum(1 for v in completed if v["aligned"])
-    # 30 is the first read, 180 confirms the move, 300 supplies regime context.
-    # Entry/re-entry needs 180 aligned plus at least two aligned completed horizons.
-    return bool(votes["180"]["aligned"] and aligned_votes>=2),votes,aligned_votes
+    # 60s is the entry confirmation. Once it is complete and aligned with the
+    # confirmed H1 local, enter immediately; 180/300 are later context, not blockers.
+    return bool(votes["60"]["aligned"]),votes,aligned_votes
 
 
 def _candidate(symbol,analysis,flow):
@@ -95,8 +95,8 @@ def _candidate(symbol,analysis,flow):
         (analysis or {}).get("flow_anchor_sell_total"),(analysis or {}).get("flow_anchor_trade_count"))
     consensus,votes,aligned_votes=_window_consensus(flow,side)
     eligible=bool(h1 and profile and profile["aligned_control"] and consensus)
-    reason=("h1_flow_30_180_300_entry" if eligible else "waiting_for_h1_local" if not h1
-        else "waiting_for_fresh_executed_flow" if profile is None else "waiting_for_30_180_300_flow_confirmation")
+    reason=("h1_flow_60_confirmed_entry" if eligible else "waiting_for_h1_local" if not h1
+        else "waiting_for_fresh_executed_flow" if profile is None else "waiting_for_60s_flow_confirmation")
     return {"symbol":symbol,"side":side,"eligible":eligible,"reason":reason,"policy":POLICY,
             "aligned_pressure":profile["aligned_pressure"] if profile else None,
             "event_epoch":profile["event_epoch"] if profile else None,
@@ -125,7 +125,7 @@ def pressure_exit(position,execution_context,mark,flow,*,opposite_local_confirme
         return None
     windows=flow.get("windows") or {}
     votes={}
-    for seconds in (30,180,300):
+    for seconds in (60,180,300):
         w=windows.get(str(seconds)) or windows.get(seconds) or {}
         complete=bool(w.get("complete"))
         imbalance=_f(w.get("imbalance"))
@@ -133,7 +133,7 @@ def pressure_exit(position,execution_context,mark,flow,*,opposite_local_confirme
             "counter":bool(complete and imbalance is not None and side*imbalance<0)}
     completed=[v for v in votes.values() if v["complete"]]
     counter_votes=sum(1 for v in completed if v["counter"])
-    # 30s is warning only. A normal flow exit needs the 180s context and
+    # 60s is the fast confirmation. A normal flow exit needs the 180s context and
     # agreement from at least two completed horizons. 300s becomes the regime
     # vote once available. Confirmed opposite H1 local bypasses this gate above.
     # Caterpillar profit-preservation rule: ordinary counter-flow may harvest a
@@ -144,11 +144,11 @@ def pressure_exit(position,execution_context,mark,flow,*,opposite_local_confirme
     current=float(features.get("current_pnl_usd") or 0.0)
     recoil=max(0.0,peak-current)
     # Aggressive MFE preservation for the SHORT10 paper test: once a trade
-    # has positive peak excursion, a 30s counter-flow warning plus >=10% peak
+    # has positive peak excursion, a 60s counter-flow warning plus >=10% peak
     # giveback can harvest the remaining profit before the slower 180/300
     # confirmation. The slower path remains the normal structure/flow exit.
     giveback_fraction=(recoil/peak) if peak>0 else 0.0
-    fast_mfe_lock=bool(peak>0.0 and current>0.0 and votes["30"]["counter"]
+    fast_mfe_lock=bool(peak>0.0 and current>0.0 and votes["60"]["counter"]
         and giveback_fraction>=0.10)
     confirmed=bool(fast_mfe_lock or (profile["counter_takeover"] and votes["180"]["counter"]
         and counter_votes>=2 and peak>0.0 and recoil>0.0 and current>0.0))
@@ -160,7 +160,7 @@ def pressure_exit(position,execution_context,mark,flow,*,opposite_local_confirme
         "control_side":profile["control_side"],"buy_notional_since_entry":profile["buy"],
         "sell_notional_since_entry":profile["sell"],"event_epoch":profile["event_epoch"],
         "window_votes":votes,"counter_votes":counter_votes}
-    return "confirmed_counter_move_exit_mfe_lock_30" if fast_mfe_lock else "confirmed_counter_move_exit_30_180_300" if confirmed else None
+    return "confirmed_counter_move_exit_mfe_lock_60" if fast_mfe_lock else "confirmed_counter_move_exit_60_180_300" if confirmed else None
 
 
 def update_watch(watch,mark,execution_context,flow,stamp):
