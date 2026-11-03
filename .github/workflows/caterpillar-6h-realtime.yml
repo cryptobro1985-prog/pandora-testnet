@@ -1,0 +1,99 @@
+name: Caterpillar 6H Realtime OOS
+
+on:
+  push:
+    branches:
+      - research/caterpillar-full-research-v2
+
+permissions:
+  contents: read
+
+jobs:
+  realtime-part1:
+    if: contains(github.event.head_commit.message, '[run-6h]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 200
+    defaults:
+      run:
+        working-directory: research/caterpillar
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip check
+      - name: Run first 3 hours of frozen 6h realtime audit
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/caterpillar-run"
+          set +e
+          timeout --signal=TERM 10800s python -m caterpillar realtime_audit \
+            --hours 6 \
+            --market-context \
+            --output "$RUNNER_TEMP/caterpillar-run"
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ] && [ "$code" -ne 124 ] && [ "$code" -ne 143 ]; then
+            exit "$code"
+          fi
+        env:
+          PYTHONUNBUFFERED: "1"
+      - name: Upload midpoint checkpoint
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: caterpillar-6h-midpoint
+          path: ${{ runner.temp }}/caterpillar-run/**
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 6
+
+  realtime-part2:
+    if: contains(github.event.head_commit.message, '[run-6h]')
+    needs: realtime-part1
+    runs-on: ubuntu-latest
+    timeout-minutes: 220
+    defaults:
+      run:
+        working-directory: research/caterpillar
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip check
+      - name: Restore midpoint checkpoint
+        uses: actions/download-artifact@v4
+        with:
+          name: caterpillar-6h-midpoint
+          path: ${{ runner.temp }}/caterpillar-run
+      - name: Resume to six-hour target
+        run: |
+          python -m caterpillar realtime_audit \
+            --resume \
+            --output "$RUNNER_TEMP/caterpillar-run"
+        env:
+          PYTHONUNBUFFERED: "1"
+      - name: Render final hourly report
+        if: always()
+        run: |
+          if test -f "$RUNNER_TEMP/caterpillar-run/research_status.json"; then
+            python -m caterpillar hourly_report --latest --output "$RUNNER_TEMP/caterpillar-run" || true
+          fi
+      - name: Upload final six-hour research
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: caterpillar-6h-final
+          path: ${{ runner.temp }}/caterpillar-run/**
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 6
