@@ -442,7 +442,8 @@ class ResearchEngine:
             if c["imbalance"]*side < 0 and c["move_bps"]*side > c["price_scale_bps"]:
                 tags.append("combo_minority_flow_directional_response")
             row = {"seq": s.seq, "ts": c["ts"], "side": side, "signal_price": c["price"],
-                   "entry": None, "tags": list(dict.fromkeys(tags)), "phase": self.phase(c["ts"]), "snapshot": snapshot}
+                   "entry": None, "tags": list(dict.fromkeys(tags)), "phase": self.phase(c["ts"]),
+                   "mfe_bps": 0.0, "mae_bps": 0.0, "snapshot": snapshot}
             forward_by_side[side] = row
             s.forecasts.append(row)
         emit_microstructure_research(self, s, c, snapshot)
@@ -674,13 +675,26 @@ class ResearchEngine:
             if row["entry"] is None and trade.ts > row["ts"]:
                 row["entry"] = trade.price*(1+row["side"]*cfg.slippage_bps/10000)
                 row["entry_seq"] = s.seq
+            if row["entry"] is not None:
+                excursion = (trade.price/row["entry"]-1)*row["side"]*10000
+                row["mfe_bps"] = max(row.get("mfe_bps", 0.0), excursion)
+                row["mae_bps"] = min(row.get("mae_bps", 0.0), excursion)
             if row["entry"] is not None and s.seq-row["entry_seq"] >= cfg.outcome_trades:
                 exit_price = trade.price*(1-row["side"]*cfg.slippage_bps/10000)
                 net = ((exit_price-row["entry"])*row["side"]-(exit_price+row["entry"])*cfg.fee_bps/10000)/row["entry"]*10000
-                self.emit("hypothesis_outcomes", s, trade.ts, status="COMPLETE", candidate=row, net_bps=net)
+                capture = net/row["mfe_bps"] if row.get("mfe_bps", 0) > 0 else None
+                self.emit("hypothesis_outcomes", s, trade.ts, status="COMPLETE", candidate=row,
+                          net_bps=net, mfe_bps=row.get("mfe_bps"), mae_bps=row.get("mae_bps"),
+                          mfe_capture_ratio=capture)
                 direction = "LONG" if row["side"] == 1 else "SHORT"
                 for tag in row["tags"]:
-                    self.profiles[s.symbol].outcome(row["phase"]+"/feature/"+direction+"/"+tag, net, ts=row["ts"])
+                    profile = self.profiles[s.symbol]
+                    profile.outcome(row["phase"]+"/feature/"+direction+"/"+tag, net, ts=row["ts"])
+                    metric_prefix = "pattern/"+direction+"/"+tag+"/"
+                    profile.add(metric_prefix+"net_bps", net)
+                    profile.add(metric_prefix+"mfe_bps", row.get("mfe_bps"))
+                    profile.add(metric_prefix+"mae_bps", row.get("mae_bps"))
+                    profile.add(metric_prefix+"mfe_capture_ratio", capture)
             else:
                 remaining.append(row)
         s.forecasts = remaining
