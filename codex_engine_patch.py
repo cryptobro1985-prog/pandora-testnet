@@ -48,6 +48,29 @@ mapping={
 for old_name,new_name in mapping.items():reset=reset.replace(old_name,new_name)
 reset=reset.replace("PANDORA_FIXED_FIVE_20261102","CODEX_FIXED_FIVE_20261102")
 reset=reset.replace("pandora_win_legacy_fixed5_20261102_","codex_legacy_fixed5_20261102_")
+reset = r'''"""One-shot Codex SHORT10 PAPER reset."""
+import json
+EXPERIMENT="CODEX_SHORT10_30_180_300_20261103"
+EQUITY=500.0
+TABLES=("local_v12_positions","local_v12_trade_history","local_v12_watchlist",
+        "local_h1_direction","local_v12_signal_journal","audit_journal",
+        "local_candle_checkpoints","local_v12_live_state","pandora_token_state",
+        "pandora_runtime_state","pandora_pyramid_adds")
+def reset_once(pg,store,now):
+    with pg() as db:
+        with db.transaction():
+            store.fence(db)
+            db.execute("CREATE TABLE IF NOT EXISTS pandora_win_experiment_migrations (experiment text PRIMARY KEY, migrated_at timestamptz NOT NULL DEFAULT clock_timestamp(), starting_equity double precision NOT NULL, archived_rows jsonb NOT NULL)")
+            if db.execute("SELECT 1 FROM pandora_win_experiment_migrations WHERE experiment=%s FOR UPDATE",(EXPERIMENT,)).fetchone():
+                return False
+            counts={}
+            for name in TABLES:
+                counts[name]=db.execute("SELECT count(*) AS n FROM "+name).fetchone()["n"]
+                db.execute("DELETE FROM "+name)
+            db.execute("INSERT INTO local_v12_account_state(id,equity,realized_pnl,started_at,updated_at) VALUES(1,%s,0,%s,%s) ON CONFLICT(id) DO UPDATE SET equity=excluded.equity,realized_pnl=0,started_at=excluded.started_at,updated_at=excluded.updated_at",(EQUITY,now(),now()))
+            db.execute("INSERT INTO pandora_win_experiment_migrations(experiment,starting_equity,archived_rows) VALUES(%s,%s,%s::jsonb)",(EXPERIMENT,EQUITY,json.dumps(counts)))
+            return True
+'''
 (p.parent/"pandora_fixed_five_reset.py").write_text(reset)
 
 # Limit all frozen history/quote/trade work to the same user cohort.
@@ -58,6 +81,14 @@ s=s.replace("stable_shard=lambda symbol:int(hashlib.sha1(str(symbol).encode()).h
 
 # Caterpillar Event Flow runtime wiring for the frozen child.
 s=s.replace("DISCOVERY_MAX_SELECTED=5","DISCOVERY_MAX_SELECTED=10")
+# Fixed SHORT10 paper regime. H1 structure is still computed and displayed;
+# only SHORT execution is allowed until this experiment is changed.
+s=s.replace("leverage=plan.leverage;margin=plan.margin;notional=plan.notional",
+'''leverage=plan.leverage;margin=plan.margin;notional=plan.notional
+ if plan.allowed and float(instrument["max_leverage"])>=30.0:
+  leverage=30.0;margin=equity*0.10;notional=margin*leverage''')
+s=s.replace("if side not in (-1,1):continue","if side!=-1:continue")
+
 # Canonical H1 repair: embedded confirmed_local is a real candidate, not display-only.
 s=s.replace('''  execution=features.get("execution_local") if isinstance(features.get("execution_local"),dict) else {}
   side=int(features.get("entry_side") or execution.get("entry_side") or 0)''','''  execution=features.get("execution_local") if isinstance(features.get("execution_local"),dict) else {}
