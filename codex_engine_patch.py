@@ -28,7 +28,7 @@ new="""    with ACCOUNT_LOCK:
      restore_state()"""
 if s.count(old)!=1:raise SystemExit("Codex coordinator signature changed")
 s=s.replace(old,new)
-for name in ("pandora_scanner.py","pandora_fixed_five_reset.py","local_order_flow.py","market_data.py"):
+for name in ("pandora_scanner.py","pandora_fixed_five_reset.py","local_order_flow.py","market_data.py","pandora_flow.py"):
  shutil.copyfile(root/name,p.parent/name)
 # The frozen revision uses local_v12/pandora tables, not pandora_win tables.
 reset=(root/"pandora_fixed_five_reset.py").read_text()
@@ -75,6 +75,8 @@ s=s.replace('"entry_mark":price,"profit_lock_armed":False,',
   "flow_entry_buy_total":float(flow.get("event_buy_notional_total") or 0.),
   "flow_entry_sell_total":float(flow.get("event_sell_notional_total") or 0.),
   "flow_entry_trade_count":int(flow.get("event_trade_count_total") or 0),''')
+s=s.replace(' if reason in ("confirmed_counter_move_exit","modeled_maintenance_breach"):', ' if reason.startswith("confirmed_counter_move_exit") or reason=="modeled_maintenance_breach":')
+s=s.replace('  opposite_flow_exit=reason=="confirmed_counter_move_exit"', '  opposite_flow_exit=reason.startswith("confirmed_counter_move_exit")')
 s=s.replace('watch["context"].update(phase="WAIT_RESUMPTION" if confirmed_opposite else "WAIT_PULLBACK",\n    counter_pressure_seen=confirmed_opposite,caterpillar_policy=LOCAL4_FLOW_POLICY)',
 '''watch["context"].update(phase="WAIT_RESUMPTION",
     counter_pressure_seen=True,caterpillar_policy=LOCAL4_FLOW_POLICY,
