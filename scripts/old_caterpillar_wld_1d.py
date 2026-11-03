@@ -49,7 +49,6 @@ def main():
             cur15={"t":k15*1000,"T":(k15+900)*1000-1,"o":t.price,"h":t.price,"l":t.price,"c":t.price,"v":t.quantity}
         else:
             cur15["h"]=max(cur15["h"],t.price);cur15["l"]=min(cur15["l"],t.price);cur15["c"]=t.price;cur15["v"]+=t.quantity
-        while q and q[0][0]<t.ts-305:q.popleft()
         if t.ts<next_eval:continue
         now=t.ts;next_eval=now+5.
         ms=int(now*1000)
@@ -61,8 +60,8 @@ def main():
         # Runtime sees completed M15 candles plus the causally forming candle, never its future final OHLCV.
         mrows=[x for x in m15 if x["T"]<ms and x["t"]<cur15["t"]]+[dict(cur15)]
         mm=analyze_m15(mrows,ms,side)
-        i60,c60=flow(q,now,60);i180,c180=flow(q,now,180);i300,c300=flow(q,now,300)
-        coverage=(q[-1][0]-q[0][0]) if q else 0
+        i60,c60=flow(buckets,now,60);i180,c180=flow(buckets,now,180);i300,c300=flow(buckets,now,300)
+        coverage=max(0.,now-since) if since is not None else 0
         flowctx={"trade_data_fresh":bool(last_trade_ts is not None and now-last_trade_ts<=15 and coverage>=60),"latest_trade_age_seconds":now-last_trade_ts if last_trade_ts is not None else None,
           "trade_coverage_seconds":coverage,"flow_imbalance":i60,"flow_imbalance_180s":i180 if coverage>=180 else None,
           "flow_imbalance_300s":i300 if coverage>=300 else None,"trade_count_60s":c60,"trade_count_180s":c180,"trade_count_300s":c300}
