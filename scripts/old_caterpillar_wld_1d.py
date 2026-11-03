@@ -53,7 +53,7 @@ def main():
         if t.ts<next_eval:continue
         now=t.ts;next_eval=now+5.
         ms=int(now*1000)
-        aa=analyze(h1,ms,SYMBOL)
+        slot=int(now//3600)\n        if cached_a is None or slot!=last_h1_slot:\n            cached_a=analyze(h1,ms,SYMBOL);last_h1_slot=slot\n        aa=cached_a
         if aa.get("ready") and aa.get("anchor_confirmed") and aa.get("entry_side") in (-1,1):
             if last_anchor is None or int(aa.get("signal_candle_time") or 0)>=int(last_anchor.get("signal_candle_time") or 0):last_anchor=aa
         a1=last_anchor or aa
