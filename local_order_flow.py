@@ -105,10 +105,26 @@ def pressure_exit(position,execution_context,mark,flow,*,opposite_local_confirme
     if profile is None:
         features["exit_decision"]={"reason":"fresh_executed_flow_required","control_side":0}
         return None
-    features["exit_decision"]={"reason":"counter_executed_flow_takeover" if profile["counter_takeover"] else "own_side_executed_flow",
+    windows=flow.get("windows") or {}
+    votes={}
+    for seconds in (60,180,300):
+        w=windows.get(str(seconds)) or windows.get(seconds) or {}
+        complete=bool(w.get("complete"))
+        imbalance=_f(w.get("imbalance"))
+        votes[str(seconds)]={"complete":complete,"imbalance":imbalance,
+            "counter":bool(complete and imbalance is not None and side*imbalance<0)}
+    completed=[v for v in votes.values() if v["complete"]]
+    counter_votes=sum(1 for v in completed if v["counter"])
+    # 60s is warning only. A normal flow exit needs the 180s context and
+    # agreement from at least two completed horizons. 300s becomes the regime
+    # vote once available. Confirmed opposite H1 local bypasses this gate above.
+    confirmed=bool(profile["counter_takeover"] and votes["180"]["counter"] and counter_votes>=2)
+    features["exit_decision"]={"reason":"counter_flow_60_180_300_confirmed" if confirmed else
+        "counter_flow_waiting_60_180_300" if profile["counter_takeover"] else "own_side_executed_flow",
         "control_side":profile["control_side"],"buy_notional_since_entry":profile["buy"],
-        "sell_notional_since_entry":profile["sell"],"event_epoch":profile["event_epoch"]}
-    return "confirmed_counter_move_exit" if profile["counter_takeover"] else None
+        "sell_notional_since_entry":profile["sell"],"event_epoch":profile["event_epoch"],
+        "window_votes":votes,"counter_votes":counter_votes}
+    return "confirmed_counter_move_exit_60_180_300" if confirmed else None
 
 
 def update_watch(watch,mark,execution_context,flow,stamp):
