@@ -189,11 +189,13 @@ class Output:
                 raise ValueError("Resume requires checkpoint.json and run_manifest.json")
             checkpoint = json.loads(checkpoint_path.read_text())
             manifest = json.loads(manifest_path.read_text())
+            current_source_hash = package_source_sha256()
             if (manifest.get("schema_version") != 3 or manifest.get("mode") != mode
                     or manifest.get("symbols") != list(symbols)
-                    or manifest.get("config_sha256") != config.digest):
+                    or manifest.get("config_sha256") != config.digest
+                    or manifest.get("package_source_sha256") != current_source_hash):
                 self.lock_handle.close()
-                raise ValueError("Resume manifest does not match mode/symbols/config/schema")
+                raise ValueError("Resume manifest does not match mode/symbols/config/schema/source")
             offsets = checkpoint.get("output_offsets", {})
             try:
                 for name in STREAMS:
@@ -214,8 +216,11 @@ class Output:
             self.meta = manifest
             self.meta["status"] = "running"
             self.meta.setdefault("resumed_at", []).append(datetime.now(timezone.utc).isoformat())
-            self.meta["package_version"] = __version__
-            self.meta["package_source_sha256"] = package_source_sha256()
+            self.meta.setdefault("resume_history", []).append({
+                "at": datetime.now(timezone.utc).isoformat(),
+                "package_version": __version__,
+                "package_source_sha256": current_source_hash,
+            })
             self.save_json("run_manifest.json", self.meta)
         else:
             try:
