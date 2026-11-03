@@ -4,17 +4,17 @@
   "warmup_blocks": 8,
   "confirmation_blocks": 2,
   "transfer_blocks": 2,
-  "local_floor_bps": 5.0,
+  "local_floor_bps": 5,
   "local_vol_multiplier": 1.5,
   "control_imbalance": 0.15,
-  "absorption_z": 2.0,
+  "absorption_z": 2,
   "fee_bps": 4.5,
-  "slippage_bps": 2.0,
-  "notional": 1000.0,
-  "gap_seconds": 30.0,
+  "slippage_bps": 2,
+  "notional": 1000,
+  "gap_seconds": 30,
   "post_exit_trades": 256,
   "outcome_trades": 128,
-  "large_trade_z": 3.0,
+  "large_trade_z": 3,
   "min_evidence": 30,
   "min_evidence_days": 5,
   "h1_lookback_bars": 4,
@@ -28,5 +28,8 @@
     "local_invalidation",
     "opposite_local",
     "structure_break"
-  ]
+  ],
+  "checkpoint_seconds": 300,
+  "status_seconds": 20,
+  "hourly_snapshot_seconds": 3600
 }
