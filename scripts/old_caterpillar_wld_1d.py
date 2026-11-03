@@ -1,8 +1,8 @@
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-import argparse, json, math
+import argparse, json, math, csv, gzip\nfrom concurrent.futures import ThreadPoolExecutor
 
-from research.caterpillar.caterpillar.sources import Archives, candles
+from research.caterpillar.caterpillar.sources import Archives, archive_row
 from market_data import RollingMarketData
 from scripts.historical_224d_hype_h1_swing import analyze, analyze_m15, position_exit, update_path
 from scripts.historical_224d_local_caterpillar import update_watch
@@ -90,22 +90,29 @@ def main():
     a=ap.parse_args(); a.output.mkdir(parents=True,exist_ok=True)
     src=Archives(a.cache); day=datetime(2026,11,2,tzinfo=timezone.utc); end=day+timedelta(days=1)
 
-    # Historical runtime consumed Bybit H1/M15 kline streams. Bootstrap the
-    # same closed candles from Bybit REST, then update the replay-day forming
-    # candles causally from the executed trade tape.
-    h1d={}; m15d={}; metas=[]
-    hist_start=day-timedelta(days=5)
-    for c in candles(SYMBOL,hist_start,day,interval=60):
-        k=int(c["open_ts"]); h1d[k]={"t":k*1000,"T":int(c["available_ts"]*1000)-1,"o":c["open"],"h":c["high"],"l":c["low"],"c":c["close"],"v":c["volume"]}
-    for c in candles(SYMBOL,day-timedelta(hours=12),day,interval=15):
-        k=int(c["open_ts"]); m15d[k]={"t":k*1000,"T":int(c["available_ts"]*1000)-1,"o":c["open"],"h":c["high"],"l":c["low"],"c":c["close"],"v":c["volume"]}
+    # Pre-download the six official Bybit trade archives concurrently, then
+    # parse each exactly once. This preserves archive-derived candles while
+    # avoiding the source helper's extra full validation pass.
+    days=[day-timedelta(days=i) for i in range(5, -1, -1)]
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        got=list(pool.map(lambda d: src.obtain(SYMBOL,d),days))
+    paths={d:p for d,(p,m) in zip(days,got)}; metas=[m for p,m in got]
+    def file_trades(d):
+        with gzip.open(paths[d],"rt",newline="") as handle:
+            for line,row in enumerate(csv.DictReader(handle),2):
+                yield archive_row(SYMBOL,row,line)
+    h1d={}; m15d={}
+    for d in days[:-1]:
+        for x in file_trades(d):
+            bucket_update(h1d,x,3600)
+            if d>=day-timedelta(days=1): bucket_update(m15d,x,900)
 
     # Exact RollingMarketData 5-second bucket semantics, warmed only by the
     # final 10 minutes before midnight, with exchange time == receipt time.
     obs=RollingMarketData(bucket_seconds=5,retention_seconds=600,max_symbols=8,max_trade_lag_seconds=360,freshness_seconds=15)
     warm_start=day.timestamp()-600
     obs.mark_connected(warm_start,[SYMBOL])
-    wit,_=src.trades(SYMBOL,day-timedelta(days=1))
+    wit=file_trades(day-timedelta(days=1))
     tid=0
     for x in wit:
         if x.ts<warm_start: continue
@@ -114,7 +121,7 @@ def main():
         obs.heartbeat(x.ts)
         obs.ingest_trades([{"coin":SYMBOL,"px":x.price,"sz":x.quantity,"time":x.ts*1000,"tid":"w"+str(tid),"side":"B" if int(x.side)==1 else "A"}],x.ts)
 
-    it,meta=src.trades(SYMBOL,day)
+    it=file_trades(day); meta=metas[-1]
     cash=START; pos=None; watch=None; trades=[]; next_decision=day.timestamp(); last=None
     entries=reentries=pyramid_adds=flow_exits=h1_exits=0
     maxeq=START; maxdd=0.0; decision_count=0; phase_counts={}
