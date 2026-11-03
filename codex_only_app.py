@@ -41,10 +41,14 @@ tick();setInterval(tick,1500);
 class H(BaseHTTPRequestHandler):
     def log_message(self,*args): pass
     def sendj(self,obj,code=200):
-        b=json.dumps(obj,default=str).encode();self.send_response(code);self.send_header("Content-Type","application/json");self.send_header("Cache-Control","no-store");self.send_header("Content-Length",str(len(b)));self.end_headers();self.wfile.write(b)
+        b=json.dumps(obj,default=str).encode();self.send_response(code);self.send_header("Content-Type","application/json");self.send_header("Cache-Control","no-store");self.send_header("Content-Length",str(len(b)));self.end_headers()
+        try:self.wfile.write(b)
+        except (BrokenPipeError,ConnectionResetError):pass
     def do_GET(self):
         if self.path.startswith("/api/codex"): return self.sendj(CODEX.snapshot())
-        if self.path.startswith("/api/research"): return self.sendj(RESEARCH.snapshot())
+        if self.path.startswith("/api/research"):
+            r=RESEARCH.snapshot()
+            return self.sendj({"online":r.get("online"),"status":r.get("status"),"status_updated_at":r.get("status_updated_at"),"hours":r.get("hours"),"symbols":r.get("symbols")})
         if self.path.startswith("/health"): return self.sendj({"ok":True,"codex":CODEX.snapshot().get("status"),"research":RESEARCH.snapshot().get("status")})
         b=HTML.encode();self.send_response(200);self.send_header("Content-Type","text/html; charset=utf-8");self.send_header("Cache-Control","no-store");self.send_header("Content-Length",str(len(b)));self.end_headers();self.wfile.write(b)
 
