@@ -28,7 +28,7 @@ new="""    with ACCOUNT_LOCK:
      restore_state()"""
 if s.count(old)!=1:raise SystemExit("Codex coordinator signature changed")
 s=s.replace(old,new)
-for name in ("pandora_scanner.py","pandora_fixed_five_reset.py"):
+for name in ("pandora_scanner.py","pandora_fixed_five_reset.py","local_order_flow.py","market_data.py"):
  shutil.copyfile(root/name,p.parent/name)
 # The frozen revision uses local_v12/pandora tables, not pandora_win tables.
 reset=(root/"pandora_fixed_five_reset.py").read_text()
@@ -52,8 +52,8 @@ reset=reset.replace("pandora_win_legacy_fixed5_20261102_","codex_legacy_fixed5_2
 
 # Limit all frozen history/quote/trade work to the same user cohort.
 s=s.replace("LOCAL_EXPERIMENT_SYMBOLS=('INIT','NEAR','BTC','SOL','ETH','LIT','HYPE','ZEC','TAO','GRASS','BIRB','BEAM','LSK')",
-            "LOCAL_EXPERIMENT_SYMBOLS=('ARIA','LYN','ESPORTS','1000CAT','SOPH')")
+            "LOCAL_EXPERIMENT_SYMBOLS=('INIT','NEAR','BTC','SOL','ETH','LIT','HYPE','ZEC','TAO','GRASS')")
 s=s.replace("count=2 if trades else max(1,min(8,int(os.getenv('BYBIT_AUX_WS_SHARDS','2'))))","count=5 if trades else max(1,min(8,int(os.getenv('BYBIT_AUX_WS_SHARDS','2'))))")
-s=s.replace("stable_shard=lambda symbol:int(hashlib.sha1(str(symbol).encode()).hexdigest()[:8],16)%count","stable_shard=lambda symbol:('ARIA','LYN','ESPORTS','1000CAT','SOPH').index(symbol) if trades and symbol in ('ARIA','LYN','ESPORTS','1000CAT','SOPH') else int(hashlib.sha1(str(symbol).encode()).hexdigest()[:8],16)%count")
+s=s.replace("stable_shard=lambda symbol:int(hashlib.sha1(str(symbol).encode()).hexdigest()[:8],16)%count","stable_shard=lambda symbol:('INIT','NEAR','BTC','SOL','ETH','LIT','HYPE','ZEC','TAO','GRASS').index(symbol)%count if trades and symbol in ('INIT','NEAR','BTC','SOL','ETH','LIT','HYPE','ZEC','TAO','GRASS') else int(hashlib.sha1(str(symbol).encode()).hexdigest()[:8],16)%count")
 
 p.write_text(s)
