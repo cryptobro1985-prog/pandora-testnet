@@ -1,6 +1,7 @@
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-import argparse, json, math, csv, gzip\nfrom concurrent.futures import ThreadPoolExecutor
+import argparse, json, math, csv, gzip
+from concurrent.futures import ThreadPoolExecutor
 
 from research.caterpillar.caterpillar.sources import Archives, archive_row
 from market_data import RollingMarketData
