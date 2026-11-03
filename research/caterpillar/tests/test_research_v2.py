@@ -13,7 +13,7 @@ from caterpillar.model import Config, Local, Trade
 from caterpillar.output import Output, Profile
 from caterpillar.realtime import parse_context
 from caterpillar.reporting import persist_status, render_hourly_report
-from caterpillar.research_layer import MultiLocalResearch, dual_side_entry_research
+from caterpillar.research_layer import MultiLocalResearch, dual_side_entry_research, local_flow_evidence
 
 
 class V2ResearchTests(unittest.TestCase):
@@ -46,6 +46,19 @@ class V2ResearchTests(unittest.TestCase):
         confirmed = [x for x in rows if x.get("stage") == "CONFIRMED" and x["local"]["kind"] == "LOW"]
         self.assertTrue(confirmed)
         self.assertTrue(all(x["local"]["confirmed_ts"] > extreme.available_ts for x in confirmed))
+
+    def test_local_flow_evidence_is_tagged_without_becoming_a_gate(self):
+        low = local_flow_evidence("LOW", {
+            "imbalance": -0.4, "move_bps": 8.0, "price_scale_bps": 5.0,
+            "sell_absorption": True, "buy_absorption": False,
+            "sell_deceleration": 0.3, "buy_deceleration": 0.0,
+            "large_trade_count": 2, "notional_z": 3.0,
+        })
+        self.assertIn("SELL_ABSORPTION_AT_LOW", low)
+        self.assertIn("DOMINANT_FLOW_DECELERATION", low)
+        self.assertIn("DOMINANT_FLOW_FAILED_TO_MOVE_PRICE", low)
+        self.assertIn("STRONG_REVERSAL_PRICE_RESPONSE", low)
+        self.assertIn("LARGE_TRADE_CONTEXT", low)
 
     def test_dual_side_research_records_long_and_short_same_block(self):
         cfg = Config(block_trades=2, baseline_blocks=8, warmup_blocks=2)
