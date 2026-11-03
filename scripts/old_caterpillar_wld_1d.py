@@ -158,7 +158,10 @@ def main():
         next_decision=x.ts+DECISION_CADENCE; decision_count+=1
 
         hr=rows(h1d,160); mr=rows(m15d,80)
-        analysis=analyze(hr,int(x.ts*1000),SYMBOL)
+        slot=int(x.ts//3600)
+        if analysis_cache is None or slot!=h1_slot:
+            analysis_cache=analyze(hr,int(x.ts*1000),SYMBOL); h1_slot=slot
+        analysis=analysis_cache
         side_for_m15=int((pos or watch or {}).get("side") or analysis.get("entry_side") or 1)
         m15=analyze_m15(mr,int(x.ts*1000),side_for_m15)
         flow=flow_context(x.ts)
