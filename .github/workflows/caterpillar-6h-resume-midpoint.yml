@@ -54,3 +54,5 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
           compression-level: 6
+
+# [resume-6h-fixed-v2]
