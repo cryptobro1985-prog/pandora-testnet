@@ -29,6 +29,42 @@ LOCAL_VARIANTS = (
 LOCAL_OUTCOME_HOURS = (1, 2, 4)
 
 
+def local_flow_evidence(kind, flow):
+    """Causal flow evidence available at H1-local confirmation time.
+
+    Tags are research labels, not gates. They let history answer whether a
+    structural H1 retreat is materially improved by exhaustion/absorption/
+    efficient opposite response for a particular token.
+    """
+    if not flow:
+        return []
+    low = kind == "LOW"
+    dominant_side = -1 if low else 1
+    reversal_side = 1 if low else -1
+    tags = []
+    imbalance = float(flow.get("imbalance", 0.0) or 0.0)
+    move = float(flow.get("move_bps", 0.0) or 0.0)
+    price_scale = float(flow.get("price_scale_bps", 0.0) or 0.0)
+    if low and flow.get("sell_absorption"):
+        tags.append("SELL_ABSORPTION_AT_LOW")
+    if not low and flow.get("buy_absorption"):
+        tags.append("BUY_ABSORPTION_AT_HIGH")
+    decel = flow.get("sell_deceleration") if low else flow.get("buy_deceleration")
+    if decel is not None and decel > 0:
+        tags.append("DOMINANT_FLOW_DECELERATION")
+    if imbalance * reversal_side > 0 and move * reversal_side > 0:
+        tags.append("OPPOSITE_FLOW_PRICE_RESPONSE")
+    if imbalance * dominant_side > 0 and move * dominant_side <= 0:
+        tags.append("DOMINANT_FLOW_FAILED_TO_MOVE_PRICE")
+    if price_scale > 0 and move * reversal_side >= price_scale:
+        tags.append("STRONG_REVERSAL_PRICE_RESPONSE")
+    if flow.get("large_trade_count", 0):
+        tags.append("LARGE_TRADE_CONTEXT")
+    if flow.get("notional_z", 0) is not None and flow.get("notional_z", 0) >= 2:
+        tags.append("VOLUME_BURST_CONTEXT")
+    return tags
+
+
 @dataclass
 class ResearchLocal:
     ident: str
@@ -96,9 +132,10 @@ class MultiLocalResearch:
             if row["bars_seen"] >= row["horizon_hours"]:
                 payload = {**row, "status": "COMPLETE", "completed_ts": observed_at}
                 emit("local_hypotheses", ts=observed_at, stage="OUTCOME", **payload)
-                profile.outcome(
-                    f'{row["phase"]}/local/{row["kind"]}/{row["variant"]}_{row["horizon_hours"]}h',
-                    close_move, ts=row["confirmed_ts"])
+                base_key = f'{row["phase"]}/local/{row["kind"]}/{row["variant"]}_{row["horizon_hours"]}h'
+                profile.outcome(base_key, close_move, ts=row["confirmed_ts"])
+                for tag in row.get("flow_evidence", []):
+                    profile.outcome(base_key+"+"+tag, close_move, ts=row["confirmed_ts"])
             else:
                 remaining.append(row)
         self.outcomes = remaining
@@ -138,9 +175,11 @@ class MultiLocalResearch:
                     local.status = "CONFIRMED"
                     local.confirmed_ts = observed_at
                     local.signal_price = current["close"]
+                    evidence_tags = local_flow_evidence(kind, latest_flow)
                     self._emit(emit, observed_at, "CONFIRMED", local,
                                reason="CAUSAL_H1_RETREAT", seeded=seeded,
-                               retreat_bps=retreat, latest_flow=latest_flow)
+                               retreat_bps=retreat, latest_flow=latest_flow,
+                               flow_evidence=evidence_tags)
                     if not seeded:
                         for horizon in LOCAL_OUTCOME_HOURS:
                             self.outcomes.append({
@@ -151,6 +190,7 @@ class MultiLocalResearch:
                                 "horizon_hours": horizon, "bars_seen": 0,
                                 "mfe_bps": 0.0, "mae_bps": 0.0,
                                 "last_close_net_bps": 0.0, "phase": phase,
+                                "flow_evidence": evidence_tags,
                             })
                     del self.pending[key]
 
