@@ -37,9 +37,14 @@ def main():
     h1=candles_from_trades(src,day-timedelta(days=5),day,3600)
     m15=candles_from_trades(src,day-timedelta(days=1),day,900)
     it,meta=src.trades(SYMBOL,day)
-    q=deque();cash=START;pos=None;watch=None;trades=[];adds=[];next_eval=day.timestamp();last=None;maxeq=START;maxdd=0.;last_anchor=None
+    q=deque();cash=START;pos=None;watch=None;trades=[];adds=[];next_eval=day.timestamp();last=None;maxeq=START;maxdd=0.;last_anchor=None;cur15=None
     for t in it:
         last=t;q.append((t.ts,t.price,t.price*t.quantity,int(t.side)))
+        k15=int(t.ts//900)*900
+        if cur15 is None or cur15["t"]!=k15*1000:
+            cur15={"t":k15*1000,"T":(k15+900)*1000-1,"o":t.price,"h":t.price,"l":t.price,"c":t.price,"v":t.quantity}
+        else:
+            cur15["h"]=max(cur15["h"],t.price);cur15["l"]=min(cur15["l"],t.price);cur15["c"]=t.price;cur15["v"]+=t.quantity
         while q and q[0][0]<t.ts-305:q.popleft()
         if t.ts<next_eval:continue
         now=t.ts;next_eval=now+5.
@@ -49,7 +54,9 @@ def main():
             if last_anchor is None or int(aa.get("signal_candle_time") or 0)>=int(last_anchor.get("signal_candle_time") or 0):last_anchor=aa
         a1=last_anchor or aa
         side=int((pos or watch or {}).get("side") or a1.get("entry_side") or 1)
-        mm=analyze_m15(m15,ms,side)
+        # Runtime sees completed M15 candles plus the causally forming candle, never its future final OHLCV.
+        mrows=[x for x in m15 if x["T"]<ms and x["t"]<cur15["t"]]+[dict(cur15)]
+        mm=analyze_m15(mrows,ms,side)
         i60,c60=flow(q,now,60);i180,c180=flow(q,now,180);i300,c300=flow(q,now,300)
         coverage=(q[-1][0]-q[0][0]) if q else 0
         flowctx={"trade_data_fresh":bool(q and now-q[-1][0]<=15 and coverage>=60),"latest_trade_age_seconds":now-q[-1][0] if q else None,
