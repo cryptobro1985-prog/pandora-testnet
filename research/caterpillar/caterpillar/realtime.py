@@ -44,6 +44,61 @@ def parse_frame(frame, symbols, received_at):
     return result, obj
 
 
+def parse_context(obj, symbols, received_at):
+    """Parse optional public L1/order-flow context without turning it into a trade signal."""
+    if not isinstance(obj, dict):
+        raise SourceError("Malformed market context object")
+    topic = obj.get("topic", "")
+    if not isinstance(topic, str):
+        raise SourceError("Malformed market context topic")
+    rows = []
+    if topic.startswith("orderbook.1."):
+        market = topic.split(".", 2)[2]
+        symbol = market.removesuffix("USDT")
+        data = obj.get("data")
+        if symbol not in symbols or market != symbol+"USDT" or not isinstance(data, dict):
+            raise SourceError("Unexpected L1 orderbook context")
+        try:
+            bids, asks = data["b"], data["a"]
+            if not bids or not asks:
+                return []
+            bid, bid_size = float(bids[0][0]), float(bids[0][1])
+            ask, ask_size = float(asks[0][0]), float(asks[0][1])
+            ts = float(obj.get("cts", obj.get("ts")))/1000
+            mid = (bid+ask)/2
+            if not all(math.isfinite(x) and x > 0 for x in (bid, ask, mid, ts)) or ask < bid:
+                raise ValueError
+            total = bid_size+ask_size
+            rows.append({"kind": "orderbook_l1", "symbol": symbol, "ts": ts,
+                         "received_at": received_at, "best_bid": bid, "best_ask": ask,
+                         "bid_size": bid_size, "ask_size": ask_size,
+                         "spread_bps": (ask-bid)/mid*10000,
+                         "top_size_imbalance": (bid_size-ask_size)/total if total > 0 else None,
+                         "update_id": data.get("u"), "sequence": data.get("seq")})
+        except (KeyError, IndexError, TypeError, ValueError):
+            raise SourceError("Malformed L1 orderbook context") from None
+    elif topic.startswith("allLiquidation."):
+        market = topic.split(".", 1)[1]
+        symbol = market.removesuffix("USDT")
+        data = obj.get("data")
+        if symbol not in symbols or market != symbol+"USDT" or not isinstance(data, list):
+            raise SourceError("Unexpected liquidation context")
+        for item in data:
+            try:
+                ts = float(item["T"])/1000
+                price, quantity = float(item["p"]), float(item["v"])
+                side = item["S"]
+                if side not in ("Buy", "Sell") or not all(math.isfinite(x) and x > 0 for x in (ts, price, quantity)):
+                    raise ValueError
+                rows.append({"kind": "liquidation", "symbol": symbol, "ts": ts,
+                             "received_at": received_at, "reported_position_side": side,
+                             "price": price, "quantity": quantity,
+                             "notional": price*quantity})
+            except (KeyError, TypeError, ValueError):
+                raise SourceError("Malformed liquidation context") from None
+    return rows
+
+
 class Ingress:
     def __init__(self, engine, reorder_seconds=2.0, max_lag_seconds=15.0, max_buffer=100000):
         if (not math.isfinite(reorder_seconds) or not math.isfinite(max_lag_seconds)
@@ -127,12 +182,18 @@ def proxy_options(url=WS_URL):
     return options
 
 
-def realtime(engine, duration=21600, reorder_seconds=2, max_lag_seconds=15):
+def realtime(engine, duration=21600, reorder_seconds=2, max_lag_seconds=15,
+             market_context=False, resume=False):
     import websocket
     if not math.isfinite(duration) or duration <= 0:
         raise ValueError("duration must be positive")
     ingress = Ingress(engine, reorder_seconds, max_lag_seconds)
-    bootstrap_complete = bootstrap_h1(engine, time.time())
+    now = time.time()
+    if resume:
+        for symbol in engine.states:
+            engine.gap(symbol, now, "process_resume_gap")
+    bootstrap_complete = bootstrap_h1(engine, now)
+    engine.maybe_status("realtime_start")
     deadline = time.monotonic()+duration
     connected = False
     reconnects = frames = 0
@@ -143,8 +204,12 @@ def realtime(engine, duration=21600, reorder_seconds=2, max_lag_seconds=15):
             ws = websocket.create_connection(WS_URL, timeout=min(10, max(1, deadline-time.monotonic())),
                                              sslopt={"context": ssl.create_default_context()}, **proxy_options())
             ws.settimeout(1)
+            topics = ["publicTrade."+s+"USDT" for s in engine.states]
+            if market_context:
+                topics += ["orderbook.1."+s+"USDT" for s in engine.states]
+                topics += ["allLiquidation."+s+"USDT" for s in engine.states]
             ws.send(json.dumps({"op": "subscribe", "req_id": "caterpillar-trades",
-                                "args": ["publicTrade."+s+"USDT" for s in engine.states]}))
+                                "args": topics}))
             ack_deadline = time.monotonic()+10
             acked = False
             last_ping = time.monotonic()
@@ -162,6 +227,7 @@ def realtime(engine, duration=21600, reorder_seconds=2, max_lag_seconds=15):
                     now = time.time()
                     last_message = time.monotonic()
                     trades, obj = parse_frame(frame, engine.states, now)
+                    contexts = parse_context(obj, engine.states, now) if market_context else []
                     frames += 1
                     if obj.get("op") == "subscribe":
                         if obj.get("success") is not True or obj.get("req_id") not in (None, "caterpillar-trades"):
@@ -171,8 +237,12 @@ def realtime(engine, duration=21600, reorder_seconds=2, max_lag_seconds=15):
                         raise SourceError("Trade data arrived before subscription acknowledgement")
                     for t in trades:
                         ingress.push(t, now)
+                    for context in contexts:
+                        engine.on_market_context(context["symbol"], context["ts"], context)
                 ingress.flush(time.time())
                 ingress.check_silence(time.time())
+                engine.maybe_status("realtime")
+                engine.maybe_checkpoint("realtime")
                 if not acked and time.monotonic() > ack_deadline:
                     raise SourceError("Subscription acknowledgement timeout")
                 if time.monotonic()-last_message > 30:
@@ -205,5 +275,6 @@ def realtime(engine, duration=21600, reorder_seconds=2, max_lag_seconds=15):
                             "silent_symbol_gaps": ingress.silence_events,
                             "unusable_events": ingress.unusable_events, "late_events": ingress.late_events,
                             "last_event_ts_by_symbol": ingress.last_event,
-                            "accepted": accepted, "status": "observed_with_interruptions" if interrupted else "observed"})
+                            "accepted": accepted, "market_context_enabled": bool(market_context),
+                            "status": "observed_with_interruptions" if interrupted else "observed"})
     return "incomplete_coverage" if interrupted or not accepted or any(not p.counts.get("accepted_trades") for p in engine.profiles.values()) else "completed"
