@@ -81,7 +81,7 @@ s=s.replace("stable_shard=lambda symbol:int(hashlib.sha1(str(symbol).encode()).h
 
 # Caterpillar Event Flow runtime wiring for the frozen child.
 s=s.replace("DISCOVERY_MAX_SELECTED=5","DISCOVERY_MAX_SELECTED=10")
-# Fixed SHORT10 paper regime. H1 structure is still computed and displayed;
+# H1 local is the only execution-direction owner.
 # only SHORT execution is allowed until this experiment is changed.
 s=s.replace("leverage=plan.leverage;margin=plan.margin;notional=plan.notional",
 '''leverage=plan.leverage;margin=plan.margin;notional=plan.notional
@@ -116,7 +116,7 @@ s=s.replace('''    with LOCK:S["sources"]["LocalRisk"]={"ok":True,"ready":True,"
      S["_execution_running"]=True
      S["_execution_heartbeat"]=time.time()
      S["_execution_errors"]={}
-     S["sources"]["LocalRisk"]={"ok":True,"ready":True,"last_check":now(),"mode":"CODEX_H1_LONG_ONLY_60_180_300","symbols":list(strategy1_trade_symbols()),"error":None}''')
+     S["sources"]["LocalRisk"]={"ok":True,"ready":True,"last_check":now(),"mode":"CODEX_H1_60_180_300","symbols":list(strategy1_trade_symbols()),"error":None}''')
 s=s.replace('''  except Exception as exc:
    with LOCK:S["_execution_ok"]=False''',
 '''  except Exception as exc:
@@ -128,7 +128,7 @@ s=s.replace('''  except Exception as exc:
 
 # Open the first PAPER shorts immediately only when the engine's own confirmed
 # H1 structure currently points SHORT. These bootstrap fills are explicitly
-# labelled and subsequent management remains 30/180/300 + MFE.
+# labelled and subsequent management remains 60/180/300 + MFE.
 s=s.replace('''  else:
    selection=pandora_flow_initial_entry_candidate(symbol,analysis,None,flow,time.time())
    if selection.get("eligible"):
@@ -179,7 +179,7 @@ s=s.replace('watch["context"].update(phase="WAIT_RESUMPTION" if confirmed_opposi
 p.write_text(s)
 
 
-# Explicit SHORT10 PAPER overlay. Preserve the real H1 local in state/monitor,
+# Legacy forced-side overlay disabled; preserve real H1 local in state/monitor,
 # but execute the requested short-only experiment against that observed structure.
 s=s.replace('''  side=int(analysis.get("entry_side") or 0)
   if watch and int(watch.get("side") or 0)==-side:''',
@@ -198,7 +198,7 @@ s=s.replace('''   selection=local4_initial_entry_candidate(symbol,analysis,None,
 '''   selection=local4_initial_entry_candidate(symbol,execution_analysis,None,flow,time.time())
    if selection.get("eligible"):
     local_experiment_open(symbol,side,execution_analysis,"ORDER_FLOW",{"pandora_win_direct_control":True,"strategy":PANDORA_WIN_NAME})''')
-# In forced-short PAPER mode, structural freshness is still required, but the
+# Structural freshness and side equality are mandatory; legacy forced-side path is disabled.
 # market's latest LOW/LONG direction is not allowed to veto the explicit test side.
 s=s.replace(''' if not strategy1_confirmed_h1(analysis):return reject("H1_NOT_CONFIRMED")''',
 ''' forced_short=False
@@ -221,7 +221,7 @@ s=s.replace(''' if latest_anchor and (latest_anchor.get('entry_blocked') or late
 ''' if latest_anchor and (latest_anchor.get('entry_blocked') or latest_anchor.get('live_structure_fresh') is False or
      (not forced_short and int(latest_anchor.get('entry_side') or 0)!=int(side)) or
      int(latest_anchor.get('signal_candle_time') or 0)!=int(analysis.get('signal_candle_time') or 0)):''')
-# Diagnostics evaluate the same forced SHORT side as the executor.
+# Diagnostics evaluate the same confirmed H1 side as the executor.
 s=s.replace('''     selection=local4_initial_entry_candidate(symbol,analysis,None,flow,time.time())
      record["candidate"]=selection''',
 '''     diagnostic_analysis=copy.deepcopy(analysis)
