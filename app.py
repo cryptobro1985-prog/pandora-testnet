@@ -357,9 +357,11 @@ def pandora_win_h1_direction(rows,now_ms,symbol):
  trusted=_local_persisted_anchor(symbol)
  if not analysis.get("ready") or not analysis.get("anchor_confirmed") or int(analysis.get("entry_side") or 0) not in (-1,1):
   if trusted and int(trusted.get("entry_side") or 0) in (-1,1):
-   return {**trusted,"ready":False,"entry_blocked":True,
-    "entry_block_reason":"current_closed_h1_not_verified",
-    "anchor_recovered_from":"latest_valid_h1_observation"}
+   # Startup bootstrap: use the newest already-confirmed historical H1 local now.
+   return {**trusted,"ready":True,"anchor_confirmed":True,"h1_direction_anchor":True,
+    "entry_blocked":False,"entry_block_reason":None,
+    "confirmation_source":"historical_closed_H1_bootstrap",
+    "anchor_recovered_from":"latest_confirmed_h1_history"}
   return analysis
  analysis["entry_blocked"]=False
  analysis["entry_block_reason"]=None
