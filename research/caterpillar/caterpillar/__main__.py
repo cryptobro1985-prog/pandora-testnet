@@ -14,7 +14,7 @@ from .sources import SourceError, historical, parse_symbols, replay, utc_date
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Caterpillar public-data PAPER research; no order methods or production integration")
-    parser.add_argument("mode", choices=("historical_research", "realtime_audit", "replay"))
+    parser.add_argument("mode", choices=("historical_research", "realtime_audit", "replay", "hourly_report"))
     parser.add_argument("--symbols", default=",".join(SYMBOLS))
     parser.add_argument("--output", required=True)
     parser.add_argument("--config", type=Path, help="Frozen Config JSON; no fitting occurs")
