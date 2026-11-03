@@ -1,0 +1,80 @@
+name: Extract 5 Caterpillar Trade Reports
+
+on:
+  push:
+    branches: [research/caterpillar-full-research-v2]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  extract:
+    if: contains(github.event.head_commit.message, '[extract-5]')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {symbol: AAVE, artifact_id: 13216296844}
+          - {symbol: DOGE, artifact_id: 13217067189}
+          - {symbol: SUI, artifact_id: 13217755862}
+          - {symbol: WLD, artifact_id: 13217654406}
+          - {symbol: 1000PEPE, artifact_id: 13218807932}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Download source artifact ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ matrix.artifact_id }}
+        run: |
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" > source.zip
+          ls -lh source.zip
+      - name: Extract exact combined-book trade lifecycle
+        env:
+          SYMBOL: ${{ matrix.symbol }}
+        run: |
+          cat > /tmp/extract.py <<'PY'
+          import csv,json,os,zipfile
+          from datetime import datetime,timezone
+          symbol=os.environ['SYMBOL']
+          def iso(ts): return datetime.fromtimestamp(float(ts),timezone.utc).isoformat() if ts is not None else None
+          opens={}; closes=[]
+          with zipfile.ZipFile('source.zip') as z:
+            name=next((n for n in z.namelist() if n.endswith('trades.jsonl')),None)
+            if not name: raise SystemExit('trades.jsonl missing')
+            with z.open(name) as raw:
+              for b in raw:
+                try: r=json.loads(b)
+                except Exception: continue
+                if r.get('symbol')!=symbol or r.get('model')!='combined': continue
+                a=r.get('action')
+                if a in ('OPEN','REENTRY'):
+                  p=r.get('position') or {}; opens[p.get('ident')]={'action':a,'position':p}
+                elif a=='CLOSE':
+                  c=r.get('close') or r; p=c.get('position') or {}; closes.append((r,c,p))
+          rows=[]
+          for r,c,p in closes:
+            o=opens.get(p.get('ident'),{})
+            rows.append({'position_id':p.get('ident'),'open_type':o.get('action') or ('REENTRY' if p.get('reentry') else 'OPEN'),'side':'LONG' if p.get('side')==1 else 'SHORT','local_id':p.get('local_id'),'local_price':p.get('local_price'),'entry_ts':iso(p.get('opened')),'entry_price':p.get('entry'),'mfe_usd':p.get('mfe'),'mae_usd':p.get('mae'),'mfe_ts':iso(p.get('mfe_ts')),'exit_ts':iso(c.get('exit_ts') or r.get('ts')),'exit_price':c.get('exit_price'),'exit_reasons':'+'.join(c.get('reasons') or []),'gross_usd':c.get('gross_usd'),'fees_usd':c.get('fees_usd'),'net_pnl_usd':c.get('net_usd_before_funding'),'net_bps':c.get('net_bps'),'mfe_capture_ratio':c.get('mfe_capture_ratio'),'net_mfe_capture_ratio':c.get('net_mfe_capture_ratio'),'mfe_giveback_usd':c.get('mfe_giveback_usd'),'parent_exit':p.get('parent_exit')})
+          rows.sort(key=lambda x:x['entry_ts'] or '')
+          total=sum((x['net_pnl_usd'] or 0) for x in rows); wins=sum((x['net_pnl_usd'] or 0)>0 for x in rows); caps=[x['mfe_capture_ratio'] for x in rows if x['mfe_capture_ratio'] is not None]
+          summary={'symbol':symbol,'model':'combined','closed_trades':len(rows),'wins':wins,'losses':len(rows)-wins,'reentries':sum(x['open_type']=='REENTRY' for x in rows),'net_pnl_usd':total,'mean_pnl_usd':total/len(rows) if rows else None,'mean_mfe_usd':sum((x['mfe_usd'] or 0) for x in rows)/len(rows) if rows else None,'mean_mae_usd':sum((x['mae_usd'] or 0) for x in rows)/len(rows) if rows else None,'mean_mfe_capture_ratio':sum(caps)/len(caps) if caps else None}
+          open('summary.json','w').write(json.dumps(summary,indent=2))
+          fields=list(rows[0]) if rows else ['position_id']
+          with open('trades.csv','w',newline='') as f: w=csv.DictWriter(f,fieldnames=fields); w.writeheader(); w.writerows(rows)
+          with open('report.md','w') as f:
+            f.write('# '+symbol+' — Caterpillar combined book\n\n```json\n'+json.dumps(summary,indent=2)+'\n```\n\n')
+            f.write('|#|Type|Side|Local|Entry|MFE|MAE|Exit|Reason|Net PnL|MFE capture|\n|---:|---|---|---:|---:|---:|---:|---:|---|---:|---:|\n')
+            for i,x in enumerate(rows,1): f.write(f"|{i}|{x['open_type']}|{x['side']}|{x['local_price']}|{x['entry_price']}|{x['mfe_usd']}|{x['mae_usd']}|{x['exit_price']}|{x['exit_reasons']}|{x['net_pnl_usd']}|{x['mfe_capture_ratio']}|\n")
+          print(json.dumps(summary,indent=2))
+          PY
+          python /tmp/extract.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: caterpillar-trade-report-${{ matrix.symbol }}
+          path: |
+            summary.json
+            trades.csv
+            report.md
+          retention-days: 14
