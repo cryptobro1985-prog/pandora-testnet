@@ -198,8 +198,11 @@ class Engine:
                 fees += p['quantity']*m['mark']*(self.config.fee_bps+self.config.slippage_bps)/10000
             used += p['margin']; exposure += p['notional']
         equity = None if missing else self.s['cash']+gross
-        return {'cash': self.s['cash'], 'equity': equity, 'realized_pnl': sum(p['pnl'] for p in self.s['closed']),
-                'unrealized_pnl': None if missing else gross-fees,
+        return {'cash': self.s['cash'], 'equity': equity,
+                'realized_pnl': self.s['cash']-self.config.start_equity,
+                'closed_realized_pnl': sum(p['pnl'] for p in self.s['closed']),
+                'unrealized_pnl': None if missing else gross,
+                'estimated_liquidation_equity': None if missing else equity-fees,
                 'estimated_exit_cost': None if missing else fees,
                 'used_margin': used, 'free_equity': None if missing else max(0., equity-used-fees),
                 'gross_notional': exposure, 'unpriced_positions': missing,

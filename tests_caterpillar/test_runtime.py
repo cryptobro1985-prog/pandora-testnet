@@ -74,6 +74,13 @@ class RuntimeTests(unittest.TestCase):
         self.assertAlmostEqual(self.e.s['cash'],500-2500*4.5/10000)
         self.assertGreater(p['entry'],p['entry_mark'])
 
+    def test_portfolio_pnl_reconciles_with_equity_and_cost_reserves(self):
+        self.open_position()
+        port=self.e.portfolio(self.t)
+        self.assertAlmostEqual(port['equity']-port['start_equity'],port['realized_pnl']+port['unrealized_pnl'])
+        self.assertAlmostEqual(port['realized_pnl'],-self.e.s['positions']['BTC']['entry_fee'])
+        self.assertLess(port['estimated_liquidation_equity'],port['equity'])
+
     def test_short_mirror_and_local_high(self):
         p=self.open_position(side=-1)
         self.assertEqual(p['side'],-1); self.assertLess(p['entry'],p['entry_mark'])
