@@ -34,6 +34,19 @@ def synthetic(symbol="ZEC", cycles=3):
             yield Trade(symbol, ts, price, fraction*20, side, str(counter))
 
 
+def seed_closed_h1(engine, symbol="ZEC", first_trade_ts=1700000000.0):
+    """Ten genuinely closed hourly bars ending before synthetic tick observations."""
+    end = (first_trade_ts//3600)*3600
+    shapes = [(96,104),(95,103),(94,102),(93,101), (90,100),(91,99),
+              (92,105),(93,104),(85,103),(86,102)]
+    for index, (low, high) in enumerate(shapes):
+        start = end-(len(shapes)-index)*3600
+        candle = {"open_ts": start, "available_ts": start+3600,
+                  "open": (low+high)/2, "high": high, "low": low,
+                  "close": (low+high)/2, "volume": 100}
+        engine.seed_h1(symbol, candle, as_of=candle["available_ts"])
+
+
 class EngineTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -61,6 +74,13 @@ class EngineTests(unittest.TestCase):
 
     def test_new_lower_lows_never_confirm_by_themselves(self):
         e = self.engine()
+        end = (1700000000//3600)*3600
+        for i in range(7):
+            start = end-(7-i)*3600
+            low, high = 100-i, 110-i
+            candle = {"open_ts": start, "available_ts": start+3600, "open": low+2,
+                      "low": low, "high": high, "close": low+3}
+            e.seed_h1("ZEC", candle, as_of=candle["available_ts"])
         for t in list(synthetic())[:160]: e.on_trade(t)
         e.finish()
         rows = self.rows("run", "locals")
@@ -71,12 +91,15 @@ class EngineTests(unittest.TestCase):
 
     def test_causal_confirmation_next_tick_fills_and_real_outcomes(self):
         e = self.engine()
+        seed_closed_h1(e)
         for t in synthetic(): e.on_trade(t)
         e.finish()
         locals_ = [r for r in self.rows("run", "locals") if r["stage"] == "CONFIRMED"]
         self.assertGreater(len(locals_), 1)
         for r in locals_:
-            self.assertLess(r["local"]["extreme_ts"], r["flow"]["start_ts"])
+            self.assertIsNone(r["local"]["extreme_ts"])
+            self.assertEqual(r["local"]["timeframe"], "1h")
+            self.assertLess(r["local"]["candle_close_ts"], r["local"]["confirmed_ts"])
             self.assertEqual(r["ts"], r["local"]["confirmed_ts"])
         trades = self.rows("run", "trades")
         opens = [r for r in trades if r["action"] in ("OPEN", "REENTRY")]
@@ -126,7 +149,9 @@ class EngineTests(unittest.TestCase):
         self.assertFalse(e.on_trade(good))
         self.assertFalse(e.on_trade(Trade("ZEC", 99, 100, 1, 1, "2")))
         self.assertFalse(e.on_trade(Trade("ZEC", 101, math.nan, 1, 1, "3")))
-        e.states["ZEC"].books["combined"].position = Position("p", 1, 100, 100, 10, 1, 90, {})
+        # Resume accepted observations after the known bad-tape reset before opening a new position.
+        self.assertTrue(e.on_trade(Trade("ZEC", 102, 100, 1, 1, "resumed")))
+        e.states["ZEC"].books["combined"].position = Position("p", 1, 100, 102, 10, 1, 90, {})
         e.on_trade(Trade("ZEC", 200, 110, 1, 1, "4"))
         self.assertIsNone(e.states["ZEC"].books["combined"].position)
         e.finish()
@@ -194,6 +219,7 @@ class EngineTests(unittest.TestCase):
     def test_raw_replay_equivalence(self):
         a = self.engine("a")
         a.record_raw = True
+        seed_closed_h1(a)
         for t in synthetic(cycles=1): a.on_trade(t)
         a.finish()
         b = self.engine("b")
@@ -205,6 +231,7 @@ class EngineTests(unittest.TestCase):
     def test_raw_replay_preserves_disconnect_without_timestamp_gap(self):
         a = self.engine("a")
         a.record_raw = True
+        seed_closed_h1(a)
         data = list(synthetic(cycles=1))
         for i, t in enumerate(data):
             if i == 300: a.gap("ZEC", t.ts, "simulated_disconnect")
@@ -284,6 +311,7 @@ class EngineTests(unittest.TestCase):
     def test_all_ten_symbols_have_independent_books_and_profiles(self):
         e = self.engine(symbols=SYMBOLS)
         for symbol in SYMBOLS:
+            seed_closed_h1(e, symbol)
             for t in synthetic(symbol, cycles=1): e.on_trade(t)
         e.finish()
         profiles = json.loads((self.root/"run/token_profiles.json").read_text())
@@ -342,7 +370,7 @@ class EngineTests(unittest.TestCase):
         block = [Trade("ZEC", 100+i*.1, 100+i*.1, 9 if i % 2 == 0 else 1,
                        1 if i % 2 == 0 else -1, str(i)) for i in range(16)]
         old = features(block, [], self.config)
-        old.update(buy_rate=old["buy_rate"]*.5, sell_rate=old["sell_rate"]*2)
+        old.update(buy_rate=old["buy_rate"]*.5, sell_rate=old["sell_rate"]*2, ts=99.9, price=99.9)
         for _ in range(8): s.history.append(old.copy())
         s.block = block
         c = features(block, s.history, self.config)

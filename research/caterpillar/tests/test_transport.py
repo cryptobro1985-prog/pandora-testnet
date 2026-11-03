@@ -81,7 +81,7 @@ class WireTests(unittest.TestCase):
                 cfg = Config(block_trades=16)
                 out = Output(Path(tmp)/"run", cfg, ("ZEC",), "local_wire_test")
                 engine = ResearchEngine(out, cfg, ("ZEC",))
-                with patch("caterpillar.realtime.WS_URL", f"ws://127.0.0.1:{address[0]}/"), patch("caterpillar.realtime.proxy_options", return_value={"http_no_proxy": ["127.0.0.1"]}):
+                with patch("caterpillar.realtime.WS_URL", f"ws://127.0.0.1:{address[0]}/"), patch("caterpillar.realtime.proxy_options", return_value={"http_no_proxy": ["127.0.0.1"]}), patch("caterpillar.realtime.bootstrap_h1", return_value=True):
                     status = realtime(engine, duration=1.3, reorder_seconds=0, max_lag_seconds=15)
                 engine.finish(status)
                 self.assertEqual(status, "completed")

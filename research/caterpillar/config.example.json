@@ -16,6 +16,8 @@
   "outcome_trades": 128,
   "large_trade_z": 3.0,
   "min_evidence": 30,
+  "min_evidence_days": 5,
+  "h1_lookback_bars": 4,
   "exit_models": [
     "combined",
     "flow_weakening",

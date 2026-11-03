@@ -3,6 +3,9 @@ from __future__ import annotations
 from collections import OrderedDict, deque
 from dataclasses import asdict, dataclass, field
 import math
+import time
+
+from .h1 import H1Tracker
 
 from .model import Config, Local, Position, SYMBOLS, Trade, features
 from .output import Profile
@@ -13,6 +16,8 @@ class Book:
     position: Position | None = None
     pending: dict | None = None
     watch: dict | None = None
+    break_streak: int = 0
+    anchor_invalidated: bool = False
 
 
 @dataclass
@@ -38,6 +43,8 @@ class State:
     candle_history: deque = field(default_factory=lambda: deque(maxlen=8))
     defenses: dict = field(default_factory=dict)
     continuity_broken: bool = False
+    h1: H1Tracker | None = None
+    h1_confirmations: list = field(default_factory=list)
 
 
 class ResearchEngine:
@@ -49,7 +56,8 @@ class ResearchEngine:
         if not symbols or len(set(symbols)) != len(symbols) or not set(symbols) <= set(SYMBOLS):
             raise ValueError("Only unique fixed-universe symbols are allowed")
         self.states = {s: State(s, history=deque(maxlen=self.config.baseline_blocks),
-                                books={m: Book() for m in self.config.exit_models}) for s in symbols}
+                                books={m: Book() for m in self.config.exit_models},
+                                h1=H1Tracker(self.config.h1_lookback_bars)) for s in symbols}
         self.profiles = {s: Profile() for s in symbols}
         self.finished = False
         self.coverage = []
@@ -82,21 +90,25 @@ class ResearchEngine:
                           position=asdict(book.position), counted_as_closed=False)
                 self.profiles[symbol].count(model+"/censored")
             book.position = book.pending = book.watch = None
+            book.break_streak = 0
+            book.anchor_invalidated = False
         for row in s.forecasts:
             self.emit("hypothesis_outcomes", s, ts, status="CENSORED", reason=reason, candidate=row)
         for row in s.post_exits:
             self.emit("post_exit", s, ts, status="CENSORED", reason=reason, observation=row)
-        if s.candidate:
-            s.candidate.status = "INVALIDATED"
-            self._stage(s, s.candidate, ts, "INVALIDATED", reason=reason)
-        for group in s.locals.values():
-            for local in group:
-                if not local.invalidated:
-                    local.invalidated = True
-                    local.status = "INVALIDATED"
-                    self._stage(s, local, ts, "INVALIDATED", reason=reason)
-        s.candidate = None
-        s.locals = {"LOW": deque(maxlen=2), "HIGH": deque(maxlen=2)}
+        if reason == "evaluation_boundary":
+            for group in s.locals.values():
+                for local in group:
+                    if not local.invalidated:
+                        local.invalidated, local.status = True, "INVALIDATED"
+                        self._stage(s, local, ts, "INVALIDATED", reason=reason)
+            s.h1 = H1Tracker(self.config.h1_lookback_bars, next_ident=s.local_seq)
+            s.locals = {"LOW": deque(maxlen=2), "HIGH": deque(maxlen=2)}
+            s.candidate = None
+            s.trend = "RANGE"
+        else:
+            s.h1.mark_gap()
+        s.h1_confirmations.clear()
         s.block.clear()
         s.history.clear()
         s.forecasts.clear()
@@ -104,7 +116,31 @@ class ResearchEngine:
         s.break_counts = {"LOW": 0, "HIGH": 0}
         s.sweeps.clear()
         s.defenses.clear()
-        s.trend = "RANGE"
+        s.candle_history.clear()
+
+    def _apply_h1(self, s, events, observed_at, seeded=False):
+        for local, stage, reason in events:
+            s.local_seq = max(s.local_seq, local.ident)
+            self._stage(s, local, observed_at,
+                        stage, reason=reason, timeframe="1h", seeded=seeded, observed_at=observed_at)
+            if stage == "CONFIRMED":
+                s.locals[local.kind].append(local)
+                if not seeded:
+                    s.h1_confirmations.append(local)
+        s.candidate = max(s.h1.pending.values(), key=lambda x: (x.candle_close_ts, x.ident)) if s.h1.pending else None
+
+    def seed_h1(self, symbol, candle, as_of=None):
+        """Seed verified closed H1 bars. This method never executes a PAPER decision."""
+        if self.finished:
+            raise RuntimeError("Run already finished")
+        s = self.states[symbol]
+        observed = time.time() if as_of is None else float(as_of)
+        events, accepted = s.h1.seed(candle, observed)
+        if accepted:
+            if self.record_raw:
+                self.emit("raw_trades", s, observed, event="H1_SEED", candle=candle, as_of=observed)
+            self._apply_h1(s, events, observed, seeded=True)
+        return accepted
 
     def on_trade(self, trade: Trade):
         if self.finished:
@@ -114,6 +150,10 @@ class ResearchEngine:
         s, cfg = self.states[trade.symbol], self.config
         if not trade.valid():
             self.quality(trade.symbol, s.last_ts or 0, "invalid_trade")
+            self.gap(trade.symbol, s.last_ts or 0, "invalid_trade_gap")
+            return False
+        if s.h1.latest_available_ts is not None and trade.ts < s.h1.latest_available_ts:
+            self.quality(trade.symbol, trade.ts, "trade_precedes_h1_availability")
             return False
         if trade.trade_id in s.ids:
             self.quality(trade.symbol, trade.ts, "duplicate")
@@ -124,6 +164,7 @@ class ResearchEngine:
             s.ids.popitem(last=False)
         if s.last_ts is not None and trade.ts < s.last_ts:
             self.quality(trade.symbol, trade.ts, "late_trade", last_accepted_ts=s.last_ts)
+            self.gap(trade.symbol, s.last_ts, "late_trade_gap")
             return False
         if not s.continuity_broken and s.last_ts is not None and trade.ts-s.last_ts > cfg.gap_seconds:
             self.gap(trade.symbol, trade.ts, "observation_gap")
@@ -142,23 +183,30 @@ class ResearchEngine:
         profile.add("trade_quantity", trade.quantity)
         if self.record_raw:
             self.emit("raw_trades", s, trade.ts, trade=asdict(trade))
+        # Close an observed H1 and apply its structure before any pending fill.
+        self._apply_h1(s, s.h1.tick(trade), trade.ts)
         # Execute prior decisions on a later timestamp, never retrospectively at a local extremum.
         for model, book in s.books.items():
-            if book.pending and trade.ts > book.pending["ts"]:
-                self._fill(s, model, book, trade)
-            if book.position:
-                book.position.mark(trade.price, trade.ts, cfg.fee_bps, cfg.slippage_bps)
+            if book.pending and book.pending["action"] != "CLOSE":
+                order = book.pending
+                if s.seq-order.get("event_seq", s.seq) > cfg.block_trades or trade.ts-order["ts"] > cfg.gap_seconds:
+                    self._forbid_reentry_opportunity(s, model, order, "SIGNAL_EXPIRED_BEFORE_FILL")
+                    self.emit("rejected_signals", s, trade.ts, action=order["action"], model=model,
+                              reasons=["SIGNAL_EXPIRED_BEFORE_FILL"], signal=order)
+                    book.pending = None
+            try:
+                if book.pending and trade.ts > book.pending["ts"]:
+                    self._fill(s, model, book, trade)
+                if book.position:
+                    book.position.mark(trade.price, trade.ts, cfg.fee_bps, cfg.slippage_bps)
+            except (ValueError, OverflowError, ZeroDivisionError):
+                # Numeric-domain failure is missing usable evidence, never an
+                # infinite gain/loss or a zero-quantity successful paper fill.
+                self.gap(trade.symbol, trade.ts, "numerical_position_error")
+                break
             if book.watch and (trade.price-book.watch["exit_price"])*book.watch["side"] < 0:
                 book.watch["correction_seen"] = True
         self._future_labels(s, trade)
-        # Local extremes observe every accepted tick, including ticks between block evaluations.
-        if s.candidate:
-            local = s.candidate
-            new_extreme = trade.price < local.price if local.kind == "LOW" else trade.price > local.price
-            if new_extreme:
-                local.price, local.extreme_ts, local.evidence = trade.price, trade.ts, 0
-                local.status = "UPDATED"
-                self._stage(s, local, trade.ts, "UPDATED", reason="NEW_LOWER_LOW" if local.kind == "LOW" else "NEW_HIGHER_HIGH")
         self._tick_sweeps(s, trade)
         s.block.append(trade)
         if len(s.block) == cfg.block_trades:
@@ -175,6 +223,9 @@ class ResearchEngine:
             local = group[-1]
             beyond = trade.price < local.price if kind == "LOW" else trade.price > local.price
             sweep = s.sweeps.get(kind)
+            if sweep is not None and sweep["local_id"] != local.ident:
+                s.sweeps.pop(kind, None)
+                sweep = None
             if beyond and sweep is None:
                 s.sweeps[kind] = {"local_id": local.ident, "ts": trade.ts, "price": trade.price}
                 self.emit("structure", s, trade.ts, event="SWEEP", kind=kind, local_id=local.ident)
@@ -185,36 +236,9 @@ class ResearchEngine:
 
     def _local_structure(self, s, c):
         cfg = self.config
-        if not s.candidate:
-            kind = "LOW" if c["move_bps"] <= 0 else "HIGH"
-            # First candidate must have actually observed its extremum in this block.
-            extreme = min(s.block, key=lambda t: t.price) if kind == "LOW" else max(s.block, key=lambda t: t.price)
-            s.local_seq += 1
-            s.candidate = Local(s.local_seq, kind, extreme.price, extreme.ts, c["ts"])
-            self._stage(s, s.candidate, c["ts"], "FORMING")
-        local = s.candidate
-        side = 1 if local.kind == "LOW" else -1
-        excursion = (c["price"]/local.price-1)*side*10000
-        accel = c["buy_acceleration"] if side == 1 else c["sell_acceleration"]
-        opposing_accel = c["sell_acceleration"] if side == 1 else c["buy_acceleration"]
-        absorbed = c["sell_absorption"] if side == 1 else c["buy_absorption"]
-        reversal_evidence = ((opposing_accel is not None and opposing_accel < 0) or absorbed)
-        control = self._control(c, side) and accel is not None and accel > 0
-        ready = len(s.history) >= cfg.warmup_blocks
+        confirmed = list(s.h1_confirmations)
+        s.h1_confirmations.clear()
         threshold = max(cfg.local_floor_bps, c["price_scale_bps"]*cfg.local_vol_multiplier)
-        # Extreme must predate the confirmation block: one final-bar OHLC cannot confirm itself.
-        qualifies = ready and local.extreme_ts < c["start_ts"] and excursion >= threshold and control and reversal_evidence
-        local.evidence = local.evidence+1 if qualifies else 0
-        confirmed = None
-        if local.evidence >= cfg.confirmation_blocks:
-            local.status, local.confirmed_ts = "CONFIRMED", c["ts"]
-            s.locals[local.kind].append(local)
-            self._stage(s, local, c["ts"], "CONFIRMED", flow=c, excursion_bps=excursion, threshold_bps=threshold)
-            confirmed = local
-            s.local_seq += 1
-            # The opposite forming local starts NOW, never backdated into the prior block.
-            s.candidate = Local(s.local_seq, "HIGH" if local.kind == "LOW" else "LOW", c["price"], c["ts"], c["ts"])
-            self._stage(s, s.candidate, c["ts"], "FORMING")
         events = []
         for kind, group in s.locals.items():
             if not group or group[-1].invalidated:
@@ -232,9 +256,9 @@ class ResearchEngine:
         previous_trend = s.trend
         lows, highs = s.locals["LOW"], s.locals["HIGH"]
         if len(lows) == len(highs) == 2:
-            if lows[-1].price > lows[0].price and highs[-1].price > highs[0].price:
+            if lows[-1].price > lows[0].price and highs[-1].price > highs[0].price and not lows[-1].invalidated:
                 s.trend = "UPTREND"
-            elif lows[-1].price < lows[0].price and highs[-1].price < highs[0].price:
+            elif lows[-1].price < lows[0].price and highs[-1].price < highs[0].price and not highs[-1].invalidated:
                 s.trend = "DOWNTREND"
             else:
                 s.trend = "RANGE"
@@ -252,7 +276,8 @@ class ResearchEngine:
             events.append("PULLBACK")
         for event in events:
             self.profiles[s.symbol].count("structure/"+event)
-        self.emit("structure", s, c["ts"], trend=s.trend, events=events, confirmed_local_id=confirmed.ident if confirmed else None)
+        self.emit("structure", s, c["ts"], trend=s.trend, events=events, confirmed_local_id=confirmed[0].ident if len(confirmed) == 1 else None,
+                  confirmed_local_ids=[local.ident for local in confirmed], timeframe="1h")
         return confirmed, events
 
     def _control(self, c, side):
@@ -264,7 +289,12 @@ class ResearchEngine:
 
     def _snapshot(self, s, c):
         return {"flow": c, "trend": s.trend, "locals": {k: [asdict(x) for x in v] for k, v in s.locals.items()},
-                "forming": asdict(s.candidate) if s.candidate else None, "phase": self.phase(c["ts"]),
+                "forming": asdict(s.candidate) if s.candidate else None,
+                "h1": {"timeframe": "1h", "closed_bars": len(s.h1.history),
+                       "current": asdict(s.h1.current) if s.h1.current else None,
+                       "current_complete": s.h1.current_complete,
+                       "pending": {kind: asdict(local) for kind, local in s.h1.pending.items()}},
+                "phase": self.phase(c["ts"]),
                 "config_sha256": self.config.digest}
 
     def _evaluate(self, s, c):
@@ -290,7 +320,10 @@ class ResearchEngine:
                         self.emit("structure", s, c["ts"], event="REPEATED_DEFENSE", local_id=anchor.ident, observations=count)
         self.emit("flow_events", s, c["ts"], flow=c, events=events)
         snapshot = self._snapshot(s, c)
-        # Forward labels are quarantined, never passed into a decision.
+        # Forward labels are quarantined, never passed into a decision. They share
+        # the causal snapshot used for entry/rejection, so actual Caterpillar
+        # conjunctions can be studied rather than only isolated generic flow tags.
+        forward_by_side = {}
         for side in (-1, 1):
             tags = ["SHORT" if side == -1 else "LONG"]
             if self._control(c, side): tags.append("control")
@@ -302,8 +335,13 @@ class ResearchEngine:
             if c["average_size_z"] >= cfg.absorption_z: tags.append("average_size_anomaly")
             if c["move_bps"]*side > c["price_scale_bps"] and c["imbalance"]*side < 0: tags.append("efficient_minority_flow")
             tags.extend(events)
-            s.forecasts.append({"seq": s.seq, "ts": c["ts"], "side": side, "signal_price": c["price"],
-                                "entry": None, "tags": tags, "phase": self.phase(c["ts"])})
+            anchor = self._anchor(s, side)
+            if anchor and (c["price"]-anchor.price)*side > 0:
+                tags.append("confirmed_low" if side == 1 else "confirmed_high")
+            row = {"seq": s.seq, "ts": c["ts"], "side": side, "signal_price": c["price"],
+                   "entry": None, "tags": list(dict.fromkeys(tags)), "phase": self.phase(c["ts"]), "snapshot": snapshot}
+            forward_by_side[side] = row
+            s.forecasts.append(row)
         for model, book in s.books.items():
             if book.pending:
                 continue
@@ -315,8 +353,14 @@ class ResearchEngine:
                 own_accel = c["buy_acceleration"] if p.side == 1 else c["sell_acceleration"]
                 weakening = own_accel is not None and own_accel < 0 and c["move_bps"]*p.side <= 0
                 p.weakening_streak = p.weakening_streak+1 if weakening else 0
-                broken = (c["price"]-p.local_price)*p.side < 0 and p.opposite_streak >= cfg.transfer_blocks
-                opposite_local = confirmed is not None and ((confirmed.kind == "HIGH") == (p.side == 1))
+                # A position may refer to an older local than the latest symbol
+                # local. Its breach must be evaluated against its own anchor,
+                # and a confirmed invalidation remains true after a rebound.
+                beyond_anchor = (c["price"]-p.local_price)*p.side < 0
+                book.break_streak = book.break_streak+1 if beyond_anchor and opposite else 0
+                book.anchor_invalidated = book.anchor_invalidated or book.break_streak >= cfg.transfer_blocks
+                broken = book.anchor_invalidated
+                opposite_local = any((local.kind == "HIGH") == (p.side == 1) for local in confirmed)
                 predicates = {
                     "flow_weakening": p.weakening_streak >= cfg.transfer_blocks,
                     "opposite_flow": p.opposite_streak >= cfg.transfer_blocks,
@@ -325,12 +369,13 @@ class ResearchEngine:
                     "mfe_recoil": p.mfe > 0 and p.mfe-p.current >= abs(p.quantity*p.entry*c["price_scale_bps"]/10000) and opposite and weakening,
                     "local_invalidation": broken,
                     "opposite_local": opposite_local,
-                    "structure_break": broken and "STRUCTURE_BREAK" in events,
+                    "structure_break": broken,
                 }
                 predicates["combined"] = broken or opposite_local or (predicates["opposite_flow"] and (weakening or predicates["mfe_recoil"]))
                 giveback = p.mfe-p.current
                 self.emit("mfe_analysis", s, c["ts"], model=model, position_id=p.ident, current_gross_usd=p.current,
                           mfe_usd=p.mfe, mae_usd=p.mae, mfe_ts=p.mfe_ts, giveback_usd=giveback,
+                          anchor_break_streak=book.break_streak, anchor_invalidated=book.anchor_invalidated,
                           giveback_ratio=giveback/p.mfe if p.mfe > 0 else None, exit_predicates=predicates, snapshot=snapshot)
                 if predicates[model]:
                     reasons = [key for key, value in predicates.items() if value and key != "combined"]
@@ -347,6 +392,8 @@ class ResearchEngine:
                 side = book.watch["side"]
             anchor = self._anchor(s, side)
             reasons = []
+            if newest and sum(local.confirmed_ts == newest.confirmed_ts for local in anchors) > 1:
+                reasons.append("AMBIGUOUS_H1_LOCALS")
             if len(s.history) < cfg.warmup_blocks: reasons.append("WARMUP")
             if not anchor: reasons.append("NO_VALID_CONFIRMED_LOCAL")
             elif (c["price"]-anchor.price)*side <= 0: reasons.append("BEYOND_LOCAL")
@@ -357,24 +404,48 @@ class ResearchEngine:
             if (s.trend == "DOWNTREND" and side == 1) or (s.trend == "UPTREND" and side == -1): reasons.append("COUNTER_TREND")
             if book.watch:
                 if not anchor or anchor.ident != book.watch["local_id"]: reasons.append("ORIGINAL_LOCAL_LOST")
+                if newest and ((newest.kind == "LOW") != (side == 1)):
+                    reasons.append("OPPOSITE_LOCAL_CONFIRMED")
                 if not book.watch["correction_seen"]: reasons.append("NO_CORRECTION_OBSERVED")
                 if book.watch["expires_seq"] < s.seq: reasons.append("REENTRY_HORIZON_EXPIRED")
             action = "REENTRY" if book.watch else "OPEN"
             if reasons:
+                forward_by_side[side]["tags"].append("rejected_"+model)
+                forward_by_side[side]["tags"].extend("rejected_"+model+"_"+reason for reason in reasons)
                 self.emit("rejected_signals", s, c["ts"], action=action, side=side, model=model,
                           label="FORBIDDEN_REENTRY" if book.watch else "REJECTED", reasons=reasons, snapshot=snapshot)
                 profile.count(model+"/"+("FORBIDDEN_REENTRY" if book.watch else "rejected"))
-                if book.watch and any(x in reasons for x in ("ORIGINAL_LOCAL_LOST", "REENTRY_HORIZON_EXPIRED")):
+                if book.watch and any(x in reasons for x in ("ORIGINAL_LOCAL_LOST", "REENTRY_HORIZON_EXPIRED", "OPPOSITE_LOCAL_CONFIRMED")):
                     book.watch = None
             else:
-                book.pending = {"action": action, "ts": c["ts"], "side": side, "local_id": anchor.ident,
+                book.pending = {"action": action, "ts": c["ts"], "event_seq": s.seq, "side": side, "local_id": anchor.ident,
                                 "local_price": anchor.price, "snapshot": snapshot,
                                 "parent_exit": book.watch["exit_id"] if book.watch else None}
                 if book.watch:
                     for observation in s.post_exits:
                         if observation["exit_id"] == book.watch["exit_id"]:
+                            if not observation["eligible_reentry_seen"]:
+                                observation["eligible_signal_ts"] = c["ts"]
+                                observation["eligible_fill_price"] = None
+                                observation["eligible_max_net_bps"] = None
+                                observation["eligible_forbidden_reason"] = None
                             observation["eligible_reentry_seen"] = True
                 self.emit("signals", s, c["ts"], action=action, side=side, model=model, snapshot=snapshot)
+                forward_by_side[side]["tags"].append(action.lower()+"_"+model)
+        for row in forward_by_side.values():
+            row["tags"] = list(dict.fromkeys(row["tags"]))
+
+    def _forbid_reentry_opportunity(self, s, model, order, reason):
+        """A forbidden/expired fill is not an executable missed opportunity."""
+        if order["action"] != "REENTRY":
+            return
+        for observation in s.post_exits:
+            if observation["exit_id"] == order.get("parent_exit") and observation["model"] == model:
+                observation["eligible_reentry_seen"] = False
+                observation["eligible_signal_ts"] = None
+                observation["eligible_fill_price"] = None
+                observation["eligible_max_net_bps"] = None
+                observation["eligible_forbidden_reason"] = reason
 
     def _fill(self, s, model, book, trade):
         order, cfg = book.pending, self.config
@@ -392,13 +463,17 @@ class ResearchEngine:
                    "mfe_capture_ratio": gross/p.mfe if p.mfe > 0 else None,
                    "net_mfe_capture_ratio": net/p.net_mfe if p.net_mfe > 0 else None,
                    "mfe_giveback_usd": p.mfe-gross, "reasons": order["reasons"], "exit_snapshot": order["snapshot"]}
+            numeric_fields = ("exit_price", "gross_usd", "fees_usd", "net_usd_before_funding", "net_bps",
+                              "mfe_capture_ratio", "net_mfe_capture_ratio", "mfe_giveback_usd")
+            if any(row[key] is not None and not math.isfinite(row[key]) for key in numeric_fields):
+                raise ValueError("Unrepresentable paper close")
             self.emit("trades", s, trade.ts, **row)
             profile = self.profiles[s.symbol]
             profile.count(model+"/closed")
             for key, value in (("net_usd", net), ("mfe", p.mfe), ("mae", p.mae), ("giveback", p.mfe-gross)):
                 profile.add(model+"/"+key, value)
             direction = "LONG" if p.side == 1 else "SHORT"
-            profile.outcome(self.phase(trade.ts)+"/exit/"+model+"/"+direction, row["net_bps"])
+            profile.outcome(self.phase(trade.ts)+"/exit/"+model+"/"+direction, row["net_bps"], ts=trade.ts)
             if p.reentry:
                 label = "GOOD_REENTRY" if net > 0 else "BAD_REENTRY"
                 profile.count(model+"/"+label)
@@ -406,25 +481,51 @@ class ResearchEngine:
             exit_id = p.ident+"/exit"
             s.post_exits.append({"exit_id": exit_id, "model": model, "side": p.side, "price": trade.price,
                                  "exit_seq": s.seq, "exit_ts": trade.ts, "max_continuation_bps": 0.0,
-                                 "max_adverse_bps": 0.0, "reentered": False, "eligible_reentry_seen": False})
+                                 "max_adverse_bps": 0.0, "reentered": False, "eligible_reentry_seen": False,
+                                 "eligible_signal_ts": None, "eligible_fill_price": None,
+                                 "eligible_max_net_bps": None})
             if not any(r in order["reasons"] for r in ("local_invalidation", "structure_break", "opposite_local")):
                 book.watch = {"side": p.side, "local_id": p.local_id, "exit_id": exit_id, "exit_price": trade.price,
                               "correction_seen": False, "expires_seq": s.seq+cfg.post_exit_trades}
             else:
                 book.watch = None
             book.position = None
+            book.break_streak = 0
+            book.anchor_invalidated = False
         else:
             anchor = self._anchor(s, order["side"])
+            anchors = [group[-1] for group in s.locals.values() if group and not group[-1].invalidated]
+            newest = max(anchors, key=lambda local: local.confirmed_ts) if anchors else None
+            if newest and sum(local.confirmed_ts == newest.confirmed_ts for local in anchors) > 1:
+                self._forbid_reentry_opportunity(s, model, order, "AMBIGUOUS_H1_LOCALS")
+                self.emit("rejected_signals", s, trade.ts, action=order["action"], model=model,
+                          reasons=["AMBIGUOUS_H1_LOCALS"], signal=order)
+                return
+            if newest and ((newest.kind == "LOW") != (order["side"] == 1)):
+                self._forbid_reentry_opportunity(s, model, order, "OPPOSITE_LOCAL_BEFORE_FILL")
+                self.emit("rejected_signals", s, trade.ts, action=order["action"], model=model,
+                          reasons=["OPPOSITE_LOCAL_BEFORE_FILL"], signal=order)
+                book.watch = None
+                return
             if not anchor or anchor.ident != order["local_id"] or (trade.price-order["local_price"])*order["side"] <= 0:
+                self._forbid_reentry_opportunity(s, model, order, "LOCAL_INVALID_BEFORE_FILL")
                 self.emit("rejected_signals", s, trade.ts, action=order["action"], model=model, reasons=["LOCAL_INVALID_BEFORE_FILL"], signal=order)
                 return
             price = trade.price*(1+order["side"]*cfg.slippage_bps/10000)
+            quantity = cfg.notional/price if math.isfinite(price) and price > 0 else 0
+            if not math.isfinite(price) or price <= 0 or not math.isfinite(quantity) or quantity <= 0 or not math.isfinite(price*quantity) or price*quantity <= 0:
+                self._forbid_reentry_opportunity(s, model, order, "UNREPRESENTABLE_FILL")
+                self.emit("rejected_signals", s, trade.ts, action=order["action"], model=model,
+                          reasons=["UNREPRESENTABLE_FILL"], signal=order)
+                return
             s.order_seq += 1
-            p = Position(f"{s.symbol}/{model}/{s.order_seq}", order["side"], price, trade.ts, cfg.notional/price,
+            p = Position(f"{s.symbol}/{model}/{s.order_seq}", order["side"], price, trade.ts, quantity,
                          order["local_id"], order["local_price"], order["snapshot"],
                          reentry=order["action"] == "REENTRY", parent_exit=order["parent_exit"], mfe_ts=trade.ts)
             p.mark(trade.price, trade.ts, cfg.fee_bps, cfg.slippage_bps)
             book.position = p
+            book.break_streak = 0
+            book.anchor_invalidated = False
             if p.parent_exit:
                 for watch in s.post_exits:
                     if watch["exit_id"] == p.parent_exit:
@@ -432,6 +533,16 @@ class ResearchEngine:
             book.watch = None
             self.profiles[s.symbol].count(model+"/"+order["action"])
             self.emit("trades", s, trade.ts, action=order["action"], model=model, position=asdict(p), signal_ts=order["ts"])
+            # A permitted signal can still be rejected or expire before its
+            # execution. Only a successful PAPER fill qualifies its queued
+            # forward observation as an executable entry conjunction.
+            signal_tag = order["action"].lower()+"_"+model
+            filled_tag = "filled_"+signal_tag
+            for observation in s.forecasts:
+                if (observation["ts"] == order["ts"] and observation["side"] == order["side"]
+                        and ("event_seq" not in order or observation["seq"] == order["event_seq"])
+                        and signal_tag in observation["tags"] and filled_tag not in observation["tags"]):
+                    observation["tags"].append(filled_tag)
 
     def _future_labels(self, s, trade):
         cfg = self.config
@@ -449,7 +560,7 @@ class ResearchEngine:
                 self.emit("hypothesis_outcomes", s, trade.ts, status="COMPLETE", candidate=row, net_bps=net)
                 direction = "LONG" if row["side"] == 1 else "SHORT"
                 for tag in row["tags"]:
-                    self.profiles[s.symbol].outcome(row["phase"]+"/feature/"+direction+"/"+tag, net)
+                    self.profiles[s.symbol].outcome(row["phase"]+"/feature/"+direction+"/"+tag, net, ts=row["ts"])
             else:
                 remaining.append(row)
         s.forecasts = remaining
@@ -458,9 +569,22 @@ class ResearchEngine:
             move = (trade.price/row["price"]-1)*row["side"]*10000
             row["max_continuation_bps"] = max(row["max_continuation_bps"], move)
             row["max_adverse_bps"] = min(row["max_adverse_bps"], move)
+            # A move that preceded re-entry eligibility was not an opportunity
+            # to re-enter. Measure the hypothetical opportunity with the same
+            # next-timestamp fill and costs as the causal entry model.
+            if row["eligible_reentry_seen"] and row.get("eligible_signal_ts") is not None and trade.ts > row["eligible_signal_ts"]:
+                if row.get("eligible_fill_price") is None:
+                    row["eligible_fill_price"] = trade.price*(1+row["side"]*cfg.slippage_bps/10000)
+                entry = row["eligible_fill_price"]
+                liquidation = trade.price*(1-row["side"]*cfg.slippage_bps/10000)
+                net_bps = ((liquidation-entry)*row["side"]-(liquidation+entry)*cfg.fee_bps/10000)/entry*10000
+                if math.isfinite(net_bps):
+                    prior_max = row.get("eligible_max_net_bps")
+                    row["eligible_max_net_bps"] = max(prior_max, net_bps) if prior_max is not None else net_bps
             if s.seq-row["exit_seq"] >= cfg.post_exit_trades:
                 cost = 2*(cfg.fee_bps+cfg.slippage_bps)
-                missed = row["eligible_reentry_seen"] and not row["reentered"] and row["max_continuation_bps"] > cost
+                missed = (row["eligible_reentry_seen"] and not row["reentered"]
+                          and row.get("eligible_max_net_bps") is not None and row["eligible_max_net_bps"] > 0)
                 label = "EARLY_EXIT_CANDIDATE" if row["max_continuation_bps"] > cost else "FAVORABLE_EXIT_CANDIDATE" if row["max_adverse_bps"] < -cost else "INCONCLUSIVE"
                 self.emit("post_exit", s, trade.ts, status="COMPLETE", **row, final_return_bps=move, label=label, missed_reentry_candidate=missed)
                 if missed:
@@ -513,9 +637,16 @@ class ResearchEngine:
         summary["aggregate_exit_books"] = {}
         for model in self.config.exit_models:
             samples = [p.metrics[model+"/net_usd"] for p in self.profiles.values() if model+"/net_usd" in p.metrics]
+            try:
+                total = math.fsum(sample.mean*sample.n for sample in samples)
+                total_status = "finite" if math.isfinite(total) else "unrepresentable"
+                if total_status != "finite":
+                    total = None
+            except (ValueError, OverflowError):
+                total, total_status = None, "unrepresentable"
             summary["aggregate_exit_books"][model] = {
                 "closed_trades": sum(x.n for x in samples),
-                "net_usd_before_funding": sum(x.mean*x.n for x in samples),
+                "net_usd_before_funding": total, "financial_total_status": total_status,
                 "note": "Sum of independent fixed-notional research books, not a shared-capital portfolio return"}
         self.output.finish(self.profiles, summary, self.config, status)
         self.finished = True

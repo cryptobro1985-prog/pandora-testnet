@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import csv
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 import gzip
 import hashlib
 import json
+import math
 from pathlib import Path
 import time
 import urllib.error
@@ -98,10 +100,13 @@ class Archives:
         path = self.cache/name
         manifest = self.cache/(name+".json")
         if path.exists() and manifest.exists():
-            meta = json.loads(manifest.read_text())
-            if meta.get("url") == url and meta.get("sha256") == file_sha(path):
-                verify_gzip(path)
-                return path, meta
+            try:
+                meta = json.loads(manifest.read_text())
+                if isinstance(meta, dict) and meta.get("url") == url and meta.get("sha256") == file_sha(path):
+                    verify_gzip(path)
+                    return path, meta
+            except (OSError, EOFError, ValueError) as exc:
+                raise SourceError(f"Invalid cached archive/manifest ({type(exc).__name__}): {name}") from None
             raise SourceError("Cached archive checksum/URL mismatch: "+name)
         if path.exists():
             raise SourceError("Unmanifested cache file; preserve it and use an empty cache directory: "+name)
@@ -143,45 +148,71 @@ class Archives:
         path, meta = self.obtain(symbol, day)
         def iterate():
             previous = None
-            with gzip.open(path, "rt", newline="") as handle:
-                for line, row in enumerate(csv.DictReader(handle), 2):
-                    t = archive_row(symbol, row, line)
-                    if previous is not None and t.ts < previous:
-                        raise SourceError(f"Unordered archive at line {line}: {path.name}")
-                    if not day.timestamp() <= t.ts < (day+timedelta(days=1)).timestamp():
-                        raise SourceError(f"Archive timestamp outside requested UTC day: {path.name}")
-                    previous = t.ts
-                    yield t
+            try:
+                with gzip.open(path, "rt", newline="") as handle:
+                    for line, row in enumerate(csv.DictReader(handle), 2):
+                        t = archive_row(symbol, row, line)
+                        if previous is not None and t.ts < previous:
+                            raise SourceError(f"Unordered archive at line {line}: {path.name}")
+                        if not day.timestamp() <= t.ts < (day+timedelta(days=1)).timestamp():
+                            raise SourceError(f"Archive timestamp outside requested UTC day: {path.name}")
+                        previous = t.ts
+                        yield t
+            except (OSError, EOFError, UnicodeError, csv.Error) as exc:
+                raise SourceError(f"Unreadable archive ({type(exc).__name__}): {path.name}") from None
+            if previous is None:
+                raise SourceError("Empty archive: "+path.name)
+        # A bad row near EOF must not first generate an apparent day's profitable trades.
+        # Full schema/order validation costs one streaming pass, not a day-sized array.
+        for _ in iterate():
+            pass
         return iterate(), meta
 
 
-def candles(symbol, start, end, interval=1):
+def candles(symbol, start, end, interval=1, request_timeout=45, request_attempts=4):
+    if symbol not in SYMBOLS or type(interval) is not int or interval <= 0:
+        raise ValueError("Invalid OHLCV symbol/interval")
     cursor = int(start.timestamp()*1000)
     end_ms = int(end.timestamp()*1000)
     duration = interval*60*1000
     while cursor < end_ms:
         query = urllib.parse.urlencode({"category": "linear", "symbol": symbol+"USDT", "interval": interval,
                                         "start": cursor, "end": min(end_ms-1, cursor+1000*duration-1), "limit": 1000})
-        data = read_url(REST_ROOT+"/v5/market/kline?"+query)
+        data = read_url(REST_ROOT+"/v5/market/kline?"+query, timeout=request_timeout, attempts=request_attempts)
+        if not isinstance(data, dict):
+            raise SourceError("Invalid OHLCV response object")
         if data.get("retCode") != 0:
             raise SourceError("Bybit kline API retCode="+str(data.get("retCode")))
-        rows = sorted(data.get("result", {}).get("list", []), key=lambda row: int(row[0]))
+        try:
+            rows = sorted(data.get("result", {}).get("list", []), key=lambda row: int(row[0]))
+        except (TypeError, ValueError, IndexError, AttributeError):
+            raise SourceError("Invalid OHLCV response schema") from None
         if not rows:
             raise SourceError(f"No OHLCV at UTC cursor {cursor} for {symbol}")
         advanced = False
         for row in rows:
-            opened = int(row[0])
+            try:
+                if not isinstance(row, list) or len(row) != 7:
+                    raise ValueError("row length")
+                opened = int(row[0])
+                values = [float(x) for x in row[1:7]]
+            except (TypeError, ValueError):
+                raise SourceError("Invalid OHLCV row schema") from None
             if opened < cursor or opened >= end_ms:
                 continue
+            # A missing interval is missing coverage, not a contiguous observation.
+            expected = ((cursor+duration-1)//duration)*duration
+            if opened != expected:
+                raise SourceError(f"OHLCV coverage gap at UTC cursor {cursor} for {symbol}")
             closed = opened+duration
             if closed <= end_ms and closed <= int(time.time()*1000):
-                values = [float(x) for x in row[1:7]]
                 if not all(math_is_finite_nonnegative(x) for x in values) or min(values[:4]) <= 0:
                     raise SourceError("Invalid OHLCV numeric values")
                 if not values[2] <= min(values[0], values[3]) <= max(values[0], values[3]) <= values[1]:
                     raise SourceError("Invalid OHLC ordering")
                 yield {"open_ts": opened/1000, "available_ts": closed/1000, "open": values[0], "high": values[1],
-                       "low": values[2], "close": values[3], "volume": values[4], "turnover": values[5]}
+                       "low": values[2], "close": values[3], "volume": values[4], "turnover": values[5],
+                       "interval_minutes": interval}
             cursor = closed
             advanced = True
         if not advanced:
@@ -192,6 +223,44 @@ def candles(symbol, start, end, interval=1):
 def math_is_finite_nonnegative(x):
     import math
     return math.isfinite(x) and x >= 0
+
+
+def closed_h1(symbol, as_of, hours=24):
+    """Fetch only already CLOSED hourly structure. Never supplies aggressor flow."""
+    if not math.isfinite(as_of) or as_of <= 0 or type(hours) is not int or not 1 <= hours <= 240:
+        raise ValueError("Invalid H1 bootstrap boundary/count")
+    closed_boundary = int(as_of//3600)*3600
+    start = datetime.fromtimestamp(closed_boundary-hours*3600, timezone.utc)
+    end = datetime.fromtimestamp(closed_boundary, timezone.utc)
+    rows = list(candles(symbol, start, end, interval=60, request_timeout=10, request_attempts=2))
+    expected = [start.timestamp()+i*3600 for i in range(hours)]
+    if (len(rows) != hours or [r["open_ts"] for r in rows] != expected
+            or any(r["available_ts"] != r["open_ts"]+3600 or r["available_ts"] > as_of for r in rows)):
+        raise SourceError("Incomplete or unclosed H1 bootstrap for "+symbol)
+    return rows
+
+
+def bootstrap_h1(engine, as_of, hours=24):
+    """Bounded parallel public REST requests; deterministic engine mutation after validation."""
+    symbols = tuple(engine.states)
+    complete = True
+    with ThreadPoolExecutor(max_workers=min(4, len(symbols))) as pool:
+        futures = {symbol: pool.submit(closed_h1, symbol, as_of, hours) for symbol in symbols}
+        for symbol in symbols:
+            coverage = {"symbol": symbol, "source": "bybit_rest_closed_h1", "as_of": as_of,
+                        "hours_requested": hours, "flow_available": False}
+            try:
+                rows = futures[symbol].result()
+                for candle in rows:
+                    engine.seed_h1(symbol, candle, as_of=as_of)
+                coverage.update(status="observed", hours_seeded=len(rows),
+                                first_open_ts=rows[0]["open_ts"], last_available_ts=rows[-1]["available_ts"])
+            except (SourceError, ValueError, OSError) as exc:
+                complete = False
+                coverage.update(status="unavailable", reason=type(exc).__name__)
+                engine.quality(symbol, as_of, "h1_bootstrap_unavailable", failure_type=type(exc).__name__)
+            engine.coverage.append(coverage)
+    return complete
 
 
 def historical(engine, cache, start, end, allow_ohlcv=False):
@@ -217,20 +286,26 @@ def historical(engine, cache, start, end, allow_ohlcv=False):
                     if start.timestamp() <= t.ts < end.timestamp():
                         seen += 1
                         coverage["accepted"] += int(engine.on_trade(t))
-                if not seen:
-                    raise SourceError("No trades in requested day/subrange")
+                coverage["rows_in_range"] = seen
+                coverage["rejected"] = seen-coverage["accepted"]
+                if not coverage["accepted"]:
+                    raise SourceError("No accepted trades in requested day/subrange")
                 coverage["status"] = "observed"
             except SourceError as exc:
                 incomplete = True
                 coverage.update(status="unavailable_or_partial", reason=str(exc))
-                engine.gap(symbol, max(day, start).timestamp(), "archive_unavailable_or_partial")
+                # Keep failure markers chronological if a source changed after preflight.
+                gap_ts = max(max(day, start).timestamp(), engine.states[symbol].last_ts or 0)
+                engine.gap(symbol, gap_ts, "archive_unavailable_or_partial")
                 if allow_ohlcv:
                     count = 0
                     try:
-                        for candle in candles(symbol, max(day, start), day_end):
+                        for candle in candles(symbol, max(day, start), day_end, interval=60):
+                            # An hourly bar is visible only at its close; never synthesise tape.
+                            engine.seed_h1(symbol, candle, as_of=candle["available_ts"])
                             engine.on_candle(symbol, candle)
                             count += 1
-                        coverage["ohlcv_fallback"] = {"bars": count, "flow_available": False}
+                        coverage["ohlcv_fallback"] = {"bars": count, "interval_minutes": 60, "flow_available": False}
                     except SourceError as fallback_exc:
                         coverage["ohlcv_error"] = str(fallback_exc)
             engine.coverage.append(coverage)
@@ -246,10 +321,26 @@ def replay(engine, path):
         for line, raw in enumerate(handle, 1):
             try:
                 row = json.loads(raw)
+                if not isinstance(row, dict):
+                    raise ValueError("expected object")
                 if row.get("event") == "GAP":
-                    engine.gap(row["symbol"], float(row["ts"]), row["reason"])
+                    ts = float(row["ts"])
+                    if (row["symbol"] not in engine.states or not math.isfinite(ts) or ts <= 0
+                            or not isinstance(row["reason"], str) or not row["reason"]):
+                        raise ValueError("invalid gap")
+                    engine.gap(row["symbol"], ts, row["reason"])
                     continue
+                if row.get("event") == "H1_SEED":
+                    as_of = float(row["as_of"])
+                    if row["symbol"] not in engine.states or not math.isfinite(as_of) or as_of <= 0:
+                        raise ValueError("invalid H1 seed boundary")
+                    engine.seed_h1(row["symbol"], row["candle"], as_of=as_of)
+                    continue
+                if "event" in row:
+                    raise ValueError("unknown event")
                 t = Trade(**row.get("trade", row))
-            except (TypeError, ValueError):
+                if not t.valid() or t.symbol not in engine.states:
+                    raise ValueError("invalid trade")
+            except (KeyError, TypeError, ValueError):
                 raise SourceError(f"Malformed replay line {line}") from None
             engine.on_trade(t)
