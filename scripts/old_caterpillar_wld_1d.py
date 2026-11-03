@@ -114,3 +114,4 @@ def main():
     r={"symbol":SYMBOL,"date":"2026-11-02","strategy_commit":"224dff69db51da2d426fddf4ffc674c94f16349e","strategy":"Restored profitable Caterpillar runtime exact thresholds/state semantics","start":START,"final":cash,"pnl":cash-START,"return_pct":(cash/START-1)*100,"trades":len(trades),"wins":sum(x["pnl"]>0 for x in trades),"losses":sum(x["pnl"]<=0 for x in trades),"pyramid_adds":len(adds),"max_drawdown_pct":maxdd*100,"fees_model":"original paper_pnl 4.5bps each leg, no added slippage","data":meta,"notes":"5s decision cadence; Bybit executed trades; H1/M15 candles reconstructed causally from same Bybit tape; exact historical H1/M15 analyzer vendored from commit 224dff69."}
     (a.output/"RESULT.json").write_text(json.dumps(r,indent=2));(a.output/"TRADES.json").write_text(json.dumps(trades,indent=2));print("RESTORED_CATERPILLAR_WLD_RESULT "+json.dumps(r),flush=True)
 if __name__=="__main__":main()
+\n# exact replay trigger cdd8\n
