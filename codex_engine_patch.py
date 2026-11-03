@@ -230,3 +230,6 @@ s=s.replace('''     selection=local4_initial_entry_candidate(symbol,analysis,Non
      selection=local4_initial_entry_candidate(symbol,diagnostic_analysis,None,flow,time.time())
      record["candidate"]=selection
      record["execution_side"]=-1 if os.getenv("CODEX_FORCE_SHORT10","0")=="1" else record.get("entry_side")''')
+
+# Persist all patches, including the SHORT10 overlay appended below the legacy patch block.
+p.write_text(s)
