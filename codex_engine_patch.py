@@ -87,7 +87,7 @@ s=s.replace("leverage=plan.leverage;margin=plan.margin;notional=plan.notional",
 '''leverage=plan.leverage;margin=plan.margin;notional=plan.notional
  if plan.allowed and float(instrument["max_leverage"])>=30.0:
   leverage=30.0;margin=equity*0.10;notional=margin*leverage''')
-s=s.replace("if side not in (-1,1):continue","if side not in (-1,1):continue")
+s=s.replace("if side not in (-1,1):continue","if side!=1:continue")
 # Make the PAPER entry audit expose the actual candidate/votes so zero-entry
 # states can be diagnosed from Render without guessing.
 s=s.replace('''     selection=local4_initial_entry_candidate(symbol,analysis,None,flow,time.time())
@@ -116,7 +116,7 @@ s=s.replace('''    with LOCK:S["sources"]["LocalRisk"]={"ok":True,"ready":True,"
      S["_execution_running"]=True
      S["_execution_heartbeat"]=time.time()
      S["_execution_errors"]={}
-     S["sources"]["LocalRisk"]={"ok":True,"ready":True,"last_check":now(),"mode":"CODEX_H1_BIDIRECTIONAL_60_180_300","symbols":list(strategy1_trade_symbols()),"error":None}''')
+     S["sources"]["LocalRisk"]={"ok":True,"ready":True,"last_check":now(),"mode":"CODEX_H1_LONG_ONLY_60_180_300","symbols":list(strategy1_trade_symbols()),"error":None}''')
 s=s.replace('''  except Exception as exc:
    with LOCK:S["_execution_ok"]=False''',
 '''  except Exception as exc:
