@@ -1,7 +1,7 @@
 """Executed notional, velocity, dominance and price response; no indicators."""
 import math
 
-WINDOWS = (5, 15, 30, 60, 108, 300)
+WINDOWS = (5, 15, 30, 60, 180, 300)
 # 0.20 imbalance means at least 60/40 executed notional. A bare majority
 # is useful context, but is not sufficient evidence of trading control.
 MIN_CONTROL_IMBALANCE = 0.20
