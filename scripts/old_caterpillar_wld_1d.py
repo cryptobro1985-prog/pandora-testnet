@@ -39,7 +39,7 @@ def main():
    nextb+=3600
   q.append((t.ts,t.price*t.quantity,t.price*t.quantity,int(t.side)))
   while q and q[0][0]<t.ts-300:q.popleft()
-  i15,n15,b15,s15=imb(q,t.ts,15);i30,n30,b30,s30=imb(q,t.ts,30);i60,n60,b60,s60=imb(q,t.ts,60)
+  if t.ts < next_eval: continue\n  next_eval=t.ts+10.0\n  i15,n15,b15,s15=imb(q,t.ts,15);i30,n30,b30,s30=imb(q,t.ts,30);i60,n60,b60,s60=imb(q,t.ts,60)
   if None in (i15,i30,i60) or n15<2 or n30<4 or n60<5:continue
   side=1 if local and local.kind=="LOW" else -1 if local and local.kind=="HIGH" else 0
   aligned=lambda x:side*x
