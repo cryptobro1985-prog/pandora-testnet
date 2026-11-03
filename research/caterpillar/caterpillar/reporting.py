@@ -196,12 +196,34 @@ def synthesize(engine, status):
     }
 
 
+def _previous_hour_snapshot(root, current_ts):
+    path = root/"hourly_snapshots.jsonl"
+    if not path.is_file():
+        return None
+    previous = None
+    with path.open(encoding="utf-8") as handle:
+        for raw in handle:
+            try:
+                row = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            ts = row.get("ts")
+            if _finite(ts) and ts < current_ts:
+                previous = row
+    return previous
+
+
+def _count_delta(current, previous, key):
+    return current.get(key, 0) - (previous.get(key, 0) if previous else 0)
+
+
 def render_hourly_report(run_dir, latest=True):
     root = Path(run_dir)
     status_path = root / "research_status.json"
     if not status_path.is_file():
         raise ValueError("research_status.json not found in run directory")
     row = json.loads(status_path.read_text())
+    previous = _previous_hour_snapshot(root, row.get("ts", 0))
     lines = [
         f'# CATERPILLAR HOURLY REPORT — {row.get("iso_utc")}',
         "",
@@ -212,6 +234,17 @@ def render_hourly_report(run_dir, latest=True):
         h1 = token["h1"]
         flow = token.get("recent_flow") or {}
         paper = token["paper"]
+        prev_token = (previous or {}).get("tokens", {}).get(symbol, {})
+        prev_cov = prev_token.get("data_coverage", {})
+        prev_paper = prev_token.get("paper", {})
+        delta_trades = token["data_coverage"].get("accepted_trades", 0) - prev_cov.get("accepted_trades", 0)
+        delta_blocks = token["data_coverage"].get("flow_blocks", 0) - prev_cov.get("flow_blocks", 0)
+        delta_entries = paper["entry_counts"]["accepted"] - prev_paper.get("entry_counts", {}).get("accepted", 0)
+        delta_reentries = paper["reentry_counts"]["ready"] - prev_paper.get("reentry_counts", {}).get("ready", 0)
+        current_closed = sum(paper["closed_by_model"].values())
+        previous_closed = sum(prev_paper.get("closed_by_model", {}).values())
+        open_mfe = max((p.get("mfe", 0) for p in paper["open_positions"].values()), default=0)
+        open_mae = min((p.get("mae", 0) for p in paper["open_positions"].values()), default=0)
         lines += [
             f"## {symbol}", "",
             f"Structure: **{token.get('structure')}**. Current price: **{token.get('current_price')}**.",
@@ -221,7 +254,8 @@ def render_hourly_report(run_dir, latest=True):
             f"Flow: BUY={flow.get('buy_notional')} SELL={flow.get('sell_notional')} imbalance={flow.get('imbalance')} move_bps={flow.get('move_bps')}.",
             f"Signals: accepted research entries={paper['entry_counts']['accepted']}, rejected={paper['entry_counts']['rejected']}; "
             f"re-entry ready={paper['reentry_counts']['ready']}, rejected={paper['reentry_counts']['rejected']}.",
-            f"Open PAPER books: **{len(paper['open_positions'])}**.",
+            f"Open PAPER books: **{len(paper['open_positions'])}**. Current open-book max MFE={open_mfe:.4f} USD; min MAE={open_mae:.4f} USD.",
+            f"Since previous hourly snapshot: trades +{delta_trades}, flow blocks +{delta_blocks}, accepted entry hypotheses +{delta_entries}, re-entry-ready +{delta_reentries}, closes +{current_closed-previous_closed}.",
             f"Confidence: **{token['confidence']['status']}**.",
             "",
             "Preliminary findings:",
@@ -237,6 +271,8 @@ def render_hourly_report(run_dir, latest=True):
             lines.append("- INSUFFICIENT DATA")
         lines.append("")
     lines += [
+        "## CHANGES SINCE PREVIOUS HOUR", "",
+        ("Previous hourly snapshot: " + str(previous.get("iso_utc")) if previous else "No previous hourly snapshot yet."), "",
         "## CROSS-TOKEN FINDINGS", "",
         json.dumps(row.get("cross_token_findings", []), indent=2, ensure_ascii=False), "",
         "## WHAT IS NOT PROVEN YET", "",
