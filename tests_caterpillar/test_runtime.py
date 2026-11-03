@@ -228,6 +228,31 @@ class RuntimeTests(unittest.TestCase):
         for kwargs in ({'leverage':50},{'margin_fraction':.3},{'pyramiding':True},{'paper_symbols':('BTC',)},{'block_trades':3.5}):
             with self.assertRaises(ValueError):Config(**kwargs)
 
+    def test_contract_quantity_step_and_maximum_enforced(self):
+        self.e.s['symbols']['BTC']['instrument']['lot_size']={'qtyStep':'1','minOrderQty':'1','maxMktOrderQty':'100','minNotionalValue':'5'}
+        p=self.open_position()
+        self.assertEqual(p['quantity'],int(p['quantity']))
+        self.assertLessEqual(p['margin'],100)
+        self.e.s['symbols']['ETH']['instrument']['lot_size']={'qtyStep':'1','minOrderQty':'1','maxMktOrderQty':'1','minNotionalValue':'5'}
+        for i in range(25):self.trade(101+i*.04,qty=1+i//4,symbol='ETH')
+        self.assertNotIn('ETH',self.e.s['positions'])
+
+    def test_missing_subscription_ack_cannot_feed_strategy(self):
+        import queue
+        from caterpillar_paper.market import StreamBridge
+        messages=queue.Queue(); bridge=StreamBridge(messages)
+        self.assertEqual(bridge.ingest_trades([{}]),0)
+        self.assertTrue(messages.empty())
+
+    def test_restored_reentry_watch_preserves_cycle_and_correction(self):
+        self.open_position()
+        for i in range(17):self.trade(101.9-i*.035,side=-1,qty=10+i//4)
+        self.e.checkpoint()
+        watch=copy.deepcopy(self.e.s['symbols']['BTC']['watch'])
+        restored=Engine(self.cfg,self.store)
+        self.assertEqual(restored.s['symbols']['BTC']['watch'],watch)
+        self.assertIsNone(restored.memory['BTC']['flow'])
+
     def test_snapshot_no_fake_online_or_fake_marks(self):
         self.open_position(); snap=self.e.snapshot(self.t+16)
         self.assertEqual(snap['status'],'STALE'); self.assertIsNone(snap['positions'][0]['mark'])

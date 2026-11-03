@@ -97,17 +97,19 @@ class Scanner:
 class StreamBridge:
     """Queue adapter for the project's transport; all decisions run on the main thread."""
     def __init__(self, messages):
-        self.messages=messages; self.symbols=set(); self.accepted=0; self.trade_ready=False
+        self.messages=messages; self.symbols=set(); self.accepted=0; self.trade_ready=False; self.generation=0
 
     def send(self,kind,data):
         # A full queue forces the stream to reconnect and clear strategy buffers.
         self.messages.put((kind,data),timeout=2)
 
     def mark_connected(self,epoch=None,symbols=None,owner=None):
+        self.generation+=1
         self.trade_ready=False
         self.symbols=set(symbols or ()); self.send('connection',(list(self.symbols),True,epoch or time.time()))
 
     def mark_disconnected(self,epoch=None,owner=None):
+        self.generation+=1
         self.trade_ready=False
         try:self.send('connection',(list(self.symbols),False,epoch or time.time()))
         except queue.Full:pass
@@ -121,7 +123,7 @@ class StreamBridge:
 
     def ingest_trades(self,rows,received_at=None,owner=None,accepted_rows=None):
         if not self.trade_ready:return 0
-        for row in rows:self.send('trade',(row,received_at or time.time()))
+        for row in rows:self.send('trade',(row,received_at or time.time(),self.generation))
         self.accepted+=len(rows)
         if accepted_rows is not None:accepted_rows.extend(rows)
         return len(rows)
@@ -130,5 +132,8 @@ class StreamBridge:
 
     def run(self,stop,symbols_provider,url=None):
         kwargs={} if url is None else {'url':url}
-        run_bybit_stream(self,stop,symbols_provider,lambda data:self.send('transport',data),worker_name='caterpillar-paper',
+        def report(data):
+            try:self.messages.put_nowait(('transport',data))
+            except queue.Full:pass
+        run_bybit_stream(self,stop,symbols_provider,report,worker_name='caterpillar-paper',
                          on_subscription=lambda ready:setattr(self,'trade_ready',ready),**kwargs)

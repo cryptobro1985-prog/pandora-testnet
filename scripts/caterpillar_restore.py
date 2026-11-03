@@ -24,7 +24,10 @@ def main():
     for run in runs:
         if run['head_branch']!=a.branch or str(run['id'])==os.getenv('GITHUB_RUN_ID'):continue
         artifacts=json.loads(gh(prefix+'runs/'+str(run['id'])+'/artifacts'))['artifacts']
-        found=[r for r in artifacts if r['name']=='caterpillar-checkpoint' and not r['expired']]
+        checkpoints=[r for r in artifacts if r['name']=='caterpillar-checkpoint']
+        if any(r['expired'] for r in checkpoints):
+            raise RuntimeError('Prior session checkpoint expired; refusing a silent equity reset')
+        found=[r for r in checkpoints if not r['expired']]
         if not found:continue
         payload=gh(prefix+'artifacts/'+str(found[0]['id'])+'/zip')
         with zipfile.ZipFile(io.BytesIO(payload)) as z:

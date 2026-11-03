@@ -61,6 +61,7 @@ def main():
     for sig in (signal.SIGINT,signal.SIGTERM):signal.signal(sig,lambda *_:stop.set())
     deadline=time.monotonic()+args.minutes*60
     last_snapshot=last_checkpoint=last_publish=0.; publisher=None; published=[]
+    stream_generation=None
 
     def publish_async(snapshot):
         try:
@@ -81,13 +82,16 @@ def main():
                 kind,data=messages.get(timeout=.1)
                 try:
                     if kind=='trade':
-                        row,received=data
+                        row,received,generation=data
+                        if stream_generation!=generation:
+                            engine.reset_flow(engine.s['active'],True,received)
+                            stream_generation=generation
                         engine.on_trade(row['coin'],float(row['time'])/1000,float(row['px']),float(row['sz']),
                                         1 if row['side']=='B' else -1,str(row['tid']),received)
                     elif kind=='connection':engine.reset_flow(*data)
                     elif kind=='transport':transport=data
                     elif kind=='h1':
-                        engine.seed_h1(*data); errors.pop('h1:'+data[0],None)
+                        engine.seed_h1(*data); errors.pop('h1:'+data[0],None); errors.pop('h1',None)
                     elif kind=='scanner':
                         ranking,universe=data; engine.s['scanner']=ranking; errors.pop('scanner',None)
                         symbols=list(engine.s['active']) or list(cfg.paper_symbols) or [r['symbol'] for r in ranking['candidates'][:5]]

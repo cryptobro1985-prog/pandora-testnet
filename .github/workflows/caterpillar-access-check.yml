@@ -1,0 +1,31 @@
+name: Caterpillar evidence and access check
+on:
+  push:
+    branches: [caterpillar-paper-runtime-v1]
+    paths: ['scripts/caterpillar_remote_check.py', '.github/workflows/caterpillar-access-check.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: caterpillar-evidence-check
+  cancel-in-progress: false
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read existing research and check actual access
+        run: python scripts/caterpillar_remote_check.py "$GITHUB_REPOSITORY" "$RUNNER_TEMP/evidence"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: caterpillar-access-evidence
+          path: ${{ runner.temp }}/evidence/*.json
+          retention-days: 30

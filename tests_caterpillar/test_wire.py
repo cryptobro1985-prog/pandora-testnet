@@ -63,7 +63,7 @@ class WireTests(unittest.TestCase):
                     except queue.Empty:continue
                     if kind=='connection':engine.reset_flow(*data)
                     elif kind=='trade':
-                        row,received=data
+                        row,received,generation=data
                         engine.on_trade(row['coin'],float(row['time'])/1000,float(row['px']),float(row['sz']),
                                         1 if row['side']=='B' else -1,str(row['tid']),received)
                 self.assertIn('BTC',engine.s['positions'])
