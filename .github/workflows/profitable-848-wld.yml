@@ -1,0 +1,26 @@
+name: Profitable 848 Caterpillar WLD Replay
+on:
+  push:
+    branches: [caterpillar-paper-runtime-v1]
+    paths:
+      - 'scripts/profitable_848_wld_1d.py'
+      - 'scripts/historical_848_*'
+      - '.github/workflows/profitable-848-wld.yml'
+  workflow_dispatch:
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: caterpillar-paper-runtime-v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: PYTHONPATH=. python scripts/profitable_848_wld_1d.py --cache .cache/bybit --output replay_848
+      - run: cat replay_848/RESULT.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: profitable-848-wld
+          path: replay_848/
