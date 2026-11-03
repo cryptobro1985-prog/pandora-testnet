@@ -5,8 +5,10 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import platform
+import socket
 import sys
 
 from . import __version__
