@@ -280,12 +280,15 @@ def historical(engine, cache, start, end, allow_ohlcv=False, resume=False):
     if resume and progress_path is None:
         raise ValueError("Resume requires an output root with persistent checkpoints")
     if resume:
-        if progress_path.is_file():
+        checkpoint_progress = getattr(engine, "resume_extra", {}).get("historical_progress")
+        if checkpoint_progress is not None:
+            progress = checkpoint_progress
+        elif progress_path.is_file():
             progress = json.loads(progress_path.read_text())
-            if any(progress.get(k) != v for k, v in expected.items()):
-                raise ValueError("Historical progress does not match requested period/symbols")
         else:
             progress = {**expected, "segments": {}}
+        if any(progress.get(k) != v for k, v in expected.items()):
+            raise ValueError("Historical progress does not match requested period/symbols")
     else:
         progress = {**expected, "segments": {}}
     completed = progress.setdefault("segments", {})
@@ -347,13 +350,16 @@ def historical(engine, cache, start, end, allow_ohlcv=False, resume=False):
                 "accepted": coverage["accepted"],
                 "completed_at": datetime.now(timezone.utc).isoformat(),
             }
-            if progress_path is not None and hasattr(engine.output, "save_json"):
-                engine.output.save_json("historical_progress.json", progress)
             if hasattr(engine, "resume_extra"):
                 engine.resume_extra["historical_progress"] = progress
             engine.output.flush()
+            # The checkpoint is the authoritative commit point. Save its state
+            # and stream offsets before publishing the human-readable progress
+            # file, so a crash can never skip evidence that was not checkpointed.
             if hasattr(engine, "checkpoint"):
                 engine.checkpoint("historical_segment", extra=getattr(engine, "resume_extra", {}))
+            if progress_path is not None and hasattr(engine.output, "save_json"):
+                engine.output.save_json("historical_progress.json", progress)
             if hasattr(engine, "maybe_status"):
                 engine.maybe_status("historical_progress")
             print(f"{symbol} {day:%Y-%m-%d}: {coverage['status']}; accepted={coverage['accepted']}", flush=True)
