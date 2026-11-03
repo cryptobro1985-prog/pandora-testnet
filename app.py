@@ -6,6 +6,8 @@ from pandora_decisions import entry_status, startup_snapshot
 from pandora_bootstrap import HistoryBootstrap
 from pandora_runtime import PandoraRuntime
 from codex_million_launcher import CODEX
+from caterpillar_research_launcher import RESEARCH
+from legacy_cleanup import cleanup_once as cleanup_legacy_once
 from pandora_scanner import ticker_worker
 from pandora_locals import live_locals, execution_anchor, entry_structure_valid
 from pandora_win_core import mark_metrics
@@ -101,6 +103,8 @@ def pinit():
    for query in SCHEMA:db.execute(query)
    db.execute('insert into pandora_win_account_state(id,equity,realized_pnl,started_at,updated_at) values(1,500,0,%s,%s) on conflict(id) do nothing',(now(),now()))
  EngineStore(pg).migrate()
+ cleanup_result=cleanup_legacy_once(pg,enabled=os.getenv("PANDORA_CLEAN_LEGACY_DB","0")=="1")
+ print("[LEGACY_DB_CLEANUP] "+json.dumps(cleanup_result,default=str,separators=(",",":")),flush=True)
  restore_state()
  with DASHBOARD_LOCK:_DASHBOARD_CACHE.clear()
  global WIN
@@ -1423,6 +1427,7 @@ def build_dashboard_snapshot(history=None):
   'health':health_state(),'sources':state['sources'],'pandora_entry_diagnostics':state.get('pandora_entry_diagnostics',{}),
   'history_error':history.get('error'),'history_updated_at':history.get('at'),'positions':[],
   'codex':CODEX.snapshot(),
+  'research':RESEARCH.snapshot(),
   'snapshot_at':now()}
 
 def dashboard():
@@ -1455,6 +1460,7 @@ class Handler(BaseHTTPRequestHandler):
    elif path=='/':self.send(200,html_dashboard(dashboard()),'text/html; charset=utf-8')
    elif path in ('/api/dashboard','/api/pandora','/status'):self.send(200,dashboard())
    elif path=='/api/codex':self.send(200,CODEX.snapshot())
+   elif path=='/api/research':self.send(200,RESEARCH.snapshot())
    elif path in ('/api/pandora/history','/pandora/history'):
     result=pandora_history_page('pandora_win',args.get('before',[None])[0],int(args.get('limit',['100'])[0]),args.get('symbol',[None])[0])
     if path=='/pandora/history':
@@ -1511,7 +1517,8 @@ def main():
    SHUTDOWN.wait(1)
  jobs=[('lease',engine_coordinator),('contracts',bybit_instruments_loop),('discovery',bybit_volatility_discovery_loop),('trades',market_trade_stream),('quotes',market_aux_stream),
   *((('h1_history',market_history_bootstrap),('h1_scan',pandora_loop)) if not v2_enabled() else ()),('execution',pandora_risk_loop),
-  ('checkpoint',pandora_live_state_loop),('history',dashboard_history_loop),('keepalive',render_keepalive_loop),('codex_million',lambda:CODEX.run(SHUTDOWN))]
+  ('checkpoint',pandora_live_state_loop),('history',dashboard_history_loop),('keepalive',render_keepalive_loop),
+  ('codex_million',lambda:CODEX.run(SHUTDOWN)),('caterpillar_research',lambda:RESEARCH.run(SHUTDOWN))]
  workers=[threading.Thread(target=supervise,args=job,daemon=True,name=job[0]) for job in jobs]
  for worker in workers:worker.start()
  try:server.serve_forever()
