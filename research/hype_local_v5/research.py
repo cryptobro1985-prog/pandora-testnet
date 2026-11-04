@@ -603,6 +603,9 @@ async def live(minutes: int, outdir: Path) -> None:
                         raw_liq.write(json.dumps(msg, separators=(",",":"))+"\n")
                     elif topic.startswith("tickers."):
                         state.on_ticker(msg)
+                    elif topic.startswith("kline."):
+                        state.messages["kline"] += 1
+                        state.last_received["kline"] = time.time()
                 except asyncio.TimeoutError:
                     pass
                 now = time.time()
@@ -624,6 +627,7 @@ async def live(minutes: int, outdir: Path) -> None:
             "L50 orderbook depth/imbalance", "book add/cancel churn",
             "executed trade flow 5s/15s/60s", "allLiquidation stream",
             "open interest from public ticker websocket",
+            "M1/M3/M5/H1 klines from public websocket",
         ],
     }
     (outdir / "SUMMARY.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
