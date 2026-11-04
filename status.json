@@ -1,5 +1,5 @@
 {
-  "stage": "replay",
+  "stage": "final",
   "source_commit": "5d42711e1fdde6abe9907ec31aeadc6f12a28646",
   "run_id": "41880357085",
   "run_attempt": "1",
@@ -14,6 +14,11 @@
       "path": "reports/study/REPORT.md",
       "bytes": 7212,
       "sha256": "f9ff820e0998cffc4f4319e30d6df4d5a2e7ec7ac89d686e4b7031028c71c08b"
+    },
+    {
+      "path": "reports/study/ci_job_outcomes.json",
+      "bytes": 425,
+      "sha256": "efc0ab878c2db80a73830532560423791cf1eaa4fb867cd9b8861becec88cfb9"
     },
     {
       "path": "reports/study/discovery/candidates.csv",
@@ -264,6 +269,16 @@
       "path": "reports/study/walk_forward_ablation.json",
       "bytes": 33134,
       "sha256": "4366546f4cfbf90ebf46b34b164d915fe0a5e1927b3c48a9584aa7f6ba0eecde"
+    },
+    {
+      "path": "reports/forward/REPORT.md",
+      "bytes": 1804,
+      "sha256": "21cb73eeae38cb28acc3fb845e96219a70efcea911a8da2b81c346b6074a1a57"
+    },
+    {
+      "path": "reports/forward/run_status.json",
+      "bytes": 1059,
+      "sha256": "051e2f446abd6f046e33a8718daab2104ffc311420aaa99549617fda1bd72e7c"
     }
   ],
   "orders_enabled": false,
