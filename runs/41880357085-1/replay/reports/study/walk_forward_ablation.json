@@ -1,0 +1,1230 @@
+[
+  {
+    "model_family": "C",
+    "ablation_status": "not_evaluated_missing_data",
+    "missing_sources": [
+      "historical_OI"
+    ],
+    "folds": []
+  },
+  {
+    "model_family": "D",
+    "ablation_status": "not_evaluated_missing_data",
+    "missing_sources": [
+      "historical_OI",
+      "historical_liquidations"
+    ],
+    "folds": []
+  },
+  {
+    "model_family": "E",
+    "ablation_status": "not_evaluated_missing_data",
+    "missing_sources": [
+      "historical_OI",
+      "historical_orderbook"
+    ],
+    "folds": []
+  },
+  {
+    "model_family": "F",
+    "ablation_status": "not_evaluated_missing_data",
+    "missing_sources": [
+      "historical_OI",
+      "historical_liquidations",
+      "historical_orderbook"
+    ],
+    "folds": []
+  },
+  {
+    "config": {
+      "model_family": "A",
+      "maturity_atr": 0.75,
+      "accept_score": 0.65,
+      "min_survival_seconds": 60.0,
+      "warmup_hours": 6,
+      "retracement_scale": 0.4,
+      "evidence_half_life_seconds": 60.0,
+      "require_absorption": false,
+      "climax_activity_ratio": 1.5,
+      "absorption_activity_ratio": 1.0,
+      "absorption_efficiency_decay": 0.5
+    },
+    "folds": [
+      {
+        "accepted": 7,
+        "true": 0,
+        "false": 7,
+        "engine_episode_accepted": 82,
+        "engine_episode_precision": 0.024390243902439025,
+        "reference_locals": 7,
+        "reference_censored": 0,
+        "reference_locals_evaluable": 7,
+        "missed": 7,
+        "censored_accepted": 0,
+        "first_accepted_precision": 0.0,
+        "precision_wilson_95": [
+          5.551115123125783e-17,
+          0.35433043506668743
+        ],
+        "false_local_rate": 1.0,
+        "recall": 0.0,
+        "missed_local_rate": 1.0,
+        "median_delay_min_upper": null,
+        "p90_delay_min_upper": null,
+        "median_entry_distance_pct": null,
+        "p90_entry_distance_pct": null,
+        "candidate_invalidation_rate": 0.6150234741784038,
+        "confidence_is_calibrated_probability": false,
+        "by_side": {
+          "HIGH": {
+            "accepted": 4,
+            "true": 0,
+            "precision": 0.0
+          },
+          "LOW": {
+            "accepted": 3,
+            "true": 0,
+            "precision": 0.0
+          }
+        },
+        "volatility_cutoffs_from_pre_evaluation_history": [
+          0.007750308818944336,
+          0.01000062080156627
+        ],
+        "by_volatility_regime": {
+          "low": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          },
+          "medium": {
+            "accepted": 6,
+            "true": 0,
+            "precision": 0.0
+          },
+          "high": {
+            "accepted": 1,
+            "true": 0,
+            "precision": 0.0
+          },
+          "unknown": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          }
+        }
+      },
+      {
+        "accepted": 9,
+        "true": 0,
+        "false": 9,
+        "engine_episode_accepted": 78,
+        "engine_episode_precision": 0.038461538461538464,
+        "reference_locals": 9,
+        "reference_censored": 0,
+        "reference_locals_evaluable": 9,
+        "missed": 9,
+        "censored_accepted": 0,
+        "first_accepted_precision": 0.0,
+        "precision_wilson_95": [
+          0.0,
+          0.2991450484195441
+        ],
+        "false_local_rate": 1.0,
+        "recall": 0.0,
+        "missed_local_rate": 1.0,
+        "median_delay_min_upper": null,
+        "p90_delay_min_upper": null,
+        "median_entry_distance_pct": null,
+        "p90_entry_distance_pct": null,
+        "candidate_invalidation_rate": 0.5384615384615384,
+        "confidence_is_calibrated_probability": false,
+        "by_side": {
+          "HIGH": {
+            "accepted": 5,
+            "true": 0,
+            "precision": 0.0
+          },
+          "LOW": {
+            "accepted": 4,
+            "true": 0,
+            "precision": 0.0
+          }
+        },
+        "volatility_cutoffs_from_pre_evaluation_history": [
+          0.00813538479796361,
+          0.01014218779371946
+        ],
+        "by_volatility_regime": {
+          "low": {
+            "accepted": 5,
+            "true": 0,
+            "precision": 0.0
+          },
+          "medium": {
+            "accepted": 3,
+            "true": 0,
+            "precision": 0.0
+          },
+          "high": {
+            "accepted": 1,
+            "true": 0,
+            "precision": 0.0
+          },
+          "unknown": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          }
+        }
+      }
+    ],
+    "ablation_status": "evaluated",
+    "accepted": 16,
+    "true": 0,
+    "rankable": true
+  },
+  {
+    "config": {
+      "model_family": "A",
+      "maturity_atr": 0.75,
+      "accept_score": 0.8,
+      "min_survival_seconds": 60.0,
+      "warmup_hours": 6,
+      "retracement_scale": 0.4,
+      "evidence_half_life_seconds": 60.0,
+      "require_absorption": false,
+      "climax_activity_ratio": 1.5,
+      "absorption_activity_ratio": 1.0,
+      "absorption_efficiency_decay": 0.5
+    },
+    "folds": [
+      {
+        "accepted": 7,
+        "true": 0,
+        "false": 7,
+        "engine_episode_accepted": 74,
+        "engine_episode_precision": 0.06756756756756757,
+        "reference_locals": 7,
+        "reference_censored": 0,
+        "reference_locals_evaluable": 7,
+        "missed": 7,
+        "censored_accepted": 0,
+        "first_accepted_precision": 0.0,
+        "precision_wilson_95": [
+          5.551115123125783e-17,
+          0.35433043506668743
+        ],
+        "false_local_rate": 1.0,
+        "recall": 0.0,
+        "missed_local_rate": 1.0,
+        "median_delay_min_upper": null,
+        "p90_delay_min_upper": null,
+        "median_entry_distance_pct": null,
+        "p90_entry_distance_pct": null,
+        "candidate_invalidation_rate": 0.7153846153846154,
+        "confidence_is_calibrated_probability": false,
+        "by_side": {
+          "HIGH": {
+            "accepted": 4,
+            "true": 0,
+            "precision": 0.0
+          },
+          "LOW": {
+            "accepted": 3,
+            "true": 0,
+            "precision": 0.0
+          }
+        },
+        "volatility_cutoffs_from_pre_evaluation_history": [
+          0.007750308818944336,
+          0.01000062080156627
+        ],
+        "by_volatility_regime": {
+          "low": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          },
+          "medium": {
+            "accepted": 6,
+            "true": 0,
+            "precision": 0.0
+          },
+          "high": {
+            "accepted": 1,
+            "true": 0,
+            "precision": 0.0
+          },
+          "unknown": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          }
+        }
+      },
+      {
+        "accepted": 9,
+        "true": 0,
+        "false": 9,
+        "engine_episode_accepted": 69,
+        "engine_episode_precision": 0.07246376811594203,
+        "reference_locals": 9,
+        "reference_censored": 0,
+        "reference_locals_evaluable": 9,
+        "missed": 9,
+        "censored_accepted": 0,
+        "first_accepted_precision": 0.0,
+        "precision_wilson_95": [
+          0.0,
+          0.2991450484195441
+        ],
+        "false_local_rate": 1.0,
+        "recall": 0.0,
+        "missed_local_rate": 1.0,
+        "median_delay_min_upper": null,
+        "p90_delay_min_upper": null,
+        "median_entry_distance_pct": null,
+        "p90_entry_distance_pct": null,
+        "candidate_invalidation_rate": 0.6682464454976303,
+        "confidence_is_calibrated_probability": false,
+        "by_side": {
+          "HIGH": {
+            "accepted": 5,
+            "true": 0,
+            "precision": 0.0
+          },
+          "LOW": {
+            "accepted": 4,
+            "true": 0,
+            "precision": 0.0
+          }
+        },
+        "volatility_cutoffs_from_pre_evaluation_history": [
+          0.00813538479796361,
+          0.01014218779371946
+        ],
+        "by_volatility_regime": {
+          "low": {
+            "accepted": 5,
+            "true": 0,
+            "precision": 0.0
+          },
+          "medium": {
+            "accepted": 3,
+            "true": 0,
+            "precision": 0.0
+          },
+          "high": {
+            "accepted": 1,
+            "true": 0,
+            "precision": 0.0
+          },
+          "unknown": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          }
+        }
+      }
+    ],
+    "ablation_status": "evaluated",
+    "accepted": 16,
+    "true": 0,
+    "rankable": true
+  },
+  {
+    "config": {
+      "model_family": "A",
+      "maturity_atr": 1.25,
+      "accept_score": 0.65,
+      "min_survival_seconds": 60.0,
+      "warmup_hours": 6,
+      "retracement_scale": 0.4,
+      "evidence_half_life_seconds": 60.0,
+      "require_absorption": false,
+      "climax_activity_ratio": 1.5,
+      "absorption_activity_ratio": 1.0,
+      "absorption_efficiency_decay": 0.5
+    },
+    "folds": [
+      {
+        "accepted": 7,
+        "true": 1,
+        "false": 6,
+        "engine_episode_accepted": 34,
+        "engine_episode_precision": 0.058823529411764705,
+        "reference_locals": 7,
+        "reference_censored": 0,
+        "reference_locals_evaluable": 7,
+        "missed": 6,
+        "censored_accepted": 0,
+        "first_accepted_precision": 0.14285714285714285,
+        "precision_wilson_95": [
+          0.02567962434474355,
+          0.5131278292743189
+        ],
+        "false_local_rate": 0.8571428571428571,
+        "recall": 0.14285714285714285,
+        "missed_local_rate": 0.8571428571428571,
+        "median_delay_min_upper": 7.0,
+        "p90_delay_min_upper": 7.0,
+        "median_entry_distance_pct": 0.9607928661432674,
+        "p90_entry_distance_pct": 0.9607928661432674,
+        "candidate_invalidation_rate": 0.6344086021505376,
+        "confidence_is_calibrated_probability": false,
+        "by_side": {
+          "HIGH": {
+            "accepted": 4,
+            "true": 1,
+            "precision": 0.25
+          },
+          "LOW": {
+            "accepted": 3,
+            "true": 0,
+            "precision": 0.0
+          }
+        },
+        "volatility_cutoffs_from_pre_evaluation_history": [
+          0.007750308818944336,
+          0.01000062080156627
+        ],
+        "by_volatility_regime": {
+          "low": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          },
+          "medium": {
+            "accepted": 6,
+            "true": 1,
+            "precision": 0.16666666666666666
+          },
+          "high": {
+            "accepted": 1,
+            "true": 0,
+            "precision": 0.0
+          },
+          "unknown": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          }
+        }
+      },
+      {
+        "accepted": 9,
+        "true": 0,
+        "false": 9,
+        "engine_episode_accepted": 31,
+        "engine_episode_precision": 0.03225806451612903,
+        "reference_locals": 9,
+        "reference_censored": 0,
+        "reference_locals_evaluable": 9,
+        "missed": 9,
+        "censored_accepted": 0,
+        "first_accepted_precision": 0.0,
+        "precision_wilson_95": [
+          0.0,
+          0.2991450484195441
+        ],
+        "false_local_rate": 1.0,
+        "recall": 0.0,
+        "missed_local_rate": 1.0,
+        "median_delay_min_upper": null,
+        "p90_delay_min_upper": null,
+        "median_entry_distance_pct": null,
+        "p90_entry_distance_pct": null,
+        "candidate_invalidation_rate": 0.6125,
+        "confidence_is_calibrated_probability": false,
+        "by_side": {
+          "HIGH": {
+            "accepted": 5,
+            "true": 0,
+            "precision": 0.0
+          },
+          "LOW": {
+            "accepted": 4,
+            "true": 0,
+            "precision": 0.0
+          }
+        },
+        "volatility_cutoffs_from_pre_evaluation_history": [
+          0.00813538479796361,
+          0.01014218779371946
+        ],
+        "by_volatility_regime": {
+          "low": {
+            "accepted": 6,
+            "true": 0,
+            "precision": 0.0
+          },
+          "medium": {
+            "accepted": 2,
+            "true": 0,
+            "precision": 0.0
+          },
+          "high": {
+            "accepted": 1,
+            "true": 0,
+            "precision": 0.0
+          },
+          "unknown": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          }
+        }
+      }
+    ],
+    "ablation_status": "evaluated",
+    "accepted": 16,
+    "true": 1,
+    "rankable": true
+  },
+  {
+    "config": {
+      "model_family": "A",
+      "maturity_atr": 1.25,
+      "accept_score": 0.8,
+      "min_survival_seconds": 60.0,
+      "warmup_hours": 6,
+      "retracement_scale": 0.4,
+      "evidence_half_life_seconds": 60.0,
+      "require_absorption": false,
+      "climax_activity_ratio": 1.5,
+      "absorption_activity_ratio": 1.0,
+      "absorption_efficiency_decay": 0.5
+    },
+    "folds": [
+      {
+        "accepted": 7,
+        "true": 2,
+        "false": 5,
+        "engine_episode_accepted": 35,
+        "engine_episode_precision": 0.11428571428571428,
+        "reference_locals": 7,
+        "reference_censored": 0,
+        "reference_locals_evaluable": 7,
+        "missed": 5,
+        "censored_accepted": 0,
+        "first_accepted_precision": 0.2857142857142857,
+        "precision_wilson_95": [
+          0.08221892400405678,
+          0.6410655481673808
+        ],
+        "false_local_rate": 0.7142857142857143,
+        "recall": 0.2857142857142857,
+        "missed_local_rate": 0.7142857142857143,
+        "median_delay_min_upper": 103.5,
+        "p90_delay_min_upper": 172.70000000000002,
+        "median_entry_distance_pct": 1.0085040496998432,
+        "p90_entry_distance_pct": 1.1280920137012562,
+        "candidate_invalidation_rate": 0.7388059701492538,
+        "confidence_is_calibrated_probability": false,
+        "by_side": {
+          "HIGH": {
+            "accepted": 4,
+            "true": 2,
+            "precision": 0.5
+          },
+          "LOW": {
+            "accepted": 3,
+            "true": 0,
+            "precision": 0.0
+          }
+        },
+        "volatility_cutoffs_from_pre_evaluation_history": [
+          0.007750308818944336,
+          0.01000062080156627
+        ],
+        "by_volatility_regime": {
+          "low": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          },
+          "medium": {
+            "accepted": 7,
+            "true": 2,
+            "precision": 0.2857142857142857
+          },
+          "high": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          },
+          "unknown": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          }
+        }
+      },
+      {
+        "accepted": 9,
+        "true": 0,
+        "false": 9,
+        "engine_episode_accepted": 27,
+        "engine_episode_precision": 0.07407407407407407,
+        "reference_locals": 9,
+        "reference_censored": 0,
+        "reference_locals_evaluable": 9,
+        "missed": 9,
+        "censored_accepted": 0,
+        "first_accepted_precision": 0.0,
+        "precision_wilson_95": [
+          0.0,
+          0.2991450484195441
+        ],
+        "false_local_rate": 1.0,
+        "recall": 0.0,
+        "missed_local_rate": 1.0,
+        "median_delay_min_upper": null,
+        "p90_delay_min_upper": null,
+        "median_entry_distance_pct": null,
+        "p90_entry_distance_pct": null,
+        "candidate_invalidation_rate": 0.71875,
+        "confidence_is_calibrated_probability": false,
+        "by_side": {
+          "HIGH": {
+            "accepted": 5,
+            "true": 0,
+            "precision": 0.0
+          },
+          "LOW": {
+            "accepted": 4,
+            "true": 0,
+            "precision": 0.0
+          }
+        },
+        "volatility_cutoffs_from_pre_evaluation_history": [
+          0.00813538479796361,
+          0.01014218779371946
+        ],
+        "by_volatility_regime": {
+          "low": {
+            "accepted": 6,
+            "true": 0,
+            "precision": 0.0
+          },
+          "medium": {
+            "accepted": 2,
+            "true": 0,
+            "precision": 0.0
+          },
+          "high": {
+            "accepted": 1,
+            "true": 0,
+            "precision": 0.0
+          },
+          "unknown": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          }
+        }
+      }
+    ],
+    "ablation_status": "evaluated",
+    "accepted": 16,
+    "true": 2,
+    "rankable": true
+  },
+  {
+    "config": {
+      "model_family": "B",
+      "maturity_atr": 0.75,
+      "accept_score": 0.65,
+      "min_survival_seconds": 60.0,
+      "warmup_hours": 6,
+      "retracement_scale": 0.4,
+      "evidence_half_life_seconds": 60.0,
+      "require_absorption": true,
+      "climax_activity_ratio": 1.5,
+      "absorption_activity_ratio": 1.0,
+      "absorption_efficiency_decay": 0.5
+    },
+    "folds": [
+      {
+        "accepted": 7,
+        "true": 1,
+        "false": 6,
+        "engine_episode_accepted": 43,
+        "engine_episode_precision": 0.09302325581395349,
+        "reference_locals": 7,
+        "reference_censored": 0,
+        "reference_locals_evaluable": 7,
+        "missed": 6,
+        "censored_accepted": 0,
+        "first_accepted_precision": 0.14285714285714285,
+        "precision_wilson_95": [
+          0.02567962434474355,
+          0.5131278292743189
+        ],
+        "false_local_rate": 0.8571428571428571,
+        "recall": 0.14285714285714285,
+        "missed_local_rate": 0.8571428571428571,
+        "median_delay_min_upper": 47.0,
+        "p90_delay_min_upper": 47.0,
+        "median_entry_distance_pct": 0.629368889773374,
+        "p90_entry_distance_pct": 0.629368889773374,
+        "candidate_invalidation_rate": 0.8339622641509434,
+        "confidence_is_calibrated_probability": false,
+        "by_side": {
+          "HIGH": {
+            "accepted": 4,
+            "true": 1,
+            "precision": 0.25
+          },
+          "LOW": {
+            "accepted": 3,
+            "true": 0,
+            "precision": 0.0
+          }
+        },
+        "volatility_cutoffs_from_pre_evaluation_history": [
+          0.007750308818944336,
+          0.01000062080156627
+        ],
+        "by_volatility_regime": {
+          "low": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          },
+          "medium": {
+            "accepted": 7,
+            "true": 1,
+            "precision": 0.14285714285714285
+          },
+          "high": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          },
+          "unknown": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          }
+        }
+      },
+      {
+        "accepted": 9,
+        "true": 0,
+        "false": 9,
+        "engine_episode_accepted": 41,
+        "engine_episode_precision": 0.0975609756097561,
+        "reference_locals": 9,
+        "reference_censored": 0,
+        "reference_locals_evaluable": 9,
+        "missed": 9,
+        "censored_accepted": 0,
+        "first_accepted_precision": 0.0,
+        "precision_wilson_95": [
+          0.0,
+          0.2991450484195441
+        ],
+        "false_local_rate": 1.0,
+        "recall": 0.0,
+        "missed_local_rate": 1.0,
+        "median_delay_min_upper": null,
+        "p90_delay_min_upper": null,
+        "median_entry_distance_pct": null,
+        "p90_entry_distance_pct": null,
+        "candidate_invalidation_rate": 0.7980769230769231,
+        "confidence_is_calibrated_probability": false,
+        "by_side": {
+          "HIGH": {
+            "accepted": 5,
+            "true": 0,
+            "precision": 0.0
+          },
+          "LOW": {
+            "accepted": 4,
+            "true": 0,
+            "precision": 0.0
+          }
+        },
+        "volatility_cutoffs_from_pre_evaluation_history": [
+          0.00813538479796361,
+          0.01014218779371946
+        ],
+        "by_volatility_regime": {
+          "low": {
+            "accepted": 4,
+            "true": 0,
+            "precision": 0.0
+          },
+          "medium": {
+            "accepted": 3,
+            "true": 0,
+            "precision": 0.0
+          },
+          "high": {
+            "accepted": 2,
+            "true": 0,
+            "precision": 0.0
+          },
+          "unknown": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          }
+        }
+      }
+    ],
+    "ablation_status": "evaluated",
+    "accepted": 16,
+    "true": 1,
+    "rankable": true
+  },
+  {
+    "config": {
+      "model_family": "B",
+      "maturity_atr": 0.75,
+      "accept_score": 0.8,
+      "min_survival_seconds": 60.0,
+      "warmup_hours": 6,
+      "retracement_scale": 0.4,
+      "evidence_half_life_seconds": 60.0,
+      "require_absorption": true,
+      "climax_activity_ratio": 1.5,
+      "absorption_activity_ratio": 1.0,
+      "absorption_efficiency_decay": 0.5
+    },
+    "folds": [
+      {
+        "accepted": 7,
+        "true": 5,
+        "false": 2,
+        "engine_episode_accepted": 12,
+        "engine_episode_precision": 0.4166666666666667,
+        "reference_locals": 7,
+        "reference_censored": 0,
+        "reference_locals_evaluable": 7,
+        "missed": 2,
+        "censored_accepted": 1,
+        "first_accepted_precision": 0.7142857142857143,
+        "precision_wilson_95": [
+          0.35893445183261935,
+          0.9177810759959433
+        ],
+        "false_local_rate": 0.2857142857142857,
+        "recall": 0.7142857142857143,
+        "missed_local_rate": 0.2857142857142857,
+        "median_delay_min_upper": 133.0,
+        "p90_delay_min_upper": 652.6,
+        "median_entry_distance_pct": 2.10794730131747,
+        "p90_entry_distance_pct": 2.6462595977337,
+        "candidate_invalidation_rate": 0.8943089430894309,
+        "confidence_is_calibrated_probability": false,
+        "by_side": {
+          "HIGH": {
+            "accepted": 4,
+            "true": 3,
+            "precision": 0.75
+          },
+          "LOW": {
+            "accepted": 3,
+            "true": 2,
+            "precision": 0.6666666666666666
+          }
+        },
+        "volatility_cutoffs_from_pre_evaluation_history": [
+          0.007750308818944336,
+          0.01000062080156627
+        ],
+        "by_volatility_regime": {
+          "low": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          },
+          "medium": {
+            "accepted": 5,
+            "true": 4,
+            "precision": 0.8
+          },
+          "high": {
+            "accepted": 2,
+            "true": 1,
+            "precision": 0.5
+          },
+          "unknown": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          }
+        }
+      },
+      {
+        "accepted": 8,
+        "true": 5,
+        "false": 3,
+        "engine_episode_accepted": 12,
+        "engine_episode_precision": 0.5,
+        "reference_locals": 9,
+        "reference_censored": 0,
+        "reference_locals_evaluable": 9,
+        "missed": 4,
+        "censored_accepted": 0,
+        "first_accepted_precision": 0.625,
+        "precision_wilson_95": [
+          0.30574239460262737,
+          0.8631557141764026
+        ],
+        "false_local_rate": 0.375,
+        "recall": 0.5555555555555556,
+        "missed_local_rate": 0.4444444444444444,
+        "median_delay_min_upper": 142.0,
+        "p90_delay_min_upper": 366.0,
+        "median_entry_distance_pct": 1.4610557975523797,
+        "p90_entry_distance_pct": 1.8424208406301368,
+        "candidate_invalidation_rate": 0.9078014184397163,
+        "confidence_is_calibrated_probability": false,
+        "by_side": {
+          "HIGH": {
+            "accepted": 4,
+            "true": 2,
+            "precision": 0.5
+          },
+          "LOW": {
+            "accepted": 4,
+            "true": 3,
+            "precision": 0.75
+          }
+        },
+        "volatility_cutoffs_from_pre_evaluation_history": [
+          0.00813538479796361,
+          0.01014218779371946
+        ],
+        "by_volatility_regime": {
+          "low": {
+            "accepted": 4,
+            "true": 3,
+            "precision": 0.75
+          },
+          "medium": {
+            "accepted": 3,
+            "true": 2,
+            "precision": 0.6666666666666666
+          },
+          "high": {
+            "accepted": 1,
+            "true": 0,
+            "precision": 0.0
+          },
+          "unknown": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          }
+        }
+      }
+    ],
+    "ablation_status": "evaluated",
+    "accepted": 15,
+    "true": 10,
+    "rankable": true
+  },
+  {
+    "config": {
+      "model_family": "B",
+      "maturity_atr": 1.25,
+      "accept_score": 0.65,
+      "min_survival_seconds": 60.0,
+      "warmup_hours": 6,
+      "retracement_scale": 0.4,
+      "evidence_half_life_seconds": 60.0,
+      "require_absorption": true,
+      "climax_activity_ratio": 1.5,
+      "absorption_activity_ratio": 1.0,
+      "absorption_efficiency_decay": 0.5
+    },
+    "folds": [
+      {
+        "accepted": 7,
+        "true": 2,
+        "false": 5,
+        "engine_episode_accepted": 32,
+        "engine_episode_precision": 0.1875,
+        "reference_locals": 7,
+        "reference_censored": 0,
+        "reference_locals_evaluable": 7,
+        "missed": 5,
+        "censored_accepted": 0,
+        "first_accepted_precision": 0.2857142857142857,
+        "precision_wilson_95": [
+          0.08221892400405678,
+          0.6410655481673808
+        ],
+        "false_local_rate": 0.7142857142857143,
+        "recall": 0.2857142857142857,
+        "missed_local_rate": 0.7142857142857143,
+        "median_delay_min_upper": 104.5,
+        "p90_delay_min_upper": 165.70000000000002,
+        "median_entry_distance_pct": 1.0178524569258884,
+        "p90_entry_distance_pct": 1.1515204768460652,
+        "candidate_invalidation_rate": 0.7870967741935484,
+        "confidence_is_calibrated_probability": false,
+        "by_side": {
+          "HIGH": {
+            "accepted": 4,
+            "true": 2,
+            "precision": 0.5
+          },
+          "LOW": {
+            "accepted": 3,
+            "true": 0,
+            "precision": 0.0
+          }
+        },
+        "volatility_cutoffs_from_pre_evaluation_history": [
+          0.007750308818944336,
+          0.01000062080156627
+        ],
+        "by_volatility_regime": {
+          "low": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          },
+          "medium": {
+            "accepted": 6,
+            "true": 1,
+            "precision": 0.16666666666666666
+          },
+          "high": {
+            "accepted": 1,
+            "true": 1,
+            "precision": 1.0
+          },
+          "unknown": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          }
+        }
+      },
+      {
+        "accepted": 9,
+        "true": 0,
+        "false": 9,
+        "engine_episode_accepted": 19,
+        "engine_episode_precision": 0.05263157894736842,
+        "reference_locals": 9,
+        "reference_censored": 0,
+        "reference_locals_evaluable": 9,
+        "missed": 9,
+        "censored_accepted": 0,
+        "first_accepted_precision": 0.0,
+        "precision_wilson_95": [
+          0.0,
+          0.2991450484195441
+        ],
+        "false_local_rate": 1.0,
+        "recall": 0.0,
+        "missed_local_rate": 1.0,
+        "median_delay_min_upper": null,
+        "p90_delay_min_upper": null,
+        "median_entry_distance_pct": null,
+        "p90_entry_distance_pct": null,
+        "candidate_invalidation_rate": 0.822429906542056,
+        "confidence_is_calibrated_probability": false,
+        "by_side": {
+          "HIGH": {
+            "accepted": 5,
+            "true": 0,
+            "precision": 0.0
+          },
+          "LOW": {
+            "accepted": 4,
+            "true": 0,
+            "precision": 0.0
+          }
+        },
+        "volatility_cutoffs_from_pre_evaluation_history": [
+          0.00813538479796361,
+          0.01014218779371946
+        ],
+        "by_volatility_regime": {
+          "low": {
+            "accepted": 5,
+            "true": 0,
+            "precision": 0.0
+          },
+          "medium": {
+            "accepted": 2,
+            "true": 0,
+            "precision": 0.0
+          },
+          "high": {
+            "accepted": 2,
+            "true": 0,
+            "precision": 0.0
+          },
+          "unknown": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          }
+        }
+      }
+    ],
+    "ablation_status": "evaluated",
+    "accepted": 16,
+    "true": 2,
+    "rankable": true
+  },
+  {
+    "config": {
+      "model_family": "B",
+      "maturity_atr": 1.25,
+      "accept_score": 0.8,
+      "min_survival_seconds": 60.0,
+      "warmup_hours": 6,
+      "retracement_scale": 0.4,
+      "evidence_half_life_seconds": 60.0,
+      "require_absorption": true,
+      "climax_activity_ratio": 1.5,
+      "absorption_activity_ratio": 1.0,
+      "absorption_efficiency_decay": 0.5
+    },
+    "folds": [
+      {
+        "accepted": 7,
+        "true": 5,
+        "false": 2,
+        "engine_episode_accepted": 8,
+        "engine_episode_precision": 0.625,
+        "reference_locals": 7,
+        "reference_censored": 0,
+        "reference_locals_evaluable": 7,
+        "missed": 2,
+        "censored_accepted": 1,
+        "first_accepted_precision": 0.7142857142857143,
+        "precision_wilson_95": [
+          0.35893445183261935,
+          0.9177810759959433
+        ],
+        "false_local_rate": 0.2857142857142857,
+        "recall": 0.7142857142857143,
+        "missed_local_rate": 0.2857142857142857,
+        "median_delay_min_upper": 133.0,
+        "p90_delay_min_upper": 652.6,
+        "median_entry_distance_pct": 2.10794730131747,
+        "p90_entry_distance_pct": 2.6462595977337,
+        "candidate_invalidation_rate": 0.9,
+        "confidence_is_calibrated_probability": false,
+        "by_side": {
+          "HIGH": {
+            "accepted": 4,
+            "true": 3,
+            "precision": 0.75
+          },
+          "LOW": {
+            "accepted": 3,
+            "true": 2,
+            "precision": 0.6666666666666666
+          }
+        },
+        "volatility_cutoffs_from_pre_evaluation_history": [
+          0.007750308818944336,
+          0.01000062080156627
+        ],
+        "by_volatility_regime": {
+          "low": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          },
+          "medium": {
+            "accepted": 5,
+            "true": 4,
+            "precision": 0.8
+          },
+          "high": {
+            "accepted": 2,
+            "true": 1,
+            "precision": 0.5
+          },
+          "unknown": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          }
+        }
+      },
+      {
+        "accepted": 7,
+        "true": 5,
+        "false": 2,
+        "engine_episode_accepted": 7,
+        "engine_episode_precision": 0.7142857142857143,
+        "reference_locals": 9,
+        "reference_censored": 0,
+        "reference_locals_evaluable": 9,
+        "missed": 4,
+        "censored_accepted": 0,
+        "first_accepted_precision": 0.7142857142857143,
+        "precision_wilson_95": [
+          0.35893445183261935,
+          0.9177810759959433
+        ],
+        "false_local_rate": 0.2857142857142857,
+        "recall": 0.5555555555555556,
+        "missed_local_rate": 0.4444444444444444,
+        "median_delay_min_upper": 142.0,
+        "p90_delay_min_upper": 366.0,
+        "median_entry_distance_pct": 1.3513687766759985,
+        "p90_entry_distance_pct": 1.721637429854539,
+        "candidate_invalidation_rate": 0.9310344827586207,
+        "confidence_is_calibrated_probability": false,
+        "by_side": {
+          "HIGH": {
+            "accepted": 4,
+            "true": 3,
+            "precision": 0.75
+          },
+          "LOW": {
+            "accepted": 3,
+            "true": 2,
+            "precision": 0.6666666666666666
+          }
+        },
+        "volatility_cutoffs_from_pre_evaluation_history": [
+          0.00813538479796361,
+          0.01014218779371946
+        ],
+        "by_volatility_regime": {
+          "low": {
+            "accepted": 5,
+            "true": 4,
+            "precision": 0.8
+          },
+          "medium": {
+            "accepted": 1,
+            "true": 1,
+            "precision": 1.0
+          },
+          "high": {
+            "accepted": 1,
+            "true": 0,
+            "precision": 0.0
+          },
+          "unknown": {
+            "accepted": 0,
+            "true": 0,
+            "precision": null
+          }
+        }
+      }
+    ],
+    "ablation_status": "evaluated",
+    "accepted": 14,
+    "true": 10,
+    "rankable": true
+  }
+]
