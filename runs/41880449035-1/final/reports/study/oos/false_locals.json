@@ -1,0 +1,219 @@
+[
+  {
+    "candidate_id": 766,
+    "episode_id": 52,
+    "side": "LOW",
+    "candidate_ts_ms": 1793206440000,
+    "ts_ms": 1793206440000,
+    "extreme_price": 79.721,
+    "extreme_ts_ms": null,
+    "extreme_interval_start_ms": 1793206320000,
+    "extreme_interval_end_ms": 1793206380000,
+    "extreme_available_ms": 1793206380000,
+    "anchor_side": "HIGH",
+    "anchor_price": 82.585,
+    "anchor_ts_ms": 1793181900000,
+    "status": "CONFIRMED_LOCAL",
+    "score": 0.8345785543386923,
+    "score_is_probability": false,
+    "confirmation_ts_ms": 1793215200000,
+    "confirmation_price": 80.968,
+    "invalidation_reason": null,
+    "features": {
+      "ts_ms": 1793215200000,
+      "completed_h1_count": 590,
+      "atr_h1": 0.7250714285714294,
+      "directional_move_3h": 0.012700241730439377,
+      "directional_move_6h": 0.0036743256495239685,
+      "h1_range": 1.3599999999999994,
+      "flow_coverage_seconds": 300.0,
+      "flow_imbalance": 0.8802267792615208,
+      "gap_before": false,
+      "buy_notional_60s": 57327.307920000036,
+      "sell_notional_60s": 3651.8341200000004,
+      "flow_imbalance_60s": 0.8802267792615208,
+      "buy_efficiency_60s": 2.511891892794909e-06,
+      "sell_efficiency_60s": 0.0,
+      "price_displacement_60s": 0.14400000000000546,
+      "buy_notional_300s": 260642.5490800001,
+      "sell_notional_300s": 83881.82476999999,
+      "flow_imbalance_300s": 0.5130572398542655,
+      "buy_efficiency_300s": 5.563174566540353e-07,
+      "sell_efficiency_300s": 0.0,
+      "price_displacement_300s": 0.14500000000001023,
+      "oi_delta_30s": null,
+      "oi_delta_60s": null,
+      "oi_delta_180s": null,
+      "oi_delta_300s": null,
+      "oi_delta_900s": null,
+      "open_interest": null,
+      "oi_age_ms": null,
+      "oi_impulse": null,
+      "oi_acceleration": null,
+      "oi_zscore": null,
+      "oi_effective_end_ms": null,
+      "oi_sampling_interval_ms": 0,
+      "oi_availability_assumed": false,
+      "long_liq_notional_5s": null,
+      "short_liq_notional_5s": null,
+      "long_liq_notional_15s": null,
+      "short_liq_notional_15s": null,
+      "long_liq_notional_60s": null,
+      "short_liq_notional_60s": null,
+      "bid_replenishment_ratio_60s": null,
+      "ask_replenishment_ratio_60s": null,
+      "book_ratio_is_proxy": false,
+      "price_oi_quadrant": null,
+      "swing_amplitude": 2.86399999999999,
+      "maturity_atr": 3.94995566939216,
+      "retracement_fraction": 0.4354050279329624,
+      "survival_seconds": 8820.0,
+      "price_acceptance": 1.0,
+      "score_components": {
+        "structure": 1.0,
+        "retracement": 1.0,
+        "survival": 0.9999995870750584,
+        "price_acceptance": 1.0,
+        "flow_persistence": 0.5130572398542655,
+        "new_side_efficiency": 1.0,
+        "old_side_efficiency_decay": 0.0
+      }
+    },
+    "stage_history": [
+      {
+        "stage": "STRUCTURAL_MATURITY",
+        "ts_ms": 1793206440000,
+        "source_ts_ms": 1793206440000,
+        "measurements": {
+          "maturity_atr": 4.268256333830087
+        }
+      },
+      {
+        "stage": "RUNNING_EXTREME",
+        "ts_ms": 1793206440000,
+        "source_ts_ms": 1793206380000,
+        "measurements": {
+          "extreme_price": 79.721
+        }
+      },
+      {
+        "stage": "EVIDENCE_ACCUMULATION",
+        "ts_ms": 1793206440000,
+        "source_ts_ms": 1793206440000,
+        "measurements": {
+          "score_kind": "uncalibrated_heuristic"
+        }
+      },
+      {
+        "stage": "CLIMAX",
+        "ts_ms": 1793206500000,
+        "source_ts_ms": 1793206500000,
+        "measurements": {
+          "activity_ratio": 1.737556008262734
+        }
+      },
+      {
+        "stage": "ABSORPTION",
+        "ts_ms": 1793207460000,
+        "source_ts_ms": 1793207460000,
+        "measurements": {
+          "activity_ratio": 1.9348008998809405,
+          "efficiency_decay": 1.0,
+          "interpretation": "price-response proxy; passive fills are not identified"
+        }
+      },
+      {
+        "stage": "EARLY_CONTROL_TRANSFER",
+        "ts_ms": 1793207580000,
+        "source_ts_ms": 1793207580000,
+        "measurements": {
+          "flow_imbalance_60s": 0.7950019385016682,
+          "price_displacement_60s": 0.0010000000000047748
+        }
+      },
+      {
+        "stage": "CONFIRMED_LOCAL",
+        "ts_ms": 1793215200000,
+        "source_ts_ms": 1793215200000,
+        "measurements": {
+          "score": 0.8345785543386923
+        }
+      }
+    ],
+    "evaluation_status": "false",
+    "matched_label_id": null,
+    "delay_min_lower": 147.0,
+    "delay_min_upper": 148.0,
+    "entry_distance_pct": 1.5642051655147426,
+    "mae_pct": 0.2840628396403533,
+    "mfe_pct": 1.1436616935085464,
+    "excursion_status": "observed",
+    "late_after_opposite": false,
+    "new_extreme_after_candidate": false,
+    "post_confirmation_extreme_extension": false,
+    "forensic": {
+      "features_at_acceptance": {
+        "ts_ms": 1793215200000,
+        "completed_h1_count": 590,
+        "atr_h1": 0.7250714285714294,
+        "directional_move_3h": 0.012700241730439377,
+        "directional_move_6h": 0.0036743256495239685,
+        "h1_range": 1.3599999999999994,
+        "flow_coverage_seconds": 300.0,
+        "flow_imbalance": 0.8802267792615208,
+        "gap_before": false,
+        "buy_notional_60s": 57327.307920000036,
+        "sell_notional_60s": 3651.8341200000004,
+        "flow_imbalance_60s": 0.8802267792615208,
+        "buy_efficiency_60s": 2.511891892794909e-06,
+        "sell_efficiency_60s": 0.0,
+        "price_displacement_60s": 0.14400000000000546,
+        "buy_notional_300s": 260642.5490800001,
+        "sell_notional_300s": 83881.82476999999,
+        "flow_imbalance_300s": 0.5130572398542655,
+        "buy_efficiency_300s": 5.563174566540353e-07,
+        "sell_efficiency_300s": 0.0,
+        "price_displacement_300s": 0.14500000000001023,
+        "oi_delta_30s": null,
+        "oi_delta_60s": null,
+        "oi_delta_180s": null,
+        "oi_delta_300s": null,
+        "oi_delta_900s": null,
+        "open_interest": null,
+        "oi_age_ms": null,
+        "oi_impulse": null,
+        "oi_acceleration": null,
+        "oi_zscore": null,
+        "oi_effective_end_ms": null,
+        "oi_sampling_interval_ms": 0,
+        "oi_availability_assumed": false,
+        "long_liq_notional_5s": null,
+        "short_liq_notional_5s": null,
+        "long_liq_notional_15s": null,
+        "short_liq_notional_15s": null,
+        "long_liq_notional_60s": null,
+        "short_liq_notional_60s": null,
+        "bid_replenishment_ratio_60s": null,
+        "ask_replenishment_ratio_60s": null,
+        "book_ratio_is_proxy": false,
+        "price_oi_quadrant": null,
+        "swing_amplitude": 2.86399999999999,
+        "maturity_atr": 3.94995566939216,
+        "retracement_fraction": 0.4354050279329624,
+        "survival_seconds": 8820.0,
+        "price_acceptance": 1.0,
+        "score_components": {
+          "structure": 1.0,
+          "retracement": 1.0,
+          "survival": 0.9999995870750584,
+          "price_acceptance": 1.0,
+          "flow_persistence": 0.5130572398542655,
+          "new_side_efficiency": 1.0,
+          "old_side_efficiency_decay": 0.0
+        }
+      },
+      "reason": "no matching offline structural extreme",
+      "causal_explanation_of_future": "not identifiable from observations alone"
+    }
+  }
+]

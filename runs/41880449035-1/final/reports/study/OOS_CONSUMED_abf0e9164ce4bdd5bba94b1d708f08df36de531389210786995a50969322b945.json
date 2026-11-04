@@ -1,0 +1,68 @@
+{
+  "selection_sha256": "abf0e9164ce4bdd5bba94b1d708f08df36de531389210786995a50969322b945",
+  "status": "evaluated",
+  "metrics": {
+    "accepted": 5,
+    "true": 2,
+    "false": 3,
+    "engine_episode_accepted": 6,
+    "engine_episode_precision": 0.8333333333333334,
+    "reference_locals": 19,
+    "reference_censored": 0,
+    "reference_locals_evaluable": 19,
+    "missed": 17,
+    "censored_accepted": 0,
+    "first_accepted_precision": 0.4,
+    "precision_wilson_95": [
+      0.11762077423264783,
+      0.769275718723987
+    ],
+    "false_local_rate": 0.6,
+    "recall": 0.10526315789473684,
+    "missed_local_rate": 0.8947368421052632,
+    "median_delay_min_upper": 95.5,
+    "p90_delay_min_upper": 124.7,
+    "median_entry_distance_pct": 2.3118683630359516,
+    "p90_entry_distance_pct": 2.6872202037318416,
+    "candidate_invalidation_rate": 0.9556962025316456,
+    "confidence_is_calibrated_probability": false,
+    "by_side": {
+      "HIGH": {
+        "accepted": 2,
+        "true": 1,
+        "precision": 0.5
+      },
+      "LOW": {
+        "accepted": 3,
+        "true": 1,
+        "precision": 0.3333333333333333
+      }
+    },
+    "volatility_cutoffs_from_pre_evaluation_history": [
+      0.008136029062638259,
+      0.010061618843746794
+    ],
+    "by_volatility_regime": {
+      "low": {
+        "accepted": 1,
+        "true": 1,
+        "precision": 1.0
+      },
+      "medium": {
+        "accepted": 2,
+        "true": 0,
+        "precision": 0.0
+      },
+      "high": {
+        "accepted": 2,
+        "true": 1,
+        "precision": 0.5
+      },
+      "unknown": {
+        "accepted": 0,
+        "true": 0,
+        "precision": null
+      }
+    }
+  }
+}
