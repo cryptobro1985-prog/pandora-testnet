@@ -230,6 +230,8 @@ class OnlineQuantLearner:
         self.drift_events=0
         self.created_ts_ms=int(time.time()*1000)
         self.last_action=None
+        self.feature_names_seen=set()
+        self.max_feature_count=0
 
     def _round_trip_cost(self)->float:
         c=self.config.get("modeled_costs",{})
@@ -238,6 +240,8 @@ class OnlineQuantLearner:
 
     def observe(self,ts_ms:int,price:float,features:dict[str,Any])->dict[str,Any]:
         x=clean_features(features)
+        self.feature_names_seen.update(x)
+        self.max_feature_count=max(self.max_feature_count,len(x))
         if not finite(price) or price<=0 or not x:
             return {"action":"FLAT","reason":"invalid_state"}
         # Causal order: settle old examples first using the new observed price;
@@ -378,6 +382,9 @@ class OnlineQuantLearner:
             "champion":{str(h):self.champion_stats[h].summary() for h in self.horizons},
             "challenger":{str(h):self.challenger_stats[h].summary() for h in self.horizons},
             "last_action":self.last_action,
+            "feature_names_seen_count":len(self.feature_names_seen),
+            "max_feature_count":self.max_feature_count,
+            "feature_names_seen":sorted(self.feature_names_seen),
         }
 
     def save(self,path:Path):
