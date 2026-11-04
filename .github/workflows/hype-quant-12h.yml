@@ -1,0 +1,259 @@
+name: HYPE Quant Learner 12h
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-quant-12h.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: hype-quant-12h-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CAPTURE_MINUTES: "170"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install quant dependencies
+        run: |
+          python -m pip install -r research/hype_local_v5/requirements-research.txt
+          python -m pip install -r research/hype_quant/requirements.txt
+      - name: Compile and causal self-test
+        run: |
+          python -m py_compile research/hype_quant/*.py
+          python -m research.hype_quant.test_self
+
+  segment_1:
+    needs: smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 195
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install research dependencies
+        run: |
+          python -m pip install -r research/hype_local_v5/requirements-research.txt
+          python -m pip install -r research/hype_quant/requirements.txt
+      - name: Bootstrap from available compact HYPE history
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p bootstrap checkpoint
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100"             --jq '.artifacts | map(select((.expired|not) and (.name|startswith("HYPE-H1-V6-12H-segment-")))) | sort_by(.created_at) | reverse | .[:12] | .[] | [.id,.name] | @tsv'             > /tmp/hype_artifacts.tsv || true
+          while IFS=$'\t' read -r id name; do
+            [ -n "${id:-}" ] || continue
+            mkdir -p "bootstrap/$id"
+            if gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$id/zip" > "bootstrap/$id/a.zip"; then
+              unzip -q "bootstrap/$id/a.zip" -d "bootstrap/$id/data" || true
+            fi
+          done < /tmp/hype_artifacts.tsv
+          mapfile -t PKGS < <(find bootstrap -name PACK_MANIFEST.json -printf '%h\n' | sort -u)
+          if [ "${#PKGS[@]}" -gt 0 ]; then
+            ARGS=()
+            for p in "${PKGS[@]}"; do ARGS+=(--package "$p"); done
+            python -m research.hype_quant.bootstrap_compact "${ARGS[@]}" --checkpoint-dir checkpoint
+          else
+            echo "No HYPE110-COMPACT-v1 history available yet; starting causal online warmup."
+          fi
+      - name: Live quant learning segment 1
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p live
+          set +e
+          python research/hype_local_v5/resilient_capture.py --minutes "$CAPTURE_MINUTES" --chunk-minutes 20 --output live &
+          CAP_PID=$!
+          python -m research.hype_quant.live_daemon --capture-root live --checkpoint-dir checkpoint --minutes "$CAPTURE_MINUTES" &
+          Q_PID=$!
+          wait "$CAP_PID"; CAP_RC=$?
+          wait "$Q_PID"; Q_RC=$?
+          set -e
+          printf '{"capture_rc":%s,"quant_rc":%s}\n' "$CAP_RC" "$Q_RC" > checkpoint/SEGMENT_STATUS.json
+          test -f checkpoint/quant_learner.pkl
+          rm -rf live bootstrap
+      - name: Upload quant checkpoint 1
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-QUANT-checkpoint-1
+          path: checkpoint
+          if-no-files-found: error
+          retention-days: 2
+          compression-level: 6
+
+  segment_2:
+    needs: segment_1
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 195
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install research dependencies
+        run: |
+          python -m pip install -r research/hype_local_v5/requirements-research.txt
+          python -m pip install -r research/hype_quant/requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: HYPE-QUANT-checkpoint-1
+          path: checkpoint
+      - name: Live quant learning segment 2
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p live
+          set +e
+          python research/hype_local_v5/resilient_capture.py --minutes "$CAPTURE_MINUTES" --chunk-minutes 20 --output live &
+          CAP_PID=$!
+          python -m research.hype_quant.live_daemon --capture-root live --checkpoint-dir checkpoint --minutes "$CAPTURE_MINUTES" &
+          Q_PID=$!
+          wait "$CAP_PID"; CAP_RC=$?
+          wait "$Q_PID"; Q_RC=$?
+          set -e
+          printf '{"capture_rc":%s,"quant_rc":%s}\n' "$CAP_RC" "$Q_RC" > checkpoint/SEGMENT_STATUS.json
+          test -f checkpoint/quant_learner.pkl
+          rm -rf live
+      - name: Upload quant checkpoint 2
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-QUANT-checkpoint-2
+          path: checkpoint
+          if-no-files-found: error
+          retention-days: 2
+
+  segment_3:
+    needs: segment_2
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 195
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install research dependencies
+        run: |
+          python -m pip install -r research/hype_local_v5/requirements-research.txt
+          python -m pip install -r research/hype_quant/requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: HYPE-QUANT-checkpoint-2
+          path: checkpoint
+      - name: Live quant learning segment 3
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p live
+          set +e
+          python research/hype_local_v5/resilient_capture.py --minutes "$CAPTURE_MINUTES" --chunk-minutes 20 --output live &
+          CAP_PID=$!
+          python -m research.hype_quant.live_daemon --capture-root live --checkpoint-dir checkpoint --minutes "$CAPTURE_MINUTES" &
+          Q_PID=$!
+          wait "$CAP_PID"; CAP_RC=$?
+          wait "$Q_PID"; Q_RC=$?
+          set -e
+          printf '{"capture_rc":%s,"quant_rc":%s}\n' "$CAP_RC" "$Q_RC" > checkpoint/SEGMENT_STATUS.json
+          test -f checkpoint/quant_learner.pkl
+          rm -rf live
+      - name: Upload quant checkpoint 3
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-QUANT-checkpoint-3
+          path: checkpoint
+          if-no-files-found: error
+          retention-days: 2
+
+  segment_4:
+    needs: segment_3
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 195
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install research dependencies
+        run: |
+          python -m pip install -r research/hype_local_v5/requirements-research.txt
+          python -m pip install -r research/hype_quant/requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: HYPE-QUANT-checkpoint-3
+          path: checkpoint
+      - name: Live quant learning segment 4
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p live
+          set +e
+          python research/hype_local_v5/resilient_capture.py --minutes "$CAPTURE_MINUTES" --chunk-minutes 20 --output live &
+          CAP_PID=$!
+          python -m research.hype_quant.live_daemon --capture-root live --checkpoint-dir checkpoint --minutes "$CAPTURE_MINUTES" &
+          Q_PID=$!
+          wait "$CAP_PID"; CAP_RC=$?
+          wait "$Q_PID"; Q_RC=$?
+          set -e
+          printf '{"capture_rc":%s,"quant_rc":%s}\n' "$CAP_RC" "$Q_RC" > checkpoint/SEGMENT_STATUS.json
+          test -f checkpoint/quant_learner.pkl
+          rm -rf live
+      - name: Upload quant checkpoint 4
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-QUANT-checkpoint-4
+          path: checkpoint
+          if-no-files-found: error
+          retention-days: 2
+
+  final:
+    needs: segment_4
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: HYPE-QUANT-checkpoint-4
+          path: final
+      - name: Build final research package
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("final")
+          report={}
+          p=root/"QUANT_REPORT.json"
+          if p.exists(): report=json.loads(p.read_text())
+          report["artifact"]="HYPE-QUANT-12H-FINAL"
+          report["objective_note"]="+100%/day is an aspirational benchmark, not a guaranteed or safety-overriding objective."
+          report["real_orders"]=False
+          (root/"FINAL_12H_REPORT.json").write_text(json.dumps(report,indent=2)+"\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-QUANT-12H-FINAL
+          path: final
+          if-no-files-found: error
+          retention-days: 14
