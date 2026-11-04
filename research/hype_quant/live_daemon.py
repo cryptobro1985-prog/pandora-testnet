@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Tail the existing HYPE collector output and train/evaluate online.
+"""Tail every HYPE110+ live source and train/evaluate online.
 
-This process never connects to private Bybit endpoints and never places orders.
-It consumes exactly the research collector's 1s microstructure and 1m context.
+Research only. No private Bybit endpoints and no order placement.
 """
 from __future__ import annotations
 import argparse
@@ -40,8 +39,13 @@ class Tailer:
                 if not line:break
                 if not line.endswith("\n"):
                     f.seek(start);break
-                try:rows.append(json.loads(line))
-                except Exception:pass
+                try:
+                    row=json.loads(line)
+                    if isinstance(row,dict):
+                        row["_source_path"]=key
+                        rows.append(row)
+                except Exception:
+                    pass
             self.offsets[key]=f.tell()
         return rows
 
@@ -50,7 +54,8 @@ def load_feature_state(path:Path):
     if path.exists():
         try:
             with path.open("rb") as f:return pickle.load(f)
-        except Exception:pass
+        except Exception:
+            pass
     return FeatureState()
 
 
@@ -58,6 +63,12 @@ def save_feature_state(state,path:Path):
     tmp=path.with_suffix(".tmp")
     with tmp.open("wb") as f:pickle.dump(state,f,pickle.HIGHEST_PROTOCOL)
     tmp.replace(path)
+
+
+def event_ts(kind,row):
+    if kind=="raw":
+        return int(row.get("received_ts_ms") or 0)
+    return int(row.get("received_ts_ms") or row.get("ts_ms") or 0)
 
 
 def main():
@@ -69,6 +80,7 @@ def main():
     ap.add_argument("--poll-seconds",type=float,default=0.5)
     args=ap.parse_args()
     args.checkpoint_dir.mkdir(parents=True,exist_ok=True)
+
     cfg=load_config(args.config)
     cp=args.checkpoint_dir/"quant_learner.pkl"
     learner=OnlineQuantLearner.load(cp) if cp.exists() else OnlineQuantLearner(cfg)
@@ -77,82 +89,110 @@ def main():
     tail=Tailer()
     actions=args.checkpoint_dir/"quant_actions.jsonl"
     gaps=args.checkpoint_dir/"quant_gaps.jsonl"
-    gaps.touch(exist_ok=True)
-    actions.touch(exist_ok=True)
+    actions.touch(exist_ok=True);gaps.touch(exist_ok=True)
+
     started=time.time();deadline=started+args.minutes*60
     next_save=0.0;next_sample_ms=0;last_seen_ts=state.last_ts_ms
     sample_ms=int(cfg.get("state_sample_seconds",5)*1000)
-    processed=0;sampled=0
-    pending_context=[]
+    processed_micro=sampled=raw_frames=market_rows=struct_rows=0
 
     while time.time()<deadline:
-        # Context is only available after its actual receive timestamp.
-        new_context=pending_context
-        pending_context=[]
+        events=[]
+        # Priority on identical receipt timestamps: raw exchange frame -> market
+        # context -> structural context -> 1s snapshot/prediction.
+        for path in sorted(args.capture_root.rglob("HYPE_live_raw_frames.jsonl")):
+            for row in tail.read_new(path):
+                events.append((event_ts("raw",row),0,"raw",row))
+        for path in sorted(args.capture_root.rglob("HYPE_market_context.jsonl")):
+            for row in tail.read_new(path):
+                events.append((event_ts("market",row),1,"market",row))
         for path in sorted(args.capture_root.rglob("HYPE_structural_context_1m.jsonl")):
             for row in tail.read_new(path):
-                if isinstance(row,dict) and row.get("ts_ms"):
-                    new_context.append(row)
-        new_context.sort(key=lambda r:int(r["ts_ms"]))
-        ci=0
-        new_rows=[]
+                events.append((event_ts("struct",row),2,"struct",row))
         for path in sorted(args.capture_root.rglob("HYPE_live_microstructure_1s.jsonl")):
             for row in tail.read_new(path):
-                if isinstance(row,dict) and row.get("ts_ms"):
-                    new_rows.append(row)
-        new_rows.sort(key=lambda r:int(r.get("ts_ms") or 0))
+                events.append((event_ts("micro",row),3,"micro",row))
+        events.sort(key=lambda z:(z[0],z[1]))
 
-        for row in new_rows:
-            ts=int(row["ts_ms"])
-            while ci<len(new_context) and int(new_context[ci]["ts_ms"])<=ts:
-                state.update_context(new_context[ci]);ci+=1
+        for ts,_,kind,row in events:
+            if ts<=0:continue
+            if kind=="raw":
+                state.update_raw_frame(row);raw_frames+=1
+                continue
+            if kind=="market":
+                state.update_market_context(row);market_rows+=1
+                continue
+            if kind=="struct":
+                state.update_structural_context(row);struct_rows+=1
+                continue
+
+            # micro is the prediction clock
             if last_seen_ts is not None and ts<=last_seen_ts:
                 continue
             if last_seen_ts is not None:
                 gap=(ts-last_seen_ts)/1000.0
                 if gap>10:
-                    append_jsonl(gaps,{"from_ts_ms":last_seen_ts,"to_ts_ms":ts,"gap_seconds":gap,
-                                       "action":"drop_pending_to_avoid_false_path_labels"})
+                    append_jsonl(gaps,{"from_ts_ms":last_seen_ts,"to_ts_ms":ts,
+                                      "gap_seconds":gap,
+                                      "action":"drop_pending_to_avoid_false_path_labels"})
                     learner.pending.clear()
                     state.prices.clear()
             last_seen_ts=ts
             try:price,x=state.update_micro(row)
-            except Exception:continue
-            processed+=1
+            except Exception as exc:
+                append_jsonl(gaps,{"ts_ms":ts,"feature_error":repr(exc)})
+                continue
+            processed_micro+=1
             if ts<next_sample_ms:
                 continue
             next_sample_ms=ts+sample_ms
             decision=learner.observe(ts,price,x)
             sampled+=1
-            append_jsonl(actions,{"ts_ms":ts,"price":price,"decision":decision})
+            append_jsonl(actions,{"ts_ms":ts,"price":price,
+                                  "feature_count":len(x),"decision":decision})
 
-        pending_context=new_context[ci:]
         now=time.time()
         if now>=next_save:
             learner.save(cp);save_feature_state(state,fs_path)
+            coverage=state.coverage_report()
+            (args.checkpoint_dir/"FEATURE_COVERAGE_116.json").write_text(
+                json.dumps(coverage,indent=2)+"\n",encoding="utf-8")
             report=learner.report()
             report.update({
-                "processed_micro_rows":processed,
+                "processed_micro_rows":processed_micro,
                 "sampled_states":sampled,
+                "raw_frames_consumed":raw_frames,
+                "market_context_rows_consumed":market_rows,
+                "structural_context_rows_consumed":struct_rows,
                 "capture_root":str(args.capture_root),
                 "checkpoint_dir":str(args.checkpoint_dir),
                 "last_seen_ts_ms":last_seen_ts,
+                "feature_contract":coverage,
                 "started_ts_ms":int(started*1000),
                 "updated_ts_ms":int(now*1000),
                 "research_only":True,
                 "real_orders":False
             })
-            (args.checkpoint_dir/"QUANT_REPORT.json").write_text(json.dumps(report,indent=2)+"\n",encoding="utf-8")
+            (args.checkpoint_dir/"QUANT_REPORT.json").write_text(
+                json.dumps(report,indent=2)+"\n",encoding="utf-8")
             next_save=now+60
-        if not new_rows:
+        if not events:
             time.sleep(args.poll_seconds)
 
     learner.save(cp);save_feature_state(state,fs_path)
+    coverage=state.coverage_report()
+    (args.checkpoint_dir/"FEATURE_COVERAGE_116.json").write_text(
+        json.dumps(coverage,indent=2)+"\n",encoding="utf-8")
     report=learner.report()
-    report.update({"processed_micro_rows":processed,"sampled_states":sampled,
+    report.update({"processed_micro_rows":processed_micro,"sampled_states":sampled,
+                   "raw_frames_consumed":raw_frames,
+                   "market_context_rows_consumed":market_rows,
+                   "structural_context_rows_consumed":struct_rows,
                    "last_seen_ts_ms":last_seen_ts,"completed_ts_ms":int(time.time()*1000),
+                   "feature_contract":coverage,
                    "research_only":True,"real_orders":False})
-    (args.checkpoint_dir/"QUANT_REPORT.json").write_text(json.dumps(report,indent=2)+"\n",encoding="utf-8")
+    (args.checkpoint_dir/"QUANT_REPORT.json").write_text(
+        json.dumps(report,indent=2)+"\n",encoding="utf-8")
     print(json.dumps(report),flush=True)
 
 
