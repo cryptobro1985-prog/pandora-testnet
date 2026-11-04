@@ -1,6 +1,5 @@
 name: HYPE v6 12h Research Material
-# resilient-capture-watchdog-v2
-# research-only chained capture; safe to rerun
+# compact-110-v1
 
 on:
   push:
@@ -14,8 +13,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: hype-v6-forward-12h-${{ github.run_id }}
-  cancel-in-progress: false
+  group: hype-v6-forward-12h-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CAPTURE_MINUTES: "170"
@@ -23,7 +22,7 @@ env:
 jobs:
   segment_1:
     runs-on: ubuntu-latest
-    timeout-minutes: 190
+    timeout-minutes: 195
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -31,28 +30,23 @@ jobs:
           python-version: "3.12"
       - name: Install research dependencies
         run: python -m pip install -r research/hype_local_v5/requirements-research.txt
-      - name: Capture segment 1 microstructure and structure
-        shell: bash
-        run: |
-          set +e
-          OUT="out/hype_v6_12h_segment_1"
-          mkdir -p "$OUT"
-          python research/hype_local_v5/resilient_capture.py --minutes "$CAPTURE_MINUTES" --chunk-minutes 20 --output "$OUT"
-          python research/hype_local_v5/aggregate_forward.py --root "$OUT" --output "$OUT/AGGREGATE_SEGMENT.json" || true
-      - name: Upload segment 1
+      - name: Capture and compact segment 1
+        run: bash research/hype_local_v5/capture_pack_segment.sh out/hype_v6_12h_segment_1 "$CAPTURE_MINUTES"
+      - name: Upload compact segment 1
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: HYPE-H1-V6-12H-segment-1
-          path: out/hype_v6_12h_segment_1
+          path: out/hype_v6_12h_segment_1_upload
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 2
+          compression-level: 0
 
   segment_2:
     needs: segment_1
     if: ${{ always() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 190
+    timeout-minutes: 195
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -60,28 +54,23 @@ jobs:
           python-version: "3.12"
       - name: Install research dependencies
         run: python -m pip install -r research/hype_local_v5/requirements-research.txt
-      - name: Capture segment 2 microstructure and structure
-        shell: bash
-        run: |
-          set +e
-          OUT="out/hype_v6_12h_segment_2"
-          mkdir -p "$OUT"
-          python research/hype_local_v5/resilient_capture.py --minutes "$CAPTURE_MINUTES" --chunk-minutes 20 --output "$OUT"
-          python research/hype_local_v5/aggregate_forward.py --root "$OUT" --output "$OUT/AGGREGATE_SEGMENT.json" || true
-      - name: Upload segment 2
+      - name: Capture and compact segment 2
+        run: bash research/hype_local_v5/capture_pack_segment.sh out/hype_v6_12h_segment_2 "$CAPTURE_MINUTES"
+      - name: Upload compact segment 2
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: HYPE-H1-V6-12H-segment-2
-          path: out/hype_v6_12h_segment_2
+          path: out/hype_v6_12h_segment_2_upload
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 2
+          compression-level: 0
 
   segment_3:
     needs: segment_2
     if: ${{ always() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 190
+    timeout-minutes: 195
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -89,28 +78,23 @@ jobs:
           python-version: "3.12"
       - name: Install research dependencies
         run: python -m pip install -r research/hype_local_v5/requirements-research.txt
-      - name: Capture segment 3 microstructure and structure
-        shell: bash
-        run: |
-          set +e
-          OUT="out/hype_v6_12h_segment_3"
-          mkdir -p "$OUT"
-          python research/hype_local_v5/resilient_capture.py --minutes "$CAPTURE_MINUTES" --chunk-minutes 20 --output "$OUT"
-          python research/hype_local_v5/aggregate_forward.py --root "$OUT" --output "$OUT/AGGREGATE_SEGMENT.json" || true
-      - name: Upload segment 3
+      - name: Capture and compact segment 3
+        run: bash research/hype_local_v5/capture_pack_segment.sh out/hype_v6_12h_segment_3 "$CAPTURE_MINUTES"
+      - name: Upload compact segment 3
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: HYPE-H1-V6-12H-segment-3
-          path: out/hype_v6_12h_segment_3
+          path: out/hype_v6_12h_segment_3_upload
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 2
+          compression-level: 0
 
   segment_4:
     needs: segment_3
     if: ${{ always() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 190
+    timeout-minutes: 195
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -118,22 +102,17 @@ jobs:
           python-version: "3.12"
       - name: Install research dependencies
         run: python -m pip install -r research/hype_local_v5/requirements-research.txt
-      - name: Capture segment 4 microstructure and structure
-        shell: bash
-        run: |
-          set +e
-          OUT="out/hype_v6_12h_segment_4"
-          mkdir -p "$OUT"
-          python research/hype_local_v5/resilient_capture.py --minutes "$CAPTURE_MINUTES" --chunk-minutes 20 --output "$OUT"
-          python research/hype_local_v5/aggregate_forward.py --root "$OUT" --output "$OUT/AGGREGATE_SEGMENT.json" || true
-      - name: Upload segment 4
+      - name: Capture and compact segment 4
+        run: bash research/hype_local_v5/capture_pack_segment.sh out/hype_v6_12h_segment_4 "$CAPTURE_MINUTES"
+      - name: Upload compact segment 4
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: HYPE-H1-V6-12H-segment-4
-          path: out/hype_v6_12h_segment_4
+          path: out/hype_v6_12h_segment_4_upload
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 2
+          compression-level: 0
 
   combine:
     needs: segment_4
@@ -141,18 +120,48 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Download all completed segments
+      - name: Download compact segment artifacts
         uses: actions/download-artifact@v4
         with:
           pattern: HYPE-H1-V6-12H-segment-*
-          path: combined
-      - name: Build combined research manifest
+          path: downloaded
+      - name: Build manifest-only combined index
         run: |
-          python research/hype_local_v5/aggregate_forward.py --root combined --output combined/HYPE_12H_RESEARCH_MANIFEST.json
-      - name: Upload combined material
+          mkdir -p combined_index
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("downloaded")
+          rows=[]
+          schemas=[]
+          for p in sorted(root.rglob("PACK_MANIFEST.json")):
+              m=json.loads(p.read_text())
+              rows.append({
+                  "artifact_dir":str(p.parent),
+                  "format_version":m.get("format_version"),
+                  "source_bytes":m.get("source_bytes"),
+                  "packed_bytes":m.get("packed_bytes"),
+                  "compression_ratio":m.get("compression_ratio"),
+                  "all_110_supported":m.get("all_110_supported"),
+                  "canonical_point_count":m.get("canonical_point_count"),
+                  "chunks":m.get("chunks",[]),
+              })
+              s=p.parent/"SCHEMA_110.json"
+              if s.exists(): schemas.append(json.loads(s.read_text()))
+          total=sum((x.get("packed_bytes") or 0) for x in rows)
+          out={"research_only":True,"symbol":"HYPEUSDT","segments":rows,
+               "packed_bytes_total":total,"target_note":"12h compact package target <100 MB on measured reference; activity dependent.",
+               "no_payload_duplication":True}
+          Path("combined_index/HYPE_12H_RESEARCH_MANIFEST.json").write_text(json.dumps(out,indent=2)+"\n")
+          if schemas:
+              Path("combined_index/SCHEMA_110.json").write_text(json.dumps(schemas[0],indent=2)+"\n")
+          PY
+          cp research/hype_local_v5/decode_compact.py combined_index/decode_compact.py
+      - name: Upload combined index only
         uses: actions/upload-artifact@v4
         with:
-          name: HYPE-H1-V6-12H-COMBINED
-          path: combined
+          name: HYPE-H1-V6-12H-COMBINED-INDEX
+          path: combined_index
           if-no-files-found: error
           retention-days: 7
+          compression-level: 0
