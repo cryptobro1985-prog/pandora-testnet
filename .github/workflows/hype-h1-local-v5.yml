@@ -1,0 +1,83 @@
+name: HYPE H1 Local v5 OI Microstructure
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/hype_local_v5/**"
+      - ".github/workflows/hype-h1-local-v5.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  historical_oi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - name: 30d HYPE klines + open interest
+        run: |
+          python research/hype_local_v5/research.py             --mode historical             --start 2026-10-04             --end 2026-11-02             --output out/historical_oi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-H1-LOCAL-V5-HISTORICAL-OI
+          path: out/historical_oi
+          if-no-files-found: error
+
+  historical_ticks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        chunk:
+          - "2026-10-04:2026-10-08"
+          - "2026-10-09:2026-10-13"
+          - "2026-10-14:2026-10-18"
+          - "2026-10-19:2026-10-23"
+          - "2026-10-24:2026-10-28"
+          - "2026-10-29:2026-11-02"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - name: Aggregate raw Bybit trades
+        shell: bash
+        run: |
+          START="${{ matrix.chunk }}"
+          START="${START%%:*}"
+          END="${{ matrix.chunk }}"
+          END="${END##*:}"
+          python research/hype_local_v5/research.py             --mode historical_ticks             --start "$START"             --end "$END"             --output "out/ticks_${START}_${END}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-H1-LOCAL-V5-TICKS-${{ strategy.job-index }}
+          path: out/ticks_*
+          if-no-files-found: warn
+
+  live_microstructure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests websockets
+      - name: Capture live HYPE orderbook + trades + liquidations + OI
+        run: |
+          python research/hype_local_v5/research.py             --mode live             --minutes 20             --output out/live_microstructure
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-H1-LOCAL-V5-LIVE-MICROSTRUCTURE
+          path: out/live_microstructure
+          if-no-files-found: error
