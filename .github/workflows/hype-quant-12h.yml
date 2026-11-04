@@ -1,5 +1,5 @@
 name: HYPE Quant Learner 12h
-# full-116-online-v4
+# full-116-online-v5
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: hype-quant-12h-v4-${{ github.ref }}
+  group: hype-quant-12h-v5-${{ github.ref }}
   cancel-in-progress: true
 
 env:
