@@ -1,10 +1,21 @@
 {
-  "stage": "started",
+  "stage": "replay",
   "source_commit": "7d0dffc4195dabfc7ed0e242689dba0b0568a39a",
   "run_id": "41891375013",
   "run_attempt": "1",
   "report_branch": "research/hype-local-v5-results",
-  "reports": [],
+  "reports": [
+    {
+      "path": "reports/study/REPORT.md",
+      "bytes": 2779,
+      "sha256": "adfedeb63816a5f2b83fe23734776be5ae49c7454621043a4667c685994acc83"
+    },
+    {
+      "path": "reports/study/run_status.json",
+      "bytes": 2051,
+      "sha256": "da7c69d228b4f51467b276e6d6927d99693ff9a1781812a4f175af957917122e"
+    }
+  ],
   "orders_enabled": false,
   "note": "Stage is execution progress, not proof that market checks passed; read included run_status.json"
 }

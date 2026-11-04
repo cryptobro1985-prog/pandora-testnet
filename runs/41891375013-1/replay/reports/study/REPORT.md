@@ -1,0 +1,64 @@
+# HYPE H1 causal study — measured run
+
+Status: **blocked**. No real orders.
+
+## Data and checks
+
+```json
+{
+  "status": "blocked",
+  "final_oos_evaluated": false,
+  "input_files": [
+    {
+      "path": "inputs/micro_2026-10-04_2026-10-08/HYPE_micro5s_2026-10-04_2026-10-08.csv.gz",
+      "size_bytes": 4060568,
+      "sha256": "5cf08e6540c6f886686e866d4b4cc5b233366cbd9f5ef2c60fd31585b79964ff"
+    },
+    {
+      "path": "inputs/micro_2026-10-09_2026-10-13/HYPE_micro5s_2026-10-09_2026-10-13.csv.gz",
+      "size_bytes": 3658047,
+      "sha256": "0fea0f84a0c6b26a1802cabbd35f556aa21e9f421d3728900f7633d51620173a"
+    },
+    {
+      "path": "inputs/micro_2026-10-14_2026-10-18/HYPE_micro5s_2026-10-14_2026-10-18.csv.gz",
+      "size_bytes": 4739344,
+      "sha256": "efcee376330102684e2c1a0b7b77615e96efe881daec9fd47b37ea7eee07d41c"
+    },
+    {
+      "path": "inputs/micro_2026-10-19_2026-10-23/HYPE_micro5s_2026-10-19_2026-10-23.csv.gz",
+      "size_bytes": 5086923,
+      "sha256": "7d1ab4b22f9242539f389d33aaacc9fb57bc01c434f63772269a11e69fe00894"
+    },
+    {
+      "path": "inputs/micro_2026-10-24_2026-10-28/HYPE_micro5s_2026-10-24_2026-10-28.csv.gz",
+      "size_bytes": 4954191,
+      "sha256": "315f83fc905a3fc450a83a5233be896ae22a977e76d240a5ecc438b50a2417f5"
+    },
+    {
+      "path": "inputs/micro_2026-10-29_2026-11-02/HYPE_micro5s_2026-10-29_2026-11-02.csv.gz",
+      "size_bytes": 6018139,
+      "sha256": "a78e852e854e890c85c4f4ed202e9422a6dc44fb1cf6852a0037d7e0f03831fa"
+    }
+  ],
+  "observed_rows": 456505,
+  "coverage": {
+    "rows": 456505,
+    "covered_fraction": 0.8806037808641975,
+    "first_start_ms": 1791072000000,
+    "last_end_ms": 1793664000000
+  },
+  "error": "ValueError: Sparse 5s coverage and no unique independently collected minute archive",
+  "traceback": "Traceback (most recent call last):\n  File \"/home/runner/work/pandora-testnet/pandora-testnet/research/hype_local_v5/ci_run.py\", line 79, in main\n    raise ValueError('Sparse 5s coverage and no unique independently collected minute archive')\nValueError: Sparse 5s coverage and no unique independently collected minute archive\n",
+  "market_metrics": null
+}
+```
+
+## Interpretation
+
+The score is an uncalibrated sequential heuristic; it is not a probability.
+A 100% sample precision is not a guarantee of future precision.
+The reference is strict offline L6/K2 with same-side collapse; it is not live evidence.
+Final OOS was evaluated once only if discovery selected an eligible rule.
+Historical OI/book/liquidations are not synthesized. Missing ablations are unmeasured.
+Any existing forward artifact was already observed by prior research and is a forward sample, not a new untouched test.
+Only outputs with actual counts establish a measurement; absent values mean unmeasured.
