@@ -125,7 +125,8 @@ class PatternMemory:
     and replayable rather than an opaque vector DB.
     """
     def __init__(self,max_examples:int=20000,neighbors:int=31):
-        self.rows=deque(maxlen=max_examples)
+        self.max_examples=int(max_examples)
+        self.rows={}
         self.neighbors=max(3,int(neighbors))
 
     @staticmethod
@@ -142,19 +143,19 @@ class PatternMemory:
         return [k for k in preferred if k in x]
 
     def add(self,x:dict[str,float],y:Outcome):
-        self.rows.append((dict(x),y.horizon_s,y.future_return,y.max_up,y.max_down))
+        q=self.rows.setdefault(y.horizon_s,deque(maxlen=self.max_examples))
+        q.append((dict(x),y.future_return,y.max_up,y.max_down))
 
     def query(self,x:dict[str,float],horizon_s:int)->dict[str,float]|None:
-        if len(self.rows)<self.neighbors:
+        rows=self.rows.get(horizon_s)
+        if not rows or len(rows)<self.neighbors:
             return None
         keys=self._keys(x)
         if len(keys)<4:
             return None
         scored=[]
         # bound CPU: the newest 6000 matured states are enough for v1 pattern memory
-        for rx,h,r,u,d in list(self.rows)[-6000:]:
-            if h!=horizon_s:
-                continue
+        for rx,r,u,d in list(rows)[-6000:]:
             common=[k for k in keys if k in rx]
             if len(common)<4:
                 continue
