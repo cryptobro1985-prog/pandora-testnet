@@ -1,5 +1,5 @@
 name: HYPE Quant Learner 12h
-# causal-context-fix-v2
+# full-116-online-v3
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: hype-quant-12h-v2-${{ github.ref }}
+  group: hype-quant-12h-v3-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -37,6 +37,7 @@ jobs:
         run: |
           python -m py_compile research/hype_quant/*.py
           python -m research.hype_quant.test_self
+          python -m research.hype_quant.test_116_features
 
   segment_1:
     needs: smoke
