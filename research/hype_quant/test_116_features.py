@@ -70,7 +70,7 @@ def main():
     required=[
         "l50_bid_50_dist_bps","l50_ask_50_log_qty",
         "m1_lag0_close_rel","m3_lag0_close_rel","m5_lag0_close_rel","h1_lag0_close_rel",
-        "flow_imbalance_raw_5s","trade_count_60s","liq_count_60s",
+        "flow_imbalance_raw_60s","trade_count_60s","liq_count_60s",
         "instrument_leverageFilter_maxLeverage","account_buy_ratio",
         "struct_long_short_holder_ratio","basis_bps","open_interest_full",
         "raw_frames_seen","book_sequence_raw"
