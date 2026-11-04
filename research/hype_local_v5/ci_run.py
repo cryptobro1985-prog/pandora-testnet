@@ -5,6 +5,7 @@ import datetime as dt
 from dataclasses import asdict
 import glob
 import json
+import shutil
 from pathlib import Path
 import traceback
 
@@ -59,12 +60,42 @@ def main():
     status=dict(status='started',final_oos_evaluated=False)
     try:
         paths=[Path(x) for x in sorted(glob.glob(args.bars_glob,recursive=True))]
+        if not paths and args.recovered.exists():
+            paths=sorted(args.recovered.rglob('HYPE_micro5s_*.csv.gz'))
         if not paths:
             raise ValueError('No actual 5-second input parts were collected')
         rows=load_bars(paths,interval_ms=5000)
         sources=[provenance(p) for p in paths]
         status.update(input_files=sources,observed_rows=len(rows),
             coverage=pipeline.coverage(rows,pipeline.WARMUP,pipeline.END))
+        micro_paths=list(paths)
+        if status['coverage']['covered_fraction']<.99:
+            # The legacy micro aggregator omits intervals with no executions.
+            # Do NOT silently label those as confirmed empty, fill OHLC, or
+            # lower the coverage assertion. Use the independently collected
+            # original minute archive, explicitly reporting lower resolution.
+            candidates=sorted(args.recovered.rglob('HYPE_minutes.csv.gz'))
+            if len(candidates)!=1:
+                raise ValueError('Sparse 5s coverage and no unique independently collected minute archive')
+            minute=candidates[0]
+            minute_rows=load_bars([minute],interval_ms=60000)
+            minute_coverage=pipeline.check_coverage(minute_rows,pipeline.WARMUP,pipeline.END)
+            status['auxiliary_5s']=dict(input_files=sources,observed_rows=len(rows),
+                coverage=status['coverage'],used_for_primary_signals=False,
+                reason='Legacy sparse execution buckets do not prove contiguous observation windows')
+            rows=minute_rows;paths=[minute];sources=[provenance(minute)]
+            status.update(input_files=sources,observed_rows=len(rows),coverage=minute_coverage,
+                primary_resolution_ms=60000,
+                subminute_signal_claim=False,
+                source_selection_reason='Use genuine independently collected minute OHLC/flow; no fabricated empty5s intervals')
+        else:
+            status['primary_resolution_ms']=5000
+        # Preserve genuine inputs for subsequent authorized research tasks;
+        # publisher copies only this explicit research report tree.
+        for i,path in enumerate(dict.fromkeys(paths+micro_paths)):
+            target=args.output/'inputs'/(str(i)+'-'+path.name)
+            target.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copyfile(path,target)
         # Legitimate public REST collection on the selected Actions runner.
         # Failure is recorded independently; OI is never manufactured.
         from .acquire import fetch_historical_oi

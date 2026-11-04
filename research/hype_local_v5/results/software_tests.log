@@ -8,6 +8,7 @@ test_symlink_and_size_limits_rejected (test_acquire.AcquisitionSafetyTests.test_
 test_traversal_validated_before_any_output (test_acquire.AcquisitionSafetyTests.test_traversal_validated_before_any_output) ... ok
 test_valid_archive_preserves_and_hashes_contents (test_acquire.AcquisitionSafetyTests.test_valid_archive_preserves_and_hashes_contents) ... ok
 test_report_branch_preserves_source_checkout_and_appends_stages (test_ci.ResearchPublicationTests.test_report_branch_preserves_source_checkout_and_appends_stages) ... ok
+test_sparse_micro_uses_actual_minute_source_without_filling_prices (test_ci.ResearchPublicationTests.test_sparse_micro_uses_actual_minute_source_without_filling_prices) ... ok
 test_book_cancellations_are_not_executed_consumption (test_data_features.CausalFeatures.test_book_cancellations_are_not_executed_consumption) ... ok
 test_flow_window_requires_coverage_and_does_not_make_subminute_path (test_data_features.CausalFeatures.test_flow_window_requires_coverage_and_does_not_make_subminute_path) ... ok
 test_oi_horizons_freshness_and_no_synthetic_backfill (test_data_features.CausalFeatures.test_oi_horizons_freshness_and_no_synthetic_backfill) ... ok
@@ -59,7 +60,7 @@ test_manifest_tamper_refuses_oos_before_loading (test_evaluation.PipelineTests.t
 test_discovery_sealed_oos_and_output_relocation_cannot_repeat (test_pipeline_integration.PipelineIntegrationTests.test_discovery_sealed_oos_and_output_relocation_cannot_repeat) ... ok
 
 ----------------------------------------------------------------------
-Ran 59 tests in 1.822s
+Ran 60 tests in 2.346s
 
 OK
 {

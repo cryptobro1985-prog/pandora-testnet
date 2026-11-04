@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: hype-local-v5-${{ github.ref }}
+  group: hype-local-v5-${{ github.ref }}-${{ contains(github.event.head_commit.message, '[hype-replay-existing]') }}
   cancel-in-progress: false
 
 jobs:
@@ -57,12 +57,54 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Reuse the six raw-derived parts from the completed collection run
+        if: ${{ contains(github.event.head_commit.message, '[hype-replay-existing]') }}
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41857510274
+          pattern: HYPE-H1-LOCAL-V5-MICRO5S-*
+          path: recovered/micro5s
+          merge-multiple: true
+      - name: Reuse the original artifacts recovered in that run
+        if: ${{ contains(github.event.head_commit.message, '[hype-replay-existing]') }}
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41857510274
+          name: HYPE-H1-LOCAL-V5-RECOVERED
+          path: recovered/original
+      - name: Reuse the recent forward capture when that artifact exists
+        if: ${{ contains(github.event.head_commit.message, '[hype-replay-existing]') }}
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41857510274
+          name: HYPE-H1-LOCAL-V5-LIVE-MICROSTRUCTURE
+          path: recovered/recent_live
+      - name: Check whether the original minute archive was recovered
+        id: recovered_minute
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          # This checks presence only. ci_run validates content and coverage before
+          # choosing any source; a filename alone is never evidence of readiness.
+          present = any(p.is_file() and p.stat().st_size > 0
+                        for p in Path('recovered').rglob('HYPE_minutes.csv.gz'))
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write('present=' + str(present).lower() + '\n')
+          PY
       - name: Recover original artifacts with the runner's existing GitHub token
         id: recover
+        if: ${{ steps.recovered_minute.outputs.present != 'true' }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python -m research.hype_local_v5.acquire --source artifacts --fetch --output recovered
+        run: python -m research.hype_local_v5.acquire --source artifacts --fetch --output recovered/refetched
       - name: Preserve recovery evidence, including unavailable artifact diagnoses
         if: always()
         uses: actions/upload-artifact@v4
@@ -75,7 +117,7 @@ jobs:
   historical_ticks:
     # The replay marker uses the genuine raw-derived 5s path below, avoiding
     # duplicate downloads just to regenerate the existing minute aggregates.
-    if: ${{ !contains(github.event.head_commit.message, '[hype-replay]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[hype-replay') }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -111,6 +153,7 @@ jobs:
 
   historical_micro5s:
     needs: code_checks
+    if: ${{ !contains(github.event.head_commit.message, '[hype-replay-existing]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -149,6 +192,7 @@ jobs:
 
   live_microstructure:
     needs: code_checks
+    if: ${{ !contains(github.event.head_commit.message, '[hype-replay-existing]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -180,6 +224,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Download fresh raw-derived microstructure parts
+        if: ${{ needs.historical_micro5s.result == 'success' }}
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
@@ -235,6 +280,7 @@ jobs:
           name: HYPE-H1-LOCAL-V5-CAUSAL-STUDY
           path: study
       - name: Download fresh forward observations, when produced
+        if: ${{ needs.live_microstructure.result == 'success' }}
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
@@ -279,5 +325,5 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Preserve failed validation and collection outcomes
-        if: ${{ needs.code_checks.result != 'success' || needs.historical_micro5s.result != 'success' || needs.causal_replay.result != 'success' || needs.live_microstructure.result != 'success' || steps.forward.outcome != 'success' }}
+        if: ${{ needs.code_checks.result != 'success' || (needs.historical_micro5s.result != 'success' && needs.historical_micro5s.result != 'skipped') || needs.causal_replay.result != 'success' || (needs.live_microstructure.result != 'success' && needs.live_microstructure.result != 'skipped') || steps.forward.outcome != 'success' }}
         run: exit 1
