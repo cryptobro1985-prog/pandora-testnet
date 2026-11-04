@@ -1,0 +1,60 @@
+{
+  "status": "selected_for_oos",
+  "selected_config": {
+    "model_family": "B",
+    "maturity_atr": 1.25,
+    "accept_score": 0.8,
+    "min_survival_seconds": 60.0,
+    "warmup_hours": 6,
+    "retracement_scale": 0.4,
+    "evidence_half_life_seconds": 60.0,
+    "require_absorption": true,
+    "climax_activity_ratio": 1.5,
+    "absorption_activity_ratio": 1.0,
+    "absorption_efficiency_decay": 0.5
+  },
+  "selection_basis": "maximum pooled Wilson lower bound among configs with decisions in both chronological folds; no calibrated probability claim",
+  "folds": [
+    [
+      1792368000000,
+      1792713600000
+    ],
+    [
+      1792713600000,
+      1793059200000
+    ]
+  ],
+  "coverage": {
+    "rows": 33118,
+    "covered_fraction": 0.99993961352657,
+    "first_start_ms": 1791072000000,
+    "last_end_ms": 1793059200000
+  },
+  "source_manifest": [
+    {
+      "path": "recovered/original/artifacts/universal-minute-HYPE/HYPE_minutes.csv.gz",
+      "size_bytes": 2029209,
+      "sha256": "45bc63998f1a7ca3a9c50bf86601d25e249cdd1d242008998c1d482a6f1c62ce"
+    }
+  ],
+  "implementation_manifest": {
+    "data.py": "95fd7696d22abebca9385a1668817f0adb3f3026d362f95c20917b63d7cdac71",
+    "features.py": "24091dba55ea517902cdf761697ad994b7baf7c5a3b7194c23910a5cd2ccebc3",
+    "engine.py": "8f5c5c560e6558ea0248d1a7d40964e2b32e2deb8df85ca86859732e8c4a2d6c",
+    "labels.py": "93d22c8d7221ee37b0a9de6a9e1271f426c996a5807ef4e649714c62e29509cc",
+    "evaluation.py": "e64acaee85083033d24b7f9476ad77da7f16180d501acdaf292a60bc8048844e",
+    "pipeline.py": "0d7d4b417b3a713bcfa6758af3f4d5f5e04624785630ca8cbca05ff4a366ae33"
+  },
+  "interval_ms": [
+    60000
+  ],
+  "untouched_oos_start_ms": 1793059200000,
+  "label_spec": "strict L6/K2; ambiguous OHLC hours excluded",
+  "forward_only_families": "C/D/E/F require actual fresh corresponding observations; no synthetic backfill",
+  "limitations": [
+    "heuristic sequential evidence score, not SPRT or fitted likelihood",
+    "small samples cannot establish perfect future precision",
+    "folds compare fixed rules; no within-fold learned model parameters"
+  ],
+  "selection_sha256": "5ecf4756433ae201314eb7af2d1bcedd86ace17052327d046580c5d7b77d77c1"
+}

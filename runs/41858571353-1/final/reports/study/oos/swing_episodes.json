@@ -1,0 +1,3257 @@
+[
+  {
+    "episode_id": 1,
+    "start_ts_ms": 1791111600000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 89.58,
+    "anchor_ts_ms": 1791097980000,
+    "anchor_source": "BOOTSTRAP_SEED",
+    "first_candidate_id": 1,
+    "first_accepted_candidate_id": 1,
+    "anchor_extensions": [],
+    "end_ts_ms": 1791113280000
+  },
+  {
+    "episode_id": 2,
+    "start_ts_ms": 1791113280000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 90.9,
+    "anchor_ts_ms": 1791109320000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 2,
+    "first_accepted_candidate_id": 15,
+    "anchor_extensions": [],
+    "end_ts_ms": 1791138960000
+  },
+  {
+    "episode_id": 3,
+    "start_ts_ms": 1791138960000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 89.63,
+    "anchor_ts_ms": 1791131460000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 16,
+    "first_accepted_candidate_id": 29,
+    "anchor_extensions": [],
+    "end_ts_ms": 1791162480000
+  },
+  {
+    "episode_id": 4,
+    "start_ts_ms": 1791162480000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 91.26,
+    "anchor_ts_ms": 1791152220000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 30,
+    "first_accepted_candidate_id": 30,
+    "anchor_extensions": [],
+    "end_ts_ms": 1791168180000
+  },
+  {
+    "episode_id": 5,
+    "start_ts_ms": 1791168180000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 89.96,
+    "anchor_ts_ms": 1791162540000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 31,
+    "first_accepted_candidate_id": 32,
+    "anchor_extensions": [],
+    "end_ts_ms": 1791173520000
+  },
+  {
+    "episode_id": 6,
+    "start_ts_ms": 1791173520000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 90.88,
+    "anchor_ts_ms": 1791171660000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 33,
+    "first_accepted_candidate_id": 59,
+    "anchor_extensions": [
+      {
+        "ts_ms": 1791175560000,
+        "old_price": 90.88,
+        "new_price": 91.08,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791175620000,
+        "old_price": 91.08,
+        "new_price": 91.18,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791179520000,
+        "old_price": 91.18,
+        "new_price": 91.2,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791180060000,
+        "old_price": 91.2,
+        "new_price": 91.42,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791180120000,
+        "old_price": 91.42,
+        "new_price": 91.59,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791180300000,
+        "old_price": 91.59,
+        "new_price": 91.6,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791180360000,
+        "old_price": 91.6,
+        "new_price": 91.61,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791183240000,
+        "old_price": 91.61,
+        "new_price": 91.77,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791183660000,
+        "old_price": 91.77,
+        "new_price": 91.79,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791183720000,
+        "old_price": 91.79,
+        "new_price": 91.9,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791183780000,
+        "old_price": 91.9,
+        "new_price": 91.96,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791184020000,
+        "old_price": 91.96,
+        "new_price": 92.08,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791184740000,
+        "old_price": 92.08,
+        "new_price": 92.1,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791185640000,
+        "old_price": 92.1,
+        "new_price": 92.14,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791185820000,
+        "old_price": 92.14,
+        "new_price": 92.19,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791185880000,
+        "old_price": 92.19,
+        "new_price": 92.21,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791185940000,
+        "old_price": 92.21,
+        "new_price": 92.22,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791186000000,
+        "old_price": 92.22,
+        "new_price": 92.25,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791186180000,
+        "old_price": 92.25,
+        "new_price": 92.26,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791186240000,
+        "old_price": 92.26,
+        "new_price": 92.42,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791186300000,
+        "old_price": 92.42,
+        "new_price": 92.62,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791186360000,
+        "old_price": 92.62,
+        "new_price": 92.67,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791186660000,
+        "old_price": 92.67,
+        "new_price": 92.75,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791186720000,
+        "old_price": 92.75,
+        "new_price": 92.77,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791186780000,
+        "old_price": 92.77,
+        "new_price": 92.78,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791186840000,
+        "old_price": 92.78,
+        "new_price": 92.79,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791186960000,
+        "old_price": 92.79,
+        "new_price": 92.81,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791187140000,
+        "old_price": 92.81,
+        "new_price": 92.85,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791187200000,
+        "old_price": 92.85,
+        "new_price": 92.87,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791187260000,
+        "old_price": 92.87,
+        "new_price": 92.89,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791187440000,
+        "old_price": 92.89,
+        "new_price": 93.0,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791187500000,
+        "old_price": 93.0,
+        "new_price": 93.3,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791187620000,
+        "old_price": 93.3,
+        "new_price": 93.4,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791187800000,
+        "old_price": 93.4,
+        "new_price": 93.44,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791187860000,
+        "old_price": 93.44,
+        "new_price": 93.72,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791187980000,
+        "old_price": 93.72,
+        "new_price": 93.76,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791188160000,
+        "old_price": 93.76,
+        "new_price": 93.77,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791219480000,
+        "old_price": 93.77,
+        "new_price": 93.85,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791222420000,
+        "old_price": 93.85,
+        "new_price": 93.91,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791222600000,
+        "old_price": 93.91,
+        "new_price": 93.93,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791223260000,
+        "old_price": 93.93,
+        "new_price": 93.99,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791229800000,
+        "old_price": 93.99,
+        "new_price": 94.08,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791230160000,
+        "old_price": 94.08,
+        "new_price": 94.19,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791230220000,
+        "old_price": 94.19,
+        "new_price": 94.28,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791230280000,
+        "old_price": 94.28,
+        "new_price": 94.36,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791230940000,
+        "old_price": 94.36,
+        "new_price": 94.55,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791231000000,
+        "old_price": 94.55,
+        "new_price": 94.59,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791231060000,
+        "old_price": 94.59,
+        "new_price": 94.65,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791231660000,
+        "old_price": 94.65,
+        "new_price": 94.72,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791233160000,
+        "old_price": 94.72,
+        "new_price": 94.78,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791233220000,
+        "old_price": 94.78,
+        "new_price": 94.79,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791233460000,
+        "old_price": 94.79,
+        "new_price": 94.83,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791233520000,
+        "old_price": 94.83,
+        "new_price": 94.89,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791237060000,
+        "old_price": 94.89,
+        "new_price": 94.9,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791238380000,
+        "old_price": 94.9,
+        "new_price": 95.14,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791238440000,
+        "old_price": 95.14,
+        "new_price": 95.16,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791238860000,
+        "old_price": 95.16,
+        "new_price": 95.18,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791239100000,
+        "old_price": 95.18,
+        "new_price": 95.24,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      }
+    ],
+    "end_ts_ms": 1791287520000
+  },
+  {
+    "episode_id": 7,
+    "start_ts_ms": 1791287520000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 92.5,
+    "anchor_ts_ms": 1791266940000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 60,
+    "first_accepted_candidate_id": 60,
+    "anchor_extensions": [],
+    "end_ts_ms": 1791290760000
+  },
+  {
+    "episode_id": 8,
+    "start_ts_ms": 1791290760000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 93.89,
+    "anchor_ts_ms": 1791287580000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 61,
+    "first_accepted_candidate_id": 78,
+    "anchor_extensions": [],
+    "end_ts_ms": 1791333480000
+  },
+  {
+    "episode_id": 9,
+    "start_ts_ms": 1791333480000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 91.14,
+    "anchor_ts_ms": 1791323640000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 79,
+    "first_accepted_candidate_id": 84,
+    "anchor_extensions": [
+      {
+        "ts_ms": 1791337920000,
+        "old_price": 91.14,
+        "new_price": 91.08,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791338040000,
+        "old_price": 91.08,
+        "new_price": 90.32,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791338400000,
+        "old_price": 90.32,
+        "new_price": 90.3,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791338460000,
+        "old_price": 90.3,
+        "new_price": 90.13,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791338520000,
+        "old_price": 90.13,
+        "new_price": 89.15,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      }
+    ],
+    "end_ts_ms": 1791347520000
+  },
+  {
+    "episode_id": 10,
+    "start_ts_ms": 1791347520000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 90.98,
+    "anchor_ts_ms": 1791340800000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 85,
+    "first_accepted_candidate_id": 113,
+    "anchor_extensions": [
+      {
+        "ts_ms": 1791351240000,
+        "old_price": 90.98,
+        "new_price": 91.0,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791352200000,
+        "old_price": 91.0,
+        "new_price": 91.05,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791352260000,
+        "old_price": 91.05,
+        "new_price": 91.07,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791354900000,
+        "old_price": 91.07,
+        "new_price": 91.12,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791354960000,
+        "old_price": 91.12,
+        "new_price": 91.14,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791355020000,
+        "old_price": 91.14,
+        "new_price": 91.19,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791355080000,
+        "old_price": 91.19,
+        "new_price": 91.2,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791355140000,
+        "old_price": 91.2,
+        "new_price": 91.21,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791355260000,
+        "old_price": 91.21,
+        "new_price": 91.27,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791355560000,
+        "old_price": 91.27,
+        "new_price": 91.28,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791357120000,
+        "old_price": 91.28,
+        "new_price": 91.29,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      }
+    ],
+    "end_ts_ms": 1791401220000
+  },
+  {
+    "episode_id": 11,
+    "start_ts_ms": 1791401220000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 87.1,
+    "anchor_ts_ms": 1791395700000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 114,
+    "first_accepted_candidate_id": 120,
+    "anchor_extensions": [],
+    "end_ts_ms": 1791431940000
+  },
+  {
+    "episode_id": 12,
+    "start_ts_ms": 1791431940000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 88.86,
+    "anchor_ts_ms": 1791422280000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 121,
+    "first_accepted_candidate_id": 152,
+    "anchor_extensions": [],
+    "end_ts_ms": 1791511620000
+  },
+  {
+    "episode_id": 13,
+    "start_ts_ms": 1791511620000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 82.61,
+    "anchor_ts_ms": 1791482760000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 153,
+    "first_accepted_candidate_id": 173,
+    "anchor_extensions": [],
+    "end_ts_ms": 1791554400000
+  },
+  {
+    "episode_id": 14,
+    "start_ts_ms": 1791554400000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 86.6,
+    "anchor_ts_ms": 1791546420000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 174,
+    "first_accepted_candidate_id": 202,
+    "anchor_extensions": [
+      {
+        "ts_ms": 1791642600000,
+        "old_price": 86.6,
+        "new_price": 86.74,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791642660000,
+        "old_price": 86.74,
+        "new_price": 86.77,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      }
+    ],
+    "end_ts_ms": 1791719640000
+  },
+  {
+    "episode_id": 15,
+    "start_ts_ms": 1791719640000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 84.61,
+    "anchor_ts_ms": 1791698880000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 203,
+    "first_accepted_candidate_id": 222,
+    "anchor_extensions": [],
+    "end_ts_ms": 1791745080000
+  },
+  {
+    "episode_id": 16,
+    "start_ts_ms": 1791745080000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 87.28,
+    "anchor_ts_ms": 1791736980000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 223,
+    "first_accepted_candidate_id": 231,
+    "anchor_extensions": [],
+    "end_ts_ms": 1791759180000
+  },
+  {
+    "episode_id": 17,
+    "start_ts_ms": 1791759180000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 85.45,
+    "anchor_ts_ms": 1791753420000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 232,
+    "first_accepted_candidate_id": 261,
+    "anchor_extensions": [],
+    "end_ts_ms": 1791798420000
+  },
+  {
+    "episode_id": 18,
+    "start_ts_ms": 1791798420000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 88.08,
+    "anchor_ts_ms": 1791782580000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 262,
+    "first_accepted_candidate_id": 313,
+    "anchor_extensions": [],
+    "end_ts_ms": 1791862500000
+  },
+  {
+    "episode_id": 19,
+    "start_ts_ms": 1791862500000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 79.4,
+    "anchor_ts_ms": 1791852780000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 314,
+    "first_accepted_candidate_id": 319,
+    "anchor_extensions": [],
+    "end_ts_ms": 1791890040000
+  },
+  {
+    "episode_id": 20,
+    "start_ts_ms": 1791890040000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 83.345,
+    "anchor_ts_ms": 1791873360000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 320,
+    "first_accepted_candidate_id": 323,
+    "anchor_extensions": [],
+    "end_ts_ms": 1791900660000
+  },
+  {
+    "episode_id": 21,
+    "start_ts_ms": 1791900660000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 80.785,
+    "anchor_ts_ms": 1791894240000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 324,
+    "first_accepted_candidate_id": 336,
+    "anchor_extensions": [
+      {
+        "ts_ms": 1791905760000,
+        "old_price": 80.785,
+        "new_price": 80.583,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791905880000,
+        "old_price": 80.583,
+        "new_price": 80.54,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791905940000,
+        "old_price": 80.54,
+        "new_price": 80.527,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791906480000,
+        "old_price": 80.527,
+        "new_price": 80.526,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791906540000,
+        "old_price": 80.526,
+        "new_price": 80.52,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      }
+    ],
+    "end_ts_ms": 1791957060000
+  },
+  {
+    "episode_id": 22,
+    "start_ts_ms": 1791957060000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 82.754,
+    "anchor_ts_ms": 1791948840000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 337,
+    "first_accepted_candidate_id": 337,
+    "anchor_extensions": [],
+    "end_ts_ms": 1791962460000
+  },
+  {
+    "episode_id": 23,
+    "start_ts_ms": 1791962460000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 81.415,
+    "anchor_ts_ms": 1791957240000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 338,
+    "first_accepted_candidate_id": 361,
+    "anchor_extensions": [
+      {
+        "ts_ms": 1791967320000,
+        "old_price": 81.415,
+        "new_price": 81.313,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791967380000,
+        "old_price": 81.313,
+        "new_price": 81.24,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791968520000,
+        "old_price": 81.24,
+        "new_price": 81.196,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791969900000,
+        "old_price": 81.196,
+        "new_price": 81.145,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791970080000,
+        "old_price": 81.145,
+        "new_price": 81.032,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791970200000,
+        "old_price": 81.032,
+        "new_price": 80.972,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791970260000,
+        "old_price": 80.972,
+        "new_price": 80.947,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791970320000,
+        "old_price": 80.947,
+        "new_price": 80.946,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791970800000,
+        "old_price": 80.946,
+        "new_price": 80.942,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791981060000,
+        "old_price": 80.942,
+        "new_price": 80.851,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791981120000,
+        "old_price": 80.851,
+        "new_price": 80.82,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791981600000,
+        "old_price": 80.82,
+        "new_price": 80.776,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791981720000,
+        "old_price": 80.776,
+        "new_price": 80.693,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791982140000,
+        "old_price": 80.693,
+        "new_price": 80.551,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791982920000,
+        "old_price": 80.551,
+        "new_price": 80.49,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791983640000,
+        "old_price": 80.49,
+        "new_price": 80.184,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791984000000,
+        "old_price": 80.184,
+        "new_price": 80.05,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791984060000,
+        "old_price": 80.05,
+        "new_price": 80.035,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791987240000,
+        "old_price": 80.035,
+        "new_price": 79.861,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791987300000,
+        "old_price": 79.861,
+        "new_price": 79.762,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791987360000,
+        "old_price": 79.762,
+        "new_price": 79.74,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791987720000,
+        "old_price": 79.74,
+        "new_price": 79.593,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791988800000,
+        "old_price": 79.593,
+        "new_price": 79.557,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791989100000,
+        "old_price": 79.557,
+        "new_price": 79.524,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1791994920000,
+        "old_price": 79.524,
+        "new_price": 79.21,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792001160000,
+        "old_price": 79.21,
+        "new_price": 79.078,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      }
+    ],
+    "end_ts_ms": 1792015920000
+  },
+  {
+    "episode_id": 24,
+    "start_ts_ms": 1792015920000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 82.04,
+    "anchor_ts_ms": 1792008120000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 362,
+    "first_accepted_candidate_id": 376,
+    "anchor_extensions": [],
+    "end_ts_ms": 1792044960000
+  },
+  {
+    "episode_id": 25,
+    "start_ts_ms": 1792044960000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 78.15,
+    "anchor_ts_ms": 1792035600000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 377,
+    "first_accepted_candidate_id": 379,
+    "anchor_extensions": [],
+    "end_ts_ms": 1792061160000
+  },
+  {
+    "episode_id": 26,
+    "start_ts_ms": 1792061160000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 80.6,
+    "anchor_ts_ms": 1792051080000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 380,
+    "first_accepted_candidate_id": 391,
+    "anchor_extensions": [],
+    "end_ts_ms": 1792075080000
+  },
+  {
+    "episode_id": 27,
+    "start_ts_ms": 1792075080000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 77.48,
+    "anchor_ts_ms": 1792072500000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 392,
+    "first_accepted_candidate_id": 410,
+    "anchor_extensions": [],
+    "end_ts_ms": 1792122120000
+  },
+  {
+    "episode_id": 28,
+    "start_ts_ms": 1792122120000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 82.6,
+    "anchor_ts_ms": 1792103220000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 411,
+    "first_accepted_candidate_id": 411,
+    "anchor_extensions": [],
+    "end_ts_ms": 1792134720000
+  },
+  {
+    "episode_id": 29,
+    "start_ts_ms": 1792134720000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 80.32,
+    "anchor_ts_ms": 1792122240000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 412,
+    "first_accepted_candidate_id": 419,
+    "anchor_extensions": [],
+    "end_ts_ms": 1792145340000
+  },
+  {
+    "episode_id": 30,
+    "start_ts_ms": 1792145340000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 81.69,
+    "anchor_ts_ms": 1792142280000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 420,
+    "first_accepted_candidate_id": 445,
+    "anchor_extensions": [
+      {
+        "ts_ms": 1792147320000,
+        "old_price": 81.69,
+        "new_price": 81.754,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792147380000,
+        "old_price": 81.754,
+        "new_price": 81.77,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792147440000,
+        "old_price": 81.77,
+        "new_price": 81.814,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792149120000,
+        "old_price": 81.814,
+        "new_price": 81.88,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792149180000,
+        "old_price": 81.88,
+        "new_price": 81.94,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792149240000,
+        "old_price": 81.94,
+        "new_price": 82.135,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792149300000,
+        "old_price": 82.135,
+        "new_price": 82.137,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792149600000,
+        "old_price": 82.137,
+        "new_price": 82.149,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792149660000,
+        "old_price": 82.149,
+        "new_price": 82.18,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792149720000,
+        "old_price": 82.18,
+        "new_price": 82.23,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792149840000,
+        "old_price": 82.23,
+        "new_price": 82.257,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792149900000,
+        "old_price": 82.257,
+        "new_price": 82.339,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792149960000,
+        "old_price": 82.339,
+        "new_price": 82.405,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792150020000,
+        "old_price": 82.405,
+        "new_price": 82.488,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792150080000,
+        "old_price": 82.488,
+        "new_price": 82.49,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      }
+    ],
+    "end_ts_ms": 1792190700000
+  },
+  {
+    "episode_id": 31,
+    "start_ts_ms": 1792190700000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 78.408,
+    "anchor_ts_ms": 1792171140000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 446,
+    "first_accepted_candidate_id": 454,
+    "anchor_extensions": [],
+    "end_ts_ms": 1792236000000
+  },
+  {
+    "episode_id": 32,
+    "start_ts_ms": 1792236000000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 80.463,
+    "anchor_ts_ms": 1792223040000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 455,
+    "first_accepted_candidate_id": 475,
+    "anchor_extensions": [],
+    "end_ts_ms": 1792275300000
+  },
+  {
+    "episode_id": 33,
+    "start_ts_ms": 1792275300000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 77.023,
+    "anchor_ts_ms": 1792273140000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 476,
+    "first_accepted_candidate_id": 484,
+    "anchor_extensions": [],
+    "end_ts_ms": 1792304400000
+  },
+  {
+    "episode_id": 34,
+    "start_ts_ms": 1792304400000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 79.328,
+    "anchor_ts_ms": 1792296060000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 485,
+    "first_accepted_candidate_id": 509,
+    "anchor_extensions": [
+      {
+        "ts_ms": 1792325220000,
+        "old_price": 79.328,
+        "new_price": 79.345,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792325280000,
+        "old_price": 79.345,
+        "new_price": 79.504,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      }
+    ],
+    "end_ts_ms": 1792375860000
+  },
+  {
+    "episode_id": 35,
+    "start_ts_ms": 1792375860000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 76.056,
+    "anchor_ts_ms": 1792354560000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 510,
+    "first_accepted_candidate_id": 524,
+    "anchor_extensions": [],
+    "end_ts_ms": 1792439160000
+  },
+  {
+    "episode_id": 36,
+    "start_ts_ms": 1792439160000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 80.398,
+    "anchor_ts_ms": 1792394280000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 525,
+    "first_accepted_candidate_id": 526,
+    "anchor_extensions": [],
+    "end_ts_ms": 1792447680000
+  },
+  {
+    "episode_id": 37,
+    "start_ts_ms": 1792447680000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 77.576,
+    "anchor_ts_ms": 1792439760000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 527,
+    "first_accepted_candidate_id": 531,
+    "anchor_extensions": [],
+    "end_ts_ms": 1792458780000
+  },
+  {
+    "episode_id": 38,
+    "start_ts_ms": 1792458780000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 79.433,
+    "anchor_ts_ms": 1792453200000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 532,
+    "first_accepted_candidate_id": 559,
+    "anchor_extensions": [
+      {
+        "ts_ms": 1792468200000,
+        "old_price": 79.433,
+        "new_price": 79.439,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792468260000,
+        "old_price": 79.439,
+        "new_price": 79.476,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792468320000,
+        "old_price": 79.476,
+        "new_price": 79.477,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792468380000,
+        "old_price": 79.477,
+        "new_price": 79.498,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792468440000,
+        "old_price": 79.498,
+        "new_price": 79.537,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792468560000,
+        "old_price": 79.537,
+        "new_price": 79.597,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792468680000,
+        "old_price": 79.597,
+        "new_price": 79.63,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792470060000,
+        "old_price": 79.63,
+        "new_price": 79.636,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792470120000,
+        "old_price": 79.636,
+        "new_price": 79.696,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792470180000,
+        "old_price": 79.696,
+        "new_price": 79.724,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792471140000,
+        "old_price": 79.724,
+        "new_price": 79.73,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792504800000,
+        "old_price": 79.73,
+        "new_price": 79.853,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792504860000,
+        "old_price": 79.853,
+        "new_price": 79.971,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792504920000,
+        "old_price": 79.971,
+        "new_price": 80.324,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792504980000,
+        "old_price": 80.324,
+        "new_price": 80.339,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792505160000,
+        "old_price": 80.339,
+        "new_price": 80.537,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792505220000,
+        "old_price": 80.537,
+        "new_price": 80.652,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792505280000,
+        "old_price": 80.652,
+        "new_price": 80.906,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792505340000,
+        "old_price": 80.906,
+        "new_price": 81.14,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792505400000,
+        "old_price": 81.14,
+        "new_price": 81.158,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792505460000,
+        "old_price": 81.158,
+        "new_price": 81.438,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792505520000,
+        "old_price": 81.438,
+        "new_price": 81.456,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792505640000,
+        "old_price": 81.456,
+        "new_price": 81.506,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792505700000,
+        "old_price": 81.506,
+        "new_price": 81.601,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792505760000,
+        "old_price": 81.601,
+        "new_price": 81.66,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792505880000,
+        "old_price": 81.66,
+        "new_price": 81.665,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792505940000,
+        "old_price": 81.665,
+        "new_price": 81.707,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792507320000,
+        "old_price": 81.707,
+        "new_price": 81.769,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792507380000,
+        "old_price": 81.769,
+        "new_price": 81.796,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792507500000,
+        "old_price": 81.796,
+        "new_price": 81.799,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      }
+    ],
+    "end_ts_ms": 1792525800000
+  },
+  {
+    "episode_id": 39,
+    "start_ts_ms": 1792525800000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 79.241,
+    "anchor_ts_ms": 1792513620000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 560,
+    "first_accepted_candidate_id": 570,
+    "anchor_extensions": [],
+    "end_ts_ms": 1792577940000
+  },
+  {
+    "episode_id": 40,
+    "start_ts_ms": 1792577940000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 82.355,
+    "anchor_ts_ms": 1792547520000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 571,
+    "first_accepted_candidate_id": 574,
+    "anchor_extensions": [],
+    "end_ts_ms": 1792595340000
+  },
+  {
+    "episode_id": 41,
+    "start_ts_ms": 1792595340000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 80.148,
+    "anchor_ts_ms": 1792590180000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 575,
+    "first_accepted_candidate_id": 575,
+    "anchor_extensions": [],
+    "end_ts_ms": 1792602540000
+  },
+  {
+    "episode_id": 42,
+    "start_ts_ms": 1792602540000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 82.536,
+    "anchor_ts_ms": 1792595640000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 576,
+    "first_accepted_candidate_id": 576,
+    "anchor_extensions": [],
+    "end_ts_ms": 1792604820000
+  },
+  {
+    "episode_id": 43,
+    "start_ts_ms": 1792604820000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 80.9,
+    "anchor_ts_ms": 1792602540000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 577,
+    "first_accepted_candidate_id": 612,
+    "anchor_extensions": [
+      {
+        "ts_ms": 1792624020000,
+        "old_price": 80.9,
+        "new_price": 80.855,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792625340000,
+        "old_price": 80.855,
+        "new_price": 80.824,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792625400000,
+        "old_price": 80.824,
+        "new_price": 80.572,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792626360000,
+        "old_price": 80.572,
+        "new_price": 80.564,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792626420000,
+        "old_price": 80.564,
+        "new_price": 80.555,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792626600000,
+        "old_price": 80.555,
+        "new_price": 80.534,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792626660000,
+        "old_price": 80.534,
+        "new_price": 80.521,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792628460000,
+        "old_price": 80.521,
+        "new_price": 80.424,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792628580000,
+        "old_price": 80.424,
+        "new_price": 80.411,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792633020000,
+        "old_price": 80.411,
+        "new_price": 80.355,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792633140000,
+        "old_price": 80.355,
+        "new_price": 80.172,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792633380000,
+        "old_price": 80.172,
+        "new_price": 80.044,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792634340000,
+        "old_price": 80.044,
+        "new_price": 80.042,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792634820000,
+        "old_price": 80.042,
+        "new_price": 79.697,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792635480000,
+        "old_price": 79.697,
+        "new_price": 79.661,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792635540000,
+        "old_price": 79.661,
+        "new_price": 79.476,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792635600000,
+        "old_price": 79.476,
+        "new_price": 79.458,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792636080000,
+        "old_price": 79.458,
+        "new_price": 79.296,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792636140000,
+        "old_price": 79.296,
+        "new_price": 79.274,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792637520000,
+        "old_price": 79.274,
+        "new_price": 79.151,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792637640000,
+        "old_price": 79.151,
+        "new_price": 79.12,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792637700000,
+        "old_price": 79.12,
+        "new_price": 79.061,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792638480000,
+        "old_price": 79.061,
+        "new_price": 79.018,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792638540000,
+        "old_price": 79.018,
+        "new_price": 78.69,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792640040000,
+        "old_price": 78.69,
+        "new_price": 78.679,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792640100000,
+        "old_price": 78.679,
+        "new_price": 78.564,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792640160000,
+        "old_price": 78.564,
+        "new_price": 78.529,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792648320000,
+        "old_price": 78.529,
+        "new_price": 78.519,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792648380000,
+        "old_price": 78.519,
+        "new_price": 78.453,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792648500000,
+        "old_price": 78.453,
+        "new_price": 78.446,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792648560000,
+        "old_price": 78.446,
+        "new_price": 78.436,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792653060000,
+        "old_price": 78.436,
+        "new_price": 78.41,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792656180000,
+        "old_price": 78.41,
+        "new_price": 78.382,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792656240000,
+        "old_price": 78.382,
+        "new_price": 78.322,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792656420000,
+        "old_price": 78.322,
+        "new_price": 78.3,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792656660000,
+        "old_price": 78.3,
+        "new_price": 78.182,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792657260000,
+        "old_price": 78.182,
+        "new_price": 77.892,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792659720000,
+        "old_price": 77.892,
+        "new_price": 77.87,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792659780000,
+        "old_price": 77.87,
+        "new_price": 77.85,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792659840000,
+        "old_price": 77.85,
+        "new_price": 77.77,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792659900000,
+        "old_price": 77.77,
+        "new_price": 77.714,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792660020000,
+        "old_price": 77.714,
+        "new_price": 77.697,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792681800000,
+        "old_price": 77.697,
+        "new_price": 77.612,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792681920000,
+        "old_price": 77.612,
+        "new_price": 77.44,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792681980000,
+        "old_price": 77.44,
+        "new_price": 77.125,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792687680000,
+        "old_price": 77.125,
+        "new_price": 76.955,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792687800000,
+        "old_price": 76.955,
+        "new_price": 76.865,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792687860000,
+        "old_price": 76.865,
+        "new_price": 76.664,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792687920000,
+        "old_price": 76.664,
+        "new_price": 76.65,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792687980000,
+        "old_price": 76.65,
+        "new_price": 76.646,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792688040000,
+        "old_price": 76.646,
+        "new_price": 76.561,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      }
+    ],
+    "end_ts_ms": 1792748340000
+  },
+  {
+    "episode_id": 44,
+    "start_ts_ms": 1792748340000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 78.888,
+    "anchor_ts_ms": 1792745580000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 613,
+    "first_accepted_candidate_id": 618,
+    "anchor_extensions": [],
+    "end_ts_ms": 1792768080000
+  },
+  {
+    "episode_id": 45,
+    "start_ts_ms": 1792768080000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 77.136,
+    "anchor_ts_ms": 1792765260000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 619,
+    "first_accepted_candidate_id": 657,
+    "anchor_extensions": [
+      {
+        "ts_ms": 1792785120000,
+        "old_price": 77.136,
+        "new_price": 77.056,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792795020000,
+        "old_price": 77.056,
+        "new_price": 77.01,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792795080000,
+        "old_price": 77.01,
+        "new_price": 76.914,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792795140000,
+        "old_price": 76.914,
+        "new_price": 76.888,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792795680000,
+        "old_price": 76.888,
+        "new_price": 76.622,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792795740000,
+        "old_price": 76.622,
+        "new_price": 76.536,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792795860000,
+        "old_price": 76.536,
+        "new_price": 76.255,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792796160000,
+        "old_price": 76.255,
+        "new_price": 76.15,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792828800000,
+        "old_price": 76.15,
+        "new_price": 76.11,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792828860000,
+        "old_price": 76.11,
+        "new_price": 76.102,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792829160000,
+        "old_price": 76.102,
+        "new_price": 76.057,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792829220000,
+        "old_price": 76.057,
+        "new_price": 75.901,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792829280000,
+        "old_price": 75.901,
+        "new_price": 75.824,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792831140000,
+        "old_price": 75.824,
+        "new_price": 75.644,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792831560000,
+        "old_price": 75.644,
+        "new_price": 75.553,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792831620000,
+        "old_price": 75.553,
+        "new_price": 75.502,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792831740000,
+        "old_price": 75.502,
+        "new_price": 75.422,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792831800000,
+        "old_price": 75.422,
+        "new_price": 75.409,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792832460000,
+        "old_price": 75.409,
+        "new_price": 75.358,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792832520000,
+        "old_price": 75.358,
+        "new_price": 75.339,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792832580000,
+        "old_price": 75.339,
+        "new_price": 75.301,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792832640000,
+        "old_price": 75.301,
+        "new_price": 75.275,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792833540000,
+        "old_price": 75.275,
+        "new_price": 75.188,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792833720000,
+        "old_price": 75.188,
+        "new_price": 75.184,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792834680000,
+        "old_price": 75.184,
+        "new_price": 75.148,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792835040000,
+        "old_price": 75.148,
+        "new_price": 75.132,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792851420000,
+        "old_price": 75.132,
+        "new_price": 74.943,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792851480000,
+        "old_price": 74.943,
+        "new_price": 74.86,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792851540000,
+        "old_price": 74.86,
+        "new_price": 74.6,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792855020000,
+        "old_price": 74.6,
+        "new_price": 74.536,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792855200000,
+        "old_price": 74.536,
+        "new_price": 74.523,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792855560000,
+        "old_price": 74.523,
+        "new_price": 74.418,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      }
+    ],
+    "end_ts_ms": 1792919580000
+  },
+  {
+    "episode_id": 46,
+    "start_ts_ms": 1792919580000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 76.872,
+    "anchor_ts_ms": 1792894080000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 658,
+    "first_accepted_candidate_id": 660,
+    "anchor_extensions": [],
+    "end_ts_ms": 1792928460000
+  },
+  {
+    "episode_id": 47,
+    "start_ts_ms": 1792928460000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 75.179,
+    "anchor_ts_ms": 1792920000000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 661,
+    "first_accepted_candidate_id": 679,
+    "anchor_extensions": [],
+    "end_ts_ms": 1792964460000
+  },
+  {
+    "episode_id": 48,
+    "start_ts_ms": 1792964460000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 77.551,
+    "anchor_ts_ms": 1792947960000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 680,
+    "first_accepted_candidate_id": 681,
+    "anchor_extensions": [],
+    "end_ts_ms": 1792967640000
+  },
+  {
+    "episode_id": 49,
+    "start_ts_ms": 1792967640000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 76.247,
+    "anchor_ts_ms": 1792964820000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 682,
+    "first_accepted_candidate_id": 695,
+    "anchor_extensions": [
+      {
+        "ts_ms": 1792971060000,
+        "old_price": 76.247,
+        "new_price": 75.876,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792979100000,
+        "old_price": 75.876,
+        "new_price": 75.857,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792979220000,
+        "old_price": 75.857,
+        "new_price": 75.823,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792981620000,
+        "old_price": 75.823,
+        "new_price": 75.812,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792981980000,
+        "old_price": 75.812,
+        "new_price": 75.687,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792982160000,
+        "old_price": 75.687,
+        "new_price": 75.637,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792982400000,
+        "old_price": 75.637,
+        "new_price": 75.636,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792982580000,
+        "old_price": 75.636,
+        "new_price": 75.609,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792982640000,
+        "old_price": 75.609,
+        "new_price": 75.596,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792982760000,
+        "old_price": 75.596,
+        "new_price": 75.57,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792983060000,
+        "old_price": 75.57,
+        "new_price": 75.205,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792983180000,
+        "old_price": 75.205,
+        "new_price": 75.0,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792986840000,
+        "old_price": 75.0,
+        "new_price": 74.93,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1792986960000,
+        "old_price": 74.93,
+        "new_price": 74.916,
+        "side": "LOW",
+        "extreme_time_is_interval": true
+      }
+    ],
+    "end_ts_ms": 1793000160000
+  },
+  {
+    "episode_id": 50,
+    "start_ts_ms": 1793000160000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 77.116,
+    "anchor_ts_ms": 1792994460000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 696,
+    "first_accepted_candidate_id": 717,
+    "anchor_extensions": [
+      {
+        "ts_ms": 1793004120000,
+        "old_price": 77.116,
+        "new_price": 77.18,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793004300000,
+        "old_price": 77.18,
+        "new_price": 77.185,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793004360000,
+        "old_price": 77.185,
+        "new_price": 77.375,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793004420000,
+        "old_price": 77.375,
+        "new_price": 77.452,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793004480000,
+        "old_price": 77.452,
+        "new_price": 77.546,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793004540000,
+        "old_price": 77.546,
+        "new_price": 77.645,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793017800000,
+        "old_price": 77.645,
+        "new_price": 77.648,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793017860000,
+        "old_price": 77.648,
+        "new_price": 77.668,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793018040000,
+        "old_price": 77.668,
+        "new_price": 77.716,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793021940000,
+        "old_price": 77.716,
+        "new_price": 77.882,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793022000000,
+        "old_price": 77.882,
+        "new_price": 77.925,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793026500000,
+        "old_price": 77.925,
+        "new_price": 78.04,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793026680000,
+        "old_price": 78.04,
+        "new_price": 78.078,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793026740000,
+        "old_price": 78.078,
+        "new_price": 78.167,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793026800000,
+        "old_price": 78.167,
+        "new_price": 78.216,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793026860000,
+        "old_price": 78.216,
+        "new_price": 78.309,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793027100000,
+        "old_price": 78.309,
+        "new_price": 78.34,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793027160000,
+        "old_price": 78.34,
+        "new_price": 78.549,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793027220000,
+        "old_price": 78.549,
+        "new_price": 78.652,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793027280000,
+        "old_price": 78.652,
+        "new_price": 78.786,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793029020000,
+        "old_price": 78.786,
+        "new_price": 78.837,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793029080000,
+        "old_price": 78.837,
+        "new_price": 78.838,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793034420000,
+        "old_price": 78.838,
+        "new_price": 78.84,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793034540000,
+        "old_price": 78.84,
+        "new_price": 78.902,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793034600000,
+        "old_price": 78.902,
+        "new_price": 78.916,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793034900000,
+        "old_price": 78.916,
+        "new_price": 78.955,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793035020000,
+        "old_price": 78.955,
+        "new_price": 78.972,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793035080000,
+        "old_price": 78.972,
+        "new_price": 78.99,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793035140000,
+        "old_price": 78.99,
+        "new_price": 79.11,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793035260000,
+        "old_price": 79.11,
+        "new_price": 79.112,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793036160000,
+        "old_price": 79.112,
+        "new_price": 79.435,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793036220000,
+        "old_price": 79.435,
+        "new_price": 80.211,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793036340000,
+        "old_price": 80.211,
+        "new_price": 80.286,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793036400000,
+        "old_price": 80.286,
+        "new_price": 80.58,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      }
+    ],
+    "end_ts_ms": 1793104620000
+  },
+  {
+    "episode_id": 51,
+    "start_ts_ms": 1793104620000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 77.116,
+    "anchor_ts_ms": 1793096760000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 718,
+    "first_accepted_candidate_id": 763,
+    "anchor_extensions": [],
+    "end_ts_ms": 1793205540000
+  },
+  {
+    "episode_id": 52,
+    "start_ts_ms": 1793205540000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 82.585,
+    "anchor_ts_ms": 1793181900000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 764,
+    "first_accepted_candidate_id": 766,
+    "anchor_extensions": [],
+    "end_ts_ms": 1793215200000
+  },
+  {
+    "episode_id": 53,
+    "start_ts_ms": 1793215200000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 79.721,
+    "anchor_ts_ms": 1793206380000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 767,
+    "first_accepted_candidate_id": 773,
+    "anchor_extensions": [],
+    "end_ts_ms": 1793224980000
+  },
+  {
+    "episode_id": 54,
+    "start_ts_ms": 1793224980000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 81.908,
+    "anchor_ts_ms": 1793217780000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 774,
+    "first_accepted_candidate_id": 820,
+    "anchor_extensions": [
+      {
+        "ts_ms": 1793270040000,
+        "old_price": 81.908,
+        "new_price": 81.912,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793270100000,
+        "old_price": 81.912,
+        "new_price": 82.892,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793270400000,
+        "old_price": 82.892,
+        "new_price": 83.138,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793270460000,
+        "old_price": 83.138,
+        "new_price": 83.441,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793270640000,
+        "old_price": 83.441,
+        "new_price": 83.445,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793270700000,
+        "old_price": 83.445,
+        "new_price": 84.034,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793270760000,
+        "old_price": 84.034,
+        "new_price": 84.69,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793270820000,
+        "old_price": 84.69,
+        "new_price": 84.8,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793270880000,
+        "old_price": 84.8,
+        "new_price": 84.858,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793270940000,
+        "old_price": 84.858,
+        "new_price": 85.414,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793271000000,
+        "old_price": 85.414,
+        "new_price": 85.91,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793271060000,
+        "old_price": 85.91,
+        "new_price": 86.026,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793271120000,
+        "old_price": 86.026,
+        "new_price": 86.176,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793271180000,
+        "old_price": 86.176,
+        "new_price": 86.255,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793271960000,
+        "old_price": 86.255,
+        "new_price": 86.499,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793272200000,
+        "old_price": 86.499,
+        "new_price": 86.522,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793272380000,
+        "old_price": 86.522,
+        "new_price": 86.575,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793272440000,
+        "old_price": 86.575,
+        "new_price": 86.69,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793272500000,
+        "old_price": 86.69,
+        "new_price": 87.061,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793272560000,
+        "old_price": 87.061,
+        "new_price": 87.159,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793272620000,
+        "old_price": 87.159,
+        "new_price": 87.17,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793272740000,
+        "old_price": 87.17,
+        "new_price": 87.267,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793274360000,
+        "old_price": 87.267,
+        "new_price": 87.37,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793274420000,
+        "old_price": 87.37,
+        "new_price": 87.473,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793274540000,
+        "old_price": 87.473,
+        "new_price": 87.62,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793274660000,
+        "old_price": 87.62,
+        "new_price": 87.75,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793274720000,
+        "old_price": 87.75,
+        "new_price": 87.954,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793274780000,
+        "old_price": 87.954,
+        "new_price": 87.99,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793275260000,
+        "old_price": 87.99,
+        "new_price": 88.096,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793275980000,
+        "old_price": 88.096,
+        "new_price": 88.303,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793276100000,
+        "old_price": 88.303,
+        "new_price": 88.374,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793276220000,
+        "old_price": 88.374,
+        "new_price": 88.466,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793276280000,
+        "old_price": 88.466,
+        "new_price": 88.505,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793276340000,
+        "old_price": 88.505,
+        "new_price": 88.703,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793276520000,
+        "old_price": 88.703,
+        "new_price": 88.981,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793277780000,
+        "old_price": 88.981,
+        "new_price": 89.06,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793277960000,
+        "old_price": 89.06,
+        "new_price": 89.18,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793278020000,
+        "old_price": 89.18,
+        "new_price": 89.2,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793278140000,
+        "old_price": 89.2,
+        "new_price": 89.285,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793278320000,
+        "old_price": 89.285,
+        "new_price": 89.496,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793278380000,
+        "old_price": 89.496,
+        "new_price": 89.498,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793278740000,
+        "old_price": 89.498,
+        "new_price": 89.712,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793278800000,
+        "old_price": 89.712,
+        "new_price": 89.72,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793278860000,
+        "old_price": 89.72,
+        "new_price": 89.799,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793278920000,
+        "old_price": 89.799,
+        "new_price": 89.835,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793278980000,
+        "old_price": 89.835,
+        "new_price": 89.863,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793279040000,
+        "old_price": 89.863,
+        "new_price": 90.0,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793279100000,
+        "old_price": 90.0,
+        "new_price": 90.11,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793279160000,
+        "old_price": 90.11,
+        "new_price": 90.606,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793279220000,
+        "old_price": 90.606,
+        "new_price": 90.656,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793279280000,
+        "old_price": 90.656,
+        "new_price": 90.672,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793279340000,
+        "old_price": 90.672,
+        "new_price": 90.808,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793279400000,
+        "old_price": 90.808,
+        "new_price": 91.136,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793279460000,
+        "old_price": 91.136,
+        "new_price": 91.318,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793280000000,
+        "old_price": 91.318,
+        "new_price": 91.476,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793280060000,
+        "old_price": 91.476,
+        "new_price": 91.798,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793280180000,
+        "old_price": 91.798,
+        "new_price": 91.875,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793280240000,
+        "old_price": 91.875,
+        "new_price": 92.151,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793286540000,
+        "old_price": 92.151,
+        "new_price": 92.3,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793286600000,
+        "old_price": 92.3,
+        "new_price": 93.693,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793286660000,
+        "old_price": 93.693,
+        "new_price": 94.47,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793286720000,
+        "old_price": 94.47,
+        "new_price": 94.5,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793286780000,
+        "old_price": 94.5,
+        "new_price": 94.632,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793289960000,
+        "old_price": 94.632,
+        "new_price": 94.707,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793290020000,
+        "old_price": 94.707,
+        "new_price": 94.79,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793290080000,
+        "old_price": 94.79,
+        "new_price": 95.214,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793290140000,
+        "old_price": 95.214,
+        "new_price": 95.5,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793290260000,
+        "old_price": 95.5,
+        "new_price": 95.657,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793290320000,
+        "old_price": 95.657,
+        "new_price": 95.666,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793290380000,
+        "old_price": 95.666,
+        "new_price": 95.804,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793290440000,
+        "old_price": 95.804,
+        "new_price": 96.082,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793290500000,
+        "old_price": 96.082,
+        "new_price": 96.726,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793290560000,
+        "old_price": 96.726,
+        "new_price": 96.811,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      },
+      {
+        "ts_ms": 1793291460000,
+        "old_price": 96.811,
+        "new_price": 97.052,
+        "side": "HIGH",
+        "extreme_time_is_interval": true
+      }
+    ],
+    "end_ts_ms": 1793362440000
+  },
+  {
+    "episode_id": 55,
+    "start_ts_ms": 1793362440000,
+    "side": "HIGH",
+    "anchor_side": "LOW",
+    "anchor_price": 88.53,
+    "anchor_ts_ms": 1793319840000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 821,
+    "first_accepted_candidate_id": 829,
+    "anchor_extensions": [],
+    "end_ts_ms": 1793377320000
+  },
+  {
+    "episode_id": 56,
+    "start_ts_ms": 1793377320000,
+    "side": "LOW",
+    "anchor_side": "HIGH",
+    "anchor_price": 93.993,
+    "anchor_ts_ms": 1793373840000,
+    "anchor_source": "CONFIRMED_LOCAL",
+    "first_candidate_id": 830,
+    "first_accepted_candidate_id": null,
+    "anchor_extensions": [],
+    "end_ts_ms": null
+  }
+]
