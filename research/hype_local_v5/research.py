@@ -372,6 +372,22 @@ class LiveState:
             self.liqs.append((now, side, p*v))
         self.messages["liq"] += 1
 
+    def on_ticker(self, msg):
+        data = msg.get("data") or {}
+        if isinstance(data, list):
+            data = data[0] if data else {}
+        oi = data.get("openInterest")
+        if oi is not None:
+            try:
+                val = float(oi)
+                if self.oi != val:
+                    self.oi_prev = self.oi
+                    self.oi = val
+                    self.oi_ts = int(time.time()*1000)
+            except Exception:
+                pass
+        self.messages["ticker"] += 1
+
     def snapshot(self) -> dict[str, Any]:
         now = time.time()
         while self.trades and self.trades[0][0] < now-60:
@@ -437,7 +453,6 @@ async def live(minutes: int, outdir: Path) -> None:
     raw_liq = (outdir / "HYPE_live_liquidations.jsonl").open("w", encoding="utf-8")
     end_at = time.time() + minutes*60
     next_snap = 0.0
-    next_oi = 0.0
     try:
         ws = None
         last_ws_error = None
@@ -456,17 +471,10 @@ async def live(minutes: int, outdir: Path) -> None:
                 f"publicTrade.{SYMBOL}",
                 f"allLiquidation.{SYMBOL}",
                 f"orderbook.50.{SYMBOL}",
+                f"tickers.{SYMBOL}",
             ]}))
             while time.time() < end_at:
                 now = time.time()
-                if now >= next_oi:
-                    try:
-                        state.oi_prev = state.oi
-                        state.oi = await asyncio.to_thread(get_latest_oi)
-                        state.oi_ts = int(now*1000)
-                    except Exception as exc:
-                        print(f"[live] OI poll failed: {exc}", flush=True)
-                    next_oi = now + 30
                 timeout = max(0.05, min(1.0, next_snap-now if next_snap > now else 0.05))
                 try:
                     txt = await asyncio.wait_for(ws.recv(), timeout=timeout)
@@ -479,6 +487,8 @@ async def live(minutes: int, outdir: Path) -> None:
                     elif topic.startswith("allLiquidation."):
                         state.on_liq(msg)
                         raw_liq.write(json.dumps(msg, separators=(",",":"))+"\n")
+                    elif topic.startswith("tickers."):
+                        state.on_ticker(msg)
                 except asyncio.TimeoutError:
                     pass
                 now = time.time()
@@ -496,7 +506,7 @@ async def live(minutes: int, outdir: Path) -> None:
         "contains": [
             "L50 orderbook depth/imbalance", "book add/cancel churn",
             "executed trade flow 5s/15s/60s", "allLiquidation stream",
-            "open interest polled every 30s",
+            "open interest from public ticker websocket",
         ],
     }
     (outdir / "SUMMARY.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
