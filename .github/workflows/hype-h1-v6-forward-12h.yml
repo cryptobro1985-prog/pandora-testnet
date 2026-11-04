@@ -30,6 +30,11 @@ jobs:
           python-version: "3.12"
       - name: Install research dependencies
         run: python -m pip install -r research/hype_local_v5/requirements-research.txt
+      - name: Validate compact research format
+        run: |
+          python -m py_compile research/hype_local_v5/compact_pack.py research/hype_local_v5/decode_compact.py research/hype_local_v5/context_capture.py research/hype_local_v5/resilient_capture.py
+          bash -n research/hype_local_v5/capture_pack_segment.sh
+          python research/hype_local_v5/test_compact_smoke.py
       - name: Capture and compact segment 1
         run: bash research/hype_local_v5/capture_pack_segment.sh out/hype_v6_12h_segment_1 "$CAPTURE_MINUTES"
       - name: Upload compact segment 1
