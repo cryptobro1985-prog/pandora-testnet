@@ -69,17 +69,17 @@ jobs:
       - name: Aggregate raw trades to 5-second microstructure
         shell: bash
         run: |
-          START="\${{ matrix.chunk }}"
-          START="\${START%%:*}"
-          END="\${{ matrix.chunk }}"
-          END="\${END##*:}"
+          START="${{ matrix.chunk }}"
+          START="${START%%:*}"
+          END="${{ matrix.chunk }}"
+          END="${END##*:}"
           python research/hype_local_v5/micro.py \
             --start "$START" \
             --end "$END" \
-            --output "out/micro_\${START}_\${END}"
+            --output "out/micro_${START}_${END}"
       - uses: actions/upload-artifact@v4
         with:
-          name: HYPE-H1-LOCAL-V5-MICRO5S-\${{ strategy.job-index }}
+          name: HYPE-H1-LOCAL-V5-MICRO5S-${{ strategy.job-index }}
           path: out/micro_*
           if-no-files-found: error
 
