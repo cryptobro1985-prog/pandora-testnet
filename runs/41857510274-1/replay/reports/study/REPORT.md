@@ -1,0 +1,69 @@
+# HYPE H1 causal study — measured run
+
+Status: **blocked**. No real orders.
+
+## Data and checks
+
+```json
+{
+  "status": "blocked",
+  "final_oos_evaluated": false,
+  "input_files": [
+    {
+      "path": "inputs/micro_2026-10-04_2026-10-08/HYPE_micro5s_2026-10-04_2026-10-08.csv.gz",
+      "size_bytes": 4060568,
+      "sha256": "537025f29fb4f40844d9bec990c41f427d7ba9f569ace7a5e0cf06bcd67f1de7"
+    },
+    {
+      "path": "inputs/micro_2026-10-09_2026-10-13/HYPE_micro5s_2026-10-09_2026-10-13.csv.gz",
+      "size_bytes": 3658047,
+      "sha256": "0107f8bd2c447bc90a6348431ccdce66c0c539cdd66e0ce120a98ffa5877d3be"
+    },
+    {
+      "path": "inputs/micro_2026-10-14_2026-10-18/HYPE_micro5s_2026-10-14_2026-10-18.csv.gz",
+      "size_bytes": 4739344,
+      "sha256": "9755e2a4d5027c60be2b66ecaab6e485caed6899ac3cd2987fca3779a22a691d"
+    },
+    {
+      "path": "inputs/micro_2026-10-19_2026-10-23/HYPE_micro5s_2026-10-19_2026-10-23.csv.gz",
+      "size_bytes": 5086923,
+      "sha256": "ab41945f53894272c8f8d61866d85217acc8ec1fd4a057c9f4eb643ac9582892"
+    },
+    {
+      "path": "inputs/micro_2026-10-24_2026-10-28/HYPE_micro5s_2026-10-24_2026-10-28.csv.gz",
+      "size_bytes": 4954191,
+      "sha256": "26653b0531aba7462d4b6e29afdac69684076dac9525e4448d73f2401fc1fbc8"
+    },
+    {
+      "path": "inputs/micro_2026-10-29_2026-11-02/HYPE_micro5s_2026-10-29_2026-11-02.csv.gz",
+      "size_bytes": 6018139,
+      "sha256": "ad1816ade2270e696f4490f060d160d54418b68130fdac1e93d168cbf87b881d"
+    }
+  ],
+  "observed_rows": 456505,
+  "coverage": {
+    "rows": 456505,
+    "covered_fraction": 0.8806037808641975,
+    "first_start_ms": 1791072000000,
+    "last_end_ms": 1793664000000
+  },
+  "historical_oi": {
+    "status": "unavailable",
+    "error": "HTTP Error 403: Forbidden",
+    "observations_synthesized": false
+  },
+  "error": "ValueError: insufficient observed coverage; need >=99% of required window: {\"rows\": 342440, \"covered_fraction\": 0.8616143317230274, \"first_start_ms\": 1791072000000, \"last_end_ms\": 1793059200000}",
+  "traceback": "Traceback (most recent call last):\n  File \"/home/runner/work/pandora-testnet/pandora-testnet/research/hype_local_v5/ci_run.py\", line 81, in main\n    selected=pipeline.discover(rows,args.output,sources)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/runner/work/pandora-testnet/pandora-testnet/research/hype_local_v5/pipeline.py\", line 126, in discover\n    cov = check_coverage(history,WARMUP,OOS)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/runner/work/pandora-testnet/pandora-testnet/research/hype_local_v5/pipeline.py\", line 83, in check_coverage\n    raise ValueError('insufficient observed coverage; need >=99% of required window: '+json.dumps(cov))\nValueError: insufficient observed coverage; need >=99% of required window: {\"rows\": 342440, \"covered_fraction\": 0.8616143317230274, \"first_start_ms\": 1791072000000, \"last_end_ms\": 1793059200000}\n",
+  "market_metrics": null
+}
+```
+
+## Interpretation
+
+The score is an uncalibrated sequential heuristic; it is not a probability.
+A 100% sample precision is not a guarantee of future precision.
+The reference is strict offline L6/K2 with same-side collapse; it is not live evidence.
+Final OOS was evaluated once only if discovery selected an eligible rule.
+Historical OI/book/liquidations are not synthesized. Missing ablations are unmeasured.
+Any existing forward artifact was already observed by prior research and is a forward sample, not a new untouched test.
+Only outputs with actual counts establish a measurement; absent values mean unmeasured.
