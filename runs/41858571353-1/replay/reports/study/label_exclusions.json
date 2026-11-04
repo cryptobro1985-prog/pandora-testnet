@@ -1,0 +1,18 @@
+[
+  {
+    "hour_ms": 1791100800000,
+    "reason": "missing_hour"
+  },
+  {
+    "hour_ms": 1791104400000,
+    "reason": "missing_hour"
+  },
+  {
+    "hour_ms": 1791108000000,
+    "reason": "missing_hour"
+  },
+  {
+    "hour_ms": 1792270800000,
+    "reason": "ambiguous_high_low_order"
+  }
+]

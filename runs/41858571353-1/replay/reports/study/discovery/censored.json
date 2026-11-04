@@ -1,0 +1,145 @@
+[
+  {
+    "candidate_id": 475,
+    "episode_id": 32,
+    "side": "LOW",
+    "candidate_ts_ms": 1792273200000,
+    "ts_ms": 1792273200000,
+    "extreme_price": 77.023,
+    "extreme_ts_ms": null,
+    "extreme_interval_start_ms": 1792273080000,
+    "extreme_interval_end_ms": 1792273140000,
+    "extreme_available_ms": 1792273140000,
+    "anchor_side": "HIGH",
+    "anchor_price": 80.463,
+    "anchor_ts_ms": 1792223040000,
+    "status": "CONFIRMED_LOCAL",
+    "score": 0.801404776697722,
+    "score_is_probability": false,
+    "confirmation_ts_ms": 1792275300000,
+    "confirmation_price": 78.315,
+    "invalidation_reason": null,
+    "features": {
+      "ts_ms": 1792275300000,
+      "completed_h1_count": 329,
+      "atr_h1": 0.597214285714287,
+      "directional_move_3h": -0.010963274297071779,
+      "directional_move_6h": -0.005271266504539129,
+      "h1_range": 2.3329999999999984,
+      "flow_coverage_seconds": 300.0,
+      "flow_imbalance": 0.6451594719362573,
+      "gap_before": false,
+      "buy_notional_60s": 193510.17758000016,
+      "sell_notional_60s": 41737.749299999996,
+      "flow_imbalance_60s": 0.6451594719362573,
+      "buy_efficiency_60s": 1.2144064097240917e-06,
+      "sell_efficiency_60s": 0.0,
+      "price_displacement_60s": 0.23499999999999943,
+      "buy_notional_300s": 651550.3054900002,
+      "sell_notional_300s": 192352.19054000004,
+      "flow_imbalance_300s": 0.5441364578375129,
+      "buy_efficiency_300s": 5.233671093800562e-07,
+      "sell_efficiency_300s": 0.0,
+      "price_displacement_300s": 0.340999999999994,
+      "oi_delta_30s": null,
+      "oi_delta_60s": null,
+      "oi_delta_180s": null,
+      "oi_delta_300s": null,
+      "oi_delta_900s": null,
+      "open_interest": null,
+      "oi_age_ms": null,
+      "oi_impulse": null,
+      "oi_acceleration": null,
+      "oi_zscore": null,
+      "oi_effective_end_ms": null,
+      "oi_sampling_interval_ms": 0,
+      "oi_availability_assumed": false,
+      "long_liq_notional_5s": null,
+      "short_liq_notional_5s": null,
+      "long_liq_notional_15s": null,
+      "short_liq_notional_15s": null,
+      "long_liq_notional_60s": null,
+      "short_liq_notional_60s": null,
+      "bid_replenishment_ratio_60s": null,
+      "ask_replenishment_ratio_60s": null,
+      "book_ratio_is_proxy": false,
+      "price_oi_quadrant": null,
+      "swing_amplitude": 3.4399999999999977,
+      "maturity_atr": 5.760076545867703,
+      "retracement_fraction": 0.37558139534883794,
+      "survival_seconds": 2160.0,
+      "price_acceptance": 1.0,
+      "score_components": {
+        "structure": 1.0,
+        "retracement": 0.9389534883720948,
+        "survival": 0.9726762775527075,
+        "price_acceptance": 1.0,
+        "flow_persistence": 0.5441364578375129,
+        "new_side_efficiency": 1.0,
+        "old_side_efficiency_decay": 0.0
+      }
+    },
+    "stage_history": [
+      {
+        "stage": "STRUCTURAL_MATURITY",
+        "ts_ms": 1792273200000,
+        "source_ts_ms": 1792273200000,
+        "measurements": {
+          "maturity_atr": 7.218225419664252
+        }
+      },
+      {
+        "stage": "RUNNING_EXTREME",
+        "ts_ms": 1792273200000,
+        "source_ts_ms": 1792273140000,
+        "measurements": {
+          "extreme_price": 77.023
+        }
+      },
+      {
+        "stage": "CLIMAX",
+        "ts_ms": 1792273200000,
+        "source_ts_ms": 1792273140000,
+        "measurements": {
+          "activity_ratio": 2.386163872639147
+        }
+      },
+      {
+        "stage": "EVIDENCE_ACCUMULATION",
+        "ts_ms": 1792273200000,
+        "source_ts_ms": 1792273200000,
+        "measurements": {
+          "score_kind": "uncalibrated_heuristic"
+        }
+      },
+      {
+        "stage": "ABSORPTION",
+        "ts_ms": 1792274760000,
+        "source_ts_ms": 1792274760000,
+        "measurements": {
+          "activity_ratio": 1.2958474516954723,
+          "efficiency_decay": 1.0,
+          "interpretation": "price-response proxy; passive fills are not identified"
+        }
+      },
+      {
+        "stage": "EARLY_CONTROL_TRANSFER",
+        "ts_ms": 1792274880000,
+        "source_ts_ms": 1792274880000,
+        "measurements": {
+          "flow_imbalance_60s": 0.06980425105861227,
+          "price_displacement_60s": 0.06700000000000728
+        }
+      },
+      {
+        "stage": "CONFIRMED_LOCAL",
+        "ts_ms": 1792275300000,
+        "source_ts_ms": 1792275300000,
+        "measurements": {
+          "score": 0.801404776697722
+        }
+      }
+    ],
+    "evaluation_status": "reference_unknown_censored"
+  }
+]

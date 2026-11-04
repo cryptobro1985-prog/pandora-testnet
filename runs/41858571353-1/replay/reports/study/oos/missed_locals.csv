@@ -1,0 +1,18 @@
+evaluation_status,extreme_interval_end_ms,extreme_interval_start_ms,extreme_price,hour_ms,label_available_ms,label_id,reason,reference_finalized,reference_finalized_ms,side
+missed,1793088240000,1793088180000,78.328,1793088000000,1793098800000,58,first accepted signal in reference swing absent or false,True,1793106000000,HIGH
+missed,1793153100000,1793153040000,82.082,1793152800000,1793163600000,60,first accepted signal in reference swing absent or false,True,1793178000000,HIGH
+missed,1793170800000,1793170740000,81.026,1793167200000,1793178000000,61,first accepted signal in reference swing absent or false,True,1793192400000,LOW
+missed,1793181900000,1793181840000,82.585,1793181600000,1793192400000,62,first accepted signal in reference swing absent or false,True,1793203200000,HIGH
+missed,1793195340000,1793195280000,79.473,1793192400000,1793203200000,63,first accepted signal in reference swing absent or false,True,1793228400000,LOW
+missed,1793217780000,1793217720000,81.908,1793217600000,1793228400000,64,first accepted signal in reference swing absent or false,True,1793253600000,HIGH
+missed,1793244660000,1793244600000,78.145,1793242800000,1793253600000,65,first accepted signal in reference swing absent or false,True,1793300400000,LOW
+missed,1793291460000,1793291400000,97.052,1793289600000,1793300400000,66,first accepted signal in reference swing absent or false,True,1793329200000,HIGH
+missed,1793319840000,1793319780000,88.53,1793318400000,1793329200000,67,first accepted signal in reference swing absent or false,True,1793354400000,LOW
+missed,1793343900000,1793343840000,93.82,1793343600000,1793354400000,68,first accepted signal in reference swing absent or false,True,1793379600000,HIGH
+missed,1793369400000,1793369340000,90.445,1793368800000,1793379600000,69,first accepted signal in reference swing absent or false,True,1793383200000,LOW
+missed,1793457060000,1793457000000,86.2,1793455200000,1793466000000,71,first accepted signal in reference swing absent or false,True,1793505600000,LOW
+missed,1793497440000,1793497380000,88.578,1793494800000,1793505600000,72,first accepted signal in reference swing absent or false,True,1793530800000,HIGH
+missed,1793521320000,1793521260000,87.08,1793520000000,1793530800000,73,first accepted signal in reference swing absent or false,True,1793545200000,LOW
+missed,1793535960000,1793535900000,88.385,1793534400000,1793545200000,74,first accepted signal in reference swing absent or false,True,1793570400000,HIGH
+missed,1793562120000,1793562060000,86.563,1793559600000,1793570400000,75,first accepted signal in reference swing absent or false,True,1793602800000,LOW
+missed,1793592300000,1793592240000,88.985,1793592000000,1793602800000,76,first accepted signal in reference swing absent or false,True,1793656800000,HIGH

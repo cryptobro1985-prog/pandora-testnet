@@ -1,10 +1,271 @@
 {
-  "stage": "started",
+  "stage": "replay",
   "source_commit": "39559f578c3df59b2b3a597f24d18fedd7b79299",
   "run_id": "41858571353",
   "run_attempt": "1",
   "report_branch": "research/hype-local-v5-results",
-  "reports": [],
+  "reports": [
+    {
+      "path": "reports/study/OOS_CONSUMED_5ecf4756433ae201314eb7af2d1bcedd86ace17052327d046580c5d7b77d77c1.json",
+      "bytes": 1674,
+      "sha256": "704460b2c9360e19d8942a90b3a7032b23b68c0ee120b92089f9e519f6389151"
+    },
+    {
+      "path": "reports/study/REPORT.md",
+      "bytes": 7276,
+      "sha256": "e58577f9134b1e5c6c56496b1e59aa052b44f86753dae9b4572d9f11587c96e4"
+    },
+    {
+      "path": "reports/study/discovery/candidates.csv",
+      "bytes": 2053889,
+      "sha256": "061c96892c81a85d7dad3b6e9a6f2215266bebc305f7a0c86677e9fa916c9093"
+    },
+    {
+      "path": "reports/study/discovery/candidates.json.gz",
+      "bytes": 237649,
+      "sha256": "5efeceaf8ada7a62f7e7abd63e576f12fd982614758a39b653b0f5d24445984b"
+    },
+    {
+      "path": "reports/study/discovery/censored.csv",
+      "bytes": 3680,
+      "sha256": "416193efc3504418bb06b1383d4fede8ff11a82839c32f6e28ebe6b60c11978e"
+    },
+    {
+      "path": "reports/study/discovery/censored.json",
+      "bytes": 4537,
+      "sha256": "5a5e84ab50761d0cba64a199cb77d7a012983d9fca0ae78bbe39abddfef4f0d1"
+    },
+    {
+      "path": "reports/study/discovery/confidence_trajectories.csv.gz",
+      "bytes": 4540109,
+      "sha256": "db6015224901ec8f4d4a09b7c8df668da469d35055f13f75aae4741d82c51eaa"
+    },
+    {
+      "path": "reports/study/discovery/confidence_trajectories.json.gz",
+      "bytes": 4664322,
+      "sha256": "7107ce156c947ae3fff3bfe756f1b601363d2073a04bdbe19a3e8550e6c3613a"
+    },
+    {
+      "path": "reports/study/discovery/confirmed_locals.csv",
+      "bytes": 163502,
+      "sha256": "7844cf110a467b23fd238164217c381139a5b5219a6ddfa0005f5314b63711e9"
+    },
+    {
+      "path": "reports/study/discovery/confirmed_locals.json",
+      "bytes": 219449,
+      "sha256": "56cadd5176d4ae77d25f41497202e68a7b0a9f9ee625ee68ac44108045a6ddf0"
+    },
+    {
+      "path": "reports/study/discovery/engine_accepted_candidates.csv",
+      "bytes": 193936,
+      "sha256": "f5f4dc21ff979777fa711fa248a6b012e892dba6597cea5e1c669c1103fd527d"
+    },
+    {
+      "path": "reports/study/discovery/engine_accepted_candidates.json",
+      "bytes": 258085,
+      "sha256": "9989de1b99bcb211b5cfe03302741303427e5592a3862131ff0f1279a39a2f63"
+    },
+    {
+      "path": "reports/study/discovery/false_locals.csv",
+      "bytes": 61511,
+      "sha256": "309818a20e98427c6c14122cbf94633ebf54313c1bc11f5df5b6e5127c5bf620"
+    },
+    {
+      "path": "reports/study/discovery/false_locals.json",
+      "bytes": 81344,
+      "sha256": "9177361c3a577e1639b948d09824c02750a3e5b7e81d8d5e7c9c4f6844bed0ac"
+    },
+    {
+      "path": "reports/study/discovery/first_accepted_candidates.csv",
+      "bytes": 183309,
+      "sha256": "4486a27f8213728cdda4c8fe9e50e30a891321369e4c6c2fb02161f633f06078"
+    },
+    {
+      "path": "reports/study/discovery/first_accepted_candidates.json",
+      "bytes": 247308,
+      "sha256": "429df017d4d1ec4291c9c393534ddb0937ac6225a1a7795fc21feed2a45d0616"
+    },
+    {
+      "path": "reports/study/discovery/metrics.json",
+      "bytes": 1513,
+      "sha256": "625b9514b3f7774c8afc0111e145268b5ee1c6120bc5c306f4675a2913337f91"
+    },
+    {
+      "path": "reports/study/discovery/missed_locals.csv",
+      "bytes": 2636,
+      "sha256": "8b0bcb96209bdf44972052dff1e7e6f7d580cdfa73afa0e730cc585f8db85792"
+    },
+    {
+      "path": "reports/study/discovery/missed_locals.json",
+      "bytes": 6849,
+      "sha256": "64f2ff95a22bf167a63126cddb77f96ad7a961c4621154993fa5e6eac57b8dfd"
+    },
+    {
+      "path": "reports/study/discovery/swing_episodes.csv",
+      "bytes": 41175,
+      "sha256": "1621c4620c0babeb237989793713121a3fcc935fd23430f6d2ad64961c7b97a4"
+    },
+    {
+      "path": "reports/study/discovery/swing_episodes.json",
+      "bytes": 65852,
+      "sha256": "b2e0dd1c380e503d6e1882c180f6c7a369ac6f6e883db8c991af906e382b35e3"
+    },
+    {
+      "path": "reports/study/inputs/0-HYPE_minutes.csv.gz",
+      "bytes": 2029209,
+      "sha256": "45bc63998f1a7ca3a9c50bf86601d25e249cdd1d242008998c1d482a6f1c62ce"
+    },
+    {
+      "path": "reports/study/inputs/1-HYPE_micro5s_2026-10-04_2026-10-08.csv.gz",
+      "bytes": 4060568,
+      "sha256": "537025f29fb4f40844d9bec990c41f427d7ba9f569ace7a5e0cf06bcd67f1de7"
+    },
+    {
+      "path": "reports/study/inputs/2-HYPE_micro5s_2026-10-09_2026-10-13.csv.gz",
+      "bytes": 3658047,
+      "sha256": "0107f8bd2c447bc90a6348431ccdce66c0c539cdd66e0ce120a98ffa5877d3be"
+    },
+    {
+      "path": "reports/study/inputs/3-HYPE_micro5s_2026-10-14_2026-10-18.csv.gz",
+      "bytes": 4739344,
+      "sha256": "9755e2a4d5027c60be2b66ecaab6e485caed6899ac3cd2987fca3779a22a691d"
+    },
+    {
+      "path": "reports/study/inputs/4-HYPE_micro5s_2026-10-19_2026-10-23.csv.gz",
+      "bytes": 5086923,
+      "sha256": "ab41945f53894272c8f8d61866d85217acc8ec1fd4a057c9f4eb643ac9582892"
+    },
+    {
+      "path": "reports/study/inputs/5-HYPE_micro5s_2026-10-24_2026-10-28.csv.gz",
+      "bytes": 4954191,
+      "sha256": "26653b0531aba7462d4b6e29afdac69684076dac9525e4448d73f2401fc1fbc8"
+    },
+    {
+      "path": "reports/study/inputs/6-HYPE_micro5s_2026-10-29_2026-11-02.csv.gz",
+      "bytes": 6018139,
+      "sha256": "ad1816ade2270e696f4490f060d160d54418b68130fdac1e93d168cbf87b881d"
+    },
+    {
+      "path": "reports/study/label_exclusions.json",
+      "bytes": 287,
+      "sha256": "0c2c93d4f7fb723f9b3a8b74f3111fa0b21b11aa595cb542c15526e18b747047"
+    },
+    {
+      "path": "reports/study/oos/candidates.csv.gz",
+      "bytes": 278585,
+      "sha256": "9d8f0edbc4befa3cabecc3c0cea3ed032106aed5315cb5ad0d6d0c3f408dde8e"
+    },
+    {
+      "path": "reports/study/oos/candidates.json.gz",
+      "bytes": 289373,
+      "sha256": "94efb47a2c3d0965ec03e943c5bd28d37309d1a4a1de9e71c443c2b807ff49a3"
+    },
+    {
+      "path": "reports/study/oos/censored.csv",
+      "bytes": 8,
+      "sha256": "7703741f562b3f2c276fc35a9aba6f2de114df21e80f56ebf257cdb5ea03115c"
+    },
+    {
+      "path": "reports/study/oos/censored.json",
+      "bytes": 3,
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "path": "reports/study/oos/confidence_trajectories.csv.gz",
+      "bytes": 6186400,
+      "sha256": "f37a0e6de4cb7764bf5da46905e526880dec7ce8e1f0385c9cf42234301e9926"
+    },
+    {
+      "path": "reports/study/oos/confidence_trajectories.json.gz",
+      "bytes": 6355782,
+      "sha256": "f8017d89995bae26b6d818f49887e9fa163250c1e6c731f9ac7899c1bd97f53e"
+    },
+    {
+      "path": "reports/study/oos/confirmed_locals.csv",
+      "bytes": 183421,
+      "sha256": "8e5c5af7e43b8c123c4d7b3f3b698b16f02e345704fde907e6e939858db1f11d"
+    },
+    {
+      "path": "reports/study/oos/confirmed_locals.json",
+      "bytes": 246256,
+      "sha256": "99e2a6bd117a021f3e360e4531c5ccd95595d4c14fc0213dac3ee9da8eb0e401"
+    },
+    {
+      "path": "reports/study/oos/engine_accepted_candidates.csv",
+      "bytes": 33481,
+      "sha256": "c0b5e6fc48473753a9ce9c500299236d6ffc71ec9976712d8d0585e2f33bc445"
+    },
+    {
+      "path": "reports/study/oos/engine_accepted_candidates.json",
+      "bytes": 44072,
+      "sha256": "a3d81374b977f5de9b79de997a122bd3b17748fe136d7696bd1ab675006801b4"
+    },
+    {
+      "path": "reports/study/oos/false_locals.csv",
+      "bytes": 6019,
+      "sha256": "6588a006a98571b3c935f203dce05baa33b8fe5d3130e809d0432b81c65910e5"
+    },
+    {
+      "path": "reports/study/oos/false_locals.json",
+      "bytes": 7356,
+      "sha256": "eb2388b3d051be5ac6c639b0eb0698ed3b114ae18c954f7a0093fe5b02f92f2e"
+    },
+    {
+      "path": "reports/study/oos/first_accepted_candidates.csv",
+      "bytes": 28074,
+      "sha256": "9d4904fa16305e284aabcd0d95d88c31ca8a78395429ea5c88f0cf9f9a2ff67f"
+    },
+    {
+      "path": "reports/study/oos/first_accepted_candidates.json",
+      "bytes": 37285,
+      "sha256": "4bcf6ae5bf5282f9d248fc63d67ea23864f05b51b7523dcbe3420ee4f0df8225"
+    },
+    {
+      "path": "reports/study/oos/label_exclusions.json",
+      "bytes": 287,
+      "sha256": "0c2c93d4f7fb723f9b3a8b74f3111fa0b21b11aa595cb542c15526e18b747047"
+    },
+    {
+      "path": "reports/study/oos/metrics.json",
+      "bytes": 1416,
+      "sha256": "0867665020101083a46bcbbcd9363221b6fb8ee0edd144896c00959d21dd2e6c"
+    },
+    {
+      "path": "reports/study/oos/missed_locals.csv",
+      "bytes": 2796,
+      "sha256": "58a181177a7473e06887d02081701bf3cc0971fd997d7c13fb3bd2522ec18dca"
+    },
+    {
+      "path": "reports/study/oos/missed_locals.json",
+      "bytes": 7283,
+      "sha256": "09ba39edd157e7f731f5c97710cf0001a4df092a5c5bbb3318de0f5fa934398f"
+    },
+    {
+      "path": "reports/study/oos/swing_episodes.csv",
+      "bytes": 51276,
+      "sha256": "439bc3dbc56f2217520db63737bf0b070dc5daf7198795bca69885aa11cd07c5"
+    },
+    {
+      "path": "reports/study/oos/swing_episodes.json",
+      "bytes": 80601,
+      "sha256": "65486d9c0c57a482ae177b25f4bd374683bdd88e78a9b08685c9f98873b4eb2e"
+    },
+    {
+      "path": "reports/study/run_status.json",
+      "bytes": 6532,
+      "sha256": "087f7bfd112e953d6063773c03e0e87a16f31f6a894ce8d299cec0bfdb985148"
+    },
+    {
+      "path": "reports/study/selection.json",
+      "bytes": 2198,
+      "sha256": "8847b70480a720915e95016b8b0729cebea3a2331d5fc2c691724cf1baa8893e"
+    },
+    {
+      "path": "reports/study/walk_forward_ablation.json",
+      "bytes": 33134,
+      "sha256": "4366546f4cfbf90ebf46b34b164d915fe0a5e1927b3c48a9584aa7f6ba0eecde"
+    }
+  ],
   "orders_enabled": false,
   "note": "Stage is execution progress, not proof that market checks passed; read included run_status.json"
 }
