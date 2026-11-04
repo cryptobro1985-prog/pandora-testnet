@@ -1,36 +1,10 @@
 {
-  "stage": "final",
-  "source_commit": "7d0dffc4195dabfc7ed0e242689dba0b0568a39a",
-  "run_id": "41891375013",
+  "stage": "started",
+  "source_commit": "effc2c4faa2075a1378e2fa0791f016bcd279ed3",
+  "run_id": "41891827721",
   "run_attempt": "1",
   "report_branch": "research/hype-local-v5-results",
-  "reports": [
-    {
-      "path": "reports/study/REPORT.md",
-      "bytes": 2779,
-      "sha256": "adfedeb63816a5f2b83fe23734776be5ae49c7454621043a4667c685994acc83"
-    },
-    {
-      "path": "reports/study/ci_job_outcomes.json",
-      "bytes": 425,
-      "sha256": "a5d5d126cc82d9edd88de8e05f088d680b0aa11c50fea751d9abc34afccc78b7"
-    },
-    {
-      "path": "reports/study/run_status.json",
-      "bytes": 2051,
-      "sha256": "da7c69d228b4f51467b276e6d6927d99693ff9a1781812a4f175af957917122e"
-    },
-    {
-      "path": "reports/forward/REPORT.md",
-      "bytes": 1375,
-      "sha256": "2512ae45e28e300b86afd9eabde43f73fc8ca8a594a8a61037cc8fb60ac70027"
-    },
-    {
-      "path": "reports/forward/run_status.json",
-      "bytes": 630,
-      "sha256": "1456e9c9f323d6bc47eff58fd15fb11d5ba7cf8b1bc058717d14ac38d335bd5d"
-    }
-  ],
+  "reports": [],
   "orders_enabled": false,
   "note": "Stage is execution progress, not proof that market checks passed; read included run_status.json"
 }
