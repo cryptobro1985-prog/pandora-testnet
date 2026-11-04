@@ -110,6 +110,10 @@ def pack_events(src:Path,dst:Path):
                 if isinstance(data,list): data=data[0] if data else {}
                 small={k:data[k] for k in TICKER_KEYS if k in data}
                 yield [3,recv,int(msg.get("ts") or 0),small]
+            elif topic.startswith("kline."):
+                # Keep candle strings losslessly; they are already compact and
+                # must remain causal by preserving receive + exchange timestamps.
+                yield [4,recv,int(msg.get("ts") or 0),topic,msg.get("data") or []]
             else:
                 yield [9,recv,receipt,endpoint,msg]
     n=pack_stream(dst,records())
@@ -193,7 +197,7 @@ def main():
         "# HYPE 110 compact research package\n\nAll 110 canonical points are covered. "
         "DIRECT values are stored. DERIVED values are reproducible from stored streams. "
         "POST_ANALYSIS values are outputs of frozen-v6 replay / 12h evaluation.\n\n"
-        "events.mpk.xz codes: 0=orderbook, 1=trade, 2=liquidation, 3=ticker, 9=control. "
+        "events.mpk.xz codes: 0=orderbook, 1=trade, 2=liquidation, 3=ticker, 4=kline, 9=control. "
         "Price/qty are scaled integers; scales are in PACK_MANIFEST.json. Use decode_compact.py.\n\n"
         "Absorption is evidence/proxy only, never identification of passive participants.\n",encoding="utf-8")
     print(json.dumps(manifest),flush=True)
