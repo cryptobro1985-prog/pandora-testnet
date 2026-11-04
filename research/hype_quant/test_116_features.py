@@ -54,6 +54,9 @@ def main():
     for k in range(1,7):
         ts=t0+5+k*5_000
         price=100.0+0.01*k
+        # Keep real executed tape present inside every 5-second window.
+        s.update_event({"kind":"trade","received_ts_ms":ts-500,"exchange_ts_ms":ts-520,
+                        "side":"Buy" if k%2 else "Sell","price":price-0.001,"qty":1.0+k*0.1})
         micro={"ts_ms":ts,"mid":price,"best_bid":price-0.005,"best_ask":price+0.005,
                "spread_bps":1.0,"book_valid":True,"book_imbalance_5":0.1,"book_imbalance_25":0.08,
                "bid_depth_5":100000.0,"ask_depth_5":90000.0,"bid_depth_25":300000.0,"ask_depth_25":280000.0,
