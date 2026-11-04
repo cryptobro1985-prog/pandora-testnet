@@ -512,14 +512,30 @@ class FeatureState:
             if ("notional" in k or "depth" in k or k.endswith("_volume") or k in ("volume_24h","turnover_24h")) and v>=0:
                 x["log_"+k]=math.log1p(v)
 
-        # Contract point support is marked when the corresponding causal feature
-        # family is present. 41-43 are represented by causal flow-reversal
-        # attempts/proxies; frozen-v6 outcome labels remain 83..110 TARGET_EVAL.
-        self._mark(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,
-                   24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,
-                   44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,
-                   64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,82,
-                   111,112,113,114,115,116)
+        # Mark only families that are actually present in this state.
+        self._mark(78,79,116)
+        if self.trades:
+            self._mark(12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,41,42,43)
+        if bids or asks:
+            self._mark(44,45,46,47,48,49,50,51,52,53,54,55,56,57)
+        if current_oi is not None:
+            self._mark(58,59,60,61)
+        if any(k in x for k in ("funding_rate","volume_24h","turnover_24h")):
+            self._mark(62,63,64)
+        if self.liqs or any(k.startswith("liq_") for k in x):
+            self._mark(65,66,67,68,69,70,71,72,73,74,75,76)
+        if self.last_raw_received_ts is not None:
+            self._mark(77,80,116)
+        if self.server_time or "struct_runner_clock_offset_ms" in x:
+            self._mark(111)
+        if self.instrument:
+            self._mark(112)
+        if self.account_ratio or "struct_long_short_holder_ratio" in x:
+            self._mark(113)
+        if "basis_bps" in x or "struct_basis_bps" in x:
+            self._mark(114)
+        if "oi_notional" in x or "struct_oi_notional" in x:
+            self._mark(115)
 
         # Remove any nonfinite values before the learner sees them.
         x={k:float(v) for k,v in x.items() if finite(v)}
