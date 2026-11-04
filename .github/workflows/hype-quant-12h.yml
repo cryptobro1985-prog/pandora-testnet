@@ -1,5 +1,5 @@
 name: HYPE Quant Learner 12h
-# full-116-online-v3
+# full-116-online-v4
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: hype-quant-12h-v3-${{ github.ref }}
+  group: hype-quant-12h-v4-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -103,7 +103,7 @@ jobs:
 
   segment_2:
     needs: segment_1
-    if: ${{ always() && !cancelled() }}
+    if: ${{ success() }}
     runs-on: ubuntu-latest
     timeout-minutes: 195
     steps:
@@ -146,7 +146,7 @@ jobs:
 
   segment_3:
     needs: segment_2
-    if: ${{ always() && !cancelled() }}
+    if: ${{ success() }}
     runs-on: ubuntu-latest
     timeout-minutes: 195
     steps:
@@ -189,7 +189,7 @@ jobs:
 
   segment_4:
     needs: segment_3
-    if: ${{ always() && !cancelled() }}
+    if: ${{ success() }}
     runs-on: ubuntu-latest
     timeout-minutes: 195
     steps:
@@ -232,7 +232,7 @@ jobs:
 
   final:
     needs: segment_4
-    if: ${{ always() && !cancelled() }}
+    if: ${{ success() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
