@@ -1,0 +1,41 @@
+{
+  "observed_at_utc": "2026-11-04T14:04:39.044261+00:00",
+  "probes": [
+    {
+      "url": "https://api.github.com/repos/cryptobro1985-prog/pandora-testnet/actions/artifacts/13278474318",
+      "status": "transport_error",
+      "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
+    },
+    {
+      "url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-04.csv.gz",
+      "status": "transport_error",
+      "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
+    },
+    {
+      "url": "https://api.bybit.com/v5/market/open-interest?category=linear&symbol=HYPEUSDT&intervalTime=5min&limit=1",
+      "status": "transport_error",
+      "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
+    }
+  ],
+  "files": [],
+  "errors": [],
+  "artifact_metadata": {
+    "13278474318": "universal-minute-HYPE",
+    "13279637097": "PANDORA-UNIVERSAL-30D-FINAL",
+    "13319113404": "HYPE-H1-LOCAL-V5-TICKS-0",
+    "13318817968": "HYPE-H1-LOCAL-V5-TICKS-1",
+    "13319258376": "HYPE-H1-LOCAL-V5-TICKS-2",
+    "13319686512": "HYPE-H1-LOCAL-V5-TICKS-3",
+    "13318779319": "HYPE-H1-LOCAL-V5-TICKS-4",
+    "13319471883": "HYPE-H1-LOCAL-V5-TICKS-5",
+    "13321242644": "HYPE-H1-LOCAL-V5-LIVE-MICROSTRUCTURE"
+  },
+  "historical_microstructure": {
+    "book": "not available from candle or executed-trade archives",
+    "liquidations": "not inferable from executed trades",
+    "oi": "5min REST history does not provide historical 30s OI"
+  },
+  "fetch_requested": true,
+  "complete": false,
+  "downloaded_files": 0
+}

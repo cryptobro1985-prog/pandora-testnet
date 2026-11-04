@@ -1,0 +1,12 @@
+{
+  "historical_commit": "b76aa569de7f5120a76da3bbe1df30187c7a8c96",
+  "historical_executor": "GitHub-hosted Actions runner",
+  "historical_authentication": "GH_TOKEN from github.token; actions:read",
+  "replayed_command": "gh api /repos/cryptobro1985-prog/pandora-testnet/actions/artifacts/13278474318/zip",
+  "current_execution_exit_code": 1,
+  "current_zip_bytes": 0,
+  "current_error": "Forbidden",
+  "workflow_prepared": ".github/workflows/hype-local-v5-artifact-recovery.yml",
+  "workflow_dispatched": false,
+  "market_files_recovered": 0
+}

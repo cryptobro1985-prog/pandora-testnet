@@ -1,0 +1,78 @@
+name: PANDORA Universal 30D Research
+on:
+  push:
+    branches: [research/pandora-universal-30d-v1]
+    paths: ['.github/workflows/pandora-universal-30d.yml']
+permissions:
+  contents: read
+env:
+  PYTHONUNBUFFERED: '1'
+jobs:
+  aggregate:
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        symbol: [ZEC, HYPE, NEAR, SOL, ENA, 1000PEPE, DOGE, SUI, AAVE, WLD]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build compact 30-day executed-flow minute history
+        run: |
+          mkdir -p "$RUNNER_TEMP/raw" "$RUNNER_TEMP/minutes"
+          PYTHONPATH=scripts python scripts/universal_cli.py aggregate \
+            --symbol "${{ matrix.symbol }}" --start 2026-10-04 --end 2026-11-03 \
+            --cache "$RUNNER_TEMP/raw" --output "$RUNNER_TEMP/minutes"
+      - name: Upload compact history
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: universal-minute-${{ matrix.symbol }}
+          path: ${{ runner.temp }}/minutes/*
+          if-no-files-found: warn
+          retention-days: 7
+          compression-level: 6
+  optimize:
+    needs: aggregate
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install analysis dependencies
+        run: python -m pip install --disable-pip-version-check numpy pandas
+      - name: Download compact histories
+        uses: actions/download-artifact@v4
+        with:
+          pattern: universal-minute-*
+          path: research_inputs
+          merge-multiple: true
+      - name: Select strategy on discovery and evaluate untouched OOS
+        run: |
+          PYTHONPATH=scripts python scripts/universal_cli.py optimize \
+            --input research_inputs --output universal_final \
+            --split-date 2026-10-27 --candidates 320
+          mkdir -p universal_final/SOURCE
+          cp scripts/universal_*.py universal_final/SOURCE/
+          python -m json.tool universal_final/RESULTS.json >/dev/null
+          python -m json.tool universal_final/SELECTED_PARAMS.json >/dev/null
+      - name: Pack research result
+        run: |
+          cd universal_final
+          zip -qr PANDORA_UNIVERSAL_30D_RESEARCH.zip RESULTS.json SELECTED_PARAMS.json TRADES.csv DAILY_EQUITY.csv SOURCE
+      - name: Upload final research deliverables
+        uses: actions/upload-artifact@v4
+        with:
+          name: PANDORA-UNIVERSAL-30D-FINAL
+          path: universal_final/*
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 6

@@ -1,0 +1,59 @@
+name: HYPE Local v5 Recover Existing Research Artifacts
+
+# Same authenticated Actions artifact route used by commit b76aa569.
+# Manual only: saving or pushing research code does not trigger data jobs.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: hype-local-v5-artifact-recovery
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install research dependencies
+        run: python -m pip install -r research/hype_local_v5/requirements-research.txt
+      - name: Validate research contracts
+        id: validate
+        run: python -m unittest discover -s research/hype_local_v5/tests -v
+      - name: Recover original Actions artifacts with existing runner authentication
+        id: recover
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python research/hype_local_v5/acquire.py --fetch --source artifacts --output recovered
+      - name: Check original minute archive and run discovery only
+        if: ${{ !cancelled() && steps.validate.outcome == 'success' }}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess, sys
+          root = Path('recovered/artifacts/universal-minute-HYPE')
+          files = list(root.rglob('HYPE_minutes.csv.gz'))
+          if len(files) != 1:
+              raise SystemExit('Expected exactly one original HYPE minute archive')
+          subprocess.run([sys.executable, '-m', 'research.hype_local_v5.pipeline',
+                          'discover', '--bars', str(files[0]), '--output', 'study'], check=True)
+          PY
+      - name: Preserve recovered inputs, provenance and discovery result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-LOCAL-V5-RECOVERED-${{ github.run_id }}
+          path: |
+            recovered/acquisition.json
+            recovered/artifacts/
+            study/
+          if-no-files-found: error
+          retention-days: 14

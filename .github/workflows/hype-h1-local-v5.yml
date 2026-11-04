@@ -12,8 +12,70 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: hype-local-v5-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  announce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Publish observable start status through the results branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -m research.hype_local_v5.ci_publish --stage started --output ci-status
+
+  code_checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run causal engine, data, evaluation and acquisition regressions
+        run: |
+          python -m pip install -r research/hype_local_v5/requirements-research.txt
+          python -m unittest discover -s research/hype_local_v5/tests -v
+
+  recover_artifacts:
+    needs: code_checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Recover original artifacts with the runner's existing GitHub token
+        id: recover
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -m research.hype_local_v5.acquire --source artifacts --fetch --output recovered
+      - name: Preserve recovery evidence, including unavailable artifact diagnoses
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-H1-LOCAL-V5-RECOVERED
+          path: recovered
+          if-no-files-found: warn
+          retention-days: 7
+
   historical_ticks:
+    # The replay marker uses the genuine raw-derived 5s path below, avoiding
+    # duplicate downloads just to regenerate the existing minute aggregates.
+    if: ${{ !contains(github.event.head_commit.message, '[hype-replay]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -48,6 +110,7 @@ jobs:
 
 
   historical_micro5s:
+    needs: code_checks
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -65,7 +128,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install requests
+      - run: python -m pip install -r research/hype_local_v5/requirements-research.txt
       - name: Aggregate raw trades to 5-second microstructure
         shell: bash
         run: |
@@ -78,12 +141,14 @@ jobs:
             --end "$END" \
             --output "out/micro_${START}_${END}"
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: HYPE-H1-LOCAL-V5-MICRO5S-${{ strategy.job-index }}
           path: out/micro_*
           if-no-files-found: error
 
   live_microstructure:
+    needs: code_checks
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -91,12 +156,128 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install requests websockets
+      - run: python -m pip install -r research/hype_local_v5/requirements-research.txt
       - name: Capture live HYPE orderbook + trades + liquidations + ticker OI
         run: |
           python research/hype_local_v5/research.py             --mode live             --minutes 20             --output out/live_microstructure
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: HYPE-H1-LOCAL-V5-LIVE-MICROSTRUCTURE
           path: out/live_microstructure
           if-no-files-found: error
+
+  causal_replay:
+    needs: [code_checks, recover_artifacts, historical_micro5s]
+    if: ${{ always() && needs.code_checks.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download fresh raw-derived microstructure parts
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: HYPE-H1-LOCAL-V5-MICRO5S-*
+          path: inputs
+          merge-multiple: true
+      - name: Download recovered original inputs
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: HYPE-H1-LOCAL-V5-RECOVERED
+          path: recovered
+      - name: Run discovery, sealed OOS, ablation and provenance checks
+        id: replay
+        continue-on-error: true
+        run: >-
+          python -m research.hype_local_v5.ci_run
+          --bars-glob 'inputs/**/HYPE_micro5s_*.csv.gz'
+          --recovered recovered --output study
+      - name: Preserve complete replay outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-H1-LOCAL-V5-CAUSAL-STUDY
+          path: study
+          if-no-files-found: error
+          retention-days: 14
+      - name: Publish replay results or diagnosed failure
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -m research.hype_local_v5.ci_publish --stage replay --output ci-status --reports study
+      - name: Preserve the replay command's failure status
+        if: ${{ steps.replay.outcome != 'success' }}
+        run: exit 1
+
+  finalize:
+    needs: [announce, code_checks, recover_artifacts, historical_micro5s, causal_replay, live_microstructure]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download study, when produced
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: HYPE-H1-LOCAL-V5-CAUSAL-STUDY
+          path: study
+      - name: Download fresh forward observations, when produced
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: HYPE-H1-LOCAL-V5-LIVE-MICROSTRUCTURE
+          path: recovered/fresh_live
+      - name: Download original observations, when recoverable
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: HYPE-H1-LOCAL-V5-RECOVERED
+          path: recovered/prior
+      - name: Preserve actual upstream job outcomes
+        env:
+          JOB_OUTCOMES: ${{ toJSON(needs) }}
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          out = Path('study')
+          out.mkdir(exist_ok=True)
+          (out / 'ci_job_outcomes.json').write_text(json.dumps(json.loads(os.environ['JOB_OUTCOMES']), indent=2) + '\n')
+          PY
+      - name: Replay real forward observations without claiming a mature OOS sample
+        id: forward
+        if: ${{ needs.code_checks.result == 'success' }}
+        continue-on-error: true
+        run: python -m research.hype_local_v5.ci_run --forward-only --recovered recovered --output forward
+      - name: Publish final results and exact blocked/skipped outcomes
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -m research.hype_local_v5.ci_publish --stage final --output ci-status --reports study forward
+      - name: Preserve final reports as an Actions artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-H1-LOCAL-V5-FINAL-REPORTS
+          path: |
+            study
+            forward
+            ci-status
+          if-no-files-found: error
+          retention-days: 14
+      - name: Preserve failed validation and collection outcomes
+        if: ${{ needs.code_checks.result != 'success' || needs.historical_micro5s.result != 'success' || needs.causal_replay.result != 'success' || needs.live_microstructure.result != 'success' || steps.forward.outcome != 'success' }}
+        run: exit 1

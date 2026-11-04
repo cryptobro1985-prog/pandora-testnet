@@ -1,0 +1,17 @@
+{
+  "command": ".venv/bin/python -m unittest discover -s research/hype_local_v5/tests -v",
+  "tests_run": 59,
+  "elapsed_seconds": 1.822,
+  "result": "OK",
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "synthetic_test_inputs": true,
+  "market_data_downloaded_files": 0,
+  "market_accuracy_measured": false,
+  "final_market_oos_evaluated": false,
+  "pip_check": "No broken requirements found",
+  "production_runtime_modified": false,
+  "workflow_validation": "Both workflow files passed official actionlint; local bare-Git publication integration passed",
+  "remote_research_status": "prepared_for_authorized_push_trigger"
+}

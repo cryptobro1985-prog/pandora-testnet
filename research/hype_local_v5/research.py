@@ -321,7 +321,8 @@ def historical_ticks(start: str, end: str, outdir: Path) -> None:
 
 
 class LiveState:
-    def __init__(self):
+    def __init__(self, clock=None):
+        self.clock = clock or time.time
         self.bids: dict[float, float] = {}
         self.asks: dict[float, float] = {}
         self.trades = deque()
@@ -330,12 +331,41 @@ class LiveState:
         self.oi_prev = None
         self.oi_ts = None
         self.churn = defaultdict(float)
+        self.book_churn = deque()
         self.messages = defaultdict(int)
+        self.last_received = {}
+        self.coverage_since = None
+        self.book_valid = False
+        self.book_since = None
+        self.book_update_id = None
+        self.book_sequence = None
+        self.book_exchange_ts_ms = None
+        self.oi_exchange_ts_ms = None
+        self.book_invalidations = 0
+        self.trade_exchange_ts_ms = None
+        self.liq_exchange_ts_ms = None
+
+    def on_subscription(self, msg):
+        """Only a positive server ACK starts observed coverage, not sending args."""
+        if msg.get("op") == "subscribe" and msg.get("success") is True:
+            self.coverage_since = self.clock()
+            self.messages["subscription_ack"] += 1
+
+    def _reset_book(self, invalidation=True):
+        self.bids.clear()
+        self.asks.clear()
+        self.churn.clear()
+        self.book_churn.clear()
+        self.book_valid = False
+        self.book_since = None
+        self.book_invalidations += int(invalidation)
 
     @staticmethod
     def update_book_side(book: dict[float, float], changes: list[list[str]], label: str, churn):
         for p0, q0 in changes:
             p, q = float(p0), float(q0)
+            if not math.isfinite(p) or not math.isfinite(q) or p <= 0 or q < 0:
+                raise ValueError("invalid orderbook level")
             old = book.get(p, 0.0)
             if q == 0:
                 if old:
@@ -349,27 +379,64 @@ class LiveState:
                 book[p] = q
 
     def on_book(self, msg):
+        now = self.clock()
         data = msg.get("data") or {}
+        update_id = data.get("u")
+        seq = data.get("seq")
         if msg.get("type") == "snapshot":
-            self.bids = {float(p): float(q) for p, q in data.get("b", [])}
-            self.asks = {float(p): float(q) for p, q in data.get("a", [])}
+            self._reset_book(invalidation=False)
+            self.update_book_side(self.bids, data.get("b", []), "bid", defaultdict(float))
+            self.update_book_side(self.asks, data.get("a", []), "ask", defaultdict(float))
+            self.book_valid = True
+            self.book_since = now
         else:
-            self.update_book_side(self.bids, data.get("b", []), "bid", self.churn)
-            self.update_book_side(self.asks, data.get("a", []), "ask", self.churn)
+            # Cross-sequence is monotonic, not necessarily consecutive. Do not
+            # invent a seq+1 requirement across other instruments' updates.
+            stale = now-self.last_received.get("book", now) > 2
+            regressed = ((update_id is not None and self.book_update_id is not None and int(update_id) <= self.book_update_id)
+                         or (seq is not None and self.book_sequence is not None and int(seq) <= self.book_sequence))
+            if not self.book_valid or stale or regressed or update_id == 1:
+                self._reset_book()
+                self.messages["book_rejected_delta"] += 1
+                return
+            changes = defaultdict(float)
+            self.update_book_side(self.bids, data.get("b", []), "bid", changes)
+            self.update_book_side(self.asks, data.get("a", []), "ask", changes)
+            for key, value in changes.items():
+                self.churn[key] += value
+            self.book_churn.append((now, dict(changes)))
+        self.book_update_id = int(update_id) if update_id is not None else None
+        self.book_sequence = int(seq) if seq is not None else None
+        self.book_exchange_ts_ms = msg.get("ts")
+        self.last_received["book"] = now
         self.messages["book"] += 1
 
     def on_trade(self, msg):
-        now = time.time()
+        now = self.clock()
         for x in msg.get("data") or []:
             p = float(x.get("p", 0)); v = float(x.get("v", 0)); side = x.get("S")
+            if not math.isfinite(p) or not math.isfinite(v) or p <= 0 or v <= 0 or side not in ("Buy", "Sell"):
+                raise ValueError("invalid public executed trade")
+            if x.get("T") is not None:
+                exchange_ts = int(x["T"])
+                if exchange_ts > int(now*1000)+1000 or int(now*1000)-exchange_ts > 10_000:
+                    self.messages["stale_trade_rejected"] += 1
+                    self.coverage_since = None
+                    continue
+                self.trade_exchange_ts_ms = exchange_ts
             self.trades.append((now, side, p*v))
+        self.last_received["trade"] = now
         self.messages["trade"] += 1
 
     def on_liq(self, msg):
-        now = time.time()
+        now = self.clock()
         for x in msg.get("data") or []:
             p = float(x.get("p", 0)); v = float(x.get("v", 0)); side = x.get("S")
+            if not math.isfinite(p) or not math.isfinite(v) or p <= 0 or v <= 0 or side not in ("Buy", "Sell"):
+                raise ValueError("invalid liquidation event")
+            self.liq_exchange_ts_ms = x.get("T", msg.get("ts"))
             self.liqs.append((now, side, p*v))
+        self.last_received["liq"] = now
         self.messages["liq"] += 1
 
     def on_ticker(self, msg):
@@ -380,35 +447,48 @@ class LiveState:
         if oi is not None:
             try:
                 val = float(oi)
-                if self.oi != val:
-                    self.oi_prev = self.oi
-                    self.oi = val
-                    self.oi_ts = int(time.time()*1000)
+                if not math.isfinite(val) or val <= 0:
+                    raise ValueError("invalid OI")
+                self.oi_prev = self.oi
+                self.oi = val
+                # An unchanged OI observation is fresh evidence too.
+                self.oi_ts = int(self.clock()*1000)
+                self.oi_exchange_ts_ms = msg.get("ts")
             except Exception:
                 pass
         self.messages["ticker"] += 1
+        self.last_received["ticker"] = self.clock()
 
     def snapshot(self) -> dict[str, Any]:
-        now = time.time()
+        now = self.clock()
         while self.trades and self.trades[0][0] < now-60:
             self.trades.popleft()
         while self.liqs and self.liqs[0][0] < now-60:
             self.liqs.popleft()
+        while self.book_churn and self.book_churn[0][0] < now-60:
+            self.book_churn.popleft()
+
+        book_fresh = self.book_valid and now-self.last_received.get("book", 0) <= 2
 
         bids = sorted(self.bids.items(), reverse=True)
         asks = sorted(self.asks.items())
-        best_bid = bids[0][0] if bids else None
-        best_ask = asks[0][0] if asks else None
+        book_fresh = book_fresh and bool(bids and asks) and bids[0][0] < asks[0][0]
+        best_bid = bids[0][0] if bids and book_fresh else None
+        best_ask = asks[0][0] if asks and book_fresh else None
         mid = None if best_bid is None or best_ask is None else (best_bid+best_ask)/2
 
         def depth(rows, n):
             return sum(p*q for p, q in rows[:n])
         def flow(sec):
+            if self.coverage_since is None or now-self.coverage_since < sec:
+                return None, None, None
             b = sum(n for t,s,n in self.trades if t >= now-sec and s == "Buy")
             a = sum(n for t,s,n in self.trades if t >= now-sec and s == "Sell")
             den = b+a
-            return b, a, 0.0 if not den else (b-a)/den
+            return b, a, None if not den else (b-a)/den
         def liq(sec):
+            if self.coverage_since is None or now-self.coverage_since < sec:
+                return None, None
             # Bybit docs: S=Buy means a long position was liquidated.
             lng = sum(n for t,s,n in self.liqs if t >= now-sec and s == "Buy")
             sht = sum(n for t,s,n in self.liqs if t >= now-sec and s == "Sell")
@@ -422,15 +502,35 @@ class LiveState:
         z = {
             "ts_ms": int(now*1000), "best_bid": best_bid, "best_ask": best_ask, "mid": mid,
             "spread_bps": None if not mid else (best_ask-best_bid)/mid*10000,
-            "book_imbalance_5": 0 if b5+a5 == 0 else (b5-a5)/(b5+a5),
-            "book_imbalance_25": 0 if b25+a25 == 0 else (b25-a25)/(b25+a25),
-            "bid_depth_5": b5, "ask_depth_5": a5, "bid_depth_25": b25, "ask_depth_25": a25,
+            "book_valid": book_fresh,
+            "book_update_id": self.book_update_id, "book_sequence": self.book_sequence,
+            "book_exchange_ts_ms": self.book_exchange_ts_ms,
+            "book_invalidations": self.book_invalidations,
+            "book_imbalance_5": None if not book_fresh or b5+a5 == 0 else (b5-a5)/(b5+a5),
+            "book_imbalance_25": None if not book_fresh or b25+a25 == 0 else (b25-a25)/(b25+a25),
+            "bid_depth_5": b5 if book_fresh else None, "ask_depth_5": a5 if book_fresh else None,
+            "bid_depth_25": b25 if book_fresh else None, "ask_depth_25": a25 if book_fresh else None,
             "flow_imbalance_5s": f5[2], "flow_imbalance_15s": f15[2], "flow_imbalance_60s": f60[2],
             "buy_notional_60s": f60[0], "sell_notional_60s": f60[1],
             "long_liq_notional_60s": l60[0], "short_liq_notional_60s": l60[1],
-            "open_interest": self.oi, "oi_change_since_prev_poll_pct": oi_delta,
+            "open_interest": self.oi if self.oi_ts is not None and int(now*1000)-self.oi_ts <= 10_000 else None,
+            "oi_ts_ms": self.oi_ts, "oi_exchange_ts_ms": self.oi_exchange_ts_ms,
+            "trade_exchange_ts_ms": self.trade_exchange_ts_ms, "liq_exchange_ts_ms": self.liq_exchange_ts_ms,
+            "oi_change_since_prev_poll_pct": oi_delta,
+            "book_ratio_is_proxy": True,
+            "book_proxy_definition": "60s observed additions / aggressive same-side consumed-flow proxy; not actual queue replenishment",
+            "channel_coverage_seconds": None if self.coverage_since is None else now-self.coverage_since,
+            **{key+"_received_ts_ms": int(value*1000) for key, value in self.last_received.items()},
             **dict(self.churn),
         }
+        for sec in (5, 15, 60):
+            lng, sht = liq(sec)
+            z[f"long_liq_notional_{sec}s"] = lng
+            z[f"short_liq_notional_{sec}s"] = sht
+        for side, executed in (("ask", f60[0]), ("bid", f60[1])):
+            additions = sum(changes.get(side+"_add_notional", 0) for _, changes in self.book_churn)
+            eligible = book_fresh and self.book_since is not None and now-self.book_since >= 60 and executed is not None and executed > 0
+            z[f"{side}_replenishment_proxy_ratio_60s"] = additions/executed if eligible else None
         self.churn.clear()
         return z
 
@@ -451,6 +551,8 @@ async def live(minutes: int, outdir: Path) -> None:
     state = LiveState()
     feat = (outdir / "HYPE_live_microstructure_1s.jsonl").open("w", encoding="utf-8")
     raw_liq = (outdir / "HYPE_live_liquidations.jsonl").open("w", encoding="utf-8")
+    raw_frames = (outdir / "HYPE_live_raw_frames.jsonl").open("w", encoding="utf-8")
+    receipt_sequence = 0
     end_at = time.time() + minutes*60
     next_snap = 0.0
     try:
@@ -478,7 +580,15 @@ async def live(minutes: int, outdir: Path) -> None:
                 timeout = max(0.05, min(1.0, next_snap-now if next_snap > now else 0.05))
                 try:
                     txt = await asyncio.wait_for(ws.recv(), timeout=timeout)
+                    receipt_sequence += 1
+                    # Preserve exact frame text, receiver order, receive time and
+                    # exchange sequence fields inside the original message.
+                    raw_frames.write(json.dumps({"received_ts_ms": int(time.time()*1000),
+                        "receipt_sequence": receipt_sequence, "endpoint": endpoint,
+                        "raw_text": txt.decode("utf-8") if isinstance(txt, bytes) else txt}, separators=(",", ":"))+"\n")
+                    raw_frames.flush()
                     msg = json.loads(txt)
+                    state.on_subscription(msg)
                     topic = msg.get("topic","")
                     if topic.startswith("orderbook."):
                         state.on_book(msg)
@@ -499,10 +609,13 @@ async def live(minutes: int, outdir: Path) -> None:
     finally:
         feat.close()
         raw_liq.close()
+        raw_frames.close()
     summary = {
         "symbol": SYMBOL, "minutes_requested": minutes,
         "messages": dict(state.messages),
-        "output": ["HYPE_live_microstructure_1s.jsonl","HYPE_live_liquidations.jsonl"],
+        "output": ["HYPE_live_microstructure_1s.jsonl","HYPE_live_liquidations.jsonl","HYPE_live_raw_frames.jsonl"],
+        "raw_frames": receipt_sequence,
+        "book_ratio_note": "Additions / aggressive-flow proxy, not true depth-consumed/depth-restored attribution.",
         "contains": [
             "L50 orderbook depth/imbalance", "book add/cancel churn",
             "executed trade flow 5s/15s/60s", "allLiquidation stream",
