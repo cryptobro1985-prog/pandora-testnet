@@ -55,12 +55,21 @@ def utc_date(s: str) -> dt.datetime:
 
 
 def request_json(path: str, params: dict[str, Any], timeout: int = 30) -> dict[str, Any]:
-    r = requests.get(BASE + path, params=params, timeout=timeout, headers={"User-Agent": UA})
-    r.raise_for_status()
-    obj = r.json()
-    if obj.get("retCode") != 0:
-        raise RuntimeError(f"Bybit error {obj.get('retCode')}: {obj.get('retMsg')}")
-    return obj
+    last = None
+    for base in BASES:
+        try:
+            r = requests.get(base + path, params=params, timeout=timeout, headers={"User-Agent": UA})
+            if r.status_code == 403:
+                last = RuntimeError(f"{base} returned 403")
+                continue
+            r.raise_for_status()
+            obj = r.json()
+            if obj.get("retCode") != 0:
+                raise RuntimeError(f"Bybit error {obj.get('retCode')}: {obj.get('retMsg')}")
+            return obj
+        except Exception as exc:
+            last = exc
+    raise RuntimeError(f"all Bybit REST endpoints failed: {last}")
 
 
 def fetch_klines(start_ms: int, end_ms: int) -> list[dict[str, float]]:
@@ -419,7 +428,19 @@ async def live(minutes: int, outdir: Path) -> None:
     next_snap = 0.0
     next_oi = 0.0
     try:
-        async with websockets.connect(WS, ping_interval=20, ping_timeout=20, max_size=8_000_000) as ws:
+        ws = None
+        last_ws_error = None
+        for endpoint in WS_BASES:
+            try:
+                ws = await websockets.connect(endpoint, ping_interval=20, ping_timeout=20, max_size=8_000_000)
+                print(f"[live] connected {endpoint}", flush=True)
+                break
+            except Exception as exc:
+                last_ws_error = exc
+                print(f"[live] websocket failed {endpoint}: {exc}", flush=True)
+        if ws is None:
+            raise RuntimeError(f"all Bybit websocket endpoints failed: {last_ws_error}")
+        async with ws:
             await ws.send(json.dumps({"op":"subscribe","args":[
                 f"publicTrade.{SYMBOL}",
                 f"allLiquidation.{SYMBOL}",
