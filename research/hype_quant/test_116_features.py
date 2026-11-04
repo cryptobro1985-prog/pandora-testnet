@@ -26,16 +26,16 @@ def main():
         "fundingRate":"0.0001","turnover24h":"50000000","volume24h":"500000",
         "highPrice24h":"105","lowPrice24h":"95","price24hPcnt":"0.03",
         "bid1Price":"100","ask1Price":"100.01","bid1Size":"10","ask1Size":"11"}}))
-
-    candles={}
+    seq=6
     for tf,ms in (("1",60_000),("3",180_000),("5",300_000),("60",3_600_000)):
-        rows=[]
         for j in range(8,0,-1):
             st=t0-j*ms
-            rows.append({"start_ms":st,"open":99.0,"high":101.0,"low":98.5,"close":100.0,
-                         "volume":1000+j,"turnover":100000+j,"interval":tf})
-        candles[tf]=rows
-    market={"received_ts_ms":t0+5,"initial_backfill":True,"candles":candles,
+            s.update_raw_frame(env(t0+5,seq,{"topic":f"kline.{tf}.HYPEUSDT","ts":t0+5,"data":[{
+                "start":st,"end":st+ms-1,"interval":tf,"open":"99.0","high":"101.0","low":"98.5",
+                "close":"100.0","volume":str(1000+j),"turnover":str(100000+j),
+                "confirm":True,"timestamp":t0+4}]}))
+            seq+=1
+    market={"received_ts_ms":t0+6,"initial_backfill":True,"candles":{},
             "ticker":{"lastPrice":"100","markPrice":"100.02","indexPrice":"99.98","openInterest":"100000",
                       "fundingRate":"0.0001","turnover24h":"50000000","volume24h":"500000"},
             "server_time":{"ok":True,"value":{"api_time_ms":t0}},
