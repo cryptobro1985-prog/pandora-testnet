@@ -1,4 +1,5 @@
 name: HYPE REST Diagnostic
+# relay-live-v1
 
 on:
   push:
@@ -18,6 +19,23 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install requests==2.34.2
+      - name: Probe Render relay
+        run: |
+          python - <<'PY'
+          import requests, json
+          base='https://hype-rest-relay.onrender.com'
+          for path in ('/health','/hype-context'):
+              r=requests.get(base+path,timeout=20)
+              print(path, r.status_code, r.text[:2000])
+              r.raise_for_status()
+              obj=r.json()
+              assert obj.get('ok', True) is not False
+              if path=='/hype-context':
+                  assert obj.get('instrument'), obj
+                  assert obj.get('account_ratio'), obj
+                  assert obj.get('server_time'), obj
+          print('HYPE_REST_RELAY_OK')
+          PY
       - name: Probe Bybit public REST domains
         shell: bash
         run: |
