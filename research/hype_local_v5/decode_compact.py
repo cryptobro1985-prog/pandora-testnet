@@ -60,6 +60,9 @@ def decode_events(path:Path,meta):
                    "side":"Buy" if side else "Sell","price":p/ps,"qty":q/qs}
         elif typ==3:
             yield {"kind":"ticker","received_ts_ms":r[1],"exchange_ts_ms":r[2],"data":r[3]}
+        elif typ==4:
+            yield {"kind":"kline","received_ts_ms":r[1],"exchange_ts_ms":r[2],
+                   "topic":r[3],"data":r[4]}
         else:
             yield {"kind":"control","received_ts_ms":r[1],"receipt_sequence":r[2],
                    "endpoint":r[3],"data":r[4]}
