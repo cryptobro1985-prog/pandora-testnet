@@ -1,0 +1,10 @@
+{
+  "stage": "started",
+  "source_commit": "fe08f5fd68a68c49d06a120c1a5036048c709d89",
+  "run_id": "41885279497",
+  "run_attempt": "1",
+  "report_branch": "research/hype-local-v5-results",
+  "reports": [],
+  "orders_enabled": false,
+  "note": "Stage is execution progress, not proof that market checks passed; read included run_status.json"
+}
