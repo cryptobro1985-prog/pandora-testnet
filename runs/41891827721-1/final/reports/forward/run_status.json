@@ -1,0 +1,18 @@
+{
+  "status": "forward_coverage_audited",
+  "files": [
+    {
+      "path": "recovered/fresh_live/HYPE_live_microstructure_1s.jsonl",
+      "size_bytes": 1855762,
+      "sha256": "723ffda96c10859cb2fbade81dc4f8ca4e4e5d22c05be22ab644976cf6ddd000",
+      "snapshots": 1201,
+      "duration_seconds": 1199.374,
+      "snapshots_with_oi": 1120,
+      "snapshots_with_explicit_oi_time": 1200,
+      "sufficient_six_hour_warmup": false
+    }
+  ],
+  "precision": null,
+  "causal_reason": "No six-hour raw-price warmup/complete forward reference supplied; coverage alone cannot validate H1 precision",
+  "no_synthetic_market_data": true
+}
