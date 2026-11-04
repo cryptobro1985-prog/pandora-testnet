@@ -67,6 +67,7 @@ class FeatureState:
         self.last_liq=None
         self.last_raw_received_ts=None
         self.last_receipt_sequence=None
+        self.last_receipt_sequence_by_source={}
         self.receipt_sequence_gaps=0
         self.subscription_acks=0
         self.raw_frames=0
@@ -107,10 +108,13 @@ class FeatureState:
     def update_raw_frame(self,envelope:dict[str,Any]):
         recv=int(envelope.get("received_ts_ms") or 0)
         seq=envelope.get("receipt_sequence")
+        source=str(envelope.get("_source_path") or "default")
         if seq is not None:
             seq=int(seq)
-            if self.last_receipt_sequence is not None and seq!=self.last_receipt_sequence+1:
+            previous=self.last_receipt_sequence_by_source.get(source)
+            if previous is not None and seq!=previous+1:
                 self.receipt_sequence_gaps+=1
+            self.last_receipt_sequence_by_source[source]=seq
             self.last_receipt_sequence=seq
         self.last_raw_received_ts=max(self.last_raw_received_ts or 0,recv)
         self.raw_frames+=1
