@@ -1,12 +1,6 @@
 name: HYPE H1 Local v5 OI Microstructure
 
 on:
-  push:
-    branches:
-      - research/hype-h1-local-v5-oi-microstructure-20261104
-    paths:
-      - "research/hype_local_v5/**"
-      - ".github/workflows/hype-h1-local-v5.yml"
   workflow_dispatch:
 
 permissions:
