@@ -36,22 +36,8 @@ jobs:
           set +e
           OUT="out/hype_v6_12h_segment_1"
           mkdir -p "$OUT"
-          python research/hype_local_v5/research.py --mode live --minutes "$CAPTURE_MINUTES" --output "$OUT" >"$OUT/live.log" 2>&1 &
-          LIVE_PID=$!
-          python research/hype_local_v5/context_capture.py --minutes "$CAPTURE_MINUTES" --output "$OUT" >"$OUT/context.log" 2>&1 &
-          CTX_PID=$!
-          wait "$LIVE_PID"; LIVE_RC=$?
-          wait "$CTX_PID"; CTX_RC=$?
-          echo "live_rc=$LIVE_RC context_rc=$CTX_RC"
+          python research/hype_local_v5/resilient_capture.py --minutes "$CAPTURE_MINUTES" --chunk-minutes 20 --output "$OUT"
           python research/hype_local_v5/aggregate_forward.py --root "$OUT" --output "$OUT/AGGREGATE_SEGMENT.json" || true
-          python - <<'PY'
-          import json, os, time
-          from pathlib import Path
-          out=Path("out/hype_v6_12h_segment_1")
-          meta={"research_only":True,"segment":1,"symbol":"HYPEUSDT","requested_minutes":int(os.environ["CAPTURE_MINUTES"]),"git_sha":os.environ.get("GITHUB_SHA"),"run_id":os.environ.get("GITHUB_RUN_ID"),"created_ts_ms":int(time.time()*1000),"purpose":"frozen v6 residual false-local research; no trading"}
-          (out/"PROVENANCE.json").write_text(json.dumps(meta,indent=2)+"\n")
-          PY
-          if [ "$LIVE_RC" -ne 0 ] && [ "$CTX_RC" -ne 0 ]; then exit 1; fi
       - name: Upload segment 1
         if: always()
         uses: actions/upload-artifact@v4
@@ -79,22 +65,8 @@ jobs:
           set +e
           OUT="out/hype_v6_12h_segment_2"
           mkdir -p "$OUT"
-          python research/hype_local_v5/research.py --mode live --minutes "$CAPTURE_MINUTES" --output "$OUT" >"$OUT/live.log" 2>&1 &
-          LIVE_PID=$!
-          python research/hype_local_v5/context_capture.py --minutes "$CAPTURE_MINUTES" --output "$OUT" >"$OUT/context.log" 2>&1 &
-          CTX_PID=$!
-          wait "$LIVE_PID"; LIVE_RC=$?
-          wait "$CTX_PID"; CTX_RC=$?
-          echo "live_rc=$LIVE_RC context_rc=$CTX_RC"
+          python research/hype_local_v5/resilient_capture.py --minutes "$CAPTURE_MINUTES" --chunk-minutes 20 --output "$OUT"
           python research/hype_local_v5/aggregate_forward.py --root "$OUT" --output "$OUT/AGGREGATE_SEGMENT.json" || true
-          python - <<'PY'
-          import json, os, time
-          from pathlib import Path
-          out=Path("out/hype_v6_12h_segment_2")
-          meta={"research_only":True,"segment":2,"symbol":"HYPEUSDT","requested_minutes":int(os.environ["CAPTURE_MINUTES"]),"git_sha":os.environ.get("GITHUB_SHA"),"run_id":os.environ.get("GITHUB_RUN_ID"),"created_ts_ms":int(time.time()*1000),"purpose":"frozen v6 residual false-local research; no trading"}
-          (out/"PROVENANCE.json").write_text(json.dumps(meta,indent=2)+"\n")
-          PY
-          if [ "$LIVE_RC" -ne 0 ] && [ "$CTX_RC" -ne 0 ]; then exit 1; fi
       - name: Upload segment 2
         if: always()
         uses: actions/upload-artifact@v4
@@ -122,22 +94,8 @@ jobs:
           set +e
           OUT="out/hype_v6_12h_segment_3"
           mkdir -p "$OUT"
-          python research/hype_local_v5/research.py --mode live --minutes "$CAPTURE_MINUTES" --output "$OUT" >"$OUT/live.log" 2>&1 &
-          LIVE_PID=$!
-          python research/hype_local_v5/context_capture.py --minutes "$CAPTURE_MINUTES" --output "$OUT" >"$OUT/context.log" 2>&1 &
-          CTX_PID=$!
-          wait "$LIVE_PID"; LIVE_RC=$?
-          wait "$CTX_PID"; CTX_RC=$?
-          echo "live_rc=$LIVE_RC context_rc=$CTX_RC"
+          python research/hype_local_v5/resilient_capture.py --minutes "$CAPTURE_MINUTES" --chunk-minutes 20 --output "$OUT"
           python research/hype_local_v5/aggregate_forward.py --root "$OUT" --output "$OUT/AGGREGATE_SEGMENT.json" || true
-          python - <<'PY'
-          import json, os, time
-          from pathlib import Path
-          out=Path("out/hype_v6_12h_segment_3")
-          meta={"research_only":True,"segment":3,"symbol":"HYPEUSDT","requested_minutes":int(os.environ["CAPTURE_MINUTES"]),"git_sha":os.environ.get("GITHUB_SHA"),"run_id":os.environ.get("GITHUB_RUN_ID"),"created_ts_ms":int(time.time()*1000),"purpose":"frozen v6 residual false-local research; no trading"}
-          (out/"PROVENANCE.json").write_text(json.dumps(meta,indent=2)+"\n")
-          PY
-          if [ "$LIVE_RC" -ne 0 ] && [ "$CTX_RC" -ne 0 ]; then exit 1; fi
       - name: Upload segment 3
         if: always()
         uses: actions/upload-artifact@v4
@@ -165,22 +123,8 @@ jobs:
           set +e
           OUT="out/hype_v6_12h_segment_4"
           mkdir -p "$OUT"
-          python research/hype_local_v5/research.py --mode live --minutes "$CAPTURE_MINUTES" --output "$OUT" >"$OUT/live.log" 2>&1 &
-          LIVE_PID=$!
-          python research/hype_local_v5/context_capture.py --minutes "$CAPTURE_MINUTES" --output "$OUT" >"$OUT/context.log" 2>&1 &
-          CTX_PID=$!
-          wait "$LIVE_PID"; LIVE_RC=$?
-          wait "$CTX_PID"; CTX_RC=$?
-          echo "live_rc=$LIVE_RC context_rc=$CTX_RC"
+          python research/hype_local_v5/resilient_capture.py --minutes "$CAPTURE_MINUTES" --chunk-minutes 20 --output "$OUT"
           python research/hype_local_v5/aggregate_forward.py --root "$OUT" --output "$OUT/AGGREGATE_SEGMENT.json" || true
-          python - <<'PY'
-          import json, os, time
-          from pathlib import Path
-          out=Path("out/hype_v6_12h_segment_4")
-          meta={"research_only":True,"segment":4,"symbol":"HYPEUSDT","requested_minutes":int(os.environ["CAPTURE_MINUTES"]),"git_sha":os.environ.get("GITHUB_SHA"),"run_id":os.environ.get("GITHUB_RUN_ID"),"created_ts_ms":int(time.time()*1000),"purpose":"frozen v6 residual false-local research; no trading"}
-          (out/"PROVENANCE.json").write_text(json.dumps(meta,indent=2)+"\n")
-          PY
-          if [ "$LIVE_RC" -ne 0 ] && [ "$CTX_RC" -ne 0 ]; then exit 1; fi
       - name: Upload segment 4
         if: always()
         uses: actions/upload-artifact@v4
