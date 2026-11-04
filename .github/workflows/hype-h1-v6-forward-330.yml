@@ -1,0 +1,61 @@
+name: HYPE v6 Continuous Forward Research
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-h1-v6-forward-330.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hype-v6-forward-330-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  forward_capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install research dependencies
+        run: python -m pip install -r research/hype_local_v5/requirements-research.txt
+      - name: Capture continuous HYPE forward microstructure
+        run: |
+          python research/hype_local_v5/research.py \
+            --mode live \
+            --minutes 330 \
+            --output out/hype_v6_forward_330
+      - name: Write provenance
+        if: always()
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          out=Path("out/hype_v6_forward_330")
+          out.mkdir(parents=True, exist_ok=True)
+          meta={
+              "research_only": True,
+              "symbol": "HYPEUSDT",
+              "capture_minutes_requested": 330,
+              "git_sha": os.environ.get("GITHUB_SHA"),
+              "git_ref": os.environ.get("GITHUB_REF"),
+              "run_id": os.environ.get("GITHUB_RUN_ID"),
+              "purpose": "continuous forward evidence for frozen HYPE H1 Local Engine v6; no trading"
+          }
+          (out/"PROVENANCE.json").write_text(json.dumps(meta,indent=2)+"\n")
+          PY
+      - name: Upload continuous forward artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-H1-V6-FORWARD-330
+          path: out/hype_v6_forward_330
+          if-no-files-found: error
+          retention-days: 7
