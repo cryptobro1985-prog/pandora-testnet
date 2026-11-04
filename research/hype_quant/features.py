@@ -257,10 +257,14 @@ class FeatureState:
             if oi and recv and (not self.oi_history or recv>self.oi_history[-1][0]):
                 self.oi_history.append((recv,oi))
         inst=row.get("instrument")
+        if isinstance(inst,dict) and inst.get("ok") is True and isinstance(inst.get("value"),dict):
+            inst=inst.get("value")
         if isinstance(inst,dict) and inst:self.instrument=inst
         ar=row.get("account_ratio")
         if isinstance(ar,dict):self.account_ratio=ar
         st=row.get("server_time")
+        if isinstance(st,dict) and st.get("ok") is True and isinstance(st.get("value"),dict):
+            st=st.get("value")
         if isinstance(st,dict):self.server_time=st
         candles=row.get("candles") or {}
         for tf,rows in candles.items():
@@ -534,6 +538,9 @@ class FeatureState:
                 if len(q)>=10:
                     z=sorted(q);x[f"{kind}_latency_p95_ms"]=float(z[min(len(z)-1,int(.95*(len(z)-1)))])
         x["book_valid_micro"]=1.0 if row.get("book_valid") else 0.0
+        if isinstance(self.market_context,dict):
+            x["rest_only_complete"]=1.0 if self.market_context.get("rest_only_complete") else 0.0
+            x["rest_relay_configured"]=1.0 if self.market_context.get("rest_relay_configured") else 0.0
 
         # Log-scale the largest positive market-size fields while retaining raw.
         for k,v in list(x.items()):
