@@ -72,6 +72,8 @@ class FeatureState:
         self.subscription_acks=0
         self.raw_frames=0
         self.control_frames=0
+        self.ws_server_ts_ms=None
+        self.ws_clock_offset_ms=None
         self.last_ts_ms=None
         self.last_price=None
         self.dominance_samples=deque()
@@ -126,6 +128,11 @@ class FeatureState:
             return
         if not isinstance(msg,dict):
             return
+        server_ts=num(msg.get("ts"))
+        if server_ts is not None and recv:
+            self.ws_server_ts_ms=int(server_ts)
+            self.ws_clock_offset_ms=float(recv-int(server_ts))
+            self._mark(111)
         if msg.get("op")=="subscribe" and msg.get("success") is True:
             self.subscription_acks+=1
             self._mark(80,116)
@@ -149,6 +156,24 @@ class FeatureState:
             d=msg.get("data") or {}
             if isinstance(d,list):d=d[0] if d else {}
             self.update_event({"kind":"ticker","received_ts_ms":recv,"exchange_ts_ms":msg.get("ts"),"data":d})
+        elif topic.startswith("kline."):
+            parts=topic.split(".")
+            tf=parts[1] if len(parts)>=3 else ""
+            if tf in TF_MS:
+                store=self.candles[tf]
+                for b in msg.get("data") or []:
+                    if not isinstance(b,dict): continue
+                    start=int(b.get("start") or 0)
+                    vals={k:num(b.get(k)) for k in ("open","high","low","close","volume","turnover")}
+                    if start<=0 or not all(vals[k] is not None for k in ("open","high","low","close")): continue
+                    store[start]={"start_ms":start,**vals,
+                                  "confirm":1.0 if b.get("confirm") else 0.0,
+                                  "received_ts_ms":recv,
+                                  "source_timestamp_ms":int(b.get("timestamp") or msg.get("ts") or recv)}
+                keep=600 if tf=="1" else 300 if tf=="3" else 220 if tf=="5" else 100
+                if len(store)>keep:
+                    for k in sorted(store)[:-keep]:store.pop(k,None)
+                self._mark({"1":4,"3":5,"5":6,"60":7}[tf],77,82,111)
         else:
             self.control_frames+=1
             self._mark(77,81,82,116)
@@ -494,6 +519,10 @@ class FeatureState:
 
         # Timestamp / continuity / transport quality.
         x["raw_frames_seen"]=float(self.raw_frames)
+        if self.ws_server_ts_ms is not None:
+            x["ws_server_ts_ms_mod_day"]=float(self.ws_server_ts_ms % 86_400_000)
+        if self.ws_clock_offset_ms is not None:
+            x["ws_runner_clock_offset_ms"]=float(self.ws_clock_offset_ms)
         x["receipt_sequence_gaps"]=float(self.receipt_sequence_gaps)
         x["subscription_acks"]=float(self.subscription_acks)
         x["control_frames"]=float(self.control_frames)
