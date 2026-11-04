@@ -13,24 +13,6 @@ permissions:
   contents: read
 
 jobs:
-  historical_oi:
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install requests
-      - name: 30d HYPE klines + open interest
-        run: |
-          python research/hype_local_v5/research.py             --mode historical             --start 2026-10-04             --end 2026-11-02             --output out/historical_oi
-      - uses: actions/upload-artifact@v4
-        with:
-          name: HYPE-H1-LOCAL-V5-HISTORICAL-OI
-          path: out/historical_oi
-          if-no-files-found: error
-
   historical_ticks:
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -73,7 +55,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install requests websockets
-      - name: Capture live HYPE orderbook + trades + liquidations + OI
+      - name: Capture live HYPE orderbook + trades + liquidations + ticker OI
         run: |
           python research/hype_local_v5/research.py             --mode live             --minutes 20             --output out/live_microstructure
       - uses: actions/upload-artifact@v4
