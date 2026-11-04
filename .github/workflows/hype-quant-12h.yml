@@ -14,7 +14,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: hype-quant-12h-${{ github.ref }}
+  group: hype-quant-12h-v2-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -102,7 +102,7 @@ jobs:
 
   segment_2:
     needs: segment_1
-    if: ${{ always() }}
+    if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 195
     steps:
@@ -145,7 +145,7 @@ jobs:
 
   segment_3:
     needs: segment_2
-    if: ${{ always() }}
+    if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 195
     steps:
@@ -188,7 +188,7 @@ jobs:
 
   segment_4:
     needs: segment_3
-    if: ${{ always() }}
+    if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 195
     steps:
@@ -231,7 +231,7 @@ jobs:
 
   final:
     needs: segment_4
-    if: ${{ always() }}
+    if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
