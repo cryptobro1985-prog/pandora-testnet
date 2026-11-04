@@ -40,8 +40,19 @@ from typing import Any
 
 import requests
 
-BASE = "https://api.bybit.com"
-WS = "wss://stream.bybit.com/v5/public/linear"
+BASES = [
+    "https://api.bybit.com",
+    "https://api.bytick.com",
+    "https://api.bybit.kz",
+    "https://api.bybit.ae",
+    "https://api.bybit.eu",
+]
+WS_BASES = [
+    "wss://stream.bybit.com/v5/public/linear",
+    "wss://stream.bybit.kz/v5/public/linear",
+    "wss://stream.bybit.ae/v5/public/linear",
+    "wss://stream.bybit.eu/v5/public/linear",
+]
 SYMBOL = "HYPEUSDT"
 UA = "pandora-hype-local-v5-research/1.0"
 
