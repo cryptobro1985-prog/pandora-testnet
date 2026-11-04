@@ -19,6 +19,7 @@ concurrency:
 
 env:
   CAPTURE_MINUTES: "170"
+  HYPE_REST_RELAY_URL: "https://hype-rest-relay.onrender.com"
 
 jobs:
   smoke:
