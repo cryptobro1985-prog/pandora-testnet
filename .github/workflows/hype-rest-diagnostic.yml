@@ -1,0 +1,44 @@
+name: HYPE REST Diagnostic
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-rest-diagnostic.yml"
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install requests==2.34.2
+      - name: Probe Bybit public REST domains
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests, json
+          bases=["https://api.bybit.com","https://api.bytick.com","https://api.bybit.kz","https://api.bybit.ae","https://api.bybit.eu"]
+          paths=[
+            ("/v5/market/time",{}),
+            ("/v5/market/instruments-info",{"category":"linear","symbol":"HYPEUSDT"}),
+            ("/v5/market/account-ratio",{"category":"linear","symbol":"HYPEUSDT","period":"5min","limit":1}),
+          ]
+          headers_list=[
+            {"User-Agent":"PANDORA-HYPE-Research/1.0","Accept":"application/json"},
+            {"User-Agent":"Mozilla/5.0","Accept":"application/json","Referer":"https://www.bybit.com/"}
+          ]
+          for base in bases:
+            for headers in headers_list:
+              for path,params in paths:
+                try:
+                  r=requests.get(base+path,params=params,headers=headers,timeout=8)
+                  print(json.dumps({"base":base,"path":path,"ua":headers["User-Agent"],"status":r.status_code,"body":r.text[:240]},ensure_ascii=False),flush=True)
+                except Exception as e:
+                  print(json.dumps({"base":base,"path":path,"ua":headers["User-Agent"],"error":repr(e)}),flush=True)
+          PY
