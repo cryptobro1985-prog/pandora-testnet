@@ -574,6 +574,10 @@ async def live(minutes: int, outdir: Path) -> None:
                 f"allLiquidation.{SYMBOL}",
                 f"orderbook.50.{SYMBOL}",
                 f"tickers.{SYMBOL}",
+                f"kline.1.{SYMBOL}",
+                f"kline.3.{SYMBOL}",
+                f"kline.5.{SYMBOL}",
+                f"kline.60.{SYMBOL}",
             ]}))
             while time.time() < end_at:
                 now = time.time()
