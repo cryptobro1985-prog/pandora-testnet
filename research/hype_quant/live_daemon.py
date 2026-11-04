@@ -77,17 +77,24 @@ def main():
     tail=Tailer()
     actions=args.checkpoint_dir/"quant_actions.jsonl"
     gaps=args.checkpoint_dir/"quant_gaps.jsonl"
+    gaps.touch(exist_ok=True)
+    actions.touch(exist_ok=True)
     started=time.time();deadline=started+args.minutes*60
     next_save=0.0;next_sample_ms=0;last_seen_ts=state.last_ts_ms
     sample_ms=int(cfg.get("state_sample_seconds",5)*1000)
     processed=0;sampled=0
+    pending_context=[]
 
     while time.time()<deadline:
-        # Context first, so each micro snapshot sees newest causally available context.
+        # Context is only available after its actual receive timestamp.
+        new_context=pending_context
+        pending_context=[]
         for path in sorted(args.capture_root.rglob("HYPE_structural_context_1m.jsonl")):
             for row in tail.read_new(path):
-                state.update_context(row)
-
+                if isinstance(row,dict) and row.get("ts_ms"):
+                    new_context.append(row)
+        new_context.sort(key=lambda r:int(r["ts_ms"]))
+        ci=0
         new_rows=[]
         for path in sorted(args.capture_root.rglob("HYPE_live_microstructure_1s.jsonl")):
             for row in tail.read_new(path):
@@ -97,6 +104,8 @@ def main():
 
         for row in new_rows:
             ts=int(row["ts_ms"])
+            while ci<len(new_context) and int(new_context[ci]["ts_ms"])<=ts:
+                state.update_context(new_context[ci]);ci+=1
             if last_seen_ts is not None and ts<=last_seen_ts:
                 continue
             if last_seen_ts is not None:
@@ -117,6 +126,7 @@ def main():
             sampled+=1
             append_jsonl(actions,{"ts_ms":ts,"price":price,"decision":decision})
 
+        pending_context=new_context[ci:]
         now=time.time()
         if now>=next_save:
             learner.save(cp);save_feature_state(state,fs_path)
