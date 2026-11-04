@@ -1,0 +1,125 @@
+name: HYPE Full Pipeline Checkpoint
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-full-checkpoint.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  HYPE_REST_RELAY_URL: "https://hype-rest-relay.onrender.com"
+  CHECKPOINT_MINUTES: "2"
+
+jobs:
+  checkpoint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install -r research/hype_local_v5/requirements-research.txt
+          python -m pip install -r research/hype_quant/requirements.txt
+      - name: Verify relay before capture
+        run: |
+          python - <<'PY'
+          import requests
+          r=requests.get("https://hype-rest-relay.onrender.com/hype-context",timeout=20)
+          r.raise_for_status()
+          o=r.json()
+          assert o.get("instrument"), o
+          assert o.get("account_ratio"), o
+          assert o.get("server_time"), o
+          print("RELAY_OK",o["instrument"].get("symbol"),o["account_ratio"].get("buyRatio"),o["account_ratio"].get("sellRatio"))
+          PY
+      - name: Run two-minute full collector plus online learner
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p checkpoint/capture checkpoint/quant
+          python research/hype_local_v5/resilient_capture.py --minutes "$CHECKPOINT_MINUTES" --chunk-minutes 2 --output checkpoint/capture &
+          CAP_PID=$!
+          python -m research.hype_quant.live_daemon --capture-root checkpoint/capture --checkpoint-dir checkpoint/quant --minutes "$CHECKPOINT_MINUTES" --poll-seconds 0.25 &
+          Q_PID=$!
+          wait "$CAP_PID"; CAP_RC=$?
+          wait "$Q_PID"; Q_RC=$?
+          printf '{"capture_rc":%s,"quant_rc":%s}\n' "$CAP_RC" "$Q_RC" > checkpoint/PROCESS_STATUS.json
+          test "$CAP_RC" -eq 0
+          test "$Q_RC" -eq 0
+      - name: Validate actual recorded data and learner
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          root=Path("checkpoint")
+          raw_files=list((root/"capture").rglob("HYPE_live_raw_frames.jsonl"))
+          micro_files=list((root/"capture").rglob("HYPE_live_microstructure_1s.jsonl"))
+          market_files=list((root/"capture").rglob("HYPE_market_context.jsonl"))
+          assert raw_files and micro_files and market_files
+          topics=set(); raw_frames=0
+          for p in raw_files:
+            for line in p.open():
+              try:
+                outer=json.loads(line); msg=json.loads(outer.get("raw_text") or "{}")
+              except Exception: continue
+              raw_frames+=1
+              topic=str(msg.get("topic") or "")
+              if topic: topics.add(topic)
+          required_prefixes=["publicTrade.","orderbook.50.","tickers.","kline.1.","kline.3.","kline.5.","kline.60."]
+          missing_topics=[x for x in required_prefixes if not any(t.startswith(x) for t in topics)]
+          micro_rows=sum(1 for p in micro_files for _ in p.open())
+          market_rows=[]
+          for p in market_files:
+            for line in p.open():
+              try: market_rows.append(json.loads(line))
+              except Exception: pass
+          rest_good=[r for r in market_rows if r.get("rest_only_complete") is True and (r.get("account_ratio") or {})]
+          instrument_good=[r for r in market_rows if isinstance(r.get("instrument"),dict) and (r["instrument"].get("value") or r["instrument"].get("symbol"))]
+          qreport=json.loads((root/"quant"/"QUANT_REPORT.json").read_text())
+          coverage=json.loads((root/"quant"/"FEATURE_COVERAGE_116.json").read_text())
+          process=json.loads((root/"PROCESS_STATUS.json").read_text())
+          verdict={
+            "process":process,
+            "raw_frames":raw_frames,
+            "micro_rows":micro_rows,
+            "topics":sorted(topics),
+            "missing_required_websocket_topics":missing_topics,
+            "market_context_rows":len(market_rows),
+            "rest_only_complete_rows":len(rest_good),
+            "instrument_rows":len(instrument_good),
+            "quant_labels":qreport.get("labels"),
+            "quant_pending":qreport.get("pending"),
+            "champion_ready":qreport.get("champion_ready"),
+            "feature_names_seen_count":coverage.get("feature_names_seen_count"),
+            "seen_input_count":coverage.get("seen_input_count"),
+            "missing_seen_input_ids":coverage.get("missing_seen_input_ids"),
+            "raw_frames_consumed":coverage.get("raw_frames_consumed"),
+            "market_context_rows_consumed":coverage.get("market_context_rows_consumed"),
+            "structural_context_rows_consumed":coverage.get("structural_context_rows_consumed"),
+          }
+          verdict["checkpoint_ok"]=(
+            process.get("capture_rc")==0 and process.get("quant_rc")==0 and
+            raw_frames>0 and micro_rows>30 and not missing_topics and
+            len(rest_good)>0 and len(instrument_good)>0 and
+            (qreport.get("labels") or 0)>0 and
+            (coverage.get("feature_names_seen_count") or 0)>100
+          )
+          (root/"CHECKPOINT_VERDICT.json").write_text(json.dumps(verdict,indent=2)+"\n")
+          print(json.dumps(verdict,indent=2))
+          assert verdict["checkpoint_ok"], verdict
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: HYPE-FULL-PIPELINE-CHECKPOINT
+          path: checkpoint
+          retention-days: 2
+          if-no-files-found: error
