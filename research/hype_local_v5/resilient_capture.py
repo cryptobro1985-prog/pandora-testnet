@@ -1,60 +1,219 @@
 #!/usr/bin/env python3
-"""Fault-tolerant research-only wrapper for HYPE forward capture.
+"""Fault-tolerant research-only supervisor for HYPE forward capture.
 
-Runs microstructure + structural-context collectors in short chunks so a transient
-WebSocket/REST/process failure cannot wipe an entire multi-hour segment. Each
-chunk is written to its own directory and a manifest records success/failure.
-No trading endpoints or order placement.
+A "chunk" is only a storage/provenance boundary. It is NOT a recovery timeout.
+The supervisor polls both collectors every few seconds. If either collector exits
+unexpectedly, the sibling is stopped, already-flushed files are preserved in the
+current chunk directory, and a new pair starts almost immediately in a new chunk.
+
+No trading endpoints. No order placement.
 """
 from __future__ import annotations
-import argparse, json, os, subprocess, sys, time
+
+import argparse
+import json
+import math
+import os
+import subprocess
+import sys
+import time
 from pathlib import Path
 
-def run_pair(root: Path, idx: int, minutes: int) -> dict:
+
+POLL_SECONDS = 2.0
+BASE_RESTART_BACKOFF_SECONDS = 2.0
+MAX_RESTART_BACKOFF_SECONDS = 15.0
+
+
+def terminate(proc: subprocess.Popen, grace_seconds: float = 5.0) -> int | None:
+    if proc.poll() is not None:
+        return proc.returncode
+    proc.terminate()
+    try:
+        return proc.wait(timeout=grace_seconds)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        return proc.wait(timeout=5)
+
+
+def run_pair(root: Path, idx: int, requested_minutes: int, global_deadline: float) -> dict:
     out = root / "chunks" / f"chunk_{idx:04d}"
     out.mkdir(parents=True, exist_ok=True)
-    live_log=(out/"live.log").open("w", encoding="utf-8")
-    ctx_log=(out/"context.log").open("w", encoding="utf-8")
-    start=time.time()
-    live=subprocess.Popen([sys.executable,"research/hype_local_v5/research.py","--mode","live","--minutes",str(minutes),"--output",str(out)],stdout=live_log,stderr=subprocess.STDOUT)
-    ctx=subprocess.Popen([sys.executable,"research/hype_local_v5/context_capture.py","--minutes",str(minutes),"--output",str(out)],stdout=ctx_log,stderr=subprocess.STDOUT)
-    live_rc=live.wait()
-    ctx_rc=ctx.wait()
-    live_log.close(); ctx_log.close()
-    return {"chunk":idx,"requested_minutes":minutes,"started_ts_ms":int(start*1000),"ended_ts_ms":int(time.time()*1000),"live_rc":live_rc,"context_rc":ctx_rc,"path":str(out)}
 
-def main():
-    ap=argparse.ArgumentParser()
-    ap.add_argument("--minutes",type=int,required=True)
-    ap.add_argument("--chunk-minutes",type=int,default=20)
-    ap.add_argument("--output",type=Path,required=True)
-    args=ap.parse_args()
+    live_log = (out / "live.log").open("w", encoding="utf-8")
+    ctx_log = (out / "context.log").open("w", encoding="utf-8")
+    start = time.time()
+
+    live = subprocess.Popen(
+        [
+            sys.executable,
+            "research/hype_local_v5/research.py",
+            "--mode", "live",
+            "--minutes", str(requested_minutes),
+            "--output", str(out),
+        ],
+        stdout=live_log,
+        stderr=subprocess.STDOUT,
+    )
+    ctx = subprocess.Popen(
+        [
+            sys.executable,
+            "research/hype_local_v5/context_capture.py",
+            "--minutes", str(requested_minutes),
+            "--output", str(out),
+        ],
+        stdout=ctx_log,
+        stderr=subprocess.STDOUT,
+    )
+
+    reason = "completed"
+    failed_component = None
+
+    try:
+        while True:
+            live_rc = live.poll()
+            ctx_rc = ctx.poll()
+
+            if live_rc is not None and ctx_rc is not None:
+                reason = "completed" if live_rc == 0 and ctx_rc == 0 else "collector_exit"
+                if live_rc != 0 and ctx_rc == 0:
+                    failed_component = "microstructure"
+                elif ctx_rc != 0 and live_rc == 0:
+                    failed_component = "structural_context"
+                elif live_rc != 0 or ctx_rc != 0:
+                    failed_component = "both_or_mixed"
+                break
+
+            # If one side dies while the other is still alive, fail over now;
+            # do not wait for the storage chunk boundary.
+            if live_rc is not None and ctx_rc is None:
+                reason = "microstructure_exit"
+                failed_component = "microstructure"
+                terminate(ctx)
+                break
+            if ctx_rc is not None and live_rc is None:
+                reason = "structural_context_exit"
+                failed_component = "structural_context"
+                terminate(live)
+                break
+
+            if time.time() >= global_deadline:
+                reason = "global_deadline"
+                terminate(live)
+                terminate(ctx)
+                break
+
+            time.sleep(POLL_SECONDS)
+    finally:
+        # Ensure no orphan process survives a restart.
+        terminate(live)
+        terminate(ctx)
+        live_log.close()
+        ctx_log.close()
+
+    end = time.time()
+    rec = {
+        "chunk": idx,
+        "requested_minutes": requested_minutes,
+        "started_ts_ms": int(start * 1000),
+        "ended_ts_ms": int(end * 1000),
+        "observed_wall_seconds": end - start,
+        "live_rc": live.returncode,
+        "context_rc": ctx.returncode,
+        "reason": reason,
+        "failed_component": failed_component,
+        "restart_poll_seconds": POLL_SECONDS,
+        "path": str(out),
+    }
+    (out / "CHUNK_STATUS.json").write_text(json.dumps(rec, indent=2) + "\n", encoding="utf-8")
+    return rec
+
+
+def write_manifest(path: Path, manifest: dict) -> None:
+    path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--minutes", type=int, required=True)
+    ap.add_argument("--chunk-minutes", type=int, default=20)
+    ap.add_argument("--output", type=Path, required=True)
+    args = ap.parse_args()
+
     args.output.mkdir(parents=True, exist_ok=True)
-    deadline=time.time()+args.minutes*60
-    manifest={"research_only":True,"symbol":"HYPEUSDT","target_minutes":args.minutes,"chunk_minutes":args.chunk_minutes,"git_sha":os.getenv("GITHUB_SHA"),"run_id":os.getenv("GITHUB_RUN_ID"),"chunks":[]}
-    idx=0
-    consecutive_total_failures=0
-    while time.time() < deadline-5:
-        idx+=1
-        remaining=max(1,int((deadline-time.time())/60))
-        mins=max(1,min(args.chunk_minutes,remaining))
-        rec=run_pair(args.output,idx,mins)
-        manifest["chunks"].append(rec)
-        (args.output/"RESILIENT_CAPTURE_MANIFEST.json").write_text(json.dumps(manifest,indent=2)+"\n",encoding="utf-8")
-        if rec["live_rc"]!=0 and rec["context_rc"]!=0:
-            consecutive_total_failures+=1
-            # brief backoff, then automatically continue
-            time.sleep(min(60,10*consecutive_total_failures))
-        else:
-            consecutive_total_failures=0
-    manifest["completed_ts_ms"]=int(time.time()*1000)
-    manifest["chunks_ok_any"]=sum(1 for x in manifest["chunks"] if x["live_rc"]==0 or x["context_rc"]==0)
-    manifest["chunks_both_ok"]=sum(1 for x in manifest["chunks"] if x["live_rc"]==0 and x["context_rc"]==0)
-    (args.output/"RESILIENT_CAPTURE_MANIFEST.json").write_text(json.dumps(manifest,indent=2)+"\n",encoding="utf-8")
-    # Fail only if nothing at all was captured; partial chunks are preserved.
-    if manifest["chunks_ok_any"]==0:
-        raise SystemExit(2)
-    print(json.dumps(manifest),flush=True)
+    started = time.time()
+    deadline = started + args.minutes * 60
+    manifest_path = args.output / "RESILIENT_CAPTURE_MANIFEST.json"
 
-if __name__=="__main__":
+    manifest = {
+        "research_only": True,
+        "symbol": "HYPEUSDT",
+        "target_minutes": args.minutes,
+        "storage_chunk_minutes": args.chunk_minutes,
+        "recovery_semantics": "seconds-level watchdog; chunk size is not recovery timeout",
+        "watchdog_poll_seconds": POLL_SECONDS,
+        "max_restart_backoff_seconds": MAX_RESTART_BACKOFF_SECONDS,
+        "git_sha": os.getenv("GITHUB_SHA"),
+        "run_id": os.getenv("GITHUB_RUN_ID"),
+        "started_ts_ms": int(started * 1000),
+        "chunks": [],
+    }
+
+    idx = 0
+    consecutive_failures = 0
+
+    while time.time() < deadline - 2:
+        idx += 1
+        remaining_seconds = max(1.0, deadline - time.time())
+        requested_minutes = max(
+            1,
+            min(args.chunk_minutes, int(math.ceil(remaining_seconds / 60.0))),
+        )
+
+        rec = run_pair(args.output, idx, requested_minutes, deadline)
+        manifest["chunks"].append(rec)
+        write_manifest(manifest_path, manifest)
+
+        if rec["reason"] == "global_deadline":
+            break
+
+        healthy = rec["live_rc"] == 0 and rec["context_rc"] == 0
+        if healthy:
+            consecutive_failures = 0
+            # Healthy chunk finished: start the next storage chunk immediately.
+            continue
+
+        consecutive_failures += 1
+        # Transient failure: restart in seconds, never wait for the 20m boundary.
+        backoff = min(
+            MAX_RESTART_BACKOFF_SECONDS,
+            BASE_RESTART_BACKOFF_SECONDS * (2 ** max(0, consecutive_failures - 1)),
+        )
+        remaining = deadline - time.time()
+        if remaining <= 2:
+            break
+        time.sleep(min(backoff, max(0.0, remaining - 1)))
+
+    manifest["completed_ts_ms"] = int(time.time() * 1000)
+    manifest["chunks_with_any_data_process"] = sum(
+        1 for x in manifest["chunks"]
+        if x["observed_wall_seconds"] > 0
+    )
+    manifest["healthy_chunks"] = sum(
+        1 for x in manifest["chunks"]
+        if x["live_rc"] == 0 and x["context_rc"] == 0
+    )
+    manifest["restart_events"] = sum(
+        1 for x in manifest["chunks"]
+        if x["reason"] not in ("completed", "global_deadline")
+    )
+    write_manifest(manifest_path, manifest)
+
+    if not manifest["chunks"]:
+        raise SystemExit(2)
+
+    print(json.dumps(manifest), flush=True)
+
+
+if __name__ == "__main__":
     main()
