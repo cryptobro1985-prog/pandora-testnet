@@ -25,7 +25,7 @@ DISCOVERY=datetime(2026,10,11,tzinfo=timezone.utc)
 TRAIN_END=datetime(2026,10,23,tzinfo=timezone.utc)
 OOS=datetime(2026,10,27,tzinfo=timezone.utc)
 END=datetime(2026,11,3,tzinfo=timezone.utc)
-DELAYS=(0,30,60,180,300)
+DELAYS=(0,30,60,180,300,600,900)
 WINDOWS=(5,15,30,60,180,300)
 EPS=1e-12
 
