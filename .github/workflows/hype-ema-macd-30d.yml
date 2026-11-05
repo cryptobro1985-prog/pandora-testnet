@@ -30,3 +30,5 @@ jobs:
           path: hype_ema_macd_30d_result.json
           if-no-files-found: warn
           retention-days: 7
+
+# trigger-m15
