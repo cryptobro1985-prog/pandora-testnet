@@ -221,44 +221,47 @@ def fmt_money(x: Any) -> str:
 
 def format_event(e: dict[str, Any]) -> str:
     kind=e["kind"]
+    base=str(e.get("base") or str(e.get("symbol","")).split("-",1)[0] or "—")
+    option_type=str(e.get("option_type") or ("CALL" if "-C-" in str(e.get("symbol","")) else "PUT" if "-P-" in str(e.get("symbol","")) else "OPTION"))
     if kind=="ENTRY":
         return (
-            f"🟢 <b>LIVE OPTIONS SETUP — {e['option_type']}</b>\n"
-            f"<b>{e['symbol']}</b>\n"
-            f"Strike: <b>{fmt_money(e['strike'])}</b> | DTE: {e['dte_hours']:.2f}h\n"
-            f"Buy reference ask: <b>{fmt_money(e['entry_ask'])}</b>\n"
-            f"Underlying: {fmt_money(e['underlying'])}\n"
-            f"Score: <b>{e['score']:.3f}</b> | agents: <b>{e.get('agent_quorum',0)}/5</b> | consensus {e.get('agent_consensus',0):.3f}\n"
-            f"IV: {e['mark_iv']:.4f} | Δ {e['delta']:.4f} | Γ {e['gamma']:.6g} | Θ {e['theta']:.6g}\n"
-            f"Spread: {e.get('spread_fraction',0)*100:.2f}% | depth balance: {e.get('depth_balance',0):.2f} | exitability: {e.get('exitability',0):.2f}\n"
-            f"Premium can fall to zero: <b>100% premium risk</b>\n"
-            f"If premium doubles: $5→$10 | $10→$20 | $20→$40\n"
-            f"Mode: live market monitoring; execution remains manual"
+            f"🟢 <b>КУПИТЬ {option_type}</b>\n"
+            f"Токен: <b>{base}</b>\n"
+            f"Цена входа: <b>{fmt_money(e['entry_ask'])} USDT</b> (ASK)\n"
+            f"Страйк: {fmt_money(e['strike'])}\n"
+            f"До экспирации: {e['dte_hours']:.1f} ч\n"
+            f"Опцион: <code>{e['symbol']}</code>\n"
+            f"Подтверждение: <b>{e.get('agent_quorum',0)}/5</b> агентов\n"
+            f"Действие: <b>КУПИТЬ {option_type}</b> и ждать следующего сигнала HOLD/SELL.\n"
+            f"⚠️ Премия опциона может упасть до нуля."
         )
     if kind=="X2_HOLD":
         return (
-            f"🟣 <b>{e['symbol']} reached {e['multiple']:.2f}x</b>\n"
-            f"Decision: <b>HOLD ABOVE X2</b>\n"
-            f"Entry ask: {fmt_money(e['entry_ask'])} | Bid now: {fmt_money(e['bid'])}\n"
-            f"MFE: {e['mfe_multiple']:.2f}x | protected floor: {e['protected_multiple']:.2f}x\n"
-            f"Liquidity: exitability {e.get('exitability',0):.2f} | depth {e.get('depth_balance',0):.2f}\n"
-            f"Score: {e['score']:.3f} — momentum still valid"
+            f"🟣 <b>ДЕРЖАТЬ {option_type}</b>\n"
+            f"Токен: <b>{base}</b>\n"
+            f"Вход: {fmt_money(e['entry_ask'])} USDT\n"
+            f"Продать сейчас можно примерно по: <b>{fmt_money(e['bid'])} USDT</b> (BID)\n"
+            f"Результат сейчас: <b>{(e['multiple']-1)*100:+.1f}%</b> ({e['multiple']:.2f}x)\n"
+            f"Решение: <b>НЕ ПРОДАВАТЬ — ДЕРЖАТЬ</b>"
         )
     if kind in {"TAKE_PROFIT","EXIT"}:
-        label="X2 / PROFIT MILESTONE" if kind=="TAKE_PROFIT" else "SETUP INVALIDATED"
+        reason="забрать прибыль" if kind=="TAKE_PROFIT" else "сигнал больше не подтверждён"
         return (
-            f"🔴 <b>{label}</b>\n"
-            f"<b>{e['symbol']}</b>\n"
-            f"Entry ask: {fmt_money(e['entry_ask'])} | Sell reference bid: <b>{fmt_money(e['bid'])}</b>\n"
-            f"Result reference: <b>{e['multiple']:.2f}x</b> ({e['return_pct']:+.1f}%)\n"
-            f"MFE: {e['mfe_multiple']:.2f}x\n"
-            f"Reason: {e['reason']}"
+            f"🔴 <b>ПРОДАТЬ {option_type}</b>\n"
+            f"Токен: <b>{base}</b>\n"
+            f"Цена входа: {fmt_money(e['entry_ask'])} USDT\n"
+            f"Цена продажи: <b>{fmt_money(e['bid'])} USDT</b> (BID)\n"
+            f"Результат: <b>{e['return_pct']:+.1f}%</b> ({e['multiple']:.2f}x)\n"
+            f"Причина: {reason}"
         )
     if kind=="HOLD":
         return (
-            f"🟡 <b>HOLD</b> {e['symbol']}\n"
-            f"Current: {e['multiple']:.2f}x | MFE {e['mfe_multiple']:.2f}x\n"
-            f"Score: {e['score']:.3f}"
+            f"🟡 <b>ДЕРЖАТЬ {option_type}</b>\n"
+            f"Токен: <b>{base}</b>\n"
+            f"Вход: {fmt_money(e.get('entry_ask'))} USDT\n"
+            f"BID сейчас: <b>{fmt_money(e.get('bid'))} USDT</b>\n"
+            f"Результат сейчас: <b>{(e['multiple']-1)*100:+.1f}%</b>\n"
+            f"Действие: <b>ДЕРЖАТЬ</b>"
         )
     return f"<b>{kind}</b>\n<code>{json.dumps(e, ensure_ascii=False)}</code>"
 
@@ -446,7 +449,7 @@ def manage_active(base: str, cands: list[Any], raw: dict[str, Any]) -> None:
         liquid_enough = pos["current_liquidity_score"] >= 0.35 and pos["current_exitability"] >= 0.25
         if score>=HOLD_ABOVE_X2_SCORE and correct_direction>0.12 and liquid_enough:
             emit("X2_HOLD",{
-                "symbol":pos["symbol"],"entry_ask":pos["entry_ask"],"bid":bid,
+                "base":base,"option_type":pos["option_type"],"symbol":pos["symbol"],"entry_ask":pos["entry_ask"],"bid":bid,
                 "multiple":multiple,"mfe_multiple":pos["mfe_multiple"],
                 "protected_multiple":protected,"score":score,
                 "exitability":pos["current_exitability"],
@@ -477,7 +480,8 @@ def manage_active(base: str, cands: list[Any], raw: dict[str, Any]) -> None:
     if now-float(pos.get("last_hold_notice",0))>=900:
         pos["last_hold_notice"]=now
         emit("HOLD",{
-            "symbol":pos["symbol"],"multiple":multiple,
+            "base":base,"option_type":pos["option_type"],"symbol":pos["symbol"],
+            "entry_ask":pos["entry_ask"],"bid":bid,"multiple":multiple,
             "mfe_multiple":pos["mfe_multiple"],"score":score
         })
     with lock:
@@ -486,7 +490,7 @@ def manage_active(base: str, cands: list[Any], raw: dict[str, Any]) -> None:
 
 def close_position(base: str,pos: dict[str,Any],bid: float,multiple: float,reason: str,kind: str) -> None:
     emit(kind,{
-        "symbol":pos["symbol"],"entry_ask":pos["entry_ask"],"bid":bid,
+        "base":base,"option_type":pos["option_type"],"symbol":pos["symbol"],"entry_ask":pos["entry_ask"],"bid":bid,
         "multiple":multiple,"return_pct":(multiple-1)*100,
         "mfe_multiple":pos["mfe_multiple"],"reason":reason,
     })
