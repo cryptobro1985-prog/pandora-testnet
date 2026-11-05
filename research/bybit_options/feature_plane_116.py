@@ -189,7 +189,7 @@ def build_feature_plane_116(context: dict[str, Any], candidate: Any, depth: dict
         n,v=_trade_features(_window(trades,now_ms,w),w); names.extend(n); values.extend(v)
     for w in WINDOWS_MS:
         n,v=_liq_features(_window(liqs,now_ms,w),w); names.extend(n); values.extend(v)
-    n,v=_book_features(context.get("orderbook") or context.get("ws_orderbook") or {}); names.extend(n); values.extend(v)
+    n,v=_book_features(context.get("ws_orderbook") or context.get("orderbook") or {}); names.extend(n); values.extend(v)
     ticker=context.get("ws_ticker") or context.get("ticker") or {}
     n,v=_ticker_features(ticker); names.extend(n); values.extend(v)
 
