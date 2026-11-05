@@ -1,4 +1,4 @@
-name: Local 116 30D Ten Token Research
+name: HYPE Local 116 30D Research
 
 on:
   push:
@@ -25,9 +25,7 @@ jobs:
           python - <<'PY'
           from research.hype_quant.feature_contract import POINTS
           assert len(POINTS)==116
-          from research.caterpillar.caterpillar.model import SYMBOLS
-          assert len(SYMBOLS)==10
-          print("smoke_ok", SYMBOLS)
+          print("smoke_ok", len(POINTS))
           PY
 
   research:
@@ -63,30 +61,3 @@ jobs:
           retention-days: 14
           compression-level: 1
 
-  aggregate:
-    needs: research
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: local116-*
-          path: ${{ runner.temp }}/local116-all
-      - name: Build pooled cross-token local engine
-        run: |
-          mkdir -p "$RUNNER_TEMP/local116-global"
-          python research/local_116_30d/aggregate.py \
-            --root "$RUNNER_TEMP/local116-all" \
-            --output "$RUNNER_TEMP/local116-global"
-      - name: Upload global local engine
-        uses: actions/upload-artifact@v4
-        with:
-          name: local116-global-model
-          path: ${{ runner.temp }}/local116-global/**
-          if-no-files-found: error
-          retention-days: 14
-          compression-level: 6
