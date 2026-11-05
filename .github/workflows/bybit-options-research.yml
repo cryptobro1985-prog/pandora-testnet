@@ -1,0 +1,140 @@
+name: Bybit Options Gamma Burst Research
+
+on:
+  push:
+    branches:
+      - research/bybit-options-gamma-burst-20261105
+    paths:
+      - "research/bybit_options/**"
+      - "research/bybit_options_relay/**"
+      - ".github/workflows/bybit-options-research.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONPATH: .
+  OPTIONS_RELAY_URL: https://pandora-bybit-options-relay.onrender.com
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install research dependencies
+        run: pip install -r research/bybit_options/requirements.txt
+      - name: Unit tests
+        run: python -m unittest discover -s research/bybit_options/tests -v
+      - name: Wait for research relay
+        run: |
+          for i in {1..24}; do
+            if curl -fsS "$OPTIONS_RELAY_URL/health" | tee /tmp/options-relay-health.json; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+      - name: Paper collector smoke
+        run: python -m research.bybit_options.collector --duration-seconds 90 --output options-smoke
+      - name: Verify smoke output
+        run: python -m research.bybit_options.verify options-smoke
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BYBIT-OPTIONS-smoke
+          path: options-smoke
+          retention-days: 3
+
+  segment_1:
+    needs: smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r research/bybit_options/requirements.txt
+      - name: Capture 20 minute bootstrap
+        run: python -m research.bybit_options.collector --duration-seconds 1200 --output options-segment-1
+      - run: python -m research.bybit_options.verify options-segment-1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BYBIT-OPTIONS-segment-1
+          path: options-segment-1
+          retention-days: 3
+
+  segment_2:
+    needs: segment_1
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r research/bybit_options/requirements.txt
+      - name: Capture segment 2
+        run: python -m research.bybit_options.collector --duration-seconds 9900 --output options-segment-2
+      - run: python -m research.bybit_options.verify options-segment-2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BYBIT-OPTIONS-segment-2
+          path: options-segment-2
+          retention-days: 3
+
+  segment_3:
+    needs: segment_2
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r research/bybit_options/requirements.txt
+      - name: Capture segment 3
+        run: python -m research.bybit_options.collector --duration-seconds 9900 --output options-segment-3
+      - run: python -m research.bybit_options.verify options-segment-3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BYBIT-OPTIONS-segment-3
+          path: options-segment-3
+          retention-days: 3
+
+  segment_4:
+    needs: segment_3
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r research/bybit_options/requirements.txt
+      - name: Capture segment 4
+        run: python -m research.bybit_options.collector --duration-seconds 9900 --output options-segment-4
+      - run: python -m research.bybit_options.verify options-segment-4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BYBIT-OPTIONS-segment-4
+          path: options-segment-4
+          retention-days: 3
+
+  final:
+    needs: segment_4
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: BYBIT-OPTIONS-*
+          path: collected
+      - name: Publish run summary
+        run: |
+          echo "# Bybit Options research summaries"
+          find collected -name SUMMARY.json -print -exec cat {} \;
