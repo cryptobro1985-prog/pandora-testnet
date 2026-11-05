@@ -34,6 +34,18 @@ def main() -> int:
         problems.append("naked short enabled")
     if summary.get("scan_count", 0) <= 0:
         problems.append("no scans")
+    candidate_rows = 0
+    for batch in read_rows(p / "candidates.jsonl.gz") or []:
+        for candidate in batch.get("top", []):
+            candidate_rows += 1
+            strike = float(candidate.get("strike") or 0)
+            underlying = float(candidate.get("underlying") or 0)
+            if strike <= 0:
+                problems.append(f"invalid candidate strike: {candidate.get('symbol')}")
+            if underlying <= 0:
+                problems.append(f"invalid candidate underlying: {candidate.get('symbol')}")
+    if candidate_rows <= 0:
+        problems.append("no option candidates")
     for row in read_rows(p / "signals.jsonl.gz") or []:
         missing = REQUIRED_SIGNAL_KEYS - row.keys()
         if missing:
