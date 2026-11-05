@@ -22,7 +22,7 @@ BASES = (
 LINEAR_WS = os.getenv("BYBIT_LINEAR_WS", "wss://stream.bybit.com/v5/public/linear")
 UNDERLYINGS = tuple(
     x.strip().upper()
-    for x in os.getenv("OPTIONS_UNDERLYINGS", "BTCUSDT,ETHUSDT,SOLUSDT").split(",")
+    for x in os.getenv("OPTIONS_UNDERLYINGS", "BTCUSDT,ETHUSDT,SOLUSDT,HYPEUSDT").split(",")
     if x.strip()
 )
 _session = requests.Session()
