@@ -41,6 +41,8 @@ jobs:
           exit 1
       - name: Paper collector smoke
         run: python -m research.bybit_options.collector --duration-seconds 90 --output options-smoke
+      - name: Label executable paper outcomes
+        run: python -m research.bybit_options.labeler options-smoke
       - name: Verify smoke output
         run: python -m research.bybit_options.verify options-smoke
       - uses: actions/upload-artifact@v4
