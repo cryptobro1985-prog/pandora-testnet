@@ -1,0 +1,53 @@
+name: HYPE Quant Stable Recovery
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-quant-recovery.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r research/hype_quant/requirements.txt
+      - name: Download night checkpoint 2
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p old
+          gh api repos/${GITHUB_REPOSITORY}/actions/artifacts/13384572950/zip > old.zip
+          unzip -q old.zip -d old
+          test -f old/quant_learner.pkl
+      - name: Rebuild stable learner from matured causal memory
+        run: |
+          python -m research.hype_quant.recover_checkpoint --source old/quant_learner.pkl --output recovered
+          cat recovered/RECOVERY_REPORT.json
+      - name: Validate recovered learner
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path("recovered/RECOVERY_REPORT.json").read_text())
+          assert r["recovered_matured_rows"] > 10000, r
+          assert r["forward_stats_reset"] is True
+          assert r["old_predictions_reused"] is False
+          print("STABLE_RECOVERY_OK",r["recovered_matured_rows"])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-QUANT-STABLE-WARMSTART
+          path: recovered
+          if-no-files-found: error
+          retention-days: 7
