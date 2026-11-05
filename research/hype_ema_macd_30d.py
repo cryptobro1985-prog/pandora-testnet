@@ -298,6 +298,98 @@ def run_levered_portfolio(minutes, signals, sl, tp, start_ts, end_ts):
         "detail":trades,
     }
 
+
+def run_levered_tp_sl_only(minutes, signals, sl, tp, start_ts, end_ts):
+    """One position at a time. Entry only when flat. While position is open,
+    later EMA/MACD signals are ignored; exit only by TP/SL or period end.
+    Margin is always 20% of CURRENT equity at 25x, so profits/losses compound.
+    """
+    rows=[r for r in minutes if start_ts<=r["ts"]<end_ts]
+    if not rows:
+        return None
+    sigs={s["enter_ts"]:s for s in signals if start_ts<=s["enter_ts"]<end_ts}
+    equity=START_EQUITY
+    peak=equity
+    maxdd=0.0
+    trades=[]
+    pos=None
+    skipped_signals=0
+
+    def close_pos(exit_px, exit_ts, reason):
+        nonlocal equity, peak, maxdd, pos
+        if pos is None:
+            return
+        price_ret=(exit_px/pos["entry"]-1.0)*pos["side"]
+        gross_pnl=pos["notional"]*price_ret
+        fees=pos["notional"]*FEE*2.0
+        pnl=gross_pnl-fees
+        before=equity
+        equity += pnl
+        trades.append({
+            "side":pos["side"],"entry":pos["entry"],"exit":exit_px,
+            "entry_ts":pos["ts"],"exit_ts":exit_ts,"reason":reason,
+            "price_return":price_ret,"gross_pnl":gross_pnl,"fees":fees,
+            "pnl":pnl,"equity_before":before,"equity_after":equity,
+            "margin":pos["margin"],"notional":pos["notional"],
+            "account_return_pct":(pnl/before*100.0) if before else None,
+        })
+        peak=max(peak,equity)
+        maxdd=max(maxdd,(peak-equity)/peak if peak>0 else 1.0)
+        pos=None
+
+    for r in rows:
+        ts=r["ts"]
+        s=sigs.get(ts)
+        if s is not None:
+            if pos is None and equity>0:
+                margin=equity*MARGIN_FRACTION
+                notional=margin*LEVERAGE
+                pos={"side":s["side"],"entry":r["open"],"ts":ts,
+                     "margin":margin,"notional":notional}
+            elif pos is not None:
+                skipped_signals += 1
+
+        if pos is None:
+            continue
+
+        e=pos["entry"]
+        if pos["side"]==1:
+            stop=e*(1-sl); take=e*(1+tp)
+            hit_stop=r["low"]<=stop
+            hit_take=r["high"]>=take
+        else:
+            stop=e*(1+sl); take=e*(1-tp)
+            hit_stop=r["high"]>=stop
+            hit_take=r["low"]<=take
+
+        if hit_stop:
+            close_pos(stop,ts,"stop")
+        elif hit_take:
+            close_pos(take,ts,"take")
+
+        if equity<=0:
+            break
+
+    if pos is not None and rows:
+        close_pos(rows[-1]["close"],rows[-1]["ts"],"period_end")
+
+    wins=sum(t["pnl"]>0 for t in trades)
+    gp=sum(max(t["pnl"],0.0) for t in trades)
+    gl=-sum(min(t["pnl"],0.0) for t in trades)
+    return {
+        "final":equity,
+        "return_pct":(equity/START_EQUITY-1.0)*100.0,
+        "trades":len(trades),
+        "wins":wins,
+        "win_rate":wins/len(trades)*100.0 if trades else 0.0,
+        "max_dd_pct":maxdd*100.0,
+        "profit_factor":gp/gl if gl>0 else None,
+        "stops":sum(t["reason"]=="stop" for t in trades),
+        "takes":sum(t["reason"]=="take" for t in trades),
+        "skipped_signals_while_open":skipped_signals,
+        "detail":trades,
+    }
+
 def main():
     minutes,trade_count=load_minutes()
     m15=bars_from_minutes(minutes,900)
@@ -340,6 +432,17 @@ def main():
     levered_oos=run_levered_portfolio(minutes,signals,levered_winner["sl"],levered_winner["tp"],SPLIT,END_TS)
     levered_full=run_levered_portfolio(minutes,signals,levered_winner["sl"],levered_winner["tp"],DISCOVERY_START,END_TS)
 
+    tp_sl_only_results=[]
+    for sl in SL_GRID:
+        for tp in TP_GRID:
+            d=run_levered_tp_sl_only(minutes,signals,sl,tp,DISCOVERY_START,SPLIT)
+            if d and d["trades"]>=5:
+                tp_sl_only_results.append({"sl":sl,"tp":tp,**{k:v for k,v in d.items() if k!="detail"}})
+    tp_sl_only_results.sort(key=lambda x:(x["final"],-x["max_dd_pct"]),reverse=True)
+    tp_sl_only_winner=tp_sl_only_results[0]
+    tp_sl_only_oos=run_levered_tp_sl_only(minutes,signals,tp_sl_only_winner["sl"],tp_sl_only_winner["tp"],SPLIT,END_TS)
+    tp_sl_only_full=run_levered_tp_sl_only(minutes,signals,tp_sl_only_winner["sl"],tp_sl_only_winner["tp"],DISCOVERY_START,END_TS)
+
     payload={"assumptions":{"ema":"6/20 M15 close","macd":"12/26 line sign on last closed H1","entry":"next M15 open","fee_per_side":FEE,
                              "same_minute_tp_sl":"stop-first conservative","position":"20% current equity margin at 25x = 5x account notional, compounded"},
              "discovery":{"start":"2026-10-11","end_exclusive":"2026-10-27","top10":top,"winner":winner},
@@ -348,6 +451,13 @@ def main():
              "winner_trades":full["detail"],"neighbor_candidates":near,
              "every_qualifying_cross":{"discovery_winner":every_winner,"oos":every_oos,"full":every_full},
              "cross_stats":cross_stats,
+             "levered_tp_sl_only_25x_20pct_margin":{
+                 "discovery_top10":tp_sl_only_results[:10],
+                 "winner":tp_sl_only_winner,
+                 "oos":{k:v for k,v in tp_sl_only_oos.items() if k!="detail"},
+                 "full":{k:v for k,v in tp_sl_only_full.items() if k!="detail"},
+                 "full_trades":tp_sl_only_full["detail"]
+             },
              "levered_25x_20pct_margin":{
                  "discovery_top10":levered_results[:10],
                  "winner":levered_winner,
