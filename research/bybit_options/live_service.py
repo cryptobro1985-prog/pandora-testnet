@@ -34,6 +34,8 @@ MIN_EXIT_DEPTH_BALANCE = float(os.getenv("LIVE_MIN_EXIT_DEPTH_BALANCE", "0.20"))
 TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TG_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 TG_PAIR_CODE = os.getenv("TELEGRAM_PAIR_CODE", "").strip()
+ALERT_BRIDGE_URL = os.getenv("OPTIONS_ALERT_BRIDGE_URL", "").strip()
+ALERT_BRIDGE_SECRET = os.getenv("OPTIONS_ALERT_SECRET", "").strip()
 telegram_chat_id = TG_CHAT_ID
 
 session = requests.Session()
@@ -45,7 +47,8 @@ state: dict[str, Any] = {
     "last_scan_ms": 0,
     "last_error": None,
     "scan_count": 0,
-    "telegram_configured": bool(TG_TOKEN and telegram_chat_id),
+    "telegram_configured": bool((ALERT_BRIDGE_URL and ALERT_BRIDGE_SECRET) or (TG_TOKEN and telegram_chat_id)),
+    "last_alert_delivery": None,
     "active": {},
     "last_events": [],
     "last_candidates": {},
@@ -63,9 +66,29 @@ def get_json(path: str, **params: Any) -> dict[str, Any]:
     return obj
 
 
-def tg_send(text: str) -> None:
+def tg_send(text: str, kind: str = "ALERT") -> int:
+    if ALERT_BRIDGE_URL and ALERT_BRIDGE_SECRET:
+        r = session.post(
+            ALERT_BRIDGE_URL,
+            json={"kind": kind, "text": text},
+            headers={"X-Options-Alert-Secret": ALERT_BRIDGE_SECRET},
+            timeout=12,
+        )
+        r.raise_for_status()
+        payload = r.json()
+        sent = int(payload.get("sent", 0))
+        with lock:
+            state["last_alert_delivery"] = {
+                "ts_ms": int(time.time() * 1000),
+                "transport": "existing_bot_webhook",
+                "sent": sent,
+                "failed": int(payload.get("failed", 0)),
+                "subscribers": int(payload.get("subscribers", 0)),
+            }
+        print(json.dumps({"kind": "TELEGRAM_BRIDGE_DELIVERY", **state["last_alert_delivery"]}), flush=True)
+        return sent
     if not (TG_TOKEN and telegram_chat_id):
-        return
+        return 0
     url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
     r = session.post(url, json={
         "chat_id": telegram_chat_id,
@@ -74,11 +97,22 @@ def tg_send(text: str) -> None:
         "disable_web_page_preview": True,
     }, timeout=12)
     r.raise_for_status()
+    with lock:
+        state["last_alert_delivery"] = {
+            "ts_ms": int(time.time() * 1000),
+            "transport": "direct_sendMessage",
+            "sent": 1,
+            "failed": 0,
+            "subscribers": 1,
+        }
+    return 1
 
 
 
 def telegram_pair_loop() -> None:
     global telegram_chat_id
+    if ALERT_BRIDGE_URL and ALERT_BRIDGE_SECRET:
+        return
     if not TG_TOKEN or telegram_chat_id:
         return
     offset = 0
@@ -108,7 +142,7 @@ def telegram_pair_loop() -> None:
                         state["telegram_configured"] = True
                     print(json.dumps({"kind":"TELEGRAM_PAIR_ACCEPTED","chat_id":telegram_chat_id}), flush=True)
                     try:
-                        tg_send("✅ <b>PANDORA OPTIONS connected</b>\nLive BUY/HOLD/SELL alerts are now enabled for this chat.")
+                        tg_send("✅ <b>PANDORA OPTIONS connected</b>\nLive BUY/HOLD/SELL alerts are now enabled for this chat.", kind="STARTUP")
                     except Exception as exc:
                         print(json.dumps({"kind":"TELEGRAM_PAIR_SEND_ERROR","error":repr(exc)}), flush=True)
                     return
@@ -124,7 +158,7 @@ def emit(kind: str, payload: dict[str, Any]) -> None:
         state["last_events"] = state["last_events"][-80:]
     print(json.dumps(event, sort_keys=True), flush=True)
     try:
-        tg_send(format_event(event))
+        tg_send(format_event(event), kind=kind)
     except Exception as exc:
         with lock:
             state["last_error"] = f"telegram:{exc!r}"
@@ -398,6 +432,29 @@ def maybe_enter(base: str,cands: list[Any]) -> None:
     })
 
 
+def startup_alert_loop() -> None:
+    deadline = time.time() + 180
+    while time.time() < deadline:
+        with lock:
+            scans = int(state["scan_count"])
+        if scans > 0:
+            try:
+                sent = tg_send(
+                    "✅ <b>PANDORA OPTIONS LIVE</b>\n"
+                    "BTC / ETH / SOL scanner is online.\n"
+                    "BUY / HOLD / SELL alerts are enabled.\n"
+                    "Execution remains manual.",
+                    kind="STARTUP",
+                )
+                print(json.dumps({"kind": "TELEGRAM_STARTUP_TEST", "sent": sent}), flush=True)
+            except Exception as exc:
+                with lock:
+                    state["last_error"] = f"telegram_startup:{exc!r}"
+                print(json.dumps({"kind": "TELEGRAM_STARTUP_TEST_ERROR", "error": repr(exc)}), flush=True)
+            return
+        time.sleep(2)
+
+
 def loop() -> None:
     instruments: dict[str,dict[str,Any]]={}
     next_refresh=0.0
@@ -451,6 +508,7 @@ def loop() -> None:
 
 threading.Thread(target=loop,daemon=True,name="options-live-decision-loop").start()
 threading.Thread(target=telegram_pair_loop,daemon=True,name="telegram-pair-loop").start()
+threading.Thread(target=startup_alert_loop,daemon=True,name="options-startup-alert").start()
 
 
 @app.get("/health")
@@ -465,6 +523,7 @@ def health():
             "scan_count": state["scan_count"],
             "active_count": len(state["active"]),
             "last_error": state["last_error"],
+            "last_alert_delivery": state["last_alert_delivery"],
             "ws": ws.status(),
         }
     return jsonify(s), (200 if s["ok"] else 503)
@@ -482,6 +541,7 @@ def status():
             "last_candidates":state["last_candidates"],
             "last_events":state["last_events"][-30:],
             "telegram_configured":state["telegram_configured"],
+            "last_alert_delivery":state["last_alert_delivery"],
         })
 
 
