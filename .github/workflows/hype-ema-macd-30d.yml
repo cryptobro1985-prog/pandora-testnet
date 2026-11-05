@@ -1,0 +1,32 @@
+name: HYPE EMA MACD 30D Backtest
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - research/hype_ema_macd_30d.py
+      - .github/workflows/hype-ema-macd-30d.yml
+
+permissions:
+  contents: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run HYPE EMA/MACD 30D backtest
+        run: python research/hype_ema_macd_30d.py
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-EMA-MACD-30D-result
+          path: hype_ema_macd_30d_result.json
+          if-no-files-found: warn
+          retention-days: 7
