@@ -1,5 +1,5 @@
 name: HYPE v6 12h Research Material
-# compact-110-v3-ws-klines-relay-ready
+# compact-110-v4-fixed-pack
 
 on:
   push:
@@ -50,7 +50,7 @@ jobs:
 
   segment_2:
     needs: segment_1
-    if: ${{ always() }}
+    if: ${{ success() }}
     runs-on: ubuntu-latest
     timeout-minutes: 195
     steps:
@@ -74,7 +74,7 @@ jobs:
 
   segment_3:
     needs: segment_2
-    if: ${{ always() }}
+    if: ${{ success() }}
     runs-on: ubuntu-latest
     timeout-minutes: 195
     steps:
@@ -98,7 +98,7 @@ jobs:
 
   segment_4:
     needs: segment_3
-    if: ${{ always() }}
+    if: ${{ success() }}
     runs-on: ubuntu-latest
     timeout-minutes: 195
     steps:
@@ -122,7 +122,7 @@ jobs:
 
   combine:
     needs: segment_4
-    if: ${{ always() }}
+    if: ${{ success() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
