@@ -680,7 +680,7 @@ def telegram_webhook():
         with lock:
             state["telegram_configured"]=True
         print(json.dumps({"kind":"TELEGRAM_PAIR_ACCEPTED","chat_id":telegram_chat_id}),flush=True)
-        reply="✅ <b>PANDORA OPTIONS подключён</b>\nBTC / ETH / SOL BUY / HOLD / SELL сигналы включены."
+        reply="✅ <b>PANDORA OPTIONS подключён</b>\nBTC / ETH / SOL / HYPE BUY / HOLD / SELL сигналы включены."
         try:
             tg_send(reply)
         except Exception as exc:
