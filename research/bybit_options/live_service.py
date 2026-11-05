@@ -9,7 +9,7 @@ from dataclasses import asdict
 from typing import Any
 
 import requests
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 
 from research.bybit_options.scoring import build_candidates, underlying_features, depth_metrics, clamp
 from research.bybit_options.ws_cache import LinearPublicWS
