@@ -12,10 +12,10 @@ class LabelerTests(unittest.TestCase):
     def test_bid_ask_and_mfe(self):
         result=label_signal(self.signal,self.points)
         o=result["outcomes"]["60s"]
-        self.assertEqual(o["gross_return_pct"],40.0)
-        self.assertEqual(o["mfe_pct"],40.0)
-        self.assertEqual(o["time_to_mfe_seconds"],60.0)
-        self.assertEqual(o["round_trip_spread_pct"],20.0)
+        self.assertAlmostEqual(o["gross_return_pct"],40.0,places=9)
+        self.assertAlmostEqual(o["mfe_pct"],40.0,places=9)
+        self.assertAlmostEqual(o["time_to_mfe_seconds"],60.0,places=9)
+        self.assertAlmostEqual(o["round_trip_spread_pct"],20.0,places=9)
     def test_missing_future_is_censored(self):
         result=label_signal(self.signal,self.points)
         self.assertEqual(result["outcomes"]["900s"]["status"],"censored_no_fresh_bid")
