@@ -1,5 +1,5 @@
 name: HYPE Quant Learner 12h
-# full-116-online-v7-stable-regression
+# full-116-online-v8-recovered-retained
 
 on:
   push:
@@ -53,28 +53,39 @@ jobs:
         run: |
           python -m pip install -r research/hype_local_v5/requirements-research.txt
           python -m pip install -r research/hype_quant/requirements.txt
-      - name: Bootstrap from available compact HYPE history
+      - name: Bootstrap stable learner from recovered night memory or compact history
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p bootstrap checkpoint
-          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100"             --jq '.artifacts | map(select((.expired|not) and (.name|startswith("HYPE-H1-V6-12H-segment-")))) | sort_by(.created_at) | reverse | .[:12] | .[] | [.id,.name] | @tsv'             > /tmp/hype_artifacts.tsv || true
-          while IFS=$'\t' read -r id name; do
-            [ -n "${id:-}" ] || continue
-            mkdir -p "bootstrap/$id"
-            if gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$id/zip" > "bootstrap/$id/a.zip"; then
-              unzip -q "bootstrap/$id/a.zip" -d "bootstrap/$id/data" || true
-            fi
-          done < /tmp/hype_artifacts.tsv
-          mapfile -t PKGS < <(find bootstrap -name PACK_MANIFEST.json -printf '%h\n' | sort -u)
-          if [ "${#PKGS[@]}" -gt 0 ]; then
-            ARGS=()
-            for p in "${PKGS[@]}"; do ARGS+=(--package "$p"); done
-            python -m research.hype_quant.bootstrap_compact "${ARGS[@]}" --checkpoint-dir checkpoint
+          WARM_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" --jq '.artifacts | map(select((.expired|not) and .name=="HYPE-QUANT-STABLE-WARMSTART")) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          if [ -n "${WARM_ID:-}" ]; then
+            echo "Using recovered stable warmstart artifact $WARM_ID"
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$WARM_ID/zip" > bootstrap/warm.zip
+            unzip -q bootstrap/warm.zip -d checkpoint
+            test -f checkpoint/quant_learner.pkl
+            test -f checkpoint/RECOVERY_REPORT.json
+            cat checkpoint/RECOVERY_REPORT.json
           else
-            echo "No HYPE110-COMPACT-v1 history available yet; starting causal online warmup."
+            echo "No stable warmstart found; replaying compact causal history."
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" --jq '.artifacts | map(select((.expired|not) and (.name|startswith("HYPE-H1-V6-12H-segment-")))) | sort_by(.created_at) | reverse | .[:12] | .[] | [.id,.name] | @tsv' > /tmp/hype_artifacts.tsv || true
+            while IFS=$'\t' read -r id name; do
+              [ -n "${id:-}" ] || continue
+              mkdir -p "bootstrap/$id"
+              if gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$id/zip" > "bootstrap/$id/a.zip"; then
+                unzip -q "bootstrap/$id/a.zip" -d "bootstrap/$id/data" || true
+              fi
+            done < /tmp/hype_artifacts.tsv
+            mapfile -t PKGS < <(find bootstrap -name PACK_MANIFEST.json -printf '%h\n' | sort -u)
+            if [ "${#PKGS[@]}" -gt 0 ]; then
+              ARGS=()
+              for p in "${PKGS[@]}"; do ARGS+=(--package "$p"); done
+              python -m research.hype_quant.bootstrap_compact "${ARGS[@]}" --checkpoint-dir checkpoint
+            else
+              echo "No HYPE110-COMPACT-v1 history available yet; starting causal online warmup."
+            fi
           fi
       - name: Live quant learning segment 1
         shell: bash
@@ -91,7 +102,16 @@ jobs:
           set -e
           printf '{"capture_rc":%s,"quant_rc":%s}\n' "$CAP_RC" "$Q_RC" > checkpoint/SEGMENT_STATUS.json
           test -f checkpoint/quant_learner.pkl
-          rm -rf live bootstrap
+          mkdir -p checkpoint/live_compact_segment_1
+          if python research/hype_local_v5/compact_pack.py --input live --output checkpoint/live_compact_segment_1 \
+             && python research/hype_local_v5/decode_compact.py checkpoint/live_compact_segment_1 --verify; then
+            rm -rf live
+          else
+            echo "Compact preservation failed; retaining raw live capture instead."
+            rm -rf checkpoint/emergency_raw_segment_1
+            mv live checkpoint/emergency_raw_segment_1
+          fi
+          rm -rf bootstrap
       - name: Upload quant checkpoint 1
         if: always()
         uses: actions/upload-artifact@v4
@@ -135,7 +155,15 @@ jobs:
           set -e
           printf '{"capture_rc":%s,"quant_rc":%s}\n' "$CAP_RC" "$Q_RC" > checkpoint/SEGMENT_STATUS.json
           test -f checkpoint/quant_learner.pkl
-          rm -rf live
+          mkdir -p checkpoint/live_compact_segment_2
+          if python research/hype_local_v5/compact_pack.py --input live --output checkpoint/live_compact_segment_2 \
+             && python research/hype_local_v5/decode_compact.py checkpoint/live_compact_segment_2 --verify; then
+            rm -rf live
+          else
+            echo "Compact preservation failed; retaining raw live capture instead."
+            rm -rf checkpoint/emergency_raw_segment_2
+            mv live checkpoint/emergency_raw_segment_2
+          fi
       - name: Upload quant checkpoint 2
         if: always()
         uses: actions/upload-artifact@v4
@@ -178,7 +206,15 @@ jobs:
           set -e
           printf '{"capture_rc":%s,"quant_rc":%s}\n' "$CAP_RC" "$Q_RC" > checkpoint/SEGMENT_STATUS.json
           test -f checkpoint/quant_learner.pkl
-          rm -rf live
+          mkdir -p checkpoint/live_compact_segment_3
+          if python research/hype_local_v5/compact_pack.py --input live --output checkpoint/live_compact_segment_3 \
+             && python research/hype_local_v5/decode_compact.py checkpoint/live_compact_segment_3 --verify; then
+            rm -rf live
+          else
+            echo "Compact preservation failed; retaining raw live capture instead."
+            rm -rf checkpoint/emergency_raw_segment_3
+            mv live checkpoint/emergency_raw_segment_3
+          fi
       - name: Upload quant checkpoint 3
         if: always()
         uses: actions/upload-artifact@v4
@@ -221,7 +257,15 @@ jobs:
           set -e
           printf '{"capture_rc":%s,"quant_rc":%s}\n' "$CAP_RC" "$Q_RC" > checkpoint/SEGMENT_STATUS.json
           test -f checkpoint/quant_learner.pkl
-          rm -rf live
+          mkdir -p checkpoint/live_compact_segment_4
+          if python research/hype_local_v5/compact_pack.py --input live --output checkpoint/live_compact_segment_4 \
+             && python research/hype_local_v5/decode_compact.py checkpoint/live_compact_segment_4 --verify; then
+            rm -rf live
+          else
+            echo "Compact preservation failed; retaining raw live capture instead."
+            rm -rf checkpoint/emergency_raw_segment_4
+            mv live checkpoint/emergency_raw_segment_4
+          fi
       - name: Upload quant checkpoint 4
         if: always()
         uses: actions/upload-artifact@v4
