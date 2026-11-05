@@ -34,9 +34,9 @@ jobs:
     needs: smoke
     strategy:
       fail-fast: false
-      max-parallel: 10
+      max-parallel: 1
       matrix:
-        symbol: [ZEC, HYPE, NEAR, SOL, ENA, 1000PEPE, DOGE, SUI, AAVE, WLD]
+        symbol: [HYPE]
     runs-on: ubuntu-latest
     timeout-minutes: 355
     steps:
