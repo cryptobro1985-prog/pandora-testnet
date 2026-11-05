@@ -69,13 +69,20 @@ def label_signal(signal, points, max_entry_lag_ms=120000, max_exit_lag_ms=120000
     premium = entry["ask"]
     base["entry"] = entry
     base["max_loss_premium_units"] = premium
-    for h in HORIZONS_SECONDS:
-        target = ts + h * 1000
-        key = f"{h}s"
+    horizons = [(f"{h}s", ts + h * 1000) for h in HORIZONS_SECONDS]
+    if expiry:
+        horizons.append(("expiry", expiry))
+    for key, target in horizons:
         if expiry and target > expiry:
             base["outcomes"][key] = {"status":"censored_after_expiry"}
             continue
-        exit_pt = next((p for p in points if target <= p["ts_ms"] <= target+max_exit_lag_ms),None)
+        # Expiry requires a verified settlement observation; an ordinary bid
+        # after expiry is not a valid executable sale.
+        if key == "expiry":
+            base["outcomes"][key] = {"status":"censored_no_verified_settlement",
+                "reason":"expiry cannot be priced from post-expiry bid/mark"}
+            continue
+        exit_pt = next((p for p in points if target <= p["ts_ms"] <= target+max_exit_lag_ms and (not expiry or p["ts_ms"] < expiry)),None)
         path = [p for p in points if entry["ts_ms"] <= p["ts_ms"] <= target and (not expiry or p["ts_ms"] <= expiry)]
         if not exit_pt:
             base["outcomes"][key] = {"status":"censored_no_fresh_bid","observations":len(path)}
@@ -124,7 +131,7 @@ def run(directory):
         "cutoff_ms":max((int(x["ts_ms"]) for x in signals),default=None),
         "model_status":"untrained","edge_proven":False,
         "rejected_hypotheses":[],
-        "limitations":["Fees/slippage beyond observed spread not configured","Sparse surfaces censor short horizons","No independent forward evaluation yet"]}
+        "limitations":["Fees/slippage beyond observed spread not configured","Sparse surfaces censor short horizons","No independent forward evaluation yet","Expiry settlement is censored until verified exchange settlement records are collected","L25 depth and size-aware execution are not available in this labeler"]}
     (folder/"LABEL_REPORT.json").write_text(json.dumps(report,indent=2))
     return report
 
