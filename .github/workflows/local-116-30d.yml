@@ -48,17 +48,17 @@ jobs:
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          mkdir -p "$RUNNER_TEMP/local116-cache/\${{ matrix.symbol }}" "$RUNNER_TEMP/local116-out/\${{ matrix.symbol }}"
+          mkdir -p "$RUNNER_TEMP/local116-cache/${{ matrix.symbol }}" "$RUNNER_TEMP/local116-out/${{ matrix.symbol }}"
           python research/local_116_30d/run_symbol.py \
-            --symbol "\${{ matrix.symbol }}" \
-            --cache "$RUNNER_TEMP/local116-cache/\${{ matrix.symbol }}" \
-            --output "$RUNNER_TEMP/local116-out/\${{ matrix.symbol }}"
-          test -z "$(find "$RUNNER_TEMP/local116-cache/\${{ matrix.symbol }}" -type f -name '*.csv.gz' -print -quit)"
+            --symbol "${{ matrix.symbol }}" \
+            --cache "$RUNNER_TEMP/local116-cache/${{ matrix.symbol }}" \
+            --output "$RUNNER_TEMP/local116-out/${{ matrix.symbol }}"
+          test -z "$(find "$RUNNER_TEMP/local116-cache/${{ matrix.symbol }}" -type f -name '*.csv.gz' -print -quit)"
       - name: Upload compact research artifact
         uses: actions/upload-artifact@v4
         with:
-          name: local116-\${{ matrix.symbol }}
-          path: \${{ runner.temp }}/local116-out/\${{ matrix.symbol }}/**
+          name: local116-${{ matrix.symbol }}
+          path: ${{ runner.temp }}/local116-out/${{ matrix.symbol }}/**
           if-no-files-found: error
           retention-days: 14
           compression-level: 1
@@ -75,7 +75,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           pattern: local116-*
-          path: \${{ runner.temp }}/local116-all
+          path: ${{ runner.temp }}/local116-all
       - name: Build pooled cross-token local engine
         run: |
           mkdir -p "$RUNNER_TEMP/local116-global"
@@ -86,7 +86,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: local116-global-model
-          path: \${{ runner.temp }}/local116-global/**
+          path: ${{ runner.temp }}/local116-global/**
           if-no-files-found: error
           retention-days: 14
           compression-level: 6
