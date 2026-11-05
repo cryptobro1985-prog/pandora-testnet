@@ -11,7 +11,7 @@ from typing import Any
 import requests
 from flask import Flask, jsonify
 
-from research.bybit_options.scoring import build_candidates, underlying_features
+from research.bybit_options.scoring import build_candidates, underlying_features, depth_metrics, clamp
 from research.bybit_options.ws_cache import LinearPublicWS
 
 app = Flask(__name__)
@@ -27,6 +27,9 @@ HOLD_ABOVE_X2_SCORE = float(os.getenv("LIVE_HOLD_ABOVE_X2_SCORE", "0.82"))
 TRAIL_MFE_FRACTION = float(os.getenv("LIVE_TRAIL_MFE_FRACTION", "0.75"))
 MIN_PROTECTED_X_AFTER_X2 = float(os.getenv("LIVE_MIN_PROTECTED_X_AFTER_X2", "1.55"))
 COOLDOWN_SECONDS = int(os.getenv("LIVE_SIGNAL_COOLDOWN_SECONDS", "900"))
+DEPTH_REFINE_TOP = int(os.getenv("LIVE_DEPTH_REFINE_TOP", "6"))
+MAX_EXEC_SPREAD_FRACTION = float(os.getenv("LIVE_MAX_EXEC_SPREAD_FRACTION", "0.12"))
+MIN_EXIT_DEPTH_BALANCE = float(os.getenv("LIVE_MIN_EXIT_DEPTH_BALANCE", "0.20"))
 
 TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TG_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
@@ -145,6 +148,7 @@ def format_event(e: dict[str, Any]) -> str:
             f"Underlying: {fmt_money(e['underlying'])}\n"
             f"Score: <b>{e['score']:.3f}</b>\n"
             f"IV: {e['mark_iv']:.4f} | Δ {e['delta']:.4f} | Γ {e['gamma']:.6g} | Θ {e['theta']:.6g}\n"
+            f"Spread: {e.get('spread_fraction',0)*100:.2f}% | depth balance: {e.get('depth_balance',0):.2f} | exitability: {e.get('exitability',0):.2f}\n"
             f"Premium can fall to zero: <b>100% premium risk</b>\n"
             f"If premium doubles: $5→$10 | $10→$20 | $20→$40\n"
             f"Mode: live market monitoring; execution remains manual"
@@ -181,6 +185,57 @@ def load_instruments() -> dict[str, dict[str, Any]]:
     return {str(x.get("symbol")):x for x in rows if str(x.get("baseCoin")) in set(UNDERLYINGS)}
 
 
+def option_depth(symbol: str, reference_price: float) -> dict[str, float]:
+    book = get_json("/options/orderbook", symbol=symbol, limit=25)
+    data = book.get("result", {})
+    bids = data.get("b") or []
+    asks = data.get("a") or []
+    best_bid = float(bids[0][0]) if bids else 0.0
+    best_ask = float(asks[0][0]) if asks else 0.0
+    mid = (best_bid + best_ask) / 2.0 if best_bid > 0 and best_ask > 0 else max(best_bid, best_ask)
+    spread_fraction = ((best_ask - best_bid) / mid) if mid > 0 and best_bid > 0 and best_ask > 0 else 1.0
+    m = depth_metrics(data, reference_price or mid, band=0.01)
+    bid_depth = float(m.get("bid_qty_1pct", 0.0))
+    ask_depth = float(m.get("ask_qty_1pct", 0.0))
+    depth_balance = min(bid_depth, ask_depth) / max(bid_depth, ask_depth, 1e-12)
+    exitability = bid_depth / max(bid_depth + ask_depth, 1e-12)
+    spread_score = clamp(1.0 - spread_fraction / max(MAX_EXEC_SPREAD_FRACTION, 1e-9), 0.0, 1.0)
+    liquidity_score = clamp(0.55 * depth_balance + 0.30 * exitability + 0.15 * spread_score, 0.0, 1.0)
+    return {
+        **m,
+        "best_bid": best_bid,
+        "best_ask": best_ask,
+        "spread_fraction": spread_fraction,
+        "depth_balance": depth_balance,
+        "exitability": exitability,
+        "liquidity_score": liquidity_score,
+    }
+
+
+def refine_with_depth(cands: list[Any]) -> tuple[list[Any], dict[str, dict[str, float]]]:
+    depth_by_symbol: dict[str, dict[str, float]] = {}
+    for c in cands[:DEPTH_REFINE_TOP]:
+        try:
+            d = option_depth(c.symbol, c.ask or c.mark)
+            depth_by_symbol[c.symbol] = d
+            c.components["option_depth_liquidity"] = d["liquidity_score"]
+            c.components["option_depth_balance"] = d["depth_balance"]
+            c.components["option_exitability"] = d["exitability"]
+            c.components["option_exec_spread"] = d["spread_fraction"]
+            spread_penalty = clamp(d["spread_fraction"] / max(MAX_EXEC_SPREAD_FRACTION, 1e-9), 0.0, 1.0)
+            c.score = clamp(
+                0.88 * float(c.score)
+                + 0.12 * d["liquidity_score"]
+                - 0.10 * spread_penalty,
+                0.0, 1.0,
+            )
+        except Exception as exc:
+            depth_by_symbol[c.symbol] = {"error": 1.0}
+            c.score = max(0.0, float(c.score) - 0.15)
+            c.components["option_depth_error"] = 1.0
+    return sorted(cands, key=lambda x: x.score, reverse=True), depth_by_symbol
+
+
 def candidate_now(base: str, instruments: dict[str, dict[str, Any]]) -> tuple[list[Any], dict[str, Any]]:
     linear=LINEAR[base]
     ctx=get_json("/underlying/context", symbol=linear)
@@ -191,7 +246,8 @@ def candidate_now(base: str, instruments: dict[str, dict[str, Any]]) -> tuple[li
         ctx["liquidations"]=direct["liquidations"]
     tickers=get_json("/options/tickers", baseCoin=base).get("list", [])
     cands=build_candidates(tickers,instruments,ctx,int(time.time()*1000),1.0,48.0,0.35)
-    return cands, {"context":ctx,"tickers":tickers}
+    cands, depth_by_symbol = refine_with_depth(cands)
+    return cands, {"context":ctx,"tickers":tickers,"depth":depth_by_symbol}
 
 
 def ticker_map(rows: list[dict[str, Any]]) -> dict[str,dict[str,Any]]:
@@ -281,13 +337,20 @@ def maybe_enter(base: str,cands: list[Any]) -> None:
         if base in state["active"]:
             return
     now=time.time()
-    eligible=[
-        c for c in cands
-        if c.score>=ENTRY_THRESHOLD
-        and c.side in {"CALL","PUT"}
-        and c.ask>0
-        and now-cooldown.get(c.symbol,0)>=COOLDOWN_SECONDS
-    ]
+    eligible=[]
+    for c in cands:
+        if not (
+            c.score>=ENTRY_THRESHOLD
+            and c.side in {"CALL","PUT"}
+            and c.ask>0
+            and now-cooldown.get(c.symbol,0)>=COOLDOWN_SECONDS
+        ):
+            continue
+        spread = float(c.components.get("option_exec_spread", 1.0))
+        depth_balance = float(c.components.get("option_depth_balance", 0.0))
+        if spread > MAX_EXEC_SPREAD_FRACTION or depth_balance < MIN_EXIT_DEPTH_BALANCE:
+            continue
+        eligible.append(c)
     if not eligible:
         return
     c=eligible[0]
@@ -298,6 +361,9 @@ def maybe_enter(base: str,cands: list[Any]) -> None:
         "expiry_ms":c.expiry_ms,"dte_hours":c.dte_hours,
         "score":c.score,"mark_iv":c.mark_iv,"delta":c.delta,
         "gamma":c.gamma,"theta":c.theta,"underlying":c.underlying,
+        "spread_fraction":float(c.components.get("option_exec_spread", 0.0)),
+        "depth_balance":float(c.components.get("option_depth_balance", 0.0)),
+        "exitability":float(c.components.get("option_exitability", 0.0)),
         "last_bid":c.bid,"last_multiple":(c.bid/c.ask if c.ask else 0),
         "mfe_multiple":max(0.0,c.bid/c.ask if c.ask else 0.0),
         "x2_seen":False,"protected_multiple":None,"last_hold_notice":0.0,
@@ -309,6 +375,9 @@ def maybe_enter(base: str,cands: list[Any]) -> None:
         "dte_hours":c.dte_hours,"entry_ask":c.ask,"underlying":c.underlying,
         "score":c.score,"mark_iv":c.mark_iv,"delta":c.delta,
         "gamma":c.gamma,"theta":c.theta,
+        "spread_fraction":float(c.components.get("option_exec_spread", 0.0)),
+        "depth_balance":float(c.components.get("option_depth_balance", 0.0)),
+        "exitability":float(c.components.get("option_exitability", 0.0)),
     })
 
 
@@ -328,7 +397,10 @@ def loop() -> None:
                 with lock:
                     state["last_candidates"][base]=[
                         {"symbol":c.symbol,"side":c.side,"score":round(c.score,5),
-                         "ask":c.ask,"bid":c.bid,"strike":c.strike,"dte_hours":round(c.dte_hours,3)}
+                         "ask":c.ask,"bid":c.bid,"strike":c.strike,"dte_hours":round(c.dte_hours,3),
+                         "spread_fraction":round(float(c.components.get("option_exec_spread",0.0)),6),
+                         "depth_balance":round(float(c.components.get("option_depth_balance",0.0)),6),
+                         "exitability":round(float(c.components.get("option_exitability",0.0)),6)}
                         for c in cands[:10]
                     ]
                 manage_active(base,cands,raw)
