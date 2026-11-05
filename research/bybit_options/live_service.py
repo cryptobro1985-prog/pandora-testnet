@@ -7,11 +7,14 @@ import threading
 import time
 from dataclasses import asdict
 from typing import Any
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 from flask import Flask, jsonify, request
 
 from research.bybit_options.scoring import build_candidates, underlying_features, depth_metrics, clamp
+from research.bybit_options.feature_plane_116 import build_feature_plane_116
+from research.bybit_options.agent_ensemble import evaluate_agents
 from research.bybit_options.ws_cache import LinearPublicWS
 from research.bybit_options import telegram_webhook_runtime as twr
 
@@ -136,6 +139,8 @@ def telegram_identity_probe() -> None:
 
 def telegram_pair_loop() -> None:
     global telegram_chat_id
+    if twr.SECRET:
+        return
     if ALERT_BRIDGE_URL and ALERT_BRIDGE_SECRET:
         return
     if not TG_TOKEN or telegram_chat_id:
@@ -205,7 +210,7 @@ def format_event(e: dict[str, Any]) -> str:
             f"Strike: <b>{fmt_money(e['strike'])}</b> | DTE: {e['dte_hours']:.2f}h\n"
             f"Buy reference ask: <b>{fmt_money(e['entry_ask'])}</b>\n"
             f"Underlying: {fmt_money(e['underlying'])}\n"
-            f"Score: <b>{e['score']:.3f}</b>\n"
+            f"Score: <b>{e['score']:.3f}</b> | agents: <b>{e.get('agent_quorum',0)}/5</b> | consensus {e.get('agent_consensus',0):.3f}\n"
             f"IV: {e['mark_iv']:.4f} | Δ {e['delta']:.4f} | Γ {e['gamma']:.6g} | Θ {e['theta']:.6g}\n"
             f"Spread: {e.get('spread_fraction',0)*100:.2f}% | depth balance: {e.get('depth_balance',0):.2f} | exitability: {e.get('exitability',0):.2f}\n"
             f"Premium can fall to zero: <b>100% premium risk</b>\n"
@@ -272,43 +277,80 @@ def option_depth(symbol: str, reference_price: float) -> dict[str, float]:
     }
 
 
-def refine_with_depth(cands: list[Any]) -> tuple[list[Any], dict[str, dict[str, float]]]:
+def refine_with_depth(cands: list[Any], context: dict[str, Any]) -> tuple[list[Any], dict[str, dict[str, float]]]:
     depth_by_symbol: dict[str, dict[str, float]] = {}
-    for c in cands[:DEPTH_REFINE_TOP]:
-        try:
-            d = option_depth(c.symbol, c.ask or c.mark)
-            depth_by_symbol[c.symbol] = d
-            c.components["option_depth_liquidity"] = d["liquidity_score"]
-            c.components["option_depth_balance"] = d["depth_balance"]
-            c.components["option_exitability"] = d["exitability"]
-            c.components["option_exec_spread"] = d["spread_fraction"]
-            spread_penalty = clamp(d["spread_fraction"] / max(MAX_EXEC_SPREAD_FRACTION, 1e-9), 0.0, 1.0)
-            c.score = clamp(
-                0.88 * float(c.score)
-                + 0.12 * d["liquidity_score"]
-                - 0.10 * spread_penalty,
-                0.0, 1.0,
-            )
-        except Exception as exc:
-            depth_by_symbol[c.symbol] = {"error": 1.0}
-            c.score = max(0.0, float(c.score) - 0.15)
-            c.components["option_depth_error"] = 1.0
+    selected = list(cands[:DEPTH_REFINE_TOP])
+    if selected:
+        with ThreadPoolExecutor(max_workers=min(len(selected), DEPTH_REFINE_TOP), thread_name_prefix="option-depth") as pool:
+            future_map = {pool.submit(option_depth, x.symbol, x.ask or x.mark): x for x in selected}
+            for future in as_completed(future_map):
+                cand = future_map[future]
+                try:
+                    d = future.result()
+                    depth_by_symbol[cand.symbol] = d
+                    cand.components["option_depth_liquidity"] = d["liquidity_score"]
+                    cand.components["option_depth_balance"] = d["depth_balance"]
+                    cand.components["option_exitability"] = d["exitability"]
+                    cand.components["option_exec_spread"] = d["spread_fraction"]
+                    cand.components["option_best_ask"] = d["best_ask"]
+                    cand.components["option_best_bid"] = d["best_bid"]
+                    spread_penalty = clamp(d["spread_fraction"] / max(MAX_EXEC_SPREAD_FRACTION, 1e-9), 0.0, 1.0)
+                    cand.score = clamp(
+                        0.88 * float(cand.score) + 0.12 * d["liquidity_score"] - 0.10 * spread_penalty,
+                        0.0, 1.0,
+                    )
+                except Exception:
+                    depth_by_symbol[cand.symbol] = {"error": 1.0}
+                    cand.score = max(0.0, float(cand.score) - 0.15)
+                    cand.components["option_depth_error"] = 1.0
+
+    cheapest_by_side: dict[str, float] = {}
+    for side in ("CALL", "PUT"):
+        asks = []
+        for cand in selected:
+            d = depth_by_symbol.get(cand.symbol, {})
+            ask = float(d.get("best_ask", 0.0))
+            if (
+                cand.side == side and ask > 0
+                and float(d.get("spread_fraction", 1.0)) <= MAX_EXEC_SPREAD_FRACTION
+                and float(d.get("depth_balance", 0.0)) >= MIN_EXIT_DEPTH_BALANCE
+            ):
+                asks.append(ask)
+        cheapest_by_side[side] = min(asks) if asks else 0.0
+
+    now_ms = int(time.time() * 1000)
+    for cand in selected:
+        d = depth_by_symbol.get(cand.symbol, {})
+        if d.get("error") or not d:
+            continue
+        plane = build_feature_plane_116(context, cand, d, now_ms)
+        decision = evaluate_agents(cand, plane, d, cheapest_by_side.get(cand.side, 0.0))
+        cand.components["feature_count"] = float(plane["count"])
+        cand.components["agent_consensus"] = float(decision.consensus)
+        cand.components["agent_quorum"] = float(decision.quorum)
+        cand.components["agent_approved"] = 1.0 if decision.approved else 0.0
+        for name, vote in decision.votes.items():
+            cand.components["agent_" + name] = float(vote)
+        cand.score = clamp(0.68 * float(cand.score) + 0.32 * decision.consensus, 0.0, 1.0)
+
     return sorted(cands, key=lambda x: x.score, reverse=True), depth_by_symbol
 
-
 def candidate_now(base: str, instruments: dict[str, dict[str, Any]]) -> tuple[list[Any], dict[str, Any]]:
-    linear=LINEAR[base]
-    ctx=get_json("/underlying/context", symbol=linear)
-    direct=ws.snapshot(linear)
+    linear = LINEAR[base]
+    ctx = get_json("/underlying/context", symbol=linear)
+    direct = ws.snapshot(linear)
     if direct["ws_recent_trades"]:
-        ctx["ws_recent_trades"]=direct["ws_recent_trades"]
+        ctx["ws_recent_trades"] = direct["ws_recent_trades"]
     if direct["liquidations"]:
-        ctx["liquidations"]=direct["liquidations"]
-    tickers=get_json("/options/tickers", baseCoin=base).get("list", [])
-    cands=build_candidates(tickers,instruments,ctx,int(time.time()*1000),1.0,48.0,0.35)
-    cands, depth_by_symbol = refine_with_depth(cands)
-    return cands, {"context":ctx,"tickers":tickers,"depth":depth_by_symbol}
-
+        ctx["liquidations"] = direct["liquidations"]
+    if direct.get("ws_ticker"):
+        ctx["ws_ticker"] = direct["ws_ticker"]
+    if direct.get("ws_orderbook"):
+        ctx["ws_orderbook"] = direct["ws_orderbook"]
+    tickers = get_json("/options/tickers", baseCoin=base).get("list", [])
+    cands = build_candidates(tickers, instruments, ctx, int(time.time()*1000), 1.0, 48.0, 0.35)
+    cands, depth_by_symbol = refine_with_depth(cands, ctx)
+    return cands, {"context":ctx, "tickers":tickers, "depth":depth_by_symbol}
 
 def ticker_map(rows: list[dict[str, Any]]) -> dict[str,dict[str,Any]]:
     return {str(x.get("symbol")):x for x in rows}
@@ -329,8 +371,15 @@ def manage_active(base: str, cands: list[Any], raw: dict[str, Any]) -> None:
     row=ticker_map(raw["tickers"]).get(pos["symbol"])
     if not row:
         return
-    bid=float(row.get("bid1Price") or 0)
-    if bid<=0:
+    ticker_bid = float(row.get("bid1Price") or 0)
+    depth_now = raw.get("depth", {}).get(pos["symbol"])
+    if not depth_now:
+        try:
+            depth_now = option_depth(pos["symbol"], ticker_bid)
+        except Exception:
+            depth_now = {}
+    bid = float(depth_now.get("best_bid", 0.0)) or ticker_bid
+    if bid <= 0:
         return
     multiple=bid/pos["entry_ask"]
     pos["last_bid"]=bid
@@ -338,12 +387,6 @@ def manage_active(base: str, cands: list[Any], raw: dict[str, Any]) -> None:
     pos["mfe_multiple"]=max(float(pos["mfe_multiple"]),multiple)
     score=current_score_for_symbol(cands,pos["symbol"])
     pos["score"]=score
-    depth_now = raw.get("depth", {}).get(pos["symbol"])
-    if not depth_now:
-        try:
-            depth_now = option_depth(pos["symbol"], bid)
-        except Exception:
-            depth_now = {}
     pos["current_spread_fraction"] = float(depth_now.get("spread_fraction", 1.0))
     pos["current_depth_balance"] = float(depth_now.get("depth_balance", 0.0))
     pos["current_exitability"] = float(depth_now.get("exitability", 0.0))
@@ -408,54 +451,83 @@ def close_position(base: str,pos: dict[str,Any],bid: float,multiple: float,reaso
         state["active"].pop(base,None)
 
 
-def maybe_enter(base: str,cands: list[Any]) -> None:
+def maybe_enter(base: str, cands: list[Any]) -> None:
     with lock:
         if base in state["active"]:
             return
-    now=time.time()
-    eligible=[]
-    for c in cands:
+    now = time.time()
+    eligible = []
+    for cand in cands:
+        exec_ask = float(cand.components.get("option_best_ask", 0.0)) or float(cand.ask)
         if not (
-            c.score>=ENTRY_THRESHOLD
-            and c.side in {"CALL","PUT"}
-            and c.ask>0
-            and now-cooldown.get(c.symbol,0)>=COOLDOWN_SECONDS
+            cand.score >= ENTRY_THRESHOLD
+            and cand.side in {"CALL","PUT"}
+            and exec_ask > 0
+            and float(cand.components.get("feature_count", 0.0)) == 116.0
+            and float(cand.components.get("agent_approved", 0.0)) >= 1.0
+            and float(cand.components.get("agent_quorum", 0.0)) >= 4.0
+            and now - cooldown.get(cand.symbol, 0) >= COOLDOWN_SECONDS
         ):
             continue
-        spread = float(c.components.get("option_exec_spread", 1.0))
-        depth_balance = float(c.components.get("option_depth_balance", 0.0))
+        spread = float(cand.components.get("option_exec_spread", 1.0))
+        depth_balance = float(cand.components.get("option_depth_balance", 0.0))
         if spread > MAX_EXEC_SPREAD_FRACTION or depth_balance < MIN_EXIT_DEPTH_BALANCE:
             continue
-        eligible.append(c)
+        eligible.append(cand)
     if not eligible:
         return
-    c=eligible[0]
+
+    side_strength: dict[str, float] = {}
+    for side in ("CALL","PUT"):
+        side_rows = [x for x in eligible if x.side == side]
+        if side_rows:
+            side_strength[side] = max(
+                0.55*float(x.components.get("agent_consensus",0.0)) + 0.45*float(x.score)
+                for x in side_rows
+            )
+    if not side_strength:
+        return
+    chosen_side = max(side_strength, key=side_strength.get)
+    side_rows = [x for x in eligible if x.side == chosen_side]
+    cand = min(
+        side_rows,
+        key=lambda x: (
+            float(x.components.get("option_best_ask",0.0)) or float(x.ask),
+            -float(x.components.get("agent_consensus",0.0)),
+            -float(x.score),
+        )
+    )
+    entry_ask = float(cand.components.get("option_best_ask",0.0)) or float(cand.ask)
+    entry_bid = float(cand.components.get("option_best_bid",0.0)) or float(cand.bid)
     pos={
-        "base":base,"symbol":c.symbol,"option_type":c.side,
-        "entry_ts_ms":int(time.time()*1000),"entry_ask":c.ask,
-        "entry_bid":c.bid,"entry_mark":c.mark,"strike":c.strike,
-        "expiry_ms":c.expiry_ms,"dte_hours":c.dte_hours,
-        "score":c.score,"mark_iv":c.mark_iv,"delta":c.delta,
-        "gamma":c.gamma,"theta":c.theta,"underlying":c.underlying,
-        "spread_fraction":float(c.components.get("option_exec_spread", 0.0)),
-        "depth_balance":float(c.components.get("option_depth_balance", 0.0)),
-        "exitability":float(c.components.get("option_exitability", 0.0)),
-        "last_bid":c.bid,"last_multiple":(c.bid/c.ask if c.ask else 0),
-        "mfe_multiple":max(0.0,c.bid/c.ask if c.ask else 0.0),
+        "base":base,"symbol":cand.symbol,"option_type":cand.side,
+        "entry_ts_ms":int(time.time()*1000),"entry_ask":entry_ask,
+        "entry_bid":entry_bid,"entry_mark":cand.mark,"strike":cand.strike,
+        "expiry_ms":cand.expiry_ms,"dte_hours":cand.dte_hours,
+        "score":cand.score,"mark_iv":cand.mark_iv,"delta":cand.delta,
+        "gamma":cand.gamma,"theta":cand.theta,"underlying":cand.underlying,
+        "agent_consensus":float(cand.components.get("agent_consensus",0.0)),
+        "agent_quorum":int(cand.components.get("agent_quorum",0.0)),
+        "spread_fraction":float(cand.components.get("option_exec_spread", 0.0)),
+        "depth_balance":float(cand.components.get("option_depth_balance", 0.0)),
+        "exitability":float(cand.components.get("option_exitability", 0.0)),
+        "last_bid":entry_bid,"last_multiple":(entry_bid/entry_ask if entry_ask else 0),
+        "mfe_multiple":max(0.0,entry_bid/entry_ask if entry_ask else 0.0),
         "x2_seen":False,"protected_multiple":None,"last_hold_notice":0.0,
     }
     with lock:
         state["active"][base]=pos
     emit("ENTRY",{
-        "symbol":c.symbol,"option_type":c.side,"strike":c.strike,
-        "dte_hours":c.dte_hours,"entry_ask":c.ask,"underlying":c.underlying,
-        "score":c.score,"mark_iv":c.mark_iv,"delta":c.delta,
-        "gamma":c.gamma,"theta":c.theta,
-        "spread_fraction":float(c.components.get("option_exec_spread", 0.0)),
-        "depth_balance":float(c.components.get("option_depth_balance", 0.0)),
-        "exitability":float(c.components.get("option_exitability", 0.0)),
+        "base":base,"symbol":cand.symbol,"option_type":cand.side,"strike":cand.strike,
+        "dte_hours":cand.dte_hours,"entry_ask":entry_ask,"underlying":cand.underlying,
+        "score":cand.score,"mark_iv":cand.mark_iv,"delta":cand.delta,
+        "gamma":cand.gamma,"theta":cand.theta,
+        "agent_consensus":float(cand.components.get("agent_consensus",0.0)),
+        "agent_quorum":int(cand.components.get("agent_quorum",0.0)),
+        "spread_fraction":float(cand.components.get("option_exec_spread", 0.0)),
+        "depth_balance":float(cand.components.get("option_depth_balance", 0.0)),
+        "exitability":float(cand.components.get("option_exitability", 0.0)),
     })
-
 
 def startup_alert_loop() -> None:
     deadline = time.time() + 180
@@ -484,23 +556,35 @@ def loop() -> None:
     instruments: dict[str,dict[str,Any]]={}
     next_refresh=0.0
     last_heartbeat = 0.0
+    valid_bases = [x for x in UNDERLYINGS if x in LINEAR]
+    scan_pool = ThreadPoolExecutor(max_workers=max(1, len(valid_bases)), thread_name_prefix="options-base")
     while True:
         try:
             if time.time()>=next_refresh or not instruments:
                 instruments=load_instruments()
                 next_refresh=time.time()+900
-            for base in UNDERLYINGS:
-                if base not in LINEAR:
+            futures={scan_pool.submit(candidate_now, base, instruments):base for base in valid_bases}
+            for future in as_completed(futures):
+                base=futures[future]
+                try:
+                    cands,raw=future.result()
+                except Exception as exc:
+                    print(json.dumps({"kind":"BASE_SCAN_ERROR","base":base,"error":repr(exc)}),flush=True)
                     continue
-                cands,raw=candidate_now(base,instruments)
                 with lock:
                     state["last_candidates"][base]=[
-                        {"symbol":c.symbol,"side":c.side,"score":round(c.score,5),
-                         "ask":c.ask,"bid":c.bid,"strike":c.strike,"dte_hours":round(c.dte_hours,3),
-                         "spread_fraction":round(float(c.components.get("option_exec_spread",0.0)),6),
-                         "depth_balance":round(float(c.components.get("option_depth_balance",0.0)),6),
-                         "exitability":round(float(c.components.get("option_exitability",0.0)),6)}
-                        for c in cands[:10]
+                        {"symbol":x.symbol,"side":x.side,"score":round(x.score,5),
+                         "ask":float(x.components.get("option_best_ask",0.0)) or x.ask,
+                         "bid":float(x.components.get("option_best_bid",0.0)) or x.bid,
+                         "strike":x.strike,"dte_hours":round(x.dte_hours,3),
+                         "feature_count":int(x.components.get("feature_count",0.0)),
+                         "agent_consensus":round(float(x.components.get("agent_consensus",0.0)),5),
+                         "agent_quorum":int(x.components.get("agent_quorum",0.0)),
+                         "agent_approved":bool(x.components.get("agent_approved",0.0)),
+                         "spread_fraction":round(float(x.components.get("option_exec_spread",0.0)),6),
+                         "depth_balance":round(float(x.components.get("option_depth_balance",0.0)),6),
+                         "exitability":round(float(x.components.get("option_exitability",0.0)),6)}
+                        for x in cands[:10]
                     ]
                 manage_active(base,cands,raw)
                 maybe_enter(base,cands)
@@ -515,10 +599,10 @@ def loop() -> None:
                         "ts_ms":state["last_scan_ms"],
                         "scan_count":state["scan_count"],
                         "active":state["active"],
-                        "top":{
-                            base:(rows[0] if rows else None)
-                            for base,rows in state["last_candidates"].items()
-                        },
+                        "top":{base:(rows[0] if rows else None) for base,rows in state["last_candidates"].items()},
+                        "feature_plane":116,
+                        "agents":5,
+                        "parallel_bases":len(valid_bases),
                         "telegram_configured":state["telegram_configured"],
                         "ws":ws.status(),
                     }
@@ -585,6 +669,8 @@ def status():
             "research_only":True,
             "real_orders_enabled":False,
             "entry_threshold":ENTRY_THRESHOLD,
+            "feature_plane_count":116,
+            "agent_count":5,
             "x2_multiple":X2_MULTIPLE,
             "active":state["active"],
             "last_candidates":state["last_candidates"],
