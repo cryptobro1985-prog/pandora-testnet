@@ -197,18 +197,40 @@ class ForwardStats:
         self.rows.append({
             "net":net,
             "correct":1.0 if correct else 0.0,
-            "abs_error":abs(pred.expected_return-y.future_return)
+            "abs_error":abs(pred.expected_return-y.future_return),
+            "long_net":y.future_return-cost_floor,
+            "short_net":-y.future_return-cost_floor,
+            "long_correct":1.0 if y.future_return>cost_floor else 0.0,
+            "short_correct":1.0 if -y.future_return>cost_floor else 0.0,
         })
 
     def summary(self):
         if not self.rows:
             return {"n":0,"net_expectancy":0.0,"precision":0.0,"mae":None}
-        return {
+        side_rows=[r for r in self.rows if "long_net" in r and "short_net" in r]
+        out={
             "n":len(self.rows),
             "net_expectancy":statistics.fmean(r["net"] for r in self.rows),
             "precision":statistics.fmean(r["correct"] for r in self.rows),
             "mae":statistics.fmean(r["abs_error"] for r in self.rows),
         }
+        if side_rows:
+            out.update({
+                "side_n":len(side_rows),
+                "long_net_expectancy":statistics.fmean(r["long_net"] for r in side_rows),
+                "short_net_expectancy":statistics.fmean(r["short_net"] for r in side_rows),
+                "long_precision":statistics.fmean(r["long_correct"] for r in side_rows),
+                "short_precision":statistics.fmean(r["short_correct"] for r in side_rows),
+            })
+        else:
+            out.update({
+                "side_n":0,
+                "long_net_expectancy":None,
+                "short_net_expectancy":None,
+                "long_precision":None,
+                "short_precision":None,
+            })
+        return out
 
 
 @dataclass
@@ -242,6 +264,7 @@ class OnlineQuantLearner:
         self.last_action=None
         self.feature_names_seen=set()
         self.max_feature_count=0
+        self.action_counts={"LONG":0,"SHORT":0,"FLAT":0}
 
     def _round_trip_cost(self)->float:
         c=self.config.get("modeled_costs",{})
@@ -261,6 +284,10 @@ class OnlineQuantLearner:
         qp={h:self.challenger[h].predict(x) for h in self.horizons}
         self.pending.append(Pending(ts_ms,price,x,cp,qp,price,price,set()))
         action=self.choose_action(x, cp if self.champion_ready else qp)
+        if not hasattr(self,"action_counts"):
+            self.action_counts={"LONG":0,"SHORT":0,"FLAT":0}
+        chosen=str(action.get("action","FLAT"))
+        self.action_counts[chosen]=self.action_counts.get(chosen,0)+1
         action["matured_labels"]=matured
         action["champion_ready"]=self.champion_ready
         self.last_action=action
@@ -395,6 +422,8 @@ class OnlineQuantLearner:
             "feature_names_seen_count":len(self.feature_names_seen),
             "max_feature_count":self.max_feature_count,
             "feature_names_seen":sorted(self.feature_names_seen),
+            "action_counts":getattr(self,"action_counts",{"LONG":0,"SHORT":0,"FLAT":0}),
+            "directional_contract":{"trained":"signed future returns","evaluated_sides":["LONG","SHORT"],"flat_baseline":True},
             "numerical_guard":{
                 "max_abs_return":MAX_ABS_RETURN,
                 "max_excursion":MAX_EXCURSION,
