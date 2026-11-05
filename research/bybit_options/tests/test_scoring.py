@@ -36,6 +36,20 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(option_side({"symbol": "SOL-6NOV26-97-P-USDT"}), "PUT")
         self.assertEqual(option_side({"symbol": "SOL-6NOV26-97-C-USDT"}), "CALL")
 
+    def test_newest_first_rest_momentum(self):
+        # Bybit REST recent trades arrive newest-first; rising price must remain bullish.
+        ctx = {
+            "recent_trades": [
+                {"time": "2000", "price": "101", "size": "1", "side": "Buy"},
+                {"time": "1000", "price": "100", "size": "1", "side": "Buy"},
+            ],
+            "orderbook": {"result": {"b": [], "a": []}},
+            "liquidations": [],
+            "ticker": {},
+        }
+        uf = underlying_features(ctx)
+        self.assertGreater(uf["short_momentum"], 0)
+
     def test_no_nan(self):
         uf = underlying_features({})
         self.assertTrue(all(v == v for v in uf.values()))
