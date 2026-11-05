@@ -21,9 +21,11 @@ import pickle
 import statistics
 import time
 
-from river import compose, drift, linear_model, preprocessing
+from river import compose, drift, linear_model, preprocessing, optim
 
 EPS=1e-12
+MAX_ABS_RETURN=0.25
+MAX_EXCURSION=0.35
 
 
 def finite(v: Any) -> bool:
@@ -51,7 +53,12 @@ def new_classifier():
 def new_regressor():
     return compose.Pipeline(
         preprocessing.StandardScaler(),
-        linear_model.LinearRegression()
+        linear_model.LinearRegression(
+            optimizer=optim.SGD(0.001),
+            intercept_lr=0.001,
+            l2=1e-6,
+            clip_gradient=1.0,
+        )
     )
 
 
@@ -93,18 +100,21 @@ class HorizonModel:
         d=self.max_down.predict_one(x)
         return Prediction(
             p_up=max(0.0,min(1.0,p_up)),
-            expected_return=float(r or 0.0),
-            expected_max_up=max(0.0,float(u or 0.0)),
-            expected_max_down=max(0.0,float(d or 0.0)),
+            expected_return=max(-MAX_ABS_RETURN,min(MAX_ABS_RETURN,float(r or 0.0))),
+            expected_max_up=max(0.0,min(MAX_EXCURSION,float(u or 0.0))),
+            expected_max_down=max(0.0,min(MAX_EXCURSION,float(d or 0.0))),
         )
 
     def learn(self,x:dict[str,float],y:Outcome,cost_floor:float)->bool:
         pred=self.predict(x)
         target_up=y.future_return > cost_floor
         self.direction.learn_one(x,target_up)
-        self.ret.learn_one(x,y.future_return)
-        self.max_up.learn_one(x,y.max_up)
-        self.max_down.learn_one(x,y.max_down)
+        ret_target=max(-MAX_ABS_RETURN,min(MAX_ABS_RETURN,float(y.future_return)))
+        up_target=max(0.0,min(MAX_EXCURSION,float(y.max_up)))
+        down_target=max(0.0,min(MAX_EXCURSION,float(y.max_down)))
+        self.ret.learn_one(x,ret_target)
+        self.max_up.learn_one(x,up_target)
+        self.max_down.learn_one(x,down_target)
         self.n+=1
         drifted=False
         if self.drift is not None:
@@ -385,6 +395,12 @@ class OnlineQuantLearner:
             "feature_names_seen_count":len(self.feature_names_seen),
             "max_feature_count":self.max_feature_count,
             "feature_names_seen":sorted(self.feature_names_seen),
+            "numerical_guard":{
+                "max_abs_return":MAX_ABS_RETURN,
+                "max_excursion":MAX_EXCURSION,
+                "regression_lr":0.001,
+                "clip_gradient":1.0,
+            },
         }
 
     def save(self,path:Path):
