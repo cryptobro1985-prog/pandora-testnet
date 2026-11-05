@@ -57,6 +57,7 @@ state: dict[str, Any] = {
     "last_events": [],
     "last_candidates": {},
     "behavior_samples": [],
+    "entry_confirmation": {},
 }
 cooldown: dict[str, float] = {}
 ws = LinearPublicWS([LINEAR[x] for x in UNDERLYINGS if x in LINEAR]).start()
@@ -486,6 +487,7 @@ def manage_active(base: str, cands: list[Any], raw: dict[str, Any]) -> None:
         })
     with lock:
         state["active"][base]=pos
+        state["entry_confirmation"].pop(base, None)
 
 
 def close_position(base: str,pos: dict[str,Any],bid: float,multiple: float,reason: str,kind: str) -> None:
@@ -503,6 +505,7 @@ def close_position(base: str,pos: dict[str,Any],bid: float,multiple: float,reaso
 def maybe_enter(base: str, cands: list[Any]) -> None:
     with lock:
         if base in state["active"]:
+            state["entry_confirmation"].pop(base, None)
             return
     now = time.time()
     eligible = []
@@ -524,6 +527,8 @@ def maybe_enter(base: str, cands: list[Any]) -> None:
             continue
         eligible.append(cand)
     if not eligible:
+        with lock:
+            state["entry_confirmation"].pop(base, None)
         return
 
     side_strength: dict[str, float] = {}
@@ -538,6 +543,71 @@ def maybe_enter(base: str, cands: list[Any]) -> None:
         return
     chosen_side = max(side_strength, key=side_strength.get)
     side_rows = [x for x in eligible if x.side == chosen_side]
+
+    # Do not enter on one transient good scan. Require the same exact contract
+    # to remain agent-approved across consecutive scans for at least 60 seconds.
+    candidate_preview = min(
+        side_rows,
+        key=lambda x: (
+            float(x.components.get("option_best_ask",0.0)) or float(x.ask),
+            -float(x.components.get("agent_consensus",0.0)),
+            -float(x.score),
+        )
+    )
+    preview_ask = float(candidate_preview.components.get("option_best_ask",0.0)) or float(candidate_preview.ask)
+    now_ms = int(now * 1000)
+    with lock:
+        conf = dict(state["entry_confirmation"].get(base) or {})
+    same_contract = (
+        conf.get("symbol") == candidate_preview.symbol
+        and conf.get("side") == chosen_side
+    )
+    if not same_contract:
+        conf = {
+            "symbol": candidate_preview.symbol,
+            "side": chosen_side,
+            "first_seen_ms": now_ms,
+            "last_seen_ms": now_ms,
+            "confirmations": 1,
+            "first_ask": preview_ask,
+            "last_ask": preview_ask,
+            "min_consensus": float(candidate_preview.components.get("agent_consensus",0.0)),
+            "min_quorum": int(candidate_preview.components.get("agent_quorum",0.0)),
+        }
+    else:
+        first_ask = float(conf.get("first_ask") or preview_ask or 0.0)
+        ask_drift = (preview_ask / first_ask - 1.0) if first_ask > 0 else 0.0
+        if abs(ask_drift) > 0.05:
+            conf = {
+                "symbol": candidate_preview.symbol,
+                "side": chosen_side,
+                "first_seen_ms": now_ms,
+                "last_seen_ms": now_ms,
+                "confirmations": 1,
+                "first_ask": preview_ask,
+                "last_ask": preview_ask,
+                "min_consensus": float(candidate_preview.components.get("agent_consensus",0.0)),
+                "min_quorum": int(candidate_preview.components.get("agent_quorum",0.0)),
+            }
+        else:
+            conf["confirmations"] = int(conf.get("confirmations",0)) + 1
+            conf["last_seen_ms"] = now_ms
+            conf["last_ask"] = preview_ask
+            conf["min_consensus"] = min(float(conf.get("min_consensus",1.0)), float(candidate_preview.components.get("agent_consensus",0.0)))
+            conf["min_quorum"] = min(int(conf.get("min_quorum",5)), int(candidate_preview.components.get("agent_quorum",0.0)))
+    with lock:
+        state["entry_confirmation"][base] = conf
+
+    age_ms = now_ms - int(conf.get("first_seen_ms", now_ms))
+    if int(conf.get("confirmations",0)) < 3 or age_ms < 60000:
+        return
+
+    # Re-resolve the candidate after confirmation from the currently eligible rows.
+    side_rows = [x for x in side_rows if x.symbol == conf.get("symbol")]
+    if not side_rows:
+        with lock:
+            state["entry_confirmation"].pop(base, None)
+        return
     cand = min(
         side_rows,
         key=lambda x: (
@@ -742,6 +812,7 @@ def status():
             "last_candidates":state["last_candidates"],
             "last_events":state["last_events"][-30:],
             "behavior_samples":state["behavior_samples"][-120:],
+            "entry_confirmation":state["entry_confirmation"],
             "telegram_configured":state["telegram_configured"],
             "last_alert_delivery":state["last_alert_delivery"],
         })
