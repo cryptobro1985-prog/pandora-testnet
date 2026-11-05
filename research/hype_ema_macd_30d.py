@@ -75,6 +75,8 @@ def build_signals(m15,h1):
     macd_by_available_ts={h1[i]["ts"]+3600:macd[i] for i in range(len(h1))}
 
     signals=[]
+    raw_up=raw_down=0
+    filtered_up=filtered_down=0
     last_macd=None
     h1_avail=sorted(macd_by_available_ts)
     j=0
@@ -85,15 +87,25 @@ def build_signals(m15,h1):
             j+=1
         if last_macd is None:
             continue
-        up=e6[i-1]<=e20[i-1] and e6[i]>e20[i] and last_macd>0
-        dn=e6[i-1]>=e20[i-1] and e6[i]<e20[i] and last_macd<0
+        cross_up=e6[i-1]<=e20[i-1] and e6[i]>e20[i]
+        cross_down=e6[i-1]>=e20[i-1] and e6[i]<e20[i]
+        raw_up += int(cross_up)
+        raw_down += int(cross_down)
+        up=cross_up and last_macd>0
+        dn=cross_down and last_macd<0
+        filtered_up += int(up)
+        filtered_down += int(dn)
         if not (up or dn):
             continue
         # Enter at the next 15m open, exactly when the closed bar signal becomes known.
         enter_ts=signal_available_ts
         signals.append({"signal_ts":signal_available_ts,"enter_ts":enter_ts,"side":1 if up else -1,
                         "macd_h1":last_macd,"ema6_m15":e6[i],"ema20_m15":e20[i]})
-    return signals
+    return signals, {
+        "raw_up":raw_up,"raw_down":raw_down,"raw_total":raw_up+raw_down,
+        "filtered_up":filtered_up,"filtered_down":filtered_down,
+        "filtered_total":filtered_up+filtered_down
+    }
 
 def run(minutes, signals, sl, tp, start_ts, end_ts):
     mins=[r for r in minutes if start_ts<=r["ts"]<end_ts]
@@ -155,12 +167,45 @@ def run(minutes, signals, sl, tp, start_ts, end_ts):
             "stops":sum(t["reason"]=="stop" for t in trades),"takes":sum(t["reason"]=="take" for t in trades),
             "opposite":sum(t["reason"]=="opposite" for t in trades),"detail":trades}
 
+def run_every_signal(minutes, signals, sl, tp, start_ts, end_ts):
+    selected=[r for r in minutes if start_ts<=r["ts"]<end_ts]
+    if not selected: return None
+    ts_sorted=[r["ts"] for r in selected]
+    by_ts={r["ts"]:r for r in selected}
+    idx={t:i for i,t in enumerate(ts_sorted)}
+    equity=START_EQUITY; peak=equity; maxdd=0.0; trades=[]
+    for s in signals:
+        t=s["enter_ts"]
+        if t<start_ts or t>=end_ts or t not in by_ts: continue
+        entry=by_ts[t]["open"]; side=s["side"]
+        last=selected[-1]; exit_px=last["close"]; exit_ts=last["ts"]; reason="period_end"
+        for tt in ts_sorted[idx[t]:]:
+            r=by_ts[tt]
+            if side==1:
+                stop=entry*(1-sl); take=entry*(1+tp)
+                if r["low"]<=stop: exit_px=stop; exit_ts=tt; reason="stop"; break
+                if r["high"]>=take: exit_px=take; exit_ts=tt; reason="take"; break
+            else:
+                stop=entry*(1+sl); take=entry*(1-tp)
+                if r["high"]>=stop: exit_px=stop; exit_ts=tt; reason="stop"; break
+                if r["low"]<=take: exit_px=take; exit_ts=tt; reason="take"; break
+        ret=((exit_px/entry-1) if side==1 else (entry/exit_px-1))-2*FEE
+        equity*=max(0.0,1+ret)
+        trades.append({"side":side,"ret":ret,"reason":reason,"entry_ts":t,"exit_ts":exit_ts})
+        peak=max(peak,equity); maxdd=max(maxdd,(peak-equity)/peak if peak else 1)
+    wins=sum(x["ret"]>0 for x in trades)
+    gp=sum(max(x["ret"],0) for x in trades); gl=-sum(min(x["ret"],0) for x in trades)
+    return {"final":equity,"return_pct":(equity/START_EQUITY-1)*100,"trades":len(trades),"wins":wins,
+            "win_rate":wins/len(trades)*100 if trades else 0.0,"max_dd_pct":maxdd*100,
+            "profit_factor":gp/gl if gl>0 else None,
+            "stops":sum(x["reason"]=="stop" for x in trades),"takes":sum(x["reason"]=="take" for x in trades)}
+
 def main():
     minutes,trade_count=load_minutes()
     m15=bars_from_minutes(minutes,900)
     h1=bars_from_minutes(minutes,3600)
-    signals=build_signals(m15,h1)
-    print(json.dumps({"dataset":{"minutes":len(minutes),"trades":trade_count,"m15":len(m15),"h1":len(h1),"signals_total":len(signals),
+    signals,cross_stats=build_signals(m15,h1)
+    print(json.dumps({"dataset":{"minutes":len(minutes),"trades":trade_count,"m15":len(m15),"h1":len(h1),"signals_total":len(signals),"cross_stats":cross_stats,
                                  "first":minutes[0]["ts"],"last":minutes[-1]["ts"]}},sort_keys=True),flush=True)
     results=[]
     for sl in SL_GRID:
@@ -175,12 +220,25 @@ def main():
     full=run(minutes,signals,winner["sl"],winner["tp"],DISCOVERY_START,END_TS)
     # neighbor stability around winner
     near=[x for x in results if abs(x["sl"]-winner["sl"])<=0.0051 and abs(x["tp"]-winner["tp"])<=0.0101][:20]
+    every=[]
+    for sl in SL_GRID:
+        for tp in TP_GRID:
+            d=run_every_signal(minutes,signals,sl,tp,DISCOVERY_START,SPLIT)
+            if d:
+                every.append({"sl":sl,"tp":tp,**d})
+    every.sort(key=lambda x:(x["final"],-x["max_dd_pct"]),reverse=True)
+    every_winner=every[0]
+    every_oos=run_every_signal(minutes,signals,every_winner["sl"],every_winner["tp"],SPLIT,END_TS)
+    every_full=run_every_signal(minutes,signals,every_winner["sl"],every_winner["tp"],DISCOVERY_START,END_TS)
+
     payload={"assumptions":{"ema":"6/20 M15 close","macd":"12/26 line sign on last closed H1","entry":"next M15 open","fee_per_side":FEE,
                              "same_minute_tp_sl":"stop-first conservative","position":"100% equity at 1x, compounded"},
              "discovery":{"start":"2026-10-11","end_exclusive":"2026-10-27","top10":top,"winner":winner},
              "oos":{"start":"2026-10-27","end_exclusive":"2026-11-03",**{k:v for k,v in oos.items() if k!="detail"}},
              "full":{"start":"2026-10-11","end_exclusive":"2026-11-03",**{k:v for k,v in full.items() if k!="detail"}},
-             "winner_trades":full["detail"],"neighbor_candidates":near}
+             "winner_trades":full["detail"],"neighbor_candidates":near,
+             "every_qualifying_cross":{"discovery_winner":every_winner,"oos":every_oos,"full":every_full},
+             "cross_stats":cross_stats}
     print("RESULT_JSON="+json.dumps(payload,separators=(",",":"),sort_keys=True),flush=True)
     with open("hype_ema_macd_30d_result.json","w") as f: json.dump(payload,f,indent=2,sort_keys=True)
 
