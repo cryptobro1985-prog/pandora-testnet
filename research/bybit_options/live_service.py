@@ -271,6 +271,7 @@ def maybe_enter(base: str,cands: list[Any]) -> None:
 def loop() -> None:
     instruments: dict[str,dict[str,Any]]={}
     next_refresh=0.0
+    last_heartbeat = 0.0
     while True:
         try:
             if time.time()>=next_refresh or not instruments:
@@ -292,6 +293,22 @@ def loop() -> None:
                 state["scan_count"]+=1
                 state["last_scan_ms"]=int(time.time()*1000)
                 state["last_error"]=None
+            if time.time() - last_heartbeat >= 30:
+                with lock:
+                    heartbeat = {
+                        "kind":"HEARTBEAT",
+                        "ts_ms":state["last_scan_ms"],
+                        "scan_count":state["scan_count"],
+                        "active":state["active"],
+                        "top":{
+                            base:(rows[0] if rows else None)
+                            for base,rows in state["last_candidates"].items()
+                        },
+                        "telegram_configured":state["telegram_configured"],
+                        "ws":ws.status(),
+                    }
+                print(json.dumps(heartbeat, sort_keys=True), flush=True)
+                last_heartbeat = time.time()
         except Exception as exc:
             with lock:
                 state["last_error"]=repr(exc)
