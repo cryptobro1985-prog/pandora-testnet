@@ -19,6 +19,19 @@ class LabelerTests(unittest.TestCase):
     def test_missing_future_is_censored(self):
         result=label_signal(self.signal,self.points)
         self.assertEqual(result["outcomes"]["900s"]["status"],"censored_no_fresh_bid")
+    def test_expiry_requires_verified_settlement(self):
+        result=label_signal(self.signal,self.points)
+        self.assertEqual(result["outcomes"]["expiry"]["status"],"censored_no_verified_settlement")
+
+    def test_post_expiry_bid_cannot_be_used_for_exit(self):
+        signal={**self.signal,"expiry_ms":160000}
+        points=[
+            self.points[0],
+            {**self.points[1],"ts_ms":160001}
+        ]
+        result=label_signal(signal,points,max_exit_lag_ms=120000)
+        self.assertEqual(result["outcomes"]["60s"]["status"],"censored_no_fresh_bid")
+
     def test_future_only_entry_is_censored(self):
         result=label_signal(self.signal,[{**self.points[0],"ts_ms":300001}])
         self.assertEqual(result["entry_status"],"censored_no_fresh_ask")
