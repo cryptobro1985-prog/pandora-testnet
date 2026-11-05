@@ -21,7 +21,7 @@ jobs:
           python-version: "3.12"
       - name: Compile and contract smoke
         run: |
-          python -m py_compile research/local_116_30d/run_symbol.py research/local_116_30d/aggregate.py
+          python -m py_compile research/local_116_30d/run_symbol.py research/local_116_30d/calibrate_hype.py
           python - <<'PY'
           from research.hype_quant.feature_contract import POINTS
           assert len(POINTS)==116
