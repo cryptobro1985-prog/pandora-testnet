@@ -21,8 +21,8 @@ from research.bybit_options import telegram_webhook_runtime as twr
 app = Flask(__name__)
 
 RELAY = os.getenv("OPTIONS_RELAY_URL", "https://pandora-bybit-options-relay.onrender.com").rstrip("/")
-UNDERLYINGS = tuple(x.strip().upper() for x in os.getenv("OPTIONS_UNDERLYINGS", "BTC,ETH,SOL").split(",") if x.strip())
-LINEAR = {"BTC":"BTCUSDT","ETH":"ETHUSDT","SOL":"SOLUSDT"}
+UNDERLYINGS = tuple(x.strip().upper() for x in os.getenv("OPTIONS_UNDERLYINGS", "BTC,ETH,SOL,HYPE").split(",") if x.strip())
+LINEAR = {"BTC":"BTCUSDT","ETH":"ETHUSDT","SOL":"SOLUSDT","HYPE":"HYPEUSDT"}
 SCAN_SECONDS = max(2.0, float(os.getenv("LIVE_SCAN_SECONDS", "5")))
 ENTRY_THRESHOLD = float(os.getenv("LIVE_ENTRY_THRESHOLD", "0.60"))
 INVALIDATE_THRESHOLD = float(os.getenv("LIVE_INVALIDATE_THRESHOLD", "0.47"))
