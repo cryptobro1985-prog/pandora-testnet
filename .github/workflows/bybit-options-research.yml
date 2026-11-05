@@ -13,6 +13,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: bybit-options-gamma-burst-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   PYTHONPATH: .
   OPTIONS_RELAY_URL: https://pandora-bybit-options-relay.onrender.com
