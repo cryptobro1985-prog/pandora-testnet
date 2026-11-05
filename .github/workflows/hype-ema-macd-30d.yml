@@ -32,3 +32,5 @@ jobs:
           retention-days: 7
 
 # trigger-m15
+
+# trigger-every-cross
