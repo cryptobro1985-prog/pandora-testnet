@@ -23,21 +23,30 @@ def logistic01(x: float) -> float:
     return 1.0 / (1.0 + math.exp(-x))
 
 
+def _symbol_tokens(symbol: str) -> list[str]:
+    return [x for x in symbol.upper().split("-") if x]
+
+
 def parse_strike(symbol: str) -> float:
-    parts = symbol.split("-")
-    if len(parts) < 4:
-        return 0.0
-    return f(parts[-2])
+    # Bybit crypto option symbols can include a settlement suffix:
+    # BTC-6NOV26-80000-P-USDT / ETH-6NOV26-2400-C-USDT.
+    # Find C/P and read the token immediately before it instead of relying on [-2].
+    parts = _symbol_tokens(symbol)
+    for i, token in enumerate(parts):
+        if token in {"C", "P", "CALL", "PUT"} and i > 0:
+            return f(parts[i - 1])
+    return 0.0
 
 
 def option_side(row: dict[str, Any], instrument: dict[str, Any] | None = None) -> str:
     t = (instrument or {}).get("optionsType") or row.get("optionsType")
     if t:
-        return str(t).upper()
-    s = str(row.get("symbol", ""))
-    if s.endswith("-C"):
+        name = str(t).upper()
+        return "CALL" if name in {"CALL", "C"} else "PUT" if name in {"PUT", "P"} else "UNKNOWN"
+    parts = _symbol_tokens(str(row.get("symbol", "")))
+    if "C" in parts or "CALL" in parts:
         return "CALL"
-    if s.endswith("-P"):
+    if "P" in parts or "PUT" in parts:
         return "PUT"
     return "UNKNOWN"
 
