@@ -11,6 +11,7 @@ from typing import Any
 import requests
 
 from .scoring import build_candidates, candidate_to_signal, depth_metrics
+from .ws_cache import LinearPublicWS
 
 
 def load_config(path: str | None = None) -> dict[str, Any]:
@@ -63,6 +64,8 @@ def main() -> int:
     if not relay_url:
         raise RuntimeError("OPTIONS_RELAY_URL is required")
     relay = Relay(relay_url)
+    ws = LinearPublicWS(list(cfg["linear_symbols"].values())).start()
+    ws_live_at_start = ws.wait_live(15.0)
     out = Path(args.output)
     out.mkdir(parents=True, exist_ok=True)
 
@@ -83,6 +86,8 @@ def main() -> int:
         "instrument_count": len(instruments),
         "paper_only": True,
         "allow_naked_short": False,
+        "direct_public_ws": True,
+        "ws_live_at_start": ws_live_at_start,
         "config": cfg,
     }, indent=2, sort_keys=True))
 
@@ -100,6 +105,12 @@ def main() -> int:
             linear = cfg["linear_symbols"].get(base)
             try:
                 contexts[base] = relay.underlying(linear)
+                direct = ws.snapshot(linear)
+                if direct["ws_recent_trades"]:
+                    contexts[base]["ws_recent_trades"] = direct["ws_recent_trades"]
+                if direct["liquidations"]:
+                    contexts[base]["liquidations"] = direct["liquidations"]
+                contexts[base]["direct_ws_status"] = direct["ws_status"]
             except Exception as exc:
                 errors += 1
                 append_jsonl_gz(out / "errors.jsonl.gz", {"ts_ms": now_ms, "stage": "underlying", "base": base, "error": repr(exc)})
@@ -156,12 +167,20 @@ def main() -> int:
         time.sleep(max(0.1, float(cfg["scan_interval_seconds"]) - elapsed))
 
     ended_ms = int(time.time() * 1000)
+    ws_final = ws.status()
+    ws.stop()
     summary = {
         "started_ms": started_ms, "ended_ms": ended_ms,
         "duration_seconds": (ended_ms - started_ms) / 1000.0,
         "instrument_count": len(instruments), "underlyings_with_options": availability,
         "scan_count": scan_count, "signal_count": signal_count, "errors": errors,
         "paper_only": True,
+        "direct_ws_connected_ever": bool(ws_final["connected_ever"]),
+        "direct_ws_messages": int(ws_final["message_count"]),
+        "direct_ws_trade_events": int(ws_final["trade_events"]),
+        "direct_ws_liquidation_events": int(ws_final["liquidation_events"]),
+        "direct_ws_reconnects": int(ws_final["reconnects"]),
+        "direct_ws_last_error": ws_final["last_error"],
     }
     (out / "SUMMARY.json").write_text(json.dumps(summary, indent=2, sort_keys=True))
     print(json.dumps(summary, sort_keys=True))
