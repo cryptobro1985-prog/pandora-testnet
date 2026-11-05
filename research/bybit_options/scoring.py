@@ -96,19 +96,24 @@ def _liquidation_pressure(liquidations: Iterable[dict[str, Any]]) -> tuple[float
 
 
 def underlying_features(context: dict[str, Any]) -> dict[str, float]:
-    trade_imb, trade_notional = _notional_trade_imbalance(context.get("recent_trades", []))
+    # Prefer the causal WS cache when available; REST recent trades are the fallback.
+    recent = context.get("ws_recent_trades") or context.get("recent_trades", [])
+    trade_imb, trade_notional = _notional_trade_imbalance(recent)
     book_imb = _book_imbalance(context.get("orderbook", {}))
     liq_imb, liq_notional = _liquidation_pressure(context.get("liquidations", []))
     ticker = context.get("ticker", {})
     mom24 = clamp(f(ticker.get("price24hPcnt")) * 8.0)
     funding = clamp(f(ticker.get("fundingRate")) * 200.0)
-    recent = context.get("recent_trades", [])
     short_mom = 0.0
     if len(recent) >= 2:
-        p0 = f(recent[-1].get("price") or recent[-1].get("p"))
-        p1 = f(recent[0].get("price") or recent[0].get("p"))
-        if p0 > 0 and p1 > 0:
-            short_mom = clamp(math.log(p0 / p1) * 300.0)
+        ordered = sorted(
+            recent,
+            key=lambda x: f(x.get("T") or x.get("time") or x.get("execTime")),
+        )
+        p_old = f(ordered[0].get("price") or ordered[0].get("p"))
+        p_new = f(ordered[-1].get("price") or ordered[-1].get("p"))
+        if p_old > 0 and p_new > 0:
+            short_mom = clamp(math.log(p_new / p_old) * 300.0)
     direction = clamp(
         0.34 * trade_imb
         + 0.24 * book_imb
