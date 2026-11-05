@@ -62,6 +62,23 @@ cooldown: dict[str, float] = {}
 ws = LinearPublicWS([LINEAR[x] for x in UNDERLYINGS if x in LINEAR]).start()
 
 
+def self_keepalive_worker() -> None:
+    """Keep the free Render web service awake without another user automation."""
+    url = os.getenv("RENDER_EXTERNAL_URL", "https://pandora-options-live-signal.onrender.com").rstrip("/") + "/health"
+    interval = max(300.0, float(os.getenv("OPTIONS_SELF_KEEPALIVE_SECONDS", "480")))
+    # Let gunicorn finish booting before the first public round-trip.
+    time.sleep(60.0)
+    while True:
+        try:
+            session.get(url, timeout=20)
+        except Exception as exc:
+            print(json.dumps({"kind":"SELF_KEEPALIVE_ERROR","error":repr(exc)}), flush=True)
+        time.sleep(interval)
+
+
+threading.Thread(target=self_keepalive_worker, daemon=True, name="options-self-keepalive").start()
+
+
 def get_json(path: str, **params: Any) -> dict[str, Any]:
     r = session.get(RELAY + path, params=params, timeout=15)
     r.raise_for_status()
