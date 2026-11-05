@@ -198,38 +198,31 @@ class ForwardStats:
             "net":net,
             "correct":1.0 if correct else 0.0,
             "abs_error":abs(pred.expected_return-y.future_return),
-            "long_net":y.future_return-cost_floor,
-            "short_net":-y.future_return-cost_floor,
-            "long_correct":1.0 if y.future_return>cost_floor else 0.0,
-            "short_correct":1.0 if -y.future_return>cost_floor else 0.0,
+            "predicted_side":"LONG" if direction==1 else "SHORT",
+            "counterfactual_long_net":y.future_return-cost_floor,
+            "counterfactual_short_net":-y.future_return-cost_floor,
         })
 
     def summary(self):
         if not self.rows:
             return {"n":0,"net_expectancy":0.0,"precision":0.0,"mae":None}
-        side_rows=[r for r in self.rows if "long_net" in r and "short_net" in r]
+        long_rows=[r for r in self.rows if r.get("predicted_side")=="LONG"]
+        short_rows=[r for r in self.rows if r.get("predicted_side")=="SHORT"]
+        cf_rows=[r for r in self.rows if "counterfactual_long_net" in r]
         out={
             "n":len(self.rows),
             "net_expectancy":statistics.fmean(r["net"] for r in self.rows),
             "precision":statistics.fmean(r["correct"] for r in self.rows),
             "mae":statistics.fmean(r["abs_error"] for r in self.rows),
+            "long_n":len(long_rows),
+            "short_n":len(short_rows),
+            "long_net_expectancy":statistics.fmean(r["net"] for r in long_rows) if long_rows else None,
+            "short_net_expectancy":statistics.fmean(r["net"] for r in short_rows) if short_rows else None,
+            "long_precision":statistics.fmean(r["correct"] for r in long_rows) if long_rows else None,
+            "short_precision":statistics.fmean(r["correct"] for r in short_rows) if short_rows else None,
+            "counterfactual_long_net_expectancy":statistics.fmean(r["counterfactual_long_net"] for r in cf_rows) if cf_rows else None,
+            "counterfactual_short_net_expectancy":statistics.fmean(r["counterfactual_short_net"] for r in cf_rows) if cf_rows else None,
         }
-        if side_rows:
-            out.update({
-                "side_n":len(side_rows),
-                "long_net_expectancy":statistics.fmean(r["long_net"] for r in side_rows),
-                "short_net_expectancy":statistics.fmean(r["short_net"] for r in side_rows),
-                "long_precision":statistics.fmean(r["long_correct"] for r in side_rows),
-                "short_precision":statistics.fmean(r["short_correct"] for r in side_rows),
-            })
-        else:
-            out.update({
-                "side_n":0,
-                "long_net_expectancy":None,
-                "short_net_expectancy":None,
-                "long_precision":None,
-                "short_precision":None,
-            })
         return out
 
 
@@ -343,7 +336,18 @@ class OnlineQuantLearner:
         base=max(abs(c["net_expectancy"]),1e-6)
         better=(q["net_expectancy"]-c["net_expectancy"])/base>=improvement
         mae_ok=(q["mae"] or 0)<=((c["mae"] or 0)+float(rule.get("max_calibration_degradation",0.03)))
-        if better and mae_ok and q["net_expectancy"]>0:
+        side_min=int(rule.get("min_side_forward_labels_before_promotion",30))
+        side_ready=min(c.get("long_n",0),c.get("short_n",0),q.get("long_n",0),q.get("short_n",0))>=side_min
+        side_tol=float(rule.get("max_side_net_expectancy_degradation",0.0))
+        side_ok=side_ready
+        if side_ok:
+            side_ok=(
+                q.get("long_net_expectancy") is not None and c.get("long_net_expectancy") is not None
+                and q.get("short_net_expectancy") is not None and c.get("short_net_expectancy") is not None
+                and q["long_net_expectancy"]>=c["long_net_expectancy"]-side_tol
+                and q["short_net_expectancy"]>=c["short_net_expectancy"]-side_tol
+            )
+        if better and mae_ok and side_ok and q["net_expectancy"]>0:
             self.champion=copy.deepcopy(self.challenger)
             self.promotions+=1
             self._reset_forward_stats()
