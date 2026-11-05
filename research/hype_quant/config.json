@@ -62,7 +62,9 @@
     "min_forward_labels_before_promotion": 120,
     "min_relative_net_expectancy_improvement": 0.05,
     "max_calibration_degradation": 0.03,
-    "require_no_liquidations": true
+    "require_no_liquidations": true,
+    "min_side_forward_labels_before_promotion": 30,
+    "max_side_net_expectancy_degradation": 0
   },
   "pattern_memory": {
     "max_examples": 20000,
