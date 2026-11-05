@@ -34,6 +34,12 @@ def main() -> int:
         problems.append("naked short enabled")
     if summary.get("scan_count", 0) <= 0:
         problems.append("no scans")
+    if not summary.get("direct_ws_connected_ever"):
+        problems.append("direct Bybit public WS never connected")
+    if int(summary.get("direct_ws_messages", 0)) <= 0:
+        problems.append("no direct Bybit public WS messages")
+    if int(summary.get("direct_ws_trade_events", 0)) <= 0:
+        problems.append("no direct Bybit public trade events")
     candidate_rows = 0
     for batch in read_rows(p / "candidates.jsonl.gz") or []:
         for candidate in batch.get("top", []):
