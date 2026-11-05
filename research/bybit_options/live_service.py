@@ -13,6 +13,7 @@ from flask import Flask, jsonify
 
 from research.bybit_options.scoring import build_candidates, underlying_features, depth_metrics, clamp
 from research.bybit_options.ws_cache import LinearPublicWS
+from research.bybit_options import telegram_webhook_runtime as twr
 
 app = Flask(__name__)
 
@@ -533,7 +534,30 @@ def loop() -> None:
 threading.Thread(target=loop,daemon=True,name="options-live-decision-loop").start()
 threading.Thread(target=telegram_pair_loop,daemon=True,name="telegram-pair-loop").start()
 threading.Thread(target=telegram_identity_probe,daemon=True,name="telegram-identity-probe").start()
+threading.Thread(target=lambda: print(json.dumps({"kind":"TELEGRAM_WEBHOOK_SETUP",**twr.configure()}),flush=True),daemon=True,name="telegram-webhook-config").start()
 threading.Thread(target=startup_alert_loop,daemon=True,name="options-startup-alert").start()
+
+
+@app.post("/telegram/webhook")
+def telegram_webhook():
+    global telegram_chat_id
+    if not twr.valid_secret(request.headers):
+        return jsonify({"ok":False}),403
+    update=request.get_json(silent=True) or {}
+    msg=update.get("message") or {}
+    chat=msg.get("chat") or {}
+    text=str(msg.get("text") or "").strip()
+    if str(chat.get("type") or "")=="private" and chat.get("id") is not None and text.startswith(("/start","/options","/status")):
+        telegram_chat_id=str(chat["id"])
+        with lock:
+            state["telegram_configured"]=True
+        print(json.dumps({"kind":"TELEGRAM_PAIR_ACCEPTED","chat_id":telegram_chat_id}),flush=True)
+        reply="✅ <b>PANDORA OPTIONS подключён</b>\nBTC / ETH / SOL BUY / HOLD / SELL сигналы включены."
+        try:
+            tg_send(reply)
+        except Exception as exc:
+            print(json.dumps({"kind":"TELEGRAM_PAIR_SEND_ERROR","error":repr(exc)}),flush=True)
+    return jsonify({"ok":True})
 
 
 @app.get("/health")
