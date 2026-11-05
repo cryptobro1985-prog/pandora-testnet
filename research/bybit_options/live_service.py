@@ -76,7 +76,7 @@ def tg_send(text: str) -> None:
 
 def telegram_pair_loop() -> None:
     global telegram_chat_id
-    if not TG_TOKEN or telegram_chat_id or not TG_PAIR_CODE:
+    if not TG_TOKEN or telegram_chat_id:
         return
     offset = 0
     base = f"https://api.telegram.org/bot{TG_TOKEN}"
@@ -90,7 +90,16 @@ def telegram_pair_loop() -> None:
                 msg = update.get("message") or update.get("edited_message") or {}
                 chat = msg.get("chat") or {}
                 text = str(msg.get("text") or "").strip()
-                if text == f"/pair {TG_PAIR_CODE}" and chat.get("id") is not None:
+                private_chat = str(chat.get("type") or "private") == "private"
+                pair_ok = bool(
+                    private_chat
+                    and chat.get("id") is not None
+                    and (
+                        (TG_PAIR_CODE and text == f"/pair {TG_PAIR_CODE}")
+                        or (not TG_PAIR_CODE and text.startswith("/start"))
+                    )
+                )
+                if pair_ok:
                     telegram_chat_id = str(chat["id"])
                     with lock:
                         state["telegram_configured"] = True
@@ -129,15 +138,16 @@ def format_event(e: dict[str, Any]) -> str:
     kind=e["kind"]
     if kind=="ENTRY":
         return (
-            f"🟢 <b>LIVE OPTIONS SIGNAL — BUY {e['option_type']}</b>\n"
+            f"🟢 <b>LIVE OPTIONS SETUP — {e['option_type']}</b>\n"
             f"<b>{e['symbol']}</b>\n"
             f"Strike: <b>{fmt_money(e['strike'])}</b> | DTE: {e['dte_hours']:.2f}h\n"
             f"Buy reference ask: <b>{fmt_money(e['entry_ask'])}</b>\n"
             f"Underlying: {fmt_money(e['underlying'])}\n"
             f"Score: <b>{e['score']:.3f}</b>\n"
             f"IV: {e['mark_iv']:.4f} | Δ {e['delta']:.4f} | Γ {e['gamma']:.6g} | Θ {e['theta']:.6g}\n"
-            f"Max option loss: <b>100% premium</b>\n"
-            f"Mode: LIVE MARKET DECISION, manual execution"
+            f"Premium can fall to zero: <b>100% premium risk</b>\n"
+            f"If premium doubles: $5→$10 | $10→$20 | $20→$40\n"
+            f"Mode: live market monitoring; execution remains manual"
         )
     if kind=="X2_HOLD":
         return (
@@ -148,7 +158,7 @@ def format_event(e: dict[str, Any]) -> str:
             f"Score: {e['score']:.3f} — momentum still valid"
         )
     if kind in {"TAKE_PROFIT","EXIT"}:
-        label="TAKE PROFIT / SELL" if kind=="TAKE_PROFIT" else "EXIT / SELL"
+        label="X2 / PROFIT MILESTONE" if kind=="TAKE_PROFIT" else "SETUP INVALIDATED"
         return (
             f"🔴 <b>{label}</b>\n"
             f"<b>{e['symbol']}</b>\n"
