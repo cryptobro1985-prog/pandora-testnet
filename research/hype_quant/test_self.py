@@ -140,12 +140,47 @@ def learner_smoke(features):
     return q
 
 
+
+def numerical_stability_smoke(features):
+    cfg=copy.deepcopy(load_config(Path("research/hype_quant/config.json")))
+    cfg["horizons_seconds"]=[1,2,3]
+    cfg["champion"]["min_forward_labels_before_promotion"]=5
+    cfg["pattern_memory"]["neighbors"]=3
+    q=OnlineQuantLearner(cfg)
+    x=dict(features)
+    # Stress large-magnitude live fields seen in real HYPE states.
+    x.update({
+        "turnover_24h":1e12,
+        "oi_notional":5e10,
+        "bid_depth_raw_50":2e10,
+        "ask_depth_raw_50":2.1e10,
+        "raw_frame_count":1e8,
+    })
+    for i in range(180):
+        ts=i*1000
+        price=100.0*(1+0.002*math.sin(i/17)+0.00005*i)
+        q.observe(ts,price,x)
+    rep=q.report()
+    for group in ("champion","challenger"):
+        for row in rep[group].values():
+            mae=row.get("mae")
+            if mae is not None:
+                assert math.isfinite(mae), rep
+                assert mae <= 0.25, rep
+    for h,m in q.challenger.items():
+        p=m.predict(x)
+        assert abs(p.expected_return) <= 0.25+1e-12
+        assert 0.0 <= p.expected_max_up <= 0.35+1e-12
+        assert 0.0 <= p.expected_max_down <= 0.35+1e-12
+    return q
+
 def main():
     c=contract_summary()
     assert c["point_count"]==116
     assert INPUT_IDS|TARGET_IDS|METADATA_IDS==set(range(1,117))
     state,features=full_feature_smoke()
     q=learner_smoke(features)
+    numerical_stability_smoke(features)
     print("HYPE_QUANT_116_SELFTEST_OK")
     print(json.dumps({"coverage":state.coverage_report(),"learner":q.report()},indent=2))
 
