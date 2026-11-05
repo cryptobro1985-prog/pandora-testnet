@@ -222,6 +222,11 @@ def build_candidates(mins,strict_labels,internal_labels):
     lows=[];highs=[]
     for i,r in enumerate(mins):
         if i>=360:
+            # Never create a structural candidate across a missing-minute boundary.
+            recent=mins[i-360:i+1]
+            if any(b["start_ms"]-a["start_ms"]!=60_000 for a,b in zip(recent,recent[1:])):
+                lows.append(r["low"]);highs.append(r["high"])
+                continue
             prev_low=min(lows[-360:]);prev_high=max(highs[-360:])
             if r["low"]<prev_low:
                 c={"side":"LOW","extreme_price":r["low"],"extreme_ts_ms":r["low_ts_ms"],
@@ -432,6 +437,12 @@ def run(symbol,out,cache):
     internal,internal_excl=structural_labels(mins,lookback=3,lookahead=1)
     candidates=build_candidates(mins,strict,internal)
     h1=aggregate_h1(mins)
+    gaps=integrity["suspicious_gaps_over_300s"]
+    if gaps:
+        def clean_candidate(x):
+            left=x["extreme_ts_ms"]-300_000;right=x["extreme_ts_ms"]+300_000
+            return not any(g["from_ms"]<right and g["to_ms"]>left for g in gaps)
+        candidates=[x for x in candidates if clean_candidate(x)]
     records=build_snapshots(symbol,candidates,sec5,mins,h1)
     model=fit_model(records)
     oos=candidate_first_accept(records,model,stamp(OOS),stamp(END))
