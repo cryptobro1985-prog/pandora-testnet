@@ -67,6 +67,8 @@ jobs:
       - run: pip install -r research/bybit_options/requirements.txt
       - name: Capture 20 minute bootstrap
         run: python -m research.bybit_options.collector --duration-seconds 1200 --output options-segment-1
+      - name: Label causal executable outcomes 1
+        run: python -m research.bybit_options.labeler options-segment-1
       - run: python -m research.bybit_options.verify options-segment-1
       - uses: actions/upload-artifact@v4
         with:
@@ -86,6 +88,8 @@ jobs:
       - run: pip install -r research/bybit_options/requirements.txt
       - name: Capture segment 2
         run: python -m research.bybit_options.collector --duration-seconds 9900 --output options-segment-2
+      - name: Label causal executable outcomes 2
+        run: python -m research.bybit_options.labeler options-segment-2
       - run: python -m research.bybit_options.verify options-segment-2
       - uses: actions/upload-artifact@v4
         with:
@@ -105,6 +109,8 @@ jobs:
       - run: pip install -r research/bybit_options/requirements.txt
       - name: Capture segment 3
         run: python -m research.bybit_options.collector --duration-seconds 9900 --output options-segment-3
+      - name: Label causal executable outcomes 3
+        run: python -m research.bybit_options.labeler options-segment-3
       - run: python -m research.bybit_options.verify options-segment-3
       - uses: actions/upload-artifact@v4
         with:
@@ -124,6 +130,8 @@ jobs:
       - run: pip install -r research/bybit_options/requirements.txt
       - name: Capture segment 4
         run: python -m research.bybit_options.collector --duration-seconds 9900 --output options-segment-4
+      - name: Label causal executable outcomes 4
+        run: python -m research.bybit_options.labeler options-segment-4
       - run: python -m research.bybit_options.verify options-segment-4
       - uses: actions/upload-artifact@v4
         with:
