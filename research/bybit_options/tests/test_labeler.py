@@ -20,7 +20,7 @@ class LabelerTests(unittest.TestCase):
         result=label_signal(self.signal,self.points)
         self.assertEqual(result["outcomes"]["900s"]["status"],"censored_no_fresh_bid")
     def test_future_only_entry_is_censored(self):
-        result=label_signal(self.signal,[{"ts_ms":300001,**self.points[0]}])
+        result=label_signal(self.signal,[{**self.points[0],"ts_ms":300001}])
         self.assertEqual(result["entry_status"],"censored_no_fresh_ask")
 
 if __name__=="__main__":
