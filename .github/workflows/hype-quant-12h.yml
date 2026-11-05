@@ -14,7 +14,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: hype-quant-12h-v5-${{ github.ref }}
+  group: hype-quant-12h-v7-${{ github.ref }}
   cancel-in-progress: true
 
 env:
