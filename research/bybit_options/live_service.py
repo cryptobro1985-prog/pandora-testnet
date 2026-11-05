@@ -109,6 +109,30 @@ def tg_send(text: str, kind: str = "ALERT") -> int:
 
 
 
+def telegram_identity_probe() -> None:
+    if not TG_TOKEN:
+        print(json.dumps({"kind":"TELEGRAM_IDENTITY","configured":False}), flush=True)
+        return
+    try:
+        base=f"https://api.telegram.org/bot{TG_TOKEN}"
+        me=session.get(base+"/getMe",timeout=10)
+        hook=session.get(base+"/getWebhookInfo",timeout=10)
+        me.raise_for_status(); hook.raise_for_status()
+        m=me.json().get("result",{})
+        h=hook.json().get("result",{})
+        print(json.dumps({
+            "kind":"TELEGRAM_IDENTITY",
+            "configured":True,
+            "username":m.get("username"),
+            "bot_id":m.get("id"),
+            "webhook_url":h.get("url"),
+            "pending_update_count":h.get("pending_update_count"),
+            "last_error_message":h.get("last_error_message"),
+        }, ensure_ascii=False), flush=True)
+    except Exception as exc:
+        print(json.dumps({"kind":"TELEGRAM_IDENTITY_ERROR","error":repr(exc)}), flush=True)
+
+
 def telegram_pair_loop() -> None:
     global telegram_chat_id
     if ALERT_BRIDGE_URL and ALERT_BRIDGE_SECRET:
@@ -508,6 +532,7 @@ def loop() -> None:
 
 threading.Thread(target=loop,daemon=True,name="options-live-decision-loop").start()
 threading.Thread(target=telegram_pair_loop,daemon=True,name="telegram-pair-loop").start()
+threading.Thread(target=telegram_identity_probe,daemon=True,name="telegram-identity-probe").start()
 threading.Thread(target=startup_alert_loop,daemon=True,name="options-startup-alert").start()
 
 
