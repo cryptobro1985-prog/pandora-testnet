@@ -30,6 +30,8 @@ COOLDOWN_SECONDS = int(os.getenv("LIVE_SIGNAL_COOLDOWN_SECONDS", "900"))
 
 TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TG_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+TG_PAIR_CODE = os.getenv("TELEGRAM_PAIR_CODE", "").strip()
+telegram_chat_id = TG_CHAT_ID
 
 session = requests.Session()
 session.headers.update({"User-Agent":"PANDORA-Options-Live-Decision/0.1"})
@@ -40,7 +42,7 @@ state: dict[str, Any] = {
     "last_scan_ms": 0,
     "last_error": None,
     "scan_count": 0,
-    "telegram_configured": bool(TG_TOKEN and TG_CHAT_ID),
+    "telegram_configured": bool(TG_TOKEN and telegram_chat_id),
     "active": {},
     "last_events": [],
     "last_candidates": {},
@@ -59,16 +61,48 @@ def get_json(path: str, **params: Any) -> dict[str, Any]:
 
 
 def tg_send(text: str) -> None:
-    if not (TG_TOKEN and TG_CHAT_ID):
+    if not (TG_TOKEN and telegram_chat_id):
         return
     url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
     r = session.post(url, json={
-        "chat_id": TG_CHAT_ID,
+        "chat_id": telegram_chat_id,
         "text": text,
         "parse_mode": "HTML",
         "disable_web_page_preview": True,
     }, timeout=12)
     r.raise_for_status()
+
+
+
+def telegram_pair_loop() -> None:
+    global telegram_chat_id
+    if not TG_TOKEN or telegram_chat_id or not TG_PAIR_CODE:
+        return
+    offset = 0
+    base = f"https://api.telegram.org/bot{TG_TOKEN}"
+    while not telegram_chat_id:
+        try:
+            r = session.get(base + "/getUpdates", params={"offset":offset,"timeout":20}, timeout=25)
+            r.raise_for_status()
+            obj = r.json()
+            for update in obj.get("result", []):
+                offset = max(offset, int(update.get("update_id",0))+1)
+                msg = update.get("message") or update.get("edited_message") or {}
+                chat = msg.get("chat") or {}
+                text = str(msg.get("text") or "").strip()
+                if text == f"/pair {TG_PAIR_CODE}" and chat.get("id") is not None:
+                    telegram_chat_id = str(chat["id"])
+                    with lock:
+                        state["telegram_configured"] = True
+                    print(json.dumps({"kind":"TELEGRAM_PAIR_ACCEPTED","chat_id":telegram_chat_id}), flush=True)
+                    try:
+                        tg_send("✅ <b>PANDORA OPTIONS connected</b>\nLive BUY/HOLD/SELL alerts are now enabled for this chat.")
+                    except Exception as exc:
+                        print(json.dumps({"kind":"TELEGRAM_PAIR_SEND_ERROR","error":repr(exc)}), flush=True)
+                    return
+        except Exception as exc:
+            print(json.dumps({"kind":"TELEGRAM_PAIR_ERROR","error":repr(exc)}), flush=True)
+            time.sleep(5)
 
 
 def emit(kind: str, payload: dict[str, Any]) -> None:
@@ -317,6 +351,7 @@ def loop() -> None:
 
 
 threading.Thread(target=loop,daemon=True,name="options-live-decision-loop").start()
+threading.Thread(target=telegram_pair_loop,daemon=True,name="telegram-pair-loop").start()
 
 
 @app.get("/health")
