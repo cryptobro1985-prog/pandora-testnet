@@ -21,6 +21,10 @@ class LinearPublicWS:
         self.trades = defaultdict(lambda: deque(maxlen=12000))
         self.liquidations = defaultdict(lambda: deque(maxlen=6000))
         self.tickers: dict[str, dict[str, Any]] = {}
+        self.orderbooks: dict[str, dict[str, dict[float, float]]] = {
+            s: {"b": {}, "a": {}} for s in self.symbols
+        }
+        self.orderbook_events = 0
         self.lock = threading.RLock()
         self.connected = False
         self.connected_ever = False
@@ -47,6 +51,7 @@ class LinearPublicWS:
                 f"publicTrade.{symbol}",
                 f"allLiquidation.{symbol}",
                 f"tickers.{symbol}",
+                f"orderbook.50.{symbol}",
             ])
         ws.send(json.dumps({"op": "subscribe", "args": args}))
         with self.lock:
@@ -82,6 +87,23 @@ class LinearPublicWS:
                             self.tickers.setdefault(symbol, {}).update(data[0])
                     elif isinstance(data, dict):
                         self.tickers.setdefault(symbol, {}).update(data)
+                elif topic.startswith("orderbook."):
+                    symbol = topic.rsplit(".", 1)[-1]
+                    if isinstance(data, dict):
+                        book = self.orderbooks.setdefault(symbol, {"b": {}, "a": {}})
+                        if str(message.get("type", "")).lower() == "snapshot":
+                            book["b"].clear()
+                            book["a"].clear()
+                        for side_key in ("b", "a"):
+                            for row in data.get(side_key) or []:
+                                if not isinstance(row, list) or len(row) < 2:
+                                    continue
+                                price = float(row[0]); qty = float(row[1])
+                                if qty <= 0:
+                                    book[side_key].pop(price, None)
+                                else:
+                                    book[side_key][price] = qty
+                        self.orderbook_events += 1
                 self._prune_locked(now_ms)
         except Exception as exc:
             with self.lock:
@@ -139,10 +161,16 @@ class LinearPublicWS:
         now_ms = int(time.time() * 1000)
         with self.lock:
             self._prune_locked(now_ms)
+            book = self.orderbooks.get(symbol, {"b": {}, "a": {}})
+            ws_orderbook = {
+                "b": [[str(p), str(q)] for p, q in sorted(book["b"].items(), reverse=True)[:50]],
+                "a": [[str(p), str(q)] for p, q in sorted(book["a"].items())[:50]],
+            }
             return {
                 "ws_recent_trades": list(self.trades[symbol]),
                 "liquidations": list(self.liquidations[symbol]),
                 "ws_ticker": dict(self.tickers.get(symbol, {})),
+                "ws_orderbook": ws_orderbook,
                 "ws_status": self.status(),
             }
 
@@ -155,6 +183,7 @@ class LinearPublicWS:
                 "message_count": self.message_count,
                 "trade_events": self.trade_events,
                 "liquidation_events": self.liquidation_events,
+                "orderbook_events": self.orderbook_events,
                 "reconnects": self.reconnects,
                 "last_error": self.last_error,
             }
