@@ -159,6 +159,7 @@ def format_event(e: dict[str, Any]) -> str:
             f"Decision: <b>HOLD ABOVE X2</b>\n"
             f"Entry ask: {fmt_money(e['entry_ask'])} | Bid now: {fmt_money(e['bid'])}\n"
             f"MFE: {e['mfe_multiple']:.2f}x | protected floor: {e['protected_multiple']:.2f}x\n"
+            f"Liquidity: exitability {e.get('exitability',0):.2f} | depth {e.get('depth_balance',0):.2f}\n"
             f"Score: {e['score']:.3f} — momentum still valid"
         )
     if kind in {"TAKE_PROFIT","EXIT"}:
@@ -278,6 +279,16 @@ def manage_active(base: str, cands: list[Any], raw: dict[str, Any]) -> None:
     pos["mfe_multiple"]=max(float(pos["mfe_multiple"]),multiple)
     score=current_score_for_symbol(cands,pos["symbol"])
     pos["score"]=score
+    depth_now = raw.get("depth", {}).get(pos["symbol"])
+    if not depth_now:
+        try:
+            depth_now = option_depth(pos["symbol"], bid)
+        except Exception:
+            depth_now = {}
+    pos["current_spread_fraction"] = float(depth_now.get("spread_fraction", 1.0))
+    pos["current_depth_balance"] = float(depth_now.get("depth_balance", 0.0))
+    pos["current_exitability"] = float(depth_now.get("exitability", 0.0))
+    pos["current_liquidity_score"] = float(depth_now.get("liquidity_score", 0.0))
     uf=underlying_features(raw["context"])
     direction=float(uf["direction"])
     correct_direction = direction if pos["option_type"]=="CALL" else -direction
@@ -286,20 +297,26 @@ def manage_active(base: str, cands: list[Any], raw: dict[str, Any]) -> None:
         pos["x2_seen"]=True
         protected=max(MIN_PROTECTED_X_AFTER_X2, pos["mfe_multiple"]*TRAIL_MFE_FRACTION)
         pos["protected_multiple"]=protected
-        if score>=HOLD_ABOVE_X2_SCORE and correct_direction>0.12:
+        liquid_enough = pos["current_liquidity_score"] >= 0.35 and pos["current_exitability"] >= 0.25
+        if score>=HOLD_ABOVE_X2_SCORE and correct_direction>0.12 and liquid_enough:
             emit("X2_HOLD",{
                 "symbol":pos["symbol"],"entry_ask":pos["entry_ask"],"bid":bid,
                 "multiple":multiple,"mfe_multiple":pos["mfe_multiple"],
                 "protected_multiple":protected,"score":score,
+                "exitability":pos["current_exitability"],
+                "depth_balance":pos["current_depth_balance"],
             })
         else:
             close_position(base,pos,bid,multiple,"x2 reached; continuation not strong enough","TAKE_PROFIT")
             return
 
     if pos["x2_seen"]:
+        trail_fraction = TRAIL_MFE_FRACTION
+        if pos["current_liquidity_score"] < 0.40 or pos["current_spread_fraction"] > MAX_EXEC_SPREAD_FRACTION * 0.75:
+            trail_fraction = max(trail_fraction, 0.85)
         pos["protected_multiple"]=max(
             float(pos.get("protected_multiple") or MIN_PROTECTED_X_AFTER_X2),
-            pos["mfe_multiple"]*TRAIL_MFE_FRACTION,
+            pos["mfe_multiple"]*trail_fraction,
             MIN_PROTECTED_X_AFTER_X2,
         )
         if multiple<=pos["protected_multiple"]:
