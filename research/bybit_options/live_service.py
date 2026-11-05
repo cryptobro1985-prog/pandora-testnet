@@ -279,7 +279,24 @@ def option_depth(symbol: str, reference_price: float) -> dict[str, float]:
 
 def refine_with_depth(cands: list[Any], context: dict[str, Any]) -> tuple[list[Any], dict[str, dict[str, float]]]:
     depth_by_symbol: dict[str, dict[str, float]] = {}
-    selected = list(cands[:DEPTH_REFINE_TOP])
+    rough_floor = max(0.58, ENTRY_THRESHOLD - 0.16)
+    rough_pool = [x for x in cands if x.ask > 0 and x.score >= rough_floor]
+    score_slots = max(2, DEPTH_REFINE_TOP // 2)
+    price_slots_each = max(1, (DEPTH_REFINE_TOP - score_slots) // 2)
+    selected_map = {x.symbol: x for x in cands[:score_slots]}
+    for side in ("CALL", "PUT"):
+        cheap = sorted(
+            (x for x in rough_pool if x.side == side),
+            key=lambda x: (x.ask, -x.score),
+        )[:price_slots_each]
+        for x in cheap:
+            selected_map[x.symbol] = x
+    if len(selected_map) < DEPTH_REFINE_TOP:
+        for x in cands:
+            selected_map.setdefault(x.symbol, x)
+            if len(selected_map) >= DEPTH_REFINE_TOP:
+                break
+    selected = list(selected_map.values())[:DEPTH_REFINE_TOP]
     if selected:
         with ThreadPoolExecutor(max_workers=min(len(selected), DEPTH_REFINE_TOP), thread_name_prefix="option-depth") as pool:
             future_map = {pool.submit(option_depth, x.symbol, x.ask or x.mark): x for x in selected}
@@ -333,7 +350,16 @@ def refine_with_depth(cands: list[Any], context: dict[str, Any]) -> tuple[list[A
             cand.components["agent_" + name] = float(vote)
         cand.score = clamp(0.68 * float(cand.score) + 0.32 * decision.consensus, 0.0, 1.0)
 
-    return sorted(cands, key=lambda x: x.score, reverse=True), depth_by_symbol
+    return sorted(
+        cands,
+        key=lambda x: (
+            int(x.components.get("feature_count", 0.0) == 116.0),
+            int(x.components.get("agent_approved", 0.0) >= 1.0),
+            float(x.components.get("agent_consensus", 0.0)),
+            float(x.score),
+        ),
+        reverse=True,
+    ), depth_by_symbol
 
 def candidate_now(base: str, instruments: dict[str, dict[str, Any]]) -> tuple[list[Any], dict[str, Any]]:
     linear = LINEAR[base]
