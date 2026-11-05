@@ -43,14 +43,14 @@ def load_minutes():
     rows=[{"ts":k,"open":v[0],"high":v[1],"low":v[2],"close":v[3],"trades":v[4]} for k,v in sorted(bars.items())]
     return rows,trade_count
 
-def h1_from_minutes(minutes):
+def bars_from_minutes(minutes, seconds):
     groups=defaultdict(list)
     for r in minutes:
-        groups[int(r["ts"]//3600)*3600].append(r)
+        groups[int(r["ts"]//seconds)*seconds].append(r)
     out=[]
-    for h,rs in sorted(groups.items()):
+    for t,rs in sorted(groups.items()):
         rs.sort(key=lambda x:x["ts"])
-        out.append({"ts":h,"open":rs[0]["open"],"high":max(x["high"] for x in rs),
+        out.append({"ts":t,"open":rs[0]["open"],"high":max(x["high"] for x in rs),
                     "low":min(x["low"] for x in rs),"close":rs[-1]["close"],"minutes":len(rs)})
     return out
 
@@ -63,21 +63,36 @@ def ema(values,n):
         out.append(x)
     return out
 
-def build_signals(h1):
-    c=[x["close"] for x in h1]
-    e6,e20=ema(c,6),ema(c,20)
-    e12,e26=ema(c,12),ema(c,26)
+def build_signals(m15,h1):
+    # EMA cross is evaluated on CLOSED 15m bars.
+    c15=[x["close"] for x in m15]
+    e6,e20=ema(c15,6),ema(c15,20)
+
+    # MACD line is evaluated only from CLOSED H1 bars.
+    ch1=[x["close"] for x in h1]
+    e12,e26=ema(ch1,12),ema(ch1,26)
     macd=[a-b for a,b in zip(e12,e26)]
+    macd_by_available_ts={h1[i]["ts"]+3600:macd[i] for i in range(len(h1))}
+
     signals=[]
-    for i in range(1,len(h1)-1):
-        up=e6[i-1]<=e20[i-1] and e6[i]>e20[i] and macd[i]>0
-        dn=e6[i-1]>=e20[i-1] and e6[i]<e20[i] and macd[i]<0
+    last_macd=None
+    h1_avail=sorted(macd_by_available_ts)
+    j=0
+    for i in range(1,len(m15)-1):
+        signal_available_ts=m15[i]["ts"]+900
+        while j<len(h1_avail) and h1_avail[j]<=signal_available_ts:
+            last_macd=macd_by_available_ts[h1_avail[j]]
+            j+=1
+        if last_macd is None:
+            continue
+        up=e6[i-1]<=e20[i-1] and e6[i]>e20[i] and last_macd>0
+        dn=e6[i-1]>=e20[i-1] and e6[i]<e20[i] and last_macd<0
         if not (up or dn):
             continue
-        # signal known only after H1 close; enter at next hour
-        enter_ts=h1[i]["ts"]+3600
-        signals.append({"signal_ts":h1[i]["ts"]+3600,"enter_ts":enter_ts,"side":1 if up else -1,
-                        "macd":macd[i],"ema6":e6[i],"ema20":e20[i]})
+        # Enter at the next 15m open, exactly when the closed bar signal becomes known.
+        enter_ts=signal_available_ts
+        signals.append({"signal_ts":signal_available_ts,"enter_ts":enter_ts,"side":1 if up else -1,
+                        "macd_h1":last_macd,"ema6_m15":e6[i],"ema20_m15":e20[i]})
     return signals
 
 def run(minutes, signals, sl, tp, start_ts, end_ts):
@@ -142,9 +157,10 @@ def run(minutes, signals, sl, tp, start_ts, end_ts):
 
 def main():
     minutes,trade_count=load_minutes()
-    h1=h1_from_minutes(minutes)
-    signals=build_signals(h1)
-    print(json.dumps({"dataset":{"minutes":len(minutes),"trades":trade_count,"h1":len(h1),"signals_total":len(signals),
+    m15=bars_from_minutes(minutes,900)
+    h1=bars_from_minutes(minutes,3600)
+    signals=build_signals(m15,h1)
+    print(json.dumps({"dataset":{"minutes":len(minutes),"trades":trade_count,"m15":len(m15),"h1":len(h1),"signals_total":len(signals),
                                  "first":minutes[0]["ts"],"last":minutes[-1]["ts"]}},sort_keys=True),flush=True)
     results=[]
     for sl in SL_GRID:
@@ -159,7 +175,7 @@ def main():
     full=run(minutes,signals,winner["sl"],winner["tp"],DISCOVERY_START,END_TS)
     # neighbor stability around winner
     near=[x for x in results if abs(x["sl"]-winner["sl"])<=0.0051 and abs(x["tp"]-winner["tp"])<=0.0101][:20]
-    payload={"assumptions":{"ema":"6/20 H1 close","macd":"12/26 line sign on H1","entry":"next H1 open","fee_per_side":FEE,
+    payload={"assumptions":{"ema":"6/20 M15 close","macd":"12/26 line sign on last closed H1","entry":"next M15 open","fee_per_side":FEE,
                              "same_minute_tp_sl":"stop-first conservative","position":"100% equity at 1x, compounded"},
              "discovery":{"start":"2026-10-11","end_exclusive":"2026-10-27","top10":top,"winner":winner},
              "oos":{"start":"2026-10-27","end_exclusive":"2026-11-03",**{k:v for k,v in oos.items() if k!="detail"}},
