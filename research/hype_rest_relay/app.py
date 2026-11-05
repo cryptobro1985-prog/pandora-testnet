@@ -127,6 +127,14 @@ def fetch():
         _cache.update(ts=now,data=out)
         return out
 
+@app.get("/")
+def root():
+    try:
+        data=fetch()
+        return jsonify({"ok":True,"symbol":SYMBOL,"relay_ts_ms":data["relay_ts_ms"],"local_low_watch":data.get("local_low_watch")})
+    except Exception as exc:
+        return jsonify({"ok":False,"error":repr(exc)}),503
+
 @app.get("/health")
 def health():
     try:
