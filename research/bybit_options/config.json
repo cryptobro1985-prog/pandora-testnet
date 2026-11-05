@@ -1,0 +1,21 @@
+{
+  "underlyings": ["BTC", "ETH", "SOL"],
+  "linear_symbols": {
+    "BTC": "BTCUSDT",
+    "ETH": "ETHUSDT",
+    "SOL": "SOLUSDT"
+  },
+  "min_dte_hours": 1.0,
+  "max_dte_hours": 48.0,
+  "surface_interval_seconds": 60,
+  "scan_interval_seconds": 10,
+  "candidate_limit_per_underlying": 40,
+  "orderbook_refine_limit": 8,
+  "signal_threshold": 0.72,
+  "signal_cooldown_seconds": 300,
+  "max_spread_fraction": 0.35,
+  "min_open_interest": 0.0,
+  "paper_only": true,
+  "allow_naked_short": false,
+  "strategies": ["GAMMA_BURST_DIRECTIONAL", "VOLATILITY_BURST_OBSERVER"]
+}
