@@ -225,15 +225,14 @@ def format_event(e: dict[str, Any]) -> str:
     option_type=str(e.get("option_type") or ("CALL" if "-C-" in str(e.get("symbol","")) else "PUT" if "-P-" in str(e.get("symbol","")) else "OPTION"))
     if kind=="ENTRY":
         return (
-            f"🟢 <b>КУПИТЬ {option_type}</b>\n"
-            f"Токен: <b>{base}</b>\n"
-            f"Цена входа: <b>{fmt_money(e['entry_ask'])} USDT</b> (ASK)\n"
-            f"Страйк: {fmt_money(e['strike'])}\n"
+            f"🟢 <b>{base} {fmt_money(e['strike'])} — КУПИТЬ {option_type}</b>\n"
+            f"Цена {base} сейчас: <b>{fmt_money(e['underlying'])} USDT</b>\n"
+            f"Страйк: <b>{fmt_money(e['strike'])}</b>\n"
+            f"Цена самого опциона: <b>{fmt_money(e['entry_ask'])} USDT</b>\n"
+            f"Что делать: <b>КУПИТЬ {option_type}</b> по цене не хуже {fmt_money(e['entry_ask'])}.\n"
             f"До экспирации: {e['dte_hours']:.1f} ч\n"
-            f"Опцион: <code>{e['symbol']}</code>\n"
-            f"Подтверждение: <b>{e.get('agent_quorum',0)}/5</b> агентов\n"
-            f"Действие: <b>КУПИТЬ {option_type}</b> и ждать следующего сигнала HOLD/SELL.\n"
-            f"⚠️ Премия опциона может упасть до нуля."
+            f"Ждать следующий сигнал: <b>ДЕРЖАТЬ</b> или <b>ПРОДАТЬ</b>.\n"
+            f"⚠️ Если фактическая цена покупки заметно выше указанной, результат будет отличаться."
         )
     if kind=="X2_HOLD":
         return (
@@ -247,11 +246,12 @@ def format_event(e: dict[str, Any]) -> str:
     if kind in {"TAKE_PROFIT","EXIT"}:
         reason="забрать прибыль" if kind=="TAKE_PROFIT" else "сигнал больше не подтверждён"
         return (
-            f"🔴 <b>ПРОДАТЬ {option_type}</b>\n"
-            f"Токен: <b>{base}</b>\n"
-            f"Цена входа: {fmt_money(e['entry_ask'])} USDT\n"
-            f"Цена продажи: <b>{fmt_money(e['bid'])} USDT</b> (BID)\n"
-            f"Результат: <b>{e['return_pct']:+.1f}%</b> ({e['multiple']:.2f}x)\n"
+            f"🔴 <b>{base} — ПРОДАТЬ {option_type}</b>\n"
+            f"Страйк: <b>{fmt_money(e.get('strike'))}</b>\n"
+            f"Вход системы: {fmt_money(e['entry_ask'])} USDT\n"
+            f"Продать сейчас по: <b>{fmt_money(e['bid'])} USDT</b> (BID)\n"
+            f"Результат от системного входа: <b>{e['return_pct']:+.1f}%</b>\n"
+            f"Действие: <b>ПРОДАТЬ {option_type}</b>\n"
             f"Причина: {reason}"
         )
     if kind=="HOLD":
@@ -490,7 +490,8 @@ def manage_active(base: str, cands: list[Any], raw: dict[str, Any]) -> None:
 
 def close_position(base: str,pos: dict[str,Any],bid: float,multiple: float,reason: str,kind: str) -> None:
     emit(kind,{
-        "base":base,"option_type":pos["option_type"],"symbol":pos["symbol"],"entry_ask":pos["entry_ask"],"bid":bid,
+        "base":base,"option_type":pos["option_type"],"symbol":pos["symbol"],"strike":pos["strike"],
+        "entry_ask":pos["entry_ask"],"bid":bid,
         "multiple":multiple,"return_pct":(multiple-1)*100,
         "mfe_multiple":pos["mfe_multiple"],"reason":reason,
     })
