@@ -192,7 +192,9 @@ def main():
     manifest.update({"source_bytes":source_bytes,"packed_bytes":packed_bytes,
         "compression_ratio":None if not source_bytes else packed_bytes/source_bytes,
         "all_110_supported":True,"canonical_point_count":110,"extra_point_count":len(extras())})
-    if packed_bytes <= 0:\n        raise SystemExit("no compact streams produced")\n    (out/"PACK_MANIFEST.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+    if packed_bytes <= 0:
+        raise SystemExit("no compact streams produced")
+    (out/"PACK_MANIFEST.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
     (out/"README_AGENT.md").write_text(
         "# HYPE 110 compact research package\n\nAll 110 canonical points are covered. "
         "DIRECT values are stored. DERIVED values are reproducible from stored streams. "
