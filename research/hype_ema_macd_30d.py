@@ -10,6 +10,9 @@ SPLIT=datetime(2026,10,27,tzinfo=timezone.utc).timestamp()
 END_TS=END.timestamp()
 FEE=0.00055
 START_EQUITY=100.0
+LEVERAGE=25.0
+MARGIN_FRACTION=0.20
+NOTIONAL_MULTIPLIER=LEVERAGE*MARGIN_FRACTION
 SL_GRID=[0.005,0.0075,0.01,0.0125,0.015,0.02,0.025,0.03,0.04]
 TP_GRID=[0.01,0.015,0.02,0.025,0.03,0.04,0.05,0.06,0.08,0.10,0.12]
 
@@ -148,7 +151,7 @@ def run(minutes, signals, sl, tp, start_ts, end_ts):
                 x=take; reason="take"
             else:
                 continue
-            ret=(e/x-1)-2*FEE
+            ret=(1-x/e)-2*FEE
         equity*=max(0.0,1+ret)
         trades.append({"side":pos["side"],"entry":e,"exit":x,"ret":ret,"reason":reason,"entry_ts":pos["ts"],"exit_ts":ts})
         peak=max(peak,equity); maxdd=max(maxdd,(peak-equity)/peak if peak else 1)
@@ -189,7 +192,7 @@ def run_every_signal(minutes, signals, sl, tp, start_ts, end_ts):
                 stop=entry*(1+sl); take=entry*(1-tp)
                 if r["high"]>=stop: exit_px=stop; exit_ts=tt; reason="stop"; break
                 if r["low"]<=take: exit_px=take; exit_ts=tt; reason="take"; break
-        ret=((exit_px/entry-1) if side==1 else (entry/exit_px-1))-2*FEE
+        ret=((exit_px/entry-1) if side==1 else (1-exit_px/entry))-2*FEE
         equity*=max(0.0,1+ret)
         trades.append({"side":side,"ret":ret,"reason":reason,"entry_ts":t,"exit_ts":exit_ts})
         peak=max(peak,equity); maxdd=max(maxdd,(peak-equity)/peak if peak else 1)
@@ -199,6 +202,101 @@ def run_every_signal(minutes, signals, sl, tp, start_ts, end_ts):
             "win_rate":wins/len(trades)*100 if trades else 0.0,"max_dd_pct":maxdd*100,
             "profit_factor":gp/gl if gl>0 else None,
             "stops":sum(x["reason"]=="stop" for x in trades),"takes":sum(x["reason"]=="take" for x in trades)}
+
+
+def run_levered_portfolio(minutes, signals, sl, tp, start_ts, end_ts):
+    """One live HYPE position at a time. Every qualifying signal closes/replaces any
+    existing position at the signal bar open. New trade uses 20% of current equity
+    as margin at 25x => 5x account notional. Fees are charged on notional both sides.
+    """
+    rows=[r for r in minutes if start_ts<=r["ts"]<end_ts]
+    if not rows:
+        return None
+    sigs={s["enter_ts"]:s for s in signals if start_ts<=s["enter_ts"]<end_ts}
+    equity=START_EQUITY
+    peak=equity
+    maxdd=0.0
+    trades=[]
+    pos=None
+
+    def close_pos(exit_px, exit_ts, reason):
+        nonlocal equity, peak, maxdd, pos
+        if pos is None:
+            return
+        price_ret=(exit_px/pos["entry"]-1.0)*pos["side"]
+        gross_pnl=pos["notional"]*price_ret
+        fees=pos["notional"]*FEE*2.0
+        pnl=gross_pnl-fees
+        before=equity
+        equity += pnl
+        trades.append({
+            "side":pos["side"],"entry":pos["entry"],"exit":exit_px,
+            "entry_ts":pos["ts"],"exit_ts":exit_ts,"reason":reason,
+            "price_return":price_ret,"gross_pnl":gross_pnl,"fees":fees,
+            "pnl":pnl,"equity_before":before,"equity_after":equity,
+            "account_return_pct":(pnl/before*100.0) if before else None,
+        })
+        peak=max(peak,equity)
+        maxdd=max(maxdd,(peak-equity)/peak if peak>0 else 1.0)
+        pos=None
+
+    for r in rows:
+        ts=r["ts"]
+
+        # A fresh qualifying EMA/MACD signal is actionable immediately at this M15 open.
+        # Close any previous position first so capital is never double-used.
+        s=sigs.get(ts)
+        if s is not None:
+            if pos is not None:
+                close_pos(r["open"],ts,"next_signal")
+            if equity<=0:
+                break
+            margin=equity*MARGIN_FRACTION
+            notional=margin*LEVERAGE
+            pos={"side":s["side"],"entry":r["open"],"ts":ts,
+                 "margin":margin,"notional":notional}
+
+        if pos is None:
+            continue
+
+        e=pos["entry"]
+        if pos["side"]==1:
+            stop=e*(1-sl); take=e*(1+tp)
+            hit_stop=r["low"]<=stop
+            hit_take=r["high"]>=take
+        else:
+            stop=e*(1+sl); take=e*(1-tp)
+            hit_stop=r["high"]>=stop
+            hit_take=r["low"]<=take
+
+        # Conservative: if both touched in same minute, stop wins.
+        if hit_stop:
+            close_pos(stop,ts,"stop")
+        elif hit_take:
+            close_pos(take,ts,"take")
+
+        if equity<=0:
+            break
+
+    if pos is not None and rows:
+        close_pos(rows[-1]["close"],rows[-1]["ts"],"period_end")
+
+    wins=sum(t["pnl"]>0 for t in trades)
+    gp=sum(max(t["pnl"],0.0) for t in trades)
+    gl=-sum(min(t["pnl"],0.0) for t in trades)
+    return {
+        "final":equity,
+        "return_pct":(equity/START_EQUITY-1.0)*100.0,
+        "trades":len(trades),
+        "wins":wins,
+        "win_rate":wins/len(trades)*100.0 if trades else 0.0,
+        "max_dd_pct":maxdd*100.0,
+        "profit_factor":gp/gl if gl>0 else None,
+        "stops":sum(t["reason"]=="stop" for t in trades),
+        "takes":sum(t["reason"]=="take" for t in trades),
+        "next_signal":sum(t["reason"]=="next_signal" for t in trades),
+        "detail":trades,
+    }
 
 def main():
     minutes,trade_count=load_minutes()
@@ -231,14 +329,32 @@ def main():
     every_oos=run_every_signal(minutes,signals,every_winner["sl"],every_winner["tp"],SPLIT,END_TS)
     every_full=run_every_signal(minutes,signals,every_winner["sl"],every_winner["tp"],DISCOVERY_START,END_TS)
 
+    levered_results=[]
+    for sl in SL_GRID:
+        for tp in TP_GRID:
+            d=run_levered_portfolio(minutes,signals,sl,tp,DISCOVERY_START,SPLIT)
+            if d and d["trades"]>=5:
+                levered_results.append({"sl":sl,"tp":tp,**{k:v for k,v in d.items() if k!="detail"}})
+    levered_results.sort(key=lambda x:(x["final"],-x["max_dd_pct"]),reverse=True)
+    levered_winner=levered_results[0]
+    levered_oos=run_levered_portfolio(minutes,signals,levered_winner["sl"],levered_winner["tp"],SPLIT,END_TS)
+    levered_full=run_levered_portfolio(minutes,signals,levered_winner["sl"],levered_winner["tp"],DISCOVERY_START,END_TS)
+
     payload={"assumptions":{"ema":"6/20 M15 close","macd":"12/26 line sign on last closed H1","entry":"next M15 open","fee_per_side":FEE,
-                             "same_minute_tp_sl":"stop-first conservative","position":"100% equity at 1x, compounded"},
+                             "same_minute_tp_sl":"stop-first conservative","position":"20% current equity margin at 25x = 5x account notional, compounded"},
              "discovery":{"start":"2026-10-11","end_exclusive":"2026-10-27","top10":top,"winner":winner},
              "oos":{"start":"2026-10-27","end_exclusive":"2026-11-03",**{k:v for k,v in oos.items() if k!="detail"}},
              "full":{"start":"2026-10-11","end_exclusive":"2026-11-03",**{k:v for k,v in full.items() if k!="detail"}},
              "winner_trades":full["detail"],"neighbor_candidates":near,
              "every_qualifying_cross":{"discovery_winner":every_winner,"oos":every_oos,"full":every_full},
-             "cross_stats":cross_stats}
+             "cross_stats":cross_stats,
+             "levered_25x_20pct_margin":{
+                 "discovery_top10":levered_results[:10],
+                 "winner":levered_winner,
+                 "oos":{k:v for k,v in levered_oos.items() if k!="detail"},
+                 "full":{k:v for k,v in levered_full.items() if k!="detail"},
+                 "full_trades":levered_full["detail"]
+             }}
     print("RESULT_JSON="+json.dumps(payload,separators=(",",":"),sort_keys=True),flush=True)
     with open("hype_ema_macd_30d_result.json","w") as f: json.dump(payload,f,indent=2,sort_keys=True)
 
