@@ -56,6 +56,7 @@ state: dict[str, Any] = {
     "active": {},
     "last_events": [],
     "last_candidates": {},
+    "behavior_samples": [],
 }
 cooldown: dict[str, float] = {}
 ws = LinearPublicWS([LINEAR[x] for x in UNDERLYINGS if x in LINEAR]).start()
@@ -597,21 +598,38 @@ def loop() -> None:
                 except Exception as exc:
                     print(json.dumps({"kind":"BASE_SCAN_ERROR","base":base,"error":repr(exc)}),flush=True)
                     continue
+                now_ms=int(time.time()*1000)
+                candidate_rows=[
+                    {"symbol":x.symbol,"side":x.side,"score":round(x.score,5),
+                     "ask":float(x.components.get("option_best_ask",0.0)) or x.ask,
+                     "bid":float(x.components.get("option_best_bid",0.0)) or x.bid,
+                     "strike":x.strike,"dte_hours":round(x.dte_hours,3),
+                     "feature_count":int(x.components.get("feature_count",0.0)),
+                     "agent_consensus":round(float(x.components.get("agent_consensus",0.0)),5),
+                     "agent_quorum":int(x.components.get("agent_quorum",0.0)),
+                     "agent_approved":bool(x.components.get("agent_approved",0.0)),
+                     "agent_votes":{
+                         "direction":round(float(x.components.get("agent_direction",0.0)),5),
+                         "flow":round(float(x.components.get("agent_flow",0.0)),5),
+                         "gamma_vol":round(float(x.components.get("agent_gamma_vol",0.0)),5),
+                         "execution_liquidity":round(float(x.components.get("agent_execution_liquidity",0.0)),5),
+                         "value_price":round(float(x.components.get("agent_value_price",0.0)),5),
+                     },
+                     "spread_fraction":round(float(x.components.get("option_exec_spread",0.0)),6),
+                     "depth_balance":round(float(x.components.get("option_depth_balance",0.0)),6),
+                     "exitability":round(float(x.components.get("option_exitability",0.0)),6)}
+                    for x in cands[:12]
+                ]
+                behavior_rows=[
+                    {"ts_ms":now_ms,"base":base,**row}
+                    for row in candidate_rows
+                    if row["feature_count"]==116 and row["agent_quorum"]>=3
+                ]
                 with lock:
-                    state["last_candidates"][base]=[
-                        {"symbol":x.symbol,"side":x.side,"score":round(x.score,5),
-                         "ask":float(x.components.get("option_best_ask",0.0)) or x.ask,
-                         "bid":float(x.components.get("option_best_bid",0.0)) or x.bid,
-                         "strike":x.strike,"dte_hours":round(x.dte_hours,3),
-                         "feature_count":int(x.components.get("feature_count",0.0)),
-                         "agent_consensus":round(float(x.components.get("agent_consensus",0.0)),5),
-                         "agent_quorum":int(x.components.get("agent_quorum",0.0)),
-                         "agent_approved":bool(x.components.get("agent_approved",0.0)),
-                         "spread_fraction":round(float(x.components.get("option_exec_spread",0.0)),6),
-                         "depth_balance":round(float(x.components.get("option_depth_balance",0.0)),6),
-                         "exitability":round(float(x.components.get("option_exitability",0.0)),6)}
-                        for x in cands[:10]
-                    ]
+                    state["last_candidates"][base]=candidate_rows[:10]
+                    if behavior_rows:
+                        state["behavior_samples"].extend(behavior_rows)
+                        state["behavior_samples"]=state["behavior_samples"][-600:]
                 manage_active(base,cands,raw)
                 maybe_enter(base,cands)
             with lock:
@@ -701,6 +719,7 @@ def status():
             "active":state["active"],
             "last_candidates":state["last_candidates"],
             "last_events":state["last_events"][-30:],
+            "behavior_samples":state["behavior_samples"][-120:],
             "telegram_configured":state["telegram_configured"],
             "last_alert_delivery":state["last_alert_delivery"],
         })
