@@ -1,5 +1,5 @@
 import unittest
-from research.bybit_options.scoring import build_candidates, underlying_features
+from research.bybit_options.scoring import build_candidates, underlying_features, parse_strike, option_side
 
 
 class ScoringTests(unittest.TestCase):
@@ -29,6 +29,12 @@ class ScoringTests(unittest.TestCase):
         c = build_candidates(rows, inst, ctx, now, 1, 48, 0.35)
         self.assertEqual(c[0].side, "CALL")
         self.assertGreater(c[0].score, c[1].score)
+
+    def test_suffix_symbol_strike(self):
+        self.assertEqual(parse_strike("BTC-6NOV26-80000-P-USDT"), 80000.0)
+        self.assertEqual(parse_strike("ETH-6NOV26-2400-C-USDT"), 2400.0)
+        self.assertEqual(option_side({"symbol": "SOL-6NOV26-97-P-USDT"}), "PUT")
+        self.assertEqual(option_side({"symbol": "SOL-6NOV26-97-C-USDT"}), "CALL")
 
     def test_no_nan(self):
         uf = underlying_features({})
