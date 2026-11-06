@@ -41,7 +41,12 @@ def compact_status(report):
         "prediction_errors":report.get("prediction_errors") or {},
         "active_local":report.get("active_local"),
         "local_models":report.get("local_models") or {},
+        "bounce_models":report.get("bounce_models") or {},
         "exit_model":report.get("exit_model") or {},
+        "reentry_model":report.get("reentry_model") or {},
+        "local_target":report.get("local_target"),
+        "policy_state":report.get("policy_state"),
+        "feature_contract":report.get("feature_contract") or {},
         "paper":{
             "equity":report.get("equity"),"return_pct":report.get("return_pct"),
             "max_drawdown_pct":report.get("max_drawdown_pct"),"closed_trades":report.get("closed_trades"),
@@ -53,7 +58,8 @@ def compact_status(report):
             "open_position":report.get("open_position"),
         },
         "quant":{
-            "labels":q.get("labels"),"pending":q.get("pending"),"champion_ready":q.get("champion_ready"),
+            "labels":q.get("labels"),"v2_labels":q.get("v2_labels"),"contract_version":q.get("contract_version"),
+            "pending":q.get("pending"),"champion_ready":q.get("champion_ready"),
             "promotions":q.get("promotions"),"drift_events":q.get("drift_events"),
             "last_action":q.get("last_action"),"action_counts":q.get("action_counts"),
         },
@@ -89,6 +95,8 @@ def publish_issue(report):
         f"**Relationships:** {status['relationships_total']} · + {status['positive_relationships']} · − {status['negative_relationships']}  ",
         f"**Checks / errors:** {status['prediction_checks']} / {status['errors_total']}  ",
         f"**Local:** {status['active_local'] or 'WAIT'}  ",
+        f"**Policy:** {status.get('policy_state') or 'WAIT'} · target {status.get('local_target') or '—'}  ",
+        f"**Inputs seen:** {(status.get('feature_contract') or {}).get('seen_input_count','—')} / {len((status.get('feature_contract') or {}).get('supported_input_ids') or [])}  ",
         f"**Paper:** equity {p.get('equity')} · return {p.get('return_pct')}% · trades {p.get('closed_trades')} · re-entry {p.get('reentries')}  ",
         f"**MFE capture:** {p.get('mean_mfe_capture_ratio')} · Caterpillar vs straight: {p.get('caterpillar_vs_straight_delta_pct')} pp  ",
         "",fence+"json",json.dumps(status,separators=(',',':'),ensure_ascii=False),fence,
@@ -182,6 +190,7 @@ def main():
             report=learner.report()
             report.update({"processed_micro_rows":processed_micro,"sampled_states":sampled,
                            "last_seen_ts_ms":last_seen_ts,"updated_ts_ms":int(now*1000),
+                           "feature_contract":state.coverage_report(),
                            "research_only":True,"real_orders":False})
             publish_monitor(report)
             next_monitor=now+10
@@ -189,6 +198,7 @@ def main():
             report=learner.report()
             report.update({"processed_micro_rows":processed_micro,"sampled_states":sampled,
                            "last_seen_ts_ms":last_seen_ts,"updated_ts_ms":int(now*1000),
+                           "feature_contract":state.coverage_report(),
                            "research_only":True,"real_orders":False})
             publish_issue(report)
             next_issue=now+30
