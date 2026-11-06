@@ -8,7 +8,6 @@ on:
     branches:
       - research/hype-h1-local-v5-oi-microstructure-20261104
     paths:
-      - ".github/workflows/hype-v12-immediate-full-graph.yml"
       - "research/hype_quant/astra_cortex.py"
       - "research/hype_quant/start_local_cortex.sh"
       - "research/hype_caterpillar_quant/live_daemon.py"
@@ -19,7 +18,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   actions: write
   issues: write
 
@@ -93,7 +92,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          rm -rf cq_warm cq_release_restore
           mkdir -p cq_warm
+          RESTORED=0
+
+          # Fast path: freshest unexpired Actions checkpoint.
           ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" --jq '
             .artifacts
             | map(select((.expired|not) and (.name=="HYPE-CATERPILLAR-QUANT-CHECKPOINT" or (.name|startswith("HYPE-CATERPILLAR-QUANT-checkpoint-"))))) as $all
@@ -105,11 +108,35 @@ jobs:
               end
           ')"
           if [ -n "$ID" ]; then
-            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$ID/zip" > cq.zip
-            unzip -q cq.zip -d cq_warm
-            echo "restored_caterpillar_checkpoint=$ID"
-          else
-            echo "no_prior_caterpillar_checkpoint"
+            if gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$ID/zip" > cq.zip                && unzip -q cq.zip -d cq_warm                && test -f cq_warm/caterpillar_quant.pkl                && test -f cq_warm/feature_state.pkl; then
+              RESTORED=1
+              echo "restored_actions_checkpoint=$ID"
+            else
+              echo "actions_checkpoint_invalid=$ID; falling back to immutable release archive" >&2
+              rm -rf cq_warm cq.zip
+              mkdir -p cq_warm
+            fi
+          fi
+
+          # Durable path: immutable GitHub Release archives do not use Actions retention.
+          if [ "$RESTORED" -eq 0 ]; then
+            TAG="$(gh release list --repo "${GITHUB_REPOSITORY}" --limit 100 --json tagName,createdAt --jq '
+              map(select(.tagName | startswith("hype-learning-archive-")))
+              | sort_by(.createdAt) | reverse | .[0].tagName // empty
+            ')"
+            if [ -n "$TAG" ]; then
+              mkdir -p cq_release_restore
+              gh release download "$TAG" --repo "${GITHUB_REPOSITORY}"                 --pattern "HYPE-CATERPILLAR-QUANT-CHECKPOINT.tar.gz"                 --dir cq_release_restore
+              tar -xzf cq_release_restore/HYPE-CATERPILLAR-QUANT-CHECKPOINT.tar.gz -C cq_warm
+              test -f cq_warm/caterpillar_quant.pkl
+              test -f cq_warm/feature_state.pkl
+              RESTORED=1
+              echo "restored_durable_release=$TAG"
+            fi
+          fi
+
+          if [ "$RESTORED" -eq 0 ]; then
+            echo "no_prior_checkpoint_found; starting first generation"
           fi
       - name: Capture and compact segment 1
         env:
@@ -322,7 +349,103 @@ jobs:
           name: HYPE-CATERPILLAR-QUANT-CHECKPOINT
           path: cq_final
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
+
+      - name: Build immutable training + model archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p durable
+          test -f cq_final/caterpillar_quant.pkl
+          test -f cq_final/feature_state.pkl
+
+          tar -czf durable/HYPE-CATERPILLAR-QUANT-CHECKPOINT.tar.gz -C cq_final .
+          tar -czf "durable/HYPE-TRAINING-DATA-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.tar.gz" downloaded combined_index
+
+          python - <<'PY'
+          import hashlib, json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          durable=Path("durable")
+          checkpoint=Path("cq_final")
+          required=[
+              "caterpillar_quant.pkl",
+              "feature_state.pkl",
+              "CATERPILLAR_QUANT_REPORT.json",
+          ]
+          optional=[
+              "astra_cortex_state.json",
+              "astra_paper_state.json",
+              "three_strategy_lab_v5_learned_local_direct_policy.json",
+              "astra_actions.jsonl",
+              "caterpillar_actions.jsonl",
+              "caterpillar_gaps.jsonl",
+          ]
+
+          def sha256(p):
+              h=hashlib.sha256()
+              with p.open("rb") as f:
+                  for chunk in iter(lambda:f.read(1024*1024),b""):
+                      h.update(chunk)
+              return h.hexdigest()
+
+          checkpoint_files=[]
+          for p in sorted(checkpoint.rglob("*")):
+              if p.is_file():
+                  checkpoint_files.append({
+                      "path":str(p.relative_to(checkpoint)),
+                      "bytes":p.stat().st_size,
+                      "sha256":sha256(p),
+                  })
+
+          archive_files=[]
+          for p in sorted(durable.glob("*.tar.gz")):
+              archive_files.append({
+                  "name":p.name,
+                  "bytes":p.stat().st_size,
+                  "sha256":sha256(p),
+              })
+
+          missing=[name for name in required if not (checkpoint/name).exists()]
+          if missing:
+              raise SystemExit("missing required checkpoint state: "+",".join(missing))
+
+          manifest={
+              "archive_version":"hype-durable-learning-v1",
+              "research_only":True,
+              "symbol":"HYPEUSDT",
+              "run_id":os.environ["GITHUB_RUN_ID"],
+              "run_attempt":os.environ["GITHUB_RUN_ATTEMPT"],
+              "branch":os.environ["GITHUB_REF_NAME"],
+              "commit_sha":os.environ["GITHUB_SHA"],
+              "created_at":datetime.now(timezone.utc).isoformat(),
+              "policy":"NO_RESET_ON_TIME_BOUNDARY",
+              "restore_policy":"latest valid Actions checkpoint, otherwise latest immutable release checkpoint",
+              "required_checkpoint_files":required,
+              "optional_state_files":{name:(checkpoint/name).exists() for name in optional},
+              "checkpoint_files":checkpoint_files,
+              "archives":archive_files,
+              "training_data_preserved":True,
+              "checkpoint_preserved":True,
+          }
+          (durable/"HYPE-DURABLE-MANIFEST.json").write_text(
+              json.dumps(manifest,indent=2,ensure_ascii=False)+"\n",encoding="utf-8"
+          )
+          PY
+          (cd durable && sha256sum *.tar.gz HYPE-DURABLE-MANIFEST.json > SHA256SUMS)
+
+      - name: Publish immutable durable learning archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="hype-learning-archive-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$TAG"             --repo "${GITHUB_REPOSITORY}"             --target "${GITHUB_SHA}"             --title "HYPE durable learning archive ${GITHUB_RUN_ID}/${GITHUB_RUN_ATTEMPT}"             --notes "Immutable research archive. Contains compact causal training data, Caterpillar/Local model checkpoint, feature state, CORTEX/strategy state when produced, reports, and integrity hashes. Time boundaries never reset learning."             --prerelease
+          gh release upload "$TAG" durable/* --repo "${GITHUB_REPOSITORY}"
+          echo "durable_release=$TAG"
+
 
 
   restart_next:
