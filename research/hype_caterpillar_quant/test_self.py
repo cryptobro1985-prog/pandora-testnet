@@ -56,7 +56,7 @@ def fake_provisional_low_state():
     return SimpleNamespace(candles={"60":candles})
 
 def test_provisional_low_starts_caterpillar_now():
-    q=new();s=fake_provisional_low_state();ts=10*H
+    q=new();s=fake_provisional_low_state();ts=10*H+10*60_000
     out=q.observe(ts,92.0,x(),s)
     assert any(e["event"]=="PROVISIONAL_H1_LOCAL_BOOTSTRAP" and e["side"]=="LOW" for e in out["events"])
     assert q.last_confirmed_local is not None
