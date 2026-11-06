@@ -100,6 +100,7 @@ class CaterpillarQuantLearner:
     EXIT_HORIZON_S=300
     REENTRY_HORIZON_S=300
     POLICY_SAMPLE_S=30
+    MIN_HOLD_S=60
 
     def __init__(self,quant_config:dict[str,Any]):
         self.quant=OnlineQuantLearner(copy.deepcopy(quant_config))
@@ -617,20 +618,26 @@ class CaterpillarQuantLearner:
             px=self._position_x(x,ts_ms,price,qd)
             exit_p=self._model_p(self.exit_model,px)
             agent_same=p.side*float(x.get("agent_consensus",0.0) or 0.0)
-            quant_same=qd.get("action")==side_name(p.side)
-            quant_opp=qd.get("action")==side_name(-p.side)
+            flow_same=p.side*float(x.get("flow_imbalance_raw_60s",x.get("flow_imbalance_60s",0.0)) or 0.0)
+            quant_ready=bool(qd.get("champion_ready"))
+            quant_same=quant_ready and qd.get("action")==side_name(p.side)
+            quant_opp=quant_ready and qd.get("action")==side_name(-p.side)
             give=max(0.0,p.mfe-cur)
             give_ratio=give/max(p.mfe,1e-9) if p.mfe>0 else 0.0
             learned_weight=min(.75,.75*self.exit_labels/300.0)
-            heuristic=clip(.50 + .22*(1 if quant_opp else -1 if quant_same else 0) -.20*agent_same + .25*give_ratio)
+            heuristic=clip(.45 + .18*(1 if quant_opp else -1 if quant_same else 0) -.22*agent_same -.18*flow_same + .25*give_ratio)
             exit_conf=(1-learned_weight)*heuristic+learned_weight*exit_p
             self._sample_exit(ts_ms,price,x,qd)
-            if exit_conf>=.67 or (p.mfe>self.round_trip_cost and give_ratio>=.45 and exit_conf>=.52):
+            age_s=max(0.0,(ts_ms-p.entry_ts_ms)/1000.0)
+            can_policy_exit=age_s>=self.MIN_HOLD_S
+            if can_policy_exit and (exit_conf>=.67 or (p.mfe>self.round_trip_cost and give_ratio>=.45 and exit_conf>=.52)):
                 events.extend(self._close(ts_ms,price,"LEARNED_EXIT_MFE_FLOW"))
             else:
                 events.append({"event":"HOLD","ts_ms":ts_ms,"side":side_name(p.side),"price":price,
                                "mfe":p.mfe,"mae":p.mae,"current_return":cur,
-                               "exit_confidence":exit_conf,"quant_action":qd.get("action")})
+                               "position_age_s":age_s,"min_hold_s":self.MIN_HOLD_S,
+                               "exit_confidence":exit_conf,"quant_action":qd.get("action"),
+                               "quant_used_for_exit":quant_ready})
 
         if self.position is None:
             c,local_conf=self._best_local()
