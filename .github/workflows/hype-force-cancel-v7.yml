@@ -18,7 +18,7 @@ jobs:
       - name: Force cancel superseded collector until stopped
         env:
           GH_TOKEN: ${{ github.token }}
-          TARGET_RUN: "42192647791"
+          TARGET_RUN: "42192765351"
         run: |
           set -euo pipefail
           for attempt in $(seq 1 20); do
