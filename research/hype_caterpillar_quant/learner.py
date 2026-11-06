@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from river import compose, linear_model, preprocessing
+from river import compose, linear_model, preprocessing, optim
 
 from research.hype_quant.learner import OnlineQuantLearner, load_config, clean_features
 
@@ -30,7 +30,12 @@ def binary_model():
 def value_model():
     return compose.Pipeline(
         preprocessing.StandardScaler(),
-        linear_model.LinearRegression()
+        linear_model.LinearRegression(
+            optimizer=optim.SGD(0.001),
+            intercept_lr=0.001,
+            l2=1e-6,
+            clip_gradient=1.0,
+        )
     )
 
 @dataclass
@@ -151,6 +156,8 @@ class CaterpillarQuantLearner:
     POLICY_SAMPLE_S=30
     DIRECT_POLICY_HORIZONS=(60,180,300)
     DIRECT_POLICY_MIN_LABELS_PER_HORIZON=30
+    DIRECT_POLICY_MAX_ABS_ADVANTAGE=0.35
+    DIRECT_POLICY_MODEL_VERSION=2
     MIN_HOLD_S=60
     FIB_RETRACE_RATIOS=(0.236,0.382,0.5,0.618,0.786,1.0)
     FIB_EXTENSION_RATIOS=(1.272,1.618)
@@ -202,6 +209,7 @@ class CaterpillarQuantLearner:
         self.policy_labels={(mode,h):0 for mode in ("FLAT","POSITION") for h in self.DIRECT_POLICY_HORIZONS}
         self.policy_target_sum={(mode,h):0.0 for mode in ("FLAT","POSITION") for h in self.DIRECT_POLICY_HORIZONS}
         self.policy_pending:list[PolicyPending]=[]
+        self.direct_policy_model_version=self.DIRECT_POLICY_MODEL_VERSION
         self.last_policy_sample_ms=0
         self.last_policy_decision={}
         self.policy_version=2
@@ -443,6 +451,13 @@ class CaterpillarQuantLearner:
 
     def _ensure_direct_policy(self):
         if getattr(self,"policy_contract_version",0)>=6:
+            model_version=int(getattr(self,"direct_policy_model_version",0) or 0)
+            if model_version<self.DIRECT_POLICY_MODEL_VERSION:
+                self.policy_models={(mode,h):value_model() for mode in ("FLAT","POSITION") for h in self.DIRECT_POLICY_HORIZONS}
+                self.policy_labels={(mode,h):0 for mode in ("FLAT","POSITION") for h in self.DIRECT_POLICY_HORIZONS}
+                self.policy_target_sum={(mode,h):0.0 for mode in ("FLAT","POSITION") for h in self.DIRECT_POLICY_HORIZONS}
+                self.policy_pending=[];self.last_policy_sample_ms=0;self.last_policy_decision={}
+                self.direct_policy_model_version=self.DIRECT_POLICY_MODEL_VERSION
             if not hasattr(self,"policy_models"):
                 self.policy_models={(mode,h):value_model() for mode in ("FLAT","POSITION") for h in self.DIRECT_POLICY_HORIZONS}
             if not hasattr(self,"policy_labels"):
@@ -452,6 +467,7 @@ class CaterpillarQuantLearner:
             if not hasattr(self,"policy_pending"):self.policy_pending=[]
             if not hasattr(self,"last_policy_sample_ms"):self.last_policy_sample_ms=0
             if not hasattr(self,"last_policy_decision"):self.last_policy_decision={}
+            if not hasattr(self,"direct_policy_model_version"):self.direct_policy_model_version=self.DIRECT_POLICY_MODEL_VERSION
             return
         old_trades=list(getattr(self,"trades",[]) or [])
         old_equity=float(getattr(self,"equity",100.0) or 100.0)
@@ -480,6 +496,7 @@ class CaterpillarQuantLearner:
         self.policy_labels={(mode,h):0 for mode in ("FLAT","POSITION") for h in self.DIRECT_POLICY_HORIZONS}
         self.policy_target_sum={(mode,h):0.0 for mode in ("FLAT","POSITION") for h in self.DIRECT_POLICY_HORIZONS}
         self.policy_pending=[];self.last_policy_sample_ms=0;self.last_policy_decision={}
+        self.direct_policy_model_version=self.DIRECT_POLICY_MODEL_VERSION
         self.position=None;self.last_exit=None
         self.equity=100.0;self.peak_equity=100.0;self.max_drawdown=0.0
         self.trades=[];self.path_equity=100.0;self.reentries=0
@@ -1020,13 +1037,16 @@ class CaterpillarQuantLearner:
 
     def _model_value(self,model,x):
         try:
-            v=model.predict_one(clean_features(x))
-            return float(v or 0.0)
+            v=float(model.predict_one(clean_features(x)) or 0.0)
+            return max(-self.DIRECT_POLICY_MAX_ABS_ADVANTAGE,
+                       min(self.DIRECT_POLICY_MAX_ABS_ADVANTAGE,v))
         except Exception:
             return 0.0
 
     def _learn_value(self,model,x,y):
-        model.learn_one(clean_features(x),float(y))
+        y=max(-self.DIRECT_POLICY_MAX_ABS_ADVANTAGE,
+              min(self.DIRECT_POLICY_MAX_ABS_ADVANTAGE,float(y)))
+        model.learn_one(clean_features(x),y)
 
     def _direct_policy_x(self,x,ts_ms,price,c,qd):
         side=1 if c.side=="LOW" else -1
@@ -1146,6 +1166,7 @@ class CaterpillarQuantLearner:
         total=sum(sum(v.values()) for v in labels.values())
         return {
             "contract_version":6,
+            "model_version":getattr(self,"direct_policy_model_version",self.DIRECT_POLICY_MODEL_VERSION),
             "actions":{"flat":["WAIT","ENTER_OR_REENTER"],"position":["HOLD","EXIT"]},
             "hard_constraints":["LOCAL_LOW_LONG_ONLY","LOCAL_HIGH_SHORT_ONLY"],
             "labels":labels,"mean_realized_advantage":means,
@@ -1155,6 +1176,8 @@ class CaterpillarQuantLearner:
             "manual_action_thresholds":False,
             "minimum_training_labels_per_horizon":self.DIRECT_POLICY_MIN_LABELS_PER_HORIZON,
             "maturity_gate_note":"this is a data-readiness gate, not a trading confidence threshold; after maturity actions use the sign of learned economic advantage",
+            "numerical_guard":{"max_abs_advantage":self.DIRECT_POLICY_MAX_ABS_ADVANTAGE,
+                               "regression_lr":0.001,"clip_gradient":1.0},
             "causal_state_note":"policy consumes the complete cleaned causal feature state; future target/evaluation fields are never inputs",
         }
 
