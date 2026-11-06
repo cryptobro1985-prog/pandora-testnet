@@ -7,8 +7,10 @@ The monitor exposes concise thesis/evidence/invalidation summaries, never privat
 chain-of-thought.
 """
 from collections import deque
+from datetime import datetime, time as dtime, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 import json, math, os, time
 import requests
 
@@ -16,6 +18,28 @@ from .learner import clean_features
 
 DECISIONS=("WAIT","HOLD","ENTER_LONG","ENTER_SHORT","EXIT")
 HORIZONS=(60,180,300)
+US_TZ=ZoneInfo("America/New_York")
+
+def us_market_session(ts_ms:int)->str:
+    dt=datetime.fromtimestamp(int(ts_ms)/1000.0,tz=timezone.utc).astimezone(US_TZ)
+    if dt.weekday()>=5:return "US_WEEKEND"
+    t=dt.time().replace(tzinfo=None)
+    if dtime(4,0)<=t<dtime(9,30):return "US_PREMARKET"
+    if dtime(9,30)<=t<dtime(16,0):return "US_CASH"
+    if dtime(16,0)<=t<dtime(20,0):return "US_AFTER_HOURS"
+    return "US_OVERNIGHT"
+
+def _json_object(text):
+    text=str(text or "").strip()
+    try:
+        obj=json.loads(text)
+        if isinstance(obj,dict):return obj
+    except Exception:pass
+    a=text.find("{");b=text.rfind("}")
+    if a>=0 and b>a:
+        obj=json.loads(text[a:b+1])
+        if isinstance(obj,dict):return obj
+    raise ValueError("cortex_response_has_no_json_object")
 
 DECISION_SCHEMA={
     "type":"object","additionalProperties":False,
@@ -57,18 +81,24 @@ def _output_text(payload):
     return ""
 
 class AstraCortex:
-    VERSION="astra-cortex-v1"
+    VERSION="cortex-20b-v2"
 
     def __init__(self,checkpoint_dir:Path):
         self.checkpoint_dir=Path(checkpoint_dir)
         self.state_path=self.checkpoint_dir/"astra_cortex_state.json"
-        self.model=os.getenv("ASTRA_CORTEX_MODEL","gpt-6-astra").strip() or "gpt-6-astra"
+        self.backend=os.getenv("CORTEX_BACKEND","local_llama").strip() or "local_llama"
+        self.local_url=os.getenv("CORTEX_LOCAL_URL","http://127.0.0.1:8081").strip().rstrip("/")
+        self.model=os.getenv("ASTRA_CORTEX_MODEL","gpt-oss-20b-local").strip() or "gpt-oss-20b-local"
         self.reasoning_effort=os.getenv("ASTRA_CORTEX_REASONING_EFFORT","high").strip() or "high"
-        self.normal_interval_s=max(30.0,float(os.getenv("ASTRA_CORTEX_INTERVAL_SECONDS","120")))
-        self.urgent_interval_s=max(15.0,float(os.getenv("ASTRA_CORTEX_URGENT_INTERVAL_SECONDS","30")))
-        self.timeout_s=max(10.0,float(os.getenv("ASTRA_CORTEX_TIMEOUT_SECONDS","40")))
+        self.normal_interval_s=max(120.0,float(os.getenv("ASTRA_CORTEX_INTERVAL_SECONDS","300")))
+        self.urgent_interval_s=max(30.0,float(os.getenv("ASTRA_CORTEX_URGENT_INTERVAL_SECONDS","60")))
+        self.timeout_s=max(30.0,float(os.getenv("ASTRA_CORTEX_TIMEOUT_SECONDS","150")))
         self.enabled=os.getenv("ASTRA_CORTEX_ENABLED","1").strip().lower() not in ("0","false","no")
         self.api_key=os.getenv("OPENAI_API_KEY","").strip()
+        self.training_target_matured=max(120,int(os.getenv("CORTEX_24H_TARGET_MATURED","600")))
+        self.training_target_decisions=max(60,int(os.getenv("CORTEX_24H_TARGET_DECISIONS","240")))
+        self.sprint_hours=max(1.0,float(os.getenv("CORTEX_SPRINT_HOURS","24")))
+        self.sprint_started_ts_ms=None
         self.last_call_ts_ms=None; self.last_decision=None
         self.last_base_action=None; self.last_local_key=None; self.last_error=None
         self.calls=0; self.api_errors=0; self.matured_episodes=0
@@ -77,15 +107,18 @@ class AstraCortex:
         self.episodes=[]; self.pending=[]; self.last_critique=None
         self.usage={"input_tokens":0,"output_tokens":0,"total_tokens":0}
         self._load()
+        if self.sprint_started_ts_ms is None:self.sprint_started_ts_ms=int(time.time()*1000)
 
     @property
     def available(self):
-        return bool(self.enabled and self.api_key)
+        if not self.enabled:return False
+        return True if self.backend=="local_llama" else bool(self.api_key)
 
     def _load(self):
         if not self.state_path.exists(): return
         try:
             obj=json.loads(self.state_path.read_text(encoding="utf-8"))
+            self.sprint_started_ts_ms=obj.get("sprint_started_ts_ms")
             self.last_call_ts_ms=obj.get("last_call_ts_ms")
             self.last_decision=obj.get("last_decision")
             self.last_base_action=obj.get("last_base_action")
@@ -105,7 +138,8 @@ class AstraCortex:
 
     def save(self):
         self.checkpoint_dir.mkdir(parents=True,exist_ok=True)
-        obj={"version":self.VERSION,"last_call_ts_ms":self.last_call_ts_ms,
+        obj={"version":self.VERSION,"backend":self.backend,"sprint_started_ts_ms":self.sprint_started_ts_ms,
+             "last_call_ts_ms":self.last_call_ts_ms,
              "last_decision":self.last_decision,"last_base_action":self.last_base_action,
              "last_local_key":self.last_local_key,"calls":self.calls,
              "api_errors":self.api_errors,"matured_episodes":self.matured_episodes,
