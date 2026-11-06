@@ -59,6 +59,18 @@ class LocalPending:
     bounce_done:bool=False
 
 @dataclass
+class EntryPending:
+    ts_ms:int
+    side:int
+    price:float
+    local_id:int
+    x:dict[str,float]
+    horizon_s:int
+    mature_ts_ms:int
+    best_favorable:float=0.0
+    worst_adverse:float=0.0
+
+@dataclass
 class ExitPending:
     ts_ms:int
     side:int
@@ -115,6 +127,8 @@ class CaterpillarQuantLearner:
     LOCAL_STAGES=(60,180,300)
     BOUNCE_FUTURE_S=1800
     EXIT_HORIZON_S=300
+    ENTRY_HORIZONS=(60,180,300)
+    ENTRY_SAMPLE_S=30
     REENTRY_HORIZON_S=300
     POLICY_SAMPLE_S=30
     MIN_HOLD_S=60
@@ -133,11 +147,15 @@ class CaterpillarQuantLearner:
         self.bounce_labels={(side,stage):0 for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
         self.bounce_pos={(side,stage):0 for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
         self.exit_model=binary_model(); self.reentry_model=binary_model()
+        self.entry_models={h:binary_model() for h in self.ENTRY_HORIZONS}
+        self.entry_labels={h:0 for h in self.ENTRY_HORIZONS}
+        self.entry_pos={h:0 for h in self.ENTRY_HORIZONS}
         self.exit_labels=0; self.exit_pos=0
         self.reentry_labels=0; self.reentry_pos=0
         self.candidates={"LOW":None,"HIGH":None}
         self.candidate_seq=0
         self.local_pending:list[LocalPending]=[]
+        self.entry_pending:list[EntryPending]=[]
         self.exit_pending:list[ExitPending]=[]
         self.reentry_pending:list[ReentryPending]=[]
         self.last_confirmed_local:Candidate|None=None
@@ -158,12 +176,13 @@ class CaterpillarQuantLearner:
         self.last_price=None
         self.censored=0
         self.censored_positions=0
+        self.last_entry_sample_ms=0
         self.last_reentry_sample_ms=0
         self.policy_version=2
         self.bootstrap_diagnostic={}
         self.structural_history={}
-        self.prediction_checks={"local":0,"bounce":0,"exit":0,"reentry":0,"fib":0}
-        self.prediction_errors={"local":0,"bounce":0,"exit":0,"reentry":0,"fib":0}
+        self.prediction_checks={"local":0,"bounce":0,"entry":0,"exit":0,"reentry":0,"fib":0}
+        self.prediction_errors={"local":0,"bounce":0,"entry":0,"exit":0,"reentry":0,"fib":0}
         self._ensure_fib()
 
     def _ensure_fib(self):
@@ -354,14 +373,18 @@ class CaterpillarQuantLearner:
         self.bounce_labels={(side,stage):0 for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
         self.bounce_pos={(side,stage):0 for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
         self.exit_model=binary_model();self.reentry_model=binary_model()
+        self.entry_models={h:binary_model() for h in self.ENTRY_HORIZONS}
+        self.entry_labels={h:0 for h in self.ENTRY_HORIZONS}
+        self.entry_pos={h:0 for h in self.ENTRY_HORIZONS}
         self.exit_labels=self.exit_pos=self.reentry_labels=self.reentry_pos=0
-        self.local_pending=[];self.exit_pending=[];self.reentry_pending=[]
+        self.local_pending=[];self.entry_pending=[];self.exit_pending=[];self.reentry_pending=[]
         self.candidates={"LOW":None,"HIGH":None};self.last_confirmed_local=None
+        self.last_entry_sample_ms=0
         self.last_reentry_sample_ms=0
         self.bootstrap_diagnostic=getattr(self,"bootstrap_diagnostic",{})
         self.censored_positions=getattr(self,"censored_positions",0)
-        self.prediction_checks={"local":0,"bounce":0,"exit":0,"reentry":0,"fib":0}
-        self.prediction_errors={"local":0,"bounce":0,"exit":0,"reentry":0,"fib":0}
+        self.prediction_checks={"local":0,"bounce":0,"entry":0,"exit":0,"reentry":0,"fib":0}
+        self.prediction_errors={"local":0,"bounce":0,"entry":0,"exit":0,"reentry":0,"fib":0}
         self._ensure_fib()
         self.policy_version=2
         if hasattr(self.quant,"_ensure_v2"):self.quant._ensure_v2()
@@ -381,16 +404,19 @@ class CaterpillarQuantLearner:
         self.bounce_labels={(side,stage):0 for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
         self.bounce_pos={(side,stage):0 for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
         self.exit_model=binary_model();self.reentry_model=binary_model()
+        self.entry_models={h:binary_model() for h in self.ENTRY_HORIZONS}
+        self.entry_labels={h:0 for h in self.ENTRY_HORIZONS}
+        self.entry_pos={h:0 for h in self.ENTRY_HORIZONS}
         self.exit_labels=self.exit_pos=self.reentry_labels=self.reentry_pos=0
-        self.local_pending=[];self.exit_pending=[];self.reentry_pending=[]
+        self.local_pending=[];self.entry_pending=[];self.exit_pending=[];self.reentry_pending=[]
         self.candidates={"LOW":None,"HIGH":None};self.last_confirmed_local=None
-        self.position=None;self.last_exit=None;self.last_reentry_sample_ms=0
+        self.position=None;self.last_exit=None;self.last_entry_sample_ms=0;self.last_reentry_sample_ms=0
         self.equity=100.0;self.peak_equity=100.0;self.max_drawdown=0.0
         self.trades=[];self.path_equity=100.0;self.reentries=0
         self.baseline_equity=100.0;self.baseline_position=None;self.baseline_trades=[]
         self.actions=[];self.structural_history={}
-        self.prediction_checks={"local":0,"bounce":0,"exit":0,"reentry":0,"fib":0}
-        self.prediction_errors={"local":0,"bounce":0,"exit":0,"reentry":0,"fib":0}
+        self.prediction_checks={"local":0,"bounce":0,"entry":0,"exit":0,"reentry":0,"fib":0}
+        self.prediction_errors={"local":0,"bounce":0,"entry":0,"exit":0,"reentry":0,"fib":0}
         self._ensure_fib()
         self.policy_contract_version=3
 
@@ -653,6 +679,59 @@ class CaterpillarQuantLearner:
             self.local_labels[(s.side,s.stage_s)]+=1;self.local_pos[(s.side,s.stage_s)]+=int(sy)
         self.local_pending=keep
 
+    def _entry_x(self,x,ts_ms,price,c,qd):
+        side=1 if c.side=="LOW" else -1
+        out=dict(x)
+        out.update({
+            "cq_entry_side":float(side),
+            "cq_entry_local_conf":float(c.stage_conf.get(c.confirmed_stage or 0,0.0)),
+            "cq_entry_local_age_s":max(0.0,(ts_ms-c.extreme_ts_ms)/1000.0),
+            "cq_entry_from_local_pct":side*(float(price)/float(c.extreme_price)-1.0),
+            "cq_entry_agent_same":side*float(x.get("agent_consensus",0.0) or 0.0),
+            "cq_entry_flow_same":side*float(x.get("flow_imbalance_raw_60s",x.get("flow_imbalance_60s",0.0)) or 0.0),
+            "cq_entry_quant_same":1.0 if qd.get("action")==side_name(side) else 0.0,
+            "cq_entry_quant_opposite":1.0 if qd.get("action")==side_name(-side) else 0.0,
+            "cq_entry_quant_score":float(qd.get("score",0.0) or 0.0),
+        })
+        return out
+
+    def _sample_entry(self,ts_ms,price,x,c,qd):
+        if c is None or c.source!="STRICT_H1_CONFIRMED":return
+        if ts_ms-self.last_entry_sample_ms<self.ENTRY_SAMPLE_S*1000:return
+        ex=self._entry_x(x,ts_ms,price,c,qd)
+        side=1 if c.side=="LOW" else -1
+        for horizon in self.ENTRY_HORIZONS:
+            self.entry_pending.append(EntryPending(
+                ts_ms=int(ts_ms),side=side,price=float(price),local_id=c.ident,x=clean_features(ex),
+                horizon_s=int(horizon),mature_ts_ms=int(ts_ms+horizon*1000)))
+        self.last_entry_sample_ms=int(ts_ms)
+
+    def _advance_entry_labels(self,ts_ms,price):
+        keep=[]
+        for p in self.entry_pending:
+            move=p.side*(float(price)/p.price-1.0)
+            p.best_favorable=max(p.best_favorable,move)
+            p.worst_adverse=max(p.worst_adverse,-move)
+            if ts_ms<p.mature_ts_ms:
+                keep.append(p);continue
+            y=move>self.round_trip_cost
+            model=self.entry_models[p.horizon_s]
+            pred=self._model_p(model,p.x)>=0.5
+            self.prediction_checks["entry"]+=1
+            self.prediction_errors["entry"]+=int(pred!=bool(y))
+            self._learn_binary(model,p.x,y)
+            self.entry_labels[p.horizon_s]+=1
+            self.entry_pos[p.horizon_s]+=int(y)
+        self.entry_pending=keep
+
+    def _entry_confidence(self,x,ts_ms,price,c,qd):
+        ex=self._entry_x(x,ts_ms,price,c,qd)
+        ps={h:self._model_p(self.entry_models[h],ex) for h in self.ENTRY_HORIZONS}
+        weights={60:0.20,180:0.30,300:0.50}
+        conf=sum(weights[h]*ps[h] for h in self.ENTRY_HORIZONS)
+        ready=min(self.entry_labels.values())>=30
+        return conf,ps,ready
+
     def _advance_exit_labels(self,ts_ms,price):
         keep=[]
         for s in self.exit_pending:
@@ -757,17 +836,19 @@ class CaterpillarQuantLearner:
         local_total=sum(self.local_labels.values()); bounce_total=sum(self.bounce_labels.values())
         local_target=len(self.local_labels)*120
         bounce_target=len(self.bounce_labels)*120
+        entry_total=sum(self.entry_labels.values());entry_target=len(self.entry_models)*120
         exit_target=300; reentry_target=200
         def pct(v,t):return min(100.0,100.0*float(v)/max(1,float(t)))
         fib_labels=sum(self.fib_labels.values());fib_target=len(self.fib_models)*40
         heads={
             "local":{"labels":local_total,"target_labels":local_target,"percent":pct(local_total,local_target)},
             "bounce":{"labels":bounce_total,"target_labels":bounce_target,"percent":pct(bounce_total,bounce_target)},
+            "entry":{"labels":entry_total,"target_labels":entry_target,"percent":pct(entry_total,entry_target)},
             "exit":{"labels":self.exit_labels,"target_labels":exit_target,"percent":pct(self.exit_labels,exit_target)},
             "reentry":{"labels":self.reentry_labels,"target_labels":reentry_target,"percent":pct(self.reentry_labels,reentry_target)},
             "fibonacci":{"labels":fib_labels,"target_labels":fib_target,"percent":pct(fib_labels,fib_target)},
         }
-        overall=.34*heads["local"]["percent"]+.08*heads["bounce"]["percent"]+.22*heads["exit"]["percent"]+.22*heads["reentry"]["percent"]+.14*heads["fibonacci"]["percent"]
+        overall=.27*heads["local"]["percent"]+.06*heads["bounce"]["percent"]+.20*heads["entry"]["percent"]+.18*heads["exit"]["percent"]+.17*heads["reentry"]["percent"]+.12*heads["fibonacci"]["percent"]
         if overall>=100:status="MODEL_MATURE"
         elif overall>=60:status="VALIDATING"
         elif overall>=10:status="LEARNING"
@@ -893,7 +974,7 @@ class CaterpillarQuantLearner:
     def on_gap(self,ts_ms,reason):
         self._ensure_v2()
         self.censored+=1
-        self.local_pending.clear();self.exit_pending.clear();self.reentry_pending.clear()
+        self.local_pending.clear();self.entry_pending.clear();self.exit_pending.clear();self.reentry_pending.clear()
         if self.position:
             self.censored_positions+=1
             self.actions.append({"event":"CENSORED_POSITION","ts_ms":ts_ms,"reason":reason,
@@ -911,6 +992,7 @@ class CaterpillarQuantLearner:
         self._ensure_v2()
         events=[]
         self._advance_local_labels(ts_ms,price,state)
+        self._advance_entry_labels(ts_ms,price)
         self._advance_exit_labels(ts_ms,price)
         self._advance_reentry_labels(ts_ms,price)
         self._advance_fib_labels(ts_ms,price)
@@ -964,7 +1046,7 @@ class CaterpillarQuantLearner:
             strong_adverse=(flow_same<=-.35 and agent_same<=-.25 and cur<=0.0)
             profit_protection=(p.mfe>=self.round_trip_cost*1.25 and cur>=self.round_trip_cost*.75
                                and give_ratio>=.45 and exit_conf>=.55)
-            learned_exit=(learned_exit_ready and exit_conf>=.67)
+            learned_exit=(learned_exit_ready and exit_conf>=.67 and cur>self.round_trip_cost)
             if can_policy_exit and (strong_adverse or profit_protection or learned_exit):
                 reason=("LEARNED_EXIT" if learned_exit else
                         "BOOTSTRAP_STRONG_ADVERSE" if strong_adverse else
@@ -994,19 +1076,31 @@ class CaterpillarQuantLearner:
                     self._sample_reentry(ts_ms,price,x,c,qd)
                     rx=self._reentry_x(x,ts_ms,price,c,qd)
                     rp=self._model_p(self.reentry_model,rx)
-                    w=min(.80,.80*self.reentry_labels/200.0)
-                    heuristic=clip(.50+.22*agent_same+.18*flow_same+.10*(1 if quant_same and quant_ready else 0))
-                    re_conf=(1-w)*heuristic+w*rp
-                    edge_ok=re_conf>=.60
+                    re_ready=self.reentry_labels>=30
+                    re_conf=rp
+                    edge_ok=re_ready and re_conf>=.65
+                    entry_conf=None;entry_ps=None;entry_ready=None
                 else:
-                    # Direction comes from the confirmed H1 local, not generic Quant.
-                    # A strict already-formed local may start a research episode immediately.
-                    edge_ok=(c.source=="STRICT_H1_CONFIRMED")
+                    # Learn entry quality from hypothetical candidates first.
+                    # PAPER is not used as exploration capital.
+                    self._sample_entry(ts_ms,price,x,c,qd)
+                    entry_conf,entry_ps,entry_ready=self._entry_confidence(x,ts_ms,price,c,qd)
+                    edge_ok=entry_ready and entry_conf>=.62
                     re_conf=None
                 if local_conf>=.55 and edge_ok and cooldown:
                     events.extend(self._open(ts_ms,price,side,c,local_conf,qd,reentry=same_local_reentry))
-                    if same_local_reentry and events:
-                        events[-1]["reentry_confidence"]=re_conf
+                    if events:
+                        events[-1]["entry_confidence"]=entry_conf
+                        events[-1]["entry_horizon_probabilities"]=entry_ps
+                        events[-1]["entry_model_ready"]=entry_ready
+                        if same_local_reentry:events[-1]["reentry_confidence"]=re_conf
+                else:
+                    events.append({"event":"LEARN_ENTRY","ts_ms":ts_ms,"side":side_name(side),
+                                   "local_id":c.ident,"local_confidence":local_conf,
+                                   "reentry":same_local_reentry,
+                                   "entry_ready":entry_ready,"entry_confidence":entry_conf,
+                                   "reentry_ready":(self.reentry_labels>=30 if same_local_reentry else None),
+                                   "reentry_confidence":re_conf})
 
         self.last_ts_ms=ts_ms;self.last_price=price
         for e in events:self.actions.append(e)
@@ -1057,6 +1151,10 @@ class CaterpillarQuantLearner:
         if self.exit_labels>=5:
             for feature,w in self._model_weights(self.exit_model):
                 rows.append({"head":"EXIT","feature":feature,"weight":w})
+        for h,model in self.entry_models.items():
+            if self.entry_labels.get(h,0)<5:continue
+            for feature,w in self._model_weights(model):
+                rows.append({"head":f"ENTRY_{h}s","feature":feature,"weight":w})
         if self.reentry_labels>=5:
             for feature,w in self._model_weights(self.reentry_model):
                 rows.append({"head":"REENTRY","feature":feature,"weight":w})
@@ -1114,8 +1212,11 @@ class CaterpillarQuantLearner:
                             for s in ("LOW","HIGH") for h in self.LOCAL_STAGES},
             "bounce_models":{f"{s}_{h}s":{"labels":self.bounce_labels[(s,h)],"positive":self.bounce_pos[(s,h)]}
                             for s in ("LOW","HIGH") for h in self.LOCAL_STAGES},
+            "entry_model":{"labels":dict(self.entry_labels),"positive":dict(self.entry_pos),
+                           "ready":min(self.entry_labels.values())>=30},
             "exit_model":{"labels":self.exit_labels,"exit_positive":self.exit_pos},
-            "reentry_model":{"labels":self.reentry_labels,"reentry_positive":self.reentry_pos},
+            "reentry_model":{"labels":self.reentry_labels,"reentry_positive":self.reentry_pos,
+                             "ready":self.reentry_labels>=30},
             "fibonacci":{**self._fib_report(),"current":getattr(self,"current_fib",None)},
             "active_local":None if self.last_confirmed_local is None else {
                 "id":self.last_confirmed_local.ident,"side":self.last_confirmed_local.side,
