@@ -203,6 +203,7 @@ class CaterpillarQuantLearner:
             for k in ("examples","positives","tp","fp","fn","tn"):z.setdefault(k,0)
             z.setdefault("brier_sum",0.0)
         if not hasattr(self,"early_local_shadow"):self.early_local_shadow={}
+        if not hasattr(self,"local_watch_current"):self.local_watch_current={}
 
     def _ensure_fib(self):
         if not hasattr(self,"prediction_checks") or not isinstance(self.prediction_checks,dict):
@@ -920,6 +921,71 @@ class CaterpillarQuantLearner:
                            "bounce_labels_seen":self.bounce_labels[(c.side,stage)]})
         return events
 
+    def _opposite_local_watch(self,ts_ms,price,x):
+        c=self.last_confirmed_local
+        if c is None or getattr(c,"source",None)!="STRICT_H1_CONFIRMED":
+            return {"structural_leg":"UNKNOWN","target_local":None,"score":0.0,"status":"WAIT_LOCAL",
+                    "structural_bias":"FLAT","components":{}}
+        leg_side=1 if c.side=="LOW" else -1
+        target="HIGH" if c.side=="LOW" else "LOW"
+        structural_leg="UP_LEG_LOW_TO_HIGH" if leg_side>0 else "DOWN_LEG_HIGH_TO_LOW"
+        structural_bias="LONG" if leg_side>0 else "SHORT"
+        early=self._early_local_report().get("shadow") or {}
+        early_p=float(early.get("high_probability" if target=="HIGH" else "low_probability") or 0.0)
+
+        cand=self.candidates.get(target)
+        cand_conf=0.0; retrace_bps=0.0; cand_stage=None; cand_price=None
+        if cand is not None and cand.invalidated_ts_ms is None:
+            cand_conf=max([float(v) for v in cand.stage_conf.values() if finite(v)] or [0.0])
+            cand_stage=max(cand.stage_done) if cand.stage_done else None
+            cand_price=float(cand.extreme_price)
+            if target=="HIGH":
+                retrace_bps=max(0.0,(cand.extreme_price-float(price))/max(cand.extreme_price,1e-9)*10000.0)
+            else:
+                retrace_bps=max(0.0,(float(price)-cand.extreme_price)/max(cand.extreme_price,1e-9)*10000.0)
+
+        agent=float(x.get("agent_consensus",0.0) or 0.0)
+        struct=float(x.get("agent_structure_direction",0.0) or 0.0)
+        flow=float(x.get("agent_flow_direction",x.get("flow_imbalance_raw_60s",0.0)) or 0.0)
+        book=float(x.get("agent_book_direction",0.0) or 0.0)
+        opposite_sign=-1.0 if target=="HIGH" else 1.0
+        reversal_pressure=clip(
+            0.35*max(0.0,opposite_sign*agent)+
+            0.30*max(0.0,opposite_sign*struct)+
+            0.20*max(0.0,opposite_sign*flow)+
+            0.15*max(0.0,opposite_sign*book)
+        )
+        retrace_score=clip(retrace_bps/60.0)
+        score=clip(.32*early_p+.28*cand_conf+.22*retrace_score+.18*reversal_pressure)
+
+        if cand is not None and cand.confirmed_stage is not None and cand.source=="STRICT_H1_CONFIRMED":
+            status="CONFIRMED_"+target
+        elif score>=.70:
+            status=target+"_CANDIDATE_STRONG"
+        elif score>=.50:
+            status=target+"_WATCH_HIGH"
+        elif score>=.30:
+            status=target+"_WATCH"
+        else:
+            status="LEG_CONTINUES"
+
+        move_from_local=leg_side*(float(price)/max(float(c.extreme_price),1e-9)-1.0)
+        return {
+            "structural_leg":structural_leg,"structural_bias":structural_bias,
+            "target_local":target,"status":status,"score":score,
+            "price":float(price),"move_from_confirmed_local_pct":move_from_local*100.0,
+            "confirmed_local":{"side":c.side,"price":float(c.extreme_price),
+                               "strict_hour_ms":getattr(c,"strict_hour_ms",None)},
+            "candidate":{"present":cand is not None,"stage":cand_stage,"confidence":cand_conf,
+                         "extreme_price":cand_price,"retrace_bps":retrace_bps},
+            "early_probability":early_p,
+            "components":{"early_probability":early_p,"candidate_confidence":cand_conf,
+                          "retrace_score":retrace_score,"reversal_pressure":reversal_pressure,
+                          "agent_consensus":agent,"agent_structure_direction":struct,
+                          "agent_flow_direction":flow,"agent_book_direction":book},
+            "interpretation":"structural leg remains active until opposite confirmed H1 local; watch score is research/shadow evidence, not a confirmed pivot",
+        }
+
     def _best_local(self):
         c=self.last_confirmed_local
         if c is None or c.invalidated_ts_ms is not None or c.confirmed_stage is None:return None,None
@@ -1153,6 +1219,7 @@ class CaterpillarQuantLearner:
         events.extend(self._update_extremes(ts_ms,price,x,state))
         for side in ("LOW","HIGH"):
             events.extend(self._stage_candidate(self.candidates[side],ts_ms,price,x))
+        self.local_watch_current=self._opposite_local_watch(ts_ms,price,x)
 
         if self.position and self.last_confirmed_local is not None:
             confirmed_side=1 if self.last_confirmed_local.side=="LOW" else -1
@@ -1347,6 +1414,7 @@ class CaterpillarQuantLearner:
             "training_progress":self._training_progress(),
             "structural_history":getattr(self,"structural_history",{}),
             "early_local":self._early_local_report(),
+            "local_watch":getattr(self,"local_watch_current",{}),
             "local_models":{f"{s}_{h}s":{"labels":self.local_labels[(s,h)],"positive":self.local_pos[(s,h)]}
                             for s in ("LOW","HIGH") for h in self.LOCAL_STAGES},
             "bounce_models":{f"{s}_{h}s":{"labels":self.bounce_labels[(s,h)],"positive":self.bounce_pos[(s,h)]}
