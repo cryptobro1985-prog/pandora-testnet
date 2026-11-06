@@ -44,6 +44,26 @@ def test_construct():
     assert len(q.local_models)==6 and len(q.bounce_models)==6
     assert q.exit_labels==0 and q.reentry_labels==0
 
+def fake_provisional_low_state():
+    candles={}
+    for i in range(10):
+        candles[i*H]={"start_ms":i*H,"open":100.0,"close":100.0,
+                      "high":105.0-i*.1,"low":95.0+i*.1}
+    # Within the last six completed H1s, the newest hour owns the newest low,
+    # while the highest high belongs to an older hour.
+    candles[9*H]["low"]=90.0
+    candles[4*H]["high"]=110.0
+    return SimpleNamespace(candles={"60":candles})
+
+def test_provisional_low_starts_caterpillar_now():
+    q=new();s=fake_provisional_low_state();ts=10*H
+    out=q.observe(ts,92.0,x(),s)
+    assert any(e["event"]=="PROVISIONAL_H1_LOCAL_BOOTSTRAP" and e["side"]=="LOW" for e in out["events"])
+    assert q.last_confirmed_local is not None
+    assert q.last_confirmed_local.side=="LOW"
+    assert q.last_confirmed_local.source=="PROVISIONAL_H1_EXTREME"
+    assert q.position is not None and q.position.side==1
+
 def test_strict_bootstrap_low_enters_long():
     q=new();s=fake_state("LOW");ts=10*H
     out=q.observe(ts,100.0,x(),s)
@@ -86,6 +106,7 @@ def test_strict_target_available_after_k2():
 
 def main():
     test_construct()
+    test_provisional_low_starts_caterpillar_now()
     test_strict_bootstrap_low_enters_long()
     test_strict_bootstrap_high_enters_short()
     test_gap_censors_position_not_trade()
