@@ -244,7 +244,7 @@ def main():
             decision=learner.observe(ts,price,x,state)
             sampled+=1
             base_report=learner.report()
-            strategy_lab.observe(ts,price,base_report,decision)
+            strategy_lab.observe(ts,price,base_report,decision,x)
             astra_book.mark(ts,price)
             if astra_future is not None and astra_future.done():
                 try:
