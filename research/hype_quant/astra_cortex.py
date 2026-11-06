@@ -302,19 +302,20 @@ class AstraCortex:
 
     def _request_local(self,state):
         system,user=self._prompt(state)
-        r=requests.post(self.local_url+"/v1/chat/completions",
-            json={"model":self.model,
-                  "messages":[{"role":"system","content":system},{"role":"user","content":user}],
-                  "temperature":0.15,"max_tokens":520,"response_format":{"type":"json_object"}},
-            timeout=self.timeout_s)
+        payload={"model":self.model,"reasoning":{"effort":self.reasoning_effort},
+                 "max_output_tokens":1200,
+                 "input":[{"role":"system","content":system},{"role":"user","content":user}],
+                 "text":{"format":{"type":"json_schema","name":"cortex_market_decision",
+                                   "strict":True,"schema":DECISION_SCHEMA}}}
+        r=requests.post(self.local_url+"/v1/responses",json=payload,timeout=self.timeout_s)
         r.raise_for_status()
-        obj=r.json();choices=obj.get("choices") or []
-        if not choices:raise RuntimeError("local_cortex_no_choices")
-        msg=(choices[0] or {}).get("message") or {}
-        decision=self._normalize_decision(_json_object(msg.get("content") or ""))
+        obj=r.json();text=_output_text(obj)
+        if not text:
+            raise RuntimeError("local_cortex_no_final_output")
+        decision=self._normalize_decision(_json_object(text))
         usage=obj.get("usage") or {}
-        self.usage["input_tokens"]+=int(usage.get("prompt_tokens") or 0)
-        self.usage["output_tokens"]+=int(usage.get("completion_tokens") or 0)
+        self.usage["input_tokens"]+=int(usage.get("input_tokens") or 0)
+        self.usage["output_tokens"]+=int(usage.get("output_tokens") or 0)
         self.usage["total_tokens"]+=int(usage.get("total_tokens") or 0)
         return decision
 
@@ -336,11 +337,30 @@ class AstraCortex:
     def _request(self,state):
         return self._request_local(state) if self.backend=="local_llama" else self._request_openai(state)
 
+    def _compact_causal_features(self,features,limit=96):
+        rows=[]
+        priority=("agent_","flow_","book_","oi_","liq","liquid","price_response","efficiency",
+                  "cvd","local","retrace","persistence","dominance","return","funding",
+                  "basis","spread","volume","turnover","gap","latency","mark","index")
+        for k,v in clean_features(features).items():
+            if not finite(v):continue
+            name=str(k)
+            rank=0
+            for i,p in enumerate(priority):
+                if p in name:
+                    rank=max(rank,len(priority)-i)
+            rows.append((rank,abs(float(v)),name,float(v)))
+        rows.sort(key=lambda z:(z[0],z[1]),reverse=True)
+        out={name:value for _,_,name,value in rows[:limit]}
+        out["_encoder_total_causal_features"]=float(len(rows))
+        out["_encoder_selected_features"]=float(len(out)-1)
+        return out
+
     def observe(self,ts_ms,price,features,base_decision,base_report,cost_floor):
         self._advance_pending(ts_ms,price)
         if not self.due(ts_ms,features,base_decision,base_report):
             return {"new_decision":False,"decision":self.last_decision,"status":self.status(ts_ms)}
-        causal=clean_features(features); q=base_decision.get("quant") or {}
+        causal=self._compact_causal_features(features); q=base_decision.get("quant") or {}
         session=us_market_session(ts_ms)
         state={"ts_ms":int(ts_ms),"price":float(price),"us_market_session":session,
                "causal_features":causal,
