@@ -137,6 +137,21 @@ def test_subcost_mfe_noise_does_not_force_bootstrap_exit():
     assert q.position is not None, out
     assert not any(e["event"]=="EXIT" for e in out["events"])
 
+def test_provisional_never_overrides_strict_structural_anchor():
+    q=new()
+    from research.hype_caterpillar_quant.learner import Candidate
+    strict=Candidate(1,"LOW",76.211,6*H,dict(x()),confirmed_stage=300,
+                     source="STRICT_H1_CONFIRMED",strict_hour_ms=6*H)
+    strict.stage_conf[300]=.99
+    q.last_confirmed_local=strict
+    provisional=Candidate(2,"LOW",76.844,13*H,dict(x()),
+                          source="PROVISIONAL_H1_EXTREME",strict_hour_ms=13*H)
+    out=q._stage_candidate(provisional,14*H,77.5,x())
+    assert provisional.confirmed_stage is not None
+    assert q.last_confirmed_local is strict
+    assert q.last_confirmed_local.extreme_price==76.211
+    assert any(e["event"]=="LOCAL_STAGE" and e["accepted"] and not e["policy_promoted"] for e in out)
+
 def test_strict_target_available_after_k2():
     q=new();s=fake_state("LOW")
     # Construct a live candidate inside pivot hour 6 and a 60s stage sample.
@@ -159,6 +174,7 @@ def main():
     test_gap_censors_position_not_trade()
     test_same_local_reentry_survives_candidate_id_change()
     test_subcost_mfe_noise_does_not_force_bootstrap_exit()
+    test_provisional_never_overrides_strict_structural_anchor()
     test_strict_target_available_after_k2()
     print("HYPE_CATERPILLAR_V2_SELFTEST_OK")
 
