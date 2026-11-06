@@ -318,36 +318,49 @@ class OnlineQuantLearner:
     def _maybe_promote(self):
         rule=self.config.get("champion",{})
         minimum=int(rule.get("min_forward_labels_before_promotion",120))
-        # First champion is a warm-start snapshot of challenger after enough
-        # strictly matured labels. Later promotions require true forward edge.
-        shortest=min(self.horizons)
-        q=self.challenger_stats[shortest].summary()
+        summaries_q={h:self.challenger_stats[h].summary() for h in self.horizons}
+        side_min=int(rule.get("min_side_forward_labels_before_promotion",30))
+
+        # First champion must pass the SAME causal safety gates on ALL horizons.
         if not self.champion_ready:
-            if q["n"]>=minimum:
+            ready=True
+            for h,s in summaries_q.items():
+                if s["n"]<minimum or s.get("net_expectancy",0.0)<=0:
+                    ready=False;break
+                if min(s.get("long_n",0),s.get("short_n",0))<side_min:
+                    ready=False;break
+                if s.get("long_net_expectancy") is None or s.get("short_net_expectancy") is None:
+                    ready=False;break
+            if ready:
                 self.champion=copy.deepcopy(self.challenger)
                 self.champion_ready=True
                 self.promotions+=1
                 self._reset_forward_stats()
             return
-        c=self.champion_stats[shortest].summary()
-        if min(c["n"],q["n"])<minimum:
-            return
+
+        summaries_c={h:self.champion_stats[h].summary() for h in self.horizons}
         improvement=float(rule.get("min_relative_net_expectancy_improvement",0.05))
-        base=max(abs(c["net_expectancy"]),1e-6)
-        better=(q["net_expectancy"]-c["net_expectancy"])/base>=improvement
-        mae_ok=(q["mae"] or 0)<=((c["mae"] or 0)+float(rule.get("max_calibration_degradation",0.03)))
-        side_min=int(rule.get("min_side_forward_labels_before_promotion",30))
-        side_ready=min(c.get("long_n",0),c.get("short_n",0),q.get("long_n",0),q.get("short_n",0))>=side_min
+        mae_tol=float(rule.get("max_calibration_degradation",0.03))
         side_tol=float(rule.get("max_side_net_expectancy_degradation",0.0))
-        side_ok=side_ready
-        if side_ok:
+        all_horizons_ok=True
+        for h in self.horizons:
+            cs=summaries_c[h]; qs=summaries_q[h]
+            if min(cs["n"],qs["n"])<minimum:
+                all_horizons_ok=False;break
+            if min(cs.get("long_n",0),cs.get("short_n",0),qs.get("long_n",0),qs.get("short_n",0))<side_min:
+                all_horizons_ok=False;break
+            base=max(abs(cs["net_expectancy"]),1e-6)
+            better=(qs["net_expectancy"]-cs["net_expectancy"])/base>=improvement
+            mae_ok=(qs["mae"] or 0)<=((cs["mae"] or 0)+mae_tol)
             side_ok=(
-                q.get("long_net_expectancy") is not None and c.get("long_net_expectancy") is not None
-                and q.get("short_net_expectancy") is not None and c.get("short_net_expectancy") is not None
-                and q["long_net_expectancy"]>=c["long_net_expectancy"]-side_tol
-                and q["short_net_expectancy"]>=c["short_net_expectancy"]-side_tol
+                qs.get("long_net_expectancy") is not None and cs.get("long_net_expectancy") is not None
+                and qs.get("short_net_expectancy") is not None and cs.get("short_net_expectancy") is not None
+                and qs["long_net_expectancy"]>=cs["long_net_expectancy"]-side_tol
+                and qs["short_net_expectancy"]>=cs["short_net_expectancy"]-side_tol
             )
-        if better and mae_ok and side_ok and q["net_expectancy"]>0:
+            if not (better and mae_ok and side_ok and qs["net_expectancy"]>0):
+                all_horizons_ok=False;break
+        if all_horizons_ok:
             self.champion=copy.deepcopy(self.challenger)
             self.promotions+=1
             self._reset_forward_stats()
@@ -369,8 +382,13 @@ class OnlineQuantLearner:
                 p.expected_max_up=.75*p.expected_max_up+.25*mem["max_up"]
                 p.expected_max_down=.75*p.expected_max_down+.25*mem["max_down"]
             for side in (1,-1):
-                confidence=p.p_up if side==1 else 1.0-p.p_up
-                if confidence<min_conf:
+                model_confidence=p.p_up if side==1 else 1.0-p.p_up
+                agent_consensus=float(x.get("agent_consensus",0.0) or 0.0)
+                agent_conf=float(x.get("agent_confidence",0.0) or 0.0)
+                adversary=float(x.get("agent_adversary_risk",0.0) or 0.0)
+                committee_side_conf=0.5+0.5*side*agent_consensus
+                confidence=(1.0-agent_conf*0.35)*model_confidence+(agent_conf*0.35)*committee_side_conf
+                if confidence<min_conf or adversary>=0.85:
                     continue
                 expected_gross=side*p.expected_return
                 favorable=p.expected_max_up if side==1 else p.expected_max_down
@@ -388,8 +406,12 @@ class OnlineQuantLearner:
                         dd=adverse*lev*frac
                         turnover=lev*frac
                         score=net-float(risk.get("drawdown_penalty",8.0))*dd*dd-float(risk.get("turnover_penalty",0.15))*self.cost_floor*turnover
-                        # reward favorable excursion only weakly; do not chase MFE at any risk
+                        # Committee participates directly: agreement adds a modest
+                        # causal bonus, disagreement/adversary risk penalizes exposure.
+                        alignment=side*agent_consensus
                         score+=0.05*favorable*lev*frac
+                        score+=0.08*agent_conf*alignment*lev*frac
+                        score-=0.20*adversary*lev*frac
                         if score>best["score"]:
                             best={
                                 "score":score,
@@ -403,6 +425,9 @@ class OnlineQuantLearner:
                                 "expected_adverse":adverse,
                                 "round_trip_cost":self.cost_floor,
                                 "pattern_neighbors":None if not mem else mem["n"],
+                                "agent_consensus":agent_consensus,
+                                "agent_confidence":agent_conf,
+                                "agent_adversary_risk":adversary,
                             }
         if best["action"]=="FLAT":
             best["reason"]="no_positive_safe_edge"
