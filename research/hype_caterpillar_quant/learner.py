@@ -102,6 +102,10 @@ class CaterpillarQuantLearner:
         self.max_drawdown=0.0
         self.round_trip_cost=self.quant.cost_floor
         self.trades=[]
+        self.path_equity=100.0
+        self.baseline_equity=100.0
+        self.baseline_position=None
+        self.baseline_trades=[]
         self.actions=[]
         self.reentries=0
         self.last_exit=None
@@ -255,8 +259,11 @@ class CaterpillarQuantLearner:
                 mature_ts_ms=ts_ms+self.LOCAL_FUTURE_S*1000))
             accepted=conf>=({300:.57,600:.60,900:.62}[stage]) and retr>0
             if accepted:
+                first_accept=c.confirmed_stage is None
                 c.confirmed_stage=stage
                 self.last_confirmed_local=c
+                if first_accept:
+                    self._baseline_on_local(c,ts_ms,price)
             events.append({"event":"LOCAL_STAGE","side":c.side,"candidate_id":c.ident,"stage_s":stage,
                            "confidence":conf,"model_p":p,"heuristic":heuristic,"retrace_bps":retr,
                            "accepted":accepted,"labels_seen":labels})
@@ -266,6 +273,24 @@ class CaterpillarQuantLearner:
         c=self.last_confirmed_local
         if c is None or c.invalidated_ts_ms is not None or c.confirmed_stage is None:return None,None
         return c,c.stage_conf.get(c.confirmed_stage,0.0)
+
+    def _baseline_on_local(self,c,ts_ms,price):
+        side=1 if c.side=="LOW" else -1
+        if self.baseline_position is not None and self.baseline_position["side"]!=side:
+            p=self.baseline_position
+            gross=p["side"]*(price/p["entry_price"]-1.0)
+            net=gross-self.round_trip_cost
+            before=self.baseline_equity
+            self.baseline_equity*=max(0.0,1.0+net)
+            self.baseline_trades.append({
+                "entry_ts_ms":p["entry_ts_ms"],"exit_ts_ms":ts_ms,
+                "side":side_name(p["side"]),"entry_price":p["entry_price"],"exit_price":price,
+                "gross_return":gross,"net_return":net,"equity_before":before,
+                "equity_after":self.baseline_equity,"reason":"OPPOSITE_CONFIRMED_LOCAL"
+            })
+            self.baseline_position=None
+        if self.baseline_position is None:
+            self.baseline_position={"side":side,"entry_ts_ms":ts_ms,"entry_price":price,"local_id":c.ident}
 
     def _sample_exit(self,ts_ms,price,x,qd):
         p=self.position
@@ -304,7 +329,9 @@ class CaterpillarQuantLearner:
              "mfe_giveback":max(0.0,p.mfe-gross),"reason":reason,
              "local_id":p.local_id,"reentry_no":p.reentry_no,
              "leverage":p.leverage,"margin_fraction":p.margin_fraction}
-        self.trades.append(row);self.last_exit=row;self.position=None
+        self.trades.append(row)
+        self.path_equity*=max(0.0,1.0+net)
+        self.last_exit=row;self.position=None
         return [{"event":"EXIT","ts_ms":ts_ms,**row}]
 
     def on_gap(self,ts_ms,reason):
@@ -386,6 +413,12 @@ class CaterpillarQuantLearner:
         return {
             "version":self.VERSION,"research_only":True,"real_orders":False,
             "equity":self.equity,"return_pct":(self.equity/100.0-1.0)*100.0,
+            "path_equity_1x":self.path_equity,
+            "caterpillar_path_return_pct":(self.path_equity/100.0-1.0)*100.0,
+            "straight_local_equity_1x":self.baseline_equity,
+            "straight_local_path_return_pct":(self.baseline_equity/100.0-1.0)*100.0,
+            "caterpillar_vs_straight_delta_pct":((self.path_equity-self.baseline_equity)/100.0)*100.0,
+            "straight_local_closed_legs":len(self.baseline_trades),
             "max_drawdown_pct":self.max_drawdown*100.0,
             "closed_trades":len(self.trades),"wins":wins,
             "win_rate":wins/len(self.trades) if self.trades else None,
