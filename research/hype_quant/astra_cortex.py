@@ -245,7 +245,7 @@ class AstraCortex:
                          "max_down":1.0-float(p["low"])/float(p["price"]),
                          "directional_net":net if direction else None,
                          "success":success,"thesis":p.get("thesis")}
-                self.episodes.append(episode); self.episodes=self.episodes[-200:]
+                self.episodes.append(episode); self.episodes=self.episodes[-1000:]
                 self.matured_episodes+=1
                 self.last_critique={"decision":decision,"horizon_s":h,"success":success,
                     "us_session":p.get("us_session"),"future_return":ret,
@@ -369,7 +369,7 @@ class AstraCortex:
                                  "us_session":session,
                                  "decision":decision.get("decision"),"confidence":decision.get("confidence"),
                                  "thesis":decision.get("thesis"),"cost_floor":float(cost_floor),"done":[]})
-            self.pending=self.pending[-200:]; self.save()
+            self.pending=self.pending[-400:]; self.save()
             return {"new_decision":True,"decision":decision,"status":self.status(ts_ms)}
         except Exception as exc:
             self.api_errors+=1
@@ -403,7 +403,7 @@ class AstraCortex:
                 "research_only":True,"real_orders":False}
 
 class AstraPaperBook:
-    VERSION="astra-paper-v1"
+    VERSION="cortex-paper-v2"
     def __init__(self,checkpoint_dir:Path,cost_floor:float):
         self.path=Path(checkpoint_dir)/"astra_paper_state.json"; self.cost_floor=float(cost_floor)
         self.equity=100.0; self.peak_equity=100.0; self.max_drawdown=0.0
@@ -433,7 +433,7 @@ class AstraPaperBook:
         p["mfe"]=max(float(p.get("mfe",0.0)),cur); p["mae"]=min(float(p.get("mae",0.0)),cur)
         p["last_ts_ms"]=int(ts_ms)
         lev=float(p["leverage"]); approx=max(0.0,1.0/lev-0.005)
-        if cur<=-max(0.005,0.55*approx): self._close(ts_ms,price,"ASTRA_RISK_GUARD")
+        if cur<=-max(0.005,0.55*approx): self._close(ts_ms,price,"CORTEX_RISK_GUARD")
     def _close(self,ts_ms,price,reason):
         p=self.position
         if p is None: return
@@ -456,10 +456,10 @@ class AstraPaperBook:
                          "price":float(price),"leverage":lev,"margin_fraction":frac,"equity":self.equity}
     def apply(self,ts_ms,price,decision):
         self.mark(ts_ms,price); action=str(decision.get("decision") or "WAIT"); self.decisions_applied+=1
-        if action=="EXIT": self._close(ts_ms,price,"ASTRA_EXIT")
+        if action=="EXIT": self._close(ts_ms,price,"CORTEX_EXIT")
         elif action in ("ENTER_LONG","ENTER_SHORT"):
             side=1 if action=="ENTER_LONG" else -1
-            if self.position is not None and int(self.position["side"])!=side: self._close(ts_ms,price,"ASTRA_FLIP")
+            if self.position is not None and int(self.position["side"])!=side: self._close(ts_ms,price,"CORTEX_FLIP")
             if self.position is None:
                 self._open(ts_ms,price,side,float(decision.get("leverage") or 1),
                            float(decision.get("margin_fraction") or 0.02),action)
@@ -480,5 +480,6 @@ def self_test():
         book.apply(1_000,100.0,{"decision":"ENTER_LONG","leverage":2,"margin_fraction":0.1})
         book.mark(61_000,101.0); book.apply(62_000,101.0,{"decision":"EXIT"})
         assert book.report()["closed_trades"]==1 and book.report()["equity"]>100.0
-        c=AstraCortex(Path(td)); c.enabled=True; c.api_key=""
-        assert c.status(2_000)["state"]=="WAITING_FOR_API_KEY"
+        c=AstraCortex(Path(td)); c.enabled=True; c.backend="local_llama"; c.api_key=""
+        assert c.available is True
+        assert c.status(2_000)["backend"]=="local_llama"
