@@ -50,7 +50,7 @@ def _rpc_urls()->list[str]:
     if one: vals.append(one)
     many=(os.getenv("SOLANA_RPC_URLS") or "").strip()
     if many: vals.extend(x.strip() for x in many.split(",") if x.strip())
-    vals += ["https://rpc.solanatracker.io/public","https://api.mainnet-beta.solana.com"]
+    vals += ["https://api.mainnet-beta.solana.com","https://rpc.solanatracker.io/public"]
     out=[]
     for x in vals:
         if x and x not in out: out.append(x)
@@ -90,7 +90,7 @@ def post_json(payload, retries=7):
                 return json.load(r)
         except urllib.error.HTTPError as exc:
             last=exc
-            if exc.code in (429,403,502,503,504):
+            if exc.code in (401,429,403,502,503,504):
                 _rpc_index+=1
                 time.sleep(min(6.0,0.35*(2**attempt)))
                 continue
