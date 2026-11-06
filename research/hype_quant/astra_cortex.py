@@ -547,6 +547,7 @@ class AstraCortex:
                "caterpillar_events":self._compact_events(base_decision.get("events")),
                "base_paper":self._compact_paper(base_decision.get("paper") or {}),
                "active_local":self._compact_local(base_report.get("active_local")),
+               "early_local_shadow":base_report.get("early_local") or {},
                "policy_state":base_report.get("policy_state"),
                "quant_training":{"overall_percent":tp.get("overall_percent"),"status":tp.get("status"),
                                   "heads":tp.get("heads")},
