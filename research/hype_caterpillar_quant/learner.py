@@ -732,6 +732,7 @@ class CaterpillarQuantLearner:
             "prediction_errors":dict(self.prediction_errors),
             "prediction_checks_by_head":dict(self.prediction_checks),
             "equity":self.equity,"return_pct":(self.equity/100.0-1.0)*100.0,
+            "open_position":self.paper_snapshot()["open_position"],
             "path_equity_1x":self.path_equity,
             "caterpillar_path_return_pct":(self.path_equity/100.0-1.0)*100.0,
             "straight_local_equity_1x":self.baseline_equity,
