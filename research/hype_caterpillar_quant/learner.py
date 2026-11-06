@@ -725,7 +725,6 @@ class CaterpillarQuantLearner:
         checks=sum(self.prediction_checks.values())
         errors=sum(self.prediction_errors.values())
         paper=self.paper_snapshot()
-        paper=self.paper_snapshot()
         return {
             "version":self.VERSION,"research_only":True,"real_orders":False,
             "learning_status":"LEARNING",
@@ -740,7 +739,6 @@ class CaterpillarQuantLearner:
             "equity":self.equity,"return_pct":(self.equity/100.0-1.0)*100.0,
             "open_position":paper["open_position"],
             "paper_snapshot":paper,
-            "open_position":self.paper_snapshot()["open_position"],
             "path_equity_1x":self.path_equity,
             "caterpillar_path_return_pct":(self.path_equity/100.0-1.0)*100.0,
             "straight_local_equity_1x":self.baseline_equity,
