@@ -1,12 +1,7 @@
 name: HYPE Local v3 — 30D Historical Warm Start
 
+# Deprecated from active runtime on 2026-11-06. Local-Only model is authoritative.
 on:
-  push:
-    branches:
-      - research/hype-h1-local-v5-oi-microstructure-20261104
-    paths:
-      - ".github/workflows/hype-local-v3-30d-warmstart.yml"
-      - "research/hype_caterpillar_quant/historical_warmstart.py"
   workflow_dispatch:
 
 permissions:
