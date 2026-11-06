@@ -1,6 +1,6 @@
 from __future__ import annotations
 import os, time, threading, json, math
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 import requests
 
 app=Flask(__name__)
@@ -157,3 +157,53 @@ def hype_context():
         return jsonify(fetch())
     except Exception as exc:
         return jsonify({"research_only":True,"symbol":SYMBOL,"error":repr(exc)}),503
+
+
+_HISTORY_SOURCES={
+    "mark":{"path":"/v5/market/mark-price-kline","interval_param":"interval","max_limit":1000},
+    "index":{"path":"/v5/market/index-price-kline","interval_param":"interval","max_limit":1000},
+    "oi":{"path":"/v5/market/open-interest","interval_param":"intervalTime","max_limit":200},
+    "funding":{"path":"/v5/market/funding/history","interval_param":None,"max_limit":200},
+}
+
+@app.get("/hype-history-page")
+def hype_history_page():
+    """Narrow public-history proxy used by the 30d Local-only backfill.
+
+    It is intentionally HYPEUSDT-only and exposes no arbitrary path/host.
+    """
+    try:
+        kind=str(request.args.get("kind") or "").lower()
+        cfg=_HISTORY_SOURCES.get(kind)
+        if not cfg:
+            return jsonify({"ok":False,"error":"kind must be mark,index,oi,funding"}),400
+        start=int(request.args.get("start") or 0)
+        end=int(request.args.get("end") or 0)
+        if start<=0 or end<=start:
+            return jsonify({"ok":False,"error":"valid start/end ms required"}),400
+        # Keep the relay narrowly scoped to the research window plus small margin.
+        lo=1759276800000  # 2025-10-01 UTC, broad safety floor
+        hi=int(time.time()*1000)+86_400_000
+        if start<lo or end>hi:
+            return jsonify({"ok":False,"error":"requested history window outside relay safety bounds"}),400
+        limit=min(int(request.args.get("limit") or cfg["max_limit"]),cfg["max_limit"])
+        params={"category":"linear","symbol":SYMBOL,"limit":limit}
+        if kind in ("mark","index"):
+            params.update({"interval":str(request.args.get("interval") or "1"),"start":start,"end":end})
+        elif kind=="oi":
+            params.update({"intervalTime":str(request.args.get("interval") or "5min"),
+                           "startTime":start,"endTime":end})
+            cursor=str(request.args.get("cursor") or "")
+            if cursor:params["cursor"]=cursor
+        else:
+            params.update({"startTime":start,"endTime":end})
+        obj,base=request_json(cfg["path"],params)
+        result=obj.get("result") or {}
+        rows=result.get("list") or []
+        return jsonify({
+            "ok":True,"research_only":True,"symbol":SYMBOL,"kind":kind,
+            "start":start,"end":end,"source_base":base,
+            "rows":rows,"next_cursor":result.get("nextPageCursor") or "",
+        })
+    except Exception as exc:
+        return jsonify({"ok":False,"research_only":True,"symbol":SYMBOL,"error":repr(exc)}),503
