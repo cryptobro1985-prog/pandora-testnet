@@ -135,9 +135,12 @@ class AstraCortex:
         if not self.state_path.exists(): return
         try:
             obj=json.loads(self.state_path.read_text(encoding="utf-8"))
+            state_version=str(obj.get("version") or "")
             self.sprint_started_ts_ms=obj.get("sprint_started_ts_ms")
             self.last_call_ts_ms=obj.get("last_call_ts_ms")
             self.last_decision=obj.get("last_decision")
+            if state_version!=self.VERSION or (isinstance(self.last_decision,dict) and "preferred_strategy" not in self.last_decision):
+                self.last_decision=None
             self.last_base_action=obj.get("last_base_action")
             self.last_local_key=obj.get("last_local_key")
             self.calls=int(obj.get("calls",0)); self.api_errors=int(obj.get("api_errors",0))
@@ -147,6 +150,7 @@ class AstraCortex:
             self.episodes=list(obj.get("episodes") or [])[-200:]
             self.pending=list(obj.get("pending") or [])[-200:]
             self.last_critique=obj.get("last_critique")
+            self.last_error=None
             self.usage.update(obj.get("usage") or {})
             for x in obj.get("net_returns") or []:
                 if finite(x): self.net_returns.append(float(x))
@@ -289,6 +293,7 @@ class AstraCortex:
     def _prompt(self,state):
         system=(f"Reasoning: {self.reasoning_effort}. Be decisive and keep internal reasoning compact enough for live use. "
                 "You are CORTEX 20B, an independent reasoning layer in a research-only HYPEUSDT system. "
+                "Reserve enough output budget for the final JSON; do not spend the entire completion on hidden reasoning. "
                 "Use only the supplied causal state; future target/evaluation labels are excluded. "
                 "You are the META-CONTROLLER above three expert trading systems: LOCAL_STRAIGHT, "
                 "CATERPILLAR_SNAKE and FIBONACCI_ZIGZAG. Compare their learned state, current position, "
@@ -347,7 +352,7 @@ class AstraCortex:
         system,user=self._prompt(state)
         payload={"model":self.model,
                  "messages":[{"role":"system","content":system},{"role":"user","content":user}],
-                 "temperature":0.10,"max_tokens":900}
+                 "temperature":0.10,"max_tokens":1800}
         r=requests.post(self.local_url+"/v1/chat/completions",json=payload,timeout=self.timeout_s)
         r.raise_for_status()
         obj=r.json();choices=obj.get("choices") or []
