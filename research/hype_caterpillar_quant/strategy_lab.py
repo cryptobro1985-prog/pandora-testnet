@@ -6,8 +6,8 @@ All contours see the same live price/local stream and use the same modeled
 round-trip cost and effective exposure. Research only; never places orders.
 
 A) LOCAL_STRAIGHT
-   Confirmed H1 LOW -> LONG until confirmed H1 HIGH; confirmed HIGH -> SHORT
-   until confirmed LOW. No intra-leg exits/re-entry.
+   Learned causal LOW -> LONG until learned causal HIGH; learned HIGH -> SHORT
+   until learned LOW. No intra-leg exits/re-entry.
 
 B) CATERPILLAR_SNAKE
    Mirrors the learned Caterpillar ENTER/EXIT/REENTER events.
@@ -34,17 +34,22 @@ def side_name(side:int)->str:
 def local_key(local:dict[str,Any]|None)->str|None:
     if not isinstance(local,dict):return None
     hour=local.get("strict_hour_ms")
+    if hour is None:
+        ts=local.get("extreme_ts_ms")
+        if ts is not None:hour=(int(ts)//3_600_000)*3_600_000
     price=local.get("price")
     side=local.get("side")
-    if hour is None or price is None or side not in ("LOW","HIGH"):return None
-    return f"{side}:{int(hour)}:{float(price):.8f}"
+    ident=local.get("id")
+    if price is None or side not in ("LOW","HIGH"):return None
+    if hour is not None:return f"{side}:{int(hour)}:{float(price):.8f}"
+    return f"{side}:ID{ident}:{float(price):.8f}" if ident is not None else f"{side}:P:{float(price):.8f}"
 
 class ThreeStrategyLab:
-    VERSION="three-strategy-lab-v4-direct-policy"
+    VERSION="three-strategy-lab-v5-learned-local-direct-policy"
 
     def __init__(self,checkpoint_dir:Path,cost_floor:float,effective_exposure_x:float=5.0):
         # New path deliberately resets the old ladder experiment without deleting it.
-        self.path=Path(checkpoint_dir)/"three_strategy_lab_v4_direct_policy.json"
+        self.path=Path(checkpoint_dir)/"three_strategy_lab_v5_learned_local_direct_policy.json"
         self.cost_floor=float(cost_floor)
         self.exposure_x=max(0.1,float(effective_exposure_x))
         self.started_ts_ms=int(time.time()*1000)
@@ -464,9 +469,9 @@ class ThreeStrategyLab:
             "strategies":strategies,
             "fibonacci_learning":self._fib_learning_report(),
             "rules":{
-                "local_straight":"confirmed H1 local -> hold until opposite confirmed H1 local; no intra-leg re-entry",
-                "caterpillar_snake":"same H1 local structure; learned Caterpillar exits and re-enters inside the leg",
-                "fibonacci_zigzag":"anchor Fib grid to confirmed local swing; at every crossed Fib node learn next-node UP vs DOWN and continue or flip, creating a node-to-node zigzag",
+                "local_straight":"learned causal Local -> hold until opposite learned causal Local; no intra-leg re-entry",
+                "caterpillar_snake":"same learned causal Local structure; direct policy learns WAIT/ENTER/HOLD/EXIT/RE-ENTER inside the leg",
+                "fibonacci_zigzag":"anchor Fib grid to learned causal Local swing; at every crossed Fib node learn next-node UP vs DOWN and continue or flip",
             },
             "gaps":self.gaps,"research_only":True,"real_orders":False,
         }
