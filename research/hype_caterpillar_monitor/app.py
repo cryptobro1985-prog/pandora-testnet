@@ -8,7 +8,7 @@ app.config["MAX_CONTENT_LENGTH"]=262144
 REPO=os.getenv("STATUS_REPO","cryptobro1985-prog/pandora-testnet")
 ISSUE=int(os.getenv("STATUS_ISSUE","24"))
 TOKEN=os.getenv("TELEGRAM_BOT_TOKEN","")
-_cache={"ts":0.0,"data":None,"source":None,"ingest_ts":0.0,"github_ts":0.0}
+_cache={"ts":0.0,"data":None,"source":None,"ingest_ts":0.0,"github_ts":0.0,"v2_seen":False}
 GITHUB_POLL_SECONDS=float(os.getenv("GITHUB_POLL_SECONDS","90"))
 
 HTML=r'''<!doctype html>
@@ -173,6 +173,10 @@ def ingest():
     now_ms=time.time()*1000
     if updated>now_ms+300000 or updated<now_ms-900000:
         return jsonify({"ok":False,"error":"stale status payload"}),400
+    is_v2=(data.get("local_target")=="STRICT_H1_L6_K2")
+    if _cache.get("v2_seen") and not is_v2:
+        return jsonify({"ok":False,"error":"legacy policy payload ignored"}),409
+    if is_v2:_cache["v2_seen"]=True
     now=time.time()
     _cache.update(ts=now,data=data,source="direct",ingest_ts=now)
     return jsonify({"ok":True,"received_ts_ms":int(now*1000)})
