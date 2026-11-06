@@ -265,7 +265,7 @@ class AstraCortex:
                 for e in self.episodes[-18:]]
 
     def _prompt(self,state):
-        system=(f"Reasoning: {self.reasoning_effort}. "
+        system=(f"Reasoning: {self.reasoning_effort}. Be decisive and keep internal reasoning compact enough for live use. "
                 "You are CORTEX 20B, an independent reasoning layer in a research-only HYPEUSDT system. "
                 "Use only the supplied causal state; future target/evaluation labels are excluded. "
                 "Compare LONG, SHORT, HOLD, EXIT and WAIT. Explicitly test contradictions between "
@@ -342,24 +342,89 @@ class AstraCortex:
     def _request(self,state):
         return self._request_local(state) if self.backend=="local_llama" else self._request_openai(state)
 
-    def _compact_causal_features(self,features,limit=48):
+    def _compact_causal_features(self,features,limit=20):
+        clean=clean_features(features)
+        family_rules=(
+            ("agents",("agent_",)),
+            ("flow",("flow_","cvd","dominance","efficiency")),
+            ("book",("book_","spread","absorption")),
+            ("oi",("oi_","open_interest","price_oi")),
+            ("liquidations",("liq","liquid")),
+            ("price_response",("price_response","return","retrace","persistence")),
+            ("local_structure",("local","pivot","structure")),
+            ("funding_basis",("funding","basis","mark","index")),
+            ("activity",("volume","turnover","trade_")),
+            ("data_quality",("gap","latency","stale","valid","sequence")),
+        )
+        priority=("agent_","flow_","price_response","book_","oi_","liq","liquid",
+                  "local","retrace","cvd","dominance","efficiency","spread","funding",
+                  "basis","return","volume","turnover","gap","latency")
         rows=[]
-        priority=("agent_","flow_","book_","oi_","liq","liquid","price_response","efficiency",
-                  "cvd","local","retrace","persistence","dominance","return","funding",
-                  "basis","spread","volume","turnover","gap","latency","mark","index")
-        for k,v in clean_features(features).items():
+        fam={name:{"n":0,"pos":0,"neg":0,"zero":0,"max_abs":0.0} for name,_ in family_rules}
+        for k,v in clean.items():
             if not finite(v):continue
-            name=str(k)
+            name=str(k);value=float(v);low=name.lower()
             rank=0
             for i,p in enumerate(priority):
-                if p in name:
-                    rank=max(rank,len(priority)-i)
-            rows.append((rank,abs(float(v)),name,float(v)))
+                if p in low:rank=max(rank,len(priority)-i)
+            rows.append((rank,abs(value),name,value))
+            matched=False
+            for family,tokens in family_rules:
+                if any(t in low for t in tokens):
+                    z=fam[family];z["n"]+=1
+                    if value>0:z["pos"]+=1
+                    elif value<0:z["neg"]+=1
+                    else:z["zero"]+=1
+                    z["max_abs"]=max(z["max_abs"],abs(value))
+                    matched=True
+                    break
+            if not matched:
+                z=fam.setdefault("other",{"n":0,"pos":0,"neg":0,"zero":0,"max_abs":0.0})
+                z["n"]+=1
+                if value>0:z["pos"]+=1
+                elif value<0:z["neg"]+=1
+                else:z["zero"]+=1
+                z["max_abs"]=max(z["max_abs"],abs(value))
         rows.sort(key=lambda z:(z[0],z[1]),reverse=True)
-        out={name:value for _,_,name,value in rows[:limit]}
-        out["_encoder_total_causal_features"]=float(len(rows))
-        out["_encoder_selected_features"]=float(len(out)-1)
+        top={name:value for _,_,name,value in rows[:limit]}
+        summaries={}
+        for name,z in fam.items():
+            if not z["n"]:continue
+            n=float(z["n"])
+            summaries[name]={"n":z["n"],"pos_share":z["pos"]/n,"neg_share":z["neg"]/n,
+                             "max_abs":z["max_abs"]}
+        return {"top_signals":top,"family_summaries":summaries,
+                "total_causal_features":len(rows),"selected_top_signals":len(top)}
+
+    def _compact_quant_state(self,q):
+        quality=q.get("quality_gate") or {}
+        return {"action":q.get("action"),"score":q.get("score"),
+                "leverage":q.get("leverage"),"margin_fraction":q.get("margin_fraction"),
+                "horizon_s":q.get("horizon_s"),"champion_ready":q.get("champion_ready"),
+                "quality_ok":quality.get("ok"),"quality_reasons":(quality.get("reasons") or [])[:4]}
+
+    def _compact_events(self,events):
+        out=[]
+        for e in (events or [])[-6:]:
+            if not isinstance(e,dict):continue
+            out.append({k:e.get(k) for k in ("event","side","reason","price","confidence",
+                                             "exit_confidence","local_confidence","reentry_confidence")
+                        if e.get(k) is not None})
         return out
+
+    def _compact_local(self,local):
+        if not isinstance(local,dict):return None
+        return {k:local.get(k) for k in ("id","side","price","stage","source","strict_hour_ms","confidence")
+                if local.get(k) is not None}
+
+    def _compact_paper(self,paper):
+        if not isinstance(paper,dict):return {}
+        op=paper.get("open_position")
+        if isinstance(op,dict):
+            op={k:op.get(k) for k in ("side","entry_price","mark_price","current_return","mfe","mae",
+                                      "leverage","margin_fraction","reentry_no") if op.get(k) is not None}
+        return {"equity":paper.get("equity"),"closed_trades":paper.get("closed_trades"),
+                "reentries":paper.get("reentries"),"open_position":op}
 
     def observe(self,ts_ms,price,features,base_decision,base_report,cost_floor):
         self._advance_pending(ts_ms,price)
@@ -367,14 +432,16 @@ class AstraCortex:
             return {"new_decision":False,"decision":self.last_decision,"status":self.status(ts_ms)}
         causal=self._compact_causal_features(features); q=base_decision.get("quant") or {}
         session=us_market_session(ts_ms)
+        tp=base_report.get("training_progress") or {}
         state={"ts_ms":int(ts_ms),"price":float(price),"us_market_session":session,
-               "causal_features":causal,
-               "quant":q,"caterpillar_events":(base_decision.get("events") or [])[-12:],
-               "base_paper":base_decision.get("paper") or {},
-               "active_local":base_report.get("active_local"),
+               "state_encoder":causal,
+               "quant":self._compact_quant_state(q),
+               "caterpillar_events":self._compact_events(base_decision.get("events")),
+               "base_paper":self._compact_paper(base_decision.get("paper") or {}),
+               "active_local":self._compact_local(base_report.get("active_local")),
                "policy_state":base_report.get("policy_state"),
-               "training_progress":base_report.get("training_progress"),
-               "episodic_memory":self._memory_for_prompt(),
+               "quant_training":{"overall_percent":tp.get("overall_percent"),"status":tp.get("status")},
+               "episodic_memory":self._memory_for_prompt()[-8:],
                "cortex_us_session_stats":self._session_stats(),
                "cortex_24h_progress":self._training_progress(ts_ms),
                "constraints":{"research_only":True,"real_orders":False,"max_leverage":25,
