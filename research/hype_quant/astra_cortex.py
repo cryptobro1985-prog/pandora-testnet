@@ -352,12 +352,13 @@ class AstraCortex:
             ("liquidations",("liq","liquid")),
             ("price_response",("price_response","return","retrace","persistence")),
             ("local_structure",("local","pivot","structure")),
+            ("fibonacci",("fib_",)),
             ("funding_basis",("funding","basis","mark","index")),
             ("activity",("volume","turnover","trade_")),
             ("data_quality",("gap","latency","stale","valid","sequence")),
         )
         priority=("agent_","flow_","price_response","book_","oi_","liq","liquid",
-                  "local","retrace","cvd","dominance","efficiency","spread","funding",
+                  "fib_","local","retrace","cvd","dominance","efficiency","spread","funding",
                   "basis","return","volume","turnover","gap","latency")
         rows=[]
         fam={name:{"n":0,"pos":0,"neg":0,"zero":0,"max_abs":0.0} for name,_ in family_rules}
