@@ -181,7 +181,9 @@ def main():
                 latest=piv[-1]
                 if last_teacher is None or latest["hour_ms"]>int(last_teacher.get("hour_ms",0)):
                     last_teacher=latest
-                    if expected is None:expected="LOW" if latest["side"]=="HIGH" else "HIGH"
+                    # Teacher Local is authoritative for the active structural leg:
+                    # after LOW we search HIGH; after HIGH we search LOW.
+                    expected="LOW" if latest["side"]=="HIGH" else "HIGH"
 
             # Dense causal proposals: 5m / 15m / 60m / 6h. These only propose;
             # strict H1 L6/K2 remains the teacher.
