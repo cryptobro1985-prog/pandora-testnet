@@ -148,9 +148,9 @@ class PaperPosition:
 class CaterpillarQuantLearner:
     VERSION="caterpillar-quant-v2"
     LOCAL_STAGES=(60,180,300)
-    LOCAL_POLICY_VERSION=2
+    LOCAL_POLICY_VERSION=3
     LOCAL_MIN_LABELS_PER_STAGE=30
-    LOCAL_LABEL_HORIZON_S=1800
+    LOCAL_LABEL_HORIZON_S=300
     BOUNCE_FUTURE_S=1800
     EXIT_HORIZON_S=300
     ENTRY_HORIZONS=(60,180,300)
@@ -1044,6 +1044,15 @@ class CaterpillarQuantLearner:
         out["cq_book_alignment"]=sign*float(x.get("book_imbalance_25",x.get("book_imbalance_raw_25",0.0)) or 0.0)
         oi=x.get("price_oi_interaction_60s",x.get("oi_change_since_prev_poll_pct"))
         if finite(oi):out["cq_oi_context"]=sign*float(oi)
+        # Historical H1 learner is a causal proposal prior only. It never confirms
+        # a Local by itself, but its probabilities are useful input to the learned
+        # full-state Local classifier.
+        early=(self._early_local_report().get("shadow") or {})
+        out["cq_early_low_probability"]=float(early.get("low_probability") or 0.0)
+        out["cq_early_high_probability"]=float(early.get("high_probability") or 0.0)
+        out["cq_early_same_probability"]=float(
+            early.get("low_probability" if c.side=="LOW" else "high_probability") or 0.0
+        )
         return out
 
     def _position_x(self,x,ts_ms,price,quant_decision):
@@ -1092,17 +1101,63 @@ class CaterpillarQuantLearner:
         return c
 
     def _update_extremes(self,ts_ms,price,x,state):
-        h=self._h1_extremes(state,ts_ms)
+        """Propose Locals densely from causal structure; never confirm by heuristic.
+
+        The old v2 path proposed a candidate only at a fresh six-hour extreme.
+        That produced too few labels for an online model. v3 proposes at causal
+        5m/15m/6h extrema already present in the 116-point feature state. The
+        learned classifier still owns confirmation and future prices only create
+        delayed labels.
+        """
         events=[]
-        if not h:return events
-        low6,high6=h
+        h=self._h1_extremes(state,ts_ms)
+        lows=[];highs=[];sources_low=[];sources_high=[]
+        if h:
+            low6,high6=h
+            lows.append(float(low6));highs.append(float(high6))
+            sources_low.append("H1_6H");sources_high.append("H1_6H")
+        for key,label in (
+            ("running_low_300s","RUNNING_5M"),("running_low_900s","RUNNING_15M"),
+            ("rolling_6h_low","ROLLING_6H"),
+        ):
+            v=x.get(key)
+            if finite(v):lows.append(float(v));sources_low.append(label)
+        for key,label in (
+            ("running_high_300s","RUNNING_5M"),("running_high_900s","RUNNING_15M"),
+            ("rolling_6h_high","ROLLING_6H"),
+        ):
+            v=x.get(key)
+            if finite(v):highs.append(float(v));sources_high.append(label)
+        if not lows and not highs:return events
+
+        # Any recent-window extreme is allowed to propose a state. 0.5 bps is
+        # numerical tolerance only, not a Local decision threshold.
+        tol=0.5/10000.0
+        low_trigger=max(lows) if lows else None
+        high_trigger=min(highs) if highs else None
         low=self.candidates["LOW"];high=self.candidates["HIGH"]
-        if price<=low6 and (low is None or price<low.extreme_price-1e-12):
+
+        def refresh(old,opposite,side):
+            if old is None:return True
+            age_ms=max(0,int(ts_ms)-int(old.extreme_ts_ms))
+            if age_ms>=1_800_000:return True
+            if opposite is not None and int(opposite.extreme_ts_ms)>int(old.extreme_ts_ms):return True
+            if side=="LOW":return float(price)<float(old.extreme_price)-1e-12
+            return float(price)>float(old.extreme_price)+1e-12
+
+        if low_trigger is not None and float(price)<=low_trigger*(1.0+tol) and refresh(low,high,"LOW"):
             c=self._new_candidate("LOW",price,ts_ms,x)
-            events.append({"event":"NEW_LOCAL_CANDIDATE","side":"LOW","candidate_id":c.ident,"price":price})
-        if price>=high6 and (high is None or price>high.extreme_price+1e-12):
+            c.evidence={"proposal":"CAUSAL_MULTIWINDOW_EXTREME_V3","windows":sources_low,
+                        "trigger_price":float(low_trigger),"future_used":False}
+            events.append({"event":"NEW_LOCAL_CANDIDATE","side":"LOW","candidate_id":c.ident,
+                           "price":price,"proposal":"CAUSAL_MULTIWINDOW_EXTREME_V3"})
+            low=c
+        if high_trigger is not None and float(price)>=high_trigger*(1.0-tol) and refresh(high,low,"HIGH"):
             c=self._new_candidate("HIGH",price,ts_ms,x)
-            events.append({"event":"NEW_LOCAL_CANDIDATE","side":"HIGH","candidate_id":c.ident,"price":price})
+            c.evidence={"proposal":"CAUSAL_MULTIWINDOW_EXTREME_V3","windows":sources_high,
+                        "trigger_price":float(high_trigger),"future_used":False}
+            events.append({"event":"NEW_LOCAL_CANDIDATE","side":"HIGH","candidate_id":c.ident,
+                           "price":price,"proposal":"CAUSAL_MULTIWINDOW_EXTREME_V3"})
         return events
 
     def _advance_local_labels(self,ts_ms,price,state):
@@ -1413,7 +1468,7 @@ class CaterpillarQuantLearner:
                 c.confirmed_stage=stage
                 c.source="LEARNED_CAUSAL_LOCAL"
                 c.evidence={
-                    "rule":"LEARNED_CAUSAL_LOCAL_V2",
+                    "rule":"LEARNED_CAUSAL_LOCAL_V3",
                     "model_probability":float(p),
                     "labels_seen":int(labels),
                     "stage_s":int(stage),
@@ -1877,12 +1932,12 @@ class CaterpillarQuantLearner:
             "mean_mfe_capture_ratio":statistics.fmean(captures) if captures else None,
             "median_mfe_capture_ratio":statistics.median(captures) if captures else None,
             "local_target":"REALIZED_REVERSAL_ADVANTAGE_FROM_FULL_CAUSAL_STATE",
-            "local_policy":"Local v2 learns new Locals from the full causal live state. If a confirmed Local already existed before learner startup, it is inherited once as starting leg context (not counted as a learned prediction). After startup, strict H1 L6/K2 remains benchmark-only; subsequent executable Locals must be learned causally.",
+            "local_policy":"Local v3 learns new Locals from the full causal live state. If a confirmed Local already existed before learner startup, it is inherited once as starting leg context (not counted as a learned prediction). After startup, strict H1 L6/K2 remains benchmark-only; subsequent executable Locals must be learned causally.",
             "local_policy_version":getattr(self,"local_policy_version",0),
             "local_teacher_benchmark":getattr(self,"last_teacher_local",None),
             "learned_local_history":list(getattr(self,"learned_local_history",[]) or [])[-12:],
             "inherited_local_history":list(getattr(self,"inherited_local_history",[]) or [])[-12:],
-            "local_learning_contract":{"candidate_source":"live structural extremes",
+            "local_learning_contract":{"candidate_source":"causal 5m/15m/6h structural-extreme proposals; learned model confirms",
                                        "inputs":"full cleaned causal state (86 predictive inputs from the 116-point contract)",
                                        "label":"favorable excursion - adverse continuation - round-trip cost > 0",
                                        "label_horizon_s":self.LOCAL_LABEL_HORIZON_S,
