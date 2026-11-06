@@ -231,6 +231,11 @@ def main():
     learner.pending.clear()
     pretrain_report=learner.report()
     learner.config["action_space"]=copy.deepcopy(full_action_space)
+    # Avoid re-querying thousands of nearest-neighbor memories for every
+    # validation risk profile. Historical selection uses the parametric Quant
+    # + causal agents; PatternMemory remains available for live forward learning.
+    saved_neighbors=learner.memory.neighbors
+    learner.memory.neighbors=10**9
 
     profiles=[]
     for min_conf in (.57,.62,.67):
@@ -245,6 +250,7 @@ def main():
     best=validation[0]["profile"]
     val_full=simulate(learner,states,TRAIN_END,OOS,best)
     oos=simulate(learner,states,OOS,END,best)
+    learner.memory.neighbors=saved_neighbors
 
     # Freeze evidence first; only now absorb validation+OOS into the historical warmstart.
     learner.config["action_space"]["leverage"]=[1]
