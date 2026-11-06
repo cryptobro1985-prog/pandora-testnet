@@ -1,4 +1,4 @@
-name: HYPE v18 Cortex Meta-Controller Live
+name: HYPE v19 Local-High Watch Meta Live
 # compact-110-v4-fixed-pack
 # 2026-11-06-local-low-restart
 # caterpillar-quant-v15-direct-relay-1000h1-isolated
@@ -22,7 +22,7 @@ permissions:
   issues: write
 
 concurrency:
-  group: hype-v18-cortex-meta-${{ github.ref }}
+  group: hype-v19-local-high-watch-${{ github.ref }}
   cancel-in-progress: true
 
 env:
