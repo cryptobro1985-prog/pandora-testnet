@@ -12,6 +12,7 @@ from pathlib import Path
 
 from .features import FeatureState
 from .learner import OnlineQuantLearner, load_config
+from .agents import augment_with_agents
 
 
 def append_jsonl(path:Path,obj):
@@ -138,7 +139,9 @@ def main():
                     learner.pending.clear()
                     state.prices.clear()
             last_seen_ts=ts
-            try:price,x=state.update_micro(row)
+            try:
+                price,x=state.update_micro(row)
+                x=augment_with_agents(x)
             except Exception as exc:
                 append_jsonl(gaps,{"ts_ms":ts,"feature_error":repr(exc)})
                 continue
