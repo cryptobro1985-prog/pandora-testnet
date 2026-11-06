@@ -1764,11 +1764,33 @@ class CaterpillarQuantLearner:
                                  "entry_price":self.position.entry_price,"local_id":self.position.local_id})
             self.position=None
         self.baseline_position=None
+
+        # A transport gap invalidates in-flight candidates and policy samples, but
+        # it must not erase the already learned/inherited structural leg. Preserve
+        # a detached immutable anchor so reconnect never falls back to a post-start
+        # strict H1 benchmark and never returns to WAIT_LOCAL just because the
+        # websocket/RPC restarted.
+        anchor=self.last_confirmed_local if self._is_policy_local(self.last_confirmed_local) else None
+        anchor_copy=None
+        if anchor is not None:
+            anchor_copy=Candidate(
+                ident=int(anchor.ident),side=str(anchor.side),extreme_price=float(anchor.extreme_price),
+                extreme_ts_ms=int(anchor.extreme_ts_ms),created_x=dict(anchor.created_x),
+                invalidated_ts_ms=None,stage_done=set(anchor.stage_done),
+                stage_conf=dict(anchor.stage_conf),stage_retrace_bps=dict(anchor.stage_retrace_bps),
+                confirmed_stage=anchor.confirmed_stage,source=str(anchor.source),
+                strict_hour_ms=anchor.strict_hour_ms,evidence=dict(anchor.evidence),
+            )
         for c in self.candidates.values():
             if c:self._invalidate_candidate(c,ts_ms)
-        self.candidates={"LOW":None,"HIGH":None};self.last_confirmed_local=None
+        self.candidates={"LOW":None,"HIGH":None}
+        self.last_confirmed_local=anchor_copy
         self.quant.pending.clear()
         self.actions.append({"event":"CENSORED","ts_ms":ts_ms,"reason":reason})
+        if anchor_copy is not None:
+            self.actions.append({"event":"LOCAL_CONTEXT_PRESERVED_ON_GAP","ts_ms":ts_ms,
+                                 "reason":reason,"side":anchor_copy.side,
+                                 "price":anchor_copy.extreme_price,"source":anchor_copy.source})
 
     def observe(self,ts_ms,price,x,state):
         self._ensure_v2()
