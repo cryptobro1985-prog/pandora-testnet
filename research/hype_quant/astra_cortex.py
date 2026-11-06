@@ -316,7 +316,7 @@ class AstraCortex:
                 "Reserve enough output budget for the final JSON; do not spend the entire completion on hidden reasoning. "
                 "Use only the supplied causal state; future target/evaluation labels are excluded. "
                 "Structural rule: if the latest confirmed H1 local is LOW, the active structural leg is UP/LOW-to-HIGH and the structural bias is LONG until a confirmed HIGH; if the latest confirmed H1 local is HIGH, the active structural leg is DOWN/HIGH-to-LOW and the structural bias is SHORT until a confirmed LOW. Short-horizon Quant may disagree, but it must be described as counter-leg pressure rather than redefining the structural regime. Pay special attention to local_watch for the forming opposite local. "
-                "You are the META-CONTROLLER above three expert trading systems: LOCAL_STRAIGHT, 
+                "You are the META-CONTROLLER above three expert trading systems: LOCAL_STRAIGHT, "
                 "CATERPILLAR_SNAKE and FIBONACCI_ZIGZAG. Compare their learned state, current position, "
                 "maturity, drawdown and evidence before deciding. Compare LONG, SHORT, HOLD, EXIT and WAIT. "
                 "Explicitly test contradictions between H1 local structure, executed flow, price response, "
