@@ -1,0 +1,219 @@
+name: HYPE LOCAL-ONLY — 30D Pretrain + Live
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/hype_local_only/**"
+      - ".github/workflows/hype-local-only.yml"
+  schedule:
+    - cron: "7 * * * *"
+
+permissions:
+  contents: read
+  actions: write
+  issues: write
+
+concurrency:
+  group: hype-local-only
+  cancel-in-progress: false
+
+env:
+  HYPE_REST_RELAY_URL: "https://hype-rest-relay.onrender.com"
+  CORTEX_LOCAL_URL: "http://127.0.0.1:8081"
+  CORTEX_PORT: "8081"
+  CORTEX_CTX_SIZE: "4096"
+  CORTEX_THREADS: "4"
+  CORTEX_HF_MODEL: "ggml-org/gpt-oss-20b-GGUF:MXFP4"
+  ASTRA_CORTEX_MODEL: "gpt-oss-20b-local"
+
+jobs:
+  local-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 59
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -r research/hype_local_v5/requirements-research.txt
+          python -m pip install -r research/hype_quant/requirements.txt
+          python -m py_compile \
+            research/hype_local_only/model.py \
+            research/hype_local_only/live_features.py \
+            research/hype_local_only/train_history.py \
+            research/hype_local_only/live_daemon.py \
+            research/hype_local_only/cortex_daemon.py
+
+      - name: Cancel deprecated Caterpillar / Direct-Policy live runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for WF in hype-v12-immediate-full-graph.yml only-profit-continuous.yml; do
+            gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${WF}/runs?per_page=30" \
+              --jq '.workflow_runs[] | select(.status=="in_progress" or .status=="queued" or .status=="pending") | .id' |
+            while read -r ID; do
+              [ -z "${ID}" ] && continue
+              echo "cancel deprecated run ${ID} (${WF})"
+              gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/${ID}/cancel" >/dev/null || true
+            done
+          done
+
+      - name: Restore Local-only checkpoint if present
+        id: restore
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf local_cp
+          mkdir -p local_cp
+          ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=HYPE-LOCAL-ONLY-CHECKPOINT" \
+            --jq '.artifacts | map(select((.expired|not) and .name=="HYPE-LOCAL-ONLY-CHECKPOINT")) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          if [ -n "${ID}" ]; then
+            echo "restoring Local-only checkpoint ${ID}"
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ID}/zip" > local.zip
+            unzip -q local.zip -d local_cp
+          fi
+          if test -s local_cp/local_only_model.pkl && test -s local_cp/LOCAL_RELATIONSHIP_MEMORY.json; then
+            echo "found=1" >> "${GITHUB_OUTPUT}"
+          else
+            echo "found=0" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Download 30-day labelled Local dataset
+        if: steps.restore.outputs.found != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf history30 history30.zip
+          mkdir -p history30
+          ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=local116-HYPE" \
+            --jq '.artifacts | map(select((.expired|not) and .name=="local116-HYPE")) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          test -n "${ID}"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ID}/zip" > history30.zip
+          unzip -q history30.zip -d history30
+          test -s history30/candidate_snapshots.jsonl.gz
+          test -s history30/manifest.json
+          python - <<'PY'
+          import json
+          m=json.load(open("history30/manifest.json"))
+          assert m["candidate_snapshots"]==6261
+          assert m["future_leakage_guard"]
+          print("history_period",m["period"])
+          print("candidate_snapshots",m["candidate_snapshots"])
+          PY
+
+      - name: Pretrain Quantum HIGH/LOW heads and build Cortex memory
+        if: steps.restore.outputs.found != '1'
+        run: |
+          python -m research.hype_local_only.train_history \
+            --snapshots history30/candidate_snapshots.jsonl.gz \
+            --model-out local_cp/local_only_model.pkl \
+            --memory-out local_cp/LOCAL_RELATIONSHIP_MEMORY.json \
+            --report-out local_cp/HISTORICAL_TRAINING_REPORT.json
+          test -s local_cp/local_only_model.pkl
+          test -s local_cp/LOCAL_RELATIONSHIP_MEMORY.json
+          test -s local_cp/HISTORICAL_TRAINING_REPORT.json
+
+      - name: Start Cortex 20B in parallel
+        shell: bash
+        run: |
+          set +e
+          bash research/hype_quant/start_local_cortex.sh > local_cp/cortex_boot.log 2>&1 &
+          echo $! > local_cp/cortex_boot.pid
+          set -e
+
+      - name: Run Local-only live collection and inference
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf live_capture
+          mkdir -p live_capture
+
+          python -m research.hype_local_only.live_daemon \
+            --capture-root live_capture \
+            --checkpoint-dir local_cp \
+            --minutes 50 > local_cp/local_daemon.log 2>&1 &
+          LOCAL_PID=$!
+
+          python -m research.hype_local_only.cortex_daemon \
+            --checkpoint-dir local_cp \
+            --minutes 50 \
+            --interval-seconds 300 > local_cp/cortex_daemon.log 2>&1 &
+          CORTEX_DAEMON_PID=$!
+
+          set +e
+          python research/hype_local_v5/resilient_capture.py \
+            --minutes 50 --chunk-minutes 20 --output live_capture
+          CAP_RC=$?
+          set -e
+
+          wait "${LOCAL_PID}"
+          LOCAL_RC=$?
+          wait "${CORTEX_DAEMON_PID}" || true
+
+          if [ -f /tmp/cortex20b.pid ]; then
+            kill "$(cat /tmp/cortex20b.pid)" 2>/dev/null || true
+          fi
+          if [ -f local_cp/cortex_boot.pid ]; then
+            kill "$(cat local_cp/cortex_boot.pid)" 2>/dev/null || true
+          fi
+
+          echo "capture_rc=${CAP_RC} local_rc=${LOCAL_RC}"
+          test "${LOCAL_RC}" -eq 0
+          test -s local_cp/LOCAL_ONLY_STATUS.json
+          test -s local_cp/local_only_model.pkl
+
+      - name: Validate Local-only state
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from research.hype_local_only.model import LocalOnlyModel
+          q=LocalOnlyModel.load(Path("local_cp/local_only_model.pkl"))
+          s=json.load(open("local_cp/LOCAL_ONLY_STATUS.json"))
+          print("labels",sum(q.labels.values()),"live_labels",q.live_labels)
+          print("status",json.dumps(s,indent=2))
+          assert sum(q.labels.values()) > 0
+          assert s["research_only"] is True
+          assert s["real_orders"] is False
+          assert s["feature_contract"]["point_count"]==116
+          PY
+
+      - name: Upload canonical Local-only checkpoint
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-LOCAL-ONLY-CHECKPOINT
+          path: local_cp/**
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+
+      - name: Upload live evidence snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-LOCAL-ONLY-EVIDENCE-${{ github.run_id }}
+          path: |
+            local_cp/LOCAL_ONLY_STATUS.json
+            local_cp/CORTEX_LOCAL_ONLY_STATUS.json
+            local_cp/HISTORICAL_TRAINING_REPORT.json
+            local_cp/LOCAL_RELATIONSHIP_MEMORY.json
+            local_cp/LOCAL_EVENTS.jsonl
+            local_cp/LOCAL_LIVE_LABELS.jsonl
+          if-no-files-found: warn
+          retention-days: 30
+          compression-level: 6
