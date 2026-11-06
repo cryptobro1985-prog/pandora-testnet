@@ -27,6 +27,12 @@ def binary_model():
         linear_model.LogisticRegression(l2=0.001)
     )
 
+def value_model():
+    return compose.Pipeline(
+        preprocessing.StandardScaler(),
+        linear_model.LinearRegression()
+    )
+
 @dataclass
 class Candidate:
     ident:int
@@ -92,6 +98,18 @@ class ReentryPending:
     worst_adverse:float=0.0
 
 @dataclass
+class PolicyPending:
+    ts_ms:int
+    side:int
+    mode:str
+    price:float
+    x:dict[str,float]
+    horizon_s:int
+    mature_ts_ms:int
+    best_favorable:float=0.0
+    worst_adverse:float=0.0
+
+@dataclass
 class FibPending:
     ts_ms:int
     key:str
@@ -131,6 +149,7 @@ class CaterpillarQuantLearner:
     ENTRY_SAMPLE_S=30
     REENTRY_HORIZON_S=300
     POLICY_SAMPLE_S=30
+    DIRECT_POLICY_HORIZONS=(60,180,300)
     MIN_HOLD_S=60
     FIB_RETRACE_RATIOS=(0.236,0.382,0.5,0.618,0.786,1.0)
     FIB_EXTENSION_RATIOS=(1.272,1.618)
@@ -178,6 +197,12 @@ class CaterpillarQuantLearner:
         self.censored_positions=0
         self.last_entry_sample_ms=0
         self.last_reentry_sample_ms=0
+        self.policy_models={(mode,h):value_model() for mode in ("FLAT","POSITION") for h in self.DIRECT_POLICY_HORIZONS}
+        self.policy_labels={(mode,h):0 for mode in ("FLAT","POSITION") for h in self.DIRECT_POLICY_HORIZONS}
+        self.policy_target_sum={(mode,h):0.0 for mode in ("FLAT","POSITION") for h in self.DIRECT_POLICY_HORIZONS}
+        self.policy_pending:list[PolicyPending]=[]
+        self.last_policy_sample_ms=0
+        self.last_policy_decision={}
         self.policy_version=2
         self.bootstrap_diagnostic={}
         self.structural_history={}
@@ -384,7 +409,7 @@ class CaterpillarQuantLearner:
             if hasattr(self.quant,"_ensure_v2"):self.quant._ensure_v2()
             self._ensure_full_graph_policy()
             self._ensure_entry_learning_policy()
-            self._ensure_mfe_caterpillar_policy()
+            self._ensure_direct_policy()
             return
         # Local v1 labels described a 30m tradeable bounce, not a strict H1 pivot.
         # Preserve generic Quant history, but reset policy heads to the corrected contract.
@@ -413,7 +438,52 @@ class CaterpillarQuantLearner:
         if hasattr(self.quant,"_ensure_v2"):self.quant._ensure_v2()
         self._ensure_full_graph_policy()
         self._ensure_entry_learning_policy()
-        self._ensure_mfe_caterpillar_policy()
+        self._ensure_direct_policy()
+
+    def _ensure_direct_policy(self):
+        if getattr(self,"policy_contract_version",0)>=6:
+            if not hasattr(self,"policy_models"):
+                self.policy_models={(mode,h):value_model() for mode in ("FLAT","POSITION") for h in self.DIRECT_POLICY_HORIZONS}
+            if not hasattr(self,"policy_labels"):
+                self.policy_labels={(mode,h):0 for mode in ("FLAT","POSITION") for h in self.DIRECT_POLICY_HORIZONS}
+            if not hasattr(self,"policy_target_sum"):
+                self.policy_target_sum={(mode,h):0.0 for mode in ("FLAT","POSITION") for h in self.DIRECT_POLICY_HORIZONS}
+            if not hasattr(self,"policy_pending"):self.policy_pending=[]
+            if not hasattr(self,"last_policy_sample_ms"):self.last_policy_sample_ms=0
+            if not hasattr(self,"last_policy_decision"):self.last_policy_decision={}
+            return
+        old_trades=list(getattr(self,"trades",[]) or [])
+        old_equity=float(getattr(self,"equity",100.0) or 100.0)
+        gp=sum(max(0.0,float(t.get("pnl") or 0.0)) for t in old_trades)
+        gl=-sum(min(0.0,float(t.get("pnl") or 0.0)) for t in old_trades)
+        caps=[float(t["mfe_capture_ratio"]) for t in old_trades if finite(t.get("mfe_capture_ratio"))]
+        archive={
+            "policy_contract_version":getattr(self,"policy_contract_version",0),
+            "equity":old_equity,
+            "return_pct":(old_equity/100.0-1.0)*100.0,
+            "closed_trades":len(old_trades),
+            "reentries":int(getattr(self,"reentries",0) or 0),
+            "win_rate":(sum(float(t.get("pnl") or 0.0)>0 for t in old_trades)/len(old_trades) if old_trades else None),
+            "profit_factor":(gp/gl if gl>0 else None),
+            "mean_mfe_capture_ratio":(statistics.fmean(caps) if caps else None),
+            "reason":"manual-gated Entry/Exit/Re-entry contract retired; direct causal policy v6 now learns actions",
+        }
+        archives=list(getattr(self,"legacy_paper_archives",[]) or [])
+        prev=getattr(self,"legacy_paper_archive",None)
+        if isinstance(prev,dict) and prev not in archives:archives.append(prev)
+        archives.append(archive)
+        self.legacy_paper_archives=archives[-8:]
+        self.legacy_paper_archive=archive
+
+        self.policy_models={(mode,h):value_model() for mode in ("FLAT","POSITION") for h in self.DIRECT_POLICY_HORIZONS}
+        self.policy_labels={(mode,h):0 for mode in ("FLAT","POSITION") for h in self.DIRECT_POLICY_HORIZONS}
+        self.policy_target_sum={(mode,h):0.0 for mode in ("FLAT","POSITION") for h in self.DIRECT_POLICY_HORIZONS}
+        self.policy_pending=[];self.last_policy_sample_ms=0;self.last_policy_decision={}
+        self.position=None;self.last_exit=None
+        self.equity=100.0;self.peak_equity=100.0;self.max_drawdown=0.0
+        self.trades=[];self.path_equity=100.0;self.reentries=0
+        self.baseline_equity=100.0;self.baseline_position=None;self.baseline_trades=[]
+        self.policy_contract_version=6
 
     def _ensure_mfe_caterpillar_policy(self):
         if getattr(self,"policy_contract_version",0)>=5:
@@ -947,6 +1017,141 @@ class CaterpillarQuantLearner:
             self.exit_labels+=1; self.exit_pos+=int(y)
         self.exit_pending=keep
 
+    def _model_value(self,model,x):
+        try:
+            v=model.predict_one(clean_features(x))
+            return float(v or 0.0)
+        except Exception:
+            return 0.0
+
+    def _learn_value(self,model,x,y):
+        model.learn_one(clean_features(x),float(y))
+
+    def _direct_policy_x(self,x,ts_ms,price,c,qd):
+        side=1 if c.side=="LOW" else -1
+        out=dict(x)
+        out.update({
+            "cp_structural_side":float(side),
+            "cp_from_local_pct":side*(float(price)/max(float(c.extreme_price),1e-9)-1.0),
+            "cp_local_confidence":float(c.stage_conf.get(c.confirmed_stage or 0,0.0)),
+            "cp_is_position":1.0 if self.position is not None else 0.0,
+            "cp_is_reentry_state":1.0 if self.position is None and self._same_local_episode(c) else 0.0,
+            "cp_seconds_since_exit":0.0 if not self.last_exit else max(0.0,(ts_ms-int(self.last_exit.get("exit_ts_ms",ts_ms)))/1000.0),
+            "cp_quant_same":1.0 if qd.get("action")==side_name(side) else 0.0,
+            "cp_quant_opposite":1.0 if qd.get("action")==side_name(-side) else 0.0,
+            "cp_quant_score":float(qd.get("score",0.0) or 0.0),
+        })
+        if self.position is not None:
+            p=self.position
+            cur=p.side*(float(price)/max(p.entry_price,1e-9)-1.0)
+            give=max(0.0,p.mfe-cur)
+            out.update({
+                "cp_position_return":cur,
+                "cp_position_mfe":p.mfe,
+                "cp_position_mae":p.mae,
+                "cp_mfe_giveback":give,
+                "cp_mfe_giveback_ratio":give/max(p.mfe,1e-9) if p.mfe>0 else 0.0,
+                "cp_position_age_s":max(0.0,(ts_ms-p.entry_ts_ms)/1000.0),
+            })
+        return clean_features(out)
+
+    def _sample_direct_policy(self,ts_ms,price,x,c,qd):
+        if c is None or getattr(c,"source",None)!="STRICT_H1_CONFIRMED":return
+        if ts_ms-self.last_policy_sample_ms<self.POLICY_SAMPLE_S*1000:return
+        mode="POSITION" if self.position is not None else "FLAT"
+        side=(self.position.side if self.position is not None else (1 if c.side=="LOW" else -1))
+        px=self._direct_policy_x(x,ts_ms,price,c,qd)
+        for horizon in self.DIRECT_POLICY_HORIZONS:
+            self.policy_pending.append(PolicyPending(
+                ts_ms=int(ts_ms),side=int(side),mode=mode,price=float(price),x=px,
+                horizon_s=int(horizon),mature_ts_ms=int(ts_ms+horizon*1000)))
+        self.last_policy_sample_ms=int(ts_ms)
+
+    def _advance_direct_policy_labels(self,ts_ms,price):
+        keep=[]
+        for p in self.policy_pending:
+            move=p.side*(float(price)/max(p.price,1e-9)-1.0)
+            p.best_favorable=max(p.best_favorable,move)
+            p.worst_adverse=max(p.worst_adverse,-move)
+            if ts_ms<p.mature_ts_ms:
+                keep.append(p);continue
+            # Economic advantage, not a hand-written action threshold:
+            # FLAT: entering now must earn favorable excursion net of adverse path and round-trip cost.
+            # POSITION: holding must add more favorable path than adverse path versus exiting now.
+            advantage=p.best_favorable-p.worst_adverse
+            if p.mode=="FLAT":advantage-=self.round_trip_cost
+            model=self.policy_models[(p.mode,p.horizon_s)]
+            self._learn_value(model,p.x,advantage)
+            self.policy_labels[(p.mode,p.horizon_s)]+=1
+            self.policy_target_sum[(p.mode,p.horizon_s)]+=float(advantage)
+        self.policy_pending=keep
+
+    def _direct_policy_values(self,x,ts_ms,price,c,qd):
+        mode="POSITION" if self.position is not None else "FLAT"
+        px=self._direct_policy_x(x,ts_ms,price,c,qd)
+        per_h={h:self._model_value(self.policy_models[(mode,h)],px) for h in self.DIRECT_POLICY_HORIZONS}
+        value=statistics.fmean(per_h.values()) if per_h else 0.0
+        labels={h:int(self.policy_labels[(mode,h)]) for h in self.DIRECT_POLICY_HORIZONS}
+        ready=any(v>0 for v in labels.values())
+        return mode,value,per_h,labels,ready
+
+    def _execute_direct_policy(self,ts_ms,price,x,c,qd):
+        events=[]
+        if c is None:return events
+        structural_side=1 if c.side=="LOW" else -1
+        mode,value,per_h,labels,ready=self._direct_policy_values(x,ts_ms,price,c,qd)
+        same_reentry=(self.position is None and self._same_local_episode(c))
+        if self.position is not None and self.position.side!=structural_side:
+            events.extend(self._close(ts_ms,price,"OPPOSITE_LOCAL_CONFIRMED"))
+            mode,value,per_h,labels,ready=self._direct_policy_values(x,ts_ms,price,c,qd)
+        if self.position is None:
+            action=("REENTER" if same_reentry else "ENTER") if ready and value>0.0 else "WAIT"
+            if action in ("ENTER","REENTER"):
+                events.extend(self._open(ts_ms,price,structural_side,c,
+                                         float(c.stage_conf.get(c.confirmed_stage or 0,0.0)),qd,
+                                         reentry=(action=="REENTER")))
+        else:
+            action="HOLD" if (not ready or value>=0.0) else "EXIT"
+            if action=="EXIT":
+                events.extend(self._close(ts_ms,price,"DIRECT_POLICY_EXIT"))
+            else:
+                p=self.position
+                cur=p.side*(float(price)/max(p.entry_price,1e-9)-1.0)
+                p.mfe=max(p.mfe,cur);p.mae=min(p.mae,cur)
+                events.append({"event":"HOLD","ts_ms":ts_ms,"side":side_name(p.side),"price":price,
+                               "mfe":p.mfe,"mae":p.mae,"current_return":cur})
+        self.last_policy_decision={
+            "ts_ms":int(ts_ms),"mode":mode,"action":action,
+            "structural_side":side_name(structural_side),"advantage":value,
+            "horizon_advantage":per_h,"labels":labels,"ready":ready,
+            "objective":"maximize favorable path minus adverse path and trading cost inside the confirmed Local-to-Local leg",
+        }
+        for e in events:
+            e["direct_policy_action"]=action
+            e["direct_policy_advantage"]=value
+            e["direct_policy_horizon_advantage"]=per_h
+        return events
+
+    def _direct_policy_report(self):
+        labels={mode:{str(h):int(self.policy_labels[(mode,h)]) for h in self.DIRECT_POLICY_HORIZONS}
+                for mode in ("FLAT","POSITION")}
+        means={mode:{str(h):(self.policy_target_sum[(mode,h)]/self.policy_labels[(mode,h)]
+                             if self.policy_labels[(mode,h)] else None)
+                     for h in self.DIRECT_POLICY_HORIZONS}
+               for mode in ("FLAT","POSITION")}
+        total=sum(sum(v.values()) for v in labels.values())
+        return {
+            "contract_version":6,
+            "actions":{"flat":["WAIT","ENTER_OR_REENTER"],"position":["HOLD","EXIT"]},
+            "hard_constraints":["LOCAL_LOW_LONG_ONLY","LOCAL_HIGH_SHORT_ONLY"],
+            "labels":labels,"mean_realized_advantage":means,
+            "pending":len(self.policy_pending),
+            "training_percent":min(100.0,100.0*total/1200.0),
+            "last_decision":self.last_policy_decision,
+            "manual_action_thresholds":False,
+            "causal_state_note":"policy consumes the complete cleaned causal feature state; future target/evaluation fields are never inputs",
+        }
+
     def _stage_candidate(self,c,ts_ms,price,x):
         events=[]
         if c is None or c.invalidated_ts_ms is not None:return events
@@ -1103,15 +1308,17 @@ class CaterpillarQuantLearner:
         exit_target=300; reentry_target=200
         def pct(v,t):return min(100.0,100.0*float(v)/max(1,float(t)))
         fib_labels=sum(self.fib_labels.values());fib_target=len(self.fib_models)*40
+        policy_total=sum(self.policy_labels.values()) if hasattr(self,"policy_labels") else 0
         heads={
             "local":{"labels":local_total,"target_labels":local_target,"percent":pct(local_total,local_target)},
             "bounce":{"labels":bounce_total,"target_labels":bounce_target,"percent":pct(bounce_total,bounce_target)},
-            "entry":{"labels":entry_total,"target_labels":entry_target,"percent":pct(entry_total,entry_target)},
-            "exit":{"labels":self.exit_labels,"target_labels":exit_target,"percent":pct(self.exit_labels,exit_target)},
-            "reentry":{"labels":self.reentry_labels,"target_labels":reentry_target,"percent":pct(self.reentry_labels,reentry_target)},
+            "direct_policy":{"labels":policy_total,"target_labels":1200,"percent":pct(policy_total,1200)},
             "fibonacci":{"labels":fib_labels,"target_labels":fib_target,"percent":pct(fib_labels,fib_target)},
+            "legacy_entry":{"labels":entry_total,"target_labels":entry_target,"percent":pct(entry_total,entry_target),"execution":False},
+            "legacy_exit":{"labels":self.exit_labels,"target_labels":exit_target,"percent":pct(self.exit_labels,exit_target),"execution":False},
+            "legacy_reentry":{"labels":self.reentry_labels,"target_labels":reentry_target,"percent":pct(self.reentry_labels,reentry_target),"execution":False},
         }
-        overall=.27*heads["local"]["percent"]+.06*heads["bounce"]["percent"]+.20*heads["entry"]["percent"]+.18*heads["exit"]["percent"]+.17*heads["reentry"]["percent"]+.12*heads["fibonacci"]["percent"]
+        overall=.38*heads["local"]["percent"]+.07*heads["bounce"]["percent"]+.45*heads["direct_policy"]["percent"]+.10*heads["fibonacci"]["percent"]
         if overall>=100:status="MODEL_MATURE"
         elif overall>=60:status="VALIDATING"
         elif overall>=10:status="LEARNING"
@@ -1240,7 +1447,7 @@ class CaterpillarQuantLearner:
     def on_gap(self,ts_ms,reason):
         self._ensure_v2()
         self.censored+=1
-        self.local_pending.clear();self.entry_pending.clear();self.exit_pending.clear();self.reentry_pending.clear()
+        self.local_pending.clear();self.entry_pending.clear();self.exit_pending.clear();self.reentry_pending.clear();self.policy_pending.clear()
         if self.position:
             self.censored_positions+=1
             self.actions.append({"event":"CENSORED_POSITION","ts_ms":ts_ms,"reason":reason,
@@ -1259,9 +1466,7 @@ class CaterpillarQuantLearner:
         events=[]
         self._train_early_local_history(state,ts_ms)
         self._advance_local_labels(ts_ms,price,state)
-        self._advance_entry_labels(ts_ms,price)
-        self._advance_exit_labels(ts_ms,price)
-        self._advance_reentry_labels(ts_ms,price)
+        self._advance_direct_policy_labels(ts_ms,price)
         self._advance_fib_labels(ts_ms,price)
         self.structural_history=self._structural_history_report(state,ts_ms)
         fib=self._fib_snapshot(state,ts_ms,price)
@@ -1286,100 +1491,17 @@ class CaterpillarQuantLearner:
             events.extend(self._stage_candidate(self.candidates[side],ts_ms,price,x))
         self.local_watch_current=self._opposite_local_watch(ts_ms,price,x)
 
-        if self.position and self.last_confirmed_local is not None:
-            confirmed_side=1 if self.last_confirmed_local.side=="LOW" else -1
-            if confirmed_side==-self.position.side:
+        c,local_conf=self._best_local()
+        if self.position and c is not None:
+            structural_side=1 if c.side=="LOW" else -1
+            if self.position.side!=structural_side:
                 events.extend(self._close(ts_ms,price,"OPPOSITE_LOCAL_CONFIRMED"))
 
-        if self.position:
-            p=self.position
-            cur=p.side*(price/p.entry_price-1.0)
-            p.mfe=max(p.mfe,cur);p.mae=min(p.mae,cur)
-            px=self._position_x(x,ts_ms,price,qd)
-            exit_p=self._model_p(self.exit_model,px)
-            agent_same=p.side*float(x.get("agent_consensus",0.0) or 0.0)
-            flow_same=p.side*float(x.get("flow_imbalance_raw_60s",x.get("flow_imbalance_60s",0.0)) or 0.0)
-            quant_ready=bool(qd.get("champion_ready"))
-            quant_same=quant_ready and qd.get("action")==side_name(p.side)
-            quant_opp=quant_ready and qd.get("action")==side_name(-p.side)
-            give=max(0.0,p.mfe-cur)
-            give_ratio=give/max(p.mfe,1e-9) if p.mfe>0 else 0.0
-            learned_weight=min(.75,.75*self.exit_labels/300.0)
-            heuristic=clip(.45 + .18*(1 if quant_opp else -1 if quant_same else 0) -.22*agent_same -.18*flow_same + .25*give_ratio)
-            exit_conf=(1-learned_weight)*heuristic+learned_weight*exit_p
-            self._sample_exit(ts_ms,price,x,qd)
-            age_s=max(0.0,(ts_ms-p.entry_ts_ms)/1000.0)
-            can_policy_exit=age_s>=self.MIN_HOLD_S
-            learned_exit_ready=self.exit_labels>=30
-            strong_adverse=(flow_same<=-.35 and agent_same<=-.25 and cur<=0.0)
-            profit_protection=(p.mfe>=self.round_trip_cost*1.50 and cur>=self.round_trip_cost*.75
-                               and give_ratio>=.30 and exit_conf>=.55)
-            learned_exit=(learned_exit_ready and exit_conf>=.67 and cur>self.round_trip_cost)
-            if can_policy_exit and (strong_adverse or profit_protection or learned_exit):
-                reason=("LEARNED_EXIT" if learned_exit else
-                        "BOOTSTRAP_STRONG_ADVERSE" if strong_adverse else
-                        "BOOTSTRAP_PROFIT_PROTECTION")
-                events.extend(self._close(ts_ms,price,reason))
-            else:
-                events.append({"event":"HOLD","ts_ms":ts_ms,"side":side_name(p.side),"price":price,
-                               "mfe":p.mfe,"mae":p.mae,"current_return":cur,
-                               "position_age_s":age_s,"min_hold_s":self.MIN_HOLD_S,
-                               "exit_confidence":exit_conf,"quant_action":qd.get("action"),
-                               "quant_used_for_exit":quant_ready,
-                               "learned_exit_ready":learned_exit_ready,
-                               "profit_protection_ready":profit_protection,
-                               "strong_adverse":strong_adverse})
-
-        if self.position is None:
-            c,local_conf=self._best_local()
-            if c is not None:
-                side=1 if c.side=="LOW" else -1
-                agent_same=side*float(x.get("agent_consensus",0.0) or 0.0)
-                flow_same=side*float(x.get("flow_imbalance_raw_60s",x.get("flow_imbalance_60s",0.0)) or 0.0)
-                quant_same=qd.get("action")==side_name(side)
-                quant_ready=bool(qd.get("champion_ready"))
-                cooldown=(self.last_exit is None or ts_ms-int(self.last_exit["exit_ts_ms"])>=60_000)
-                same_local_reentry=self._same_local_episode(c)
-                if same_local_reentry:
-                    self._sample_reentry(ts_ms,price,x,c,qd)
-                    rx=self._reentry_x(x,ts_ms,price,c,qd)
-                    rp=self._model_p(self.reentry_model,rx)
-                    re_ready=self.reentry_labels>=30
-                    re_conf=rp
-                    # Caterpillar re-entry requires learned edge AND resumed executed
-                    # flow in the structural-local direction. This is the core snake
-                    # behavior, not an extra technical indicator.
-                    resumed_flow=flow_same>0.0
-                    edge_ok=re_ready and re_conf>=.65 and resumed_flow
-                    entry_conf=None;entry_ps=None;entry_ready=None
-                else:
-                    # Learn entry quality from hypothetical candidates first.
-                    # PAPER is not used as exploration capital.
-                    self._sample_entry(ts_ms,price,x,c,qd)
-                    entry_conf,entry_ps,entry_ready=self._entry_confidence(x,ts_ms,price,c,qd)
-                    # Initial Caterpillar entry also waits for executed flow to align
-                    # with the confirmed structural-local direction.
-                    resumed_flow=flow_same>0.0
-                    edge_ok=entry_ready and entry_conf>=.62 and resumed_flow
-                    re_conf=None
-                if local_conf>=.55 and edge_ok and cooldown:
-                    events.extend(self._open(ts_ms,price,side,c,local_conf,qd,reentry=same_local_reentry))
-                    if events:
-                        events[-1]["entry_confidence"]=entry_conf
-                        events[-1]["entry_horizon_probabilities"]=entry_ps
-                        events[-1]["entry_model_ready"]=entry_ready
-                        events[-1]["resumed_flow"]=flow_same>0.0
-                        if same_local_reentry:
-                            events[-1]["reentry_confidence"]=re_conf
-                            events[-1]["resumed_flow"]=flow_same>0.0
-                else:
-                    events.append({"event":"LEARN_ENTRY","ts_ms":ts_ms,"side":side_name(side),
-                                   "local_id":c.ident,"local_confidence":local_conf,
-                                   "reentry":same_local_reentry,
-                                   "entry_ready":entry_ready,"entry_confidence":entry_conf,
-                                   "reentry_ready":(self.reentry_labels>=30 if same_local_reentry else None),
-                                   "reentry_confidence":re_conf,
-                                   "resumed_flow":(flow_same>0.0 if same_local_reentry else None)})
+        if c is not None:
+            self._sample_direct_policy(ts_ms,price,x,c,qd)
+            events.extend(self._execute_direct_policy(ts_ms,price,x,c,qd))
+        else:
+            self.last_policy_decision={"ts_ms":int(ts_ms),"action":"WAIT_LOCAL","ready":False}
 
         self.last_ts_ms=ts_ms;self.last_price=price
         for e in events:self.actions.append(e)
@@ -1486,7 +1608,7 @@ class CaterpillarQuantLearner:
             "mean_mfe_capture_ratio":statistics.fmean(captures) if captures else None,
             "median_mfe_capture_ratio":statistics.median(captures) if captures else None,
             "local_target":"FULL_HISTORY_STRICT_H1_L6_K2",
-            "local_policy":"H1 local hard-defines direction; Caterpillar v5 entry learns usable MFE, normal exit learns MFE/profit preservation, re-entry requires learned same-leg continuation plus resumed executed flow; opposite-local/emergency remains separate",
+            "local_policy":"Direct policy v6: H1 local hard-defines direction only. The learned causal policy alone chooses WAIT/ENTER/HOLD/EXIT/RE-ENTER from the full current state; no manual confidence/action thresholds participate in execution.",
             "bootstrap_diagnostic":{"disabled_for_policy":True,"reason":"recency-window local is training-only"},
             "training_progress":self._training_progress(),
             "structural_history":getattr(self,"structural_history",{}),
@@ -1496,11 +1618,13 @@ class CaterpillarQuantLearner:
                             for s in ("LOW","HIGH") for h in self.LOCAL_STAGES},
             "bounce_models":{f"{s}_{h}s":{"labels":self.bounce_labels[(s,h)],"positive":self.bounce_pos[(s,h)]}
                             for s in ("LOW","HIGH") for h in self.LOCAL_STAGES},
+            "direct_policy":self._direct_policy_report(),
             "entry_model":{"labels":dict(self.entry_labels),"positive":dict(self.entry_pos),
-                           "ready":min(self.entry_labels.values())>=30},
-            "exit_model":{"labels":self.exit_labels,"exit_positive":self.exit_pos},
+                           "ready":False,"execution":False,"legacy":True},
+            "exit_model":{"labels":self.exit_labels,"exit_positive":self.exit_pos,
+                          "execution":False,"legacy":True},
             "reentry_model":{"labels":self.reentry_labels,"reentry_positive":self.reentry_pos,
-                             "ready":self.reentry_labels>=30},
+                             "ready":False,"execution":False,"legacy":True},
             "fibonacci":{**self._fib_report(),"current":getattr(self,"current_fib",None)},
             "active_local":None if self.last_confirmed_local is None else {
                 "id":self.last_confirmed_local.ident,"side":self.last_confirmed_local.side,
