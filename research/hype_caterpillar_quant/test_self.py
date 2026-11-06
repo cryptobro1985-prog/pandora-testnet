@@ -55,6 +55,24 @@ def fake_provisional_low_state():
     candles[4*H]["high"]=110.0
     return SimpleNamespace(candles={"60":candles})
 
+def test_same_h1_extremes_use_m1_order():
+    q=new()
+    candles60={}
+    for i in range(10):
+        candles60[i*H]={"start_ms":i*H,"open":100.0,"close":100.0,"high":104.0,"low":96.0}
+    candles60[9*H]={"start_ms":9*H,"open":100.0,"close":99.0,"high":110.0,"low":90.0}
+    candles1={}
+    for j in range(60):
+        st=9*H+j*60_000
+        candles1[st]={"start_ms":st,"open":100.0,"close":100.0,"high":103.0,"low":97.0}
+    candles1[9*H+5*60_000]["high"]=110.0
+    candles1[9*H+45*60_000]["low"]=90.0
+    s=SimpleNamespace(candles={"60":candles60,"1":candles1})
+    out=q.observe(10*H+10*60_000,92.0,x(),s)
+    assert any(e["event"]=="PROVISIONAL_H1_LOCAL_BOOTSTRAP" and e["side"]=="LOW" for e in out["events"])
+    assert q.bootstrap_diagnostic["resolution"]=="M1_INTRAHOUR_ORDER"
+    assert q.bootstrap_diagnostic["m1_resolved_side"]=="LOW"
+
 def test_provisional_low_starts_caterpillar_now():
     q=new();s=fake_provisional_low_state();ts=10*H+10*60_000
     out=q.observe(ts,92.0,x(),s)
@@ -106,6 +124,7 @@ def test_strict_target_available_after_k2():
 
 def main():
     test_construct()
+    test_same_h1_extremes_use_m1_order()
     test_provisional_low_starts_caterpillar_now()
     test_strict_bootstrap_low_enters_long()
     test_strict_bootstrap_high_enters_short()
