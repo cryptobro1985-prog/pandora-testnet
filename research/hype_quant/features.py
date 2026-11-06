@@ -78,20 +78,32 @@ class FeatureState:
         self.last_price=None
         self.dominance_samples=deque()
         self.point_seen=set()
+        self.point_last_seen_ms={}
+        self._mark_ts_ms=None
         self.feature_names_seen=set()
         self.max_feature_count=0
 
     def _mark(self,*ids):
-        self.point_seen.update(i for i in ids if i in INPUT_IDS or i in METADATA_IDS)
+        if not hasattr(self,"point_last_seen_ms"):self.point_last_seen_ms={}
+        valid=[i for i in ids if i in INPUT_IDS or i in METADATA_IDS]
+        self.point_seen.update(valid)
+        ts=getattr(self,"_mark_ts_ms",None) or getattr(self,"last_ts_ms",None) or getattr(self,"last_raw_received_ts",None)
+        if ts:
+            for i in valid:self.point_last_seen_ms[i]=int(ts)
 
     def coverage_report(self):
         seen_inputs=sorted(self.point_seen & INPUT_IDS)
+        if not hasattr(self,"point_last_seen_ms"):self.point_last_seen_ms={}
+        newest=max(self.point_last_seen_ms.values(),default=(self.last_ts_ms or 0))
+        ages={str(i):(None if i not in self.point_last_seen_ms or not newest else max(0.0,(newest-self.point_last_seen_ms[i])/1000.0))
+              for i in sorted(INPUT_IDS)}
         return {
             **contract_summary(),
             "supported_input_ids":sorted(INPUT_IDS),
             "seen_input_ids":seen_inputs,
             "missing_seen_input_ids":sorted(INPUT_IDS-set(seen_inputs)),
             "seen_input_count":len(seen_inputs),
+            "point_age_seconds":ages,
             "feature_names_seen_count":len(self.feature_names_seen),
             "max_features_in_one_state":self.max_feature_count,
             "target_eval_ids_reserved_for_post_event_labels":sorted(TARGET_IDS),
@@ -109,6 +121,7 @@ class FeatureState:
 
     def update_raw_frame(self,envelope:dict[str,Any]):
         recv=int(envelope.get("received_ts_ms") or 0)
+        self._mark_ts_ms=recv or getattr(self,"_mark_ts_ms",None)
         seq=envelope.get("receipt_sequence")
         source=str(envelope.get("_source_path") or "default")
         if seq is not None:
@@ -248,6 +261,7 @@ class FeatureState:
     def update_market_context(self,row:dict[str,Any]):
         if not isinstance(row,dict):return
         recv=int(row.get("received_ts_ms") or row.get("ts_ms") or 0)
+        self._mark_ts_ms=recv or getattr(self,"_mark_ts_ms",None)
         self.market_context=row
         self.initial_backfill_seen=self.initial_backfill_seen or bool(row.get("initial_backfill"))
         ticker=row.get("ticker") or {}
@@ -285,6 +299,7 @@ class FeatureState:
 
     def update_structural_context(self,row:dict[str,Any]):
         if isinstance(row,dict) and "error" not in row:
+            self._mark_ts_ms=int(row.get("ts_ms") or row.get("received_ts_ms") or 0) or getattr(self,"_mark_ts_ms",None)
             self.structural=row
             self._mark(9,10,11,36,37,38,39,40,77,78,79,80,82,111,113,114,115,116)
 
@@ -355,6 +370,7 @@ class FeatureState:
 
     def update_micro(self,row:dict[str,Any])->tuple[float,dict[str,float]]:
         ts=int(row.get("ts_ms") or 0)
+        self._mark_ts_ms=ts or getattr(self,"_mark_ts_ms",None)
         price=num(row.get("mid")) or num(row.get("best_bid")) or num(self.ticker.get("lastPrice")) or num(self.structural.get("last_price"))
         if not price or price<=0:raise ValueError("micro row has no valid price")
         gap_s=0.0 if self.last_ts_ms is None else max(0.0,(ts-self.last_ts_ms)/1000.0)
