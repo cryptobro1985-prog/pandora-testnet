@@ -89,6 +89,7 @@ class PaperPosition:
     margin:float
     local_id:int
     reentry_no:int
+    local_key:str|None=None
     mfe:float=0.0
     mae:float=0.0
     last_exit_sample_ms:int=0
@@ -521,7 +522,7 @@ class CaterpillarQuantLearner:
         return out
 
     def _sample_reentry(self,ts_ms,price,x,c,qd):
-        if self.last_exit is None or self.last_exit.get("local_id")!=c.ident:return
+        if not self._same_local_episode(c):return
         if ts_ms-self.last_reentry_sample_ms<self.POLICY_SAMPLE_S*1000:return
         side=1 if c.side=="LOW" else -1
         rx=self._reentry_x(x,ts_ms,price,c,qd)
@@ -542,13 +543,31 @@ class CaterpillarQuantLearner:
             self.reentry_labels+=1;self.reentry_pos+=int(y)
         self.reentry_pending=keep
 
+    def _local_key(self,c):
+        if c is None:return None
+        hour=getattr(c,"strict_hour_ms",None)
+        if hour is None:
+            hour=(int(c.extreme_ts_ms)//3_600_000)*3_600_000
+        return f"{c.side}:{int(hour)}:{float(c.extreme_price):.8f}"
+
+    def _same_local_episode(self,c):
+        if c is None or not self.last_exit:return False
+        side=1 if c.side=="LOW" else -1
+        if self.last_exit.get("side")!=side_name(side):return False
+        key=self.last_exit.get("local_key")
+        if key:return key==self._local_key(c)
+        # Migration fallback for old checkpoints that predate stable local keys.
+        if self.last_exit.get("local_id")==c.ident:return True
+        anchor=getattr(c,"strict_hour_ms",None)
+        return anchor is not None and int(self.last_exit.get("exit_ts_ms",0))>=int(anchor)+3_600_000
+
     def _open(self,ts_ms,price,side,c,local_conf,qd,reentry=False):
         lev=float(qd.get("leverage") or 5)
         frac=float(qd.get("margin_fraction") or .05)
         lev=max(1.0,min(25.0,lev));frac=max(.02,min(.20,frac))
         margin=self.equity*frac;notional=margin*lev
         re_no=(self.last_exit.get("reentry_no",0)+1 if reentry and self.last_exit else 0)
-        self.position=PaperPosition(side,ts_ms,price,lev,frac,notional,margin,c.ident,re_no)
+        self.position=PaperPosition(side,ts_ms,price,lev,frac,notional,margin,c.ident,re_no,self._local_key(c))
         if reentry:self.reentries+=1
         return [{"event":"REENTER" if reentry else "ENTER","ts_ms":ts_ms,"side":side_name(side),
                  "price":price,"local_id":c.ident,"local_confidence":local_conf,
@@ -569,7 +588,7 @@ class CaterpillarQuantLearner:
              "pnl":pnl,"equity_before":before,"equity_after":self.equity,
              "mfe":p.mfe,"mae":p.mae,"mfe_capture_ratio":capture,
              "mfe_giveback":max(0.0,p.mfe-gross),"reason":reason,
-             "local_id":p.local_id,"reentry_no":p.reentry_no,
+             "local_id":p.local_id,"local_key":getattr(p,"local_key",None),"reentry_no":p.reentry_no,
              "leverage":p.leverage,"margin_fraction":p.margin_fraction}
         self.trades.append(row)
         self.path_equity*=max(0.0,1.0+net)
@@ -630,14 +649,25 @@ class CaterpillarQuantLearner:
             self._sample_exit(ts_ms,price,x,qd)
             age_s=max(0.0,(ts_ms-p.entry_ts_ms)/1000.0)
             can_policy_exit=age_s>=self.MIN_HOLD_S
-            if can_policy_exit and (exit_conf>=.67 or (p.mfe>self.round_trip_cost and give_ratio>=.45 and exit_conf>=.52)):
-                events.extend(self._close(ts_ms,price,"LEARNED_EXIT_MFE_FLOW"))
+            learned_exit_ready=self.exit_labels>=30
+            strong_adverse=(flow_same<=-.35 and agent_same<=-.25 and cur<=0.0)
+            profit_protection=(p.mfe>=self.round_trip_cost*1.25 and cur>=self.round_trip_cost*.75
+                               and give_ratio>=.45 and exit_conf>=.55)
+            learned_exit=(learned_exit_ready and exit_conf>=.67)
+            if can_policy_exit and (strong_adverse or profit_protection or learned_exit):
+                reason=("LEARNED_EXIT" if learned_exit else
+                        "BOOTSTRAP_STRONG_ADVERSE" if strong_adverse else
+                        "BOOTSTRAP_PROFIT_PROTECTION")
+                events.extend(self._close(ts_ms,price,reason))
             else:
                 events.append({"event":"HOLD","ts_ms":ts_ms,"side":side_name(p.side),"price":price,
                                "mfe":p.mfe,"mae":p.mae,"current_return":cur,
                                "position_age_s":age_s,"min_hold_s":self.MIN_HOLD_S,
                                "exit_confidence":exit_conf,"quant_action":qd.get("action"),
-                               "quant_used_for_exit":quant_ready})
+                               "quant_used_for_exit":quant_ready,
+                               "learned_exit_ready":learned_exit_ready,
+                               "profit_protection_ready":profit_protection,
+                               "strong_adverse":strong_adverse})
 
         if self.position is None:
             c,local_conf=self._best_local()
@@ -648,7 +678,7 @@ class CaterpillarQuantLearner:
                 quant_same=qd.get("action")==side_name(side)
                 quant_ready=bool(qd.get("champion_ready"))
                 cooldown=(self.last_exit is None or ts_ms-int(self.last_exit["exit_ts_ms"])>=60_000)
-                same_local_reentry=bool(self.last_exit and self.last_exit["local_id"]==c.ident and self.last_exit["side"]==side_name(side))
+                same_local_reentry=self._same_local_episode(c)
                 if same_local_reentry:
                     self._sample_reentry(ts_ms,price,x,c,qd)
                     rx=self._reentry_x(x,ts_ms,price,c,qd)
@@ -681,7 +711,7 @@ class CaterpillarQuantLearner:
                     "side":side_name(p.side),"entry_ts_ms":p.entry_ts_ms,"entry_price":p.entry_price,
                     "mark_price":self.last_price,"current_return":current_return,
                     "mfe":p.mfe,"mae":p.mae,"leverage":p.leverage,"margin_fraction":p.margin_fraction,
-                    "local_id":p.local_id,"reentry_no":p.reentry_no},
+                    "local_id":p.local_id,"local_key":getattr(p,"local_key",None),"reentry_no":p.reentry_no},
                 "closed_trades":len(self.trades),"reentries":self.reentries}
 
     @staticmethod
