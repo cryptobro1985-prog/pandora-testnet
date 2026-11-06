@@ -202,9 +202,12 @@ class AstraCortex:
         disagreement=float(features.get("agent_disagreement",0.0) or 0.0)
         adversary=float(features.get("agent_adversary_risk",0.0) or 0.0)
         expert_disagreement=self._strategy_disagreement_score(strategy_lab)
+        watch=(base_report.get("local_watch") or {}) if isinstance(base_report,dict) else {}
+        opposite_watch=float(watch.get("score") or 0.0)
         return (base_action!=self.last_base_action or local_key!=self.last_local_key
                 or bool(names & {"ENTER","EXIT","REENTER","STRICT_H1_LOCAL_SYNC","FIB_TOUCH"})
-                or disagreement>=0.35 or adversary>=0.55 or expert_disagreement>=0.5)
+                or disagreement>=0.35 or adversary>=0.55 or expert_disagreement>=0.5
+                or opposite_watch>=0.50)
 
     def due(self,ts_ms,features,base_decision,base_report,strategy_lab=None):
         if not self.enabled:return False
@@ -312,7 +315,8 @@ class AstraCortex:
                 "You are CORTEX 20B, an independent reasoning layer in a research-only HYPEUSDT system. "
                 "Reserve enough output budget for the final JSON; do not spend the entire completion on hidden reasoning. "
                 "Use only the supplied causal state; future target/evaluation labels are excluded. "
-                "You are the META-CONTROLLER above three expert trading systems: LOCAL_STRAIGHT, "
+                "Structural rule: if the latest confirmed H1 local is LOW, the active structural leg is UP/LOW-to-HIGH and the structural bias is LONG until a confirmed HIGH; if the latest confirmed H1 local is HIGH, the active structural leg is DOWN/HIGH-to-LOW and the structural bias is SHORT until a confirmed LOW. Short-horizon Quant may disagree, but it must be described as counter-leg pressure rather than redefining the structural regime. Pay special attention to local_watch for the forming opposite local. "
+                "You are the META-CONTROLLER above three expert trading systems: LOCAL_STRAIGHT, 
                 "CATERPILLAR_SNAKE and FIBONACCI_ZIGZAG. Compare their learned state, current position, "
                 "maturity, drawdown and evidence before deciding. Compare LONG, SHORT, HOLD, EXIT and WAIT. "
                 "Explicitly test contradictions between H1 local structure, executed flow, price response, "
@@ -548,6 +552,7 @@ class AstraCortex:
                "base_paper":self._compact_paper(base_decision.get("paper") or {}),
                "active_local":self._compact_local(base_report.get("active_local")),
                "early_local_shadow":base_report.get("early_local") or {},
+               "local_watch":base_report.get("local_watch") or {},
                "policy_state":base_report.get("policy_state"),
                "quant_training":{"overall_percent":tp.get("overall_percent"),"status":tp.get("status"),
                                   "heads":tp.get("heads")},
