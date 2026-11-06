@@ -25,10 +25,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  CAPTURE_MINUTES: "170"
+  CAPTURE_MINUTES: "30"
   HYPE_REST_RELAY_URL: "https://hype-rest-relay.onrender.com"
   CATERPILLAR_QUANT_ENABLED: "1"
-  CATERPILLAR_POLICY_MODE: "learned-local-v2-direct-policy-v7"
+  CATERPILLAR_POLICY_MODE: "learned-local-v3-direct-policy-v7"
   CATERPILLAR_MONITOR_URL: "https://hype-caterpillar-quant-monitor.onrender.com/api/ingest"
   ASTRA_CORTEX_ENABLED: "1"
   CORTEX_LOCAL_ENABLED: "1"
@@ -50,7 +50,7 @@ env:
 jobs:
   segment_1:
     runs-on: ubuntu-latest
-    timeout-minutes: 195
+    timeout-minutes: 55
     steps:
       - name: Cancel superseded HYPE collector runs
         env:
@@ -164,7 +164,7 @@ jobs:
     needs: segment_1
     if: ${{ success() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 195
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -206,7 +206,7 @@ jobs:
     needs: segment_2
     if: ${{ success() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 195
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -248,7 +248,7 @@ jobs:
     needs: segment_3
     if: ${{ success() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 195
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
