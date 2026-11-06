@@ -97,6 +97,7 @@ def main():
     report={"version":model.VERSION,"teacher":"strict_true H1 Local labels","heads":{},
             "historical_rows":len(rows),"leakage_guard":"strict_true and all target/eval fields are labels only"}
     memory={"version":"HYPE-LOCAL-RELATIONSHIP-MEMORY-v1","teacher":"strict_true","heads":{}}
+    class_weights={}
 
     for side in ("LOW","HIGH"):
       for stage in STAGES:
@@ -105,8 +106,14 @@ def main():
         train=[r for r in rr if int(r["candidate_ts_ms"])<TRAIN_END]
         valid=[r for r in rr if TRAIN_END<=int(r["candidate_ts_ms"])<OOS_START]
         oos=[r for r in rr if int(r["candidate_ts_ms"])>=OOS_START]
+        pos=sum(bool(r["strict_true"]) for r in train)
+        neg=max(0,len(train)-pos)
+        pos_repeat=max(1,min(8,round(neg/max(1,pos))))
+        class_weights[(side,stage)]=pos_repeat
         temp=LocalOnlyModel()
-        for r in train:temp.learn(side,stage,r["features"],r["strict_true"])
+        for r in train:
+            temp.learn(side,stage,r["features"],r["strict_true"],
+                       repeat=(pos_repeat if r["strict_true"] else 1))
         vp=[temp.probability(side,stage,r["features"]) for r in valid]
         th=choose_threshold(valid,vp) if valid else .5
         op=[temp.probability(side,stage,r["features"]) for r in oos]
@@ -116,6 +123,7 @@ def main():
             "validation":stats(valid,vp,th),
             "oos":stats(oos,op,th),
             "threshold":th,
+            "positive_oversample_repeat":pos_repeat,
         }
         fx=feature_effects(train+valid)
         memory["heads"][key]={
@@ -128,7 +136,9 @@ def main():
 
     # After honest OOS evaluation, final production research model consumes all 30d labels.
     for r in rows:
-        model.learn(r["side"],int(r["delay_s"]),r["features"],r["strict_true"])
+        key=(r["side"],int(r["delay_s"]))
+        repeat=class_weights.get(key,1) if r["strict_true"] else 1
+        model.learn(r["side"],int(r["delay_s"]),r["features"],r["strict_true"],repeat=repeat)
     model.history_meta={
         "period":["2026-10-04","2026-11-03"],
         "candidate_snapshots_total":6261,
