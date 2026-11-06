@@ -1,0 +1,48 @@
+name: HYPE Full116 Local Replay
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/only_profit/replay_locals_full116.py"
+      - ".github/workflows/hype-full116-local-replay.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: python -m pip install msgpack
+      - name: Download preserved full116 HYPE dataset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" \
+            --jq '.artifacts | map(select((.expired|not) and .name=="HYPE-ONLY-PROFIT-24H-FULL116")) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          test -n "$ID"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$ID/zip" > full116.zip
+          mkdir -p input
+          unzip -q full116.zip -d input
+      - name: Detect Local High Low
+        run: |
+          mkdir -p out
+          python -m research.only_profit.replay_locals_full116 --root input --output out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-FULL116-LOCALS
+          path: out/**
+          if-no-files-found: error
+          retention-days: 90
