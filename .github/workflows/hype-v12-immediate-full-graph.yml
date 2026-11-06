@@ -1,7 +1,7 @@
-name: HYPE v14 Immediate Verified 1000-H1 Live
+name: HYPE v15 Direct-Relay 1000-H1 Live
 # compact-110-v4-fixed-pack
 # 2026-11-06-local-low-restart
-# caterpillar-quant-v14-verified-1000h1
+# caterpillar-quant-v15-direct-relay-1000h1
 
 on:
   push:
