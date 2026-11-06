@@ -17,8 +17,8 @@ permissions:
   issues: write
 
 concurrency:
-  group: hype-v6-forward-12h-caterpillar-v1-${{ github.ref }}
-  cancel-in-progress: true
+  group: hype-v6-forward-12h-caterpillar-v2-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   CAPTURE_MINUTES: "170"
