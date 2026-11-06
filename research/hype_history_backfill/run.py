@@ -113,11 +113,11 @@ def enrich(infile:Path,outfile:Path,mark,index,oi,funding):
             o=last_at(oi,ok,t)
             fr=last_at(funding,fk,t)
             if m:
-                f["hist_mark_available"]=1.0;f["hist_mark_close"]=m["close"]
+                f["hist_mark_available"]=1.0
                 if price and price>0:f["hist_mark_price_rel"]=m["close"]/price-1.0
                 counts["mark"]+=1
             if ix:
-                f["hist_index_available"]=1.0;f["hist_index_close"]=ix["close"]
+                f["hist_index_available"]=1.0
                 if price and price>0:f["hist_index_price_rel"]=ix["close"]/price-1.0
                 counts["index"]+=1
             if m and ix and ix["close"]:
