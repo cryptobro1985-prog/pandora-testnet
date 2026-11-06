@@ -14,7 +14,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: only-profit-continuous-v4-${{ github.ref }}
+  group: only-profit-continuous-v5-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
