@@ -1,0 +1,28 @@
+name: HYPE Caterpillar Cutover Stop Old
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-caterpillar-cutover-stop-old.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  stop_v1_group:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: hype-v6-forward-12h-caterpillar-v1-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - run: echo "v1 concurrency group superseded by Caterpillar v3"
+
+  stop_v2_group:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: hype-v6-forward-12h-caterpillar-v2-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - run: echo "v2 concurrency group superseded by Caterpillar v3"
