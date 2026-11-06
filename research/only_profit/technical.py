@@ -129,6 +129,8 @@ def score_components(x):
     timing=g("agent_timing_direction")
     confidence=g("agent_confidence",.5)
     adversary=g("agent_adversary_risk",0.0)
+    quant=g("quant_direction",0.0)
+    quant_conf=g("quant_confidence",0.0)
     return {
         "trend":max(-1,min(1,trend)),
         "stoch_momentum":max(-1,min(1,stoch_momentum)),
@@ -140,6 +142,8 @@ def score_components(x):
         "local":max(-1,min(1,local)),
         "structure":max(-1,min(1,structure)),
         "timing":max(-1,min(1,timing)),
-        "confidence":max(0,min(1,confidence)),
+        "quant":max(-1,min(1,quant)),
+        "quant_confidence":max(0,min(1,quant_conf)),
+        "confidence":max(0,min(1,max(confidence,quant_conf))),
         "adversary":max(0,min(1,adversary)),
     }
