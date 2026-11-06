@@ -17,6 +17,7 @@ import requests
 from .learner import clean_features
 
 DECISIONS=("WAIT","HOLD","ENTER_LONG","ENTER_SHORT","EXIT")
+STRATEGIES=("LOCAL_STRAIGHT","CATERPILLAR_SNAKE","FIBONACCI_ZIGZAG","ENSEMBLE","NONE")
 HORIZONS=(60,180,300)
 US_TZ=ZoneInfo("America/New_York")
 
@@ -58,11 +59,26 @@ DECISION_SCHEMA={
         "leverage":{"type":"integer","minimum":1,"maximum":25},
         "margin_fraction":{"type":"number","minimum":0.02,"maximum":0.20},
         "learning_note":{"type":"string"},
+        "preferred_strategy":{"type":"string","enum":list(STRATEGIES)},
+        "strategy_weights":{
+            "type":"object","additionalProperties":False,
+            "properties":{
+                "LOCAL_STRAIGHT":{"type":"number","minimum":0,"maximum":1},
+                "CATERPILLAR_SNAKE":{"type":"number","minimum":0,"maximum":1},
+                "FIBONACCI_ZIGZAG":{"type":"number","minimum":0,"maximum":1}
+            },
+            "required":["LOCAL_STRAIGHT","CATERPILLAR_SNAKE","FIBONACCI_ZIGZAG"]
+        },
+        "strategy_consensus":{"type":"string"},
+        "strategy_disagreement":{"type":"number","minimum":0,"maximum":1},
+        "arbitration_reason":{"type":"string"},
     },
     "required":["decision","confidence","market_regime","thesis","evidence_for",
                 "evidence_against","invalidation","expected_path_60s",
                 "expected_path_180s","expected_path_300s","risk_level",
-                "leverage","margin_fraction","learning_note"],
+                "leverage","margin_fraction","learning_note","preferred_strategy",
+                "strategy_weights","strategy_consensus","strategy_disagreement",
+                "arbitration_reason"],
 }
 
 def finite(v:Any)->bool:
@@ -244,7 +260,10 @@ class AstraCortex:
                          "max_up":float(p["high"])/float(p["price"])-1.0,
                          "max_down":1.0-float(p["low"])/float(p["price"]),
                          "directional_net":net if direction else None,
-                         "success":success,"thesis":p.get("thesis")}
+                         "success":success,"thesis":p.get("thesis"),
+                         "preferred_strategy":p.get("preferred_strategy"),
+                         "strategy_weights":p.get("strategy_weights"),
+                         "strategy_disagreement":p.get("strategy_disagreement")}
                 self.episodes.append(episode); self.episodes=self.episodes[-1000:]
                 self.matured_episodes+=1
                 self.last_critique={"decision":decision,"horizon_s":h,"success":success,
@@ -259,7 +278,8 @@ class AstraCortex:
 
     def _memory_for_prompt(self):
         return [{"horizon_s":e.get("horizon_s"),"us_session":e.get("us_session"),
-                 "decision":e.get("decision"),
+                 "decision":e.get("decision"),"preferred_strategy":e.get("preferred_strategy"),
+                 "strategy_weights":e.get("strategy_weights"),
                  "confidence":e.get("confidence"),"future_return":e.get("future_return"),
                  "directional_net":e.get("directional_net"),"success":e.get("success")}
                 for e in self.episodes[-18:]]
@@ -268,8 +288,11 @@ class AstraCortex:
         system=(f"Reasoning: {self.reasoning_effort}. Be decisive and keep internal reasoning compact enough for live use. "
                 "You are CORTEX 20B, an independent reasoning layer in a research-only HYPEUSDT system. "
                 "Use only the supplied causal state; future target/evaluation labels are excluded. "
-                "Compare LONG, SHORT, HOLD, EXIT and WAIT. Explicitly test contradictions between "
-                "H1 local structure, executed flow, price response, L50 book, OI, liquidations and Quant. "
+                "You are the META-CONTROLLER above three expert trading systems: LOCAL_STRAIGHT, "
+                "CATERPILLAR_SNAKE and FIBONACCI_ZIGZAG. Compare their learned state, current position, "
+                "maturity, drawdown and evidence before deciding. Compare LONG, SHORT, HOLD, EXIT and WAIT. "
+                "Explicitly test contradictions between H1 local structure, executed flow, price response, "
+                "L50 book, OI, liquidations, Quant and the three strategy experts. "
                 "Pay special attention to US premarket, US cash and US after-hours behavior, "
                 "but never assume a session is profitable by itself. Return ONLY compact JSON. "
                 "Do not expose private chain-of-thought; use short audit summaries.")
@@ -277,7 +300,11 @@ class AstraCortex:
                "evidence_for":["feature/value"],"evidence_against":["feature/value"],"invalidation":"condition",
                "expected_path_60s":"string","expected_path_180s":"string","expected_path_300s":"string",
                "risk_level":"LOW|MEDIUM|HIGH|EXTREME","leverage":1,"margin_fraction":0.02,
-               "learning_note":"short hypothesis/lesson"}
+               "learning_note":"short hypothesis/lesson",
+               "preferred_strategy":"LOCAL_STRAIGHT|CATERPILLAR_SNAKE|FIBONACCI_ZIGZAG|ENSEMBLE|NONE",
+               "strategy_weights":{"LOCAL_STRAIGHT":0.33,"CATERPILLAR_SNAKE":0.34,"FIBONACCI_ZIGZAG":0.33},
+               "strategy_consensus":"short summary","strategy_disagreement":0.0,
+               "arbitration_reason":"why this expert or ensemble deserves weight now"}
         user=("Emit one JSON object matching this shape:\n"+json.dumps(shape,separators=(",",":"))+
               "\nSTATE_JSON\n"+json.dumps(state,ensure_ascii=False,separators=(",",":")))
         return system,user
@@ -294,8 +321,19 @@ class AstraCortex:
         out["risk_level"]=risk if risk in ("LOW","MEDIUM","HIGH","EXTREME") else "HIGH"
         out["leverage"]=int(clip(out.get("leverage",1) or 1,1,25))
         out["margin_fraction"]=clip(out.get("margin_fraction",0.02) or 0.02,0.02,0.20)
+        pref=str(out.get("preferred_strategy") or "NONE").strip().upper()
+        out["preferred_strategy"]=pref if pref in STRATEGIES else "NONE"
+        weights=out.get("strategy_weights")
+        if not isinstance(weights,dict):weights={}
+        cleanw={k:clip(weights.get(k,0.0) or 0.0,0,1) for k in STRATEGIES[:3]}
+        total=sum(cleanw.values())
+        if total<=1e-9:cleanw={k:1/3 for k in STRATEGIES[:3]}
+        else:cleanw={k:v/total for k,v in cleanw.items()}
+        out["strategy_weights"]=cleanw
+        out["strategy_disagreement"]=clip(out.get("strategy_disagreement",0.0) or 0.0,0,1)
         for k in ("market_regime","thesis","invalidation","expected_path_60s",
-                  "expected_path_180s","expected_path_300s","learning_note"):
+                  "expected_path_180s","expected_path_300s","learning_note",
+                  "strategy_consensus","arbitration_reason"):
             out[k]=str(out.get(k) or "")[:700]
         for k in ("evidence_for","evidence_against"):
             v=out.get(k)
@@ -427,7 +465,52 @@ class AstraCortex:
         return {"equity":paper.get("equity"),"closed_trades":paper.get("closed_trades"),
                 "reentries":paper.get("reentries"),"open_position":op}
 
-    def observe(self,ts_ms,price,features,base_decision,base_report,cost_floor):
+    def _compact_strategy_lab(self,lab):
+        if not isinstance(lab,dict):return {}
+        strategies=lab.get("strategies") or {}
+        compact={}
+        directions=[]
+        for key in ("local_straight","caterpillar_snake","fibonacci_zigzag"):
+            z=strategies.get(key) or {}
+            op=z.get("open_position") or {}
+            side=str(op.get("side") or "FLAT")
+            if side in ("LONG","SHORT"):directions.append(side)
+            compact[key]={
+                "equity":z.get("equity"),"return_pct":z.get("return_pct"),
+                "closed_trades":z.get("closed_trades"),"win_rate":z.get("win_rate"),
+                "max_drawdown_pct":z.get("max_drawdown_pct"),
+                "mean_mfe":z.get("mean_mfe"),"mean_mae":z.get("mean_mae"),
+                "position":side,"entry_price":op.get("entry_price"),
+            }
+        fib=lab.get("fibonacci_learning") or {}
+        consensus=("AGREE_"+directions[0] if directions and len(set(directions))==1
+                   else "MIXED" if directions else "ALL_FLAT")
+        return {
+            "progress_percent":lab.get("progress_percent"),
+            "evidence_quality":lab.get("evidence_quality"),
+            "leader":lab.get("leader"),"same_risk_for_all":lab.get("same_risk_for_all"),
+            "experts":compact,"raw_consensus":consensus,
+            "fib_zigzag":{"training_percent":fib.get("training_percent"),
+                          "decisions":fib.get("decisions"),
+                          "resolved_transitions":fib.get("resolved_transitions"),
+                          "last_decision":fib.get("last_decision"),
+                          "pending_transition":fib.get("pending_transition")}
+        }
+
+    def _strategy_disagreement_score(self,lab):
+        if not isinstance(lab,dict):return 0.0
+        experts=(lab.get("strategies") or {})
+        sides=[]
+        for key in ("local_straight","caterpillar_snake","fibonacci_zigzag"):
+            op=(experts.get(key) or {}).get("open_position") or {}
+            side=str(op.get("side") or "FLAT")
+            sides.append(side if side in ("LONG","SHORT") else "FLAT")
+        uniq=len(set(sides))
+        if uniq<=1:return 0.0
+        if uniq==2:return 0.5
+        return 1.0
+
+    def observe(self,ts_ms,price,features,base_decision,base_report,cost_floor,strategy_lab=None):
         self._advance_pending(ts_ms,price)
         if not self.due(ts_ms,features,base_decision,base_report):
             return {"new_decision":False,"decision":self.last_decision,"status":self.status(ts_ms)}
@@ -441,7 +524,9 @@ class AstraCortex:
                "base_paper":self._compact_paper(base_decision.get("paper") or {}),
                "active_local":self._compact_local(base_report.get("active_local")),
                "policy_state":base_report.get("policy_state"),
-               "quant_training":{"overall_percent":tp.get("overall_percent"),"status":tp.get("status")},
+               "quant_training":{"overall_percent":tp.get("overall_percent"),"status":tp.get("status"),
+                                  "heads":tp.get("heads")},
+               "strategy_experts":self._compact_strategy_lab(strategy_lab),
                "episodic_memory":self._memory_for_prompt()[-8:],
                "cortex_us_session_stats":self._session_stats(),
                "cortex_24h_progress":self._training_progress(ts_ms),
@@ -461,6 +546,9 @@ class AstraCortex:
             self.pending.append({"ts_ms":int(ts_ms),"price":float(price),"high":float(price),"low":float(price),
                                  "us_session":session,
                                  "decision":decision.get("decision"),"confidence":decision.get("confidence"),
+                                 "preferred_strategy":decision.get("preferred_strategy"),
+                                 "strategy_weights":decision.get("strategy_weights"),
+                                 "strategy_disagreement":decision.get("strategy_disagreement"),
                                  "thesis":decision.get("thesis"),"cost_floor":float(cost_floor),"done":[]})
             self.pending=self.pending[-400:]; self.save()
             return {"new_decision":True,"decision":decision,"status":self.status(ts_ms)}
