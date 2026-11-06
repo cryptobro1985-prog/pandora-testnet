@@ -181,9 +181,28 @@ class CaterpillarQuantLearner:
         self.policy_version=2
         self.bootstrap_diagnostic={}
         self.structural_history={}
+        self.early_local_models={"LOW":binary_model(),"HIGH":binary_model()}
+        self.early_local_last_trained_hour_ms=None
+        self.early_local_stats={side:{"examples":0,"positives":0,"tp":0,"fp":0,"fn":0,"tn":0,"brier_sum":0.0}
+                                for side in ("LOW","HIGH")}
+        self.early_local_shadow={}
         self.prediction_checks={"local":0,"bounce":0,"entry":0,"exit":0,"reentry":0,"fib":0}
         self.prediction_errors={"local":0,"bounce":0,"entry":0,"exit":0,"reentry":0,"fib":0}
         self._ensure_fib()
+
+    def _ensure_early_local(self):
+        if not hasattr(self,"early_local_models"):
+            self.early_local_models={"LOW":binary_model(),"HIGH":binary_model()}
+        if not hasattr(self,"early_local_last_trained_hour_ms"):
+            self.early_local_last_trained_hour_ms=None
+        if not hasattr(self,"early_local_stats") or not isinstance(self.early_local_stats,dict):
+            self.early_local_stats={side:{"examples":0,"positives":0,"tp":0,"fp":0,"fn":0,"tn":0,"brier_sum":0.0}
+                                    for side in ("LOW","HIGH")}
+        for side in ("LOW","HIGH"):
+            z=self.early_local_stats.setdefault(side,{})
+            for k in ("examples","positives","tp","fp","fn","tn"):z.setdefault(k,0)
+            z.setdefault("brier_sum",0.0)
+        if not hasattr(self,"early_local_shadow"):self.early_local_shadow={}
 
     def _ensure_fib(self):
         if not hasattr(self,"prediction_checks") or not isinstance(self.prediction_checks,dict):
@@ -359,6 +378,7 @@ class CaterpillarQuantLearner:
 
     def _ensure_v2(self):
         self._ensure_fib()
+        self._ensure_early_local()
         if getattr(self,"policy_version",1)>=2:
             if hasattr(self.quant,"_ensure_v2"):self.quant._ensure_v2()
             self._ensure_full_graph_policy()
@@ -464,6 +484,86 @@ class CaterpillarQuantLearner:
                     rows.append({"start_ms":int(start),"high":float(b["high"]),"low":float(b["low"]),
                                  "open":float(b.get("open") or b["low"]),"close":float(b.get("close") or b["high"])})
         return rows
+
+    @staticmethod
+    def _h1_early_features(rows,i):
+        if i<6 or i>=len(rows):return None
+        cur=rows[i];past=rows[i-6:i]
+        win=past+[cur]
+        if any(b["start_ms"]!=a["start_ms"]+3_600_000 for a,b in zip(win,win[1:])):return None
+        past_hi=max(z["high"] for z in past);past_lo=min(z["low"] for z in past)
+        span=max(past_hi-past_lo,1e-9);rng=max(cur["high"]-cur["low"],1e-9)
+        closes=[z["close"] for z in past];ranges=[max(z["high"]-z["low"],1e-9) for z in past]
+        return {
+            "h1_high_break_bps":(cur["high"]/max(past_hi,1e-9)-1.0)*10000.0,
+            "h1_low_break_bps":(past_lo/max(cur["low"],1e-9)-1.0)*10000.0,
+            "h1_high_position":(cur["high"]-past_lo)/span,
+            "h1_low_position":(cur["low"]-past_lo)/span,
+            "h1_close_position":(cur["close"]-cur["low"])/rng,
+            "h1_body_bps":(cur["close"]/max(cur["open"],1e-9)-1.0)*10000.0,
+            "h1_range_bps":(cur["high"]/max(cur["low"],1e-9)-1.0)*10000.0,
+            "h1_upper_wick_share":max(0.0,cur["high"]-max(cur["open"],cur["close"]))/rng,
+            "h1_lower_wick_share":max(0.0,min(cur["open"],cur["close"])-cur["low"])/rng,
+            "h1_close_trend_6_bps":(cur["close"]/max(closes[0],1e-9)-1.0)*10000.0,
+            "h1_close_trend_3_bps":(cur["close"]/max(closes[-3],1e-9)-1.0)*10000.0,
+            "h1_prev_range_mean_bps":statistics.mean(ranges)/max(statistics.mean(closes),1e-9)*10000.0,
+            "h1_range_vs_prev_mean":rng/max(statistics.mean(ranges),1e-9),
+            "h1_prev_close_to_high_bps":(past_hi/max(cur["close"],1e-9)-1.0)*10000.0,
+            "h1_prev_low_to_close_bps":(cur["close"]/max(past_lo,1e-9)-1.0)*10000.0,
+        }
+
+    def _train_early_local_history(self,state,ts_ms):
+        self._ensure_early_local()
+        rows=self._completed_h1(state,ts_ms)
+        if len(rows)<9:return
+        last=self.early_local_last_trained_hour_ms
+        for i in range(6,len(rows)-2):
+            row=rows[i]
+            if last is not None and row["start_ms"]<=int(last):continue
+            win=rows[i-6:i+3]
+            if len(win)!=9 or any(b["start_ms"]!=a["start_ms"]+3_600_000 for a,b in zip(win,win[1:])):continue
+            x=self._h1_early_features(rows,i)
+            if not x:continue
+            past=rows[i-6:i];future=rows[i+1:i+3]
+            hi=row["high"]>max(z["high"] for z in past) and row["high"]>=max(z["high"] for z in future)
+            lo=row["low"]<min(z["low"] for z in past) and row["low"]<=min(z["low"] for z in future)
+            if hi and lo:hi=lo=False
+            for side,y in (("HIGH",hi),("LOW",lo)):
+                model=self.early_local_models[side];p=self._model_p(model,x);pred=p>=0.5
+                st=self.early_local_stats[side]
+                st["examples"]+=1;st["positives"]+=int(y);st["brier_sum"]+=(p-float(y))**2
+                if pred and y:st["tp"]+=1
+                elif pred and not y:st["fp"]+=1
+                elif not pred and y:st["fn"]+=1
+                else:st["tn"]+=1
+                self._learn_binary(model,x,y)
+            self.early_local_last_trained_hour_ms=int(row["start_ms"])
+        i=len(rows)-1;x=self._h1_early_features(rows,i)
+        if x:
+            low_p=self._model_p(self.early_local_models["LOW"],x)
+            high_p=self._model_p(self.early_local_models["HIGH"],x)
+            side="LOW" if low_p>high_p else "HIGH"
+            self.early_local_shadow={
+                "hour_ms":int(rows[i]["start_ms"]),
+                "price":float(rows[i]["low"] if side=="LOW" else rows[i]["high"]),
+                "side":side,"low_probability":low_p,"high_probability":high_p,
+                "confidence":max(low_p,high_p),"research_only":True,"trading_enabled":False,
+                "note":"causal H1 shadow forecast before K2 confirmation; not used for PAPER entries until validated",
+            }
+
+    def _early_local_report(self):
+        self._ensure_early_local();metrics={}
+        for side in ("LOW","HIGH"):
+            z=self.early_local_stats[side];n=max(1,int(z["examples"]))
+            tp=int(z["tp"]);fp=int(z["fp"]);fn=int(z["fn"])
+            metrics[side]={"examples":int(z["examples"]),"positives":int(z["positives"]),
+                           "precision":tp/max(1,tp+fp),"recall":tp/max(1,tp+fn),
+                           "brier":float(z["brier_sum"])/n,
+                           "tp":tp,"fp":fp,"fn":fn,"tn":int(z["tn"])}
+        return {"last_trained_hour_ms":self.early_local_last_trained_hour_ms,
+                "metrics":metrics,"shadow":self.early_local_shadow,
+                "trading_enabled":False,
+                "leakage_guard":"features use only current/past H1; K2 future is used only for matured labels"}
 
     def _strict_pivots(self,state,ts_ms):
         rows=self._completed_h1(state,ts_ms)
@@ -1026,6 +1126,7 @@ class CaterpillarQuantLearner:
     def observe(self,ts_ms,price,x,state):
         self._ensure_v2()
         events=[]
+        self._train_early_local_history(state,ts_ms)
         self._advance_local_labels(ts_ms,price,state)
         self._advance_entry_labels(ts_ms,price)
         self._advance_exit_labels(ts_ms,price)
@@ -1245,6 +1346,7 @@ class CaterpillarQuantLearner:
             "bootstrap_diagnostic":{"disabled_for_policy":True,"reason":"recency-window local is training-only"},
             "training_progress":self._training_progress(),
             "structural_history":getattr(self,"structural_history",{}),
+            "early_local":self._early_local_report(),
             "local_models":{f"{s}_{h}s":{"labels":self.local_labels[(s,h)],"positive":self.local_pos[(s,h)]}
                             for s in ("LOW","HIGH") for h in self.LOCAL_STAGES},
             "bounce_models":{f"{s}_{h}s":{"labels":self.bounce_labels[(s,h)],"positive":self.bounce_pos[(s,h)]}
