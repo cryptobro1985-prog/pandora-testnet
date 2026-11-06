@@ -10,7 +10,9 @@ on:
     paths:
       - ".github/workflows/hype-v12-immediate-full-graph.yml"
       - "research/hype_quant/astra_cortex.py"
+      - "research/hype_quant/start_local_cortex.sh"
       - "research/hype_caterpillar_quant/live_daemon.py"
+      - "research/hype_local_v5/capture_pack_segment.sh"
   workflow_dispatch:
 
 permissions:
@@ -28,11 +30,21 @@ env:
   CATERPILLAR_QUANT_ENABLED: "1"
   CATERPILLAR_MONITOR_URL: "https://hype-caterpillar-quant-monitor.onrender.com/api/ingest"
   ASTRA_CORTEX_ENABLED: "1"
-  ASTRA_CORTEX_MODEL: "gpt-6-astra"
+  CORTEX_LOCAL_ENABLED: "1"
+  CORTEX_BACKEND: "local_llama"
+  CORTEX_LOCAL_URL: "http://127.0.0.1:8081"
+  CORTEX_PORT: "8081"
+  CORTEX_CTX_SIZE: "4096"
+  CORTEX_THREADS: "4"
+  CORTEX_HF_MODEL: "ggml-org/gpt-oss-20b-GGUF:MXFP4"
+  ASTRA_CORTEX_MODEL: "gpt-oss-20b-local"
   ASTRA_CORTEX_REASONING_EFFORT: "high"
-  ASTRA_CORTEX_INTERVAL_SECONDS: "120"
-  ASTRA_CORTEX_URGENT_INTERVAL_SECONDS: "30"
-  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  ASTRA_CORTEX_INTERVAL_SECONDS: "300"
+  ASTRA_CORTEX_URGENT_INTERVAL_SECONDS: "60"
+  ASTRA_CORTEX_TIMEOUT_SECONDS: "180"
+  CORTEX_SPRINT_HOURS: "24"
+  CORTEX_24H_TARGET_DECISIONS: "240"
+  CORTEX_24H_TARGET_MATURED: "600"
 
 jobs:
   segment_1:
@@ -66,6 +78,7 @@ jobs:
           python -m py_compile research/hype_local_v5/compact_pack.py research/hype_local_v5/decode_compact.py research/hype_local_v5/context_capture.py research/hype_local_v5/resilient_capture.py
           python -m py_compile research/hype_quant/astra_cortex.py research/hype_caterpillar_quant/learner.py research/hype_caterpillar_quant/live_daemon.py
           bash -n research/hype_local_v5/capture_pack_segment.sh
+          bash -n research/hype_quant/start_local_cortex.sh
           python research/hype_local_v5/test_compact_smoke.py
           python -m research.hype_quant.test_self
           python -m research.hype_quant.test_astra_cortex
@@ -319,4 +332,4 @@ jobs:
         run: |
           set -euo pipefail
           echo "Self-chaining next HYPE collector run..."
-          gh workflow run hype-h1-v6-forward-12h.yml --repo "${GITHUB_REPOSITORY}" --ref "${GITHUB_REF_NAME}"
+          gh workflow run hype-v12-immediate-full-graph.yml --repo "${GITHUB_REPOSITORY}" --ref "${GITHUB_REF_NAME}"
