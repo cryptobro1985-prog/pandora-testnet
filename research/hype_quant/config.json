@@ -1,5 +1,5 @@
 {
-  "version": "HYPE-QUANT-LEARNER-v1",
+  "version": "HYPE-QUANT-LEARNER-v2",
   "research_only": true,
   "symbol": "HYPEUSDT",
   "state_sample_seconds": 5,
@@ -69,5 +69,6 @@
   "pattern_memory": {
     "max_examples": 20000,
     "neighbors": 31
-  }
+  },
+  "training_sample_seconds": 15
 }
