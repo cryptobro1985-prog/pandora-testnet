@@ -106,13 +106,21 @@ def fetch():
         ticker=rows[0] if rows else {}
         out["ticker"]=ticker; out["sources"]["ticker"]=base
 
-        obj,base=request_json("/v5/market/kline",{"category":"linear","symbol":SYMBOL,"interval":"1","limit":360})
-        kl1=obj.get("result",{}).get("list",[])
-        out["sources"]["kline_1m"]=base
-
-        obj,base=request_json("/v5/market/kline",{"category":"linear","symbol":SYMBOL,"interval":"60","limit":48})
-        kl60=obj.get("result",{}).get("list",[])
-        out["sources"]["kline_60m"]=base
+        candle_raw={}
+        for interval,limit in (("1",480),("3",240),("5",180),("60",72)):
+            obj,base=request_json("/v5/market/kline",{"category":"linear","symbol":SYMBOL,"interval":interval,"limit":limit})
+            raw=obj.get("result",{}).get("list",[])
+            candle_raw[interval]=raw
+            out["sources"][f"kline_{interval}m"]=base
+        def norm(rows,interval):
+            out_rows=[]
+            for r in reversed(rows):
+                if len(r)<7:continue
+                out_rows.append({"start_ms":int(r[0]),"open":float(r[1]),"high":float(r[2]),"low":float(r[3]),
+                                 "close":float(r[4]),"volume":float(r[5]),"turnover":float(r[6]),"interval":interval})
+            return out_rows
+        out["candles"]={k:norm(v,k) for k,v in candle_raw.items()}
+        kl1=candle_raw["1"];kl60=candle_raw["60"]
 
         obj,base=request_json("/v5/market/orderbook",{"category":"linear","symbol":SYMBOL,"limit":50})
         book=obj.get("result",{}) or {}
