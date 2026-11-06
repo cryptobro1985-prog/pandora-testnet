@@ -1,4 +1,4 @@
-name: HYPE v20 Caterpillar MFE Live
+name: HYPE v21 Direct Caterpillar Policy Live
 # compact-110-v4-fixed-pack
 # 2026-11-06-local-low-restart
 # caterpillar-quant-v15-direct-relay-1000h1-isolated
@@ -12,6 +12,8 @@ on:
       - "research/hype_quant/astra_cortex.py"
       - "research/hype_quant/start_local_cortex.sh"
       - "research/hype_caterpillar_quant/live_daemon.py"
+      - "research/hype_caterpillar_quant/learner.py"
+      - "research/hype_caterpillar_quant/test_self.py"
       - "research/hype_caterpillar_quant/strategy_lab.py"
       - "research/hype_local_v5/capture_pack_segment.sh"
   workflow_dispatch:
@@ -22,14 +24,14 @@ permissions:
   issues: write
 
 concurrency:
-  group: hype-v20-caterpillar-mfe-${{ github.ref }}
+  group: hype-v21-direct-policy-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   CAPTURE_MINUTES: "170"
   HYPE_REST_RELAY_URL: "https://hype-rest-relay.onrender.com"
   CATERPILLAR_QUANT_ENABLED: "1"
-  CATERPILLAR_POLICY_MODE: "learned-entry-v4"
+  CATERPILLAR_POLICY_MODE: "direct-policy-v6"
   CATERPILLAR_MONITOR_URL: "https://hype-caterpillar-quant-monitor.onrender.com/api/ingest"
   ASTRA_CORTEX_ENABLED: "1"
   CORTEX_LOCAL_ENABLED: "1"
