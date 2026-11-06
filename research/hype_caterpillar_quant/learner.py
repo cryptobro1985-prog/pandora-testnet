@@ -384,6 +384,7 @@ class CaterpillarQuantLearner:
             if hasattr(self.quant,"_ensure_v2"):self.quant._ensure_v2()
             self._ensure_full_graph_policy()
             self._ensure_entry_learning_policy()
+            self._ensure_mfe_caterpillar_policy()
             return
         # Local v1 labels described a 30m tradeable bounce, not a strict H1 pivot.
         # Preserve generic Quant history, but reset policy heads to the corrected contract.
@@ -412,6 +413,52 @@ class CaterpillarQuantLearner:
         if hasattr(self.quant,"_ensure_v2"):self.quant._ensure_v2()
         self._ensure_full_graph_policy()
         self._ensure_entry_learning_policy()
+        self._ensure_mfe_caterpillar_policy()
+
+    def _ensure_mfe_caterpillar_policy(self):
+        if getattr(self,"policy_contract_version",0)>=5:
+            if not hasattr(self,"legacy_paper_archives"):self.legacy_paper_archives=[]
+            return
+        old_trades=list(getattr(self,"trades",[]) or [])
+        old_equity=float(getattr(self,"equity",100.0) or 100.0)
+        gp=sum(max(0.0,float(t.get("pnl") or 0.0)) for t in old_trades)
+        gl=-sum(min(0.0,float(t.get("pnl") or 0.0)) for t in old_trades)
+        caps=[float(t["mfe_capture_ratio"]) for t in old_trades if finite(t.get("mfe_capture_ratio"))]
+        archive={
+            "policy_contract_version":getattr(self,"policy_contract_version",0),
+            "equity":old_equity,
+            "return_pct":(old_equity/100.0-1.0)*100.0,
+            "closed_trades":len(old_trades),
+            "reentries":int(getattr(self,"reentries",0) or 0),
+            "win_rate":(sum(float(t.get("pnl") or 0.0)>0 for t in old_trades)/len(old_trades) if old_trades else None),
+            "profit_factor":(gp/gl if gl>0 else None),
+            "mean_mfe_capture_ratio":(statistics.fmean(caps) if caps else None),
+            "reason":"v4 terminal-return entry / generic 5m exit contract retired; retained for audit only",
+        }
+        archives=list(getattr(self,"legacy_paper_archives",[]) or [])
+        prev=getattr(self,"legacy_paper_archive",None)
+        if isinstance(prev,dict) and prev not in archives:archives.append(prev)
+        archives.append(archive)
+        self.legacy_paper_archives=archives[-8:]
+        self.legacy_paper_archive=archive
+
+        # New Caterpillar contract learns the actual objective:
+        # entry -> usable favorable excursion, exit -> preserve accumulated MFE,
+        # re-entry -> renewed same-leg impulse after a pause.
+        self.entry_models={h:binary_model() for h in self.ENTRY_HORIZONS}
+        self.entry_labels={h:0 for h in self.ENTRY_HORIZONS}
+        self.entry_pos={h:0 for h in self.ENTRY_HORIZONS}
+        self.exit_model=binary_model();self.reentry_model=binary_model()
+        self.exit_labels=self.exit_pos=self.reentry_labels=self.reentry_pos=0
+        self.entry_pending=[];self.exit_pending=[];self.reentry_pending=[]
+        self.last_entry_sample_ms=0;self.last_reentry_sample_ms=0
+        self.position=None;self.last_exit=None
+        self.equity=100.0;self.peak_equity=100.0;self.max_drawdown=0.0
+        self.trades=[];self.path_equity=100.0;self.reentries=0
+        self.baseline_equity=100.0;self.baseline_position=None;self.baseline_trades=[]
+        for k in ("entry","exit","reentry"):
+            self.prediction_checks[k]=0;self.prediction_errors[k]=0
+        self.policy_contract_version=5
 
     def _ensure_entry_learning_policy(self):
         if getattr(self,"policy_contract_version",0)>=4:
@@ -850,7 +897,12 @@ class CaterpillarQuantLearner:
             p.worst_adverse=max(p.worst_adverse,-move)
             if ts_ms<p.mature_ts_ms:
                 keep.append(p);continue
-            y=move>self.round_trip_cost
+            # A good Caterpillar entry is one that offered a usable favorable excursion,
+            # even if the terminal price later retraced. Exit learning is responsible
+            # for capturing that excursion.
+            min_mfe=self.round_trip_cost*1.50
+            y=(p.best_favorable>=min_mfe and
+               p.best_favorable>=1.25*max(p.worst_adverse,1e-9))
             model=self.entry_models[p.horizon_s]
             pred=self._model_p(model,p.x)>=0.5
             self.prediction_checks["entry"]+=1
@@ -876,8 +928,18 @@ class CaterpillarQuantLearner:
             s.worst_adverse=max(s.worst_adverse,-move)
             if ts_ms<s.mature_ts_ms:
                 keep.append(s);continue
-            # EXIT is correct when the next 5m loses edge or adverse path dominates.
-            y=(move < -self.round_trip_cost*0.5) or (s.worst_adverse > max(0.0015,s.best_favorable*1.20))
+            # EXIT is correct only as MFE/profit preservation. Normal Caterpillar
+            # exit learning must not learn "close a loser"; emergency structural/risk
+            # exits remain a separate execution path.
+            cur=float(s.x.get("cq_position_return",0.0) or 0.0)
+            mfe=float(s.x.get("cq_position_mfe",0.0) or 0.0)
+            give_ratio=float(s.x.get("cq_mfe_giveback_ratio",0.0) or 0.0)
+            profitable=cur>self.round_trip_cost
+            future_deteriorates=(s.worst_adverse>=max(self.round_trip_cost*0.50,
+                                                      s.best_favorable*1.10))
+            already_giving_back=(mfe>self.round_trip_cost*1.25 and give_ratio>=0.30
+                                 and s.best_favorable<s.worst_adverse)
+            y=bool(profitable and (future_deteriorates or already_giving_back))
             pred=self._model_p(self.exit_model,s.x)>=0.5
             self.prediction_checks["exit"]+=1
             self.prediction_errors["exit"]+=int(pred!=bool(y))
@@ -1113,7 +1175,10 @@ class CaterpillarQuantLearner:
             s.best_favorable=max(s.best_favorable,move);s.worst_adverse=max(s.worst_adverse,-move)
             if ts_ms<s.mature_ts_ms:
                 keep.append(s);continue
-            y=s.best_favorable>=max(0.0020,self.round_trip_cost*1.25) and s.best_favorable>1.10*s.worst_adverse
+            # Re-entry is positive only when the same structural leg genuinely
+            # resumes: a fresh favorable excursion must dominate adverse noise.
+            y=(s.best_favorable>=self.round_trip_cost*1.50 and
+               s.best_favorable>=1.35*max(s.worst_adverse,1e-9))
             pred=self._model_p(self.reentry_model,s.x)>=0.5
             self.prediction_checks["reentry"]+=1;self.prediction_errors["reentry"]+=int(pred!=bool(y))
             self._learn_binary(self.reentry_model,s.x,y)
@@ -1281,7 +1346,11 @@ class CaterpillarQuantLearner:
                     rp=self._model_p(self.reentry_model,rx)
                     re_ready=self.reentry_labels>=30
                     re_conf=rp
-                    edge_ok=re_ready and re_conf>=.65
+                    # Caterpillar re-entry requires learned edge AND resumed executed
+                    # flow in the structural-local direction. This is the core snake
+                    # behavior, not an extra technical indicator.
+                    resumed_flow=flow_same>0.0
+                    edge_ok=re_ready and re_conf>=.65 and resumed_flow
                     entry_conf=None;entry_ps=None;entry_ready=None
                 else:
                     # Learn entry quality from hypothetical candidates first.
@@ -1296,14 +1365,17 @@ class CaterpillarQuantLearner:
                         events[-1]["entry_confidence"]=entry_conf
                         events[-1]["entry_horizon_probabilities"]=entry_ps
                         events[-1]["entry_model_ready"]=entry_ready
-                        if same_local_reentry:events[-1]["reentry_confidence"]=re_conf
+                        if same_local_reentry:
+                            events[-1]["reentry_confidence"]=re_conf
+                            events[-1]["resumed_flow"]=flow_same>0.0
                 else:
                     events.append({"event":"LEARN_ENTRY","ts_ms":ts_ms,"side":side_name(side),
                                    "local_id":c.ident,"local_confidence":local_conf,
                                    "reentry":same_local_reentry,
                                    "entry_ready":entry_ready,"entry_confidence":entry_conf,
                                    "reentry_ready":(self.reentry_labels>=30 if same_local_reentry else None),
-                                   "reentry_confidence":re_conf})
+                                   "reentry_confidence":re_conf,
+                                   "resumed_flow":(flow_same>0.0 if same_local_reentry else None)})
 
         self.last_ts_ms=ts_ms;self.last_price=price
         for e in events:self.actions.append(e)
@@ -1381,6 +1453,7 @@ class CaterpillarQuantLearner:
         return {
             "version":self.VERSION,"policy_contract_version":getattr(self,"policy_contract_version",0),
             "legacy_paper_archive":getattr(self,"legacy_paper_archive",None),
+            "legacy_paper_archives":getattr(self,"legacy_paper_archives",[]),
             "research_only":True,"real_orders":False,
             "learning_status":"LEARNING",
             "relationships":relationships,
@@ -1409,7 +1482,7 @@ class CaterpillarQuantLearner:
             "mean_mfe_capture_ratio":statistics.fmean(captures) if captures else None,
             "median_mfe_capture_ratio":statistics.median(captures) if captures else None,
             "local_target":"FULL_HISTORY_STRICT_H1_L6_K2",
-            "local_policy":"H1 local defines direction; entry/re-entry PAPER executes only after matured learned edge; negative exit only emergency/opposite-local, normal learned exits protect positive net edge",
+            "local_policy":"H1 local hard-defines direction; Caterpillar v5 entry learns usable MFE, normal exit learns MFE/profit preservation, re-entry requires learned same-leg continuation plus resumed executed flow; opposite-local/emergency remains separate",
             "bootstrap_diagnostic":{"disabled_for_policy":True,"reason":"recency-window local is training-only"},
             "training_progress":self._training_progress(),
             "structural_history":getattr(self,"structural_history",{}),
