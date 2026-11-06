@@ -1,7 +1,7 @@
 name: HYPE v6 12h Research Material
 # compact-110-v4-fixed-pack
 # 2026-11-06-local-low-restart
-# caterpillar-quant-v10-full-history-structural-anchor
+# caterpillar-quant-v11-full-graph-local-to-local
 
 on:
   push:
