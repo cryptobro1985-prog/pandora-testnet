@@ -80,6 +80,21 @@ class ReentryPending:
     worst_adverse:float=0.0
 
 @dataclass
+class FibPending:
+    ts_ms:int
+    key:str
+    ratio:float
+    kind:str
+    level_price:float
+    touch_price:float
+    trend_side:int
+    horizon_s:int
+    x:dict[str,float]
+    mature_ts_ms:int
+    best_trend:float=0.0
+    worst_trend:float=0.0
+
+@dataclass
 class PaperPosition:
     side:int
     entry_ts_ms:int
@@ -103,6 +118,11 @@ class CaterpillarQuantLearner:
     REENTRY_HORIZON_S=300
     POLICY_SAMPLE_S=30
     MIN_HOLD_S=60
+    FIB_RETRACE_RATIOS=(0.236,0.382,0.5,0.618,0.786,1.0)
+    FIB_EXTENSION_RATIOS=(1.272,1.618)
+    FIB_HORIZONS=(60,180,300)
+    FIB_TOUCH_BPS=7.5
+    FIB_TOUCH_COOLDOWN_S=120
 
     def __init__(self,quant_config:dict[str,Any]):
         self.quant=OnlineQuantLearner(copy.deepcopy(quant_config))
@@ -142,8 +162,166 @@ class CaterpillarQuantLearner:
         self.policy_version=2
         self.bootstrap_diagnostic={}
         self.structural_history={}
-        self.prediction_checks={"local":0,"bounce":0,"exit":0,"reentry":0}
-        self.prediction_errors={"local":0,"bounce":0,"exit":0,"reentry":0}
+        self.prediction_checks={"local":0,"bounce":0,"exit":0,"reentry":0,"fib":0}
+        self.prediction_errors={"local":0,"bounce":0,"exit":0,"reentry":0,"fib":0}
+        self._ensure_fib()
+
+    def _ensure_fib(self):
+        if not hasattr(self,"fib_models"):
+            self.fib_models={}
+        if not hasattr(self,"fib_labels"):
+            self.fib_labels={}
+        if not hasattr(self,"fib_pos"):
+            self.fib_pos={}
+        if not hasattr(self,"fib_pending"):
+            self.fib_pending=[]
+        if not hasattr(self,"fib_last_touch_ms"):
+            self.fib_last_touch_ms={}
+        if not hasattr(self,"fib_touch_counts"):
+            self.fib_touch_counts={}
+        if not hasattr(self,"fib_outcomes"):
+            self.fib_outcomes={}
+        for kind,ratios in (("R",self.FIB_RETRACE_RATIOS),("E",self.FIB_EXTENSION_RATIOS)):
+            for ratio in ratios:
+                for horizon in self.FIB_HORIZONS:
+                    key=f"{kind}{ratio:.3f}_{horizon}s"
+                    if key not in self.fib_models:self.fib_models[key]=binary_model()
+                    if key not in self.fib_labels:self.fib_labels[key]=0
+                    if key not in self.fib_pos:self.fib_pos[key]=0
+        self.prediction_checks.setdefault("fib",0)
+        self.prediction_errors.setdefault("fib",0)
+
+    @staticmethod
+    def _fib_name(kind,ratio):
+        return f"{kind}{ratio:.3f}"
+
+    def _fib_snapshot(self,state,ts_ms,price):
+        pivots=self._strict_pivots(state,ts_ms)
+        if len(pivots)<2:return {"available":False,"features":{},"levels":[]}
+        a,b=pivots[-2],pivots[-1]
+        if a["side"]==b["side"]:return {"available":False,"features":{},"levels":[]}
+        trend=1 if a["side"]=="LOW" and b["side"]=="HIGH" else -1
+        start=float(a["price"]);end=float(b["price"]);span=abs(end-start)
+        if span<=1e-12:return {"available":False,"features":{},"levels":[]}
+        retrace=trend*(end-float(price))/span
+        extension=trend*(float(price)-end)/span
+        levels=[]
+        distances={}
+        for ratio in self.FIB_RETRACE_RATIOS:
+            level=end-trend*ratio*span
+            dist_bps=(float(price)/level-1.0)*10000.0 if level>0 else 0.0
+            name=self._fib_name("R",ratio)
+            levels.append({"kind":"RETRACEMENT","ratio":ratio,"name":name,"price":level,"distance_bps":dist_bps})
+            distances[f"fib_dist_{name}_bps"]=dist_bps
+            distances[f"fib_abs_dist_{name}_bps"]=abs(dist_bps)
+        for ratio in self.FIB_EXTENSION_RATIOS:
+            level=start+trend*ratio*span
+            dist_bps=(float(price)/level-1.0)*10000.0 if level>0 else 0.0
+            name=self._fib_name("E",ratio)
+            levels.append({"kind":"EXTENSION","ratio":ratio,"name":name,"price":level,"distance_bps":dist_bps})
+            distances[f"fib_dist_{name}_bps"]=dist_bps
+            distances[f"fib_abs_dist_{name}_bps"]=abs(dist_bps)
+        closest=min(levels,key=lambda z:abs(z["distance_bps"]))
+        features={
+            "fib_available":1.0,
+            "fib_trend_side":float(trend),
+            "fib_swing_span_pct":span/max(abs(start),1e-9),
+            "fib_retrace_fraction":retrace,
+            "fib_extension_fraction":extension,
+            "fib_closest_ratio":float(closest["ratio"]),
+            "fib_closest_kind":1.0 if closest["kind"]=="RETRACEMENT" else 2.0,
+            "fib_closest_distance_bps":float(closest["distance_bps"]),
+            "fib_closest_abs_distance_bps":abs(float(closest["distance_bps"])),
+            **distances,
+        }
+        return {
+            "available":True,"trend_side":trend,
+            "swing_from":{"side":a["side"],"price":start,"hour_ms":a["hour_ms"]},
+            "swing_to":{"side":b["side"],"price":end,"hour_ms":b["hour_ms"]},
+            "swing_span":span,"retrace_fraction":retrace,"extension_fraction":extension,
+            "closest":closest,"levels":levels,"features":features,
+        }
+
+    def _sample_fib_touches(self,ts_ms,price,x,fib):
+        if not fib.get("available"):return []
+        events=[]
+        trend=int(fib["trend_side"])
+        for level in fib.get("levels") or []:
+            if abs(float(level["distance_bps"]))>self.FIB_TOUCH_BPS:continue
+            base=level["name"]
+            last=int(self.fib_last_touch_ms.get(base,0) or 0)
+            if ts_ms-last<self.FIB_TOUCH_COOLDOWN_S*1000:continue
+            self.fib_last_touch_ms[base]=int(ts_ms)
+            self.fib_touch_counts[base]=int(self.fib_touch_counts.get(base,0))+1
+            kind="R" if level["kind"]=="RETRACEMENT" else "E"
+            for horizon in self.FIB_HORIZONS:
+                key=f"{kind}{float(level['ratio']):.3f}_{horizon}s"
+                fx=dict(x)
+                fx.update({
+                    "fib_touch":1.0,"fib_touch_ratio":float(level["ratio"]),
+                    "fib_touch_kind":1.0 if kind=="R" else 2.0,
+                    "fib_touch_distance_bps":float(level["distance_bps"]),
+                    "fib_touch_trend_side":float(trend),
+                })
+                self.fib_pending.append(FibPending(
+                    ts_ms=int(ts_ms),key=key,ratio=float(level["ratio"]),kind=kind,
+                    level_price=float(level["price"]),touch_price=float(price),
+                    trend_side=trend,horizon_s=horizon,x=clean_features(fx),
+                    mature_ts_ms=int(ts_ms+horizon*1000)))
+            events.append({"event":"FIB_TOUCH","ts_ms":ts_ms,"name":base,
+                           "kind":level["kind"],"ratio":level["ratio"],
+                           "level_price":level["price"],"touch_price":price,
+                           "distance_bps":level["distance_bps"],"trend_side":side_name(trend)})
+        return events
+
+    def _advance_fib_labels(self,ts_ms,price):
+        self._ensure_fib()
+        keep=[]
+        for p in self.fib_pending:
+            move=p.trend_side*(float(price)/p.touch_price-1.0)
+            p.best_trend=max(p.best_trend,move)
+            p.worst_trend=max(p.worst_trend,-move)
+            if ts_ms<p.mature_ts_ms:
+                keep.append(p);continue
+            y=move>self.round_trip_cost
+            pred=self._model_p(self.fib_models[p.key],p.x)>=0.5
+            self.prediction_checks["fib"]+=1
+            self.prediction_errors["fib"]+=int(pred!=bool(y))
+            self._learn_binary(self.fib_models[p.key],p.x,y)
+            self.fib_labels[p.key]+=1;self.fib_pos[p.key]+=int(y)
+            base=self._fib_name(p.kind,p.ratio)
+            z=self.fib_outcomes.setdefault(base,{"matured":0,"continuation":0,"reversal":0,
+                                                   "net_sum":0.0,"mfe_sum":0.0,"mae_sum":0.0})
+            z["matured"]+=1;z["continuation"]+=int(y)
+            z["reversal"]+=int(move<-self.round_trip_cost)
+            z["net_sum"]+=move-self.round_trip_cost
+            z["mfe_sum"]+=p.best_trend;z["mae_sum"]+=p.worst_trend
+        self.fib_pending=keep
+
+    def _fib_report(self):
+        self._ensure_fib()
+        levels={}
+        names=[self._fib_name("R",r) for r in self.FIB_RETRACE_RATIOS]+[self._fib_name("E",r) for r in self.FIB_EXTENSION_RATIOS]
+        for name in names:
+            z=self.fib_outcomes.get(name) or {}
+            n=int(z.get("matured",0) or 0)
+            labels=sum(v for k,v in self.fib_labels.items() if k.startswith(name+"_"))
+            pos=sum(v for k,v in self.fib_pos.items() if k.startswith(name+"_"))
+            levels[name]={
+                "touches":int(self.fib_touch_counts.get(name,0) or 0),
+                "matured":n,"labels":labels,"continuation_positive":pos,
+                "continuation_rate":(float(z.get("continuation",0))/n if n else None),
+                "reversal_rate":(float(z.get("reversal",0))/n if n else None),
+                "mean_net":(float(z.get("net_sum",0.0))/n if n else None),
+                "mean_mfe":(float(z.get("mfe_sum",0.0))/n if n else None),
+                "mean_mae":(float(z.get("mae_sum",0.0))/n if n else None),
+            }
+        total_labels=sum(self.fib_labels.values())
+        target=len(self.fib_models)*40
+        return {"enabled":True,"touch_radius_bps":self.FIB_TOUCH_BPS,
+                "pending":len(self.fib_pending),"labels":total_labels,
+                "training_percent":min(100.0,100.0*total_labels/max(1,target)),
+                "levels":levels}
 
     def _model_p(self,model,x):
         try:
@@ -157,6 +335,7 @@ class CaterpillarQuantLearner:
 
 
     def _ensure_v2(self):
+        self._ensure_fib()
         if getattr(self,"policy_version",1)>=2:
             if hasattr(self.quant,"_ensure_v2"):self.quant._ensure_v2()
             self._ensure_full_graph_policy()
@@ -177,8 +356,9 @@ class CaterpillarQuantLearner:
         self.last_reentry_sample_ms=0
         self.bootstrap_diagnostic=getattr(self,"bootstrap_diagnostic",{})
         self.censored_positions=getattr(self,"censored_positions",0)
-        self.prediction_checks={"local":0,"bounce":0,"exit":0,"reentry":0}
-        self.prediction_errors={"local":0,"bounce":0,"exit":0,"reentry":0}
+        self.prediction_checks={"local":0,"bounce":0,"exit":0,"reentry":0,"fib":0}
+        self.prediction_errors={"local":0,"bounce":0,"exit":0,"reentry":0,"fib":0}
+        self._ensure_fib()
         self.policy_version=2
         if hasattr(self.quant,"_ensure_v2"):self.quant._ensure_v2()
         self._ensure_full_graph_policy()
@@ -205,8 +385,9 @@ class CaterpillarQuantLearner:
         self.trades=[];self.path_equity=100.0;self.reentries=0
         self.baseline_equity=100.0;self.baseline_position=None;self.baseline_trades=[]
         self.actions=[];self.structural_history={}
-        self.prediction_checks={"local":0,"bounce":0,"exit":0,"reentry":0}
-        self.prediction_errors={"local":0,"bounce":0,"exit":0,"reentry":0}
+        self.prediction_checks={"local":0,"bounce":0,"exit":0,"reentry":0,"fib":0}
+        self.prediction_errors={"local":0,"bounce":0,"exit":0,"reentry":0,"fib":0}
+        self._ensure_fib()
         self.policy_contract_version=3
 
     def _completed_h1(self,state,ts_ms):
@@ -574,13 +755,15 @@ class CaterpillarQuantLearner:
         bounce_target=len(self.bounce_labels)*120
         exit_target=300; reentry_target=200
         def pct(v,t):return min(100.0,100.0*float(v)/max(1,float(t)))
+        fib_labels=sum(self.fib_labels.values());fib_target=len(self.fib_models)*40
         heads={
             "local":{"labels":local_total,"target_labels":local_target,"percent":pct(local_total,local_target)},
             "bounce":{"labels":bounce_total,"target_labels":bounce_target,"percent":pct(bounce_total,bounce_target)},
             "exit":{"labels":self.exit_labels,"target_labels":exit_target,"percent":pct(self.exit_labels,exit_target)},
             "reentry":{"labels":self.reentry_labels,"target_labels":reentry_target,"percent":pct(self.reentry_labels,reentry_target)},
+            "fibonacci":{"labels":fib_labels,"target_labels":fib_target,"percent":pct(fib_labels,fib_target)},
         }
-        overall=.40*heads["local"]["percent"]+.10*heads["bounce"]["percent"]+.25*heads["exit"]["percent"]+.25*heads["reentry"]["percent"]
+        overall=.34*heads["local"]["percent"]+.08*heads["bounce"]["percent"]+.22*heads["exit"]["percent"]+.22*heads["reentry"]["percent"]+.14*heads["fibonacci"]["percent"]
         if overall>=100:status="MODEL_MATURE"
         elif overall>=60:status="VALIDATING"
         elif overall>=10:status="LEARNING"
@@ -726,9 +909,14 @@ class CaterpillarQuantLearner:
         self._advance_local_labels(ts_ms,price,state)
         self._advance_exit_labels(ts_ms,price)
         self._advance_reentry_labels(ts_ms,price)
+        self._advance_fib_labels(ts_ms,price)
         self.structural_history=self._structural_history_report(state,ts_ms)
+        fib=self._fib_snapshot(state,ts_ms,price)
+        if fib.get("available"):
+            x=dict(x);x.update(fib.get("features") or {})
         qd=self.quant.observe(ts_ms,price,x)
         events.extend(self._sync_strict_local(state,ts_ms,price,x))
+        events.extend(self._sample_fib_touches(ts_ms,price,x,fib))
         # No recency-window bootstrap participates in trading policy. Candidate
         # discovery below exists only to train earlier local recognition.
         events.extend(self._update_extremes(ts_ms,price,x,state))
@@ -859,6 +1047,10 @@ class CaterpillarQuantLearner:
         if self.reentry_labels>=5:
             for feature,w in self._model_weights(self.reentry_model):
                 rows.append({"head":"REENTRY","feature":feature,"weight":w})
+        for key,model in self.fib_models.items():
+            if self.fib_labels.get(key,0)<5:continue
+            for feature,w in self._model_weights(model):
+                rows.append({"head":"FIB_"+key,"feature":feature,"weight":w})
         rows.sort(key=lambda z:abs(z["weight"]),reverse=True)
         return {"total":len(rows),"positive":sum(r["weight"]>0 for r in rows),
                 "negative":sum(r["weight"]<0 for r in rows),"top":rows[:40]}
@@ -911,6 +1103,8 @@ class CaterpillarQuantLearner:
                             for s in ("LOW","HIGH") for h in self.LOCAL_STAGES},
             "exit_model":{"labels":self.exit_labels,"exit_positive":self.exit_pos},
             "reentry_model":{"labels":self.reentry_labels,"reentry_positive":self.reentry_pos},
+            "fibonacci":{**self._fib_report(),
+                         "current":(self._fib_snapshot_for_report() if hasattr(self,"_fib_snapshot_for_report") else None)},
             "active_local":None if self.last_confirmed_local is None else {
                 "id":self.last_confirmed_local.ident,"side":self.last_confirmed_local.side,
                 "price":self.last_confirmed_local.extreme_price,
