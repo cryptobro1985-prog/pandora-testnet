@@ -20,7 +20,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          for id in 42186725092; do
+          for id in 42187021803; do
             gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/${id}/cancel" || true
           done
           echo "superseded runs cancellation requested"
