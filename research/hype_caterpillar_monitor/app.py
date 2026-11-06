@@ -8,7 +8,7 @@ app.config["MAX_CONTENT_LENGTH"]=262144
 REPO=os.getenv("STATUS_REPO","cryptobro1985-prog/pandora-testnet")
 ISSUE=int(os.getenv("STATUS_ISSUE","24"))
 TOKEN=os.getenv("TELEGRAM_BOT_TOKEN","")
-_cache={"ts":0.0,"data":None,"source":None,"ingest_ts":0.0,"github_ts":0.0,"v2_seen":False}
+_cache={"ts":0.0,"data":None,"source":None,"ingest_ts":0.0,"github_ts":0.0,"v2_seen":False,"preferred_run_id":0}
 GITHUB_POLL_SECONDS=float(os.getenv("GITHUB_POLL_SECONDS","90"))
 
 HTML=r'''<!doctype html>
@@ -176,7 +176,13 @@ def ingest():
     is_v2=(data.get("local_target")=="STRICT_H1_L6_K2")
     if _cache.get("v2_seen") and not is_v2:
         return jsonify({"ok":False,"error":"legacy policy payload ignored"}),409
-    if is_v2:_cache["v2_seen"]=True
+    run_int=int(run_id)
+    if is_v2:
+        preferred=int(_cache.get("preferred_run_id") or 0)
+        if preferred and run_int<preferred:
+            return jsonify({"ok":False,"error":"older v2 run ignored","preferred_run_id":preferred}),409
+        _cache["v2_seen"]=True
+        _cache["preferred_run_id"]=max(preferred,run_int)
     now=time.time()
     _cache.update(ts=now,data=data,source="direct",ingest_ts=now)
     return jsonify({"ok":True,"received_ts_ms":int(now*1000)})
