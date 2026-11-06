@@ -341,19 +341,24 @@ class AstraCortex:
         if not self.due(ts_ms,features,base_decision,base_report):
             return {"new_decision":False,"decision":self.last_decision,"status":self.status(ts_ms)}
         causal=clean_features(features); q=base_decision.get("quant") or {}
-        state={"ts_ms":int(ts_ms),"price":float(price),"causal_features":causal,
+        session=us_market_session(ts_ms)
+        state={"ts_ms":int(ts_ms),"price":float(price),"us_market_session":session,
+               "causal_features":causal,
                "quant":q,"caterpillar_events":(base_decision.get("events") or [])[-12:],
                "base_paper":base_decision.get("paper") or {},
                "active_local":base_report.get("active_local"),
                "policy_state":base_report.get("policy_state"),
                "training_progress":base_report.get("training_progress"),
                "episodic_memory":self._memory_for_prompt(),
+               "cortex_us_session_stats":self._session_stats(),
+               "cortex_24h_progress":self._training_progress(ts_ms),
                "constraints":{"research_only":True,"real_orders":False,"max_leverage":25,
                               "max_margin_fraction":0.20,"modeled_round_trip_cost":float(cost_floor)}}
         try:
             decision=self._request(state)
             decision.update({"ts_ms":int(ts_ms),"price":float(price),"model":self.model,
-                             "reasoning_effort":self.reasoning_effort,
+                             "backend":self.backend,"reasoning_effort":self.reasoning_effort,
+                             "us_market_session":session,
                              "base_quant_action":q.get("action"),
                              "base_quant_score":q.get("score"),
                              "audit_note":"Concise rationale summary; not hidden chain-of-thought."})
@@ -361,6 +366,7 @@ class AstraCortex:
             self.last_base_action=str(q.get("action") or "FLAT")
             self.last_local_key=self._local_key(base_report); self.last_error=None; self.calls+=1
             self.pending.append({"ts_ms":int(ts_ms),"price":float(price),"high":float(price),"low":float(price),
+                                 "us_session":session,
                                  "decision":decision.get("decision"),"confidence":decision.get("confidence"),
                                  "thesis":decision.get("thesis"),"cost_floor":float(cost_floor),"done":[]})
             self.pending=self.pending[-200:]; self.save()
@@ -373,12 +379,15 @@ class AstraCortex:
 
     def status(self,ts_ms=None):
         now_ms=int(ts_ms or time.time()*1000)
-        state=("DISABLED" if not self.enabled else "WAITING_FOR_API_KEY" if not self.api_key
-               else "DEGRADED" if self.last_error else "THINKING_LIVE" if self.last_decision else "READY")
+        state=("DISABLED" if not self.enabled
+               else "LOCAL_MODEL_DEGRADED" if self.backend=="local_llama" and self.last_error
+               else "WAITING_FOR_API_KEY" if self.backend!="local_llama" and not self.api_key
+               else "CORTEX_LIVE" if self.last_decision
+               else "LOCAL_MODEL_READY" if self.backend=="local_llama" else "READY")
         age=None if self.last_call_ts_ms is None else max(0.0,(now_ms-self.last_call_ts_ms)/1000.0)
         avg=sum(self.net_returns)/len(self.net_returns) if self.net_returns else None
         return {"version":self.VERSION,"state":state,"enabled":self.enabled,
-                "api_key_present":bool(self.api_key),"model":self.model,
+                "backend":self.backend,"api_key_present":bool(self.api_key),"model":self.model,
                 "reasoning_effort":self.reasoning_effort,"calls":self.calls,
                 "api_errors":self.api_errors,"last_error":self.last_error,
                 "last_call_age_seconds":age,"normal_interval_seconds":self.normal_interval_s,
@@ -386,7 +395,10 @@ class AstraCortex:
                 "matured_episodes":self.matured_episodes,"memory_episodes":len(self.episodes),
                 "pending_episodes":len(self.pending),"directional_checks":self.directional_checks,
                 "directional_accuracy":self.directional_correct/self.directional_checks if self.directional_checks else None,
-                "mean_directional_net":avg,"last_decision":self.last_decision,
+                "mean_directional_net":avg,"current_us_session":us_market_session(now_ms),
+                "us_session_stats":self._session_stats(),
+                "training_progress":self._training_progress(now_ms),
+                "last_decision":self.last_decision,
                 "last_critique":self.last_critique,"usage":dict(self.usage),
                 "research_only":True,"real_orders":False}
 
