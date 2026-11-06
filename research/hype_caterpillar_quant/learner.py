@@ -313,6 +313,7 @@ class CaterpillarQuantLearner:
         for c in self.candidates.values():
             if c:self._invalidate_candidate(c,ts_ms)
         self.candidates={"LOW":None,"HIGH":None};self.last_confirmed_local=None
+        self.quant.pending.clear()
         if self.position:
             self.position=None
         self.actions.append({"event":"CENSORED","ts_ms":ts_ms,"reason":reason})
@@ -325,6 +326,11 @@ class CaterpillarQuantLearner:
         events.extend(self._update_extremes(ts_ms,price,x,state))
         for side in ("LOW","HIGH"):
             events.extend(self._stage_candidate(self.candidates[side],ts_ms,price,x))
+
+        if self.position and self.last_confirmed_local is not None:
+            confirmed_side=1 if self.last_confirmed_local.side=="LOW" else -1
+            if confirmed_side==-self.position.side:
+                events.extend(self._close(ts_ms,price,"OPPOSITE_LOCAL_CONFIRMED"))
 
         if self.position:
             p=self.position
