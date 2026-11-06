@@ -1,0 +1,90 @@
+name: Solana Pump.fun Insider Wallet Research
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/solana-wallet-leaders-20261106
+    paths:
+      - research/solana_wallet_leaders/kaiser_insider_scan.py
+      - .github/workflows/solana-wallet-leaders.yml
+  schedule:
+    - cron: '*/30 * * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: solana-wallet-insider-research
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/solana-wallet-leaders-20261106
+          persist-credentials: true
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Compile research scanner
+        run: python -m py_compile research/solana_wallet_leaders/kaiser_insider_scan.py
+
+      - name: Scan Pump.fun early wallets and rank insider candidates
+        env:
+          SOLANA_RPC_URL: ${{ secrets.SOLANA_RPC_URL }}
+          MAX_TOKENS: '48'
+          SIGNATURES_PER_TOKEN: '90'
+          MAX_TX_PER_RUN: '3200'
+          EARLY_RANK: '12'
+          LEADER_WINDOW_SECONDS: '600'
+          MIN_REPEAT_TOKENS: '3'
+          MAX_EVENTS: '60000'
+          RPC_SLEEP_SECONDS: '0.045'
+        run: python research/solana_wallet_leaders/kaiser_insider_scan.py
+
+      - name: Validate outputs
+        run: |
+          test -s research/solana_wallet_leaders/state.json
+          test -s research/solana_wallet_leaders/latest_report.json
+          test -s research/solana_wallet_leaders/dorado_candidates.yaml
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("research/solana_wallet_leaders/latest_report.json")
+          r=json.loads(p.read_text())
+          assert r["research_only"] is True
+          assert r["live_copytrade_approved"] is False
+          assert isinstance(r["top_wallets"], list)
+          print("wallets_ranked", len(r["top_wallets"]))
+          print("insider_candidates", len(r["top_insider_candidates"]))
+          print("repeat_snipers", len(r["top_repeat_snipers"]))
+          print("runner_selectors", len(r["top_runner_selectors"]))
+          PY
+
+      - name: Upload immutable research snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: solana-pumpfun-insider-wallets-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            research/solana_wallet_leaders/latest_report.json
+            research/solana_wallet_leaders/dorado_candidates.yaml
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 9
+
+      - name: Persist rolling observations and ranking
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add             research/solana_wallet_leaders/state.json             research/solana_wallet_leaders/latest_report.json             research/solana_wallet_leaders/dorado_candidates.yaml
+          if ! git diff --cached --quiet; then
+            git commit -m "research: update Pump.fun insider wallet rankings"
+            git push origin HEAD:research/solana-wallet-leaders-20261106
+          fi
