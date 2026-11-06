@@ -6,6 +6,7 @@ from research.hype_local_v5.decode_compact import manifest,chunk_meta,stream_met
 from research.hype_quant.features import FeatureState
 from research.hype_quant.agents import augment_with_agents
 from research.hype_quant.bootstrap_30d_unified import historical_states, load_jsonl_gz
+from research.hype_quant.learner import OnlineQuantLearner, load_config, clean_features
 from .technical import causal_indicator_map, indicator_series, resample
 
 def write_jsonl_gz(path,rows):
@@ -138,6 +139,51 @@ def build_live_phase(root:Path,phase:str):
         rows.extend(rr)
     return rows
 
+
+DISCOVERY=1791676800000
+TRAIN_END=1792713600000
+
+def _quant_prediction_features(learner,x):
+    xx=clean_features(x)
+    scales={60:.0015,180:.0030,300:.0045,600:.0070,900:.0100,1800:.0150}
+    weights={60:.10,180:.15,300:.25,600:.20,900:.15,1800:.15}
+    direction=confidence=ret_score=0.0
+    out={}
+    for h in learner.horizons:
+        p=learner.challenger[h].predict(xx)
+        ds=(2*p.p_up-1.0)*.40 + __import__("math").tanh(p.expected_return/max(scales[h],1e-9))*.60
+        w=weights[h]
+        direction+=w*ds
+        confidence+=w*abs(2*p.p_up-1.0)
+        ret_score+=w*__import__("math").tanh(p.expected_return/max(scales[h],1e-9))
+        out[f"quant_p_up_{h}s"]=float(p.p_up)
+        out[f"quant_expected_return_{h}s"]=float(p.expected_return)
+        out[f"quant_expected_max_up_{h}s"]=float(p.expected_max_up)
+        out[f"quant_expected_max_down_{h}s"]=float(p.expected_max_down)
+    out["quant_direction"]=max(-1.0,min(1.0,direction))
+    out["quant_confidence"]=max(0.0,min(1.0,confidence))
+    out["quant_return_score"]=max(-1.0,min(1.0,ret_score))
+    return out
+
+def add_frozen_quant_overlay(hist,cal,hold):
+    cfg=load_config(Path("research/hype_quant/config.json"))
+    learner=OnlineQuantLearner(cfg)
+    learner.config["action_space"]["leverage"]=[1]
+    learner.config["action_space"]["margin_fraction"]=[.02]
+    learner.memory.neighbors=10**9
+    # Walk-forward predictions before each historical update. Training freezes at
+    # TRAIN_END; validation/OOS/live never update the model.
+    for r in sorted(hist,key=lambda z:z["ts_ms"]):
+        x=r["features"]
+        x.update(_quant_prediction_features(learner,x))
+        if int(r["ts_ms"])<TRAIN_END:
+            learner.observe(int(r["ts_ms"]),float(r["price"]),x)
+    learner.pending.clear()
+    for rows in (cal,hold):
+        for r in rows:
+            r["features"].update(_quant_prediction_features(learner,r["features"]))
+    return {"labels":learner.labels,"promotions":learner.promotions,"champion_ready":learner.champion_ready}
+
 def main():
     import argparse
     ap=argparse.ArgumentParser()
@@ -148,10 +194,11 @@ def main():
     hist=build_historical(args.historical_root)
     cal=build_live_phase(args.live_root,"calibration")
     hold=build_live_phase(args.live_root,"holdout")
+    quant=add_frozen_quant_overlay(hist,cal,hold)
     write_jsonl_gz(args.output/"historical.jsonl.gz",hist)
     write_jsonl_gz(args.output/"calibration.jsonl.gz",cal)
     write_jsonl_gz(args.output/"holdout.jsonl.gz",hold)
-    summary={"historical_rows":len(hist),"calibration_rows":len(cal),"holdout_rows":len(hold),
+    summary={"historical_rows":len(hist),"calibration_rows":len(cal),"holdout_rows":len(hold),"quant_overlay":quant,
              "historical_first":hist[0]["ts_ms"] if hist else None,"historical_last":hist[-1]["ts_ms"] if hist else None,
              "calibration_first":cal[0]["ts_ms"] if cal else None,"calibration_last":cal[-1]["ts_ms"] if cal else None,
              "holdout_first":hold[0]["ts_ms"] if hold else None,"holdout_last":hold[-1]["ts_ms"] if hold else None,
