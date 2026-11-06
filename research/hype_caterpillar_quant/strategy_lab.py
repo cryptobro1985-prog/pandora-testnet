@@ -40,11 +40,11 @@ def local_key(local:dict[str,Any]|None)->str|None:
     return f"{side}:{int(hour)}:{float(price):.8f}"
 
 class ThreeStrategyLab:
-    VERSION="three-strategy-lab-v2-fib-zigzag"
+    VERSION="three-strategy-lab-v3-caterpillar-mfe"
 
     def __init__(self,checkpoint_dir:Path,cost_floor:float,effective_exposure_x:float=5.0):
         # New path deliberately resets the old ladder experiment without deleting it.
-        self.path=Path(checkpoint_dir)/"three_strategy_lab_v2_fib_zigzag.json"
+        self.path=Path(checkpoint_dir)/"three_strategy_lab_v3_caterpillar_mfe.json"
         self.cost_floor=float(cost_floor)
         self.exposure_x=max(0.1,float(effective_exposure_x))
         self.started_ts_ms=int(time.time()*1000)
