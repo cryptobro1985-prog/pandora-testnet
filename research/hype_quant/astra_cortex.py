@@ -716,6 +716,7 @@ def self_test():
         book.mark(61_000,101.0); book.apply(62_000,101.0,{"decision":"EXIT"})
         assert book.report()["closed_trades"]==1 and book.report()["equity"]>100.0
         c=AstraCortex(Path(td)); c.enabled=True; c.backend="local_llama"; c.api_key=""
+        c._local_ready=lambda *args,**kwargs: True
         assert c.available is True
         assert c.status(2_000)["backend"]=="local_llama"
         lab={"strategies":{
