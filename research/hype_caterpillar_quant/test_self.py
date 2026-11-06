@@ -167,7 +167,11 @@ def test_gap_censors_position_not_trade():
     assert q.position is None
     assert len(q.trades)==before
     assert q.censored_positions==1
+    assert q.last_confirmed_local is not None
+    assert q.last_confirmed_local.source=="LEARNED_CAUSAL_LOCAL"
+    assert q.last_confirmed_local.side=="LOW"
     assert any(e["event"]=="CENSORED_POSITION" for e in q.actions)
+    assert any(e["event"]=="LOCAL_CONTEXT_PRESERVED_ON_GAP" for e in q.actions)
 
 def test_same_local_reentry_survives_candidate_id_change():
     q=new();ts=10*H
