@@ -1,0 +1,54 @@
+name: HYPE Full H1 Local Audit
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-local-full-history-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch full H1 history and derive structural pivots
+        run: |
+          python - <<'PY'
+          import json, urllib.request, datetime
+          url="https://hype-rest-relay.onrender.com/hype-context"
+          req=urllib.request.Request(url,headers={"User-Agent":"PANDORA-HYPE-Full-H1-Audit/1.0"})
+          with urllib.request.urlopen(req,timeout=30) as r:
+              d=json.load(r)
+          rows=d.get("candles",{}).get("60",[])
+          rows=rows[-72:]
+          print("H1_COUNT",len(rows))
+          print("H1_ROWS_BEGIN")
+          for x in rows:
+              ts=int(x["start_ms"])/1000
+              iso=datetime.datetime.fromtimestamp(ts,datetime.timezone.utc).isoformat()
+              print(json.dumps({"utc":iso,"start_ms":x["start_ms"],"o":x["open"],"h":x["high"],"l":x["low"],"c":x["close"]},separators=(",",":")))
+          print("H1_ROWS_END")
+          raw=[]
+          for i in range(6,len(rows)-2):
+              row=rows[i]; past=rows[i-6:i]; future=rows[i+1:i+3]
+              hi=row["high"]>max(x["high"] for x in past) and row["high"]>=max(x["high"] for x in future)
+              lo=row["low"]<min(x["low"] for x in past) and row["low"]<=min(x["low"] for x in future)
+              if hi==lo: continue
+              side="HIGH" if hi else "LOW"
+              price=row["high"] if hi else row["low"]
+              item={"side":side,"price":price,"hour_ms":row["start_ms"],
+                    "utc":datetime.datetime.fromtimestamp(int(row["start_ms"])/1000,datetime.timezone.utc).isoformat()}
+              if raw and raw[-1]["side"]==side:
+                  better=price>raw[-1]["price"] if side=="HIGH" else price<raw[-1]["price"]
+                  if better: raw[-1]=item
+              else:
+                  raw.append(item)
+          print("STRICT_PIVOTS",json.dumps(raw,separators=(",",":")))
+          if raw: print("LATEST_STRICT_PIVOT",json.dumps(raw[-1],separators=(",",":")))
+          lows=sorted(rows,key=lambda x:x["low"])[:10]
+          print("LOWEST_10",json.dumps([{"start_ms":x["start_ms"],"low":x["low"],"high":x["high"]} for x in lows],separators=(",",":")))
+          PY
