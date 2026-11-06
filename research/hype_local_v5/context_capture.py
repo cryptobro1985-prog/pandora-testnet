@@ -131,6 +131,7 @@ def main():
             row_errors=[]
             # REST-only fields: relay first, direct REST second.
             relay=safe(fetch_relay) if RELAY_URL else {"ok":False,"error":"relay_not_configured"}
+            rv={}
             if relay.get("ok"):
                 rv=relay["value"]
                 instrument=rv.get("instrument") or instrument
@@ -151,15 +152,21 @@ def main():
                 else: row_errors.append("server_time:"+x["error"])
 
             # Optional REST redundancy only. Primary ticker+M1/M3/M5/H1 are raw WS.
-            ticker={}
+            ticker=(rv.get("ticker") or {}) if isinstance(rv,dict) else {}
             candles={}
-            xt=safe(fetch_ticker)
-            if xt.get("ok"):
-                ticker=xt["value"];source_ok["direct_rest"]+=1
-            else:
-                row_errors.append("ticker_rest_optional:"+xt["error"])
+            relay_candles=(rv.get("candles") or {}) if isinstance(rv,dict) else {}
+            if not ticker:
+                xt=safe(fetch_ticker)
+                if xt.get("ok"):
+                    ticker=xt["value"];source_ok["direct_rest"]+=1
+                else:
+                    row_errors.append("ticker_rest_optional:"+xt["error"])
             limits={"1":480 if first else 8,"3":240 if first else 8,"5":180 if first else 8,"60":72 if first else 4}
             for k,v in limits.items():
+                rr=relay_candles.get(k) if isinstance(relay_candles,dict) else None
+                if isinstance(rr,list) and rr:
+                    candles[k]=rr[-v:] if not first else rr
+                    continue
                 x=safe(lambda k=k,v=v:fetch_klines(k,v))
                 if x.get("ok"):
                     candles[k]=x["value"];source_ok["direct_rest"]+=1
