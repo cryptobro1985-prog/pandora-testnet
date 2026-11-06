@@ -59,7 +59,16 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p cq_warm
-          ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100"             --jq '.artifacts | map(select((.expired|not) and (.name=="HYPE-CATERPILLAR-QUANT-CHECKPOINT" or (.name|startswith("HYPE-CATERPILLAR-QUANT-checkpoint-"))))) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" --jq '
+            .artifacts
+            | map(select((.expired|not) and (.name=="HYPE-CATERPILLAR-QUANT-CHECKPOINT" or (.name|startswith("HYPE-CATERPILLAR-QUANT-checkpoint-"))))) as $all
+            | ($all | map(select(.name=="HYPE-CATERPILLAR-QUANT-CHECKPOINT")) | sort_by(.created_at) | reverse | .[0] // null) as $base
+            | if $base then
+                ($all | map(select(.created_at >= $base.created_at)) | sort_by(.created_at) | reverse | .[0].id // $base.id)
+              else
+                ($all | sort_by(.created_at) | reverse | .[0].id // empty)
+              end
+          ')"
           if [ -n "$ID" ]; then
             gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$ID/zip" > cq.zip
             unzip -q cq.zip -d cq_warm
