@@ -1,0 +1,25 @@
+name: HYPE Force Cancel v7
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-force-cancel-v7.yml"
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  cancel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Force cancel superseded v7 collector
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/42187749745/cancel" || true
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/42187749745/force-cancel" || true
+          echo "v7 cancellation requested"
