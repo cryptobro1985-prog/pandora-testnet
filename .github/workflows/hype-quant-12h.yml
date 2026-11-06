@@ -11,11 +11,11 @@ on:
 
 permissions:
   contents: read
-  actions: read
+  actions: write
 
 concurrency:
   group: hype-quant-12h-v7-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   CAPTURE_MINUTES: "170"
@@ -304,3 +304,17 @@ jobs:
           path: final
           if-no-files-found: error
           retention-days: 14
+
+
+  restart_next:
+    needs: final
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Start next continuous HYPE Quant chunk
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          echo "Self-chaining next HYPE Quant run..."
+          gh workflow run hype-quant-12h.yml --ref "${GITHUB_REF_NAME}"
