@@ -61,6 +61,20 @@ def compact_status(report):
         "github_run_id":os.environ.get("GITHUB_RUN_ID"),"github_sha":os.environ.get("GITHUB_SHA"),
     }
 
+def publish_monitor(report):
+    url=os.environ.get("CATERPILLAR_MONITOR_URL","").strip()
+    if not url:return
+    try:
+        r=requests.post(
+            url,
+            headers={"X-Caterpillar-Research":"1","User-Agent":"pandora-caterpillar-quant/2.0"},
+            json=compact_status(report),
+            timeout=5,
+        )
+        r.raise_for_status()
+    except Exception:
+        pass
+
 def publish_issue(report):
     token=os.environ.get("GITHUB_TOKEN")
     repo=os.environ.get("GITHUB_REPOSITORY","cryptobro1985-prog/pandora-testnet")
@@ -106,7 +120,7 @@ def main():
     actions.touch(exist_ok=True);gaps.touch(exist_ok=True)
 
     started=time.time();deadline=started+args.minutes*60
-    next_save=0.0;next_publish=0.0;next_sample_ms=0
+    next_save=0.0;next_issue=0.0;next_monitor=0.0;next_sample_ms=0
     last_seen_ts=state.last_ts_ms
     sample_ms=5000
     processed_micro=sampled=0
@@ -164,13 +178,20 @@ def main():
             })
             (args.checkpoint_dir/"CATERPILLAR_QUANT_REPORT.json").write_text(json.dumps(report,indent=2)+"\n")
             next_save=now+60
-        if now>=next_publish:
+        if now>=next_monitor:
+            report=learner.report()
+            report.update({"processed_micro_rows":processed_micro,"sampled_states":sampled,
+                           "last_seen_ts_ms":last_seen_ts,"updated_ts_ms":int(now*1000),
+                           "research_only":True,"real_orders":False})
+            publish_monitor(report)
+            next_monitor=now+10
+        if now>=next_issue:
             report=learner.report()
             report.update({"processed_micro_rows":processed_micro,"sampled_states":sampled,
                            "last_seen_ts_ms":last_seen_ts,"updated_ts_ms":int(now*1000),
                            "research_only":True,"real_orders":False})
             publish_issue(report)
-            next_publish=now+30
+            next_issue=now+30
         if not events:time.sleep(args.poll_seconds)
 
     learner.save(cp);save_state(state,fs_path)
@@ -180,6 +201,7 @@ def main():
                    "feature_contract":state.coverage_report(),
                    "research_only":True,"real_orders":False})
     (args.checkpoint_dir/"CATERPILLAR_QUANT_REPORT.json").write_text(json.dumps(report,indent=2)+"\n")
+    publish_monitor(report)
     publish_issue(report)
     print("CATERPILLAR_QUANT="+json.dumps({
         "equity":report["equity"],"return_pct":report["return_pct"],
