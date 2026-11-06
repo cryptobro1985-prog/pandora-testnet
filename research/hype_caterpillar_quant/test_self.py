@@ -99,14 +99,49 @@ def promote_learned(q,side="LOW",ts=10*H,price=None):
     assert any(e["event"]=="LOCAL_STAGE" and e["policy_promoted"] for e in ev)
     return c,ev
 
-def test_strict_history_is_benchmark_only_never_policy_local():
+def test_pretraining_confirmed_local_is_inherited_once_not_counted_as_learned():
     q=new();s=fake_state("LOW");ts=10*H
     out=q.observe(ts,100.0,x(),s)
     assert q.last_teacher_local is not None and q.last_teacher_local["side"]=="LOW"
-    assert q.last_confirmed_local is None
-    assert len(q.policy_pending)==0
+    assert q.last_confirmed_local is not None
+    assert q.last_confirmed_local.side=="LOW"
+    assert q.last_confirmed_local.source=="INHERITED_CONFIRMED_LOCAL"
+    assert q.last_confirmed_local.extreme_price==90.0
+    assert q.learned_local_history==[]
+    assert q.inherited_local_history and q.inherited_local_history[-1]["side"]=="LOW"
+    assert len(q.policy_pending)==3
+    assert any(e["event"]=="INHERITED_PRETRAIN_LOCAL" for e in out["events"])
     assert not any(e["event"]=="STRICT_H1_LOCAL_SYNC" for e in out["events"])
-    assert q.last_policy_decision["action"]=="WAIT_LOCAL"
+    assert q.last_policy_decision["action"]=="WAIT"
+    assert q.last_policy_decision["structural_side"]=="LONG"
+
+
+def fake_two_pivot_state():
+    candles={}
+    for i in range(14):
+        base=100.0
+        candles[i*H]={"start_ms":i*H,"open":base,"close":base,"high":103.0,"low":97.0}
+    candles[6*H]["high"]=112.0
+    candles[7*H]["high"]=105.0
+    candles[8*H]["high"]=104.0
+    candles[10*H]["low"]=88.0
+    candles[11*H]["low"]=94.0
+    candles[12*H]["low"]=95.0
+    return SimpleNamespace(candles={"60":candles})
+
+
+def test_pretraining_context_bootstraps_fibonacci_swing_without_faking_learning():
+    q=new();s=fake_two_pivot_state();ts=14*H
+    q.observe(ts,92.0,x(),s)
+    report=q.report()
+    assert report["active_local"]["side"]=="LOW"
+    assert report["active_local"]["source"]=="INHERITED_CONFIRMED_LOCAL"
+    assert report["learned_local_history"]==[]
+    assert len(report["inherited_local_history"])>=2
+    fib=report["fibonacci"]["current"]
+    assert fib["available"] is True
+    assert fib["swing_from"]["side"]=="HIGH"
+    assert fib["swing_to"]["side"]=="LOW"
 
 def test_learned_low_samples_direct_long_policy():
     q=new();ts=10*H
@@ -202,7 +237,8 @@ def main():
     test_construct()
     test_same_h1_extremes_use_m1_order_training_only()
     test_provisional_low_is_training_only_not_policy()
-    test_strict_history_is_benchmark_only_never_policy_local()
+    test_pretraining_confirmed_local_is_inherited_once_not_counted_as_learned()
+    test_pretraining_context_bootstraps_fibonacci_swing_without_faking_learning()
     test_learned_low_samples_direct_long_policy()
     test_learned_high_samples_direct_short_policy()
     test_gap_censors_position_not_trade()
