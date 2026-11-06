@@ -52,6 +52,38 @@ def live_to_archive_features(side:str,age_s:float,extreme_price:float,price:floa
     if finite(v24):out["volume_24h_log"]=float(v24)
     if finite(t24):out["turnover_24h_log"]=float(t24)
 
+    # Names shared with the causally backfilled 30-day mark/index/OI/funding set.
+    mark=x.get("mark_price");idx=x.get("index_price")
+    if finite(mark):
+        out["hist_mark_available"]=1.0
+        if price>0:out["hist_mark_price_rel"]=float(mark)/price-1.0
+    if finite(idx):
+        out["hist_index_available"]=1.0
+        if price>0:out["hist_index_price_rel"]=float(idx)/price-1.0
+    if finite(mark) and finite(idx) and float(idx)!=0:
+        out["hist_basis_bps"]=(float(mark)/float(idx)-1.0)*10000.0
+    elif finite(x.get("basis_bps")):
+        out["hist_basis_bps"]=float(x["basis_bps"])
+    funding=x.get("funding_rate",x.get("struct_funding_rate"))
+    if finite(funding):
+        out["hist_funding_available"]=1.0;out["hist_funding_rate"]=float(funding)
+    oi=x.get("open_interest_full",x.get("ticker_open_interest",x.get("open_interest")))
+    if finite(oi) and float(oi)>=0:
+        out["hist_oi_available"]=1.0
+        out["hist_open_interest_log"]=math.log1p(float(oi))
+        if price>0:out["hist_oi_notional_log"]=math.log1p(float(oi)*price)
+        if finite(x.get("oi_delta_300s")):out["hist_oi_delta_300s"]=float(x["oi_delta_300s"])
+        # FeatureState keeps ~3h of OI observations; reconstruct the same 1h delta
+        # used by historical enrichment without looking forward.
+        hist=list(getattr(state,"oi_history",[]) or [])
+        target=int(getattr(state,"last_ts_ms",0) or 0)-3_600_000
+        prev=None
+        for t,v in hist:
+            if int(t)<=target:prev=float(v)
+            else:break
+        if prev is not None and prev>0:
+            out["hist_oi_delta_3600s"]=float(oi)/prev-1.0
+
     h1=[state.candles["60"][k] for k in sorted(state.candles.get("60",{}))]
     if h1:
         ranges=[(b["high"]-b["low"])/b["close"] for b in h1[-14:] if b.get("close")]
