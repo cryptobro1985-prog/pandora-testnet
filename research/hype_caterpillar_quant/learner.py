@@ -242,6 +242,39 @@ class CaterpillarQuantLearner:
                  "price":latest["price"],"hour_ms":latest["hour_ms"],"available_ms":latest["available_ms"],
                  "candidate_id":c.ident}]
 
+
+    def _bootstrap_provisional_local(self,state,ts_ms,price,x):
+        """Recover the newest already-observed H1 extreme when the daemon starts late.
+
+        This is NOT a strict label. It is a causal candidate used immediately by
+        Caterpillar; the strict L6/K2 teacher settles it only after K2 becomes
+        available. That lets policy learning start now without future leakage.
+        """
+        rows=self._completed_h1(state,ts_ms)
+        if len(rows)<6:return []
+        use=rows[-6:]
+        low_row=min(use,key=lambda z:z["low"]); high_row=max(use,key=lambda z:z["high"])
+        # Prefer the more recent structural extreme. If both occurred in one H1,
+        # preserve ambiguity rather than inventing intrabar order.
+        if low_row["start_ms"]==high_row["start_ms"]:return []
+        side="LOW" if low_row["start_ms"]>high_row["start_ms"] else "HIGH"
+        row=low_row if side=="LOW" else high_row
+        extreme=row["low"] if side=="LOW" else row["high"]
+        hour=row["start_ms"]
+        existing=self.candidates.get(side)
+        if existing is not None and getattr(existing,"strict_hour_ms",None)==hour:
+            return []
+        current=self.last_confirmed_local
+        cur_hour=getattr(current,"strict_hour_ms",None) if current is not None else None
+        if cur_hour is not None and cur_hour>=hour:return []
+        self.candidate_seq+=1
+        # We know the completed H1 extreme only at the bar close.
+        c=Candidate(self.candidate_seq,side,float(extreme),hour+3_600_000,clean_features(x),
+                    source="PROVISIONAL_H1_EXTREME",strict_hour_ms=hour)
+        self.candidates[side]=c
+        return [{"event":"PROVISIONAL_H1_LOCAL_BOOTSTRAP","ts_ms":ts_ms,"side":side,
+                 "price":extreme,"hour_ms":hour,"candidate_id":c.ident}]
+
     def _h1_extremes(self,state,ts_ms):
         rows=[]
         for start in sorted(state.candles.get("60",{})):
@@ -401,7 +434,7 @@ class CaterpillarQuantLearner:
                 c.confirmed_stage=stage
                 self.last_confirmed_local=c
                 if first_accept:
-                    c.source="LIVE_CANDIDATE"
+                    if not getattr(c,"source",None):c.source="LIVE_CANDIDATE"
                     self._baseline_on_local(c,ts_ms,price)
             events.append({"event":"LOCAL_STAGE","side":c.side,"candidate_id":c.ident,"stage_s":stage,
                            "confidence":conf,"strict_model_p":p,"bounce_model_p":bp,
@@ -537,6 +570,7 @@ class CaterpillarQuantLearner:
         self._advance_reentry_labels(ts_ms,price)
         qd=self.quant.observe(ts_ms,price,x)
         events.extend(self._sync_strict_local(state,ts_ms,price,x))
+        events.extend(self._bootstrap_provisional_local(state,ts_ms,price,x))
         events.extend(self._update_extremes(ts_ms,price,x,state))
         for side in ("LOW","HIGH"):
             events.extend(self._stage_candidate(self.candidates[side],ts_ms,price,x))
@@ -589,7 +623,7 @@ class CaterpillarQuantLearner:
                 else:
                     # Direction comes from the confirmed H1 local, not generic Quant.
                     # A strict already-formed local may start a research episode immediately.
-                    edge_ok=(c.source=="STRICT_H1_CONFIRMED") or (agent_same>=-.10 and (not quant_ready or quant_same))
+                    edge_ok=(c.source in ("STRICT_H1_CONFIRMED","PROVISIONAL_H1_EXTREME")) or (agent_same>=-.10 and (not quant_ready or quant_same))
                     re_conf=None
                 if local_conf>=.55 and edge_ok and cooldown:
                     events.extend(self._open(ts_ms,price,side,c,local_conf,qd,reentry=same_local_reentry))
