@@ -39,6 +39,8 @@ class Candidate:
     stage_conf:dict[int,float]=field(default_factory=dict)
     stage_retrace_bps:dict[int,float]=field(default_factory=dict)
     confirmed_stage:int|None=None
+    source:str="LIVE_CANDIDATE"
+    strict_hour_ms:int|None=None
 
 @dataclass
 class LocalPending:
@@ -48,15 +50,29 @@ class LocalPending:
     ts_ms:int
     price:float
     x:dict[str,float]
-    mature_ts_ms:int
+    candidate_hour_ms:int
+    strict_mature_ts_ms:int
+    bounce_mature_ts_ms:int
     best_favorable:float=0.0
     worst_adverse:float=0.0
+    bounce_done:bool=False
 
 @dataclass
 class ExitPending:
     ts_ms:int
     side:int
     price:float
+    x:dict[str,float]
+    mature_ts_ms:int
+    best_favorable:float=0.0
+    worst_adverse:float=0.0
+
+@dataclass
+class ReentryPending:
+    ts_ms:int
+    side:int
+    price:float
+    local_id:int
     x:dict[str,float]
     mature_ts_ms:int
     best_favorable:float=0.0
@@ -78,23 +94,29 @@ class PaperPosition:
     last_exit_sample_ms:int=0
 
 class CaterpillarQuantLearner:
-    VERSION="caterpillar-quant-v1"
-    LOCAL_STAGES=(300,600,900)
-    LOCAL_FUTURE_S=1800
+    VERSION="caterpillar-quant-v2"
+    LOCAL_STAGES=(60,180,300)
+    BOUNCE_FUTURE_S=1800
     EXIT_HORIZON_S=300
-    EXIT_SAMPLE_S=30
+    REENTRY_HORIZON_S=300
+    POLICY_SAMPLE_S=30
 
     def __init__(self,quant_config:dict[str,Any]):
         self.quant=OnlineQuantLearner(copy.deepcopy(quant_config))
         self.local_models={(side,stage):binary_model() for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
         self.local_labels={(side,stage):0 for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
         self.local_pos={(side,stage):0 for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
-        self.exit_model=binary_model()
+        self.bounce_models={(side,stage):binary_model() for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
+        self.bounce_labels={(side,stage):0 for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
+        self.bounce_pos={(side,stage):0 for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
+        self.exit_model=binary_model(); self.reentry_model=binary_model()
         self.exit_labels=0; self.exit_pos=0
+        self.reentry_labels=0; self.reentry_pos=0
         self.candidates={"LOW":None,"HIGH":None}
         self.candidate_seq=0
         self.local_pending:list[LocalPending]=[]
         self.exit_pending:list[ExitPending]=[]
+        self.reentry_pending:list[ReentryPending]=[]
         self.last_confirmed_local:Candidate|None=None
         self.position:PaperPosition|None=None
         self.equity=100.0
@@ -112,8 +134,11 @@ class CaterpillarQuantLearner:
         self.last_ts_ms=None
         self.last_price=None
         self.censored=0
-        self.prediction_checks={"local":0,"exit":0}
-        self.prediction_errors={"local":0,"exit":0}
+        self.censored_positions=0
+        self.last_reentry_sample_ms=0
+        self.policy_version=2
+        self.prediction_checks={"local":0,"bounce":0,"exit":0,"reentry":0}
+        self.prediction_errors={"local":0,"bounce":0,"exit":0,"reentry":0}
 
     def _model_p(self,model,x):
         try:
@@ -124,6 +149,98 @@ class CaterpillarQuantLearner:
 
     def _learn_binary(self,model,x,y):
         model.learn_one(clean_features(x),bool(y))
+
+
+    def _ensure_v2(self):
+        if getattr(self,"policy_version",1)>=2:
+            if hasattr(self.quant,"_ensure_v2"):self.quant._ensure_v2()
+            return
+        # Local v1 labels described a 30m tradeable bounce, not a strict H1 pivot.
+        # Preserve generic Quant history, but reset policy heads to the corrected contract.
+        self.LOCAL_STAGES=(60,180,300)
+        self.local_models={(side,stage):binary_model() for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
+        self.local_labels={(side,stage):0 for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
+        self.local_pos={(side,stage):0 for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
+        self.bounce_models={(side,stage):binary_model() for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
+        self.bounce_labels={(side,stage):0 for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
+        self.bounce_pos={(side,stage):0 for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
+        self.exit_model=binary_model();self.reentry_model=binary_model()
+        self.exit_labels=self.exit_pos=self.reentry_labels=self.reentry_pos=0
+        self.local_pending=[];self.exit_pending=[];self.reentry_pending=[]
+        self.candidates={"LOW":None,"HIGH":None};self.last_confirmed_local=None
+        self.last_reentry_sample_ms=0
+        self.censored_positions=getattr(self,"censored_positions",0)
+        self.prediction_checks={"local":0,"bounce":0,"exit":0,"reentry":0}
+        self.prediction_errors={"local":0,"bounce":0,"exit":0,"reentry":0}
+        self.policy_version=2
+        if hasattr(self.quant,"_ensure_v2"):self.quant._ensure_v2()
+
+    def _completed_h1(self,state,ts_ms):
+        rows=[]
+        for start in sorted(state.candles.get("60",{})):
+            if start+3_600_000<=ts_ms:
+                b=state.candles["60"][start]
+                if finite(b.get("high")) and finite(b.get("low")):
+                    rows.append({"start_ms":int(start),"high":float(b["high"]),"low":float(b["low"]),
+                                 "open":float(b.get("open") or b["low"]),"close":float(b.get("close") or b["high"])})
+        return rows
+
+    def _strict_pivots(self,state,ts_ms):
+        rows=self._completed_h1(state,ts_ms)
+        raw=[]
+        for i in range(6,len(rows)-2):
+            row=rows[i];past=rows[i-6:i];future=rows[i+1:i+3]
+            # Missing completed hours break the reference label.
+            win=rows[i-6:i+3]
+            if any(b["start_ms"]!=a["start_ms"]+3_600_000 for a,b in zip(win,win[1:])):
+                continue
+            hi=row["high"]>max(x["high"] for x in past) and row["high"]>=max(x["high"] for x in future)
+            lo=row["low"]<min(x["low"] for x in past) and row["low"]<=min(x["low"] for x in future)
+            if hi==lo:continue
+            side="HIGH" if hi else "LOW"
+            price=row["high"] if hi else row["low"]
+            item={"side":side,"price":price,"hour_ms":row["start_ms"],
+                  "available_ms":row["start_ms"]+3*3_600_000}
+            if raw and raw[-1]["side"]==side:
+                better=price>raw[-1]["price"] if side=="HIGH" else price<raw[-1]["price"]
+                if better:raw[-1]=item
+            else:raw.append(item)
+        return raw
+
+    def _strict_candidate_outcome(self,state,pending,ts_ms):
+        if ts_ms<pending.strict_mature_ts_ms:return None
+        rows={r["start_ms"]:r for r in self._completed_h1(state,ts_ms)}
+        h=pending.candidate_hour_ms
+        needed=[h-6*3_600_000,h-5*3_600_000,h-4*3_600_000,h-3*3_600_000,
+                h-2*3_600_000,h-1*3_600_000,h,h+3_600_000,h+2*3_600_000]
+        if any(k not in rows for k in needed):return False
+        row=rows[h];past=[rows[h-j*3_600_000] for j in range(6,0,-1)]
+        future=[rows[h+3_600_000],rows[h+2*3_600_000]]
+        hi=row["high"]>max(z["high"] for z in past) and row["high"]>=max(z["high"] for z in future)
+        lo=row["low"]<min(z["low"] for z in past) and row["low"]<=min(z["low"] for z in future)
+        if hi and lo:return False
+        return bool(lo if pending.side=="LOW" else hi)
+
+    def _sync_strict_local(self,state,ts_ms,price,x):
+        pivots=self._strict_pivots(state,ts_ms)
+        if not pivots:return []
+        latest=pivots[-1]
+        current=self.last_confirmed_local
+        cur_hour=getattr(current,"strict_hour_ms",None) if current is not None else None
+        # Do not overwrite a genuinely newer early live candidate with an older K2 pivot.
+        if current is not None and current.source=="LIVE_CANDIDATE" and current.extreme_ts_ms>latest["available_ms"]:
+            return []
+        if cur_hour is not None and cur_hour>=latest["hour_ms"]:return []
+        self.candidate_seq+=1
+        c=Candidate(self.candidate_seq,latest["side"],latest["price"],latest["available_ms"],clean_features(x),
+                    confirmed_stage=0,source="STRICT_H1_CONFIRMED",strict_hour_ms=latest["hour_ms"])
+        c.stage_conf[0]=0.99
+        self.candidates[latest["side"]]=c
+        self.last_confirmed_local=c
+        self._baseline_on_local(c,ts_ms,price)
+        return [{"event":"STRICT_H1_LOCAL_SYNC","ts_ms":ts_ms,"side":latest["side"],
+                 "price":latest["price"],"hour_ms":latest["hour_ms"],"available_ms":latest["available_ms"],
+                 "candidate_id":c.ident}]
 
     def _h1_extremes(self,state,ts_ms):
         rows=[]
@@ -178,6 +295,9 @@ class CaterpillarQuantLearner:
             if s.candidate_id==c.ident:
                 self._learn_binary(self.local_models[(s.side,s.stage_s)],s.x,False)
                 self.local_labels[(s.side,s.stage_s)]+=1
+                if not getattr(s,"bounce_done",False):
+                    self._learn_binary(self.bounce_models[(s.side,s.stage_s)],s.x,False)
+                    self.bounce_labels[(s.side,s.stage_s)]+=1
             else:keep.append(s)
         self.local_pending=keep
         if self.last_confirmed_local and self.last_confirmed_local.ident==c.ident:
@@ -210,25 +330,31 @@ class CaterpillarQuantLearner:
                 events.extend(self._close(ts_ms,price,"NEW_HIGHER_HIGH_INVALIDATES_SHORT"))
         return events
 
-    def _advance_local_labels(self,ts_ms,price):
+    def _advance_local_labels(self,ts_ms,price,state):
         keep=[]
         for s in self.local_pending:
             sign=1.0 if s.side=="LOW" else -1.0
             move=sign*(price/s.price-1.0)
             s.best_favorable=max(s.best_favorable,move)
             s.worst_adverse=max(s.worst_adverse,-move)
-            if ts_ms<s.mature_ts_ms:
-                keep.append(s);continue
             c=self.candidates.get(s.side)
-            invalid=(c is None or c.ident!=s.candidate_id or (c.invalidated_ts_ms is not None and c.invalidated_ts_ms<=s.mature_ts_ms))
-            y=(not invalid) and s.best_favorable>=0.0035
+            invalid=(c is None or c.ident!=s.candidate_id or c.invalidated_ts_ms is not None)
+            if not s.bounce_done and ts_ms>=s.bounce_mature_ts_ms:
+                by=(not invalid) and s.best_favorable>=0.0035
+                bp=self._model_p(self.bounce_models[(s.side,s.stage_s)],s.x)>=0.5
+                self.prediction_checks["bounce"]+=1;self.prediction_errors["bounce"]+=int(bp!=bool(by))
+                self._learn_binary(self.bounce_models[(s.side,s.stage_s)],s.x,by)
+                self.bounce_labels[(s.side,s.stage_s)]+=1;self.bounce_pos[(s.side,s.stage_s)]+=int(by)
+                s.bounce_done=True
+            sy=self._strict_candidate_outcome(state,s,ts_ms)
+            if sy is None:
+                keep.append(s);continue
+            sy=bool(sy and not invalid)
             model=self.local_models[(s.side,s.stage_s)]
             pred=self._model_p(model,s.x)>=0.5
-            self.prediction_checks["local"]+=1
-            self.prediction_errors["local"]+=int(pred!=bool(y))
-            self._learn_binary(model,s.x,y)
-            self.local_labels[(s.side,s.stage_s)]+=1
-            self.local_pos[(s.side,s.stage_s)]+=int(y)
+            self.prediction_checks["local"]+=1;self.prediction_errors["local"]+=int(pred!=sy)
+            self._learn_binary(model,s.x,sy)
+            self.local_labels[(s.side,s.stage_s)]+=1;self.local_pos[(s.side,s.stage_s)]+=int(sy)
         self.local_pending=keep
 
     def _advance_exit_labels(self,ts_ms,price):
@@ -256,26 +382,32 @@ class CaterpillarQuantLearner:
             if age<stage or stage in c.stage_done:continue
             sx=self._candidate_x(x,c,ts_ms,price)
             p=self._model_p(self.local_models[(c.side,stage)],sx)
+            bp=self._model_p(self.bounce_models[(c.side,stage)],sx)
             labels=self.local_labels[(c.side,stage)]
             sign=1.0 if c.side=="LOW" else -1.0
             retr=sx["cq_retrace_bps"]
-            heuristic=sigmoid((retr-35.0)/22.0 + 1.2*sx["cq_agent_alignment"] + .8*sx["cq_flow_alignment"])
-            model_weight=min(.75,.75*labels/200.0)
+            heuristic=sigmoid((retr-18.0)/18.0 + 1.2*sx["cq_agent_alignment"] + .8*sx["cq_flow_alignment"])
+            model_weight=min(.80,.80*labels/120.0)
             conf=(1-model_weight)*heuristic+model_weight*p
             c.stage_done.add(stage);c.stage_conf[stage]=conf;c.stage_retrace_bps[stage]=retr
+            hour=(c.extreme_ts_ms//3_600_000)*3_600_000
             self.local_pending.append(LocalPending(
                 candidate_id=c.ident,side=c.side,stage_s=stage,ts_ms=ts_ms,price=price,x=sx,
-                mature_ts_ms=ts_ms+self.LOCAL_FUTURE_S*1000))
-            accepted=conf>=({300:.57,600:.60,900:.62}[stage]) and retr>0
+                candidate_hour_ms=hour,strict_mature_ts_ms=hour+3*3_600_000,
+                bounce_mature_ts_ms=ts_ms+self.BOUNCE_FUTURE_S*1000))
+            accepted=conf>=({60:.55,180:.58,300:.60}[stage]) and retr>0
             if accepted:
                 first_accept=c.confirmed_stage is None
                 c.confirmed_stage=stage
                 self.last_confirmed_local=c
                 if first_accept:
+                    c.source="LIVE_CANDIDATE"
                     self._baseline_on_local(c,ts_ms,price)
             events.append({"event":"LOCAL_STAGE","side":c.side,"candidate_id":c.ident,"stage_s":stage,
-                           "confidence":conf,"model_p":p,"heuristic":heuristic,"retrace_bps":retr,
-                           "accepted":accepted,"labels_seen":labels})
+                           "confidence":conf,"strict_model_p":p,"bounce_model_p":bp,
+                           "heuristic":heuristic,"retrace_bps":retr,
+                           "accepted":accepted,"strict_labels_seen":labels,
+                           "bounce_labels_seen":self.bounce_labels[(c.side,stage)]})
         return events
 
     def _best_local(self):
@@ -304,10 +436,47 @@ class CaterpillarQuantLearner:
     def _sample_exit(self,ts_ms,price,x,qd):
         p=self.position
         if p is None:return
-        if ts_ms-p.last_exit_sample_ms<self.EXIT_SAMPLE_S*1000:return
+        if ts_ms-p.last_exit_sample_ms<self.POLICY_SAMPLE_S*1000:return
         px=self._position_x(x,ts_ms,price,qd)
         self.exit_pending.append(ExitPending(ts_ms,p.side,price,px,ts_ms+self.EXIT_HORIZON_S*1000))
         p.last_exit_sample_ms=ts_ms
+
+    def _reentry_x(self,x,ts_ms,price,c,qd):
+        side=1 if c.side=="LOW" else -1
+        out=dict(x)
+        out.update({
+            "cq_reentry_side":float(side),
+            "cq_reentry_local_conf":float(c.stage_conf.get(c.confirmed_stage or 0,0.0)),
+            "cq_reentry_local_age_s":max(0.0,(ts_ms-c.extreme_ts_ms)/1000.0),
+            "cq_reentry_agent_same":side*float(x.get("agent_consensus",0.0) or 0.0),
+            "cq_reentry_flow_same":side*float(x.get("flow_imbalance_raw_60s",x.get("flow_imbalance_60s",0.0)) or 0.0),
+            "cq_reentry_quant_same":1.0 if qd.get("action")==side_name(side) else 0.0,
+            "cq_reentry_quant_opposite":1.0 if qd.get("action")==side_name(-side) else 0.0,
+            "cq_reentry_seconds_since_exit":0.0 if not self.last_exit else max(0.0,(ts_ms-int(self.last_exit["exit_ts_ms"]))/1000.0),
+        })
+        return out
+
+    def _sample_reentry(self,ts_ms,price,x,c,qd):
+        if self.last_exit is None or self.last_exit.get("local_id")!=c.ident:return
+        if ts_ms-self.last_reentry_sample_ms<self.POLICY_SAMPLE_S*1000:return
+        side=1 if c.side=="LOW" else -1
+        rx=self._reentry_x(x,ts_ms,price,c,qd)
+        self.reentry_pending.append(ReentryPending(ts_ms,side,price,c.ident,rx,ts_ms+self.REENTRY_HORIZON_S*1000))
+        self.last_reentry_sample_ms=ts_ms
+
+    def _advance_reentry_labels(self,ts_ms,price):
+        keep=[]
+        for s in self.reentry_pending:
+            move=s.side*(price/s.price-1.0)
+            s.best_favorable=max(s.best_favorable,move);s.worst_adverse=max(s.worst_adverse,-move)
+            if ts_ms<s.mature_ts_ms:
+                keep.append(s);continue
+            y=s.best_favorable>=max(0.0020,self.round_trip_cost*1.25) and s.best_favorable>1.10*s.worst_adverse
+            pred=self._model_p(self.reentry_model,s.x)>=0.5
+            self.prediction_checks["reentry"]+=1;self.prediction_errors["reentry"]+=int(pred!=bool(y))
+            self._learn_binary(self.reentry_model,s.x,y)
+            self.reentry_labels+=1;self.reentry_pos+=int(y)
+        self.reentry_pending=keep
 
     def _open(self,ts_ms,price,side,c,local_conf,qd,reentry=False):
         lev=float(qd.get("leverage") or 5)
@@ -344,21 +513,30 @@ class CaterpillarQuantLearner:
         return [{"event":"EXIT","ts_ms":ts_ms,**row}]
 
     def on_gap(self,ts_ms,reason):
+        self._ensure_v2()
         self.censored+=1
-        self.local_pending.clear();self.exit_pending.clear()
+        self.local_pending.clear();self.exit_pending.clear();self.reentry_pending.clear()
+        if self.position:
+            self.censored_positions+=1
+            self.actions.append({"event":"CENSORED_POSITION","ts_ms":ts_ms,"reason":reason,
+                                 "side":side_name(self.position.side),"entry_ts_ms":self.position.entry_ts_ms,
+                                 "entry_price":self.position.entry_price,"local_id":self.position.local_id})
+            self.position=None
+        self.baseline_position=None
         for c in self.candidates.values():
             if c:self._invalidate_candidate(c,ts_ms)
         self.candidates={"LOW":None,"HIGH":None};self.last_confirmed_local=None
         self.quant.pending.clear()
-        if self.position:
-            self.position=None
         self.actions.append({"event":"CENSORED","ts_ms":ts_ms,"reason":reason})
 
     def observe(self,ts_ms,price,x,state):
+        self._ensure_v2()
         events=[]
-        self._advance_local_labels(ts_ms,price)
+        self._advance_local_labels(ts_ms,price,state)
         self._advance_exit_labels(ts_ms,price)
+        self._advance_reentry_labels(ts_ms,price)
         qd=self.quant.observe(ts_ms,price,x)
+        events.extend(self._sync_strict_local(state,ts_ms,price,x))
         events.extend(self._update_extremes(ts_ms,price,x,state))
         for side in ("LOW","HIGH"):
             events.extend(self._stage_candidate(self.candidates[side],ts_ms,price,x))
@@ -395,12 +573,28 @@ class CaterpillarQuantLearner:
             if c is not None:
                 side=1 if c.side=="LOW" else -1
                 agent_same=side*float(x.get("agent_consensus",0.0) or 0.0)
+                flow_same=side*float(x.get("flow_imbalance_raw_60s",x.get("flow_imbalance_60s",0.0)) or 0.0)
                 quant_same=qd.get("action")==side_name(side)
-                edge_ok=quant_same or (agent_same>=.20 and float(qd.get("score",0.0) or 0.0)>=0)
+                quant_ready=bool(qd.get("champion_ready"))
                 cooldown=(self.last_exit is None or ts_ms-int(self.last_exit["exit_ts_ms"])>=60_000)
                 same_local_reentry=bool(self.last_exit and self.last_exit["local_id"]==c.ident and self.last_exit["side"]==side_name(side))
-                if local_conf>=.57 and edge_ok and cooldown:
+                if same_local_reentry:
+                    self._sample_reentry(ts_ms,price,x,c,qd)
+                    rx=self._reentry_x(x,ts_ms,price,c,qd)
+                    rp=self._model_p(self.reentry_model,rx)
+                    w=min(.80,.80*self.reentry_labels/200.0)
+                    heuristic=clip(.50+.22*agent_same+.18*flow_same+.10*(1 if quant_same and quant_ready else 0))
+                    re_conf=(1-w)*heuristic+w*rp
+                    edge_ok=re_conf>=.60
+                else:
+                    # Direction comes from the confirmed H1 local, not generic Quant.
+                    # A strict already-formed local may start a research episode immediately.
+                    edge_ok=(c.source=="STRICT_H1_CONFIRMED") or (agent_same>=-.10 and (not quant_ready or quant_same))
+                    re_conf=None
+                if local_conf>=.55 and edge_ok and cooldown:
                     events.extend(self._open(ts_ms,price,side,c,local_conf,qd,reentry=same_local_reentry))
+                    if same_local_reentry and events:
+                        events[-1]["reentry_confidence"]=re_conf
 
         self.last_ts_ms=ts_ms;self.last_price=price
         for e in events:self.actions.append(e)
@@ -440,14 +634,22 @@ class CaterpillarQuantLearner:
             if self.local_labels[(side,stage)]<5:continue
             for feature,w in self._model_weights(model):
                 rows.append({"head":f"LOCAL_{side}_{stage}s","feature":feature,"weight":w})
+        for (side,stage),model in self.bounce_models.items():
+            if self.bounce_labels[(side,stage)]<5:continue
+            for feature,w in self._model_weights(model):
+                rows.append({"head":f"BOUNCE_{side}_{stage}s","feature":feature,"weight":w})
         if self.exit_labels>=5:
             for feature,w in self._model_weights(self.exit_model):
                 rows.append({"head":"EXIT","feature":feature,"weight":w})
+        if self.reentry_labels>=5:
+            for feature,w in self._model_weights(self.reentry_model):
+                rows.append({"head":"REENTRY","feature":feature,"weight":w})
         rows.sort(key=lambda z:abs(z["weight"]),reverse=True)
         return {"total":len(rows),"positive":sum(r["weight"]>0 for r in rows),
                 "negative":sum(r["weight"]<0 for r in rows),"top":rows[:40]}
 
     def report(self):
+        self._ensure_v2()
         captures=[t["mfe_capture_ratio"] for t in self.trades if finite(t.get("mfe_capture_ratio"))]
         wins=sum(t["pnl"]>0 for t in self.trades)
         gp=sum(max(0.0,t["pnl"]) for t in self.trades);gl=-sum(min(0.0,t["pnl"]) for t in self.trades)
@@ -479,16 +681,23 @@ class CaterpillarQuantLearner:
             "reentries":self.reentries,
             "mean_mfe_capture_ratio":statistics.fmean(captures) if captures else None,
             "median_mfe_capture_ratio":statistics.median(captures) if captures else None,
+            "local_target":"STRICT_H1_L6_K2",
             "local_models":{f"{s}_{h}s":{"labels":self.local_labels[(s,h)],"positive":self.local_pos[(s,h)]}
                             for s in ("LOW","HIGH") for h in self.LOCAL_STAGES},
+            "bounce_models":{f"{s}_{h}s":{"labels":self.bounce_labels[(s,h)],"positive":self.bounce_pos[(s,h)]}
+                            for s in ("LOW","HIGH") for h in self.LOCAL_STAGES},
             "exit_model":{"labels":self.exit_labels,"exit_positive":self.exit_pos},
+            "reentry_model":{"labels":self.reentry_labels,"reentry_positive":self.reentry_pos},
             "active_local":None if self.last_confirmed_local is None else {
                 "id":self.last_confirmed_local.ident,"side":self.last_confirmed_local.side,
                 "price":self.last_confirmed_local.extreme_price,
                 "stage":self.last_confirmed_local.confirmed_stage,
+                "source":getattr(self.last_confirmed_local,"source","LIVE_CANDIDATE"),
+                "strict_hour_ms":getattr(self.last_confirmed_local,"strict_hour_ms",None),
                 "confidence":self.last_confirmed_local.stage_conf.get(self.last_confirmed_local.confirmed_stage or 0)},
             "quant":self.quant.report(),
-            "censored":self.censored,
+            "policy_state":"IN_POSITION" if self.position else ("WAIT_REENTRY" if self.last_exit and self.last_confirmed_local and self.last_exit.get("local_id")==self.last_confirmed_local.ident else "WAIT_ENTRY"),
+            "censored":self.censored,"censored_positions":self.censored_positions,
         }
 
     def save(self,path:Path):
@@ -502,6 +711,7 @@ class CaterpillarQuantLearner:
     def load(path:Path):
         with path.open("rb") as f:obj=pickle.load(f)
         if not isinstance(obj,CaterpillarQuantLearner):raise TypeError("not CaterpillarQuantLearner")
+        obj._ensure_v2()
         return obj
 
 def new_from_config(path:Path):
