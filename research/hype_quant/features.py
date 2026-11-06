@@ -183,7 +183,7 @@ class FeatureState:
                                   "confirm":1.0 if b.get("confirm") else 0.0,
                                   "received_ts_ms":recv,
                                   "source_timestamp_ms":int(b.get("timestamp") or msg.get("ts") or recv)}
-                keep=600 if tf=="1" else 300 if tf=="3" else 220 if tf=="5" else 10000
+                keep=600 if tf=="1" else 300 if tf=="3" else 220 if tf=="5" else 1000
                 if len(store)>keep:
                     for k in sorted(store)[:-keep]:store.pop(k,None)
                 self._mark({"1":4,"3":5,"5":6,"60":7}[tf],77,82,111)
