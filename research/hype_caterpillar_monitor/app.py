@@ -18,147 +18,141 @@ HTML=r'''<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#05070b">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<title>HYPE Caterpillar Quant</title>
+<title>HYPE Local Engine</title>
 <style>
-:root{--bg:#05070b;--card:#0d1118;--line:#1d2938;--text:#edf6ff;--muted:#71829b;--cyan:#51f6ff;--green:#55f59a;--red:#ff6b78;--amber:#ffc857}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% -10%,#0d2432 0,#05070b 38%);color:var(--text);font-family:Inter,system-ui,-apple-system,sans-serif;min-height:100vh}
-.wrap{max-width:760px;margin:auto;padding:18px 14px 40px}.hero{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}.eyebrow{font-size:11px;letter-spacing:.18em;color:var(--cyan);font-weight:800}.title{font-size:25px;font-weight:900;line-height:1.05;margin:5px 0}.sub{color:var(--muted);font-size:12px}
-.pulse{display:flex;gap:7px;align-items:center;font-size:12px;color:var(--green);font-weight:800}.dot{width:9px;height:9px;background:var(--green);border-radius:50%;box-shadow:0 0 16px var(--green);animation:p 1.4s infinite}@keyframes p{50%{opacity:.35}}
-.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.card{background:linear-gradient(145deg,rgba(17,24,36,.95),rgba(8,12,18,.96));border:1px solid var(--line);border-radius:16px;padding:14px}.card.wide{grid-column:1/-1}.k{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.12em;font-weight:800}.v{font-size:25px;font-weight:900;margin-top:5px}.small{font-size:12px;color:var(--muted);margin-top:5px}.good{color:var(--green)}.bad{color:var(--red)}.cyan{color:var(--cyan)}.amber{color:var(--amber)}
-.row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.055);font-size:13px}.row:last-child{border:0}.row span:first-child{color:var(--muted)}.row b{text-align:right;overflow-wrap:anywhere}.bar{height:6px;background:#09101a;border-radius:9px;overflow:hidden;margin-top:9px}.fill{height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:9px;transition:width .5s}.tag{display:inline-block;padding:4px 7px;border-radius:8px;background:#0b2831;color:var(--cyan);font-size:10px;font-weight:800;margin:2px}.rel{font-size:11px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04)}.footer{text-align:center;color:#516177;font-size:10px;margin-top:16px}
-.busgrid{display:grid;grid-template-columns:repeat(29,1fr);gap:3px;margin-top:11px}.bit{height:7px;border-radius:3px;background:#101923;box-shadow:inset 0 0 0 1px rgba(255,255,255,.03);transition:background .25s,box-shadow .25s,transform .25s}.bit.seen{background:#184d39}.bit.target{background:#4d3b18}.bit.meta{background:#263142}.bit.missing{background:#4d1d24}.bit.hot{background:var(--cyan);box-shadow:0 0 10px rgba(81,246,255,.7);transform:scaleY(1.35)}.triplet{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.mini{background:#080d14;border:1px solid rgba(255,255,255,.05);border-radius:10px;padding:9px}.mini b{display:block;font-size:16px;margin-top:3px}.feed{max-height:150px;overflow:hidden;margin-top:8px;font:11px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}.feedline{padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04);color:#9bb0c8}.feedline strong{color:var(--green)}.scan{height:2px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scan 1.7s linear infinite;margin-top:10px;opacity:.85}@keyframes scan{0%{transform:translateX(-40%)}100%{transform:translateX(40%)}}
-@media(min-width:620px){.grid{grid-template-columns:repeat(4,1fr)}.card.wide{grid-column:span 2}.card.full{grid-column:1/-1}}
+:root{--bg:#05070b;--card:#0c121a;--line:#1c2a3b;--text:#eef7ff;--muted:#7f91aa;--cyan:#55efff;--green:#57f59b;--red:#ff6677;--amber:#ffc857}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% -15%,#0c2937 0,#05070b 40%);color:var(--text);font-family:Inter,system-ui,-apple-system,sans-serif;min-height:100vh}
+.wrap{max-width:840px;margin:auto;padding:18px 14px 42px}.hero{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:15px}.eyebrow{font-size:11px;letter-spacing:.18em;color:var(--cyan);font-weight:900}.title{font-size:26px;font-weight:950;line-height:1.05;margin:5px 0}.sub{color:var(--muted);font-size:12px}
+.pulse{display:flex;gap:7px;align-items:center;font-size:12px;color:var(--green);font-weight:900}.dot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 16px var(--green);animation:p 1.3s infinite}@keyframes p{50%{opacity:.3}}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.card{background:linear-gradient(145deg,rgba(15,23,34,.96),rgba(7,11,17,.96));border:1px solid var(--line);border-radius:16px;padding:14px}.wide{grid-column:1/-1}.k{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);font-weight:900}.v{font-size:24px;font-weight:950;margin-top:5px}.small{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.45}.cyan{color:var(--cyan)}.good{color:var(--green)}.bad{color:var(--red)}.amber{color:var(--amber)}
+.row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.055);font-size:13px}.row:last-child{border:0}.row span:first-child{color:var(--muted)}.row b{text-align:right;overflow-wrap:anywhere}
+.triplet{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.mini{background:#080d14;border:1px solid rgba(255,255,255,.05);border-radius:10px;padding:9px}.mini b{display:block;font-size:16px;margin-top:3px}
+.headgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.head{background:#080d14;border:1px solid rgba(255,255,255,.055);border-radius:11px;padding:9px}.head .n{font-size:15px;font-weight:900;margin-top:3px}.head .m{font-size:10px;color:var(--muted);margin-top:3px}
+.probrow{display:grid;grid-template-columns:68px 1fr 48px;gap:8px;align-items:center;margin-top:8px}.bar{height:7px;background:#08101a;border-radius:10px;overflow:hidden}.fill{height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:10px;transition:width .4s}.th{height:100%;border-right:2px solid var(--amber);opacity:.9}
+.tag{display:inline-block;padding:4px 7px;border-radius:8px;background:#0b2831;color:var(--cyan);font-size:10px;font-weight:800;margin:2px}.rel{padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:11px}.rel:last-child{border:0}
+.busgrid{display:grid;grid-template-columns:repeat(29,1fr);gap:3px;margin-top:11px}.bit{height:7px;border-radius:3px;background:#111a25;box-shadow:inset 0 0 0 1px rgba(255,255,255,.03)}.bit.seen{background:#17513a}.bit.target{background:#5a441a}.bit.meta{background:#273344}.bit.missing{background:#4b2028}
+.off{display:inline-block;background:#2b1218;color:#ff8a96;border:1px solid #4d202a;border-radius:8px;padding:4px 7px;font-size:10px;font-weight:900;margin:2px}.footer{text-align:center;color:#52637a;font-size:10px;margin-top:16px}
+@media(min-width:680px){.grid{grid-template-columns:repeat(4,1fr)}.card.wide{grid-column:span 2}.card.full{grid-column:1/-1}}
 </style>
 </head>
 <body><div class="wrap">
-<div class="hero"><div><div class="eyebrow">PANDORA · HYPE</div><div class="title">Caterpillar Quant</div><div class="sub" id="updated">Подключение…</div><div class="small">UI v9 · Learned Local + Direct Policy · CORTEX Meta</div></div><div class="pulse"><i class="dot"></i><span id="live">LIVE</span></div></div>
+<div class="hero"><div><div class="eyebrow">PANDORA · HYPE · LOCAL ONLY</div><div class="title">Local HIGH / LOW Engine</div><div class="sub" id="updated">Подключение…</div><div class="small">Quantum + Cortex · strict H1 teacher · 116-point live state</div></div><div class="pulse"><i class="dot"></i><span id="live">LIVE</span></div></div>
+
 <div class="grid">
 <div class="card"><div class="k">Статус</div><div class="v cyan" id="status">—</div><div class="small" id="fresh">—</div></div>
-<div class="card"><div class="k">Связи</div><div class="v" id="rels">0</div><div class="small"><span class="good" id="pos">+0</span> · <span class="bad" id="neg">−0</span></div></div>
-<div class="card"><div class="k">Проверки</div><div class="v" id="checks">0</div><div class="small">ошибок <span id="errs">0</span></div></div>
-<div class="card"><div class="k">MFE capture</div><div class="v" id="mfe">—</div><div class="bar"><div class="fill" id="mfebar"></div></div></div>
-<div class="card wide"><div class="k">Learned causal Local</div><div class="v" id="local">WAIT</div><div class="row"><span>Confidence</span><b id="localconf">—</b></div><div class="row"><span>Stage</span><b id="localstage">—</b></div><div class="row"><span>Source</span><b id="localsource">—</b></div><div class="row"><span>Policy</span><b id="policy">—</b></div><div class="row"><span>Structural leg</span><b id="structleg">—</b></div><div class="row"><span>Opposite local watch</span><b id="oppwatch">—</b></div><div class="row"><span>Candidate / retrace</span><b id="oppcandidate">—</b></div><div class="row"><span>Early H1 shadow</span><b id="earlylocal">—</b></div><div class="small" id="earlymetrics">Shadow bootstrap ещё не готов.</div><div class="small" id="localwhy">—</div></div>
-<div class="card wide"><div class="k">Quant</div><div class="row"><span>All labels</span><b id="qlabels">—</b></div><div class="row"><span>v2 labels</span><b id="qv2labels">—</b></div><div class="row"><span>Champion</span><b id="champ">—</b></div><div class="row"><span>Last action</span><b id="qaction">—</b></div></div>
-<div class="card wide"><div class="k">CORTEX 20B · META-CONTROLLER</div><div class="row"><span>Status</span><b id="astatus">—</b></div><div class="row"><span>Model / backend</span><b id="amodel">—</b></div><div class="row"><span>Final decision / confidence</span><b id="adecision">—</b></div><div class="row"><span>Preferred expert</span><b id="apreferred">—</b></div><div class="row"><span>Expert weights</span><b id="aweights">—</b></div><div class="row"><span>Consensus / disagreement</span><b id="aconsensus">—</b></div><div class="row"><span>Arbitration</span><b id="aarbitration">—</b></div><div class="row"><span>24h training</span><b id="atrain">0%</b></div><div class="bar"><div class="fill" id="atrainbar"></div></div><div class="row"><span>Elapsed / evidence</span><b id="atrainparts">—</b></div><div class="row"><span>Decisions / matured</span><b id="acalls">—</b></div><div class="row"><span>Learning memory</span><b id="amemory">—</b></div><div class="row"><span>Directional accuracy</span><b id="aacc">—</b></div><div class="row"><span>US session now</span><b id="asession">—</b></div><div class="row"><span>Parallel lanes</span><b id="aparallel">—</b></div><div class="row"><span>Regime</span><b id="aregime">—</b></div><div class="small"><b>Текущая гипотеза:</b> <span id="athesis">—</span></div><div class="small"><b>За:</b> <span id="afor">—</span></div><div class="small"><b>Против:</b> <span id="aagainst">—</span></div><div class="small"><b>Инвалидация:</b> <span id="ainvalidation">—</span></div><div class="small"><b>Разбор последнего решения:</b> <span id="acritique">—</span></div><div class="small">24h progress = зрелость evidence, а не обещание точности/прибыли. Показывается audit summary, не скрытая chain-of-thought.</div></div>
-<div class="card wide"><div class="k">US market behavior · HYPE</div><div class="row"><span>Premarket</span><b id="uspremarket">—</b></div><div class="row"><span>Cash 09:30–16:00 ET</span><b id="uscash">—</b></div><div class="row"><span>After-hours</span><b id="usafter">—</b></div><div class="row"><span>Overnight</span><b id="usovernight">—</b></div><div class="small">Сравнение фактической волатильности, directional accuracy и net expectancy по дозревшим 60/180/300s эпизодам.</div></div>
-<div class="card wide"><div class="k">Fibonacci · Local ↔ Local learning</div><div class="row"><span>Training</span><b id="fibtrain">0%</b></div><div class="bar"><div class="fill" id="fibbar"></div></div><div class="row"><span>Swing</span><b id="fibswing">—</b></div><div class="row"><span>Closest level</span><b id="fibclosest">—</b></div><div class="row"><span>Touches / matured / pending</span><b id="fibcounts">—</b></div><div class="small" id="fiblevels">Ждём первую подтверждённую пару Local Low ↔ Local High.</div><div class="small">Проверяем 0.236 / 0.382 / 0.5 / 0.618 / 0.786 / 1.0 и extensions 1.272 / 1.618. Фибо обучается как causal feature и отдельный continuation/reversal head, а не как жёсткий сигнал.</div></div>
-<div class="card full"><div class="k">24h · Three Strategy Lab</div><div class="row"><span>Progress</span><b id="labprogress">0%</b></div><div class="bar"><div class="fill" id="labbar"></div></div><div class="row"><span>Leader / evidence</span><b id="lableader">—</b></div><div class="row"><span>Same risk</span><b id="labrisk">—</b></div><div class="row"><span>1 · Local→Local Straight</span><b id="labstraight">—</b></div><div class="row"><span>2 · Caterpillar Snake</span><b id="labsnake">—</b></div><div class="row"><span>3 · Fibonacci Zigzag</span><b id="labfib">—</b></div><div class="row"><span>Fib decisions / transitions</span><b id="labfibLearn">—</b></div><div class="row"><span>Last Fib decision</span><b id="labfibLast">—</b></div><div class="small" id="labrules">Один поток, одни H1-local, одинаковый exposure и costs. Сравнивается только способ ведения позиции.</div></div>
-<div class="card wide"><div class="k">116-point data bus</div><div class="triplet"><div class="mini"><span class="k">Inputs seen</span><b id="inputseen">—</b></div><div class="mini"><span class="k">Snapshots</span><b id="sampled">—</b></div><div class="mini"><span class="k">Micro rows</span><b id="micro">—</b></div></div><div class="row"><span>Data status</span><b id="datastatus">—</b></div><div class="busgrid" id="bus"></div><div class="scan"></div><div class="small">зелёный = input/quality был получен · жёлтый = target/eval · серый = metadata · красный = input ещё не виделся</div></div>
-<div class="card wide"><div class="k">Готовность обучения</div><div class="v cyan" id="learnpct">0%</div><div class="small" id="learnstatus">COLLECTING</div><div class="row"><span>Local</span><b id="plocal">0%</b></div><div class="row"><span>Bounce</span><b id="pbounce">0%</b></div><div class="row"><span>Direct policy</span><b id="pdirect">0%</b></div><div class="row"><span>Fibonacci</span><b id="pfib">0%</b></div><div class="small">Local задаёт только разрешённое направление. WAIT / ENTER / HOLD / EXIT / RE-ENTER выбирает обучаемая policy по полному causal-state.</div></div>
-<div class="card wide"><div class="k">Local ↔ Local · causal reference</div><div class="row"><span>H1 bars</span><b id="hbars">—</b></div><div class="row"><span>Strict pivots</span><b id="hpivots">—</b></div><div class="row"><span>Closed legs</span><b id="hlegs">—</b></div><div class="row"><span>1x return</span><b id="href1">—</b></div><div class="row"><span>20% × 25x reference</span><b id="hrefcfg">—</b></div><div class="small">Это только benchmark истории. Он не назначает торговый Local и не задаёт LONG/SHORT.</div></div>
-<div class="card wide"><div class="k">Гусеничка · DIRECT POLICY v6</div><div class="row"><span>Policy</span><b id="policyver">—</b></div><div class="row"><span>Current action</span><b id="policyaction">—</b></div><div class="row"><span>Advantage 60 / 180 / 300</span><b id="policyadv">—</b></div><div class="row"><span>Policy labels FLAT / POSITION</span><b id="policylabels">—</b></div><div class="row"><span>Equity</span><b id="equity">—</b></div><div class="row"><span>Return</span><b id="ret">—</b></div><div class="row"><span>Сделок / re-entry</span><b id="trades">—</b></div><div class="row"><span>Win rate</span><b id="wr">—</b></div><div class="row"><span>Max DD</span><b id="dd">—</b></div><div class="row"><span>Legacy PAPER</span><b id="legacypaper">—</b></div><div class="small">Никаких ручных action-thresholds: Local ограничивает сторону, direct policy сама выбирает действие по causal-state.</div></div>
-<div class="card wide"><div class="k">CORTEX META · PAPER</div><div class="row"><span>Equity</span><b id="aequity">—</b></div><div class="row"><span>Return</span><b id="aret">—</b></div><div class="row"><span>Trades</span><b id="atrades">—</b></div><div class="row"><span>Win rate</span><b id="awr">—</b></div><div class="row"><span>Max DD</span><b id="add">—</b></div><div class="row"><span>Δ vs Quant</span><b id="adelta">—</b></div><div class="row"><span>Position</span><b id="aposition">FLAT</b></div><div class="row"><span>Chosen expert</span><b id="apositionexpert">—</b></div><div class="small" id="aexpertusage">Пока нет закрытых meta-сделок.</div></div>
-<div class="card wide"><div class="k">Текущая позиция</div><div class="v amber" id="position">FLAT</div><div class="small" id="position2">—</div></div>
-<div class="card full"><div class="k">Local / Direct Caterpillar policy</div><div id="localmodels" class="small">—</div><div class="row"><span>Direct policy state</span><b id="directstate">—</b></div><div class="row"><span>Manual action thresholds</span><b id="manualgates">—</b></div></div>
-<div class="card full"><div class="k">Топ взаимосвязей</div><div id="toprels" class="small">Пока недостаточно labels</div></div>
-<div class="card full"><div class="k">Ошибки обучения</div><div class="row"><span>Error rate</span><b id="erate">—</b></div><div class="row"><span>Prediction errors</span><b id="perrors">—</b></div></div>
-<div class="card full"><div class="k">Live activity</div><div id="feed" class="feed"><div class="feedline">ожидаю первый snapshot…</div></div></div>
-</div><div class="footer">Research / PAPER only · direct push + резерв GitHub · UI heartbeat 3 сек · реальные ордера отключены</div></div>
+<div class="card"><div class="k">Следующий Local</div><div class="v amber" id="expected">—</div><div class="small">по последнему teacher pivot</div></div>
+<div class="card"><div class="k">30D labels</div><div class="v" id="histlabels">—</div><div class="small">supervised pretrain</div></div>
+<div class="card"><div class="k">Live labels</div><div class="v" id="livelabels">—</div><div class="small">pending <span id="pending">—</span></div></div>
+
+<div class="card wide">
+<div class="k">Текущий кандидат</div>
+<div class="v" id="candidate">WAIT</div>
+<div class="row"><span>Стадия</span><b id="stage">—</b></div>
+<div class="row"><span>Возраст</span><b id="age">—</b></div>
+<div class="row"><span>H1 prior</span><b id="h1prior">—</b></div>
+<div class="row"><span>Источник кандидата</span><b id="source">—</b></div>
+<div class="probrow"><span>60s</span><div class="bar"><div class="fill" id="p60bar"></div></div><b id="p60">—</b></div>
+<div class="probrow"><span>180s</span><div class="bar"><div class="fill" id="p180bar"></div></div><b id="p180">—</b></div>
+<div class="probrow"><span>300s</span><div class="bar"><div class="fill" id="p300bar"></div></div><b id="p300">—</b></div>
+<div class="small">Порог каждой головы показан в таблице ниже. EARLY/PROBABLE ≠ подтверждённый teacher Local.</div>
+</div>
+
+<div class="card wide">
+<div class="k">Teacher / structural anchor</div>
+<div class="row"><span>Последний подтверждённый Local</span><b id="teacher">—</b></div>
+<div class="row"><span>H1 shadow LOW</span><b id="h1low">—</b></div>
+<div class="row"><span>H1 shadow HIGH</span><b id="h1high">—</b></div>
+<div class="row"><span>H1 history labels LOW/HIGH</span><b id="h1labels">—</b></div>
+<div class="small">K2 future используется только для созревшей teacher-метки; в predictive inputs не попадает.</div>
+</div>
+
+<div class="card wide">
+<div class="k">Quantum · 6 Local heads</div>
+<div class="headgrid" id="heads"></div>
+<div class="small">LOW/HIGH × 60/180/300. Исторические true Local балансируются, чтобы модель не училась тривиальному «всегда false».</div>
+</div>
+
+<div class="card wide">
+<div class="k">CORTEX · relationship analysis</div>
+<div class="row"><span>Состояние</span><b id="cstate">—</b></div>
+<div class="row"><span>Вердикт</span><b id="cverdict">—</b></div>
+<div class="row"><span>Confidence</span><b id="cconf">—</b></div>
+<div class="small"><b>Summary:</b> <span id="csummary">—</span></div>
+<div class="small"><b>Поддерживает:</b> <span id="csupport">—</span></div>
+<div class="small"><b>Против:</b> <span id="cagainst">—</span></div>
+<div class="small"><b>Не хватает:</b> <span id="cmissing">—</span></div>
+</div>
+
+<div class="card wide">
+<div class="k">Historical relationship match</div>
+<div class="small good"><b>Совпадает с true Local:</b></div><div id="relsupport">—</div>
+<div class="small bad"><b>Противоречит true Local:</b></div><div id="relagainst">—</div>
+</div>
+
+<div class="card wide">
+<div class="k">116-point live data bus</div>
+<div class="triplet"><div class="mini"><span class="k">Inputs seen</span><b id="seen">—</b></div><div class="mini"><span class="k">Contract</span><b>116</b></div><div class="mini"><span class="k">Mode</span><b>LIVE</b></div></div>
+<div class="row"><span>Отсутствующие live inputs</span><b id="missingcount">—</b></div>
+<div class="busgrid" id="bus"></div>
+<div class="small">зелёный = causal input/quality получен · жёлтый = target/eval · серый = metadata · красный = input ещё не виделся</div>
+</div>
+
+<div class="card wide">
+<div class="k">Последний model signal</div>
+<div class="v amber" id="signal">—</div>
+<div class="small" id="signalmeta">—</div>
+</div>
+
+<div class="card wide">
+<div class="k">Архитектура</div>
+<span class="tag">LOCAL MODEL ON</span><span class="tag">QUANTUM ON</span><span class="tag">CORTEX ON</span>
+<span class="off">CATERPILLAR OFF</span><span class="off">FIBONACCI OFF</span><span class="off">DIRECT POLICY OFF</span><span class="off">ENTRY/EXIT/RE-ENTRY HEADS OFF</span>
+<div class="small">Research-only. Реальные ордера отключены. Цель — только своевременное определение Local LOW / Local HIGH.</div>
+</div>
+</div>
+<div class="footer">HYPE Local-Only · direct push + GitHub fallback · heartbeat 3s</div>
+</div>
 <script>
-const el=id=>document.getElementById(id);
+const $=id=>document.getElementById(id);
+const pct=v=>v==null?"—":(Number(v)*100).toFixed(1)+"%";
 const n=(v,d=2)=>v==null?"—":Number(v).toLocaleString("ru-RU",{maximumFractionDigits:d});
-const pct=(v,d=1)=>v==null?"—":(Number(v)*100).toFixed(d)+"%";
-let lastSnapshot=null,lastUpdated=null;
-const feed=[];
-const bus=el("bus");
-for(let i=0;i<116;i++){const b=document.createElement("i");b.className="bit";b.title="Point "+(i+1);bus.appendChild(b)}
-function addFeed(msg){
- const t=new Date().toLocaleTimeString("ru-RU");
- feed.unshift("<div class='feedline'><strong>"+t+"</strong> · "+msg+"</div>");
- if(feed.length>8)feed.pop();
- el("feed").innerHTML=feed.join("");
-}
-function pulseBus(){
- const bits=[...document.querySelectorAll(".bit")];
- bits.forEach((b,i)=>{setTimeout(()=>{b.classList.add("hot");setTimeout(()=>b.classList.remove("hot"),380)},(i%29)*18+Math.floor(i/29)*70)});
-}
+const bus=$("bus");for(let i=0;i<116;i++){const b=document.createElement("i");b.className="bit";b.title="Point "+(i+1);bus.appendChild(b)}
+function setProb(id,v){$(id).textContent=pct(v);$(id+"bar").style.width=Math.max(0,Math.min(100,Number(v||0)*100))+"%"}
+function relRows(rows){return (rows||[]).slice(0,8).map(r=>"<div class='rel'><b>"+r.feature+"</b> · effect "+n(r.effect,2)+" · now "+n(r.value,4)+" · hist "+n(r.historical_median,4)+"</div>").join("")||"—"}
 function render(s){
- el("status").textContent=s.status||"—";el("fresh").textContent="fresh "+n(s.freshness_seconds,0)+"s";
- el("rels").textContent=n(s.relationships_total,0);el("pos").textContent="+"+n(s.positive_relationships,0);el("neg").textContent="−"+n(s.negative_relationships,0);
- el("checks").textContent=n(s.prediction_checks,0);el("errs").textContent=n(s.errors_total,0);el("erate").textContent=pct(s.error_rate);el("perrors").textContent=JSON.stringify(s.prediction_errors||{});
- const p=s.paper||{},q=s.quant||{},a=s.astra||{},ap=s.astra_paper||{},ad=a.last_decision||{},ac=a.last_critique||{},l=s.active_local,m=p.mean_mfe_capture_ratio,tp=s.training_progress||{},sh=s.structural_history||{},fib=s.fibonacci||{},fibcur=fib.current||{},dp=s.direct_policy||{},legacy=s.legacy_paper_archive||{},lab=s.strategy_lab||{},labs=lab.strategies||{};
+ $("status").textContent=s.status||"—";
+ const age=s.stream_age_seconds??s.freshness_seconds;
+ $("fresh").textContent="fresh "+n(age,0)+"s · "+(s.transport||"—");
+ $("expected").textContent=s.expected_side||"UNKNOWN";
+ $("histlabels").textContent=n(s.historical_labels,0);
+ $("livelabels").textContent=n(s.live_labels,0);$("pending").textContent=n(s.pending_labels,0);
+ const c=s.candidate||{},p=c.probabilities||{};
+ if(c.side){$("candidate").textContent=c.side+" @ "+n(c.extreme_price,4);$("candidate").className="v "+(c.side==="LOW"?"good":"bad")}
+ else{$("candidate").textContent="WAIT";$("candidate").className="v amber"}
+ $("stage").textContent=c.stage||"WATCH";$("age").textContent=c.age_s==null?"—":n(c.age_s,0)+"s";
+ $("h1prior").textContent=pct(c.h1_prior);$("source").textContent=((c.evidence||{}).windows||[]).join(" / ")||((c.evidence||{}).proposal||"—");
+ setProb("p60",p["60"]);setProb("p180",p["180"]);setProb("p300",p["300"]);
+ const t=s.last_teacher_local||{};$("teacher").textContent=t.side?(t.side+" @ "+n(t.price,4)+" · hour "+new Date(t.hour_ms).toLocaleString("ru-RU")):"—";
+ const h=s.h1_baseline||{},ht=s.h1_training||{};$("h1low").textContent=pct(h.low_probability);$("h1high").textContent=pct(h.high_probability);
+ $("h1labels").textContent=n((ht.labels||{}).LOW,0)+" / "+n((ht.labels||{}).HIGH,0);
+ const mr=s.model_report||{},labs=mr.labels||{},pos=mr.positive||{},ths=mr.thresholds||{};
+ const keys=["LOW_60s","LOW_180s","LOW_300s","HIGH_60s","HIGH_180s","HIGH_300s"];
+ $("heads").innerHTML=keys.map(k=>"<div class='head'><div class='k'>"+k+"</div><div class='n'>"+n(labs[k],0)+" labels</div><div class='m'>true "+n(pos[k],0)+" · threshold "+pct(ths[k])+"</div></div>").join("");
+ const cx=s.cortex||{},cd=cx.decision||{};$("cstate").textContent=cx.state||s.cortex_state||"—";$("cverdict").textContent=cd.verdict||"—";$("cconf").textContent=pct(cd.confidence);
+ $("csummary").textContent=cd.summary||"—";$("csupport").textContent=(cd.supporting_relationships||[]).join(" · ")||"—";$("cagainst").textContent=(cd.contradicting_relationships||[]).join(" · ")||"—";$("cmissing").textContent=(cd.missing_live_evidence||[]).join(" · ")||"—";
+ const re=c.relationship_evidence||{};$("relsupport").innerHTML=relRows(re.supports);$("relagainst").innerHTML=relRows(re.contradicts);
  const fc=s.feature_contract||{},seen=new Set(fc.seen_input_ids||[]),targets=new Set(fc.target_eval_ids||[]),meta=new Set(fc.metadata_ids||[]);
- const inputTotal=(fc.supported_input_ids||[]).length,inputSeen=Number(fc.seen_input_count||0);
- el("inputseen").textContent=n(inputSeen,0)+" / "+n(inputTotal,0);el("datastatus").textContent=(inputTotal>0&&inputSeen===inputTotal)?"ГОТОВО":"СБОР";
- const ready=v=>Number(v||0)>=100?"ГОТОВО":("ОБУЧЕНИЕ "+n(v,1)+"%");
- el("learnpct").textContent=Number(tp.overall_percent||0)>=100?"ГОТОВО":n(tp.overall_percent,1)+"%";el("learnstatus").textContent=tp.status||"COLLECTING_LABELS";
- const th=tp.heads||{};el("plocal").textContent=ready((th.local||{}).percent);el("pbounce").textContent=ready((th.bounce||{}).percent);el("pdirect").textContent=ready((th.direct_policy||{}).percent);el("pfib").textContent=ready((th.fibonacci||{}).percent);
- el("hbars").textContent=n(sh.bars_loaded,0);el("hpivots").textContent=n(sh.strict_pivots,0);el("hlegs").textContent=n(sh.closed_legs,0);el("href1").textContent=n(sh.return_1x_pct,2)+"%";el("hrefcfg").textContent=n(sh.return_configured_reference_pct,2)+"%";
- el("sampled").textContent=n(s.sampled_states,0);el("micro").textContent=n(s.processed_micro_rows,0);
+ $("seen").textContent=n(fc.seen_input_count,0)+" / "+n((fc.supported_input_ids||[]).length,0);$("missingcount").textContent=n((fc.missing_seen_input_ids||[]).length,0);
  [...document.querySelectorAll(".bit")].forEach((b,i)=>{const id=i+1;b.className="bit "+(seen.has(id)?"seen":targets.has(id)?"target":meta.has(id)?"meta":"missing")});
- el("mfe").textContent=pct(m);el("mfebar").style.width=Math.max(0,Math.min(100,(m||0)*100))+"%";
- if(l){el("local").textContent="ГОТОВО · "+l.side+" @ "+n(l.price,4);el("local").className="v "+(l.side==="LOW"?"good":"bad");el("localconf").textContent=pct(l.confidence);el("localstage").textContent=(l.stage||"—")+"s";el("localsource").textContent=l.source||"—";const e=l.evidence||{};el("localwhy").textContent=(e.rule||"LEARNED_CAUSAL_LOCAL")+" · p "+pct(e.model_probability)+" · labels "+n(e.labels_seen,0)+" · "+(e.label_objective||"realized reversal advantage")}else{el("local").textContent="WAIT";el("local").className="v amber";el("localconf").textContent="—";el("localstage").textContent="—";el("localsource").textContent="—";el("localwhy").textContent="—"}el("policy").textContent=s.policy_state||"—";
- const watch=s.local_watch||{},wc=watch.candidate||{};
- el("structleg").textContent=(watch.structural_leg||"—")+" · bias "+(watch.structural_bias||"—")+" · move "+n(watch.move_from_confirmed_local_pct,2)+"%";
- el("oppwatch").textContent=(watch.target_local||"—")+" · "+(watch.status||"—")+" · score "+pct(watch.score);
- el("oppcandidate").textContent=(wc.present?"YES":"NO")+" · stage "+(wc.stage??"—")+" · conf "+pct(wc.confidence)+" · retrace "+n(wc.retrace_bps,1)+" bps";
- const early=s.early_local||{},esh=early.shadow||{},emx=early.metrics||{},elo=emx.LOW||{},ehi=emx.HIGH||{};
- el("earlylocal").textContent=esh.side?esh.side+" · conf "+pct(esh.confidence)+" · LOW "+pct(esh.low_probability)+" / HIGH "+pct(esh.high_probability):"—";
- el("earlymetrics").textContent="SHADOW ONLY · LOW P/R "+pct(elo.precision)+"/"+pct(elo.recall)+" · HIGH P/R "+pct(ehi.precision)+"/"+pct(ehi.recall)+" · examples "+n(Math.max(Number(elo.examples||0),Number(ehi.examples||0)),0);
- el("qlabels").textContent=n(q.labels,0);el("qv2labels").textContent=n(q.v2_labels,0);el("champ").textContent=q.champion_ready?"READY":"LEARNING";el("qaction").textContent=(q.last_action||{}).action||"FLAT";
- el("astatus").textContent=a.state||"—";el("amodel").textContent=(a.model||"—")+" · "+(a.backend||"—")+" · "+(a.reasoning_effort||"—");
- el("adecision").textContent=(ad.decision||"—")+" / "+(ad.confidence==null?"—":pct(ad.confidence));
- el("apreferred").textContent=ad.preferred_strategy||"—";
- const aw=ad.strategy_weights||{};el("aweights").textContent="Local "+pct(aw.LOCAL_STRAIGHT)+" · Snake "+pct(aw.CATERPILLAR_SNAKE)+" · Fib "+pct(aw.FIBONACCI_ZIGZAG);
- el("aconsensus").textContent=(ad.strategy_consensus||"—")+" · disagreement "+pct(ad.strategy_disagreement);
- el("aarbitration").textContent=ad.arbitration_reason||"—";
- const at=a.training_progress||{};el("atrain").textContent=n(at.overall_percent,1)+"%";el("atrainbar").style.width=Math.max(0,Math.min(100,Number(at.overall_percent||0)))+"%";
- el("atrainparts").textContent=n(at.elapsed_percent,1)+"% time · "+n(at.evidence_percent,1)+"% evidence";
- el("acalls").textContent=n(a.calls,0)+" / "+n(a.matured_episodes,0);el("amemory").textContent=n(a.memory_episodes,0)+" · pending "+n(a.pending_episodes,0);
- el("aacc").textContent=pct(a.directional_accuracy);el("asession").textContent=a.current_us_session||ad.us_market_session||"—";const rc=s.runtime_concurrency||{};el("aparallel").textContent="Quant "+n(rc.quant_loop,0)+" · Cortex "+n(rc.cortex_workers,0)+"×"+n(rc.cortex_cpu_threads,0)+"T · I/O "+n(rc.io_workers,0);el("aregime").textContent=ad.market_regime||"—";
- const us=a.us_session_stats||{};const usfmt=x=>{const z=us[x]||{};return n(z.matured,0)+" ep · acc "+pct(z.directional_accuracy)+" · net "+pct(z.mean_directional_net)+" · |move| "+pct(z.mean_abs_return)};
- el("uspremarket").textContent=usfmt("US_PREMARKET");el("uscash").textContent=usfmt("US_CASH");el("usafter").textContent=usfmt("US_AFTER_HOURS");el("usovernight").textContent=usfmt("US_OVERNIGHT");
- el("fibtrain").textContent=n(fib.training_percent,1)+"%";el("fibbar").style.width=Math.max(0,Math.min(100,Number(fib.training_percent||0)))+"%";
- const fs=fibcur.swing_from||{},ft=fibcur.swing_to||{},fcx=fibcur.closest||{};
- el("fibswing").textContent=fibcur.available?((fs.side||"—")+" "+n(fs.price,4)+" → "+(ft.side||"—")+" "+n(ft.price,4)):"—";
- el("fibclosest").textContent=fibcur.available?((fcx.name||"—")+" @ "+n(fcx.price,4)+" · "+n(fcx.distance_bps,1)+" bps"):"—";
- const flevels=fib.levels||{};const ftouches=Object.values(flevels).reduce((z,x)=>z+Number((x||{}).touches||0),0);const fmatured=Object.values(flevels).reduce((z,x)=>z+Number((x||{}).matured||0),0);
- el("fibcounts").textContent=n(ftouches,0)+" / "+n(fmatured,0)+" / "+n(fib.pending,0);
- el("fiblevels").innerHTML=Object.entries(flevels).map(([k,v])=>"<span class='tag'>"+k+" · n "+n(v.matured,0)+" · cont "+pct(v.continuation_rate)+" · rev "+pct(v.reversal_rate)+" · net "+pct(v.mean_net)+"</span>").join(" ")||"Ждём касания уровней.";
- const labfmt=z=>{z=z||{};const op=z.open_position||{};return (Number(z.return_pct||0)>=0?"+":"")+n(z.return_pct,2)+"% · $"+n(z.equity,2)+" · "+n(z.closed_trades,0)+" tr · DD "+n(z.max_drawdown_pct,2)+"%"+(op.side?" · "+op.side:" · FLAT")};
- el("labprogress").textContent=n(lab.progress_percent,1)+"% / 24h";el("labbar").style.width=Math.max(0,Math.min(100,Number(lab.progress_percent||0)))+"%";
- el("lableader").textContent=(lab.leader||"—")+" · "+(lab.evidence_quality||"—");
- el("labrisk").textContent=(lab.same_risk_for_all?"YES":"NO")+" · exposure "+n(lab.effective_exposure_x,1)+"x · cost "+pct(lab.modeled_round_trip_cost,2);
- el("labstraight").textContent=labfmt(labs.local_straight);el("labsnake").textContent=labfmt(labs.caterpillar_snake);el("labfib").textContent=labfmt(labs.fibonacci_zigzag);
- const fl=lab.fibonacci_learning||{},fld=fl.last_decision||{};
- el("labfibLearn").textContent=n(fl.decisions,0)+" decisions · "+n(fl.resolved_transitions,0)+" resolved · "+n(fl.training_percent,1)+"%";
- el("labfibLast").textContent=(fld.node||"—")+" → "+(fld.side||"—")+" · p↑ "+(fld.p_up==null?"—":pct(fld.p_up))+" · "+(fld.reason||"—");
- const rr=lab.rules||{};el("labrules").textContent="Straight: "+(rr.local_straight||"—")+" · Snake: "+(rr.caterpillar_snake||"—")+" · Fib: "+(rr.fibonacci_zigzag||"—");
- el("athesis").textContent=ad.thesis||"—";el("afor").textContent=(ad.evidence_for||[]).join(" · ")||"—";el("aagainst").textContent=(ad.evidence_against||[]).join(" · ")||"—";
- el("ainvalidation").textContent=ad.invalidation||"—";el("acritique").textContent=(ac.lesson||"—")+(ac.horizon_s?" · "+ac.horizon_s+"s":"");
- el("policyver").textContent="v"+n(s.policy_contract_version,0);el("equity").textContent="$"+n(p.equity,2);el("ret").textContent=n(p.return_pct,2)+"%";el("trades").textContent=n(p.closed_trades,0)+" / "+n(p.reentries,0);el("wr").textContent=p.win_rate==null?"—":pct(p.win_rate);el("dd").textContent=n(p.max_drawdown_pct,2)+"%";
- const pdlast=dp.last_decision||{},pha=pdlast.horizon_advantage||{},plb=dp.labels||{},pfl=plb.FLAT||{},pps=plb.POSITION||{};
- el("policyaction").textContent=(pdlast.action||"—")+" · "+(pdlast.structural_side||"—")+" · adv "+n(pdlast.advantage,5);
- el("policyadv").textContent=n(pha["60"]??pha[60],5)+" / "+n(pha["180"]??pha[180],5)+" / "+n(pha["300"]??pha[300],5);
- el("policylabels").textContent=n((pfl["60"]||0)+(pfl["180"]||0)+(pfl["300"]||0),0)+" / "+n((pps["60"]||0)+(pps["180"]||0)+(pps["300"]||0),0);
- el("legacypaper").textContent=legacy.return_pct==null?"—":n(legacy.return_pct,2)+"% · "+n(legacy.closed_trades,0)+" trades";
- el("aequity").textContent="$"+n(ap.equity,2);el("aret").textContent=n(ap.return_pct,2)+"%";el("atrades").textContent=n(ap.closed_trades,0);el("awr").textContent=ap.win_rate==null?"—":pct(ap.win_rate);el("add").textContent=n(ap.max_drawdown_pct,2)+"%";el("adelta").textContent=n(s.astra_vs_quant_delta_pct,2)+" pp";
- const aop=ap.open_position;el("aposition").textContent=aop?(Number(aop.side)>0?"LONG":"SHORT")+" · "+n(Number(aop.current_return||0)*100,2)+"%":"FLAT";
- el("apositionexpert").textContent=aop?(aop.preferred_strategy||"NONE"):"—";
- const ausage=ap.strategy_usage||{};el("aexpertusage").innerHTML=Object.entries(ausage).map(([k,v])=>"<span class='tag'>"+k+" · "+n(v.trades,0)+" tr · WR "+pct(v.win_rate)+" · PnL $"+n(v.realized_pnl,2)+"</span>").join(" ")||"Пока нет закрытых meta-сделок.";
- const op=p.open_position;if(op){el("position").textContent=op.side;el("position").className="v "+(op.side==="LONG"?"good":"bad");el("position2").textContent="entry "+n(op.entry_price,4)+" · MFE "+pct(op.mfe)+" · MAE "+pct(op.mae)+" · "+op.leverage+"x · "+n(op.margin_fraction*100,1)+"% margin"}else{el("position").textContent="FLAT";el("position").className="v amber";el("position2").textContent="ждём подтверждённый local + edge"}
- const lm=s.local_models||{},bm=s.bounce_models||{};el("localmodels").innerHTML=[...Object.entries(lm).map(([k,v])=>"<span class='tag'>STRICT "+k+" · "+(v.labels||0)+" / "+(v.positive||0)+"+</span>"),...Object.entries(bm).map(([k,v])=>"<span class='tag'>BOUNCE "+k+" · "+(v.labels||0)+" / "+(v.positive||0)+"+</span>")].join(" ")||"—";
- el("directstate").textContent=(pdlast.action||"—")+" · "+(pdlast.mode||"—")+" · labels "+n((th.direct_policy||{}).labels,0);
- el("manualgates").textContent=dp.manual_action_thresholds===false?"OFF":"CHECK";
- const top=(s.relationships||{}).top||[];el("toprels").innerHTML=top.slice(0,14).map(r=>"<div class='rel'><b>"+r.head+"</b> · "+r.feature+" · <span class='"+(r.weight>0?"good":"bad")+"'>"+n(r.weight,4)+"</span></div>").join("")||"Пока недостаточно labels";
- const age=s.stream_age_seconds==null?s.freshness_seconds:s.stream_age_seconds;
- const direct=s.transport==="DIRECT_PUSH";
- el("updated").textContent="данные "+new Date(s.updated_ts_ms||Date.now()).toLocaleTimeString("ru-RU")+" · "+(direct?"DIRECT":"GITHUB")+" · канал "+n(age,0)+"s";
- el("live").textContent=(age!=null&&age<45)?"LIVE":(age!=null&&age<180?"STALE":"RECONNECT");
- if(lastUpdated!==s.updated_ts_ms){
-   const prev=lastSnapshot||{};
-   const ds=Number(s.sampled_states||0)-Number(prev.sampled_states||0), dm=Number(s.processed_micro_rows||0)-Number(prev.processed_micro_rows||0);
-   const dq=Number(q.labels||0)-Number((prev.quant||{}).labels||0);
-   const act=(q.last_action||{}).action||"FLAT";
-   const acalls=Number(a.calls||0),prevAcalls=Number((prev.astra||{}).calls||0);
-   addFeed("snapshot "+n(s.sampled_states,0)+" · micro +"+Math.max(0,dm)+" · labels "+n(q.labels,0)+(dq>0?" (+"+dq+")":"")+" · action "+act+(acalls>prevAcalls?" · CORTEX "+(ad.decision||"—"):""));
-   pulseBus();lastUpdated=s.updated_ts_ms;lastSnapshot=s;
- }
+ const sig=s.last_signal||{};$("signal").textContent=sig.side?(sig.state+" · "+sig.side+" @ "+n(sig.price,4)):"—";$("signalmeta").textContent=sig.side?("stage "+sig.stage+"s · p "+pct(sig.probability)+" · H1 "+pct(sig.h1_prior)):"нет сигнала";
+ $("updated").textContent="данные "+new Date(s.updated_ts_ms||Date.now()).toLocaleTimeString("ru-RU")+" · "+(s.mode||"LOCAL_ONLY");
+ $("live").textContent=(age!=null&&age<45)?"LIVE":(age!=null&&age<180?"STALE":"RECONNECT");
 }
-async function tick(){try{const r=await fetch("/api/status?x="+Date.now(),{cache:"no-store"});const j=await r.json();if(!r.ok)throw Error(j.error||("HTTP "+r.status));render(j)}catch(e){el("live").textContent="RECONNECT";el("updated").textContent="канал переподключается · "+e.message}}
+async function tick(){try{const r=await fetch("/api/status?x="+Date.now(),{cache:"no-store"});const j=await r.json();if(!r.ok)throw Error(j.error||("HTTP "+r.status));render(j)}catch(e){$("live").textContent="RECONNECT";$("updated").textContent=e.message}}
 if(window.Telegram&&Telegram.WebApp){Telegram.WebApp.ready();Telegram.WebApp.expand();Telegram.WebApp.setHeaderColor("#05070b");Telegram.WebApp.setBackgroundColor("#05070b")}
 tick();setInterval(tick,3000);
-</script></body></html>'''
+</script>
+</body></html>'''
 
 def parse_status(body:str):
     start=(body or "").find("{")
