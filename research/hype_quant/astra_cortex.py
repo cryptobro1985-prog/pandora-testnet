@@ -98,7 +98,7 @@ def _output_text(payload):
     return ""
 
 class AstraCortex:
-    VERSION="cortex-20b-v2"
+    VERSION="cortex-20b-meta-v3"
 
     def __init__(self,checkpoint_dir:Path):
         self.checkpoint_dir=Path(checkpoint_dir)
@@ -666,3 +666,21 @@ def self_test():
         c=AstraCortex(Path(td)); c.enabled=True; c.backend="local_llama"; c.api_key=""
         assert c.available is True
         assert c.status(2_000)["backend"]=="local_llama"
+        lab={"strategies":{
+            "local_straight":{"equity":101.0,"return_pct":1.0,"closed_trades":2,"max_drawdown_pct":1.0,
+                              "open_position":{"side":"LONG","entry_price":100.0}},
+            "caterpillar_snake":{"equity":100.0,"return_pct":0.0,"closed_trades":1,"max_drawdown_pct":0.5,
+                                "open_position":None},
+            "fibonacci_zigzag":{"equity":99.0,"return_pct":-1.0,"closed_trades":3,"max_drawdown_pct":2.0,
+                               "open_position":{"side":"SHORT","entry_price":101.0}}},
+             "leader":"local_straight","progress_percent":10.0,"evidence_quality":"LOW",
+             "same_risk_for_all":True,"fibonacci_learning":{"training_percent":5.0}}
+        assert c._strategy_disagreement_score(lab)==1.0
+        compact=c._compact_strategy_lab(lab)
+        assert set(compact["experts"])=={"local_straight","caterpillar_snake","fibonacci_zigzag"}
+        d=c._normalize_decision({"decision":"LONG","preferred_strategy":"CATERPILLAR_SNAKE",
+                                 "strategy_weights":{"LOCAL_STRAIGHT":2,"CATERPILLAR_SNAKE":1,
+                                                     "FIBONACCI_ZIGZAG":1}})
+        assert d["decision"]=="ENTER_LONG"
+        assert d["preferred_strategy"]=="CATERPILLAR_SNAKE"
+        assert abs(sum(d["strategy_weights"].values())-1.0)<1e-9
