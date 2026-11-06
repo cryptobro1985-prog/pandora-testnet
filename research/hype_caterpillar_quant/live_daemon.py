@@ -71,6 +71,7 @@ def compact_status(report):
         "prediction_errors":report.get("prediction_errors") or {},
         "active_local":report.get("active_local"),
         "early_local":report.get("early_local") or {},
+        "local_watch":report.get("local_watch") or {},
         "local_models":report.get("local_models") or {},
         "bounce_models":report.get("bounce_models") or {},
         "entry_model":report.get("entry_model") or {},
