@@ -74,6 +74,7 @@ def compact_status(report):
         "local_watch":report.get("local_watch") or {},
         "local_models":report.get("local_models") or {},
         "bounce_models":report.get("bounce_models") or {},
+        "direct_policy":report.get("direct_policy") or {},
         "entry_model":report.get("entry_model") or {},
         "exit_model":report.get("exit_model") or {},
         "reentry_model":report.get("reentry_model") or {},
