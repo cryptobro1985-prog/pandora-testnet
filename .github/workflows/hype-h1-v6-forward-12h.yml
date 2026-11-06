@@ -31,6 +31,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 195
     steps:
+      - name: Cancel superseded HYPE collector runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SELF="${GITHUB_RUN_ID}"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs?branch=${GITHUB_REF_NAME}&per_page=100" --jq             '.workflow_runs[] | select(.path==".github/workflows/hype-h1-v6-forward-12h.yml") | select(.status=="in_progress" or .status=="queued" or .status=="pending") | .id' |
+          while read -r ID; do
+            [ -z "$ID" ] && continue
+            if [ "$ID" -lt "$SELF" ]; then
+              echo "cancel_superseded_run=$ID"
+              gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/$ID/cancel" >/dev/null || true
+            fi
+          done
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
