@@ -1,0 +1,57 @@
+name: HYPE Caterpillar Quant Checkpoint Recovery
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-caterpillar-checkpoint-recovery.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Recover known-good Caterpillar Quant checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RECOVERY_ARTIFACT_ID: "13485575017"
+        run: |
+          set -euo pipefail
+          mkdir -p recovered
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${RECOVERY_ARTIFACT_ID}/zip" > checkpoint.zip
+          unzip -q checkpoint.zip -d recovered
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("recovered")
+          reports=list(root.rglob("CATERPILLAR_QUANT_REPORT.json"))
+          pickles=list(root.rglob("caterpillar_quant.pkl"))
+          assert reports, "CATERPILLAR_QUANT_REPORT.json missing"
+          assert pickles, "caterpillar_quant.pkl missing"
+          report=json.loads(reports[0].read_text())
+          q=report.get("quant") or {}
+          labels=int(q.get("labels") or 0)
+          assert labels >= 900, f"recovery checkpoint unexpectedly small: labels={labels}"
+          assert report.get("research_only") is True
+          assert report.get("real_orders") is False
+          print(json.dumps({
+              "recovery_ok": True,
+              "quant_labels": labels,
+              "report": str(reports[0]),
+              "pickle": str(pickles[0]),
+          }))
+          PY
+      - name: Publish recovered durable checkpoint
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-CATERPILLAR-QUANT-CHECKPOINT
+          path: recovered
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
