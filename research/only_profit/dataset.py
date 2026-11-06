@@ -175,9 +175,10 @@ def add_frozen_quant_overlay(hist,cal,hold):
     # TRAIN_END; validation/OOS/live never update the model.
     for r in sorted(hist,key=lambda z:z["ts_ms"]):
         x=r["features"]
-        x.update(_quant_prediction_features(learner,x))
+        qf=_quant_prediction_features(learner,x)
         if int(r["ts_ms"])<TRAIN_END:
             learner.observe(int(r["ts_ms"]),float(r["price"]),x)
+        x.update(qf)
     learner.pending.clear()
     for rows in (cal,hold):
         for r in rows:
