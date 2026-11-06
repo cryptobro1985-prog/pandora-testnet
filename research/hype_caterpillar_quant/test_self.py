@@ -55,7 +55,7 @@ def fake_provisional_low_state():
     candles[4*H]["high"]=110.0
     return SimpleNamespace(candles={"60":candles})
 
-def test_same_h1_extremes_use_m1_order():
+def test_same_h1_extremes_use_m1_order_training_only():
     q=new()
     candles60={}
     for i in range(10):
@@ -68,19 +68,18 @@ def test_same_h1_extremes_use_m1_order():
     candles1[9*H+5*60_000]["high"]=110.0
     candles1[9*H+45*60_000]["low"]=90.0
     s=SimpleNamespace(candles={"60":candles60,"1":candles1})
-    out=q.observe(10*H+10*60_000,92.0,x(),s)
-    assert any(e["event"]=="PROVISIONAL_H1_LOCAL_BOOTSTRAP" and e["side"]=="LOW" for e in out["events"])
+    ev=q._bootstrap_provisional_local(s,10*H+10*60_000,92.0,x())
+    assert any(e["event"]=="PROVISIONAL_H1_LOCAL_BOOTSTRAP" and e["side"]=="LOW" for e in ev)
     assert q.bootstrap_diagnostic["resolution"]=="M1_INTRAHOUR_ORDER"
     assert q.bootstrap_diagnostic["m1_resolved_side"]=="LOW"
+    assert q.last_confirmed_local is None and q.position is None
 
-def test_provisional_low_starts_caterpillar_now():
+def test_provisional_low_is_training_only_not_policy():
     q=new();s=fake_provisional_low_state();ts=10*H+10*60_000
-    out=q.observe(ts,92.0,x(),s)
-    assert any(e["event"]=="PROVISIONAL_H1_LOCAL_BOOTSTRAP" and e["side"]=="LOW" for e in out["events"])
-    assert q.last_confirmed_local is not None
-    assert q.last_confirmed_local.side=="LOW"
-    assert q.last_confirmed_local.source=="PROVISIONAL_H1_EXTREME"
-    assert q.position is not None and q.position.side==1
+    ev=q._bootstrap_provisional_local(s,ts,92.0,x())
+    assert any(e["event"]=="PROVISIONAL_H1_LOCAL_BOOTSTRAP" and e["side"]=="LOW" for e in ev)
+    assert q.last_confirmed_local is None
+    assert q.position is None
 
 def test_strict_bootstrap_low_enters_long():
     q=new();s=fake_state("LOW");ts=10*H
@@ -110,7 +109,7 @@ def test_gap_censors_position_not_trade():
     assert any(e["event"]=="CENSORED_POSITION" for e in q.actions)
 
 def test_same_local_reentry_survives_candidate_id_change():
-    q=new();s=fake_provisional_low_state();ts=10*H+10*60_000
+    q=new();s=fake_state("LOW");ts=10*H
     q.observe(ts,92.0,x(),s)
     assert q.position is not None
     q._close(ts+70_000,92.1,"TEST_EXIT")
@@ -127,7 +126,7 @@ def test_same_local_reentry_survives_candidate_id_change():
     assert q._same_local_episode(c) is True
 
 def test_subcost_mfe_noise_does_not_force_bootstrap_exit():
-    q=new();s=fake_provisional_low_state();ts=10*H+10*60_000
+    q=new();s=fake_state("LOW");ts=10*H
     q.observe(ts,100.0,x(),s)
     assert q.position is not None and q.position.side==1
     entry=q.position.entry_price
@@ -167,8 +166,8 @@ def test_strict_target_available_after_k2():
 
 def main():
     test_construct()
-    test_same_h1_extremes_use_m1_order()
-    test_provisional_low_starts_caterpillar_now()
+    test_same_h1_extremes_use_m1_order_training_only()
+    test_provisional_low_is_training_only_not_policy()
     test_strict_bootstrap_low_enters_long()
     test_strict_bootstrap_high_enters_short()
     test_gap_censors_position_not_trade()
