@@ -1,4 +1,4 @@
-name: HYPE v15 Direct-Relay 1000-H1 Live
+name: HYPE v16 Learned-Entry Cortex/Fib Live
 # compact-110-v4-fixed-pack
 # 2026-11-06-local-low-restart
 # caterpillar-quant-v15-direct-relay-1000h1-isolated
@@ -21,7 +21,7 @@ permissions:
   issues: write
 
 concurrency:
-  group: hype-v15-direct-relay-1000h1-${{ github.ref }}
+  group: hype-v16-learned-entry-${{ github.ref }}
   cancel-in-progress: true
 
 env:
