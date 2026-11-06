@@ -1,0 +1,40 @@
+name: HYPE Caterpillar v2 Validation
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-caterpillar-v2-validation.yml"
+      - "research/hype_quant/**"
+      - "research/hype_caterpillar_quant/**"
+      - "research/hype_caterpillar_monitor/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hype-caterpillar-v2-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install research dependencies
+        run: |
+          python -m pip install -r research/hype_quant/requirements.txt
+          python -m pip install flask requests
+      - name: Compile v2
+        run: |
+          python -m py_compile             research/hype_quant/learner.py             research/hype_quant/features.py             research/hype_caterpillar_quant/learner.py             research/hype_caterpillar_quant/live_daemon.py             research/hype_caterpillar_monitor/app.py
+      - name: Quant 116 v2 self-test
+        run: python research/hype_quant/test_self.py
+      - name: Caterpillar H1 policy v2 behavioural test
+        run: python research/hype_caterpillar_quant/test_self.py
