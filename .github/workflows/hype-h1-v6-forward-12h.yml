@@ -18,7 +18,7 @@ permissions:
 
 concurrency:
   group: hype-v6-forward-12h-caterpillar-v1-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   CAPTURE_MINUTES: "170"
@@ -45,13 +45,8 @@ jobs:
           python -m py_compile research/hype_caterpillar_quant/learner.py research/hype_caterpillar_quant/live_daemon.py
           bash -n research/hype_local_v5/capture_pack_segment.sh
           python research/hype_local_v5/test_compact_smoke.py
-          python - <<'PY'
-          from pathlib import Path
-          from research.hype_caterpillar_quant.learner import new_from_config
-          q=new_from_config(Path("research/hype_quant/config.json"))
-          assert q.report()["research_only"] and not q.report()["real_orders"]
-          print("caterpillar_quant_smoke=ok")
-          PY
+          python -m research.hype_quant.test_self
+          python -m research.hype_caterpillar_quant.test_self
       - name: Restore latest Caterpillar Quant checkpoint
         env:
           GH_TOKEN: ${{ github.token }}
@@ -301,4 +296,4 @@ jobs:
         run: |
           set -euo pipefail
           echo "Self-chaining next HYPE collector run..."
-          gh workflow run hype-h1-v6-forward-12h.yml --ref "${GITHUB_REF_NAME}"
+          gh workflow run hype-h1-v6-forward-12h.yml --repo "${GITHUB_REPOSITORY}" --ref "${GITHUB_REF_NAME}"
