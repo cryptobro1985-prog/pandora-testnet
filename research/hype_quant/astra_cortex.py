@@ -553,6 +553,7 @@ class AstraCortex:
                "active_local":self._compact_local(base_report.get("active_local")),
                "early_local_shadow":base_report.get("early_local") or {},
                "local_watch":base_report.get("local_watch") or {},
+               "direct_caterpillar_policy":base_report.get("direct_policy") or {},
                "policy_state":base_report.get("policy_state"),
                "quant_training":{"overall_percent":tp.get("overall_percent"),"status":tp.get("status"),
                                   "heads":tp.get("heads")},
