@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import argparse,json,pickle,time
+import argparse,json,pickle,time,os
+import requests
 from pathlib import Path
 
 from research.hype_quant.features import FeatureState
@@ -21,6 +22,71 @@ def save_state(state,path):
     with tmp.open("wb") as f:pickle.dump(state,f,pickle.HIGHEST_PROTOCOL)
     tmp.replace(path)
 
+
+def compact_status(report):
+    q=report.get("quant") or {}
+    return {
+        "status":report.get("learning_status","LEARNING"),
+        "updated_ts_ms":report.get("updated_ts_ms") or report.get("completed_ts_ms"),
+        "last_seen_ts_ms":report.get("last_seen_ts_ms"),
+        "freshness_seconds":None if not report.get("last_seen_ts_ms") else max(0.0,(time.time()*1000-report["last_seen_ts_ms"])/1000.0),
+        "sampled_states":report.get("sampled_states",0),
+        "processed_micro_rows":report.get("processed_micro_rows",0),
+        "relationships_total":report.get("relationships_total",0),
+        "positive_relationships":report.get("positive_relationships",0),
+        "negative_relationships":report.get("negative_relationships",0),
+        "prediction_checks":report.get("prediction_checks",0),
+        "errors_total":report.get("errors_total",0),
+        "error_rate":report.get("error_rate"),
+        "prediction_errors":report.get("prediction_errors") or {},
+        "active_local":report.get("active_local"),
+        "local_models":report.get("local_models") or {},
+        "exit_model":report.get("exit_model") or {},
+        "paper":{
+            "equity":report.get("equity"),"return_pct":report.get("return_pct"),
+            "max_drawdown_pct":report.get("max_drawdown_pct"),"closed_trades":report.get("closed_trades"),
+            "win_rate":report.get("win_rate"),"profit_factor":report.get("profit_factor"),
+            "reentries":report.get("reentries"),"mean_mfe_capture_ratio":report.get("mean_mfe_capture_ratio"),
+            "caterpillar_path_return_pct":report.get("caterpillar_path_return_pct"),
+            "straight_local_path_return_pct":report.get("straight_local_path_return_pct"),
+            "caterpillar_vs_straight_delta_pct":report.get("caterpillar_vs_straight_delta_pct"),
+            "open_position":report.get("open_position"),
+        },
+        "quant":{
+            "labels":q.get("labels"),"pending":q.get("pending"),"champion_ready":q.get("champion_ready"),
+            "promotions":q.get("promotions"),"drift_events":q.get("drift_events"),
+            "last_action":q.get("last_action"),"action_counts":q.get("action_counts"),
+        },
+        "research_only":True,"real_orders":False,
+        "github_run_id":os.environ.get("GITHUB_RUN_ID"),"github_sha":os.environ.get("GITHUB_SHA"),
+    }
+
+def publish_issue(report):
+    token=os.environ.get("GITHUB_TOKEN")
+    repo=os.environ.get("GITHUB_REPOSITORY","cryptobro1985-prog/pandora-testnet")
+    issue=os.environ.get("CATERPILLAR_STATUS_ISSUE","24")
+    if not token or not issue:return
+    status=compact_status(report);p=status["paper"];fence=chr(96)*3
+    fresh=status["freshness_seconds"]
+    lines=[
+        "# HYPE Caterpillar Quant — LIVE",
+        f"**Status:** {status['status']}  ",
+        f"**Freshness:** {fresh:.1f}s  " if fresh is not None else "**Freshness:** —  ",
+        f"**Relationships:** {status['relationships_total']} · + {status['positive_relationships']} · − {status['negative_relationships']}  ",
+        f"**Checks / errors:** {status['prediction_checks']} / {status['errors_total']}  ",
+        f"**Local:** {status['active_local'] or 'WAIT'}  ",
+        f"**Paper:** equity {p.get('equity')} · return {p.get('return_pct')}% · trades {p.get('closed_trades')} · re-entry {p.get('reentries')}  ",
+        f"**MFE capture:** {p.get('mean_mfe_capture_ratio')} · Caterpillar vs straight: {p.get('caterpillar_vs_straight_delta_pct')} pp  ",
+        "",fence+"json",json.dumps(status,separators=(',',':'),ensure_ascii=False),fence,
+    ]
+    try:
+        r=requests.patch(f"https://api.github.com/repos/{repo}/issues/{issue}",
+            headers={"Authorization":f"Bearer {token}","Accept":"application/vnd.github+json"},
+            json={"body":"\n".join(lines)},timeout=10)
+        r.raise_for_status()
+    except Exception:
+        pass
+
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--capture-root",type=Path,required=True)
@@ -40,7 +106,7 @@ def main():
     actions.touch(exist_ok=True);gaps.touch(exist_ok=True)
 
     started=time.time();deadline=started+args.minutes*60
-    next_save=0.0;next_sample_ms=0
+    next_save=0.0;next_publish=0.0;next_sample_ms=0
     last_seen_ts=state.last_ts_ms
     sample_ms=5000
     processed_micro=sampled=0
@@ -98,6 +164,13 @@ def main():
             })
             (args.checkpoint_dir/"CATERPILLAR_QUANT_REPORT.json").write_text(json.dumps(report,indent=2)+"\n")
             next_save=now+60
+        if now>=next_publish:
+            report=learner.report()
+            report.update({"processed_micro_rows":processed_micro,"sampled_states":sampled,
+                           "last_seen_ts_ms":last_seen_ts,"updated_ts_ms":int(now*1000),
+                           "research_only":True,"real_orders":False})
+            publish_issue(report)
+            next_publish=now+30
         if not events:time.sleep(args.poll_seconds)
 
     learner.save(cp);save_state(state,fs_path)
@@ -107,6 +180,7 @@ def main():
                    "feature_contract":state.coverage_report(),
                    "research_only":True,"real_orders":False})
     (args.checkpoint_dir/"CATERPILLAR_QUANT_REPORT.json").write_text(json.dumps(report,indent=2)+"\n")
+    publish_issue(report)
     print("CATERPILLAR_QUANT="+json.dumps({
         "equity":report["equity"],"return_pct":report["return_pct"],
         "closed_trades":report["closed_trades"],"reentries":report["reentries"],
