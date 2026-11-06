@@ -12,10 +12,11 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 concurrency:
   group: hype-v6-forward-12h-v4-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   CAPTURE_MINUTES: "170"
@@ -172,3 +173,17 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
+
+
+  restart_next:
+    needs: combine
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Start next continuous HYPE collector chunk
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          echo "Self-chaining next HYPE collector run..."
+          gh workflow run hype-h1-v6-forward-12h.yml --ref "${GITHUB_REF_NAME}"
