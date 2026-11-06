@@ -159,6 +159,7 @@ class CaterpillarQuantLearner:
     def _ensure_v2(self):
         if getattr(self,"policy_version",1)>=2:
             if hasattr(self.quant,"_ensure_v2"):self.quant._ensure_v2()
+            self._ensure_full_graph_policy()
             return
         # Local v1 labels described a 30m tradeable bounce, not a strict H1 pivot.
         # Preserve generic Quant history, but reset policy heads to the corrected contract.
@@ -180,6 +181,33 @@ class CaterpillarQuantLearner:
         self.prediction_errors={"local":0,"bounce":0,"exit":0,"reentry":0}
         self.policy_version=2
         if hasattr(self.quant,"_ensure_v2"):self.quant._ensure_v2()
+        self._ensure_full_graph_policy()
+
+    def _ensure_full_graph_policy(self):
+        if getattr(self,"policy_contract_version",0)>=3:
+            if not hasattr(self,"structural_history"):self.structural_history={}
+            return
+        # Contract changed materially: old provisional-window policy labels/PAPER
+        # are not comparable. Preserve generic Quant learning and all raw files,
+        # but restart Local/Caterpillar policy heads on the full-graph target.
+        self.local_models={(side,stage):binary_model() for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
+        self.local_labels={(side,stage):0 for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
+        self.local_pos={(side,stage):0 for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
+        self.bounce_models={(side,stage):binary_model() for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
+        self.bounce_labels={(side,stage):0 for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
+        self.bounce_pos={(side,stage):0 for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
+        self.exit_model=binary_model();self.reentry_model=binary_model()
+        self.exit_labels=self.exit_pos=self.reentry_labels=self.reentry_pos=0
+        self.local_pending=[];self.exit_pending=[];self.reentry_pending=[]
+        self.candidates={"LOW":None,"HIGH":None};self.last_confirmed_local=None
+        self.position=None;self.last_exit=None;self.last_reentry_sample_ms=0
+        self.equity=100.0;self.peak_equity=100.0;self.max_drawdown=0.0
+        self.trades=[];self.path_equity=100.0;self.reentries=0
+        self.baseline_equity=100.0;self.baseline_position=None;self.baseline_trades=[]
+        self.actions=[];self.structural_history={}
+        self.prediction_checks={"local":0,"bounce":0,"exit":0,"reentry":0}
+        self.prediction_errors={"local":0,"bounce":0,"exit":0,"reentry":0}
+        self.policy_contract_version=3
 
     def _completed_h1(self,state,ts_ms):
         rows=[]
@@ -245,6 +273,9 @@ class CaterpillarQuantLearner:
         current=self.last_confirmed_local
         cur_hour=getattr(current,"strict_hour_ms",None) if current is not None else None
         if current is not None and getattr(current,"source",None)=="STRICT_H1_CONFIRMED" and cur_hour==latest["hour_ms"]:
+            current.extreme_price=float(latest["price"])
+            current.evidence=dict(latest.get("evidence") or {})
+            current.stage_conf[0]=0.99
             return []
         self.candidate_seq+=1
         c=Candidate(self.candidate_seq,latest["side"],latest["price"],latest["available_ms"],clean_features(x),
@@ -842,7 +873,7 @@ class CaterpillarQuantLearner:
         errors=sum(self.prediction_errors.values())
         paper=self.paper_snapshot()
         return {
-            "version":self.VERSION,"research_only":True,"real_orders":False,
+            "version":self.VERSION,"policy_contract_version":getattr(self,"policy_contract_version",0),"research_only":True,"real_orders":False,
             "learning_status":"LEARNING",
             "relationships":relationships,
             "relationships_total":relationships["total"],
