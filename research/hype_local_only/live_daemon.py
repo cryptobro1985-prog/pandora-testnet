@@ -70,9 +70,7 @@ def strict_label(state,p,ts_ms):
     hi=row["high"]>max(z["high"] for z in past) and row["high"]>=max(z["high"] for z in future)
     lo=row["low"]<min(z["low"] for z in past) and row["low"]<=min(z["low"] for z in future)
     if hi==lo:return False
-    target=row["high"] if p.side=="HIGH" else row["low"]
-    same=abs(p.extreme_price-target)/max(target,1e-12)<=0.5/10000.0
-    return bool((hi if p.side=="HIGH" else lo) and same)
+    return bool(hi if p.side=="HIGH" else lo)
 
 def append_jsonl(path,obj):
     with path.open("a",encoding="utf-8") as f:f.write(json.dumps(obj,separators=(",",":"),ensure_ascii=False)+"\n")
@@ -115,10 +113,12 @@ def main():
     model=LocalOnlyModel.load(mp)
     fp=args.checkpoint_dir/"feature_state.pkl";state=load_pickle(fp,FeatureState())
     rp=args.checkpoint_dir/"local_runtime.pkl"
-    rt=load_pickle(rp,{"candidates":{"LOW":None,"HIGH":None},"pending":[],"expected_side":None,"last_teacher_local":None})
+    rt=load_pickle(rp,{"candidates":{"LOW":None,"HIGH":None},"pending":[],"expected_side":None,
+                       "last_teacher_local":None,"latest_by_hour":{}})
     candidates=rt.get("candidates") or {"LOW":None,"HIGH":None}
     pending=[Pending(**z) if isinstance(z,dict) else z for z in rt.get("pending",[])]
     expected=rt.get("expected_side");last_teacher=rt.get("last_teacher_local")
+    latest_by_hour=rt.get("latest_by_hour") or {}
 
     tail=Tailer();stop=False
     def stopfn(*_):
@@ -155,6 +155,9 @@ def main():
             if ts<next_sample:continue
             next_sample=ts+5000
 
+            # H1 baseline learns every matured Local in the backfill/live history.
+            model.train_h1_history(state,ts)
+
             piv=strict_pivots(state,ts)
             if piv:
                 latest=piv[-1]
@@ -162,17 +165,35 @@ def main():
                     last_teacher=latest
                     if expected is None:expected="LOW" if latest["side"]=="HIGH" else "HIGH"
 
+            # Dense causal proposals: 5m / 15m / 60m / 6h. These only propose;
+            # strict H1 L6/K2 remains the teacher.
             struct=state.structural or {}
-            for side,level in (("LOW",struct.get("rolling_6h_low")),("HIGH",struct.get("rolling_6h_high"))):
-                if not isinstance(level,(int,float)) or not math.isfinite(level):continue
-                near=price<=float(level)*(1+0.5/10000.0) if side=="LOW" else price>=float(level)*(1-0.5/10000.0)
-                if not near:continue
+            levels={
+                "LOW":[("5m",x.get("running_low_300s")),("15m",x.get("running_low_900s")),
+                       ("60m",struct.get("rolling_60m_low")),("6h",struct.get("rolling_6h_low"))],
+                "HIGH":[("5m",x.get("running_high_300s")),("15m",x.get("running_high_900s")),
+                        ("60m",struct.get("rolling_60m_high")),("6h",struct.get("rolling_6h_high"))],
+            }
+            for side in ("LOW","HIGH"):
+                valid=[(name,float(v)) for name,v in levels[side]
+                       if isinstance(v,(int,float)) and math.isfinite(v)]
+                if not valid:continue
+                if side=="LOW":
+                    hit=[(n,v) for n,v in valid if price<=v*(1+0.75/10000.0)]
+                else:
+                    hit=[(n,v) for n,v in valid if price>=v*(1-0.75/10000.0)]
+                if not hit:continue
                 old=candidates.get(side)
                 extends=old is None or (price<old.extreme_price if side=="LOW" else price>old.extreme_price)
-                if extends:
-                    c=Candidate(side,float(price),int(ts),f"{side[0]}-{ts}")
+                stale=old is not None and ts-old.extreme_ts_ms>H
+                if extends or stale:
+                    evidence={"proposal":"MULTIWINDOW_CAUSAL","windows":[n for n,_ in hit]}
+                    c=Candidate(side,float(price),int(ts),f"{side[0]}-{ts}",evidence=evidence)
                     candidates[side]=c
-                    append_jsonl(evlog,{"event":"NEW_CANDIDATE","ts_ms":ts,"side":side,"price":price,"candidate_id":c.candidate_id})
+                    hour=(int(ts)//H)*H
+                    latest_by_hour[f"{side}:{hour}"]=c.candidate_id
+                    append_jsonl(evlog,{"event":"NEW_CANDIDATE","ts_ms":ts,"side":side,"price":price,
+                        "candidate_id":c.candidate_id,"evidence":evidence})
 
             for side in ("LOW","HIGH"):
                 c=candidates.get(side)
@@ -182,26 +203,37 @@ def main():
                     if age<stage or stage in c.stages_done:continue
                     fx=live_to_archive_features(side,age,c.extreme_price,price,x,state)
                     prob,accepted=model.predict(side,stage,fx)
+                    h1_prior=model.h1_prior(side)
                     c.snapshots[stage]=fx;c.probabilities[stage]=prob;c.stages_done.add(stage)
                     h=(c.extreme_ts_ms//H)*H
                     pending.append(Pending(c.candidate_id,side,stage,c.extreme_price,c.extreme_ts_ms,fx,h+3*H))
+                    relation=model.relationship_evidence(side,stage,fx)
                     append_jsonl(evlog,{"event":"LOCAL_STAGE","ts_ms":ts,"side":side,"stage":stage,
                         "probability":prob,"threshold":model.thresholds[(side,stage)],
-                        "accepted":accepted,"expected_side":expected,"candidate_id":c.candidate_id})
-                    if stage==300 and accepted and (expected is None or side==expected):
+                        "accepted":accepted,"h1_prior":h1_prior,"expected_side":expected,
+                        "candidate_id":c.candidate_id,"relationship_evidence":relation})
+                    if accepted and (expected is None or side==expected):
+                        signal_state="FORMING_LOCAL" if stage==60 else "PROBABLE_LOCAL" if stage==180 else "LOCAL_SIGNAL"
                         model.last_signal={"side":side,"price":c.extreme_price,"candidate_id":c.candidate_id,
-                            "detected_ts_ms":ts,"probability":prob,"stage":300}
-                        expected="HIGH" if side=="LOW" else "LOW"
-                        append_jsonl(evlog,{"event":"LOCAL_MODEL_SIGNAL",**model.last_signal,"next_expected":expected})
+                            "detected_ts_ms":ts,"probability":prob,"h1_prior":h1_prior,
+                            "stage":stage,"state":signal_state}
+                        if stage==300:
+                            expected="HIGH" if side=="LOW" else "LOW"
+                        append_jsonl(evlog,{"event":signal_state,**model.last_signal,"next_expected":expected})
 
             keep=[]
             for item in pending:
                 y=strict_label(state,item,ts)
                 if y is None:
                     keep.append(item);continue
-                model.learn(item.side,item.stage,item.x,y,source="live")
+                hour=(int(item.extreme_ts_ms)//H)*H
+                is_latest=(latest_by_hour.get(f"{item.side}:{hour}")==item.candidate_id)
+                y=bool(y and is_latest)
+                model.learn(item.side,item.stage,item.x,y,source="live",
+                            repeat=(4 if y else 1))
                 append_jsonl(lablog,{"ts_ms":ts,"candidate_id":item.candidate_id,"side":item.side,
-                    "stage":item.stage,"label":bool(y),"teacher":"H1_L6_K2_STRICT"})
+                    "stage":item.stage,"label":bool(y),"is_latest_extreme_in_hour":is_latest,
+                    "teacher":"H1_L6_K2_STRICT"})
             pending=keep
 
             c=candidates.get(expected) if expected else None
@@ -217,11 +249,21 @@ def main():
                     "age_s":round(max(0.0,(ts-c.extreme_ts_ms)/1000.0),1),
                     "probabilities":{str(k):round(v,6) for k,v in c.probabilities.items()},
                     "thresholds":{str(k):model.thresholds[(c.side,k)] for k in STAGES},
-                    "stage":"CONFIRMED" if 300 in c.stages_done and c.probabilities.get(300,0)>=model.thresholds[(c.side,300)]
-                            else "PROBABLE" if 180 in c.stages_done else "FORMING" if 60 in c.stages_done else "WATCH"
+                    "h1_prior":round(model.h1_prior(c.side),6),
+                    "evidence":getattr(c,"evidence",{}),
+                    "relationship_evidence":(
+                        model.relationship_evidence(c.side,max(c.stages_done),c.snapshots[max(c.stages_done)])
+                        if c.stages_done else {"supports":[],"contradicts":[],"pairs":[]}
+                    ),
+                    "stage":"LOCAL_SIGNAL" if 300 in c.stages_done and c.probabilities.get(300,0)>=model.thresholds[(c.side,300)]
+                            else "PROBABLE" if 180 in c.stages_done and c.probabilities.get(180,0)>=model.thresholds[(c.side,180)]
+                            else "FORMING" if 60 in c.stages_done and c.probabilities.get(60,0)>=model.thresholds[(c.side,60)]
+                            else "WATCH"
                 },
                 "historical_labels":sum(model.labels.values())-model.live_labels,
                 "live_labels":model.live_labels,"pending_labels":len(pending),
+                "h1_baseline":model.h1_shadow,
+                "h1_training":{"labels":model.h1_labels,"positive":model.h1_positive},
                 "seen_input_count":cov.get("seen_input_count"),"feature_contract":cov,
                 "last_signal":model.last_signal,"cortex_state":"RELATIONSHIP_MEMORY_READY",
                 "research_only":True,"real_orders":False
@@ -231,7 +273,8 @@ def main():
         if now>=next_save:
             model.save(mp);save_pickle(fp,state)
             save_pickle(rp,{"candidates":candidates,"pending":[asdict(z) for z in pending],
-                "expected_side":expected,"last_teacher_local":last_teacher})
+                "expected_side":expected,"last_teacher_local":last_teacher,
+                "latest_by_hour":latest_by_hour})
             if status:status_path.write_text(json.dumps(status,indent=2)+"\n")
             next_save=now+30
         if now>=next_issue and status:
@@ -240,7 +283,8 @@ def main():
 
     model.save(mp);save_pickle(fp,state)
     save_pickle(rp,{"candidates":candidates,"pending":[asdict(z) for z in pending],
-        "expected_side":expected,"last_teacher_local":last_teacher})
+        "expected_side":expected,"last_teacher_local":last_teacher,
+        "latest_by_hour":latest_by_hour})
     if status:
         status_path.write_text(json.dumps(status,indent=2)+"\n");publish_issue(status)
     print("LOCAL_ONLY="+json.dumps(status,separators=(",",":"),ensure_ascii=False),flush=True)
