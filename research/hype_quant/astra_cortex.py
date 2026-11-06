@@ -114,6 +114,8 @@ class AstraCortex:
         self.api_key=os.getenv("OPENAI_API_KEY","").strip()
         self.training_target_matured=max(120,int(os.getenv("CORTEX_24H_TARGET_MATURED","600")))
         self.training_target_decisions=max(60,int(os.getenv("CORTEX_24H_TARGET_DECISIONS","240")))
+        self._local_health_checked_ms=0
+        self._local_health_ready=False
         self.sprint_hours=max(1.0,float(os.getenv("CORTEX_SPRINT_HOURS","24")))
         self.sprint_started_ts_ms=None
         self.last_call_ts_ms=None; self.last_decision=None
@@ -126,10 +128,23 @@ class AstraCortex:
         self._load()
         if self.sprint_started_ts_ms is None:self.sprint_started_ts_ms=int(time.time()*1000)
 
+    def _local_ready(self,now_ms=None,force=False):
+        if self.backend!="local_llama":return True
+        now_ms=int(now_ms or time.time()*1000)
+        if not force and now_ms-self._local_health_checked_ms<5_000:
+            return bool(self._local_health_ready)
+        self._local_health_checked_ms=now_ms
+        try:
+            r=requests.get(self.local_url+"/health",timeout=2.0)
+            self._local_health_ready=bool(r.ok)
+        except Exception:
+            self._local_health_ready=False
+        return bool(self._local_health_ready)
+
     @property
     def available(self):
         if not self.enabled:return False
-        return True if self.backend=="local_llama" else bool(self.api_key)
+        return self._local_ready() if self.backend=="local_llama" else bool(self.api_key)
 
     def _load(self):
         if not self.state_path.exists(): return
@@ -192,7 +207,9 @@ class AstraCortex:
                 or disagreement>=0.35 or adversary>=0.55 or expert_disagreement>=0.5)
 
     def due(self,ts_ms,features,base_decision,base_report,strategy_lab=None):
-        if not self.available: return False
+        if not self.enabled:return False
+        if self.backend=="local_llama" and not self._local_ready(ts_ms):return False
+        if self.backend!="local_llama" and not self.api_key:return False
         if self.last_call_ts_ms is None: return True
         elapsed=max(0.0,(ts_ms-self.last_call_ts_ms)/1000.0)
         interval=self.urgent_interval_s if self._urgent(features,base_decision,base_report,strategy_lab) else self.normal_interval_s
@@ -567,7 +584,9 @@ class AstraCortex:
 
     def status(self,ts_ms=None):
         now_ms=int(ts_ms or time.time()*1000)
+        local_ready=self._local_ready(now_ms) if self.backend=="local_llama" and self.enabled else False
         state=("DISABLED" if not self.enabled
+               else "LOCAL_MODEL_BOOTING" if self.backend=="local_llama" and not local_ready
                else "LOCAL_MODEL_DEGRADED" if self.backend=="local_llama" and self.last_error
                else "WAITING_FOR_API_KEY" if self.backend!="local_llama" and not self.api_key
                else "CORTEX_LIVE" if self.last_decision
