@@ -2,10 +2,12 @@
 from __future__ import annotations
 import argparse,json,pickle,time,os
 import requests
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from research.hype_quant.features import FeatureState
 from research.hype_quant.agents import augment_with_agents
+from research.hype_quant.astra_cortex import AstraCortex,AstraPaperBook
 from research.hype_quant.live_daemon import Tailer,event_ts,append_jsonl
 from .learner import CaterpillarQuantLearner,new_from_config
 
@@ -94,9 +96,20 @@ def compact_status(report):
             "promotions":q.get("promotions"),"drift_events":q.get("drift_events"),
             "last_action":q.get("last_action"),"action_counts":q.get("action_counts"),
         },
+        "astra":report.get("astra") or {},
+        "astra_paper":report.get("astra_paper") or {},
+        "astra_vs_quant_delta_pct":report.get("astra_vs_quant_delta_pct"),
         "research_only":True,"real_orders":False,
         "github_run_id":os.environ.get("GITHUB_RUN_ID"),"github_sha":os.environ.get("GITHUB_SHA"),
     }
+
+def enrich_astra(report,cortex,astra_book):
+    out=dict(report)
+    out["astra"]=cortex.status()
+    out["astra_paper"]=astra_book.report()
+    qret=out.get("return_pct");aret=out["astra_paper"].get("return_pct")
+    out["astra_vs_quant_delta_pct"]=(float(aret)-float(qret)) if qret is not None and aret is not None else None
+    return out
 
 def publish_monitor(report):
     url=os.environ.get("CATERPILLAR_MONITOR_URL","").strip()
@@ -132,6 +145,8 @@ def publish_issue(report):
         f"**Inputs seen:** {(status.get('feature_contract') or {}).get('seen_input_count','—')} / {len((status.get('feature_contract') or {}).get('supported_input_ids') or [])}  ",
         f"**Paper:** equity {p.get('equity')} · return {p.get('return_pct')}% · trades {p.get('closed_trades')} · re-entry {p.get('reentries')}  ",
         f"**MFE capture:** {p.get('mean_mfe_capture_ratio')} · Caterpillar vs straight: {p.get('caterpillar_vs_straight_delta_pct')} pp  ",
+        f"**Astra:** {(status.get('astra') or {}).get('state','—')} · decision {((status.get('astra') or {}).get('last_decision') or {}).get('decision','—')} · calls {(status.get('astra') or {}).get('calls',0)}  ",
+        f"**Astra PAPER:** equity {(status.get('astra_paper') or {}).get('equity')} · return {(status.get('astra_paper') or {}).get('return_pct')}% · delta vs Quant {status.get('astra_vs_quant_delta_pct')} pp  ",
         "",fence+"json",json.dumps(status,separators=(',',':'),ensure_ascii=False),fence,
     ]
     try:
@@ -160,7 +175,12 @@ def main():
     tail=Tailer()
     actions=args.checkpoint_dir/"caterpillar_actions.jsonl"
     gaps=args.checkpoint_dir/"caterpillar_gaps.jsonl"
-    actions.touch(exist_ok=True);gaps.touch(exist_ok=True)
+    astra_actions=args.checkpoint_dir/"astra_actions.jsonl"
+    actions.touch(exist_ok=True);gaps.touch(exist_ok=True);astra_actions.touch(exist_ok=True)
+    cortex=AstraCortex(args.checkpoint_dir)
+    astra_book=AstraPaperBook(args.checkpoint_dir,learner.round_trip_cost)
+    astra_pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix="astra-cortex")
+    astra_future=None
 
     started=time.time();deadline=started+args.minutes*60
     next_save=0.0;next_issue=0.0;next_monitor=0.0;next_sample_ms=0
@@ -207,6 +227,30 @@ def main():
             next_sample_ms=ts+sample_ms
             decision=learner.observe(ts,price,x,state)
             sampled+=1
+            astra_book.mark(ts,price)
+            if astra_future is not None and astra_future.done():
+                try:
+                    ar=astra_future.result()
+                    if ar.get("new_decision") and isinstance(ar.get("decision"),dict):
+                        adec=dict(ar["decision"])
+                        source_ts=int(adec.get("ts_ms") or ts)
+                        latency_s=max(0.0,(ts-source_ts)/1000.0)
+                        adec["applied_latency_seconds"]=latency_s
+                        applied=latency_s<=90.0
+                        if applied:
+                            astra_book.apply(ts,price,adec)
+                        append_jsonl(astra_actions,{
+                            "source_ts_ms":source_ts,"applied_ts_ms":ts,"applied_price":price,
+                            "applied":applied,"latency_seconds":latency_s,"decision":adec,
+                        })
+                except Exception as exc:
+                    append_jsonl(astra_actions,{"ts_ms":ts,"worker_error":repr(exc)})
+                astra_future=None
+            base_report=learner.report()
+            if astra_future is None and cortex.due(ts,x,decision,base_report):
+                astra_future=astra_pool.submit(
+                    cortex.observe,ts,price,dict(x),decision,base_report,learner.round_trip_cost
+                )
             append_jsonl(actions,{"ts_ms":ts,"price":price,"feature_count":len(x),**decision})
 
         now=time.time()
@@ -219,6 +263,7 @@ def main():
                 "updated_ts_ms":int(now*1000),"feature_contract":state.coverage_report(),
                 "research_only":True,"real_orders":False,
             })
+            report=enrich_astra(report,cortex,astra_book)
             (args.checkpoint_dir/"CATERPILLAR_QUANT_REPORT.json").write_text(json.dumps(report,indent=2)+"\n")
             next_save=now+60
         if now>=next_monitor:
@@ -227,6 +272,7 @@ def main():
                            "last_seen_ts_ms":last_seen_ts,"updated_ts_ms":int(now*1000),
                            "feature_contract":state.coverage_report(),
                            "research_only":True,"real_orders":False})
+            report=enrich_astra(report,cortex,astra_book)
             publish_monitor(report)
             next_monitor=now+10
         if now>=next_issue:
@@ -235,6 +281,7 @@ def main():
                            "last_seen_ts_ms":last_seen_ts,"updated_ts_ms":int(now*1000),
                            "feature_contract":state.coverage_report(),
                            "research_only":True,"real_orders":False})
+            report=enrich_astra(report,cortex,astra_book)
             publish_issue(report)
             next_issue=now+30
         if not events:time.sleep(args.poll_seconds)
@@ -245,9 +292,12 @@ def main():
                    "last_seen_ts_ms":last_seen_ts,"completed_ts_ms":int(time.time()*1000),
                    "feature_contract":state.coverage_report(),
                    "research_only":True,"real_orders":False})
+    report=enrich_astra(report,cortex,astra_book)
+    cortex.save();astra_book.save()
     (args.checkpoint_dir/"CATERPILLAR_QUANT_REPORT.json").write_text(json.dumps(report,indent=2)+"\n")
     publish_monitor(report)
     publish_issue(report)
+    astra_pool.shutdown(wait=False,cancel_futures=True)
     print("CATERPILLAR_QUANT="+json.dumps({
         "equity":report["equity"],"return_pct":report["return_pct"],
         "closed_trades":report["closed_trades"],"reentries":report["reentries"],
