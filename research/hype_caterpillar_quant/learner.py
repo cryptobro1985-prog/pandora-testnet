@@ -137,6 +137,7 @@ class CaterpillarQuantLearner:
         self.censored_positions=0
         self.last_reentry_sample_ms=0
         self.policy_version=2
+        self.bootstrap_diagnostic={}
         self.prediction_checks={"local":0,"bounce":0,"exit":0,"reentry":0}
         self.prediction_errors={"local":0,"bounce":0,"exit":0,"reentry":0}
 
@@ -169,6 +170,7 @@ class CaterpillarQuantLearner:
         self.local_pending=[];self.exit_pending=[];self.reentry_pending=[]
         self.candidates={"LOW":None,"HIGH":None};self.last_confirmed_local=None
         self.last_reentry_sample_ms=0
+        self.bootstrap_diagnostic=getattr(self,"bootstrap_diagnostic",{})
         self.censored_positions=getattr(self,"censored_positions",0)
         self.prediction_checks={"local":0,"bounce":0,"exit":0,"reentry":0}
         self.prediction_errors={"local":0,"bounce":0,"exit":0,"reentry":0}
@@ -243,6 +245,22 @@ class CaterpillarQuantLearner:
                  "candidate_id":c.ident}]
 
 
+    def _m1_extreme_order(self,state,hour_ms,low_price,high_price):
+        rows=[]
+        for start in sorted(state.candles.get("1",{})):
+            if hour_ms<=start<hour_ms+3_600_000:
+                b=state.candles["1"][start]
+                if finite(b.get("low")) and finite(b.get("high")):
+                    rows.append((int(start),float(b["low"]),float(b["high"])))
+        if not rows:return None
+        low_row=min(rows,key=lambda z:z[1]);high_row=max(rows,key=lambda z:z[2])
+        # Do not require exact equality: REST/WS normalization can differ by one tick.
+        low_tol=max(1e-9,abs(low_price)*2e-6); high_tol=max(1e-9,abs(high_price)*2e-6)
+        if abs(low_row[1]-low_price)>low_tol or abs(high_row[2]-high_price)>high_tol:
+            return None
+        if low_row[0]==high_row[0]:return None
+        return "LOW" if low_row[0]>high_row[0] else "HIGH"
+
     def _bootstrap_provisional_local(self,state,ts_ms,price,x):
         """Recover the newest already-observed H1 extreme when the daemon starts late.
 
@@ -254,11 +272,23 @@ class CaterpillarQuantLearner:
         if len(rows)<6:return []
         use=rows[-6:]
         low_row=min(use,key=lambda z:z["low"]); high_row=max(use,key=lambda z:z["high"])
-        # Prefer the more recent structural extreme. If both occurred in one H1,
-        # preserve ambiguity rather than inventing intrabar order.
-        if low_row["start_ms"]==high_row["start_ms"]:return []
-        side="LOW" if low_row["start_ms"]>high_row["start_ms"] else "HIGH"
+        self.bootstrap_diagnostic={
+            "completed_h1":len(rows),
+            "low_hour_ms":low_row["start_ms"],"low_price":low_row["low"],
+            "high_hour_ms":high_row["start_ms"],"high_price":high_row["high"],
+            "resolution":"H1_RECENCY",
+        }
+        if low_row["start_ms"]==high_row["start_ms"]:
+            side=self._m1_extreme_order(state,low_row["start_ms"],low_row["low"],high_row["high"])
+            self.bootstrap_diagnostic["resolution"]="M1_INTRAHOUR_ORDER"
+            self.bootstrap_diagnostic["m1_resolved_side"]=side
+            if side is None:
+                self.bootstrap_diagnostic["reason"]="AMBIGUOUS_SAME_H1_NO_M1_ORDER"
+                return []
+        else:
+            side="LOW" if low_row["start_ms"]>high_row["start_ms"] else "HIGH"
         row=low_row if side=="LOW" else high_row
+        self.bootstrap_diagnostic["selected_side"]=side
         extreme=row["low"] if side=="LOW" else row["high"]
         hour=row["start_ms"]
         existing=self.candidates.get(side)
@@ -716,6 +746,7 @@ class CaterpillarQuantLearner:
             "mean_mfe_capture_ratio":statistics.fmean(captures) if captures else None,
             "median_mfe_capture_ratio":statistics.median(captures) if captures else None,
             "local_target":"STRICT_H1_L6_K2",
+            "bootstrap_diagnostic":getattr(self,"bootstrap_diagnostic",{}),
             "local_models":{f"{s}_{h}s":{"labels":self.local_labels[(s,h)],"positive":self.local_pos[(s,h)]}
                             for s in ("LOW","HIGH") for h in self.LOCAL_STAGES},
             "bounce_models":{f"{s}_{h}s":{"labels":self.bounce_labels[(s,h)],"positive":self.bounce_pos[(s,h)]}
