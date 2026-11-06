@@ -87,11 +87,13 @@ def historical_states(bars,candidates):
             if diffs:
                 x[f"positive_persistence_{sec}s"]=sum(d>0 for d in diffs)/len(diffs)
                 x[f"negative_persistence_{sec}s"]=sum(d<0 for d in diffs)/len(diffs)
-            hh=max(part);ll=min(part)
+            hh=max(part);ll=min(part);span=max(hh-ll,1e-12)
             hi_rev=next((j for j,v in enumerate(reversed(part)) if v==hh),0)
             lo_rev=next((j for j,v in enumerate(reversed(part)) if v==ll),0)
             x[f"survival_since_high_{sec}s"]=float(hi_rev*60)
             x[f"survival_since_low_{sec}s"]=float(lo_rev*60)
+            x[f"retracement_from_high_{sec}s"]=(hh-px)/span
+            x[f"retracement_from_low_{sec}s"]=(px-ll)/span
         c=cand.get(ts//60_000)
         if c and int(c["snapshot_ts_ms"])<=ts:
             x["local116_candidate_side"]=1.0 if c["side"]=="LOW" else -1.0
