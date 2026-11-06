@@ -1,4 +1,4 @@
-name: HYPE Force Cancel v7
+name: HYPE Force Cancel Superseded
 
 on:
   push:
@@ -15,11 +15,11 @@ jobs:
   cancel:
     runs-on: ubuntu-latest
     steps:
-      - name: Force cancel superseded v7 collector
+      - name: Force cancel superseded collector
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/42187749745/cancel" || true
-          gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/42187749745/force-cancel" || true
-          echo "v7 cancellation requested"
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/42187940034/cancel" || true
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/42187940034/force-cancel" || true
+          echo "superseded collector cancellation requested"
