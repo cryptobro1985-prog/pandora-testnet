@@ -145,8 +145,9 @@ def publish_issue(report):
         f"**Inputs seen:** {(status.get('feature_contract') or {}).get('seen_input_count','—')} / {len((status.get('feature_contract') or {}).get('supported_input_ids') or [])}  ",
         f"**Paper:** equity {p.get('equity')} · return {p.get('return_pct')}% · trades {p.get('closed_trades')} · re-entry {p.get('reentries')}  ",
         f"**MFE capture:** {p.get('mean_mfe_capture_ratio')} · Caterpillar vs straight: {p.get('caterpillar_vs_straight_delta_pct')} pp  ",
-        f"**Astra:** {(status.get('astra') or {}).get('state','—')} · decision {((status.get('astra') or {}).get('last_decision') or {}).get('decision','—')} · calls {(status.get('astra') or {}).get('calls',0)}  ",
-        f"**Astra PAPER:** equity {(status.get('astra_paper') or {}).get('equity')} · return {(status.get('astra_paper') or {}).get('return_pct')}% · delta vs Quant {status.get('astra_vs_quant_delta_pct')} pp  ",
+        f"**CORTEX 20B:** {(status.get('astra') or {}).get('state','—')} · decision {((status.get('astra') or {}).get('last_decision') or {}).get('decision','—')} · calls {(status.get('astra') or {}).get('calls',0)}  ",
+        f"**CORTEX 24h:** {((status.get('astra') or {}).get('training_progress') or {}).get('overall_percent','—')}% · session {(status.get('astra') or {}).get('current_us_session','—')} · matured {(status.get('astra') or {}).get('matured_episodes',0)}  ",
+        f"**CORTEX PAPER:** equity {(status.get('astra_paper') or {}).get('equity')} · return {(status.get('astra_paper') or {}).get('return_pct')}% · delta vs Quant {status.get('astra_vs_quant_delta_pct')} pp  ",
         "",fence+"json",json.dumps(status,separators=(',',':'),ensure_ascii=False),fence,
     ]
     try:
