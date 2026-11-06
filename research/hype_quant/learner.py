@@ -32,14 +32,14 @@ def finite(v: Any) -> bool:
     return isinstance(v,(int,float)) and math.isfinite(v)
 
 
-QUALITY_EXACT={
-    "micro_gap_seconds","raw_frames_seen","book_update_id_raw","book_sequence_raw",
-    "book_invalidations_raw","receipt_sequence_gaps","subscription_acks","control_frames",
-    "raw_age_ms","book_valid_raw","book_valid_micro","channel_coverage_seconds",
-    "rest_only_complete","rest_relay_configured","ws_server_ts_ms_mod_day",
-    "ws_runner_clock_offset_ms","struct_runner_clock_offset_ms",
+# All causal market + quality information remains available to learning.
+# Only monotonic/opaque technical identifiers are excluded from directional alpha:
+# they identify packet/run chronology rather than market state. Their derived
+# quality signals (gaps, freshness, validity, latency, coverage) remain inputs.
+TECHNICAL_ID_EXACT={
+    "book_update_id_raw","book_sequence_raw","raw_frames_seen",
+    "subscription_acks","control_frames","ws_server_ts_ms_mod_day",
 }
-QUALITY_PREFIXES=("instrument_","trade_latency_","book_latency_","liq_latency_","ticker_latency_")
 
 def quality_gate(x:dict[str,Any])->dict[str,Any]:
     reasons=[]
@@ -50,18 +50,19 @@ def quality_gate(x:dict[str,Any])->dict[str,Any]:
     return {"ok":not reasons,"reasons":reasons}
 
 def clean_features(x: dict[str,Any]) -> dict[str,float]:
-    """Return alpha features only.
+    """Return causal market/quality features for learning.
 
-    Transport counters, sequence IDs, clocks and contract metadata stay available
-    to monitoring/risk code but are forbidden from becoming directional alpha.
-    Stale OI and invalid book families are removed rather than silently imputed.
+    We keep freshness, latency, validity, gaps and instrument context because
+    their interaction with market signals can be informative. Only opaque
+    monotonic transport identifiers are removed. Stale OI / invalid book families
+    are still masked so stale values cannot masquerade as fresh observations.
     """
     out={}
     oi_age=x.get("oi_age_ms")
     stale_oi=finite(oi_age) and float(oi_age)>120000.0
     book_invalid=("book_valid_micro" in x and float(x.get("book_valid_micro") or 0.0)<0.5)
     for k,v in x.items():
-        if k in QUALITY_EXACT or any(k.startswith(p) for p in QUALITY_PREFIXES):
+        if k in TECHNICAL_ID_EXACT:
             continue
         if stale_oi and ("oi_" in k or k.startswith("open_interest")):
             continue
