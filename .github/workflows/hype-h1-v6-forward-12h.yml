@@ -17,7 +17,7 @@ permissions:
   issues: write
 
 concurrency:
-  group: hype-v6-forward-12h-caterpillar-v5-${{ github.ref }}
+  group: hype-v6-forward-12h-caterpillar-v9-${{ github.ref }}
   cancel-in-progress: true
 
 env:
