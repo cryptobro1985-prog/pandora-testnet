@@ -1,7 +1,7 @@
-name: HYPE v12 Immediate Full-Graph Live
+name: HYPE v13 Immediate 1000-H1 Full-Graph Live
 # compact-110-v4-fixed-pack
 # 2026-11-06-local-low-restart
-# caterpillar-quant-v12-immediate-full-graph
+# caterpillar-quant-v13-1000h1-full-graph
 
 on:
   push:
