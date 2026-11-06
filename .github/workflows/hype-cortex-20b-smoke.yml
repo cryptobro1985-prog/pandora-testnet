@@ -42,26 +42,42 @@ jobs:
         run: |
           python - <<'PY'
           import json, urllib.request
+          schema={
+            "type":"object","additionalProperties":False,
+            "properties":{
+              "decision":{"type":"string","enum":["WAIT","ENTER_LONG","ENTER_SHORT"]},
+              "confidence":{"type":"number"},
+              "thesis":{"type":"string"}
+            },
+            "required":["decision","confidence","thesis"]
+          }
           payload={
             "model":"gpt-oss-20b-local",
-            "messages":[
-              {"role":"system","content":"Reasoning: high. Return only compact JSON. Do not reveal chain-of-thought."},
-              {"role":"user","content":"Market state: confirmed H1 LOW; buy flow positive but price response weak; ask absorption rising; OI rising. Compare LONG SHORT WAIT. Return {\"decision\":\"WAIT|ENTER_LONG|ENTER_SHORT\",\"confidence\":0.0,\"thesis\":\"short\"}."}
+            "reasoning":{"effort":"high"},
+            "max_output_tokens":900,
+            "input":[
+              {"role":"system","content":"Reasoning: high. Analyze internally and return only the required compact JSON final answer."},
+              {"role":"user","content":"Market state: confirmed H1 LOW; buy flow positive but price response weak; ask absorption rising; OI rising. Compare LONG SHORT WAIT."}
             ],
-            "temperature":0.1,
-            "max_tokens":180,
-            "response_format":{"type":"json_object"}
+            "text":{"format":{"type":"json_schema","name":"smoke_decision","strict":True,"schema":schema}}
           }
           req=urllib.request.Request(
-            "http://127.0.0.1:8081/v1/chat/completions",
+            "http://127.0.0.1:8081/v1/responses",
             data=json.dumps(payload).encode(),
             headers={"Content-Type":"application/json"},
           )
-          with urllib.request.urlopen(req,timeout=180) as r:
+          with urllib.request.urlopen(req,timeout=240) as r:
               obj=json.load(r)
-          msg=obj["choices"][0]["message"]
-          print("CORTEX20B_SMOKE_RESPONSE="+str(msg.get("content"))[:1200])
-          assert msg.get("content")
+          text=""
+          for item in obj.get("output") or []:
+              if item.get("type")!="message": continue
+              for part in item.get("content") or []:
+                  if part.get("type")=="output_text":
+                      text=part.get("text") or text
+          print("CORTEX20B_SMOKE_RESPONSE="+text[:1200])
+          parsed=json.loads(text)
+          assert parsed["decision"] in ("WAIT","ENTER_LONG","ENTER_SHORT")
+          assert 0 <= float(parsed["confidence"]) <= 1
           print("CORTEX20B_SMOKE=ok")
           PY
       - name: Diagnostics
