@@ -73,6 +73,7 @@ def compact_status(report):
         "bounce_models":report.get("bounce_models") or {},
         "exit_model":report.get("exit_model") or {},
         "reentry_model":report.get("reentry_model") or {},
+        "fibonacci":report.get("fibonacci") or {},
         "local_target":report.get("local_target"),
         "local_policy":report.get("local_policy"),
         "bootstrap_diagnostic":report.get("bootstrap_diagnostic") or {},
@@ -149,6 +150,7 @@ def publish_issue(report):
         f"**CORTEX 20B:** {(status.get('astra') or {}).get('state','—')} · decision {((status.get('astra') or {}).get('last_decision') or {}).get('decision','—')} · calls {(status.get('astra') or {}).get('calls',0)}  ",
         f"**CORTEX 24h:** {((status.get('astra') or {}).get('training_progress') or {}).get('overall_percent','—')}% · session {(status.get('astra') or {}).get('current_us_session','—')} · matured {(status.get('astra') or {}).get('matured_episodes',0)}  ",
         f"**CORTEX PAPER:** equity {(status.get('astra_paper') or {}).get('equity')} · return {(status.get('astra_paper') or {}).get('return_pct')}% · delta vs Quant {status.get('astra_vs_quant_delta_pct')} pp  ",
+        f"**Fibonacci:** training {(status.get('fibonacci') or {}).get('training_percent','—')}% · pending {(status.get('fibonacci') or {}).get('pending',0)} · closest {(((status.get('fibonacci') or {}).get('current') or {}).get('closest') or {}).get('name','—')}  ",
         "",fence+"json",json.dumps(status,separators=(',',':'),ensure_ascii=False),fence,
     ]
     try:
