@@ -22,5 +22,6 @@ jobs:
           set -euo pipefail
           for id in 42187021803; do
             gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/${id}/cancel" || true
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/${id}/force-cancel" || true
           done
           echo "superseded runs cancellation requested"
