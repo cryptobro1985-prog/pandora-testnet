@@ -1312,8 +1312,8 @@ class CaterpillarQuantLearner:
             can_policy_exit=age_s>=self.MIN_HOLD_S
             learned_exit_ready=self.exit_labels>=30
             strong_adverse=(flow_same<=-.35 and agent_same<=-.25 and cur<=0.0)
-            profit_protection=(p.mfe>=self.round_trip_cost*1.25 and cur>=self.round_trip_cost*.75
-                               and give_ratio>=.45 and exit_conf>=.55)
+            profit_protection=(p.mfe>=self.round_trip_cost*1.50 and cur>=self.round_trip_cost*.75
+                               and give_ratio>=.30 and exit_conf>=.55)
             learned_exit=(learned_exit_ready and exit_conf>=.67 and cur>self.round_trip_cost)
             if can_policy_exit and (strong_adverse or profit_protection or learned_exit):
                 reason=("LEARNED_EXIT" if learned_exit else
@@ -1357,7 +1357,10 @@ class CaterpillarQuantLearner:
                     # PAPER is not used as exploration capital.
                     self._sample_entry(ts_ms,price,x,c,qd)
                     entry_conf,entry_ps,entry_ready=self._entry_confidence(x,ts_ms,price,c,qd)
-                    edge_ok=entry_ready and entry_conf>=.62
+                    # Initial Caterpillar entry also waits for executed flow to align
+                    # with the confirmed structural-local direction.
+                    resumed_flow=flow_same>0.0
+                    edge_ok=entry_ready and entry_conf>=.62 and resumed_flow
                     re_conf=None
                 if local_conf>=.55 and edge_ok and cooldown:
                     events.extend(self._open(ts_ms,price,side,c,local_conf,qd,reentry=same_local_reentry))
@@ -1365,6 +1368,7 @@ class CaterpillarQuantLearner:
                         events[-1]["entry_confidence"]=entry_conf
                         events[-1]["entry_horizon_probabilities"]=entry_ps
                         events[-1]["entry_model_ready"]=entry_ready
+                        events[-1]["resumed_flow"]=flow_same>0.0
                         if same_local_reentry:
                             events[-1]["reentry_confidence"]=re_conf
                             events[-1]["resumed_flow"]=flow_same>0.0
