@@ -71,10 +71,13 @@ def main():
                   "decision":decision,"candidate_side":side,"memory_version":memory.get("version")}
         except Exception as exc:
             errors+=1
-            last={"state":"DEGRADED","updated_ts_ms":int(time.time()*1000),"calls":calls,"errors":errors,
+            # Boot/restart races are expected while llama.cpp is starting. Retry
+            # quickly instead of freezing Cortex evidence for the full 5m cadence.
+            last={"state":"BOOTING" if "Connection" in type(exc).__name__ or "connection" in repr(exc).lower() else "DEGRADED",
+                  "updated_ts_ms":int(time.time()*1000),"calls":calls,"errors":errors,
                   "error":repr(exc)[:500],"decision":last.get("decision")}
         out.write_text(json.dumps(last,indent=2,ensure_ascii=False)+"\n")
-        time.sleep(max(30,args.interval_seconds))
+        time.sleep(20 if last.get("state")=="BOOTING" else max(30,args.interval_seconds))
     print("LOCAL_CORTEX="+json.dumps(last,separators=(",",":"),ensure_ascii=False))
 
 if __name__=="__main__":main()
