@@ -64,4 +64,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh workflow run hype-h1-v6-forward-12h.yml --ref "${GITHUB_REF_NAME}"
+          gh workflow run hype-h1-v6-forward-12h.yml --repo "${GITHUB_REPOSITORY}" --ref "${GITHUB_REF_NAME}"
