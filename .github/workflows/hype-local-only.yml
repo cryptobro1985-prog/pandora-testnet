@@ -18,7 +18,7 @@ permissions:
 
 concurrency:
   group: hype-local-only
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   HYPE_REST_RELAY_URL: "https://hype-rest-relay.onrender.com"
@@ -28,6 +28,7 @@ env:
   CORTEX_THREADS: "4"
   CORTEX_HF_MODEL: "ggml-org/gpt-oss-20b-GGUF:MXFP4"
   ASTRA_CORTEX_MODEL: "gpt-oss-20b-local"
+  LOCAL_ONLY_MONITOR_URL: "https://hype-caterpillar-quant-monitor.onrender.com/api/ingest"
 
 jobs:
   local-only:
@@ -217,3 +218,10 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
           compression-level: 6
+
+      - name: Continue Local-only learning loop
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run hype-local-only.yml             --repo "${GITHUB_REPOSITORY}"             --ref "research/hype-h1-local-v5-oi-microstructure-20261104"
