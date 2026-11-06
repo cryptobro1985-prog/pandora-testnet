@@ -44,7 +44,7 @@ def test_construct():
     assert len(q.local_models)==6 and len(q.bounce_models)==6
     assert q.exit_labels==0 and q.reentry_labels==0
     assert q.policy_contract_version==7
-    assert q.local_policy_version==2
+    assert q.local_policy_version==3
     assert len(q.policy_models)==6
     assert q.report()["direct_policy"]["manual_action_thresholds"] is False
     assert q.report()["local_learning_contract"]["strict_h1_execution"] is False
@@ -207,6 +207,38 @@ def test_strict_benchmark_cannot_override_learned_policy_local():
     assert q._best_local()[0] is learned
     assert q._best_local()[0].source=="LEARNED_CAUSAL_LOCAL"
 
+def test_v3_multiwindow_extreme_proposes_candidate_without_heuristic_confirmation():
+    q=new();q._ensure_v2();ts=10*H
+    features={**x(),"running_low_300s":99.0,"running_low_900s":98.0,
+              "running_high_300s":101.0,"running_high_900s":102.0,
+              "rolling_6h_low":95.0,"rolling_6h_high":105.0}
+    ev=q._update_extremes(ts,99.0,features,fake_state("LOW"))
+    low=q.candidates["LOW"]
+    assert low is not None
+    assert low.confirmed_stage is None
+    assert low.source=="LIVE_CANDIDATE"
+    assert low.evidence["proposal"]=="CAUSAL_MULTIWINDOW_EXTREME_V3"
+    assert low.evidence["future_used"] is False
+    assert any(e["event"]=="NEW_LOCAL_CANDIDATE" and e["side"]=="LOW" for e in ev)
+
+
+def test_v3_local_label_matures_on_five_minute_future_path():
+    q=new();q._ensure_v2();ts=10*H
+    assert q.LOCAL_LABEL_HORIZON_S==300
+    c=q._new_candidate("LOW",100.0,ts,x())
+    from research.hype_caterpillar_quant.learner import LocalPending
+    q.local_pending.append(LocalPending(
+        candidate_id=c.ident,side="LOW",stage_s=60,ts_ms=ts,price=100.0,x=x(),
+        candidate_hour_ms=ts//H*H,strict_mature_ts_ms=0,
+        bounce_mature_ts_ms=ts+300_000,best_favorable=0.0,worst_adverse=0.0,bounce_done=False
+    ))
+    q._advance_local_labels(ts+299_000,101.0,fake_state("HIGH"))
+    assert q.local_labels[("LOW",60)]==0
+    q._advance_local_labels(ts+301_000,101.0,fake_state("HIGH"))
+    assert q.local_labels[("LOW",60)]==1
+    assert q.local_pos[("LOW",60)]==1
+
+
 def test_market_outcome_labels_local_not_strict_formula():
     q=new();q._ensure_v2();ts=10*H
     c=q._new_candidate("LOW",100.0,ts,x())
@@ -245,9 +277,11 @@ def main():
     test_same_local_reentry_survives_candidate_id_change()
     test_subcost_mfe_noise_does_not_force_bootstrap_exit()
     test_strict_benchmark_cannot_override_learned_policy_local()
+    test_v3_multiwindow_extreme_proposes_candidate_without_heuristic_confirmation()
+    test_v3_local_label_matures_on_five_minute_future_path()
     test_market_outcome_labels_local_not_strict_formula()
     test_strict_benchmark_available_after_k2()
-    print("HYPE_CATERPILLAR_V2_SELFTEST_OK")
+    print("HYPE_CATERPILLAR_V3_SELFTEST_OK")
 
 if __name__=="__main__":
     main()
