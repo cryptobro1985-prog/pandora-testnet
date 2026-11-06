@@ -18,12 +18,13 @@ permissions:
 
 concurrency:
   group: hype-v6-forward-12h-caterpillar-v1-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   CAPTURE_MINUTES: "170"
   HYPE_REST_RELAY_URL: "https://hype-rest-relay.onrender.com"
   CATERPILLAR_QUANT_ENABLED: "1"
+  CATERPILLAR_MONITOR_URL: "https://hype-caterpillar-quant-monitor.onrender.com/api/ingest"
 
 jobs:
   segment_1:
