@@ -1110,6 +1110,9 @@ class CaterpillarQuantLearner:
                 events.extend(self._open(ts_ms,price,structural_side,c,
                                          float(c.stage_conf.get(c.confirmed_stage or 0,0.0)),qd,
                                          reentry=(action=="REENTER")))
+            else:
+                events.append({"event":"WAIT","ts_ms":ts_ms,"side":side_name(structural_side),
+                               "price":price,"reason":"DIRECT_POLICY_NONPOSITIVE_OR_WARMUP"})
         else:
             action="HOLD" if (not ready or value>=0.0) else "EXIT"
             if action=="EXIT":
