@@ -35,6 +35,6 @@ jobs:
         run: |
           python -m py_compile             research/hype_quant/learner.py             research/hype_quant/features.py             research/hype_caterpillar_quant/learner.py             research/hype_caterpillar_quant/live_daemon.py             research/hype_caterpillar_monitor/app.py
       - name: Quant 116 v2 self-test
-        run: python research/hype_quant/test_self.py
+        run: python -m research.hype_quant.test_self
       - name: Caterpillar H1 policy v2 behavioural test
-        run: python research/hype_caterpillar_quant/test_self.py
+        run: python -m research.hype_caterpillar_quant.test_self
