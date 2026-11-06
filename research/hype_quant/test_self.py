@@ -8,7 +8,7 @@ from pathlib import Path
 
 from research.hype_quant.feature_contract import INPUT_IDS, TARGET_IDS, METADATA_IDS, contract_summary
 from research.hype_quant.features import FeatureState
-from research.hype_quant.learner import OnlineQuantLearner, load_config
+from research.hype_quant.learner import OnlineQuantLearner, load_config, clean_features, HorizonModel
 
 
 def candle_rows(end_ms,interval_ms,count,base=100.0):
@@ -141,6 +141,42 @@ def learner_smoke(features):
 
 
 
+def v2_contract_smoke(features):
+    cleaned=clean_features({
+        **features,
+        "micro_gap_seconds":1.25,
+        "receipt_sequence_gaps":2.0,
+        "trade_latency_last_ms":35.0,
+        "book_sequence_raw":123456789.0,
+        "book_update_id_raw":987654321.0,
+        "raw_frames_seen":999999.0,
+    })
+    assert "micro_gap_seconds" in cleaned
+    assert "receipt_sequence_gaps" in cleaned
+    assert "trade_latency_last_ms" in cleaned
+    assert "book_sequence_raw" not in cleaned
+    assert "book_update_id_raw" not in cleaned
+    assert "raw_frames_seen" not in cleaned
+
+    m=HorizonModel()
+    p=m.predict(clean_features(features))
+    assert hasattr(p,"p_short")
+    assert -p.expected_max_down-1e-12 <= p.expected_return <= p.expected_max_up+1e-12
+
+    cfg=copy.deepcopy(load_config(Path("research/hype_quant/config.json")))
+    cfg["horizons_seconds"]=[1]
+    cfg["training_sample_seconds"]=3
+    cfg["champion"]["min_forward_labels_before_promotion"]=999999
+    q=OnlineQuantLearner(cfg)
+    for i in range(10):
+        q.observe(i*1000,100.0+0.01*i,features)
+    rep=q.report()
+    assert rep["contract_version"]==2
+    assert rep["directional_contract"]["short_is_not_one_minus_long"] is True
+    assert q.last_enqueued_ts_ms in (6000,9000)
+    return q
+
+
 def numerical_stability_smoke(features):
     cfg=copy.deepcopy(load_config(Path("research/hype_quant/config.json")))
     cfg["horizons_seconds"]=[1,2,3]
@@ -180,6 +216,7 @@ def main():
     assert INPUT_IDS|TARGET_IDS|METADATA_IDS==set(range(1,117))
     state,features=full_feature_smoke()
     q=learner_smoke(features)
+    v2_contract_smoke(features)
     numerical_stability_smoke(features)
     print("HYPE_QUANT_116_SELFTEST_OK")
     print(json.dumps({"coverage":state.coverage_report(),"learner":q.report()},indent=2))
