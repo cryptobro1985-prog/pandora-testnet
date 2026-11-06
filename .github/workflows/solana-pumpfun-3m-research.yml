@@ -1,0 +1,89 @@
+name: Solana Pump.fun 3M Wallet Graph
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/30 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/solana-pumpfun-3m-research.yml
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: solana-pumpfun-3m-wallet-graph
+  cancel-in-progress: false
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/solana-wallet-leaders-20261106
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Restore rolling 3-month checkpoint
+        uses: actions/cache/restore@v4
+        with:
+          path: research/solana_wallet_leaders/three_month_state.json.gz
+          key: pumpfun-3m-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            pumpfun-3m-
+
+      - name: Compile crawler
+        run: python -m py_compile research/solana_wallet_leaders/three_month_crawler.py
+
+      - name: Crawl Pump.fun three-month history
+        env:
+          SOLANA_RPC_URL: ${{ secrets.SOLANA_RPC_URL }}
+          HISTORY_START: '2026-08-06T00:00:00+00:00'
+          PUMP_THRESHOLD: '2.0'
+          MAX_SIGNATURES_PER_CHUNK: '12000'
+          TX_BATCH_SIZE: '20'
+          MAX_RUNTIME_SECONDS: '3000'
+          EARLY_WALLETS_PER_TOKEN: '30'
+          MIN_TRADE_SOL: '0.002'
+        run: python research/solana_wallet_leaders/three_month_crawler.py
+
+      - name: Validate report
+        run: |
+          test -s research/solana_wallet_leaders/three_month_state.json.gz
+          test -s research/solana_wallet_leaders/three_month_report.json
+          test -s research/solana_wallet_leaders/three_month_dorado_candidates.yaml
+          python - <<'PY'
+          import json
+          p='research/solana_wallet_leaders/three_month_report.json'
+          r=json.load(open(p))
+          assert r['research_only'] is True
+          print('progress', r['progress'])
+          print('pump_tiers', r['pump_tiers'])
+          print('top_wallets', len(r['top_wallets']))
+          print('co_entry_pairs', len(r['co_entry_pairs']))
+          PY
+
+      - name: Upload current research snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: pumpfun-3m-wallet-graph-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            research/solana_wallet_leaders/three_month_report.json
+            research/solana_wallet_leaders/three_month_dorado_candidates.yaml
+          retention-days: 30
+          if-no-files-found: error
+          compression-level: 9
+
+      - name: Save rolling checkpoint
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: research/solana_wallet_leaders/three_month_state.json.gz
+          key: pumpfun-3m-${{ github.run_id }}-${{ github.run_attempt }}
