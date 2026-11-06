@@ -32,13 +32,44 @@ def finite(v: Any) -> bool:
     return isinstance(v,(int,float)) and math.isfinite(v)
 
 
+QUALITY_EXACT={
+    "micro_gap_seconds","raw_frames_seen","book_update_id_raw","book_sequence_raw",
+    "book_invalidations_raw","receipt_sequence_gaps","subscription_acks","control_frames",
+    "raw_age_ms","book_valid_raw","book_valid_micro","channel_coverage_seconds",
+    "rest_only_complete","rest_relay_configured","ws_server_ts_ms_mod_day",
+    "ws_runner_clock_offset_ms","struct_runner_clock_offset_ms",
+}
+QUALITY_PREFIXES=("instrument_","trade_latency_","book_latency_","liq_latency_","ticker_latency_")
+
+def quality_gate(x:dict[str,Any])->dict[str,Any]:
+    reasons=[]
+    gap=x.get("micro_gap_seconds")
+    if finite(gap) and float(gap)>10.0:reasons.append("micro_gap")
+    raw_age=x.get("raw_age_ms")
+    if finite(raw_age) and float(raw_age)>5000.0:reasons.append("raw_stale")
+    return {"ok":not reasons,"reasons":reasons}
+
 def clean_features(x: dict[str,Any]) -> dict[str,float]:
+    """Return alpha features only.
+
+    Transport counters, sequence IDs, clocks and contract metadata stay available
+    to monitoring/risk code but are forbidden from becoming directional alpha.
+    Stale OI and invalid book families are removed rather than silently imputed.
+    """
     out={}
+    oi_age=x.get("oi_age_ms")
+    stale_oi=finite(oi_age) and float(oi_age)>120000.0
+    book_invalid=("book_valid_micro" in x and float(x.get("book_valid_micro") or 0.0)<0.5)
     for k,v in x.items():
+        if k in QUALITY_EXACT or any(k.startswith(p) for p in QUALITY_PREFIXES):
+            continue
+        if stale_oi and ("oi_" in k or k.startswith("open_interest")):
+            continue
+        if book_invalid and (k.startswith("l50_") or k.startswith("book_") or "depth_" in k or "absorption" in k or "replenishment" in k):
+            continue
         if isinstance(v,bool):
             out[k]=1.0 if v else 0.0
         elif finite(v):
-            # keep model numerically sane while retaining direction/order
             out[k]=max(-1e9,min(1e9,float(v)))
     return out
 
@@ -74,15 +105,19 @@ class Outcome:
 
 @dataclass
 class Prediction:
+    # p_up is retained as the LONG edge probability for checkpoint compatibility.
     p_up: float
     expected_return: float
     expected_max_up: float
     expected_max_down: float
+    p_short: float = 0.5
 
 
 class HorizonModel:
     def __init__(self):
-        self.direction=new_classifier()
+        self.direction=new_classifier()  # legacy alias: LONG-edge classifier
+        self.long_edge=self.direction
+        self.short_edge=new_classifier()
         self.ret=new_regressor()
         self.max_up=new_regressor()
         self.max_down=new_regressor()
@@ -92,23 +127,39 @@ class HorizonModel:
             self.drift=None
         self.n=0
 
+    def _ensure_v2(self):
+        if not hasattr(self,"long_edge"):
+            self.long_edge=getattr(self,"direction",new_classifier())
+        if not hasattr(self,"short_edge"):
+            self.short_edge=new_classifier()
+        self.direction=self.long_edge
+
     def predict(self,x:dict[str,float])->Prediction:
-        proba=self.direction.predict_proba_one(x) or {}
-        p_up=float(proba.get(True,proba.get(1,0.5)) or 0.5)
-        r=self.ret.predict_one(x)
-        u=self.max_up.predict_one(x)
-        d=self.max_down.predict_one(x)
+        self._ensure_v2()
+        lp=self.long_edge.predict_proba_one(x) or {}
+        sp=self.short_edge.predict_proba_one(x) or {}
+        p_long=float(lp.get(True,lp.get(1,0.5)) or 0.5)
+        p_short=float(sp.get(True,sp.get(1,0.5)) or 0.5)
+        r=float(self.ret.predict_one(x) or 0.0)
+        u=max(0.0,min(MAX_EXCURSION,float(self.max_up.predict_one(x) or 0.0)))
+        d=max(0.0,min(MAX_EXCURSION,float(self.max_down.predict_one(x) or 0.0)))
+        # A terminal return cannot lie outside the path extrema.
+        r=max(-d,min(u,max(-MAX_ABS_RETURN,min(MAX_ABS_RETURN,r))))
         return Prediction(
-            p_up=max(0.0,min(1.0,p_up)),
-            expected_return=max(-MAX_ABS_RETURN,min(MAX_ABS_RETURN,float(r or 0.0))),
-            expected_max_up=max(0.0,min(MAX_EXCURSION,float(u or 0.0))),
-            expected_max_down=max(0.0,min(MAX_EXCURSION,float(d or 0.0))),
+            p_up=max(0.0,min(1.0,p_long)),
+            p_short=max(0.0,min(1.0,p_short)),
+            expected_return=r,
+            expected_max_up=u,
+            expected_max_down=d,
         )
 
     def learn(self,x:dict[str,float],y:Outcome,cost_floor:float)->bool:
+        self._ensure_v2()
         pred=self.predict(x)
-        target_up=y.future_return > cost_floor
-        self.direction.learn_one(x,target_up)
+        target_long=y.future_return > cost_floor
+        target_short=y.future_return < -cost_floor
+        self.long_edge.learn_one(x,target_long)
+        self.short_edge.learn_one(x,target_short)
         ret_target=max(-MAX_ABS_RETURN,min(MAX_ABS_RETURN,float(y.future_return)))
         up_target=max(0.0,min(MAX_EXCURSION,float(y.max_up)))
         down_target=max(0.0,min(MAX_EXCURSION,float(y.max_down)))
@@ -190,7 +241,9 @@ class ForwardStats:
         self.rows=deque(maxlen=maxlen)
 
     def add(self,pred:Prediction,y:Outcome,cost_floor:float):
-        direction=1 if pred.expected_return>=0 else -1
+        p_long=float(getattr(pred,"p_up",0.5))
+        p_short=float(getattr(pred,"p_short",1.0-p_long))
+        direction=1 if p_long>=p_short else -1
         gross=direction*y.future_return
         net=gross-cost_floor
         correct=(gross>cost_floor)
@@ -258,13 +311,33 @@ class OnlineQuantLearner:
         self.feature_names_seen=set()
         self.max_feature_count=0
         self.action_counts={"LONG":0,"SHORT":0,"FLAT":0}
+        self.contract_version=2
+        self.v2_labels=0
+        self.last_enqueued_ts_ms=None
 
     def _round_trip_cost(self)->float:
         c=self.config.get("modeled_costs",{})
         bps=2*float(c.get("taker_fee_bps_per_side",0))+2*float(c.get("slippage_bps_per_side",0))+float(c.get("latency_bps_per_round_trip",0))
         return bps/10000.0
 
+    def _ensure_v2(self):
+        if not hasattr(self,"contract_version") or self.contract_version<2:
+            for models in (getattr(self,"challenger",{}),getattr(self,"champion",{})):
+                for model in models.values():
+                    if hasattr(model,"_ensure_v2"):model._ensure_v2()
+            self.pending=deque()
+            self.champion_stats={h:ForwardStats() for h in self.horizons}
+            self.challenger_stats={h:ForwardStats() for h in self.horizons}
+            self.champion_ready=False
+            self.contract_version=2
+            self.v2_labels=0
+            self.last_enqueued_ts_ms=None
+        if not hasattr(self,"v2_labels"):self.v2_labels=0
+        if not hasattr(self,"last_enqueued_ts_ms"):self.last_enqueued_ts_ms=None
+
     def observe(self,ts_ms:int,price:float,features:dict[str,Any])->dict[str,Any]:
+        self._ensure_v2()
+        gate=quality_gate(features)
         x=clean_features(features)
         self.feature_names_seen.update(x)
         self.max_feature_count=max(self.max_feature_count,len(x))
@@ -275,8 +348,14 @@ class OnlineQuantLearner:
         matured=self._advance_pending(ts_ms,price)
         cp={h:self.champion[h].predict(x) for h in self.horizons}
         qp={h:self.challenger[h].predict(x) for h in self.horizons}
-        self.pending.append(Pending(ts_ms,price,x,cp,qp,price,price,set()))
+        spacing_s=float(self.config.get("training_sample_seconds",15))
+        enqueue=(gate["ok"] and (self.last_enqueued_ts_ms is None or ts_ms-self.last_enqueued_ts_ms>=spacing_s*1000))
+        if enqueue:
+            self.pending.append(Pending(ts_ms,price,x,cp,qp,price,price,set()))
+            self.last_enqueued_ts_ms=ts_ms
         action=self.choose_action(x, cp if self.champion_ready else qp)
+        action["quality_gate"]=gate
+        action["training_sample_enqueued"]=enqueue
         if not hasattr(self,"action_counts"):
             self.action_counts={"LONG":0,"SHORT":0,"FLAT":0}
         chosen=str(action.get("action","FLAT"))
@@ -308,7 +387,7 @@ class OnlineQuantLearner:
                 drifted=self.challenger[h].learn(p.x,y,self.cost_floor)
                 if drifted:self.drift_events+=1
                 self.memory.add(p.x,y)
-                p.done.add(h); self.labels+=1; matured+=1
+                p.done.add(h); self.labels+=1; self.v2_labels+=1; matured+=1
             if len(p.done)<len(self.horizons):
                 keep.append(p)
         self.pending=keep
@@ -377,12 +456,12 @@ class OnlineQuantLearner:
             p=copy.copy(p0)
             mem=self.memory.query(x,h)
             if mem:
-                # Blend only after enough causal memory exists; model remains primary.
                 p.expected_return=.75*p.expected_return+.25*mem["return"]
                 p.expected_max_up=.75*p.expected_max_up+.25*mem["max_up"]
                 p.expected_max_down=.75*p.expected_max_down+.25*mem["max_down"]
+                p.expected_return=max(-p.expected_max_down,min(p.expected_max_up,p.expected_return))
             for side in (1,-1):
-                model_confidence=p.p_up if side==1 else 1.0-p.p_up
+                model_confidence=p.p_up if side==1 else float(getattr(p,"p_short",0.5))
                 agent_consensus=float(x.get("agent_consensus",0.0) or 0.0)
                 agent_conf=float(x.get("agent_confidence",0.0) or 0.0)
                 adversary=float(x.get("agent_adversary_risk",0.0) or 0.0)
@@ -440,6 +519,8 @@ class OnlineQuantLearner:
             "version":self.config.get("version"),
             "research_only":True,
             "labels":self.labels,
+            "v2_labels":getattr(self,"v2_labels",0),
+            "contract_version":getattr(self,"contract_version",1),
             "pending":len(self.pending),
             "champion_ready":self.champion_ready,
             "promotions":self.promotions,
@@ -452,7 +533,11 @@ class OnlineQuantLearner:
             "max_feature_count":self.max_feature_count,
             "feature_names_seen":sorted(self.feature_names_seen),
             "action_counts":getattr(self,"action_counts",{"LONG":0,"SHORT":0,"FLAT":0}),
-            "directional_contract":{"trained":"signed future returns","evaluated_sides":["LONG","SHORT"],"flat_baseline":True},
+            "directional_contract":{
+                "trained":"independent LONG edge and SHORT edge outside +/- round-trip-cost neutral band",
+                "evaluated_sides":["LONG","SHORT"],"flat_baseline":True,
+                "short_is_not_one_minus_long":True,
+            },
             "numerical_guard":{
                 "max_abs_return":MAX_ABS_RETURN,
                 "max_excursion":MAX_EXCURSION,
