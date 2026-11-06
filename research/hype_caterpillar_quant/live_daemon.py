@@ -138,6 +138,25 @@ def publish_issue(report):
     issue=os.environ.get("CATERPILLAR_STATUS_ISSUE","24")
     if not token or not issue:return
     status=compact_status(report);p=status["paper"];fence=chr(96)*3
+    # Never let an older concurrent collector overwrite a newer live status.
+    try:
+        current_run=int(status.get("github_run_id") or 0)
+        existing=requests.get(
+            f"https://api.github.com/repos/{repo}/issues/{issue}",
+            headers={"Authorization":f"Bearer {token}","Accept":"application/vnd.github+json"},
+            timeout=6,
+        )
+        if existing.ok:
+            body=str((existing.json() or {}).get("body") or "")
+            a=body.find(fence+"json");b=body.find(fence,a+len(fence)+4) if a>=0 else -1
+            if a>=0 and b>a:
+                raw=body[a+len(fence)+4:b].strip()
+                prev=json.loads(raw)
+                prev_run=int(prev.get("github_run_id") or 0)
+                if prev_run>current_run:
+                    return
+    except Exception:
+        pass
     fresh=status["freshness_seconds"]
     lines=[
         "# HYPE Caterpillar Quant — LIVE",
