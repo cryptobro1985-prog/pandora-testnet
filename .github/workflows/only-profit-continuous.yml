@@ -1,12 +1,7 @@
 name: Only Profit Continuous Search
 
+# Deprecated from active runtime on 2026-11-06. Local-Only model is authoritative.
 on:
-  push:
-    branches:
-      - research/hype-h1-local-v5-oi-microstructure-20261104
-    paths:
-      - "research/only_profit/**"
-      - ".github/workflows/only-profit-continuous.yml"
   workflow_dispatch:
 
 permissions:
