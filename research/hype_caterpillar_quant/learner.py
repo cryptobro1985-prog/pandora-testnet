@@ -362,6 +362,7 @@ class CaterpillarQuantLearner:
         if getattr(self,"policy_version",1)>=2:
             if hasattr(self.quant,"_ensure_v2"):self.quant._ensure_v2()
             self._ensure_full_graph_policy()
+            self._ensure_entry_learning_policy()
             return
         # Local v1 labels described a 30m tradeable bounce, not a strict H1 pivot.
         # Preserve generic Quant history, but reset policy heads to the corrected contract.
@@ -389,6 +390,40 @@ class CaterpillarQuantLearner:
         self.policy_version=2
         if hasattr(self.quant,"_ensure_v2"):self.quant._ensure_v2()
         self._ensure_full_graph_policy()
+        self._ensure_entry_learning_policy()
+
+    def _ensure_entry_learning_policy(self):
+        if getattr(self,"policy_contract_version",0)>=4:
+            if not hasattr(self,"legacy_paper_archive"):self.legacy_paper_archive=None
+            if not hasattr(self,"entry_models"):
+                self.entry_models={h:binary_model() for h in self.ENTRY_HORIZONS}
+                self.entry_labels={h:0 for h in self.ENTRY_HORIZONS}
+                self.entry_pos={h:0 for h in self.ENTRY_HORIZONS}
+                self.entry_pending=[];self.last_entry_sample_ms=0
+            self.prediction_checks.setdefault("entry",0)
+            self.prediction_errors.setdefault("entry",0)
+            return
+        old_trades=list(getattr(self,"trades",[]) or [])
+        old_equity=float(getattr(self,"equity",100.0) or 100.0)
+        self.legacy_paper_archive={
+            "policy_contract_version":getattr(self,"policy_contract_version",0),
+            "equity":old_equity,
+            "return_pct":(old_equity/100.0-1.0)*100.0,
+            "closed_trades":len(old_trades),
+            "reentries":int(getattr(self,"reentries",0) or 0),
+            "reason":"blind strict-local entry/re-entry policy retired; retained for audit only",
+        }
+        self.entry_models={h:binary_model() for h in self.ENTRY_HORIZONS}
+        self.entry_labels={h:0 for h in self.ENTRY_HORIZONS}
+        self.entry_pos={h:0 for h in self.ENTRY_HORIZONS}
+        self.entry_pending=[];self.last_entry_sample_ms=0
+        self.position=None;self.last_exit=None
+        self.equity=100.0;self.peak_equity=100.0;self.max_drawdown=0.0
+        self.trades=[];self.path_equity=100.0;self.reentries=0
+        self.baseline_equity=100.0;self.baseline_position=None;self.baseline_trades=[]
+        self.prediction_checks.setdefault("entry",0)
+        self.prediction_errors.setdefault("entry",0)
+        self.policy_contract_version=4
 
     def _ensure_full_graph_policy(self):
         if getattr(self,"policy_contract_version",0)>=3:
@@ -1176,7 +1211,9 @@ class CaterpillarQuantLearner:
         errors=sum(self.prediction_errors.values())
         paper=self.paper_snapshot()
         return {
-            "version":self.VERSION,"policy_contract_version":getattr(self,"policy_contract_version",0),"research_only":True,"real_orders":False,
+            "version":self.VERSION,"policy_contract_version":getattr(self,"policy_contract_version",0),
+            "legacy_paper_archive":getattr(self,"legacy_paper_archive",None),
+            "research_only":True,"real_orders":False,
             "learning_status":"LEARNING",
             "relationships":relationships,
             "relationships_total":relationships["total"],
@@ -1204,7 +1241,7 @@ class CaterpillarQuantLearner:
             "mean_mfe_capture_ratio":statistics.fmean(captures) if captures else None,
             "median_mfe_capture_ratio":statistics.median(captures) if captures else None,
             "local_target":"FULL_HISTORY_STRICT_H1_L6_K2",
-            "local_policy":"LOW->LONG until confirmed HIGH; HIGH->SHORT until confirmed LOW; Caterpillar manages HOLD/EXIT/REENTRY inside the leg",
+            "local_policy":"H1 local defines direction; entry/re-entry PAPER executes only after matured learned edge; negative exit only emergency/opposite-local, normal learned exits protect positive net edge",
             "bootstrap_diagnostic":{"disabled_for_policy":True,"reason":"recency-window local is training-only"},
             "training_progress":self._training_progress(),
             "structural_history":getattr(self,"structural_history",{}),
