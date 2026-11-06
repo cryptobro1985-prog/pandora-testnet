@@ -150,6 +150,7 @@ class CaterpillarQuantLearner:
     REENTRY_HORIZON_S=300
     POLICY_SAMPLE_S=30
     DIRECT_POLICY_HORIZONS=(60,180,300)
+    DIRECT_POLICY_MIN_LABELS_PER_HORIZON=30
     MIN_HOLD_S=60
     FIB_RETRACE_RATIOS=(0.236,0.382,0.5,0.618,0.786,1.0)
     FIB_EXTENSION_RATIOS=(1.272,1.618)
@@ -1092,7 +1093,7 @@ class CaterpillarQuantLearner:
         per_h={h:self._model_value(self.policy_models[(mode,h)],px) for h in self.DIRECT_POLICY_HORIZONS}
         value=statistics.fmean(per_h.values()) if per_h else 0.0
         labels={h:int(self.policy_labels[(mode,h)]) for h in self.DIRECT_POLICY_HORIZONS}
-        ready=any(v>0 for v in labels.values())
+        ready=all(v>=self.DIRECT_POLICY_MIN_LABELS_PER_HORIZON for v in labels.values())
         return mode,value,per_h,labels,ready
 
     def _execute_direct_policy(self,ts_ms,price,x,c,qd):
@@ -1152,6 +1153,8 @@ class CaterpillarQuantLearner:
             "training_percent":min(100.0,100.0*total/1200.0),
             "last_decision":self.last_policy_decision,
             "manual_action_thresholds":False,
+            "minimum_training_labels_per_horizon":self.DIRECT_POLICY_MIN_LABELS_PER_HORIZON,
+            "maturity_gate_note":"this is a data-readiness gate, not a trading confidence threshold; after maturity actions use the sign of learned economic advantage",
             "causal_state_note":"policy consumes the complete cleaned causal feature state; future target/evaluation fields are never inputs",
         }
 
