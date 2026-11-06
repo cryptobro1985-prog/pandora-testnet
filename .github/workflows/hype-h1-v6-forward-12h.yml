@@ -21,6 +21,7 @@ concurrency:
 env:
   CAPTURE_MINUTES: "170"
   HYPE_REST_RELAY_URL: "https://hype-rest-relay.onrender.com"
+  CATERPILLAR_QUANT_ENABLED: "1"
 
 jobs:
   segment_1:
@@ -32,13 +33,40 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install research dependencies
-        run: python -m pip install -r research/hype_local_v5/requirements-research.txt
-      - name: Validate compact research format
+        run: |
+          python -m pip install -r research/hype_local_v5/requirements-research.txt
+          python -m pip install -r research/hype_quant/requirements.txt
+      - name: Validate compact research format and Caterpillar Quant
         run: |
           python -m py_compile research/hype_local_v5/compact_pack.py research/hype_local_v5/decode_compact.py research/hype_local_v5/context_capture.py research/hype_local_v5/resilient_capture.py
+          python -m py_compile research/hype_caterpillar_quant/learner.py research/hype_caterpillar_quant/live_daemon.py
           bash -n research/hype_local_v5/capture_pack_segment.sh
           python research/hype_local_v5/test_compact_smoke.py
+          python - <<'PY'
+          from pathlib import Path
+          from research.hype_caterpillar_quant.learner import new_from_config
+          q=new_from_config(Path("research/hype_quant/config.json"))
+          assert q.report()["research_only"] and not q.report()["real_orders"]
+          print("caterpillar_quant_smoke=ok")
+          PY
+      - name: Restore latest Caterpillar Quant checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p cq_warm
+          ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100"             --jq '.artifacts | map(select((.expired|not) and .name=="HYPE-CATERPILLAR-QUANT-CHECKPOINT")) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          if [ -n "$ID" ]; then
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$ID/zip" > cq.zip
+            unzip -q cq.zip -d cq_warm
+            echo "restored_caterpillar_checkpoint=$ID"
+          else
+            echo "no_prior_caterpillar_checkpoint"
+          fi
       - name: Capture and compact segment 1
+        env:
+          CATERPILLAR_WARMSTART_DIR: cq_warm
         run: bash research/hype_local_v5/capture_pack_segment.sh out/hype_v6_12h_segment_1 "$CAPTURE_MINUTES"
       - name: Upload compact segment 1
         if: always()
@@ -49,6 +77,14 @@ jobs:
           if-no-files-found: error
           retention-days: 2
           compression-level: 0
+      - name: Upload Caterpillar Quant checkpoint 1
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-CATERPILLAR-QUANT-checkpoint-1
+          path: out/hype_v6_12h_segment_1_upload/caterpillar_quant
+          if-no-files-found: warn
+          retention-days: 2
 
   segment_2:
     needs: segment_1
@@ -61,8 +97,16 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install research dependencies
-        run: python -m pip install -r research/hype_local_v5/requirements-research.txt
+        run: |
+          python -m pip install -r research/hype_local_v5/requirements-research.txt
+          python -m pip install -r research/hype_quant/requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: HYPE-CATERPILLAR-QUANT-checkpoint-1
+          path: cq_warm
       - name: Capture and compact segment 2
+        env:
+          CATERPILLAR_WARMSTART_DIR: cq_warm
         run: bash research/hype_local_v5/capture_pack_segment.sh out/hype_v6_12h_segment_2 "$CAPTURE_MINUTES"
       - name: Upload compact segment 2
         if: always()
@@ -73,6 +117,14 @@ jobs:
           if-no-files-found: error
           retention-days: 2
           compression-level: 0
+      - name: Upload Caterpillar Quant checkpoint 2
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-CATERPILLAR-QUANT-checkpoint-2
+          path: out/hype_v6_12h_segment_2_upload/caterpillar_quant
+          if-no-files-found: warn
+          retention-days: 2
 
   segment_3:
     needs: segment_2
@@ -85,8 +137,16 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install research dependencies
-        run: python -m pip install -r research/hype_local_v5/requirements-research.txt
+        run: |
+          python -m pip install -r research/hype_local_v5/requirements-research.txt
+          python -m pip install -r research/hype_quant/requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: HYPE-CATERPILLAR-QUANT-checkpoint-2
+          path: cq_warm
       - name: Capture and compact segment 3
+        env:
+          CATERPILLAR_WARMSTART_DIR: cq_warm
         run: bash research/hype_local_v5/capture_pack_segment.sh out/hype_v6_12h_segment_3 "$CAPTURE_MINUTES"
       - name: Upload compact segment 3
         if: always()
@@ -97,6 +157,14 @@ jobs:
           if-no-files-found: error
           retention-days: 2
           compression-level: 0
+      - name: Upload Caterpillar Quant checkpoint 3
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-CATERPILLAR-QUANT-checkpoint-3
+          path: out/hype_v6_12h_segment_3_upload/caterpillar_quant
+          if-no-files-found: warn
+          retention-days: 2
 
   segment_4:
     needs: segment_3
@@ -109,8 +177,16 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install research dependencies
-        run: python -m pip install -r research/hype_local_v5/requirements-research.txt
+        run: |
+          python -m pip install -r research/hype_local_v5/requirements-research.txt
+          python -m pip install -r research/hype_quant/requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: HYPE-CATERPILLAR-QUANT-checkpoint-3
+          path: cq_warm
       - name: Capture and compact segment 4
+        env:
+          CATERPILLAR_WARMSTART_DIR: cq_warm
         run: bash research/hype_local_v5/capture_pack_segment.sh out/hype_v6_12h_segment_4 "$CAPTURE_MINUTES"
       - name: Upload compact segment 4
         if: always()
@@ -121,6 +197,14 @@ jobs:
           if-no-files-found: error
           retention-days: 2
           compression-level: 0
+      - name: Upload Caterpillar Quant checkpoint 4
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-CATERPILLAR-QUANT-checkpoint-4
+          path: out/hype_v6_12h_segment_4_upload/caterpillar_quant
+          if-no-files-found: warn
+          retention-days: 2
 
   combine:
     needs: segment_4
@@ -133,6 +217,10 @@ jobs:
         with:
           pattern: HYPE-H1-V6-12H-segment-*
           path: downloaded
+      - uses: actions/download-artifact@v4
+        with:
+          name: HYPE-CATERPILLAR-QUANT-checkpoint-4
+          path: cq_final
       - name: Build manifest-only combined index
         run: |
           mkdir -p combined_index
@@ -173,6 +261,13 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
+      - name: Upload durable Caterpillar Quant checkpoint
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-CATERPILLAR-QUANT-CHECKPOINT
+          path: cq_final
+          if-no-files-found: error
+          retention-days: 30
 
 
   restart_next:
