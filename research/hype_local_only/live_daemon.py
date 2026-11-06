@@ -280,6 +280,7 @@ def main():
                 },
                 "historical_labels":sum(model.labels.values())-model.live_labels,
                 "live_labels":model.live_labels,"pending_labels":len(pending),
+                "model_report":model.report(),
                 "h1_baseline":model.h1_shadow,
                 "h1_training":{"labels":model.h1_labels,"positive":model.h1_positive},
                 "seen_input_count":cov.get("seen_input_count"),"feature_contract":cov,
