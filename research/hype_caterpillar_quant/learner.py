@@ -148,6 +148,9 @@ class PaperPosition:
 class CaterpillarQuantLearner:
     VERSION="caterpillar-quant-v2"
     LOCAL_STAGES=(60,180,300)
+    LOCAL_POLICY_VERSION=2
+    LOCAL_MIN_LABELS_PER_STAGE=30
+    LOCAL_LABEL_HORIZON_S=1800
     BOUNCE_FUTURE_S=1800
     EXIT_HORIZON_S=300
     ENTRY_HORIZONS=(60,180,300)
@@ -220,6 +223,9 @@ class CaterpillarQuantLearner:
         self.early_local_stats={side:{"examples":0,"positives":0,"tp":0,"fp":0,"fn":0,"tn":0,"brier_sum":0.0}
                                 for side in ("LOW","HIGH")}
         self.early_local_shadow={}
+        self.local_policy_version=0
+        self.learned_local_history=[]
+        self.last_teacher_local=None
         self.prediction_checks={"local":0,"bounce":0,"entry":0,"exit":0,"reentry":0,"fib":0}
         self.prediction_errors={"local":0,"bounce":0,"entry":0,"exit":0,"reentry":0,"fib":0}
         self._ensure_fib()
@@ -273,7 +279,7 @@ class CaterpillarQuantLearner:
         return f"{kind}{ratio:.3f}"
 
     def _fib_snapshot(self,state,ts_ms,price):
-        pivots=self._strict_pivots(state,ts_ms)
+        pivots=list(getattr(self,"learned_local_history",[]) or [])
         if len(pivots)<2:return {"available":False,"features":{},"levels":[]}
         a,b=pivots[-2],pivots[-1]
         if a["side"]==b["side"]:return {"available":False,"features":{},"levels":[]}
@@ -418,6 +424,7 @@ class CaterpillarQuantLearner:
             if hasattr(self.quant,"_ensure_v2"):self.quant._ensure_v2()
             self._ensure_full_graph_policy()
             self._ensure_entry_learning_policy()
+            self._ensure_learned_local_policy()
             self._ensure_direct_policy()
             return
         # Local v1 labels described a 30m tradeable bounce, not a strict H1 pivot.
@@ -447,7 +454,70 @@ class CaterpillarQuantLearner:
         if hasattr(self.quant,"_ensure_v2"):self.quant._ensure_v2()
         self._ensure_full_graph_policy()
         self._ensure_entry_learning_policy()
+        self._ensure_learned_local_policy()
         self._ensure_direct_policy()
+
+    def _ensure_learned_local_policy(self):
+        if int(getattr(self,"local_policy_version",0) or 0)>=self.LOCAL_POLICY_VERSION:
+            if not hasattr(self,"learned_local_history"):self.learned_local_history=[]
+            if not hasattr(self,"last_teacher_local"):self.last_teacher_local=None
+            return
+
+        # Target semantics changed materially: old Local heads learned a fixed
+        # L6/K2 historical pivot formula. Preserve that only as a benchmark.
+        # New Local heads learn whether a live extreme actually becomes an
+        # economically useful turning point from the full causal state.
+        old_trades=list(getattr(self,"trades",[]) or [])
+        old_equity=float(getattr(self,"equity",100.0) or 100.0)
+        archive={
+            "policy_contract_version":getattr(self,"policy_contract_version",0),
+            "local_policy_version":getattr(self,"local_policy_version",0),
+            "equity":old_equity,
+            "return_pct":(old_equity/100.0-1.0)*100.0,
+            "closed_trades":len(old_trades),
+            "reentries":int(getattr(self,"reentries",0) or 0),
+            "reason":"strict historical pivot execution retired; Local is now learned from live causal state and realized reversal outcomes",
+        }
+        archives=list(getattr(self,"legacy_paper_archives",[]) or [])
+        prev=getattr(self,"legacy_paper_archive",None)
+        if isinstance(prev,dict) and prev not in archives:archives.append(prev)
+        archives.append(archive)
+        self.legacy_paper_archives=archives[-8:]
+        self.legacy_paper_archive=archive
+
+        self.local_models={(side,stage):binary_model() for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
+        self.local_labels={(side,stage):0 for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
+        self.local_pos={(side,stage):0 for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
+        self.bounce_models={(side,stage):binary_model() for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
+        self.bounce_labels={(side,stage):0 for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
+        self.bounce_pos={(side,stage):0 for side in ("LOW","HIGH") for stage in self.LOCAL_STAGES}
+        self.local_pending=[]
+        self.candidates={"LOW":None,"HIGH":None}
+        self.last_confirmed_local=None
+        self.learned_local_history=[]
+        self.last_teacher_local=None
+
+        # Direct action policy is conditioned on Local state, so it must restart
+        # when Local semantics change.
+        self.policy_models={(mode,h):value_model() for mode in ("FLAT","POSITION") for h in self.DIRECT_POLICY_HORIZONS}
+        self.policy_labels={(mode,h):0 for mode in ("FLAT","POSITION") for h in self.DIRECT_POLICY_HORIZONS}
+        self.policy_target_sum={(mode,h):0.0 for mode in ("FLAT","POSITION") for h in self.DIRECT_POLICY_HORIZONS}
+        self.policy_pending=[];self.last_policy_sample_ms=0;self.last_policy_decision={}
+        self.direct_policy_model_version=self.DIRECT_POLICY_MODEL_VERSION
+
+        # Fib learning also re-anchors to learned Local swings.
+        self.fib_models={};self.fib_labels={};self.fib_pos={};self.fib_pending=[]
+        self.fib_last_touch_ms={};self.fib_touch_counts={};self.fib_outcomes={}
+        self._ensure_fib()
+
+        self.position=None;self.last_exit=None
+        self.equity=100.0;self.peak_equity=100.0;self.max_drawdown=0.0
+        self.trades=[];self.path_equity=100.0;self.reentries=0
+        self.baseline_equity=100.0;self.baseline_position=None;self.baseline_trades=[]
+        self.local_policy_version=self.LOCAL_POLICY_VERSION
+        self.policy_contract_version=7
+        self.prediction_checks["local"]=0;self.prediction_errors["local"]=0
+        self.prediction_checks["bounce"]=0;self.prediction_errors["bounce"]=0
 
     def _ensure_direct_policy(self):
         if getattr(self,"policy_contract_version",0)>=6:
@@ -925,29 +995,35 @@ class CaterpillarQuantLearner:
 
     def _advance_local_labels(self,ts_ms,price,state):
         keep=[]
-        for s in self.local_pending:
-            sign=1.0 if s.side=="LOW" else -1.0
-            move=sign*(price/s.price-1.0)
-            s.best_favorable=max(s.best_favorable,move)
-            s.worst_adverse=max(s.worst_adverse,-move)
-            c=self.candidates.get(s.side)
-            invalid=(c is None or c.ident!=s.candidate_id or c.invalidated_ts_ms is not None)
-            if not s.bounce_done and ts_ms>=s.bounce_mature_ts_ms:
-                by=(not invalid) and s.best_favorable>=0.0035
-                bp=self._model_p(self.bounce_models[(s.side,s.stage_s)],s.x)>=0.5
-                self.prediction_checks["bounce"]+=1;self.prediction_errors["bounce"]+=int(bp!=bool(by))
-                self._learn_binary(self.bounce_models[(s.side,s.stage_s)],s.x,by)
-                self.bounce_labels[(s.side,s.stage_s)]+=1;self.bounce_pos[(s.side,s.stage_s)]+=int(by)
-                s.bounce_done=True
-            sy=self._strict_candidate_outcome(state,s,ts_ms)
-            if sy is None:
-                keep.append(s);continue
-            sy=bool(sy and not invalid)
-            model=self.local_models[(s.side,s.stage_s)]
-            pred=self._model_p(model,s.x)>=0.5
-            self.prediction_checks["local"]+=1;self.prediction_errors["local"]+=int(pred!=sy)
-            self._learn_binary(model,s.x,sy)
-            self.local_labels[(s.side,s.stage_s)]+=1;self.local_pos[(s.side,s.stage_s)]+=int(sy)
+        for p in self.local_pending:
+            sign=1.0 if p.side=="LOW" else -1.0
+            move=sign*(float(price)/max(float(p.price),1e-9)-1.0)
+            p.best_favorable=max(p.best_favorable,move)
+            p.worst_adverse=max(p.worst_adverse,-move)
+            c=self.candidates.get(p.side)
+            invalid=(c is None or c.ident!=p.candidate_id or c.invalidated_ts_ms is not None)
+            if ts_ms<p.bounce_mature_ts_ms:
+                keep.append(p);continue
+
+            # The market labels the candidate. A true Local is a turning point
+            # whose realized favorable path beats the same-side extension/adverse
+            # path after costs. No fixed historical pivot formula is the target.
+            economic_advantage=p.best_favorable-p.worst_adverse-self.round_trip_cost
+            local_y=(not invalid) and economic_advantage>0.0
+            model=self.local_models[(p.side,p.stage_s)]
+            pred=self._model_p(model,p.x)>=0.5
+            self.prediction_checks["local"]+=1;self.prediction_errors["local"]+=int(pred!=bool(local_y))
+            self._learn_binary(model,p.x,local_y)
+            self.local_labels[(p.side,p.stage_s)]+=1;self.local_pos[(p.side,p.stage_s)]+=int(local_y)
+
+            # Bounce remains a diagnostic head only. It measures whether the
+            # favorable reversal dominated adverse continuation, without costs.
+            bounce_y=(not invalid) and p.best_favorable>p.worst_adverse
+            bp=self._model_p(self.bounce_models[(p.side,p.stage_s)],p.x)>=0.5
+            self.prediction_checks["bounce"]+=1;self.prediction_errors["bounce"]+=int(bp!=bool(bounce_y))
+            self._learn_binary(self.bounce_models[(p.side,p.stage_s)],p.x,bounce_y)
+            self.bounce_labels[(p.side,p.stage_s)]+=1;self.bounce_pos[(p.side,p.stage_s)]+=int(bounce_y)
+            p.bounce_done=True
         self.local_pending=keep
 
     def _entry_x(self,x,ts_ms,price,c,qd):
@@ -1077,7 +1153,7 @@ class CaterpillarQuantLearner:
         return clean_features(out)
 
     def _sample_direct_policy(self,ts_ms,price,x,c,qd):
-        if c is None or getattr(c,"source",None)!="STRICT_H1_CONFIRMED":return
+        if c is None or getattr(c,"source",None)!="LEARNED_CAUSAL_LOCAL":return
         if ts_ms-self.last_policy_sample_ms<self.POLICY_SAMPLE_S*1000:return
         mode="POSITION" if self.position is not None else "FLAT"
         side=(self.position.side if self.position is not None else (1 if c.side=="LOW" else -1))
@@ -1165,7 +1241,7 @@ class CaterpillarQuantLearner:
                for mode in ("FLAT","POSITION")}
         total=sum(sum(v.values()) for v in labels.values())
         return {
-            "contract_version":6,
+            "contract_version":7,
             "model_version":getattr(self,"direct_policy_model_version",self.DIRECT_POLICY_MODEL_VERSION),
             "actions":{"flat":["WAIT","ENTER_OR_REENTER"],"position":["HOLD","EXIT"]},
             "hard_constraints":["LOCAL_LOW_LONG_ONLY","LOCAL_HIGH_SHORT_ONLY"],
@@ -1181,6 +1257,26 @@ class CaterpillarQuantLearner:
             "causal_state_note":"policy consumes the complete cleaned causal feature state; future target/evaluation fields are never inputs",
         }
 
+    def _record_learned_local(self,c,ts_ms,price,model_p,labels):
+        item={
+            "side":c.side,
+            "price":float(c.extreme_price),
+            "hour_ms":int((c.extreme_ts_ms//3_600_000)*3_600_000),
+            "available_ms":int(ts_ms),
+            "confirm_price":float(price),
+            "source":"LEARNED_CAUSAL_LOCAL",
+            "model_probability":float(model_p),
+            "labels_seen":int(labels),
+            "stage_s":int(c.confirmed_stage or 0),
+        }
+        hist=list(getattr(self,"learned_local_history",[]) or [])
+        if hist and hist[-1]["side"]==item["side"]:
+            better=item["price"]<hist[-1]["price"] if item["side"]=="LOW" else item["price"]>hist[-1]["price"]
+            if better:hist[-1]=item
+        else:
+            hist.append(item)
+        self.learned_local_history=hist[-200:]
+
     def _stage_candidate(self,c,ts_ms,price,x):
         events=[]
         if c is None or c.invalidated_ts_ms is not None:return events
@@ -1191,35 +1287,53 @@ class CaterpillarQuantLearner:
             p=self._model_p(self.local_models[(c.side,stage)],sx)
             bp=self._model_p(self.bounce_models[(c.side,stage)],sx)
             labels=self.local_labels[(c.side,stage)]
-            sign=1.0 if c.side=="LOW" else -1.0
             retr=sx["cq_retrace_bps"]
-            heuristic=sigmoid((retr-18.0)/18.0 + 1.2*sx["cq_agent_alignment"] + .8*sx["cq_flow_alignment"])
-            model_weight=min(.80,.80*labels/120.0)
-            conf=(1-model_weight)*heuristic+model_weight*p
-            c.stage_done.add(stage);c.stage_conf[stage]=conf;c.stage_retrace_bps[stage]=retr
+            ready=labels>=self.LOCAL_MIN_LABELS_PER_STAGE
+            accepted=bool(ready and p>0.5)
+            c.stage_done.add(stage);c.stage_conf[stage]=p;c.stage_retrace_bps[stage]=retr
             hour=(c.extreme_ts_ms//3_600_000)*3_600_000
             self.local_pending.append(LocalPending(
-                candidate_id=c.ident,side=c.side,stage_s=stage,ts_ms=ts_ms,price=price,x=sx,
-                candidate_hour_ms=hour,strict_mature_ts_ms=hour+3*3_600_000,
-                bounce_mature_ts_ms=ts_ms+self.BOUNCE_FUTURE_S*1000))
-            accepted=conf>=({60:.55,180:.58,300:.60}[stage]) and retr>0
+                candidate_id=c.ident,side=c.side,stage_s=stage,ts_ms=ts_ms,price=price,x=clean_features(sx),
+                candidate_hour_ms=hour,strict_mature_ts_ms=0,
+                bounce_mature_ts_ms=ts_ms+self.LOCAL_LABEL_HORIZON_S*1000))
             policy_promoted=False
             if accepted:
                 c.confirmed_stage=stage
-                # Candidate heads continue learning, but trading direction is anchored
-                # only by the full-history structural H1 sequence.
-                policy_promoted=(c.source=="STRICT_H1_CONFIRMED")
+                c.source="LEARNED_CAUSAL_LOCAL"
+                c.evidence={
+                    "rule":"LEARNED_CAUSAL_LOCAL_V2",
+                    "model_probability":float(p),
+                    "labels_seen":int(labels),
+                    "stage_s":int(stage),
+                    "label_objective":"realized favorable path > adverse continuation + trading cost",
+                    "input_scope":"full cleaned causal state; future/eval fields excluded",
+                    "manual_heuristic":False,
+                }
+                if self.last_confirmed_local is not c:
+                    self.last_confirmed_local=c
+                    self._baseline_on_local(c,ts_ms,price)
+                    self._record_learned_local(c,ts_ms,price,p,labels)
+                    if self.position is not None:
+                        side=1 if c.side=="LOW" else -1
+                        if self.position.side==side:
+                            self.position.local_id=c.ident
+                            self.position.local_key=self._local_key(c)
+                else:
+                    self._record_learned_local(c,ts_ms,price,p,labels)
+                policy_promoted=True
             events.append({"event":"LOCAL_STAGE","side":c.side,"candidate_id":c.ident,"stage_s":stage,
-                           "confidence":conf,"strict_model_p":p,"bounce_model_p":bp,
-                           "heuristic":heuristic,"retrace_bps":retr,
+                           "confidence":p,"local_model_p":p,"bounce_model_p":bp,
+                           "retrace_bps":retr,"ready":ready,
                            "accepted":accepted,"policy_promoted":policy_promoted,
-                           "strict_labels_seen":labels,
+                           "local_labels_seen":labels,
+                           "label_target":"REALIZED_REVERSAL_ADVANTAGE",
+                           "manual_heuristic":False,
                            "bounce_labels_seen":self.bounce_labels[(c.side,stage)]})
         return events
 
     def _opposite_local_watch(self,ts_ms,price,x):
         c=self.last_confirmed_local
-        if c is None or getattr(c,"source",None)!="STRICT_H1_CONFIRMED":
+        if c is None or getattr(c,"source",None)!="LEARNED_CAUSAL_LOCAL":
             return {"structural_leg":"UNKNOWN","target_local":None,"score":0.0,"status":"WAIT_LOCAL",
                     "structural_bias":"FLAT","components":{}}
         leg_side=1 if c.side=="LOW" else -1
@@ -1254,7 +1368,7 @@ class CaterpillarQuantLearner:
         retrace_score=clip(retrace_bps/60.0)
         score=clip(.32*early_p+.28*cand_conf+.22*retrace_score+.18*reversal_pressure)
 
-        if cand is not None and cand.confirmed_stage is not None and cand.source=="STRICT_H1_CONFIRMED":
+        if cand is not None and cand.confirmed_stage is not None and cand.source=="LEARNED_CAUSAL_LOCAL":
             status="CONFIRMED_"+target
         elif score>=.70:
             status=target+"_CANDIDATE_STRONG"
@@ -1279,13 +1393,13 @@ class CaterpillarQuantLearner:
                           "retrace_score":retrace_score,"reversal_pressure":reversal_pressure,
                           "agent_consensus":agent,"agent_structure_direction":struct,
                           "agent_flow_direction":flow,"agent_book_direction":book},
-            "interpretation":"structural leg remains active until opposite confirmed H1 local; watch score is research/shadow evidence, not a confirmed pivot",
+            "interpretation":"structural leg remains active until opposite learned causal Local; strict H1 pivots are benchmark-only and never assign trading direction",
         }
 
     def _best_local(self):
         c=self.last_confirmed_local
         if c is None or c.invalidated_ts_ms is not None or c.confirmed_stage is None:return None,None
-        if getattr(c,"source",None)!="STRICT_H1_CONFIRMED":return None,None
+        if getattr(c,"source",None)!="LEARNED_CAUSAL_LOCAL":return None,None
         return c,c.stage_conf.get(c.confirmed_stage,0.0)
 
     def _structural_history_report(self,state,ts_ms):
@@ -1511,10 +1625,13 @@ class CaterpillarQuantLearner:
         if fib.get("available"):
             x=dict(x);x.update(fib.get("features") or {})
         qd=self.quant.observe(ts_ms,price,x)
-        events.extend(self._sync_strict_local(state,ts_ms,price,x))
+        # Strict H1 pivots remain benchmark/audit only. They never set
+        # last_confirmed_local and never assign LONG/SHORT execution direction.
+        strict_ref=self._strict_pivots(state,ts_ms)
+        self.last_teacher_local=(strict_ref[-1] if strict_ref else None)
         events.extend(self._sample_fib_touches(ts_ms,price,x,fib))
-        # No recency-window bootstrap participates in trading policy. Candidate
-        # discovery below exists only to train earlier local recognition.
+        # Price structure only proposes candidate extremes. The causal Local
+        # model decides whether a candidate becomes an executable Local.
         events.extend(self._update_extremes(ts_ms,price,x,state))
         for side in ("LOW","HIGH"):
             events.extend(self._stage_candidate(self.candidates[side],ts_ms,price,x))
@@ -1641,9 +1758,20 @@ class CaterpillarQuantLearner:
             "reentries":self.reentries,
             "mean_mfe_capture_ratio":statistics.fmean(captures) if captures else None,
             "median_mfe_capture_ratio":statistics.median(captures) if captures else None,
-            "local_target":"FULL_HISTORY_STRICT_H1_L6_K2",
-            "local_policy":"Direct policy v6: H1 local hard-defines direction only. The learned causal policy alone chooses WAIT/ENTER/HOLD/EXIT/RE-ENTER from the full current state; no manual confidence/action thresholds participate in execution.",
-            "bootstrap_diagnostic":{"disabled_for_policy":True,"reason":"recency-window local is training-only"},
+            "local_target":"REALIZED_REVERSAL_ADVANTAGE_FROM_FULL_CAUSAL_STATE",
+            "local_policy":"Local v2 is learned from the full causal live state. Structural extremes only create candidates; realized future price path supplies delayed labels. Strict H1 L6/K2 is benchmark-only and cannot set trading direction. Learned LOW permits LONG; learned HIGH permits SHORT.",
+            "local_policy_version":getattr(self,"local_policy_version",0),
+            "local_teacher_benchmark":getattr(self,"last_teacher_local",None),
+            "learned_local_history":list(getattr(self,"learned_local_history",[]) or [])[-12:],
+            "local_learning_contract":{"candidate_source":"live structural extremes",
+                                       "inputs":"full cleaned causal state (86 predictive inputs from the 116-point contract)",
+                                       "label":"favorable excursion - adverse continuation - round-trip cost > 0",
+                                       "label_horizon_s":self.LOCAL_LABEL_HORIZON_S,
+                                       "minimum_labels_per_stage":self.LOCAL_MIN_LABELS_PER_STAGE,
+                                       "decision_boundary":0.5,
+                                       "manual_heuristics":False,
+                                       "strict_h1_execution":False},
+            "bootstrap_diagnostic":{"disabled_for_policy":True,"reason":"historical strict/recency local formulas are benchmark/training diagnostics only"},
             "training_progress":self._training_progress(),
             "structural_history":getattr(self,"structural_history",{}),
             "early_local":self._early_local_report(),
