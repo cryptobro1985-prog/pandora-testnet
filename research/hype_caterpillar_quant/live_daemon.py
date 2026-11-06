@@ -45,6 +45,7 @@ def compact_status(report):
         "exit_model":report.get("exit_model") or {},
         "reentry_model":report.get("reentry_model") or {},
         "local_target":report.get("local_target"),
+        "bootstrap_diagnostic":report.get("bootstrap_diagnostic") or {},
         "policy_state":report.get("policy_state"),
         "feature_contract":report.get("feature_contract") or {},
         "paper":{
