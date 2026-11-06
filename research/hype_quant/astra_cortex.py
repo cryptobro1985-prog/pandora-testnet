@@ -373,22 +373,36 @@ class AstraCortex:
         system,user=self._prompt(state)
         payload={"model":self.model,
                  "messages":[{"role":"system","content":system},{"role":"user","content":user}],
-                 "temperature":0.10,"max_tokens":1800}
-        r=requests.post(self.local_url+"/v1/chat/completions",json=payload,timeout=self.timeout_s)
-        r.raise_for_status()
-        obj=r.json();choices=obj.get("choices") or []
-        if not choices:raise RuntimeError("local_cortex_no_choices")
-        msg=(choices[0] or {}).get("message") or {}
-        text=str(msg.get("content") or "")
-        if not text:
-            reason=str(msg.get("reasoning_content") or "")
-            raise RuntimeError("local_cortex_no_final_content; reasoning_tokens="+str(len(reason)))
-        decision=self._normalize_decision(_json_object(text))
-        usage=obj.get("usage") or {}
-        self.usage["input_tokens"]+=int(usage.get("prompt_tokens") or 0)
-        self.usage["output_tokens"]+=int(usage.get("completion_tokens") or 0)
-        self.usage["total_tokens"]+=int(usage.get("total_tokens") or 0)
-        return decision
+                 "temperature":0.05,"max_tokens":1800,
+                 "response_format":{"type":"json_object"}}
+        last_exc=None
+        for attempt in range(2):
+            try:
+                r=requests.post(self.local_url+"/v1/chat/completions",json=payload,timeout=self.timeout_s)
+                r.raise_for_status()
+                obj=r.json();choices=obj.get("choices") or []
+                if not choices:raise RuntimeError("local_cortex_no_choices")
+                msg=(choices[0] or {}).get("message") or {}
+                text=str(msg.get("content") or "").strip()
+                reason=str(msg.get("reasoning_content") or "").strip()
+                # Some llama.cpp/gpt-oss builds occasionally return the final JSON
+                # in reasoning_content with an empty content field. Recover the JSON
+                # internally rather than marking the whole meta-controller dead.
+                source=text or reason
+                if not source:
+                    raise RuntimeError("local_cortex_no_final_content")
+                decision=self._normalize_decision(_json_object(source))
+                usage=obj.get("usage") or {}
+                self.usage["input_tokens"]+=int(usage.get("prompt_tokens") or 0)
+                self.usage["output_tokens"]+=int(usage.get("completion_tokens") or 0)
+                self.usage["total_tokens"]+=int(usage.get("total_tokens") or 0)
+                return decision
+            except Exception as exc:
+                last_exc=exc
+                if attempt==0:
+                    time.sleep(0.25)
+                    continue
+        raise RuntimeError("local_cortex_request_failed: "+str(last_exc)[:220])
 
     def _request_openai(self,state):
         system,user=self._prompt(state)
