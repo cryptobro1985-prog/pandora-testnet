@@ -1,7 +1,7 @@
 name: HYPE v6 12h Research Material
 # compact-110-v4-fixed-pack
 # 2026-11-06-local-low-restart
-# caterpillar-quant-v1.1
+# caterpillar-quant-v3-provisional-local
 
 on:
   push:
@@ -17,7 +17,7 @@ permissions:
   issues: write
 
 concurrency:
-  group: hype-v6-forward-12h-caterpillar-v2-${{ github.ref }}
+  group: hype-v6-forward-12h-caterpillar-v3-${{ github.ref }}
   cancel-in-progress: false
 
 env:
