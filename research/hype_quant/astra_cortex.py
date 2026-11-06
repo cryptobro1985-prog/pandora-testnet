@@ -628,13 +628,19 @@ class AstraPaperBook:
              "side":"LONG" if int(p["side"])>0 else "SHORT","entry_price":p["entry_price"],
              "exit_price":float(price),"gross_return":gross,"net_return":net,"pnl":pnl,
              "equity_before":before,"equity_after":self.equity,"mfe":p.get("mfe"),"mae":p.get("mae"),
-             "leverage":p.get("leverage"),"margin_fraction":p.get("margin_fraction"),"reason":reason}
+             "leverage":p.get("leverage"),"margin_fraction":p.get("margin_fraction"),
+             "preferred_strategy":p.get("preferred_strategy"),
+             "strategy_weights":p.get("strategy_weights"),
+             "reason":reason}
         self.trades.append(row); self.trades=self.trades[-500:]; self.last_event={"event":"EXIT",**row}; self.position=None
-    def _open(self,ts_ms,price,side,leverage,margin_fraction,reason):
+    def _open(self,ts_ms,price,side,leverage,margin_fraction,reason,preferred_strategy=None,strategy_weights=None):
         lev=clip(leverage,1,25); frac=clip(margin_fraction,0.02,0.20); margin=self.equity*frac
         self.position={"side":int(side),"entry_ts_ms":int(ts_ms),"entry_price":float(price),
                        "mark_price":float(price),"current_return":0.0,"mfe":0.0,"mae":0.0,
-                       "leverage":lev,"margin_fraction":frac,"margin":margin,"notional":margin*lev,"reason":reason}
+                       "leverage":lev,"margin_fraction":frac,"margin":margin,"notional":margin*lev,
+                       "preferred_strategy":preferred_strategy,
+                       "strategy_weights":strategy_weights or {},
+                       "reason":reason}
         self.last_event={"event":"ENTER","side":"LONG" if side>0 else "SHORT","ts_ms":int(ts_ms),
                          "price":float(price),"leverage":lev,"margin_fraction":frac,"equity":self.equity}
     def apply(self,ts_ms,price,decision):
@@ -645,8 +651,27 @@ class AstraPaperBook:
             if self.position is not None and int(self.position["side"])!=side: self._close(ts_ms,price,"CORTEX_FLIP")
             if self.position is None:
                 self._open(ts_ms,price,side,float(decision.get("leverage") or 1),
-                           float(decision.get("margin_fraction") or 0.02),action)
+                           float(decision.get("margin_fraction") or 0.02),action,
+                           decision.get("preferred_strategy"),decision.get("strategy_weights"))
         self.save()
+    def _strategy_usage(self):
+        counts={}
+        wins={}
+        pnl={}
+        for t in self.trades:
+            key=str(t.get("preferred_strategy") or "NONE")
+            counts[key]=counts.get(key,0)+1
+            win=float(t.get("pnl") or 0.0)>0
+            wins[key]=wins.get(key,0)+int(win)
+            pnl[key]=pnl.get(key,0.0)+float(t.get("pnl") or 0.0)
+        if isinstance(self.position,dict):
+            key=str(self.position.get("preferred_strategy") or "NONE")
+            counts.setdefault(key,0);wins.setdefault(key,0);pnl.setdefault(key,0.0)
+        return {k:{"trades":counts[k],"wins":wins.get(k,0),
+                   "win_rate":wins.get(k,0)/counts[k] if counts[k] else None,
+                   "realized_pnl":pnl.get(k,0.0)}
+                for k in counts}
+
     def report(self):
         wins=sum(float(t.get("pnl") or 0.0)>0 for t in self.trades)
         return {"version":self.VERSION,"equity":self.equity,"return_pct":(self.equity/100.0-1.0)*100.0,
@@ -654,7 +679,9 @@ class AstraPaperBook:
                 "closed_trades":len(self.trades),"wins":wins,
                 "win_rate":wins/len(self.trades) if self.trades else None,
                 "decisions_applied":self.decisions_applied,"open_position":self.position,
-                "last_event":self.last_event,"research_only":True,"real_orders":False}
+                "last_event":self.last_event,
+                "strategy_usage":self._strategy_usage(),
+                "research_only":True,"real_orders":False}
 
 def self_test():
     import tempfile
