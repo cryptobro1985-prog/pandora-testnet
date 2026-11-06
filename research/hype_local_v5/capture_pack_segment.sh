@@ -11,18 +11,16 @@ mkdir -p "$RAW" "$UPLOAD"
 CQ_PID=""
 CQ_RC=0
 CORTEX_PID=""
+CORTEX_BOOT_PID=""
 CORTEX_BOOT_RC=0
 CQ_DIR="$UPLOAD/caterpillar_quant"
 if [ "${CORTEX_LOCAL_ENABLED:-0}" = "1" ]; then
-  echo "Starting local CORTEX 20B before Quant..."
-  bash research/hype_quant/start_local_cortex.sh
-  CORTEX_BOOT_RC=$?
-  if [ -f "${CORTEX_PIDFILE:-/tmp/cortex20b.pid}" ]; then
-    CORTEX_PID="$(cat "${CORTEX_PIDFILE:-/tmp/cortex20b.pid}")"
-  fi
-  if [ "$CORTEX_BOOT_RC" -ne 0 ]; then
-    echo "CORTEX 20B boot failed rc=$CORTEX_BOOT_RC; Quant continues and monitor will expose degraded state." >&2
-  fi
+  echo "Starting local CORTEX 20B asynchronously; Quant will not wait..."
+  (
+    bash research/hype_quant/start_local_cortex.sh
+    echo $? > "$UPLOAD/CORTEX_BOOT_RC.txt"
+  ) &
+  CORTEX_BOOT_PID=$!
 fi
 if [ "${CATERPILLAR_QUANT_ENABLED:-0}" = "1" ]; then
   mkdir -p "$CQ_DIR"
@@ -49,8 +47,17 @@ python research/hype_local_v5/compact_pack.py --input "$RAW" --output "$COMPACT"
 PACK_RC=$?
 set -e
 
+if [ -f "$UPLOAD/CORTEX_BOOT_RC.txt" ]; then
+  CORTEX_BOOT_RC="$(cat "$UPLOAD/CORTEX_BOOT_RC.txt" 2>/dev/null || echo 0)"
+fi
+if [ -f "${CORTEX_PIDFILE:-/tmp/cortex20b.pid}" ]; then
+  CORTEX_PID="$(cat "${CORTEX_PIDFILE:-/tmp/cortex20b.pid}" 2>/dev/null || true)"
+fi
 if [ -n "$CORTEX_PID" ]; then
   kill "$CORTEX_PID" 2>/dev/null || true
+fi
+if [ -n "$CORTEX_BOOT_PID" ]; then
+  kill "$CORTEX_BOOT_PID" 2>/dev/null || true
 fi
 
 printf '{"capture_rc":%s,"caterpillar_quant_rc":%s,"cortex_boot_rc":%s,"aggregate_rc":%s,"pack_rc":%s}
