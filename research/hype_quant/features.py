@@ -183,7 +183,7 @@ class FeatureState:
                                   "confirm":1.0 if b.get("confirm") else 0.0,
                                   "received_ts_ms":recv,
                                   "source_timestamp_ms":int(b.get("timestamp") or msg.get("ts") or recv)}
-                keep=600 if tf=="1" else 300 if tf=="3" else 220 if tf=="5" else 1000
+                keep=600 if tf=="1" else 300 if tf=="3" else 220 if tf=="5" else 10000
                 if len(store)>keep:
                     for k in sorted(store)[:-keep]:store.pop(k,None)
                 self._mark({"1":4,"3":5,"5":6,"60":7}[tf],77,82,111)
@@ -292,7 +292,7 @@ class FeatureState:
                 vals={k:num(b.get(k)) for k in ("open","high","low","close","volume","turnover")}
                 if not all(vals[k] is not None for k in ("open","high","low","close")):continue
                 store[start]={"start_ms":start,**vals}
-            keep=600 if tf=="1" else 300 if tf=="3" else 220 if tf=="5" else 100
+            keep=600 if tf=="1" else 300 if tf=="3" else 220 if tf=="5" else 1000
             if len(store)>keep:
                 for k in sorted(store)[:-keep]:store.pop(k,None)
         self._mark(1,2,3,4,5,6,7,8,58,62,63,64,77,82,111,112,113,114,115)
