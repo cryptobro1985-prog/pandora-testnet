@@ -264,37 +264,77 @@ class AstraCortex:
                  "directional_net":e.get("directional_net"),"success":e.get("success")}
                 for e in self.episodes[-18:]]
 
-    def _request(self,state):
-        system=("You are Astra Cortex, the independent reasoning overlay in a research-only crypto market system. "
-                "You receive a causal market snapshot, Quant outputs, current PAPER state, and matured episodic memory. "
-                "Do not assume profitability. Do not place orders or request private credentials. "
-                "Analyze conflicting evidence, regime, likely path, and invalidation. "
-                "Use only information in the supplied snapshot; never infer future labels. "
-                "Return the structured decision record only. Do not reveal private chain-of-thought; "
-                "the thesis/evidence/invalidation fields must be concise audit summaries.")
-        payload={"model":self.model,"reasoning":{"effort":self.reasoning_effort},
-                 "max_output_tokens":1800,
-                 "input":[{"role":"system","content":system},
-                          {"role":"user","content":
-                           "Evaluate this HYPEUSDT research state. The causal feature map contains all currently "
-                           "available predictive/quality features from the 116-point contract; target/evaluation "
-                           "labels are intentionally excluded to prevent future leakage.\\nSTATE_JSON\\n"+
-                           json.dumps(state,ensure_ascii=False,separators=(",",":"))}],
-                 "text":{"format":{"type":"json_schema","name":"astra_market_decision",
-                                   "strict":True,"schema":DECISION_SCHEMA}}}
-        r=requests.post("https://api.openai.com/v1/responses",
-            headers={"Authorization":f"Bearer {self.api_key}","Content-Type":"application/json",
-                     "User-Agent":"pandora-hype-astra-cortex/1.0"},
-            json=payload,timeout=self.timeout_s)
+    def _prompt(self,state):
+        system=(f"Reasoning: {self.reasoning_effort}. "
+                "You are CORTEX 20B, an independent reasoning layer in a research-only HYPEUSDT system. "
+                "Use only the supplied causal state; future target/evaluation labels are excluded. "
+                "Compare LONG, SHORT, HOLD, EXIT and WAIT. Explicitly test contradictions between "
+                "H1 local structure, executed flow, price response, L50 book, OI, liquidations and Quant. "
+                "Pay special attention to US premarket, US cash and US after-hours behavior, "
+                "but never assume a session is profitable by itself. Return ONLY compact JSON. "
+                "Do not expose private chain-of-thought; use short audit summaries.")
+        shape={"decision":"WAIT","confidence":0.0,"market_regime":"string","thesis":"short audit thesis",
+               "evidence_for":["feature/value"],"evidence_against":["feature/value"],"invalidation":"condition",
+               "expected_path_60s":"string","expected_path_180s":"string","expected_path_300s":"string",
+               "risk_level":"LOW|MEDIUM|HIGH|EXTREME","leverage":1,"margin_fraction":0.02,
+               "learning_note":"short hypothesis/lesson"}
+        user=("Emit one JSON object matching this shape:\n"+json.dumps(shape,separators=(",",":"))+
+              "\nSTATE_JSON\n"+json.dumps(state,ensure_ascii=False,separators=(",",":")))
+        return system,user
+
+    def _normalize_decision(self,d):
+        out=dict(d or {})
+        action=str(out.get("decision") or "WAIT").upper()
+        out["decision"]=action if action in DECISIONS else "WAIT"
+        out["confidence"]=clip(out.get("confidence",0.0) or 0.0,0,1)
+        risk=str(out.get("risk_level") or "HIGH").upper()
+        out["risk_level"]=risk if risk in ("LOW","MEDIUM","HIGH","EXTREME") else "HIGH"
+        out["leverage"]=int(clip(out.get("leverage",1) or 1,1,25))
+        out["margin_fraction"]=clip(out.get("margin_fraction",0.02) or 0.02,0.02,0.20)
+        for k in ("market_regime","thesis","invalidation","expected_path_60s",
+                  "expected_path_180s","expected_path_300s","learning_note"):
+            out[k]=str(out.get(k) or "")[:700]
+        for k in ("evidence_for","evidence_against"):
+            v=out.get(k)
+            if not isinstance(v,list):v=[]
+            out[k]=[str(x)[:260] for x in v[:5]]
+        return out
+
+    def _request_local(self,state):
+        system,user=self._prompt(state)
+        r=requests.post(self.local_url+"/v1/chat/completions",
+            json={"model":self.model,
+                  "messages":[{"role":"system","content":system},{"role":"user","content":user}],
+                  "temperature":0.15,"max_tokens":520,"response_format":{"type":"json_object"}},
+            timeout=self.timeout_s)
         r.raise_for_status()
-        obj=r.json(); text=_output_text(obj)
-        if not text: raise RuntimeError("astra_response_has_no_output_text")
-        decision=json.loads(text)
+        obj=r.json();choices=obj.get("choices") or []
+        if not choices:raise RuntimeError("local_cortex_no_choices")
+        msg=(choices[0] or {}).get("message") or {}
+        decision=self._normalize_decision(_json_object(msg.get("content") or ""))
         usage=obj.get("usage") or {}
-        self.usage["input_tokens"]+=int(usage.get("input_tokens") or 0)
-        self.usage["output_tokens"]+=int(usage.get("output_tokens") or 0)
+        self.usage["input_tokens"]+=int(usage.get("prompt_tokens") or 0)
+        self.usage["output_tokens"]+=int(usage.get("completion_tokens") or 0)
         self.usage["total_tokens"]+=int(usage.get("total_tokens") or 0)
         return decision
+
+    def _request_openai(self,state):
+        system,user=self._prompt(state)
+        payload={"model":self.model,"reasoning":{"effort":self.reasoning_effort},
+                 "max_output_tokens":1200,
+                 "input":[{"role":"system","content":system},{"role":"user","content":user}],
+                 "text":{"format":{"type":"json_schema","name":"cortex_market_decision",
+                                   "strict":True,"schema":DECISION_SCHEMA}}}
+        r=requests.post("https://api.openai.com/v1/responses",
+            headers={"Authorization":f"Bearer {self.api_key}","Content-Type":"application/json"},
+            json=payload,timeout=self.timeout_s)
+        r.raise_for_status()
+        obj=r.json();text=_output_text(obj)
+        if not text:raise RuntimeError("cortex_response_has_no_output_text")
+        return self._normalize_decision(_json_object(text))
+
+    def _request(self,state):
+        return self._request_local(state) if self.backend=="local_llama" else self._request_openai(state)
 
     def observe(self,ts_ms,price,features,base_decision,base_report,cost_floor):
         self._advance_pending(ts_ms,price)
