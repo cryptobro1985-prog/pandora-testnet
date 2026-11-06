@@ -39,7 +39,7 @@ jobs:
           set -euo pipefail
           mkdir -p input/historical input/live
 
-          HIST_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" \
+          HIST_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=local116-HYPE" \
             --jq '.artifacts | map(select((.expired|not) and .name=="local116-HYPE")) | sort_by(.created_at) | reverse | .[0].id // empty')"
           test -n "$HIST_ID"
           gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$HIST_ID/zip" > hist.zip
@@ -47,7 +47,7 @@ jobs:
           test -f input/historical/compact_1m.jsonl.gz
           test -f input/historical/candidate_snapshots.jsonl.gz
 
-          LIVE_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" \
+          LIVE_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=HYPE-ONLY-PROFIT-24H-FULL116" \
             --jq '.artifacts | map(select((.expired|not) and .name=="HYPE-ONLY-PROFIT-24H-FULL116")) | sort_by(.created_at) | reverse | .[0].id // empty')"
           if [ -n "${LIVE_ID:-}" ]; then
             echo "Using durable 24h full116 artifact $LIVE_ID"
@@ -74,7 +74,7 @@ jobs:
           fi
 
           mkdir -p previous
-          STATE_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" \
+          STATE_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=ONLY-PROFIT-SEARCH-STATE" \
             --jq '.artifacts | map(select((.expired|not) and .name=="ONLY-PROFIT-SEARCH-STATE")) | sort_by(.created_at) | reverse | .[0].id // empty')"
           if [ -n "${STATE_ID:-}" ]; then
             gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$STATE_ID/zip" > state.zip
@@ -137,7 +137,7 @@ jobs:
 
   aggregate:
     needs: search
-    if: ${{ always() }}
+    if: ${{ needs.search.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -166,4 +166,9 @@ jobs:
         run: |
           set -euo pipefail
           echo "Only Profit round ${{ github.run_number }} complete; chaining next round."
-          gh workflow run only-profit-continuous.yml --ref "${GITHUB_REF_NAME}"
+          for attempt in 1 2 3 4 5; do
+            if gh workflow run only-profit-continuous.yml --ref "${GITHUB_REF_NAME}"; then exit 0; fi
+            sleep $((attempt * 10))
+          done
+          echo "Failed to dispatch next round after retries" >&2
+          exit 1
