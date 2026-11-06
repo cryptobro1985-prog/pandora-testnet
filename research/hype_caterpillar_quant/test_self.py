@@ -43,9 +43,11 @@ def test_construct():
     assert set(q.candidates)=={"LOW","HIGH"}
     assert len(q.local_models)==6 and len(q.bounce_models)==6
     assert q.exit_labels==0 and q.reentry_labels==0
-    assert q.policy_contract_version==6
+    assert q.policy_contract_version==7
+    assert q.local_policy_version==2
     assert len(q.policy_models)==6
     assert q.report()["direct_policy"]["manual_action_thresholds"] is False
+    assert q.report()["local_learning_contract"]["strict_h1_execution"] is False
 
 def fake_provisional_low_state():
     candles={}
@@ -84,38 +86,46 @@ def test_provisional_low_is_training_only_not_policy():
     assert q.last_confirmed_local is None
     assert q.position is None
 
-def test_strict_bootstrap_low_samples_direct_long_policy():
+def promote_learned(q,side="LOW",ts=10*H,price=None):
+    q._ensure_v2()
+    price=float(price if price is not None else (90.0 if side=="LOW" else 110.0))
+    c=q._new_candidate(side,price,ts,x())
+    q.local_labels[(side,60)]=q.LOCAL_MIN_LABELS_PER_STAGE
+    q._model_p=lambda model,features:.80
+    ev=q._stage_candidate(c,ts+61_000,price*(1.01 if side=="LOW" else .99),x())
+    q.__dict__.pop("_model_p",None)
+    assert q.last_confirmed_local is c
+    assert c.source=="LEARNED_CAUSAL_LOCAL"
+    assert any(e["event"]=="LOCAL_STAGE" and e["policy_promoted"] for e in ev)
+    return c,ev
+
+def test_strict_history_is_benchmark_only_never_policy_local():
     q=new();s=fake_state("LOW");ts=10*H
     out=q.observe(ts,100.0,x(),s)
-    assert q.last_confirmed_local is not None
-    assert q.last_confirmed_local.side=="LOW"
-    assert q.last_confirmed_local.source=="STRICT_H1_CONFIRMED"
-    assert q.position is None
-    assert len(q.entry_pending)==0
-    assert len(q.policy_pending)==3
-    assert {p.mode for p in q.policy_pending}=={"FLAT"}
-    assert {p.side for p in q.policy_pending}=={1}
-    assert any(e["event"]=="STRICT_H1_LOCAL_SYNC" for e in out["events"])
-    assert any(e["event"]=="WAIT" and e["side"]=="LONG" for e in out["events"])
-    assert not any(e["event"]=="ENTER" for e in out["events"])
-    assert q.last_policy_decision["structural_side"]=="LONG"
+    assert q.last_teacher_local is not None and q.last_teacher_local["side"]=="LOW"
+    assert q.last_confirmed_local is None
+    assert len(q.policy_pending)==0
+    assert not any(e["event"]=="STRICT_H1_LOCAL_SYNC" for e in out["events"])
+    assert q.last_policy_decision["action"]=="WAIT_LOCAL"
 
-def test_strict_bootstrap_high_samples_direct_short_policy():
-    q=new();s=fake_state("HIGH");ts=10*H
-    out=q.observe(ts,100.0,x(),s)
-    assert q.last_confirmed_local is not None and q.last_confirmed_local.side=="HIGH"
-    assert q.position is None
-    assert len(q.entry_pending)==0
+def test_learned_low_samples_direct_long_policy():
+    q=new();ts=10*H
+    c,_=promote_learned(q,"LOW",ts,90.0)
+    q._sample_direct_policy(ts+62_000,91.0,x(),c,{"action":"FLAT","score":0.0})
     assert len(q.policy_pending)==3
+    assert {p.side for p in q.policy_pending}=={1}
     assert {p.mode for p in q.policy_pending}=={"FLAT"}
+
+def test_learned_high_samples_direct_short_policy():
+    q=new();ts=10*H
+    c,_=promote_learned(q,"HIGH",ts,110.0)
+    q._sample_direct_policy(ts+62_000,109.0,x(),c,{"action":"FLAT","score":0.0})
+    assert len(q.policy_pending)==3
     assert {p.side for p in q.policy_pending}=={-1}
-    assert any(e["event"]=="WAIT" and e["side"]=="SHORT" for e in out["events"])
-    assert q.last_policy_decision["structural_side"]=="SHORT"
 
 def test_gap_censors_position_not_trade():
-    q=new();s=fake_state("LOW");ts=10*H
-    q.observe(ts,100.0,x(),s)
-    c=q.last_confirmed_local
+    q=new();ts=10*H
+    c,_=promote_learned(q,"LOW",ts,90.0)
     q._open(ts,100.0,1,c,.9,{"action":"LONG"},reentry=False)
     before=len(q.trades)
     q.on_gap(ts+11_000,"TEST_GAP")
@@ -125,9 +135,8 @@ def test_gap_censors_position_not_trade():
     assert any(e["event"]=="CENSORED_POSITION" for e in q.actions)
 
 def test_same_local_reentry_survives_candidate_id_change():
-    q=new();s=fake_state("LOW");ts=10*H
-    q.observe(ts,92.0,x(),s)
-    c0=q.last_confirmed_local
+    q=new();ts=10*H
+    c0,_=promote_learned(q,"LOW",ts,90.0)
     q._open(ts,92.0,1,c0,.9,{"action":"LONG"},reentry=False)
     assert q.position is not None
     q._close(ts+70_000,92.1,"TEST_EXIT")
@@ -145,8 +154,7 @@ def test_same_local_reentry_survives_candidate_id_change():
 
 def test_subcost_mfe_noise_does_not_force_bootstrap_exit():
     q=new();s=fake_state("LOW");ts=10*H
-    q.observe(ts,100.0,x(),s)
-    c=q.last_confirmed_local
+    c,_=promote_learned(q,"LOW",ts,90.0)
     q._open(ts,100.0,1,c,.9,{"action":"LONG"},reentry=False)
     assert q.position is not None and q.position.side==1
     entry=q.position.entry_price
@@ -156,22 +164,28 @@ def test_subcost_mfe_noise_does_not_force_bootstrap_exit():
     assert q.position is not None, out
     assert not any(e["event"]=="EXIT" for e in out["events"])
 
-def test_provisional_never_overrides_strict_structural_anchor():
-    q=new()
-    from research.hype_caterpillar_quant.learner import Candidate
-    strict=Candidate(1,"LOW",76.211,6*H,dict(x()),confirmed_stage=300,
-                     source="STRICT_H1_CONFIRMED",strict_hour_ms=6*H)
-    strict.stage_conf[300]=.99
-    q.last_confirmed_local=strict
-    provisional=Candidate(2,"LOW",76.844,13*H,dict(x()),
-                          source="PROVISIONAL_H1_EXTREME",strict_hour_ms=13*H)
-    out=q._stage_candidate(provisional,14*H,77.5,x())
-    assert provisional.confirmed_stage is not None
-    assert q.last_confirmed_local is strict
-    assert q.last_confirmed_local.extreme_price==76.211
-    assert any(e["event"]=="LOCAL_STAGE" and e["accepted"] and not e["policy_promoted"] for e in out)
+def test_strict_benchmark_cannot_override_learned_policy_local():
+    q=new();ts=10*H
+    learned,_=promote_learned(q,"LOW",ts,90.0)
+    q.last_teacher_local={"side":"HIGH","price":112.0,"hour_ms":6*H}
+    assert q.last_confirmed_local is learned
+    assert q._best_local()[0] is learned
+    assert q._best_local()[0].source=="LEARNED_CAUSAL_LOCAL"
 
-def test_strict_target_available_after_k2():
+def test_market_outcome_labels_local_not_strict_formula():
+    q=new();q._ensure_v2();ts=10*H
+    c=q._new_candidate("LOW",100.0,ts,x())
+    from research.hype_caterpillar_quant.learner import LocalPending
+    q.local_pending.append(LocalPending(
+        candidate_id=c.ident,side="LOW",stage_s=60,ts_ms=ts,price=100.0,x=x(),
+        candidate_hour_ms=ts//H*H,strict_mature_ts_ms=0,
+        bounce_mature_ts_ms=ts+60_000,best_favorable=0.0,worst_adverse=0.0,bounce_done=False
+    ))
+    q._advance_local_labels(ts+61_000,101.0,fake_state("HIGH"))
+    assert q.local_labels[("LOW",60)]==1
+    assert q.local_pos[("LOW",60)]==1
+
+def test_strict_benchmark_available_after_k2():
     q=new();s=fake_state("LOW")
     # Construct a live candidate inside pivot hour 6 and a 60s stage sample.
     c=q._new_candidate("LOW",90.0,6*H+30_000,x())
@@ -188,13 +202,15 @@ def main():
     test_construct()
     test_same_h1_extremes_use_m1_order_training_only()
     test_provisional_low_is_training_only_not_policy()
-    test_strict_bootstrap_low_samples_direct_long_policy()
-    test_strict_bootstrap_high_samples_direct_short_policy()
+    test_strict_history_is_benchmark_only_never_policy_local()
+    test_learned_low_samples_direct_long_policy()
+    test_learned_high_samples_direct_short_policy()
     test_gap_censors_position_not_trade()
     test_same_local_reentry_survives_candidate_id_change()
     test_subcost_mfe_noise_does_not_force_bootstrap_exit()
-    test_provisional_never_overrides_strict_structural_anchor()
-    test_strict_target_available_after_k2()
+    test_strict_benchmark_cannot_override_learned_policy_local()
+    test_market_outcome_labels_local_not_strict_formula()
+    test_strict_benchmark_available_after_k2()
     print("HYPE_CATERPILLAR_V2_SELFTEST_OK")
 
 if __name__=="__main__":
