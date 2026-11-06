@@ -1044,6 +1044,32 @@ class CaterpillarQuantLearner:
         out["cq_book_alignment"]=sign*float(x.get("book_imbalance_25",x.get("book_imbalance_raw_25",0.0)) or 0.0)
         oi=x.get("price_oi_interaction_60s",x.get("oi_change_since_prev_poll_pct"))
         if finite(oi):out["cq_oi_context"]=sign*float(oi)
+
+        # Stable shared feature names are deliberately kept compatible with the
+        # archived 30-day causal snapshots. Missing historical sources simply
+        # remain absent; River can add their weights later during live fine-tuning.
+        for sec in (5,15,30,60,180,300):
+            flow=x.get(f"flow_imbalance_raw_{sec}s",x.get(f"flow_imbalance_{sec}s"))
+            if finite(flow):out[f"cq_flow_alignment_{sec}s"]=sign*float(flow)
+            ret=x.get(f"ret_{sec}s")
+            if finite(ret):out[f"cq_price_alignment_{sec}s"]=sign*float(ret)
+            buy=x.get(f"buy_efficiency_{sec}s");sell=x.get(f"sell_efficiency_{sec}s")
+            if c.side=="LOW":
+                old_eff,rev_eff=sell,buy
+            else:
+                old_eff,rev_eff=buy,sell
+            if finite(old_eff):out[f"cq_old_efficiency_{sec}s"]=float(old_eff)
+            if finite(rev_eff):out[f"cq_reversal_efficiency_{sec}s"]=float(rev_eff)
+
+        for label,hi_key,lo_key in (
+            ("60m","rolling_60m_high","rolling_60m_low"),
+            ("6h","rolling_6h_high","rolling_6h_low"),
+            ("24h","rolling_24h_high","rolling_24h_low"),
+        ):
+            hi=x.get(hi_key);lo=x.get(lo_key)
+            if finite(hi) and finite(lo) and float(hi)>float(lo):
+                out[f"cq_position_{label}"]=(float(price)-float(lo))/(float(hi)-float(lo))
+
         # Historical H1 learner is a causal proposal prior only. It never confirms
         # a Local by itself, but its probabilities are useful input to the learned
         # full-state Local classifier.
