@@ -1,0 +1,26 @@
+name: HYPE Caterpillar Cancel Specific Old Runs
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-caterpillar-cancel-specific-old.yml"
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  cancel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel superseded HYPE collectors
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for id in 42185687096 42185778417; do
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/${id}/cancel" || true
+          done
+          echo "superseded runs cancellation requested"
