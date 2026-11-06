@@ -302,20 +302,22 @@ class AstraCortex:
 
     def _request_local(self,state):
         system,user=self._prompt(state)
-        payload={"model":self.model,"reasoning":{"effort":self.reasoning_effort},
-                 "max_output_tokens":1200,
-                 "input":[{"role":"system","content":system},{"role":"user","content":user}],
-                 "text":{"format":{"type":"json_schema","name":"cortex_market_decision",
-                                   "strict":True,"schema":DECISION_SCHEMA}}}
-        r=requests.post(self.local_url+"/v1/responses",json=payload,timeout=self.timeout_s)
+        payload={"model":self.model,
+                 "messages":[{"role":"system","content":system},{"role":"user","content":user}],
+                 "temperature":0.10,"max_tokens":900}
+        r=requests.post(self.local_url+"/v1/chat/completions",json=payload,timeout=self.timeout_s)
         r.raise_for_status()
-        obj=r.json();text=_output_text(obj)
+        obj=r.json();choices=obj.get("choices") or []
+        if not choices:raise RuntimeError("local_cortex_no_choices")
+        msg=(choices[0] or {}).get("message") or {}
+        text=str(msg.get("content") or "")
         if not text:
-            raise RuntimeError("local_cortex_no_final_output")
+            reason=str(msg.get("reasoning_content") or "")
+            raise RuntimeError("local_cortex_no_final_content; reasoning_tokens="+str(len(reason)))
         decision=self._normalize_decision(_json_object(text))
         usage=obj.get("usage") or {}
-        self.usage["input_tokens"]+=int(usage.get("input_tokens") or 0)
-        self.usage["output_tokens"]+=int(usage.get("output_tokens") or 0)
+        self.usage["input_tokens"]+=int(usage.get("prompt_tokens") or 0)
+        self.usage["output_tokens"]+=int(usage.get("completion_tokens") or 0)
         self.usage["total_tokens"]+=int(usage.get("total_tokens") or 0)
         return decision
 
