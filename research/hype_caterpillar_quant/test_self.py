@@ -109,6 +109,34 @@ def test_gap_censors_position_not_trade():
     assert q.censored_positions==1
     assert any(e["event"]=="CENSORED_POSITION" for e in q.actions)
 
+def test_same_local_reentry_survives_candidate_id_change():
+    q=new();s=fake_provisional_low_state();ts=10*H+10*60_000
+    q.observe(ts,92.0,x(),s)
+    assert q.position is not None
+    q._close(ts+70_000,92.1,"TEST_EXIT")
+    old_key=q.last_exit.get("local_key")
+    assert old_key
+    # Simulate restart/bootstrap regenerating a candidate id for the same H1 local.
+    q.candidate_seq+=1
+    old=q.last_confirmed_local
+    from research.hype_caterpillar_quant.learner import Candidate
+    c=Candidate(q.candidate_seq,old.side,old.extreme_price,old.extreme_ts_ms,dict(old.created_x),
+                confirmed_stage=300,source=old.source,strict_hour_ms=old.strict_hour_ms)
+    c.stage_conf[300]=.9
+    q.last_confirmed_local=c
+    assert q._same_local_episode(c) is True
+
+def test_subcost_mfe_noise_does_not_force_bootstrap_exit():
+    q=new();s=fake_provisional_low_state();ts=10*H+10*60_000
+    q.observe(ts,100.0,x(),s)
+    assert q.position is not None and q.position.side==1
+    entry=q.position.entry_price
+    # Build a small MFE below round-trip costs, then give some of it back.
+    q.observe(ts+70_000,entry*1.0013,{**x(),"agent_consensus":0.0,"flow_imbalance_raw_60s":0.0},s)
+    out=q.observe(ts+130_000,entry*1.0004,{**x(),"agent_consensus":-0.30,"flow_imbalance_raw_60s":0.0},s)
+    assert q.position is not None, out
+    assert not any(e["event"]=="EXIT" for e in out["events"])
+
 def test_strict_target_available_after_k2():
     q=new();s=fake_state("LOW")
     # Construct a live candidate inside pivot hour 6 and a 60s stage sample.
@@ -129,6 +157,8 @@ def main():
     test_strict_bootstrap_low_enters_long()
     test_strict_bootstrap_high_enters_short()
     test_gap_censors_position_not_trade()
+    test_same_local_reentry_survives_candidate_id_change()
+    test_subcost_mfe_noise_does_not_force_bootstrap_exit()
     test_strict_target_available_after_k2()
     print("HYPE_CATERPILLAR_V2_SELFTEST_OK")
 
