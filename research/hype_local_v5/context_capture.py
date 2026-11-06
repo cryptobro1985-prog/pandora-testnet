@@ -161,7 +161,7 @@ def main():
                     ticker=xt["value"];source_ok["direct_rest"]+=1
                 else:
                     row_errors.append("ticker_rest_optional:"+xt["error"])
-            limits={"1":480 if first else 180,"3":240 if first else 60,"5":180 if first else 36,"60":72 if first else 24}
+            limits={"1":480 if first else 180,"3":240 if first else 60,"5":180 if first else 36,"60":1000 if first else 24}
             for k,v in limits.items():
                 rr=relay_candles.get(k) if isinstance(relay_candles,dict) else None
                 if isinstance(rr,list) and rr:
