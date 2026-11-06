@@ -33,8 +33,10 @@ jobs:
           python -m pip install flask requests
       - name: Compile v2
         run: |
-          python -m py_compile             research/hype_quant/learner.py             research/hype_quant/features.py             research/hype_caterpillar_quant/learner.py             research/hype_caterpillar_quant/live_daemon.py             research/hype_caterpillar_monitor/app.py
+          python -m py_compile             research/hype_quant/learner.py             research/hype_quant/features.py             research/hype_caterpillar_quant/learner.py             research/hype_caterpillar_quant/strategy_lab.py             research/hype_caterpillar_quant/live_daemon.py             research/hype_caterpillar_monitor/app.py
       - name: Quant 116 v2 self-test
         run: python -m research.hype_quant.test_self
       - name: Caterpillar H1 policy v2 behavioural test
         run: python -m research.hype_caterpillar_quant.test_self
+      - name: Three strategy lab self-test
+        run: python -c "from research.hype_caterpillar_quant.strategy_lab import self_test; self_test(); print('THREE_STRATEGY_LAB_VALIDATION=ok')"
