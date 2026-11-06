@@ -14,9 +14,10 @@ on:
 permissions:
   contents: read
   actions: write
+  issues: write
 
 concurrency:
-  group: hype-v6-forward-12h-v4-${{ github.ref }}
+  group: hype-v6-forward-12h-caterpillar-v1-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -67,6 +68,8 @@ jobs:
           fi
       - name: Capture and compact segment 1
         env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CATERPILLAR_STATUS_ISSUE: "24"
           CATERPILLAR_WARMSTART_DIR: cq_warm
         run: bash research/hype_local_v5/capture_pack_segment.sh out/hype_v6_12h_segment_1 "$CAPTURE_MINUTES"
       - name: Upload compact segment 1
@@ -107,6 +110,8 @@ jobs:
           path: cq_warm
       - name: Capture and compact segment 2
         env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CATERPILLAR_STATUS_ISSUE: "24"
           CATERPILLAR_WARMSTART_DIR: cq_warm
         run: bash research/hype_local_v5/capture_pack_segment.sh out/hype_v6_12h_segment_2 "$CAPTURE_MINUTES"
       - name: Upload compact segment 2
@@ -147,6 +152,8 @@ jobs:
           path: cq_warm
       - name: Capture and compact segment 3
         env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CATERPILLAR_STATUS_ISSUE: "24"
           CATERPILLAR_WARMSTART_DIR: cq_warm
         run: bash research/hype_local_v5/capture_pack_segment.sh out/hype_v6_12h_segment_3 "$CAPTURE_MINUTES"
       - name: Upload compact segment 3
@@ -187,6 +194,8 @@ jobs:
           path: cq_warm
       - name: Capture and compact segment 4
         env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CATERPILLAR_STATUS_ISSUE: "24"
           CATERPILLAR_WARMSTART_DIR: cq_warm
         run: bash research/hype_local_v5/capture_pack_segment.sh out/hype_v6_12h_segment_4 "$CAPTURE_MINUTES"
       - name: Upload compact segment 4
