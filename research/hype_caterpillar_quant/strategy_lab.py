@@ -331,7 +331,8 @@ class ThreeStrategyLab:
             self._open(book,ts_ms,price,structural_side,"FIB_LOCAL_BOOTSTRAP",local=local)
             if self.fib_grid:
                 nearest=min(self.fib_grid,key=lambda z:abs(float(z["price"])-float(price)))
-                self._set_pending_transition(nearest,structural_side)
+                swing_trend=int(fib_current.get("trend_side") or structural_side)
+                self._set_pending_transition(nearest,swing_trend)
             return
 
         crossed=self._crossed_nodes(self.fib_last_price,price)
