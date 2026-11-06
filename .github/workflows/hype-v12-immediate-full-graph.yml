@@ -9,6 +9,8 @@ on:
       - research/hype-h1-local-v5-oi-microstructure-20261104
     paths:
       - ".github/workflows/hype-v12-immediate-full-graph.yml"
+      - "research/hype_quant/astra_cortex.py"
+      - "research/hype_caterpillar_quant/live_daemon.py"
   workflow_dispatch:
 
 permissions:
@@ -25,6 +27,12 @@ env:
   HYPE_REST_RELAY_URL: "https://hype-rest-relay.onrender.com"
   CATERPILLAR_QUANT_ENABLED: "1"
   CATERPILLAR_MONITOR_URL: "https://hype-caterpillar-quant-monitor.onrender.com/api/ingest"
+  ASTRA_CORTEX_ENABLED: "1"
+  ASTRA_CORTEX_MODEL: "gpt-6-astra"
+  ASTRA_CORTEX_REASONING_EFFORT: "high"
+  ASTRA_CORTEX_INTERVAL_SECONDS: "120"
+  ASTRA_CORTEX_URGENT_INTERVAL_SECONDS: "30"
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
 jobs:
   segment_1:
@@ -56,10 +64,11 @@ jobs:
       - name: Validate compact research format and Caterpillar Quant
         run: |
           python -m py_compile research/hype_local_v5/compact_pack.py research/hype_local_v5/decode_compact.py research/hype_local_v5/context_capture.py research/hype_local_v5/resilient_capture.py
-          python -m py_compile research/hype_caterpillar_quant/learner.py research/hype_caterpillar_quant/live_daemon.py
+          python -m py_compile research/hype_quant/astra_cortex.py research/hype_caterpillar_quant/learner.py research/hype_caterpillar_quant/live_daemon.py
           bash -n research/hype_local_v5/capture_pack_segment.sh
           python research/hype_local_v5/test_compact_smoke.py
           python -m research.hype_quant.test_self
+          python -m research.hype_quant.test_astra_cortex
           python -m research.hype_caterpillar_quant.test_self
       - name: Restore latest Caterpillar Quant checkpoint
         env:
