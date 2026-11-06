@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-"""GPT-6 Astra reasoning overlay for HYPE Quant research.
+"""Local CORTEX 20B meta-controller for HYPE Quant research.
 
 Research/PAPER only. No Bybit private endpoints or live order placement.
-The monitor exposes concise thesis/evidence/invalidation summaries, never private
-chain-of-thought.
+CORTEX arbitrates three expert contours (Local Straight, Caterpillar Snake,
+Fibonacci Zigzag) on top of the shared causal market state. The monitor exposes
+concise thesis/evidence/arbitration summaries, never private chain-of-thought.
 """
 from collections import deque
 from datetime import datetime, time as dtime, timezone
@@ -173,7 +174,7 @@ class AstraCortex:
         if not isinstance(local,dict): return None
         return f"{local.get('side')}:{local.get('price')}:{local.get('stage')}"
 
-    def _urgent(self,features,base_decision,base_report):
+    def _urgent(self,features,base_decision,base_report,strategy_lab=None):
         q=base_decision.get("quant") or {}
         base_action=str(q.get("action") or "FLAT")
         local_key=self._local_key(base_report)
@@ -181,15 +182,16 @@ class AstraCortex:
         names={str(e.get("event")) for e in events if isinstance(e,dict)}
         disagreement=float(features.get("agent_disagreement",0.0) or 0.0)
         adversary=float(features.get("agent_adversary_risk",0.0) or 0.0)
+        expert_disagreement=self._strategy_disagreement_score(strategy_lab)
         return (base_action!=self.last_base_action or local_key!=self.last_local_key
-                or bool(names & {"ENTER","EXIT","REENTER","STRICT_H1_LOCAL_SYNC"})
-                or disagreement>=0.35 or adversary>=0.55)
+                or bool(names & {"ENTER","EXIT","REENTER","STRICT_H1_LOCAL_SYNC","FIB_TOUCH"})
+                or disagreement>=0.35 or adversary>=0.55 or expert_disagreement>=0.5)
 
-    def due(self,ts_ms,features,base_decision,base_report):
+    def due(self,ts_ms,features,base_decision,base_report,strategy_lab=None):
         if not self.available: return False
         if self.last_call_ts_ms is None: return True
         elapsed=max(0.0,(ts_ms-self.last_call_ts_ms)/1000.0)
-        interval=self.urgent_interval_s if self._urgent(features,base_decision,base_report) else self.normal_interval_s
+        interval=self.urgent_interval_s if self._urgent(features,base_decision,base_report,strategy_lab) else self.normal_interval_s
         return elapsed>=interval
 
     def _session_stats(self):
@@ -512,7 +514,7 @@ class AstraCortex:
 
     def observe(self,ts_ms,price,features,base_decision,base_report,cost_floor,strategy_lab=None):
         self._advance_pending(ts_ms,price)
-        if not self.due(ts_ms,features,base_decision,base_report):
+        if not self.due(ts_ms,features,base_decision,base_report,strategy_lab):
             return {"new_decision":False,"decision":self.last_decision,"status":self.status(ts_ms)}
         causal=self._compact_causal_features(features); q=base_decision.get("quant") or {}
         session=us_market_session(ts_ms)
