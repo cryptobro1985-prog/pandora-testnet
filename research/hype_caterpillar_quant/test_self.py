@@ -81,26 +81,31 @@ def test_provisional_low_is_training_only_not_policy():
     assert q.last_confirmed_local is None
     assert q.position is None
 
-def test_strict_bootstrap_low_enters_long():
+def test_strict_bootstrap_low_learns_before_long():
     q=new();s=fake_state("LOW");ts=10*H
     out=q.observe(ts,100.0,x(),s)
     assert q.last_confirmed_local is not None
     assert q.last_confirmed_local.side=="LOW"
     assert q.last_confirmed_local.source=="STRICT_H1_CONFIRMED"
-    assert q.position is not None and q.position.side==1
+    assert q.position is None
+    assert len(q.entry_pending)==3
     assert any(e["event"]=="STRICT_H1_LOCAL_SYNC" for e in out["events"])
-    assert any(e["event"]=="ENTER" and e["side"]=="LONG" for e in out["events"])
+    assert any(e["event"]=="LEARN_ENTRY" and e["side"]=="LONG" for e in out["events"])
+    assert not any(e["event"]=="ENTER" for e in out["events"])
 
-def test_strict_bootstrap_high_enters_short():
+def test_strict_bootstrap_high_learns_before_short():
     q=new();s=fake_state("HIGH");ts=10*H
     out=q.observe(ts,100.0,x(),s)
     assert q.last_confirmed_local is not None and q.last_confirmed_local.side=="HIGH"
-    assert q.position is not None and q.position.side==-1
-    assert any(e["event"]=="ENTER" and e["side"]=="SHORT" for e in out["events"])
+    assert q.position is None
+    assert len(q.entry_pending)==3
+    assert any(e["event"]=="LEARN_ENTRY" and e["side"]=="SHORT" for e in out["events"])
 
 def test_gap_censors_position_not_trade():
     q=new();s=fake_state("LOW");ts=10*H
     q.observe(ts,100.0,x(),s)
+    c=q.last_confirmed_local
+    q._open(ts,100.0,1,c,.9,{"action":"LONG"},reentry=False)
     before=len(q.trades)
     q.on_gap(ts+11_000,"TEST_GAP")
     assert q.position is None
@@ -111,6 +116,8 @@ def test_gap_censors_position_not_trade():
 def test_same_local_reentry_survives_candidate_id_change():
     q=new();s=fake_state("LOW");ts=10*H
     q.observe(ts,92.0,x(),s)
+    c0=q.last_confirmed_local
+    q._open(ts,92.0,1,c0,.9,{"action":"LONG"},reentry=False)
     assert q.position is not None
     q._close(ts+70_000,92.1,"TEST_EXIT")
     old_key=q.last_exit.get("local_key")
@@ -128,6 +135,8 @@ def test_same_local_reentry_survives_candidate_id_change():
 def test_subcost_mfe_noise_does_not_force_bootstrap_exit():
     q=new();s=fake_state("LOW");ts=10*H
     q.observe(ts,100.0,x(),s)
+    c=q.last_confirmed_local
+    q._open(ts,100.0,1,c,.9,{"action":"LONG"},reentry=False)
     assert q.position is not None and q.position.side==1
     entry=q.position.entry_price
     # Build a small MFE below round-trip costs, then give some of it back.
@@ -168,8 +177,8 @@ def main():
     test_construct()
     test_same_h1_extremes_use_m1_order_training_only()
     test_provisional_low_is_training_only_not_policy()
-    test_strict_bootstrap_low_enters_long()
-    test_strict_bootstrap_high_enters_short()
+    test_strict_bootstrap_low_learns_before_long()
+    test_strict_bootstrap_high_learns_before_short()
     test_gap_censors_position_not_trade()
     test_same_local_reentry_survives_candidate_id_change()
     test_subcost_mfe_noise_does_not_force_bootstrap_exit()
