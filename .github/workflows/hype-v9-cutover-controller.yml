@@ -1,0 +1,40 @@
+name: HYPE v9 One-Time Cutover Controller
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-v9-cutover-controller.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  cutover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Cancel every superseded HYPE collector
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          IDS="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?branch=${GITHUB_REF_NAME}&per_page=100" --jq '
+            .workflow_runs[]
+            | select(.path==".github/workflows/hype-h1-v6-forward-12h.yml")
+            | select(.status=="in_progress" or .status=="queued" or .status=="pending")
+            | .id')"
+          for ID in $IDS; do
+            echo "cancel_main_run=$ID"
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/$ID/cancel" >/dev/null || true
+          done
+      - name: Start one fresh v9 collector
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh workflow run hype-h1-v6-forward-12h.yml --repo "${GITHUB_REPOSITORY}" --ref "${GITHUB_REF_NAME}"
+          echo "fresh_v9_dispatched=1"
