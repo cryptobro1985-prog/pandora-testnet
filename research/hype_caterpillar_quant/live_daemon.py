@@ -237,7 +237,7 @@ def main():
                         source_ts=int(adec.get("ts_ms") or ts)
                         latency_s=max(0.0,(ts-source_ts)/1000.0)
                         adec["applied_latency_seconds"]=latency_s
-                        applied=latency_s<=90.0
+                        applied=latency_s<=180.0
                         if applied:
                             astra_book.apply(ts,price,adec)
                         append_jsonl(astra_actions,{
