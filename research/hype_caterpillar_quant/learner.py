@@ -1791,6 +1791,7 @@ class CaterpillarQuantLearner:
             "active_local":None if self.last_confirmed_local is None else {
                 "id":self.last_confirmed_local.ident,"side":self.last_confirmed_local.side,
                 "price":self.last_confirmed_local.extreme_price,
+                "extreme_ts_ms":self.last_confirmed_local.extreme_ts_ms,
                 "stage":self.last_confirmed_local.confirmed_stage,
                 "source":getattr(self.last_confirmed_local,"source","LIVE_CANDIDATE"),
                 "strict_hour_ms":getattr(self.last_confirmed_local,"strict_hour_ms",None),
