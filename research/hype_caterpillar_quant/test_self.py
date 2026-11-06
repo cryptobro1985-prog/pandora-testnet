@@ -13,3 +13,5 @@ def test_binary_heads_exist():
     q=CaterpillarQuantLearner(load_config(Path("research/hype_quant/config.json")))
     assert len(q.local_models)==6
     assert q.exit_labels==0
+
+# ci-trigger
