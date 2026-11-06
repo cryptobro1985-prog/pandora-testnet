@@ -14,12 +14,12 @@ ROUND_TRIP_COST=0.0016
 LEV_CHOICES=(3,5,8,10,15,20,25)
 
 BASE_WEIGHTS={
- "trend_follow":{"trend":1.25,"stoch_momentum":.40,"stoch_reversal":0,"flow":.85,"book":.30,"oi_liq":.25,"local":.10,"structure":.55,"timing":.45},
- "pullback":{"trend":.95,"stoch_momentum":0,"stoch_reversal":.75,"flow":.70,"book":.35,"oi_liq":.20,"local":.45,"structure":.55,"timing":.50},
- "local_reversal":{"trend":-.20,"stoch_momentum":0,"stoch_reversal":1.10,"flow":.75,"book":.45,"oi_liq":.35,"local":1.30,"structure":.35,"timing":.60},
- "liq_squeeze":{"trend":.35,"stoch_momentum":.15,"stoch_reversal":.35,"flow":.85,"book":.70,"oi_liq":1.30,"local":.35,"structure":.25,"timing":.40},
- "absorption":{"trend":.40,"stoch_momentum":.10,"stoch_reversal":.35,"flow":1.00,"book":1.35,"oi_liq":.30,"local":.50,"structure":.35,"timing":.45},
- "hybrid":{"trend":.75,"stoch_momentum":.25,"stoch_reversal":.35,"flow":.85,"book":.65,"oi_liq":.55,"local":.70,"structure":.55,"timing":.55},
+ "trend_follow":{"trend":1.25,"stoch_momentum":.40,"stoch_reversal":0,"flow":.85,"book":.30,"oi_liq":.25,"local":.10,"structure":.55,"timing":.45,"quant":.85},
+ "pullback":{"trend":.95,"stoch_momentum":0,"stoch_reversal":.75,"flow":.70,"book":.35,"oi_liq":.20,"local":.45,"structure":.55,"timing":.50,"quant":.80},
+ "local_reversal":{"trend":-.20,"stoch_momentum":0,"stoch_reversal":1.10,"flow":.75,"book":.45,"oi_liq":.35,"local":1.30,"structure":.35,"timing":.60,"quant":.65},
+ "liq_squeeze":{"trend":.35,"stoch_momentum":.15,"stoch_reversal":.35,"flow":.85,"book":.70,"oi_liq":1.30,"local":.35,"structure":.25,"timing":.40,"quant":.70},
+ "absorption":{"trend":.40,"stoch_momentum":.10,"stoch_reversal":.35,"flow":1.00,"book":1.35,"oi_liq":.30,"local":.50,"structure":.35,"timing":.45,"quant":.75},
+ "hybrid":{"trend":.75,"stoch_momentum":.25,"stoch_reversal":.35,"flow":.85,"book":.65,"oi_liq":.55,"local":.70,"structure":.55,"timing":.55,"quant":.90},
 }
 
 def load(path):
