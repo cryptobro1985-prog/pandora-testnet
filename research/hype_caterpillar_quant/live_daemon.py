@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import argparse,json,pickle,time,os
+import argparse,json,pickle,time,os,signal
 import requests
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -222,6 +222,15 @@ def main():
     astra_pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix="cortex-20b")
     io_pool=ThreadPoolExecutor(max_workers=3,thread_name_prefix="quant-io")
     astra_future=None
+    stop_requested=False
+
+    def _request_stop(signum,_frame):
+        nonlocal stop_requested
+        stop_requested=True
+        print(f"CATERPILLAR_STOP_REQUESTED signal={signum}; flushing checkpoint",flush=True)
+
+    signal.signal(signal.SIGTERM,_request_stop)
+    signal.signal(signal.SIGINT,_request_stop)
 
     started=time.time();deadline=started+args.minutes*60
     next_save=0.0;next_issue=0.0;next_monitor=0.0;next_sample_ms=0
@@ -229,7 +238,7 @@ def main():
     sample_ms=5000
     processed_micro=sampled=0
 
-    while time.time()<deadline:
+    while time.time()<deadline and not stop_requested:
         events=[]
         for path in sorted(args.capture_root.rglob("HYPE_live_raw_frames.jsonl")):
             for row in tail.read_new(path):events.append((event_ts("raw",row),0,"raw",row))
