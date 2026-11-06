@@ -86,6 +86,60 @@ jobs:
             gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ID}/zip" > local.zip
             unzip -q local.zip -d local_cp
           fi
+          # If the historical gap backfill has passed its independent OOS gate,
+          # promote it once into the Local-only checkpoint. Preserve the live H1
+          # baseline/runtime; do not repeatedly overwrite online learning.
+          EID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=HYPE-LOCAL-ONLY-ENRICHED-PRETRAIN"             --jq '.artifacts | map(select((.expired|not) and .name=="HYPE-LOCAL-ONLY-ENRICHED-PRETRAIN")) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          if [ -n "${EID:-}" ]; then
+            rm -rf enriched_pretrain enriched.zip
+            mkdir -p enriched_pretrain
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$EID/zip" > enriched.zip
+            unzip -q enriched.zip -d enriched_pretrain
+            python - <<'PY'
+          import json,pickle,shutil
+          from pathlib import Path
+          root=Path("enriched_pretrain")
+          promo=next(iter(root.rglob("PROMOTION.json")),None)
+          modelp=next(iter(root.rglob("local_only_model.pkl")),None)
+          memp=next(iter(root.rglob("LOCAL_RELATIONSHIP_MEMORY.json")),None)
+          reportp=next(iter(root.rglob("HISTORICAL_TRAINING_REPORT.json")),None)
+          if not all((promo,modelp,memp)):
+              print("enriched_pretrain incomplete; skip")
+              raise SystemExit(0)
+          v=json.loads(promo.read_text())
+          if not v.get("promoted"):
+              print("enriched OOS gate did not pass; keeping current model")
+              raise SystemExit(0)
+          dst=Path("local_cp/local_only_model.pkl")
+          old=None
+          if dst.exists():
+              try:
+                  old=pickle.load(dst.open("rb"))
+                  if (getattr(old,"history_meta",{}) or {}).get("historical_gap_backfill"):
+                      print("enriched history already promoted")
+                      raise SystemExit(0)
+                  if int(getattr(old,"live_labels",0) or 0)>50:
+                      print("current checkpoint has >50 live labels; skip automatic history replacement")
+                      raise SystemExit(0)
+              except SystemExit:
+                  raise
+              except Exception:
+                  old=None
+          new=pickle.load(modelp.open("rb"))
+          if old is not None:
+              # Keep the live H1 teacher learner and operational context.
+              for attr in ("h1_models","h1_labels","h1_positive","h1_thresholds",
+                           "h1_last_trained_hour_ms","h1_shadow","last_signal"):
+                  if hasattr(old,attr):setattr(new,attr,getattr(old,attr))
+              new.history_meta["live_labels_before_history_upgrade"]=int(getattr(old,"live_labels",0) or 0)
+          new.save(dst)
+          shutil.copy2(memp,"local_cp/LOCAL_RELATIONSHIP_MEMORY.json")
+          if reportp:shutil.copy2(reportp,"local_cp/HISTORICAL_TRAINING_REPORT.json")
+          shutil.copy2(promo,"local_cp/HISTORICAL_GAP_PROMOTION.json")
+          print("promoted OOS-approved historical gap model")
+          PY
+          fi
+
           if test -s local_cp/local_only_model.pkl && test -s local_cp/LOCAL_RELATIONSHIP_MEMORY.json; then
             echo "found=1" >> "${GITHUB_OUTPUT}"
           else
