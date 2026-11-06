@@ -60,16 +60,16 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p bootstrap checkpoint
-          WARM_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" --jq '.artifacts | map(select((.expired|not) and .name=="HYPE-QUANT-STABLE-WARMSTART")) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          WARM_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" --jq '.artifacts | map(select((.expired|not) and (.name=="HYPE-QUANT-12H-FINAL" or .name=="HYPE-QUANT-checkpoint-4" or .name=="HYPE-UNIFIED-30D-WARMSTART" or .name=="HYPE-QUANT-STABLE-WARMSTART"))) | sort_by(.created_at) | reverse | .[0].id // empty')"
           if [ -n "${WARM_ID:-}" ]; then
-            echo "Using recovered stable warmstart artifact $WARM_ID"
+            echo "Using freshest available Quant artifact $WARM_ID"
             gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$WARM_ID/zip" > bootstrap/warm.zip
             unzip -q bootstrap/warm.zip -d checkpoint
             test -f checkpoint/quant_learner.pkl
-            test -f checkpoint/RECOVERY_REPORT.json
-            cat checkpoint/RECOVERY_REPORT.json
+            if [ -f checkpoint/RECOVERY_REPORT.json ]; then cat checkpoint/RECOVERY_REPORT.json; fi
+            if [ -f checkpoint/UNIFIED_30D_REPORT.json ]; then echo "Loaded unified 30D warmstart metadata"; fi
           else
-            echo "No stable warmstart found; replaying compact causal history."
+            echo "No prior Quant/unified warmstart found; replaying compact causal history."
             gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" --jq '.artifacts | map(select((.expired|not) and (.name|startswith("HYPE-H1-V6-12H-segment-")))) | sort_by(.created_at) | reverse | .[:12] | .[] | [.id,.name] | @tsv' > /tmp/hype_artifacts.tsv || true
             while IFS=$'\t' read -r id name; do
               [ -n "${id:-}" ] || continue
