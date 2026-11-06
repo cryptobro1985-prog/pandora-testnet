@@ -11,15 +11,22 @@ def json_object(text):
     return json.loads(text[a:b+1])
 
 def compact_memory(memory,side):
-    out={}
+    out={"micro":{},"h1":{}}
     for stage in (60,180,300):
         key=f"{side}_{stage}s";h=(memory.get("heads") or {}).get(key) or {}
-        out[key]={
+        out["micro"][key]={
             "baseline_positive_rate":h.get("baseline_positive_rate"),
             "top_feature_relationships":(h.get("top_feature_relationships") or [])[:12],
             "top_pair_relationships":(h.get("top_pair_relationships") or [])[:8],
             "true_examples":h.get("true_examples"),"false_examples":h.get("false_examples")
         }
+    h=(memory.get("h1_heads") or {}).get(side) or {}
+    out["h1"][side]={
+        "baseline_positive_rate":h.get("baseline_positive_rate"),
+        "top_feature_relationships":(h.get("top_feature_relationships") or [])[:16],
+        "top_pair_relationships":(h.get("top_pair_relationships") or [])[:10],
+        "true_examples":h.get("true_examples"),"false_examples":h.get("false_examples")
+    }
     return out
 
 def call_cortex(url,model,payload,timeout):
@@ -60,6 +67,8 @@ def main():
               "expected_next_local":status.get("expected_side"),
               "last_teacher_local":status.get("last_teacher_local"),
               "candidate":candidate,
+              "h1_baseline":status.get("h1_baseline"),
+              "h1_training":status.get("h1_training"),
               "last_signal":status.get("last_signal"),
               "input_coverage":(status.get("feature_contract") or {}).get("seen_input_ids"),
               "missing_inputs":(status.get("feature_contract") or {}).get("missing_seen_input_ids"),
