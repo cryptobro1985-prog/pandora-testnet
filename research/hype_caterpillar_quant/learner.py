@@ -225,6 +225,9 @@ class CaterpillarQuantLearner:
         self.early_local_shadow={}
         self.local_policy_version=0
         self.learned_local_history=[]
+        self.inherited_local_history=[]
+        self.bootstrap_anchor_initialized=False
+        self.bootstrap_anchor_cutoff_ms=None
         self.last_teacher_local=None
         self.prediction_checks={"local":0,"bounce":0,"entry":0,"exit":0,"reentry":0,"fib":0}
         self.prediction_errors={"local":0,"bounce":0,"entry":0,"exit":0,"reentry":0,"fib":0}
@@ -278,8 +281,36 @@ class CaterpillarQuantLearner:
     def _fib_name(kind,ratio):
         return f"{kind}{ratio:.3f}"
 
+    def _policy_local_history(self):
+        rows=[]
+        for src in (getattr(self,"inherited_local_history",[]) or [],
+                    getattr(self,"learned_local_history",[]) or []):
+            for item in src:
+                if not isinstance(item,dict):continue
+                try:
+                    row=dict(item)
+                    row["hour_ms"]=int(row["hour_ms"])
+                    row["price"]=float(row["price"])
+                    row["side"]=str(row["side"])
+                except Exception:
+                    continue
+                rows.append(row)
+        rows.sort(key=lambda z:(int(z.get("hour_ms",0)),int(z.get("available_ms",0) or 0)))
+        out=[]
+        seen=set()
+        for row in rows:
+            key=(row["side"],row["hour_ms"],round(row["price"],8))
+            if key in seen:continue
+            seen.add(key)
+            if out and out[-1]["side"]==row["side"]:
+                better=row["price"]<out[-1]["price"] if row["side"]=="LOW" else row["price"]>out[-1]["price"]
+                if better:out[-1]=row
+            else:
+                out.append(row)
+        return out
+
     def _fib_snapshot(self,state,ts_ms,price):
-        pivots=list(getattr(self,"learned_local_history",[]) or [])
+        pivots=self._policy_local_history()
         if len(pivots)<2:return {"available":False,"features":{},"levels":[]}
         a,b=pivots[-2],pivots[-1]
         if a["side"]==b["side"]:return {"available":False,"features":{},"levels":[]}
@@ -460,6 +491,9 @@ class CaterpillarQuantLearner:
     def _ensure_learned_local_policy(self):
         if int(getattr(self,"local_policy_version",0) or 0)>=self.LOCAL_POLICY_VERSION:
             if not hasattr(self,"learned_local_history"):self.learned_local_history=[]
+            if not hasattr(self,"inherited_local_history"):self.inherited_local_history=[]
+            if not hasattr(self,"bootstrap_anchor_initialized"):self.bootstrap_anchor_initialized=False
+            if not hasattr(self,"bootstrap_anchor_cutoff_ms"):self.bootstrap_anchor_cutoff_ms=None
             if not hasattr(self,"last_teacher_local"):self.last_teacher_local=None
             return
 
@@ -495,6 +529,9 @@ class CaterpillarQuantLearner:
         self.candidates={"LOW":None,"HIGH":None}
         self.last_confirmed_local=None
         self.learned_local_history=[]
+        self.inherited_local_history=[]
+        self.bootstrap_anchor_initialized=False
+        self.bootstrap_anchor_cutoff_ms=None
         self.last_teacher_local=None
 
         # Direct action policy is conditioned on Local state, so it must restart
@@ -803,6 +840,81 @@ class CaterpillarQuantLearner:
                 if better:raw[-1]=item
             else:raw.append(item)
         return raw
+
+    @staticmethod
+    def _is_policy_local(c):
+        return bool(c is not None
+                    and c.invalidated_ts_ms is None
+                    and c.confirmed_stage is not None
+                    and getattr(c,"source",None) in ("LEARNED_CAUSAL_LOCAL","INHERITED_CONFIRMED_LOCAL"))
+
+    def _bootstrap_inherited_local(self,state,ts_ms,price,x,pivots=None):
+        """Seed the live policy from a Local that was already confirmed before this learner generation.
+
+        This is startup context, not a learned prediction. It is recorded separately
+        and never increments Local-model labels/accuracy. All subsequent executable
+        Locals must still be produced by the causal learned Local model.
+        """
+        if getattr(self,"bootstrap_anchor_initialized",False):
+            return []
+        self.bootstrap_anchor_initialized=True
+        self.bootstrap_anchor_cutoff_ms=int(ts_ms)
+        pivots=list(pivots if pivots is not None else self._strict_pivots(state,ts_ms))
+        eligible=[p for p in pivots if int(p.get("available_ms",0) or 0)<=int(ts_ms)]
+        if not eligible:
+            self.bootstrap_diagnostic={
+                "anchor_initialized":True,"anchor_found":False,
+                "cutoff_ms":int(ts_ms),"reason":"NO_PRETRAIN_CONFIRMED_LOCAL",
+            }
+            return []
+
+        # Keep enough pre-start structural context to reconstruct the active swing
+        # for Fibonacci, but do not mix it into learned_local_history.
+        inherited=[]
+        for p in eligible[-12:]:
+            inherited.append({
+                "side":str(p["side"]),"price":float(p["price"]),
+                "hour_ms":int(p["hour_ms"]),"available_ms":int(p["available_ms"]),
+                "confirm_price":float(p.get("confirm_price") or p["price"]),
+                "source":"INHERITED_PRETRAIN_CONFIRMED_LOCAL",
+                "not_learned_prediction":True,
+            })
+        self.inherited_local_history=inherited
+
+        latest=eligible[-1]
+        self.candidate_seq+=1
+        evidence=dict(latest.get("evidence") or {})
+        evidence.update({
+            "rule":"INHERITED_PRETRAIN_CONFIRMED_LOCAL",
+            "teacher_available_ms":int(latest["available_ms"]),
+            "bootstrap_cutoff_ms":int(ts_ms),
+            "not_learned_prediction":True,
+            "purpose":"seed active Local-to-Local leg because Local existed before learner startup",
+        })
+        c=Candidate(
+            self.candidate_seq,str(latest["side"]),float(latest["price"]),int(latest["hour_ms"]),
+            clean_features(x),confirmed_stage=0,source="INHERITED_CONFIRMED_LOCAL",
+            strict_hour_ms=int(latest["hour_ms"]),evidence=evidence,
+        )
+        # Confidence is deliberately zero: this anchor was inherited, not predicted
+        # by the learned Local model.
+        c.stage_conf[0]=0.0
+        self.last_confirmed_local=c
+        self._baseline_on_local(c,ts_ms,price)
+        self.bootstrap_diagnostic={
+            "anchor_initialized":True,"anchor_found":True,"cutoff_ms":int(ts_ms),
+            "side":c.side,"price":float(c.extreme_price),
+            "hour_ms":int(c.strict_hour_ms),"teacher_available_ms":int(latest["available_ms"]),
+            "source":"INHERITED_CONFIRMED_LOCAL",
+            "learned_prediction":False,
+            "policy_use":"STARTING_CONTEXT_ONLY",
+        }
+        return [{
+            "event":"INHERITED_PRETRAIN_LOCAL","ts_ms":int(ts_ms),
+            "side":c.side,"price":float(c.extreme_price),
+            "hour_ms":int(c.strict_hour_ms),"available_ms":int(latest["available_ms"]),
+            "candidate_id":c.ident,"learned_prediction":False,
+        }]
 
     def _strict_candidate_outcome(self,state,pending,ts_ms):
         if ts_ms<pending.strict_mature_ts_ms:return None
@@ -1153,7 +1265,7 @@ class CaterpillarQuantLearner:
         return clean_features(out)
 
     def _sample_direct_policy(self,ts_ms,price,x,c,qd):
-        if c is None or getattr(c,"source",None)!="LEARNED_CAUSAL_LOCAL":return
+        if not self._is_policy_local(c):return
         if ts_ms-self.last_policy_sample_ms<self.POLICY_SAMPLE_S*1000:return
         mode="POSITION" if self.position is not None else "FLAT"
         side=(self.position.side if self.position is not None else (1 if c.side=="LOW" else -1))
@@ -1333,7 +1445,7 @@ class CaterpillarQuantLearner:
 
     def _opposite_local_watch(self,ts_ms,price,x):
         c=self.last_confirmed_local
-        if c is None or getattr(c,"source",None)!="LEARNED_CAUSAL_LOCAL":
+        if not self._is_policy_local(c):
             return {"structural_leg":"UNKNOWN","target_local":None,"score":0.0,"status":"WAIT_LOCAL",
                     "structural_bias":"FLAT","components":{}}
         leg_side=1 if c.side=="LOW" else -1
@@ -1393,14 +1505,13 @@ class CaterpillarQuantLearner:
                           "retrace_score":retrace_score,"reversal_pressure":reversal_pressure,
                           "agent_consensus":agent,"agent_structure_direction":struct,
                           "agent_flow_direction":flow,"agent_book_direction":book},
-            "interpretation":"structural leg remains active until opposite learned causal Local; strict H1 pivots are benchmark-only and never assign trading direction",
+            "interpretation":"leg starts from the inherited pre-training confirmed Local when necessary, then remains active until an opposite learned causal Local; post-start strict H1 pivots remain benchmark-only",
         }
 
     def _best_local(self):
         c=self.last_confirmed_local
-        if c is None or c.invalidated_ts_ms is not None or c.confirmed_stage is None:return None,None
-        if getattr(c,"source",None)!="LEARNED_CAUSAL_LOCAL":return None,None
-        return c,c.stage_conf.get(c.confirmed_stage,0.0)
+        if not self._is_policy_local(c):return None,None
+        return c,c.stage_conf.get(c.confirmed_stage or 0,0.0)
 
     def _structural_history_report(self,state,ts_ms):
         pivots=self._strict_pivots(state,ts_ms)
@@ -1612,6 +1723,12 @@ class CaterpillarQuantLearner:
         self._advance_direct_policy_labels(ts_ms,price)
         self._advance_fib_labels(ts_ms,price)
         self.structural_history=self._structural_history_report(state,ts_ms)
+        # A Local that was already confirmed before this learner generation is
+        # startup context, not a model prediction. Seed it exactly once so the
+        # live leg is not forgotten merely because training began later.
+        strict_ref=self._strict_pivots(state,ts_ms)
+        self.last_teacher_local=(strict_ref[-1] if strict_ref else None)
+        events.extend(self._bootstrap_inherited_local(state,ts_ms,price,x,strict_ref))
         fib=self._fib_snapshot(state,ts_ms,price)
         self.current_fib={
             "available":bool(fib.get("available")),
@@ -1625,10 +1742,8 @@ class CaterpillarQuantLearner:
         if fib.get("available"):
             x=dict(x);x.update(fib.get("features") or {})
         qd=self.quant.observe(ts_ms,price,x)
-        # Strict H1 pivots remain benchmark/audit only. They never set
-        # last_confirmed_local and never assign LONG/SHORT execution direction.
-        strict_ref=self._strict_pivots(state,ts_ms)
-        self.last_teacher_local=(strict_ref[-1] if strict_ref else None)
+        # After bootstrap, strict H1 pivots remain benchmark/audit only. They do
+        # not replace the active anchor; subsequent executable Locals are learned.
         events.extend(self._sample_fib_touches(ts_ms,price,x,fib))
         # Price structure only proposes candidate extremes. The causal Local
         # model decides whether a candidate becomes an executable Local.
@@ -1759,10 +1874,11 @@ class CaterpillarQuantLearner:
             "mean_mfe_capture_ratio":statistics.fmean(captures) if captures else None,
             "median_mfe_capture_ratio":statistics.median(captures) if captures else None,
             "local_target":"REALIZED_REVERSAL_ADVANTAGE_FROM_FULL_CAUSAL_STATE",
-            "local_policy":"Local v2 is learned from the full causal live state. Structural extremes only create candidates; realized future price path supplies delayed labels. Strict H1 L6/K2 is benchmark-only and cannot set trading direction. Learned LOW permits LONG; learned HIGH permits SHORT.",
+            "local_policy":"Local v2 learns new Locals from the full causal live state. If a confirmed Local already existed before learner startup, it is inherited once as starting leg context (not counted as a learned prediction). After startup, strict H1 L6/K2 remains benchmark-only; subsequent executable Locals must be learned causally.",
             "local_policy_version":getattr(self,"local_policy_version",0),
             "local_teacher_benchmark":getattr(self,"last_teacher_local",None),
             "learned_local_history":list(getattr(self,"learned_local_history",[]) or [])[-12:],
+            "inherited_local_history":list(getattr(self,"inherited_local_history",[]) or [])[-12:],
             "local_learning_contract":{"candidate_source":"live structural extremes",
                                        "inputs":"full cleaned causal state (86 predictive inputs from the 116-point contract)",
                                        "label":"favorable excursion - adverse continuation - round-trip cost > 0",
