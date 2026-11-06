@@ -245,6 +245,7 @@ def main():
             sampled+=1
             base_report=learner.report()
             strategy_lab.observe(ts,price,base_report,decision,x)
+            lab_report=strategy_lab.report()
             astra_book.mark(ts,price)
             if astra_future is not None and astra_future.done():
                 try:
@@ -264,9 +265,9 @@ def main():
                 except Exception as exc:
                     append_jsonl(astra_actions,{"ts_ms":ts,"worker_error":repr(exc)})
                 astra_future=None
-            if astra_future is None and cortex.due(ts,x,decision,base_report):
+            if astra_future is None and cortex.due(ts,x,decision,base_report,lab_report):
                 astra_future=astra_pool.submit(
-                    cortex.observe,ts,price,dict(x),decision,base_report,learner.round_trip_cost
+                    cortex.observe,ts,price,dict(x),decision,base_report,learner.round_trip_cost,lab_report
                 )
             append_jsonl(actions,{"ts_ms":ts,"price":price,"feature_count":len(x),**decision})
 
