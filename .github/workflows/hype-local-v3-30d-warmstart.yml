@@ -1,0 +1,127 @@
+name: HYPE Local v3 — 30D Historical Warm Start
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-local-v3-30d-warmstart.yml"
+      - "research/hype_caterpillar_quant/historical_warmstart.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: hype-local-v3-30d-warmstart
+  cancel-in-progress: false
+
+jobs:
+  warmstart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install learner dependencies
+        run: |
+          python -m pip install -r research/hype_quant/requirements.txt
+
+      - name: Restore freshest live Caterpillar checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf cq_warm checkpoint.zip
+          mkdir -p cq_warm
+          ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" --jq '
+            .artifacts
+            | map(select((.expired|not) and
+                (.name=="HYPE-CATERPILLAR-QUANT-CHECKPOINT" or (.name|startswith("HYPE-CATERPILLAR-QUANT-checkpoint-")))))
+            | sort_by(.created_at) | reverse | .[0].id // empty
+          ')"
+          test -n "$ID"
+          echo "checkpoint_artifact_id=$ID"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$ID/zip" > checkpoint.zip
+          unzip -q checkpoint.zip -d cq_warm
+          test -s cq_warm/caterpillar_quant.pkl
+          test -s cq_warm/feature_state.pkl
+
+      - name: Download saved 30-day HYPE causal archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HISTORY_ARTIFACT_ID: "13435380791"
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf history30 history30.zip
+          mkdir -p history30
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${HISTORY_ARTIFACT_ID}/zip" > history30.zip
+          unzip -q history30.zip -d history30
+          test -s history30/candidate_snapshots.jsonl.gz
+          test -s history30/compact_1m.jsonl.gz
+          test -s history30/manifest.json
+          python - <<'PY'
+          import json
+          m=json.load(open("history30/manifest.json"))
+          assert m["candidate_snapshots"]==6261
+          assert m["feature_contract"].startswith("116-point")
+          assert m["future_leakage_guard"]
+          print("history_period",m["period"])
+          print("candidate_snapshots",m["candidate_snapshots"])
+          PY
+
+      - name: Apply Local v3 historical warm-start
+        run: |
+          python research/hype_caterpillar_quant/historical_warmstart.py             --checkpoint cq_warm/caterpillar_quant.pkl             --history-dir history30             --report cq_warm/HISTORICAL_LOCAL_V3_WARMSTART.json
+
+      - name: Validate warm-started model
+        run: |
+          python - <<'PY'
+          import json,pickle
+          from pathlib import Path
+          p=Path("cq_warm/HISTORICAL_LOCAL_V3_WARMSTART.json")
+          r=json.loads(p.read_text())
+          print(json.dumps(r["applied_by_head"],indent=2))
+          with open("cq_warm/caterpillar_quant.pkl","rb") as f:
+              q=pickle.load(f)
+          q._ensure_v2()
+          labels=sum(q.local_labels.values())
+          print("local_labels",labels)
+          print("local_progress",q.report()["training_progress"]["heads"]["local"])
+          assert labels >= 1500, labels
+          assert min(q.local_labels.values()) >= 100
+          assert getattr(q,"historical_local_v3_warmstart",{}).get("applied") is True
+          PY
+
+      - name: Upload warm-started canonical checkpoint
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-CATERPILLAR-QUANT-CHECKPOINT
+          path: cq_warm
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+
+      - name: Upload warm-start audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-LOCAL-V3-30D-WARMSTART-${{ github.run_id }}
+          path: cq_warm/HISTORICAL_LOCAL_V3_WARMSTART.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Start live learner from the historical warm checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run hype-v12-immediate-full-graph.yml             --repo "${GITHUB_REPOSITORY}"             --ref "research/hype-h1-local-v5-oi-microstructure-20261104"
