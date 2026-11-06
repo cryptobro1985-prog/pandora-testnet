@@ -18,7 +18,7 @@ permissions:
 
 concurrency:
   group: hype-v6-forward-12h-caterpillar-v5-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   CAPTURE_MINUTES: "170"
