@@ -112,6 +112,8 @@ class CaterpillarQuantLearner:
         self.last_ts_ms=None
         self.last_price=None
         self.censored=0
+        self.prediction_checks={"local":0,"exit":0}
+        self.prediction_errors={"local":0,"exit":0}
 
     def _model_p(self,model,x):
         try:
@@ -220,7 +222,11 @@ class CaterpillarQuantLearner:
             c=self.candidates.get(s.side)
             invalid=(c is None or c.ident!=s.candidate_id or (c.invalidated_ts_ms is not None and c.invalidated_ts_ms<=s.mature_ts_ms))
             y=(not invalid) and s.best_favorable>=0.0035
-            self._learn_binary(self.local_models[(s.side,s.stage_s)],s.x,y)
+            model=self.local_models[(s.side,s.stage_s)]
+            pred=self._model_p(model,s.x)>=0.5
+            self.prediction_checks["local"]+=1
+            self.prediction_errors["local"]+=int(pred!=bool(y))
+            self._learn_binary(model,s.x,y)
             self.local_labels[(s.side,s.stage_s)]+=1
             self.local_pos[(s.side,s.stage_s)]+=int(y)
         self.local_pending=keep
@@ -235,6 +241,9 @@ class CaterpillarQuantLearner:
                 keep.append(s);continue
             # EXIT is correct when the next 5m loses edge or adverse path dominates.
             y=(move < -self.round_trip_cost*0.5) or (s.worst_adverse > max(0.0015,s.best_favorable*1.20))
+            pred=self._model_p(self.exit_model,s.x)>=0.5
+            self.prediction_checks["exit"]+=1
+            self.prediction_errors["exit"]+=int(pred!=bool(y))
             self._learn_binary(self.exit_model,s.x,y)
             self.exit_labels+=1; self.exit_pos+=int(y)
         self.exit_pending=keep
@@ -406,12 +415,56 @@ class CaterpillarQuantLearner:
                     "local_id":p.local_id,"reentry_no":p.reentry_no},
                 "closed_trades":len(self.trades),"reentries":self.reentries}
 
+    @staticmethod
+    def _model_weights(model):
+        rows=[]
+        try:
+            steps=getattr(model,"steps",None)
+            vals=list(steps.values()) if hasattr(steps,"values") else []
+            if not vals:
+                try: vals=[model[-1]]
+                except Exception: vals=[]
+            for step in vals:
+                weights=getattr(step,"weights",None)
+                if weights is None:continue
+                for k,v in dict(weights).items():
+                    if finite(v) and abs(float(v))>=1e-5:
+                        rows.append((str(k),float(v)))
+        except Exception:
+            pass
+        return rows
+
+    def _relationships_report(self):
+        rows=[]
+        for (side,stage),model in self.local_models.items():
+            if self.local_labels[(side,stage)]<5:continue
+            for feature,w in self._model_weights(model):
+                rows.append({"head":f"LOCAL_{side}_{stage}s","feature":feature,"weight":w})
+        if self.exit_labels>=5:
+            for feature,w in self._model_weights(self.exit_model):
+                rows.append({"head":"EXIT","feature":feature,"weight":w})
+        rows.sort(key=lambda z:abs(z["weight"]),reverse=True)
+        return {"total":len(rows),"positive":sum(r["weight"]>0 for r in rows),
+                "negative":sum(r["weight"]<0 for r in rows),"top":rows[:40]}
+
     def report(self):
         captures=[t["mfe_capture_ratio"] for t in self.trades if finite(t.get("mfe_capture_ratio"))]
         wins=sum(t["pnl"]>0 for t in self.trades)
         gp=sum(max(0.0,t["pnl"]) for t in self.trades);gl=-sum(min(0.0,t["pnl"]) for t in self.trades)
+        relationships=self._relationships_report()
+        checks=sum(self.prediction_checks.values())
+        errors=sum(self.prediction_errors.values())
         return {
             "version":self.VERSION,"research_only":True,"real_orders":False,
+            "learning_status":"LEARNING",
+            "relationships":relationships,
+            "relationships_total":relationships["total"],
+            "positive_relationships":relationships["positive"],
+            "negative_relationships":relationships["negative"],
+            "prediction_checks":checks,"errors_total":errors,
+            "error_rate":errors/checks if checks else None,
+            "prediction_errors":dict(self.prediction_errors),
+            "prediction_checks_by_head":dict(self.prediction_checks),
             "equity":self.equity,"return_pct":(self.equity/100.0-1.0)*100.0,
             "path_equity_1x":self.path_equity,
             "caterpillar_path_return_pct":(self.path_equity/100.0-1.0)*100.0,
