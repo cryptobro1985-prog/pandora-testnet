@@ -273,7 +273,7 @@ class AstraCortex:
                 "Pay special attention to US premarket, US cash and US after-hours behavior, "
                 "but never assume a session is profitable by itself. Return ONLY compact JSON. "
                 "Do not expose private chain-of-thought; use short audit summaries.")
-        shape={"decision":"WAIT","confidence":0.0,"market_regime":"string","thesis":"short audit thesis",
+        shape={"decision":"WAIT|HOLD|ENTER_LONG|ENTER_SHORT|EXIT","confidence":0.0,"market_regime":"string","thesis":"short audit thesis",
                "evidence_for":["feature/value"],"evidence_against":["feature/value"],"invalidation":"condition",
                "expected_path_60s":"string","expected_path_180s":"string","expected_path_300s":"string",
                "risk_level":"LOW|MEDIUM|HIGH|EXTREME","leverage":1,"margin_fraction":0.02,
@@ -284,7 +284,10 @@ class AstraCortex:
 
     def _normalize_decision(self,d):
         out=dict(d or {})
-        action=str(out.get("decision") or "WAIT").upper()
+        action=str(out.get("decision") or "WAIT").strip().upper().replace(" ","_")
+        aliases={"LONG":"ENTER_LONG","BUY":"ENTER_LONG","SHORT":"ENTER_SHORT","SELL":"ENTER_SHORT",
+                 "FLAT":"WAIT","NO_TRADE":"WAIT","NO-TRADE":"WAIT"}
+        action=aliases.get(action,action)
         out["decision"]=action if action in DECISIONS else "WAIT"
         out["confidence"]=clip(out.get("confidence",0.0) or 0.0,0,1)
         risk=str(out.get("risk_level") or "HIGH").upper()
@@ -339,7 +342,7 @@ class AstraCortex:
     def _request(self,state):
         return self._request_local(state) if self.backend=="local_llama" else self._request_openai(state)
 
-    def _compact_causal_features(self,features,limit=96):
+    def _compact_causal_features(self,features,limit=48):
         rows=[]
         priority=("agent_","flow_","book_","oi_","liq","liquid","price_response","efficiency",
                   "cvd","local","retrace","persistence","dominance","return","funding",
