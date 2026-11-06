@@ -99,6 +99,7 @@ def compact_status(report):
         "astra":report.get("astra") or {},
         "astra_paper":report.get("astra_paper") or {},
         "astra_vs_quant_delta_pct":report.get("astra_vs_quant_delta_pct"),
+        "runtime_concurrency":report.get("runtime_concurrency") or {},
         "research_only":True,"real_orders":False,
         "github_run_id":os.environ.get("GITHUB_RUN_ID"),"github_sha":os.environ.get("GITHUB_SHA"),
     }
@@ -180,7 +181,8 @@ def main():
     actions.touch(exist_ok=True);gaps.touch(exist_ok=True);astra_actions.touch(exist_ok=True)
     cortex=AstraCortex(args.checkpoint_dir)
     astra_book=AstraPaperBook(args.checkpoint_dir,learner.round_trip_cost)
-    astra_pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix="astra-cortex")
+    astra_pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix="cortex-20b")
+    io_pool=ThreadPoolExecutor(max_workers=3,thread_name_prefix="quant-io")
     astra_future=None
 
     started=time.time();deadline=started+args.minutes*60
@@ -262,6 +264,7 @@ def main():
                 "processed_micro_rows":processed_micro,"sampled_states":sampled,
                 "last_seen_ts_ms":last_seen_ts,"started_ts_ms":int(started*1000),
                 "updated_ts_ms":int(now*1000),"feature_contract":state.coverage_report(),
+                "runtime_concurrency":{"quant_loop":1,"cortex_workers":1,"cortex_cpu_threads":int(os.getenv("CORTEX_THREADS","4")),"io_workers":3},
                 "research_only":True,"real_orders":False,
             })
             report=enrich_astra(report,cortex,astra_book)
@@ -272,18 +275,20 @@ def main():
             report.update({"processed_micro_rows":processed_micro,"sampled_states":sampled,
                            "last_seen_ts_ms":last_seen_ts,"updated_ts_ms":int(now*1000),
                            "feature_contract":state.coverage_report(),
+                           "runtime_concurrency":{"quant_loop":1,"cortex_workers":1,"cortex_cpu_threads":int(os.getenv("CORTEX_THREADS","4")),"io_workers":3},
                            "research_only":True,"real_orders":False})
             report=enrich_astra(report,cortex,astra_book)
-            publish_monitor(report)
+            io_pool.submit(publish_monitor,report)
             next_monitor=now+10
         if now>=next_issue:
             report=learner.report()
             report.update({"processed_micro_rows":processed_micro,"sampled_states":sampled,
                            "last_seen_ts_ms":last_seen_ts,"updated_ts_ms":int(now*1000),
                            "feature_contract":state.coverage_report(),
+                           "runtime_concurrency":{"quant_loop":1,"cortex_workers":1,"cortex_cpu_threads":int(os.getenv("CORTEX_THREADS","4")),"io_workers":3},
                            "research_only":True,"real_orders":False})
             report=enrich_astra(report,cortex,astra_book)
-            publish_issue(report)
+            io_pool.submit(publish_issue,report)
             next_issue=now+30
         if not events:time.sleep(args.poll_seconds)
 
@@ -292,6 +297,7 @@ def main():
     report.update({"processed_micro_rows":processed_micro,"sampled_states":sampled,
                    "last_seen_ts_ms":last_seen_ts,"completed_ts_ms":int(time.time()*1000),
                    "feature_contract":state.coverage_report(),
+                   "runtime_concurrency":{"quant_loop":1,"cortex_workers":1,"cortex_cpu_threads":int(os.getenv("CORTEX_THREADS","4")),"io_workers":3},
                    "research_only":True,"real_orders":False})
     report=enrich_astra(report,cortex,astra_book)
     cortex.save();astra_book.save()
@@ -299,6 +305,7 @@ def main():
     publish_monitor(report)
     publish_issue(report)
     astra_pool.shutdown(wait=False,cancel_futures=True)
+    io_pool.shutdown(wait=True,cancel_futures=False)
     print("CATERPILLAR_QUANT="+json.dumps({
         "equity":report["equity"],"return_pct":report["return_pct"],
         "closed_trades":report["closed_trades"],"reentries":report["reentries"],
