@@ -219,6 +219,10 @@ def main():
     cfg=load_config(args.config)
     learner=OnlineQuantLearner(copy.deepcopy(cfg))
     full_action_space=copy.deepcopy(learner.config["action_space"])
+    saved_neighbors=learner.memory.neighbors
+    # Historical replay trains the parametric Quant and agent features. Disable
+    # expensive nearest-neighbor lookup throughout replay; restore it for live.
+    learner.memory.neighbors=10**9
     # During fitting the action grid does not affect labels or model updates.
     # Keep a tiny grid here; restore the full high-growth grid for policy search.
     learner.config["action_space"]["leverage"]=[1]
@@ -231,12 +235,8 @@ def main():
     learner.pending.clear()
     pretrain_report=learner.report()
     learner.config["action_space"]=copy.deepcopy(full_action_space)
-    # Avoid re-querying thousands of nearest-neighbor memories for every
-    # validation risk profile. Historical selection uses the parametric Quant
-    # + causal agents; PatternMemory remains available for live forward learning.
-    saved_neighbors=learner.memory.neighbors
-    learner.memory.neighbors=10**9
-
+    # Historical selection uses parametric Quant + causal agents; nearest-neighbor
+    # PatternMemory is deliberately held out to reduce overfit and runtime.
     profiles=[]
     for min_conf in (.57,.62,.67):
       for ddp in (4.0,8.0,12.0):
@@ -250,7 +250,6 @@ def main():
     best=validation[0]["profile"]
     val_full=simulate(learner,states,TRAIN_END,OOS,best)
     oos=simulate(learner,states,OOS,END,best)
-    learner.memory.neighbors=saved_neighbors
 
     # Freeze evidence first; only now absorb validation+OOS into the historical warmstart.
     learner.config["action_space"]["leverage"]=[1]
@@ -260,6 +259,7 @@ def main():
             learner.observe(ts,px,x)
     learner.pending.clear()
     learner.config["action_space"]=copy.deepcopy(full_action_space)
+    learner.memory.neighbors=saved_neighbors
     learner.save(args.output/"quant_learner.pkl")
 
     report={
