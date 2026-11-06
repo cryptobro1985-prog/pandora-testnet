@@ -846,7 +846,7 @@ class CaterpillarQuantLearner:
         return bool(c is not None
                     and c.invalidated_ts_ms is None
                     and c.confirmed_stage is not None
-                    and getattr(c,"source",None) in ("LEARNED_CAUSAL_LOCAL","INHERITED_CONFIRMED_LOCAL"))
+                    and getattr(c,"source",None) == "LEARNED_CAUSAL_LOCAL")
 
     def _bootstrap_inherited_local(self,state,ts_ms,price,x,pivots=None):
         """Seed the live policy from a Local that was already confirmed before this learner generation.
@@ -1728,7 +1728,8 @@ class CaterpillarQuantLearner:
         # live leg is not forgotten merely because training began later.
         strict_ref=self._strict_pivots(state,ts_ms)
         self.last_teacher_local=(strict_ref[-1] if strict_ref else None)
-        events.extend(self._bootstrap_inherited_local(state,ts_ms,price,x,strict_ref))
+        # Strict H1 history is benchmark-only: never bootstrap an executable Local from it.
+        # Existing learned checkpoint Locals remain intact; new Locals require learned evidence.
         fib=self._fib_snapshot(state,ts_ms,price)
         self.current_fib={
             "available":bool(fib.get("available")),
