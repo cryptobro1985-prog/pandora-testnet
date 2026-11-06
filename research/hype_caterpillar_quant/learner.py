@@ -41,6 +41,7 @@ class Candidate:
     confirmed_stage:int|None=None
     source:str="LIVE_CANDIDATE"
     strict_hour_ms:int|None=None
+    evidence:dict[str,Any]=field(default_factory=dict)
 
 @dataclass
 class LocalPending:
@@ -140,6 +141,7 @@ class CaterpillarQuantLearner:
         self.last_reentry_sample_ms=0
         self.policy_version=2
         self.bootstrap_diagnostic={}
+        self.structural_history={}
         self.prediction_checks={"local":0,"bounce":0,"exit":0,"reentry":0}
         self.prediction_errors={"local":0,"bounce":0,"exit":0,"reentry":0}
 
@@ -204,7 +206,18 @@ class CaterpillarQuantLearner:
             side="HIGH" if hi else "LOW"
             price=row["high"] if hi else row["low"]
             item={"side":side,"price":price,"hour_ms":row["start_ms"],
-                  "available_ms":row["start_ms"]+3*3_600_000}
+                  "available_ms":row["start_ms"]+3*3_600_000,
+                  "confirm_price":future[-1]["close"],
+                  "evidence":{
+                      "rule":"H1_L6_K2_STRICT",
+                      "left_hours":6,"right_hours":2,
+                      "past_high_max":max(x["high"] for x in past),
+                      "past_low_min":min(x["low"] for x in past),
+                      "future_high_max":max(x["high"] for x in future),
+                      "future_low_min":min(x["low"] for x in future),
+                      "pivot_high":row["high"],"pivot_low":row["low"],
+                      "pivot_open":row["open"],"pivot_close":row["close"],
+                  }}
             if raw and raw[-1]["side"]==side:
                 better=price>raw[-1]["price"] if side=="HIGH" else price<raw[-1]["price"]
                 if better:raw[-1]=item
@@ -231,20 +244,27 @@ class CaterpillarQuantLearner:
         latest=pivots[-1]
         current=self.last_confirmed_local
         cur_hour=getattr(current,"strict_hour_ms",None) if current is not None else None
-        # Do not overwrite a genuinely newer early live candidate with an older K2 pivot.
-        if current is not None and current.source=="LIVE_CANDIDATE" and current.extreme_ts_ms>latest["available_ms"]:
+        if current is not None and getattr(current,"source",None)=="STRICT_H1_CONFIRMED" and cur_hour==latest["hour_ms"]:
             return []
-        if cur_hour is not None and cur_hour>=latest["hour_ms"]:return []
         self.candidate_seq+=1
         c=Candidate(self.candidate_seq,latest["side"],latest["price"],latest["available_ms"],clean_features(x),
-                    confirmed_stage=0,source="STRICT_H1_CONFIRMED",strict_hour_ms=latest["hour_ms"])
+                    confirmed_stage=0,source="STRICT_H1_CONFIRMED",strict_hour_ms=latest["hour_ms"],
+                    evidence=dict(latest.get("evidence") or {}))
         c.stage_conf[0]=0.99
         self.candidates[latest["side"]]=c
         self.last_confirmed_local=c
         self._baseline_on_local(c,ts_ms,price)
+        # If PAPER is already aligned with the same direction, re-anchor it to the
+        # actual structural local rather than closing/reopening due to a restart.
+        if self.position is not None:
+            side=1 if c.side=="LOW" else -1
+            if self.position.side==side:
+                self.position.local_id=c.ident
+                self.position.local_key=self._local_key(c)
         return [{"event":"STRICT_H1_LOCAL_SYNC","ts_ms":ts_ms,"side":latest["side"],
                  "price":latest["price"],"hour_ms":latest["hour_ms"],"available_ms":latest["available_ms"],
-                 "candidate_id":c.ident}]
+                 "confirm_price":latest.get("confirm_price"),"candidate_id":c.ident,
+                 "evidence":latest.get("evidence") or {}}]
 
 
     def _m1_extreme_order(self,state,hour_ms,low_price,high_price):
@@ -385,14 +405,9 @@ class CaterpillarQuantLearner:
         if price<=low6 and (low is None or price<low.extreme_price-1e-12):
             c=self._new_candidate("LOW",price,ts_ms,x)
             events.append({"event":"NEW_LOCAL_CANDIDATE","side":"LOW","candidate_id":c.ident,"price":price})
-            if self.position and self.position.side>0:
-                # A fresh lower low invalidates the previous long-local thesis.
-                events.extend(self._close(ts_ms,price,"NEW_LOWER_LOW_INVALIDATES_LONG"))
         if price>=high6 and (high is None or price>high.extreme_price+1e-12):
             c=self._new_candidate("HIGH",price,ts_ms,x)
             events.append({"event":"NEW_LOCAL_CANDIDATE","side":"HIGH","candidate_id":c.ident,"price":price})
-            if self.position and self.position.side<0:
-                events.extend(self._close(ts_ms,price,"NEW_HIGHER_HIGH_INVALIDATES_SHORT"))
         return events
 
     def _advance_local_labels(self,ts_ms,price,state):
@@ -463,23 +478,10 @@ class CaterpillarQuantLearner:
             accepted=conf>=({60:.55,180:.58,300:.60}[stage]) and retr>0
             policy_promoted=False
             if accepted:
-                first_accept=c.confirmed_stage is None
                 c.confirmed_stage=stage
-                current=self.last_confirmed_local
-                # A short-window restart bootstrap is only a candidate/teacher.
-                # It must never replace a structural H1 pivot already confirmed
-                # from the full loaded H1 history.
-                blocks_structural=(
-                    c.source=="PROVISIONAL_H1_EXTREME"
-                    and current is not None
-                    and getattr(current,"source",None)=="STRICT_H1_CONFIRMED"
-                )
-                if not blocks_structural:
-                    self.last_confirmed_local=c
-                    policy_promoted=True
-                    if first_accept:
-                        if not getattr(c,"source",None):c.source="LIVE_CANDIDATE"
-                        self._baseline_on_local(c,ts_ms,price)
+                # Candidate heads continue learning, but trading direction is anchored
+                # only by the full-history structural H1 sequence.
+                policy_promoted=(c.source=="STRICT_H1_CONFIRMED")
             events.append({"event":"LOCAL_STAGE","side":c.side,"candidate_id":c.ident,"stage_s":stage,
                            "confidence":conf,"strict_model_p":p,"bounce_model_p":bp,
                            "heuristic":heuristic,"retrace_bps":retr,
@@ -491,7 +493,69 @@ class CaterpillarQuantLearner:
     def _best_local(self):
         c=self.last_confirmed_local
         if c is None or c.invalidated_ts_ms is not None or c.confirmed_stage is None:return None,None
+        if getattr(c,"source",None)!="STRICT_H1_CONFIRMED":return None,None
         return c,c.stage_conf.get(c.confirmed_stage,0.0)
+
+    def _structural_history_report(self,state,ts_ms):
+        pivots=self._strict_pivots(state,ts_ms)
+        legs=[]
+        eq1=100.0
+        eq_cfg=100.0
+        exposure=5.0  # research reference: 20% margin * 25x
+        for a,b in zip(pivots,pivots[1:]):
+            if a["side"]==b["side"]:continue
+            side=1 if a["side"]=="LOW" else -1
+            entry=float(a.get("confirm_price") or a["price"])
+            exitp=float(b.get("confirm_price") or b["price"])
+            gross=side*(exitp/entry-1.0)
+            net=gross-self.round_trip_cost
+            before1=eq1; before_cfg=eq_cfg
+            eq1*=max(0.0,1.0+net)
+            eq_cfg*=max(0.0,1.0+exposure*net)
+            legs.append({
+                "side":side_name(side),"local_from":a["price"],"local_to":b["price"],
+                "entry_confirm_price":entry,"exit_confirm_price":exitp,
+                "entry_available_ms":a["available_ms"],"exit_available_ms":b["available_ms"],
+                "gross_return":gross,"net_return":net,
+                "equity_1x_before":before1,"equity_1x_after":eq1,
+                "equity_configured_before":before_cfg,"equity_configured_after":eq_cfg,
+            })
+        wins=sum(z["net_return"]>0 for z in legs)
+        return {
+            "bars_loaded":len(self._completed_h1(state,ts_ms)),
+            "strict_pivots":len(pivots),
+            "closed_legs":len(legs),
+            "wins":wins,
+            "win_rate":wins/len(legs) if legs else None,
+            "equity_1x":eq1,
+            "return_1x_pct":eq1-100.0,
+            "configured_exposure_x":exposure,
+            "equity_configured_reference":eq_cfg,
+            "return_configured_reference_pct":eq_cfg-100.0,
+            "reference_note":"causal H1 confirmation reference; ignores liquidation/slippage and is not a profit forecast",
+            "latest_pivots":pivots[-8:],
+            "latest_legs":legs[-8:],
+        }
+
+    def _training_progress(self):
+        local_total=sum(self.local_labels.values()); bounce_total=sum(self.bounce_labels.values())
+        local_target=len(self.local_labels)*120
+        bounce_target=len(self.bounce_labels)*120
+        exit_target=300; reentry_target=200
+        def pct(v,t):return min(100.0,100.0*float(v)/max(1,float(t)))
+        heads={
+            "local":{"labels":local_total,"target_labels":local_target,"percent":pct(local_total,local_target)},
+            "bounce":{"labels":bounce_total,"target_labels":bounce_target,"percent":pct(bounce_total,bounce_target)},
+            "exit":{"labels":self.exit_labels,"target_labels":exit_target,"percent":pct(self.exit_labels,exit_target)},
+            "reentry":{"labels":self.reentry_labels,"target_labels":reentry_target,"percent":pct(self.reentry_labels,reentry_target)},
+        }
+        overall=.40*heads["local"]["percent"]+.10*heads["bounce"]["percent"]+.25*heads["exit"]["percent"]+.25*heads["reentry"]["percent"]
+        if overall>=100:status="MODEL_MATURE"
+        elif overall>=60:status="VALIDATING"
+        elif overall>=10:status="LEARNING"
+        else:status="COLLECTING_LABELS"
+        return {"overall_percent":overall,"status":status,"heads":heads,
+                "meaning":"label-maturity progress, not guaranteed accuracy or profitability"}
 
     def _baseline_on_local(self,c,ts_ms,price):
         side=1 if c.side=="LOW" else -1
@@ -631,9 +695,11 @@ class CaterpillarQuantLearner:
         self._advance_local_labels(ts_ms,price,state)
         self._advance_exit_labels(ts_ms,price)
         self._advance_reentry_labels(ts_ms,price)
+        self.structural_history=self._structural_history_report(state,ts_ms)
         qd=self.quant.observe(ts_ms,price,x)
         events.extend(self._sync_strict_local(state,ts_ms,price,x))
-        events.extend(self._bootstrap_provisional_local(state,ts_ms,price,x))
+        # No recency-window bootstrap participates in trading policy. Candidate
+        # discovery below exists only to train earlier local recognition.
         events.extend(self._update_extremes(ts_ms,price,x,state))
         for side in ("LOW","HIGH"):
             events.extend(self._stage_candidate(self.candidates[side],ts_ms,price,x))
@@ -703,7 +769,7 @@ class CaterpillarQuantLearner:
                 else:
                     # Direction comes from the confirmed H1 local, not generic Quant.
                     # A strict already-formed local may start a research episode immediately.
-                    edge_ok=(c.source in ("STRICT_H1_CONFIRMED","PROVISIONAL_H1_EXTREME")) or (agent_same>=-.10 and (not quant_ready or quant_same))
+                    edge_ok=(c.source=="STRICT_H1_CONFIRMED")
                     re_conf=None
                 if local_conf>=.55 and edge_ok and cooldown:
                     events.extend(self._open(ts_ms,price,side,c,local_conf,qd,reentry=same_local_reentry))
@@ -803,8 +869,11 @@ class CaterpillarQuantLearner:
             "reentries":self.reentries,
             "mean_mfe_capture_ratio":statistics.fmean(captures) if captures else None,
             "median_mfe_capture_ratio":statistics.median(captures) if captures else None,
-            "local_target":"STRICT_H1_L6_K2",
-            "bootstrap_diagnostic":getattr(self,"bootstrap_diagnostic",{}),
+            "local_target":"FULL_HISTORY_STRICT_H1_L6_K2",
+            "local_policy":"LOW->LONG until confirmed HIGH; HIGH->SHORT until confirmed LOW; Caterpillar manages HOLD/EXIT/REENTRY inside the leg",
+            "bootstrap_diagnostic":{"disabled_for_policy":True,"reason":"recency-window local is training-only"},
+            "training_progress":self._training_progress(),
+            "structural_history":getattr(self,"structural_history",{}),
             "local_models":{f"{s}_{h}s":{"labels":self.local_labels[(s,h)],"positive":self.local_pos[(s,h)]}
                             for s in ("LOW","HIGH") for h in self.LOCAL_STAGES},
             "bounce_models":{f"{s}_{h}s":{"labels":self.bounce_labels[(s,h)],"positive":self.bounce_pos[(s,h)]}
@@ -817,7 +886,8 @@ class CaterpillarQuantLearner:
                 "stage":self.last_confirmed_local.confirmed_stage,
                 "source":getattr(self.last_confirmed_local,"source","LIVE_CANDIDATE"),
                 "strict_hour_ms":getattr(self.last_confirmed_local,"strict_hour_ms",None),
-                "confidence":self.last_confirmed_local.stage_conf.get(self.last_confirmed_local.confirmed_stage or 0)},
+                "confidence":self.last_confirmed_local.stage_conf.get(self.last_confirmed_local.confirmed_stage or 0),
+                "evidence":getattr(self.last_confirmed_local,"evidence",{})},
             "quant":self.quant.report(),
             "policy_state":"IN_POSITION" if self.position else ("WAIT_REENTRY" if self.last_exit and self.last_confirmed_local and self.last_exit.get("local_id")==self.last_confirmed_local.ident else "WAIT_ENTRY"),
             "censored":self.censored,"censored_positions":self.censored_positions,
