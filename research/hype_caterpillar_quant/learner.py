@@ -167,6 +167,10 @@ class CaterpillarQuantLearner:
         self._ensure_fib()
 
     def _ensure_fib(self):
+        if not hasattr(self,"prediction_checks") or not isinstance(self.prediction_checks,dict):
+            self.prediction_checks={}
+        if not hasattr(self,"prediction_errors") or not isinstance(self.prediction_errors,dict):
+            self.prediction_errors={}
         if not hasattr(self,"fib_models"):
             self.fib_models={}
         if not hasattr(self,"fib_labels"):
@@ -912,6 +916,15 @@ class CaterpillarQuantLearner:
         self._advance_fib_labels(ts_ms,price)
         self.structural_history=self._structural_history_report(state,ts_ms)
         fib=self._fib_snapshot(state,ts_ms,price)
+        self.current_fib={
+            "available":bool(fib.get("available")),
+            "trend_side":fib.get("trend_side"),
+            "swing_from":fib.get("swing_from"),"swing_to":fib.get("swing_to"),
+            "retrace_fraction":fib.get("retrace_fraction"),
+            "extension_fraction":fib.get("extension_fraction"),
+            "closest":fib.get("closest"),
+            "levels":fib.get("levels") or [],
+        }
         if fib.get("available"):
             x=dict(x);x.update(fib.get("features") or {})
         qd=self.quant.observe(ts_ms,price,x)
@@ -1103,8 +1116,7 @@ class CaterpillarQuantLearner:
                             for s in ("LOW","HIGH") for h in self.LOCAL_STAGES},
             "exit_model":{"labels":self.exit_labels,"exit_positive":self.exit_pos},
             "reentry_model":{"labels":self.reentry_labels,"reentry_positive":self.reentry_pos},
-            "fibonacci":{**self._fib_report(),
-                         "current":(self._fib_snapshot_for_report() if hasattr(self,"_fib_snapshot_for_report") else None)},
+            "fibonacci":{**self._fib_report(),"current":getattr(self,"current_fib",None)},
             "active_local":None if self.last_confirmed_local is None else {
                 "id":self.last_confirmed_local.ident,"side":self.last_confirmed_local.side,
                 "price":self.last_confirmed_local.extreme_price,
