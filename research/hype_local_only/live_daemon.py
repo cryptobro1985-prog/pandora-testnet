@@ -75,6 +75,24 @@ def strict_label(state,p,ts_ms):
 def append_jsonl(path,obj):
     with path.open("a",encoding="utf-8") as f:f.write(json.dumps(obj,separators=(",",":"),ensure_ascii=False)+"\n")
 
+def publish_monitor(status):
+    url=os.getenv("LOCAL_ONLY_MONITOR_URL","").strip()
+    if not url:return
+    payload=dict(status)
+    payload["mode"]="LOCAL_ONLY"
+    payload["local_target"]="FULL_HISTORY_STRICT_H1_L6_K2"
+    payload["github_run_id"]=os.getenv("GITHUB_RUN_ID")
+    payload["github_sha"]=os.getenv("GITHUB_SHA")
+    payload["research_only"]=True
+    payload["real_orders"]=False
+    try:
+        r=requests.post(url,
+            headers={"X-Caterpillar-Research":"1","User-Agent":"pandora-hype-local-only/1.0"},
+            json=payload,timeout=6)
+        r.raise_for_status()
+    except Exception:
+        pass
+
 def publish_issue(status):
     token=os.getenv("GITHUB_TOKEN")
     if not token:return
@@ -129,7 +147,7 @@ def main():
     lablog=args.checkpoint_dir/"LOCAL_LIVE_LABELS.jsonl";lablog.touch(exist_ok=True)
     status_path=args.checkpoint_dir/"LOCAL_ONLY_STATUS.json"
     deadline=time.time()+args.minutes*60
-    last_seen=state.last_ts_ms;next_sample=next_save=next_issue=0;status={}
+    last_seen=state.last_ts_ms;next_sample=next_save=next_issue=next_monitor=0;status={}
 
     while time.time()<deadline and not stop:
         events=[]
@@ -265,9 +283,20 @@ def main():
                 "h1_baseline":model.h1_shadow,
                 "h1_training":{"labels":model.h1_labels,"positive":model.h1_positive},
                 "seen_input_count":cov.get("seen_input_count"),"feature_contract":cov,
-                "last_signal":model.last_signal,"cortex_state":"RELATIONSHIP_MEMORY_READY",
+                "last_signal":model.last_signal,
+                "mode":"LOCAL_ONLY","local_target":"FULL_HISTORY_STRICT_H1_L6_K2",
+                "github_run_id":os.getenv("GITHUB_RUN_ID"),"github_sha":os.getenv("GITHUB_SHA"),
+                "cortex_state":"RELATIONSHIP_MEMORY_READY",
+                "cortex":{},
                 "research_only":True,"real_orders":False
             }
+            cortex_path=args.checkpoint_dir/"CORTEX_LOCAL_ONLY_STATUS.json"
+            if cortex_path.exists():
+                try:
+                    status["cortex"]=json.loads(cortex_path.read_text(encoding="utf-8"))
+                    status["cortex_state"]=status["cortex"].get("state","RELATIONSHIP_MEMORY_READY")
+                except Exception:
+                    pass
 
         now=time.time()
         if now>=next_save:
@@ -277,6 +306,8 @@ def main():
                 "latest_by_hour":latest_by_hour})
             if status:status_path.write_text(json.dumps(status,indent=2)+"\n")
             next_save=now+30
+        if now>=next_monitor and status:
+            publish_monitor(status);next_monitor=now+10
         if now>=next_issue and status:
             publish_issue(status);next_issue=now+30
         if not events:time.sleep(.5)
@@ -286,7 +317,7 @@ def main():
         "expected_side":expected,"last_teacher_local":last_teacher,
         "latest_by_hour":latest_by_hour})
     if status:
-        status_path.write_text(json.dumps(status,indent=2)+"\n");publish_issue(status)
+        status_path.write_text(json.dumps(status,indent=2)+"\n");publish_monitor(status);publish_issue(status)
     print("LOCAL_ONLY="+json.dumps(status,separators=(",",":"),ensure_ascii=False),flush=True)
 
 if __name__=="__main__":main()
