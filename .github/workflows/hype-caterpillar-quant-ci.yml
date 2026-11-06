@@ -34,6 +34,10 @@ jobs:
           q=new_from_config(Path("research/hype_quant/config.json"))
           assert q.report()["version"]=="caterpillar-quant-v2"
           assert len(q.local_models)==6
+          assert len(q.fib_models)==24
+          fr=q._fib_report()
+          assert fr["enabled"] is True
+          assert set(fr["levels"])=={"R0.236","R0.382","R0.500","R0.618","R0.786","R1.000","E1.272","E1.618"}
           assert q.position is None
-          print("CATERPILLAR_QUANT_CI=ok")
+          print("CATERPILLAR_QUANT_CI=ok fib_heads=24")
           PY
