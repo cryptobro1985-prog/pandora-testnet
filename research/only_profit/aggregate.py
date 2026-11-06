@@ -19,6 +19,7 @@ def main():
     all_top.sort(key=lambda p:p[1].get("search_score",-999),reverse=True)
     sanity=[(f,z) for f,z in all_top if z.get("sanity_pass")]
     provisional=[(f,z) for f,z in sanity if z.get("provisional_50pct_daily")]
+    zero_loss=[(f,z) for f,z in sanity if z.get("zero_loss_target")]
     best=all_top[0] if all_top else (None,None)
     best_sanity=sanity[0] if sanity else (None,None)
     state={"round":args.round,"families":{}}
@@ -30,6 +31,7 @@ def main():
       "candidate_top_count":len(all_top),
       "sanity_pass_count":len(sanity),
       "provisional_50pct_daily_count":len(provisional),
+      "zero_loss_target_count":len(zero_loss),
       "best_family":best[0],"best":best[1],
       "best_sanity_family":best_sanity[0],"best_sanity":best_sanity[1],
       "target_daily_return":0.50,
@@ -44,7 +46,7 @@ def main():
         f,z=provisional[0]
         (args.output/"PROVISIONAL_CHAMPION.json").write_text(json.dumps({"family":f,**z},indent=2,sort_keys=True,allow_nan=False)+"\n")
     print("ONLY_PROFIT_AGG="+json.dumps({
-      "round":args.round,"families":len(fam),"sanity":len(sanity),"provisional50":len(provisional),
+      "round":args.round,"families":len(fam),"sanity":len(sanity),"provisional50":len(provisional),"zero_loss":len(zero_loss),
       "best_family":best[0],"best_score":None if best[1] is None else best[1].get("search_score"),
       "target_status":summary["target_status"]},separators=(",",":")))
 
