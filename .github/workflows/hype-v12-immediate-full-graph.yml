@@ -11,8 +11,6 @@ on:
       - "research/hype_quant/astra_cortex.py"
       - "research/hype_quant/start_local_cortex.sh"
       - "research/hype_caterpillar_quant/live_daemon.py"
-      - "research/hype_caterpillar_quant/learner.py"
-      - "research/hype_caterpillar_quant/test_self.py"
       - "research/hype_caterpillar_quant/strategy_lab.py"
       - "research/hype_local_v5/capture_pack_segment.sh"
   workflow_dispatch:
