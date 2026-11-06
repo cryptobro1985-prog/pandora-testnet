@@ -5,6 +5,7 @@ from collections import defaultdict
 from datetime import datetime,timezone
 from pathlib import Path
 from research.hype_local_only.model import LocalOnlyModel,STAGES,clean
+from research.hype_local_v5.labels import completed_hours
 
 TRAIN_END=int(datetime(2026,10,23,tzinfo=timezone.utc).timestamp()*1000)
 OOS_START=int(datetime(2026,10,27,tzinfo=timezone.utc).timestamp()*1000)
@@ -34,17 +35,44 @@ def stats(rows,probs,threshold):
             "recall":tp/(tp+fn) if tp+fn else None,
             "accuracy":(tp+tn)/n if n else None}
 
-def choose_threshold(rows,probs):
-    best=(None,0.5)
-    for i in range(20,86):
+def choose_threshold(rows,probs,stage=300):
+    """Validation-only threshold selection, precision first with a recall floor."""
+    recall_floor={60:.50,180:.40,300:.30}.get(int(stage),.30)
+    ranked=[]
+    for i in range(20,91):
         th=i/100
         m=stats(rows,probs,th)
-        p=m["precision"] or 0;r=m["recall"] or 0
-        # Precision matters, but a detector that never catches the local is useless.
-        score=.58*p+.42*r
-        if m["tp"]<2:score-=1
-        if best[0] is None or score>best[0]:best=(score,th)
-    return best[1]
+        p=m["precision"] or 0.0;r=m["recall"] or 0.0
+        predicted=m["tp"]+m["fp"]
+        viable=(m["tp"]>=2 and predicted>=3 and r>=recall_floor)
+        ranked.append(((1 if viable else 0,p,r,m["accuracy"] or 0.0,th),th,m))
+    ranked.sort(key=lambda z:z[0],reverse=True)
+    return ranked[0][1] if ranked else .5
+
+def binary_stats(labels,probs,threshold):
+    rows=[{"strict_true":bool(y)} for y in labels]
+    return stats(rows,probs,threshold)
+
+def load_json_gz(path):
+    with gzip.open(path,"rt",encoding="utf-8") as f:return json.load(f)
+
+def build_h1_examples(model,compact_path,labels_path):
+    mins=list(load(compact_path))
+    hours=completed_hours(mins)
+    labels=load_json_gz(labels_path).get("strict") or []
+    true={side:set(int(x["hour_ms"]) for x in labels if x.get("side")==side)
+          for side in ("LOW","HIGH")}
+    out={"LOW":[],"HIGH":[]}
+    for i in range(6,max(6,len(hours)-2)):
+        window=hours[i-6:i+3]
+        if len(window)!=9:continue
+        if any(int(b["start_ms"])!=int(a["ts_ms"]) for a,b in zip(window,window[1:])):continue
+        hour=int(hours[i]["start_ms"])
+        for side in ("LOW","HIGH"):
+            x=model._h1_features(hours,i,side)
+            if x:
+                out[side].append({"hour_ms":hour,"features":x,"strict_true":hour in true[side]})
+    return out
 
 def feature_effects(rows):
     names=sorted({k for r in rows for k in (r.get("features") or {})})
@@ -88,6 +116,8 @@ def main():
     ap.add_argument("--model-out",type=Path,required=True)
     ap.add_argument("--memory-out",type=Path,required=True)
     ap.add_argument("--report-out",type=Path,required=True)
+    ap.add_argument("--compact-1m",type=Path)
+    ap.add_argument("--labels-gz",type=Path)
     args=ap.parse_args()
 
     rows=[r for r in load(args.snapshots)
@@ -115,7 +145,7 @@ def main():
             temp.learn(side,stage,r["features"],r["strict_true"],
                        repeat=(pos_repeat if r["strict_true"] else 1))
         vp=[temp.probability(side,stage,r["features"]) for r in valid]
-        th=choose_threshold(valid,vp) if valid else .5
+        th=choose_threshold(valid,vp,stage) if valid else .5
         op=[temp.probability(side,stage,r["features"]) for r in oos]
         model.thresholds[(side,stage)]=th
         report["heads"][key]={
@@ -134,6 +164,49 @@ def main():
             "true_examples":sum(bool(r["strict_true"]) for r in rr),
         }
 
+    # Full-hour baseline: every matured H1 hour is a supervised example, not
+    # only the rare 6h-extreme candidate snapshots.
+    if args.compact_1m and args.labels_gz:
+        h1=build_h1_examples(model,args.compact_1m,args.labels_gz)
+        report["h1_heads"]={};memory["h1_heads"]={}
+        for side in ("LOW","HIGH"):
+            rr=h1[side]
+            train=[r for r in rr if r["hour_ms"]<TRAIN_END]
+            valid=[r for r in rr if TRAIN_END<=r["hour_ms"]<OOS_START]
+            oos=[r for r in rr if r["hour_ms"]>=OOS_START]
+            pos=sum(bool(r["strict_true"]) for r in train);neg=max(0,len(train)-pos)
+            repeat=max(1,min(8,round(neg/max(1,pos))))
+            temp=LocalOnlyModel()
+            for r in train:
+                for _ in range(repeat if r["strict_true"] else 1):
+                    temp.h1_models[side].learn_one(clean(r["features"]),bool(r["strict_true"]))
+            vp=[float(temp.h1_models[side].predict_proba_one(clean(r["features"])).get(True,.5)) for r in valid]
+            th=choose_threshold(valid,vp,300) if valid else .5
+            op=[float(temp.h1_models[side].predict_proba_one(clean(r["features"])).get(True,.5)) for r in oos]
+            tp=[float(temp.h1_models[side].predict_proba_one(clean(r["features"])).get(True,.5)) for r in train]
+            model.h1_thresholds[side]=th
+            report["h1_heads"][side]={
+                "train":binary_stats([r["strict_true"] for r in train],tp,th),
+                "validation":binary_stats([r["strict_true"] for r in valid],vp,th),
+                "oos":binary_stats([r["strict_true"] for r in oos],op,th),
+                "threshold":th,"positive_oversample_repeat":repeat,
+                "examples":len(rr),"positives":sum(bool(r["strict_true"]) for r in rr),
+            }
+            fx=feature_effects(rr)
+            memory["h1_heads"][side]={
+                "baseline_positive_rate":sum(bool(r["strict_true"]) for r in rr)/max(1,len(rr)),
+                "top_feature_relationships":fx[:50],
+                "top_pair_relationships":pairwise(rr,fx),
+                "true_examples":sum(bool(r["strict_true"]) for r in rr),
+                "false_examples":sum(not bool(r["strict_true"]) for r in rr),
+            }
+            for r in rr:
+                for _ in range(repeat if r["strict_true"] else 1):
+                    model.h1_models[side].learn_one(clean(r["features"]),bool(r["strict_true"]))
+                model.h1_labels[side]+=1
+                model.h1_positive[side]+=int(bool(r["strict_true"]))
+            if rr:model.h1_last_trained_hour_ms=max(r["hour_ms"] for r in rr)
+
     # After honest OOS evaluation, final production research model consumes all 30d labels.
     for r in rows:
         key=(r["side"],int(r["delay_s"]))
@@ -146,6 +219,7 @@ def main():
         "teacher":"strict_true",
         "train_end":"2026-10-23","oos_start":"2026-10-27",
         "missing_historical_sources":"availability-aware; never imputed",
+        "h1_full_history_pretrained":bool(args.compact_1m and args.labels_gz),
     }
     model.relationship_memory=memory
     args.model_out.parent.mkdir(parents=True,exist_ok=True)
@@ -156,7 +230,8 @@ def main():
     print("LOCAL_ONLY_HISTORY="+json.dumps({
         "rows":len(rows),
         "labels":sum(model.labels.values()),
-        "heads":{k:{"threshold":v["threshold"],"oos":v["oos"]} for k,v in report["heads"].items()}
+        "heads":{k:{"threshold":v["threshold"],"oos":v["oos"]} for k,v in report["heads"].items()},
+        "h1_heads":{k:{"threshold":v["threshold"],"oos":v["oos"]} for k,v in report.get("h1_heads",{}).items()}
     },separators=(",",":")))
 
 if __name__=="__main__":main()
