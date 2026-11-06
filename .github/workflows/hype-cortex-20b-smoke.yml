@@ -1,0 +1,72 @@
+name: HYPE Cortex 20B Smoke
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/hype_quant/astra_cortex.py"
+      - "research/hype_quant/start_local_cortex.sh"
+      - ".github/workflows/hype-cortex-20b-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hype-cortex-20b-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CORTEX_PORT: "8081"
+      CORTEX_CTX_SIZE: "4096"
+      CORTEX_THREADS: "4"
+      CORTEX_HF_MODEL: "ggml-org/gpt-oss-20b-GGUF:MXFP4"
+      CORTEX_BACKEND: "local_llama"
+      CORTEX_LOCAL_URL: "http://127.0.0.1:8081"
+      ASTRA_CORTEX_MODEL: "gpt-oss-20b-local"
+      ASTRA_CORTEX_REASONING_EFFORT: "high"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Runner capacity
+        run: |
+          free -h
+          df -h /
+      - name: Start local gpt-oss-20b
+        run: bash research/hype_quant/start_local_cortex.sh
+      - name: Verify real local reasoning response
+        run: |
+          python - <<'PY'
+          import json, urllib.request
+          payload={
+            "model":"gpt-oss-20b-local",
+            "messages":[
+              {"role":"system","content":"Reasoning: high. Return only compact JSON. Do not reveal chain-of-thought."},
+              {"role":"user","content":"Market state: confirmed H1 LOW; buy flow positive but price response weak; ask absorption rising; OI rising. Compare LONG SHORT WAIT. Return {\"decision\":\"WAIT|ENTER_LONG|ENTER_SHORT\",\"confidence\":0.0,\"thesis\":\"short\"}."}
+            ],
+            "temperature":0.1,
+            "max_tokens":180,
+            "response_format":{"type":"json_object"}
+          }
+          req=urllib.request.Request(
+            "http://127.0.0.1:8081/v1/chat/completions",
+            data=json.dumps(payload).encode(),
+            headers={"Content-Type":"application/json"},
+          )
+          with urllib.request.urlopen(req,timeout=180) as r:
+              obj=json.load(r)
+          msg=obj["choices"][0]["message"]
+          print("CORTEX20B_SMOKE_RESPONSE="+str(msg.get("content"))[:1200])
+          assert msg.get("content")
+          print("CORTEX20B_SMOKE=ok")
+          PY
+      - name: Diagnostics
+        if: always()
+        run: |
+          free -h || true
+          df -h / || true
+          tail -n 120 /tmp/cortex20b.log || true
