@@ -18,19 +18,26 @@ jobs:
       - name: Force cancel superseded collector until stopped
         env:
           GH_TOKEN: ${{ github.token }}
-          TARGET_RUN: "42202173826"
+          TARGET_RUNS: "42202414617 42202707513"
         run: |
           set -euo pipefail
           for attempt in $(seq 1 20); do
+            for TARGET_RUN in ${TARGET_RUNS}; do
             status=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${TARGET_RUN}" --jq .status || echo unknown)
             echo "attempt=${attempt} status=${status}"
             if [ "${status}" = "completed" ]; then
-              exit 0
+              echo "already_completed=${TARGET_RUN}"
+              continue
             fi
             gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/${TARGET_RUN}/cancel" || true
             gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/${TARGET_RUN}/force-cancel" || true
             sleep 3
           done
-          status=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${TARGET_RUN}" --jq .status || echo unknown)
-          echo "final_status=${status}"
-          test "${status}" = "completed"
+          done
+          all_done=1
+          for TARGET_RUN in ${TARGET_RUNS}; do
+            status=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${TARGET_RUN}" --jq .status || echo unknown)
+            echo "final_run=${TARGET_RUN} status=${status}"
+            [ "${status}" = "completed" ] || all_done=0
+          done
+          test "${all_done}" = "1"
