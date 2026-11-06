@@ -461,17 +461,30 @@ class CaterpillarQuantLearner:
                 candidate_hour_ms=hour,strict_mature_ts_ms=hour+3*3_600_000,
                 bounce_mature_ts_ms=ts_ms+self.BOUNCE_FUTURE_S*1000))
             accepted=conf>=({60:.55,180:.58,300:.60}[stage]) and retr>0
+            policy_promoted=False
             if accepted:
                 first_accept=c.confirmed_stage is None
                 c.confirmed_stage=stage
-                self.last_confirmed_local=c
-                if first_accept:
-                    if not getattr(c,"source",None):c.source="LIVE_CANDIDATE"
-                    self._baseline_on_local(c,ts_ms,price)
+                current=self.last_confirmed_local
+                # A short-window restart bootstrap is only a candidate/teacher.
+                # It must never replace a structural H1 pivot already confirmed
+                # from the full loaded H1 history.
+                blocks_structural=(
+                    c.source=="PROVISIONAL_H1_EXTREME"
+                    and current is not None
+                    and getattr(current,"source",None)=="STRICT_H1_CONFIRMED"
+                )
+                if not blocks_structural:
+                    self.last_confirmed_local=c
+                    policy_promoted=True
+                    if first_accept:
+                        if not getattr(c,"source",None):c.source="LIVE_CANDIDATE"
+                        self._baseline_on_local(c,ts_ms,price)
             events.append({"event":"LOCAL_STAGE","side":c.side,"candidate_id":c.ident,"stage_s":stage,
                            "confidence":conf,"strict_model_p":p,"bounce_model_p":bp,
                            "heuristic":heuristic,"retrace_bps":retr,
-                           "accepted":accepted,"strict_labels_seen":labels,
+                           "accepted":accepted,"policy_promoted":policy_promoted,
+                           "strict_labels_seen":labels,
                            "bounce_labels_seen":self.bounce_labels[(c.side,stage)]})
         return events
 
