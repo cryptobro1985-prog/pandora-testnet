@@ -107,7 +107,7 @@ def fetch():
         out["ticker"]=ticker; out["sources"]["ticker"]=base
 
         candle_raw={}
-        for interval,limit in (("1",480),("3",240),("5",180),("60",72)):
+        for interval,limit in (("1",480),("3",240),("5",180),("60",1000)):
             obj,base=request_json("/v5/market/kline",{"category":"linear","symbol":SYMBOL,"interval":interval,"limit":limit})
             raw=obj.get("result",{}).get("list",[])
             candle_raw[interval]=raw
