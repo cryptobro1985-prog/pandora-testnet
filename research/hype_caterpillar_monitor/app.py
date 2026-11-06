@@ -253,6 +253,17 @@ def ingest():
         _cache["preferred_run_id"]=max(preferred,run_int)
     now=time.time()
     _cache.update(ts=now,data=data,source="direct",ingest_ts=now)
+    try:
+        dp=data.get("direct_policy") or {}
+        last=dp.get("last_decision") or {}
+        app.logger.info(
+            "INGEST_ACCEPT run=%s sha=%s policy=%s action=%s direct_labels=%s",
+            run_id,sha[:8],data.get("policy_contract_version"),
+            last.get("action"),
+            ((data.get("training_progress") or {}).get("heads") or {}).get("direct_policy",{}).get("labels"),
+        )
+    except Exception:
+        pass
     return jsonify({"ok":True,"received_ts_ms":int(now*1000)})
 
 @app.get("/healthz")
