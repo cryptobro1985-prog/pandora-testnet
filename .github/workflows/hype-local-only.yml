@@ -175,6 +175,8 @@ jobs:
         run: |
           python -m research.hype_local_only.train_history \
             --snapshots history30/candidate_snapshots.jsonl.gz \
+            --compact-1m history30/compact_1m.jsonl.gz \
+            --labels-gz history30/labels.json.gz \
             --model-out local_cp/local_only_model.pkl \
             --memory-out local_cp/LOCAL_RELATIONSHIP_MEMORY.json \
             --report-out local_cp/HISTORICAL_TRAINING_REPORT.json
