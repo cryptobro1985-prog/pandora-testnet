@@ -1,7 +1,7 @@
 name: HYPE v6 12h Research Material
 # compact-110-v4-fixed-pack
 # 2026-11-06-local-low-restart
-# caterpillar-quant-v7-local-caterpillar-live
+# caterpillar-quant-v8-min-hold-gated-exit
 
 on:
   push:
