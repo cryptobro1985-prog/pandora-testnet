@@ -26,6 +26,7 @@ class Candidate:
     probabilities:dict[int,float]=field(default_factory=dict)
     stages_done:set[int]=field(default_factory=set)
     invalidated:bool=False
+    evidence:dict[str,Any]=field(default_factory=dict)
 
 class LocalOnlyModel:
     VERSION="HYPE-LOCAL-ONLY-v1"
