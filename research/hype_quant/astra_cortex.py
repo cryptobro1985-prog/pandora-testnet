@@ -176,6 +176,49 @@ class AstraCortex:
         interval=self.urgent_interval_s if self._urgent(features,base_decision,base_report) else self.normal_interval_s
         return elapsed>=interval
 
+    def _session_stats(self):
+        buckets={}
+        for e in self.episodes:
+            key=str(e.get("us_session") or "UNKNOWN")
+            b=buckets.setdefault(key,{"matured":0,"directional_checks":0,"directional_correct":0,
+                                      "net_sum":0.0,"abs_return_sum":0.0,"range_sum":0.0})
+            b["matured"]+=1
+            b["abs_return_sum"]+=abs(float(e.get("future_return") or 0.0))
+            b["range_sum"]+=float(e.get("max_up") or 0.0)+float(e.get("max_down") or 0.0)
+            if e.get("success") is not None:
+                b["directional_checks"]+=1
+                b["directional_correct"]+=int(bool(e.get("success")))
+                b["net_sum"]+=float(e.get("directional_net") or 0.0)
+        out={}
+        for k,b in buckets.items():
+            n=max(1,b["matured"]);d=b["directional_checks"]
+            out[k]={"matured":b["matured"],"directional_checks":d,
+                    "directional_accuracy":b["directional_correct"]/d if d else None,
+                    "mean_directional_net":b["net_sum"]/d if d else None,
+                    "mean_abs_return":b["abs_return_sum"]/n,
+                    "mean_path_range":b["range_sum"]/n}
+        return out
+
+    def _training_progress(self,now_ms=None):
+        now_ms=int(now_ms or time.time()*1000)
+        elapsed_h=max(0.0,(now_ms-int(self.sprint_started_ts_ms or now_ms))/3_600_000.0)
+        elapsed_pct=min(100.0,100.0*elapsed_h/self.sprint_hours)
+        evidence_pct=min(100.0,100.0*self.matured_episodes/self.training_target_matured)
+        decision_pct=min(100.0,100.0*self.calls/self.training_target_decisions)
+        overall=min(100.0,.35*elapsed_pct+.45*evidence_pct+.20*decision_pct)
+        if elapsed_pct>=100 and evidence_pct>=100:state="24H_EVIDENCE_READY"
+        elif overall>=60:state="VALIDATING"
+        elif overall>=10:state="LEARNING"
+        else:state="WARMING_UP"
+        return {"overall_percent":overall,"elapsed_percent":elapsed_pct,
+                "evidence_percent":evidence_pct,"decision_percent":decision_pct,
+                "elapsed_hours":elapsed_h,"target_hours":self.sprint_hours,
+                "matured_episodes":self.matured_episodes,
+                "target_matured_episodes":self.training_target_matured,
+                "decisions":self.calls,"target_decisions":self.training_target_decisions,
+                "status":state,
+                "meaning":"24h evidence maturity; not guaranteed accuracy or profitability"}
+
     def _advance_pending(self,ts_ms,price):
         keep=[]
         for p in self.pending:
@@ -196,7 +239,7 @@ class AstraCortex:
                     self.directional_correct+=int(success)
                     self.net_returns.append(net)
                 episode={"decision_ts_ms":p["ts_ms"],"mature_ts_ms":ts_ms,"horizon_s":h,
-                         "decision":decision,"confidence":p.get("confidence"),
+                         "us_session":p.get("us_session"),"decision":decision,"confidence":p.get("confidence"),
                          "entry_price":p["price"],"close_price":price,"future_return":ret,
                          "max_up":float(p["high"])/float(p["price"])-1.0,
                          "max_down":1.0-float(p["low"])/float(p["price"]),
@@ -205,7 +248,7 @@ class AstraCortex:
                 self.episodes.append(episode); self.episodes=self.episodes[-200:]
                 self.matured_episodes+=1
                 self.last_critique={"decision":decision,"horizon_s":h,"success":success,
-                    "future_return":ret,
+                    "us_session":p.get("us_session"),"future_return":ret,
                     "lesson":("Directional thesis was confirmed after modeled cost." if success is True
                               else "Directional thesis failed after modeled cost; reduce weight on this state." if success is False
                               else "Non-directional decision matured; retain as context, not an accuracy check.")}
@@ -215,7 +258,8 @@ class AstraCortex:
         self.pending=keep
 
     def _memory_for_prompt(self):
-        return [{"horizon_s":e.get("horizon_s"),"decision":e.get("decision"),
+        return [{"horizon_s":e.get("horizon_s"),"us_session":e.get("us_session"),
+                 "decision":e.get("decision"),
                  "confidence":e.get("confidence"),"future_return":e.get("future_return"),
                  "directional_net":e.get("directional_net"),"success":e.get("success")}
                 for e in self.episodes[-18:]]
