@@ -1,0 +1,91 @@
+name: Preserve HYPE 24h Full 116 Research
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-preserve-24h-full116.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  preserve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download two completed 12h HYPE packs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p preserved/calibration preserved/holdout
+          fetch_artifact() {
+            local id="$1"; local dest="$2"
+            mkdir -p "$dest"
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$id/zip" > "$dest/artifact.zip"
+            unzip -q "$dest/artifact.zip" -d "$dest/package"
+            rm "$dest/artifact.zip"
+            test -f "$dest/package/PACK_MANIFEST.json"
+            test -f "$dest/package/SCHEMA_110.json"
+            test -f "$dest/package/PACK_MODE.txt"
+            python research/hype_local_v5/decode_compact.py "$dest/package" --verify
+          }
+
+          # Canonical completed 12h run 41972340463.
+          fetch_artifact 13397539131 preserved/calibration/segment_1
+          fetch_artifact 13408382406 preserved/calibration/segment_2
+          fetch_artifact 13418992824 preserved/calibration/segment_3
+          fetch_artifact 13434596251 preserved/calibration/segment_4
+
+          # Independent completed 12h run 41972154657.
+          fetch_artifact 13424674035 preserved/holdout/segment_1
+          fetch_artifact 13437804738 preserved/holdout/segment_2
+          fetch_artifact 13451001041 preserved/holdout/segment_3
+          fetch_artifact 13462480997 preserved/holdout/segment_4
+
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          root=Path("preserved")
+          rows=[]
+          for phase in ("calibration","holdout"):
+              for seg in sorted((root/phase).glob("segment_*")):
+                  pkg=seg/"package"
+                  m=json.loads((pkg/"PACK_MANIFEST.json").read_text())
+                  rows.append({
+                      "phase":phase,
+                      "segment":seg.name,
+                      "format":m.get("format_version"),
+                      "schema":m.get("schema_version"),
+                      "source_bytes":m.get("source_bytes"),
+                      "packed_bytes":m.get("packed_bytes"),
+                      "all_110_supported":m.get("all_110_supported"),
+                      "canonical_point_count":m.get("canonical_point_count"),
+                      "extra_point_count":m.get("extra_point_count"),
+                  })
+          out={
+              "research_only":True,
+              "symbol":"HYPEUSDT",
+              "contract":"110 canonical + extras 111-116",
+              "calibration_source_run":41972340463,
+              "holdout_source_run":41972154657,
+              "segments":rows,
+              "anti_leakage":"calibration may tune; holdout must not tune",
+          }
+          (root/"ONLY_PROFIT_24H_DATASET.json").write_text(json.dumps(out,indent=2)+"\n")
+          print(json.dumps(out))
+          PY
+      - name: Upload durable 24h full-116 research base
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-ONLY-PROFIT-24H-FULL116
+          path: preserved/**
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
