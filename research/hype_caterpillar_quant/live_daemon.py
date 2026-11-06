@@ -10,6 +10,7 @@ from research.hype_quant.agents import augment_with_agents
 from research.hype_quant.astra_cortex import AstraCortex,AstraPaperBook
 from research.hype_quant.live_daemon import Tailer,event_ts,append_jsonl
 from .learner import CaterpillarQuantLearner,new_from_config
+from .strategy_lab import ThreeStrategyLab
 
 def load_state(path):
     if path.exists():
@@ -104,6 +105,7 @@ def compact_status(report):
         "policy_contract_version":report.get("policy_contract_version"),
         "legacy_paper_archive":report.get("legacy_paper_archive"),
         "runtime_concurrency":report.get("runtime_concurrency") or {},
+        "strategy_lab":report.get("strategy_lab") or {},
         "research_only":True,"real_orders":False,
         "github_run_id":os.environ.get("GITHUB_RUN_ID"),"github_sha":os.environ.get("GITHUB_SHA"),
     }
@@ -154,6 +156,7 @@ def publish_issue(report):
         f"**CORTEX 24h:** {((status.get('astra') or {}).get('training_progress') or {}).get('overall_percent','—')}% · session {(status.get('astra') or {}).get('current_us_session','—')} · matured {(status.get('astra') or {}).get('matured_episodes',0)}  ",
         f"**CORTEX PAPER:** equity {(status.get('astra_paper') or {}).get('equity')} · return {(status.get('astra_paper') or {}).get('return_pct')}% · delta vs Quant {status.get('astra_vs_quant_delta_pct')} pp  ",
         f"**Fibonacci:** training {(status.get('fibonacci') or {}).get('training_percent','—')}% · pending {(status.get('fibonacci') or {}).get('pending',0)} · closest {(((status.get('fibonacci') or {}).get('current') or {}).get('closest') or {}).get('name','—')}  ",
+        f"**3-Strategy Lab:** {((status.get('strategy_lab') or {}).get('progress_percent','—'))}% / 24h · leader {((status.get('strategy_lab') or {}).get('leader','—'))} · evidence {((status.get('strategy_lab') or {}).get('evidence_quality','—'))}  ",
         "",fence+"json",json.dumps(status,separators=(',',':'),ensure_ascii=False),fence,
     ]
     try:
@@ -186,6 +189,10 @@ def main():
     actions.touch(exist_ok=True);gaps.touch(exist_ok=True);astra_actions.touch(exist_ok=True)
     cortex=AstraCortex(args.checkpoint_dir)
     astra_book=AstraPaperBook(args.checkpoint_dir,learner.round_trip_cost)
+    strategy_lab=ThreeStrategyLab(
+        args.checkpoint_dir,learner.round_trip_cost,
+        float(os.getenv("STRATEGY_LAB_EXPOSURE_X","5.0"))
+    )
     astra_pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix="cortex-20b")
     io_pool=ThreadPoolExecutor(max_workers=3,thread_name_prefix="quant-io")
     astra_future=None
@@ -222,6 +229,7 @@ def main():
                 gap=(ts-last_seen_ts)/1000.0
                 append_jsonl(gaps,{"from_ts_ms":last_seen_ts,"to_ts_ms":ts,"gap_seconds":gap})
                 learner.on_gap(ts,"MICRO_GAP")
+                strategy_lab.on_gap(ts,"MICRO_GAP")
                 state.prices.clear()
             last_seen_ts=ts
             try:
@@ -235,6 +243,8 @@ def main():
             next_sample_ms=ts+sample_ms
             decision=learner.observe(ts,price,x,state)
             sampled+=1
+            base_report=learner.report()
+            strategy_lab.observe(ts,price,base_report,decision)
             astra_book.mark(ts,price)
             if astra_future is not None and astra_future.done():
                 try:
@@ -254,7 +264,6 @@ def main():
                 except Exception as exc:
                     append_jsonl(astra_actions,{"ts_ms":ts,"worker_error":repr(exc)})
                 astra_future=None
-            base_report=learner.report()
             if astra_future is None and cortex.due(ts,x,decision,base_report):
                 astra_future=astra_pool.submit(
                     cortex.observe,ts,price,dict(x),decision,base_report,learner.round_trip_cost
@@ -263,7 +272,7 @@ def main():
 
         now=time.time()
         if now>=next_save:
-            learner.save(cp);save_state(state,fs_path)
+            learner.save(cp);save_state(state,fs_path);strategy_lab.save()
             report=learner.report()
             report.update({
                 "processed_micro_rows":processed_micro,"sampled_states":sampled,
@@ -273,6 +282,7 @@ def main():
                 "research_only":True,"real_orders":False,
             })
             report=enrich_astra(report,cortex,astra_book)
+            report["strategy_lab"]=strategy_lab.report()
             (args.checkpoint_dir/"CATERPILLAR_QUANT_REPORT.json").write_text(json.dumps(report,indent=2)+"\n")
             next_save=now+60
         if now>=next_monitor:
@@ -283,6 +293,7 @@ def main():
                            "runtime_concurrency":{"quant_loop":1,"cortex_workers":1,"cortex_cpu_threads":int(os.getenv("CORTEX_THREADS","4")),"io_workers":3},
                            "research_only":True,"real_orders":False})
             report=enrich_astra(report,cortex,astra_book)
+            report["strategy_lab"]=strategy_lab.report()
             io_pool.submit(publish_monitor,report)
             next_monitor=now+10
         if now>=next_issue:
@@ -293,11 +304,12 @@ def main():
                            "runtime_concurrency":{"quant_loop":1,"cortex_workers":1,"cortex_cpu_threads":int(os.getenv("CORTEX_THREADS","4")),"io_workers":3},
                            "research_only":True,"real_orders":False})
             report=enrich_astra(report,cortex,astra_book)
+            report["strategy_lab"]=strategy_lab.report()
             io_pool.submit(publish_issue,report)
             next_issue=now+30
         if not events:time.sleep(args.poll_seconds)
 
-    learner.save(cp);save_state(state,fs_path)
+    learner.save(cp);save_state(state,fs_path);strategy_lab.save()
     report=learner.report()
     report.update({"processed_micro_rows":processed_micro,"sampled_states":sampled,
                    "last_seen_ts_ms":last_seen_ts,"completed_ts_ms":int(time.time()*1000),
@@ -305,7 +317,8 @@ def main():
                    "runtime_concurrency":{"quant_loop":1,"cortex_workers":1,"cortex_cpu_threads":int(os.getenv("CORTEX_THREADS","4")),"io_workers":3},
                    "research_only":True,"real_orders":False})
     report=enrich_astra(report,cortex,astra_book)
-    cortex.save();astra_book.save()
+    report["strategy_lab"]=strategy_lab.report()
+    cortex.save();astra_book.save();strategy_lab.save()
     (args.checkpoint_dir/"CATERPILLAR_QUANT_REPORT.json").write_text(json.dumps(report,indent=2)+"\n")
     publish_monitor(report)
     publish_issue(report)
