@@ -24,7 +24,7 @@ jobs:
           with urllib.request.urlopen(req,timeout=30) as r:
               d=json.load(r)
           rows=d.get("candles",{}).get("60",[])
-          rows=rows[-72:]
+          rows=rows[-1000:]
           print("H1_COUNT",len(rows))
           print("H1_ROWS_BEGIN")
           for x in rows:
