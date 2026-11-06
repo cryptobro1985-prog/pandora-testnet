@@ -1,5 +1,6 @@
 from __future__ import annotations
-import gzip, heapq, json
+import gzip, heapq, json, math
+from collections import deque
 from pathlib import Path
 
 from research.hype_local_v5.decode_compact import manifest,chunk_meta,stream_meta,decode_events,decode_table
@@ -185,6 +186,159 @@ def add_frozen_quant_overlay(hist,cal,hold):
             r["features"].update(_quant_prediction_features(learner,r["features"]))
     return {"labels":learner.labels,"promotions":learner.promotions,"champion_ready":learner.champion_ready}
 
+
+def _num(v):
+    try:
+        x=float(v);return x if math.isfinite(x) else None
+    except Exception:return None
+
+def _flatten_numeric(prefix,obj,out,depth=0):
+    if depth>3:return
+    if isinstance(obj,dict):
+        for k,v in obj.items():_flatten_numeric(prefix+"_"+str(k),v,out,depth+1)
+    else:
+        v=_num(obj)
+        if v is not None:out[prefix]=v
+
+def _value_at(hist,target):
+    out=None
+    for ts,v in reversed(hist):
+        if ts<=target:return v
+    return out
+
+def _tech_from_minutes(minutes,now_ms):
+    if len(minutes)<20:return {}
+    out={}
+    for tf in (5,15,60):
+        rs=resample(minutes[-720:],tf)
+        if not rs:continue
+        s=indicator_series(rs)
+        if not s:continue
+        last=s[-1];span=tf*60_000
+        if last["ts_ms"]+span>now_ms and len(s)>1:last=s[-2]
+        for k,v in last.items():
+            if k!="ts_ms" and _num(v) is not None:out[f"tech_{tf}m_{k}"]=float(v)
+    return out
+
+def build_live_phase_fast(root:Path,phase:str):
+    rows=[];next_sample=0
+    price_hist=deque(maxlen=5000);oi_hist=deque(maxlen=5000);flow_hist=deque(maxlen=5000)
+    minute_bars=[];current_minute=None;bar=None;tech={}
+    latest_struct={};latest_market={}
+    for seg in sorted((root/phase).glob("segment_*")):
+        pkg=seg/"package"
+        if not (pkg/"PACK_MANIFEST.json").exists():continue
+        m=manifest(pkg)
+        for ch in sorted((x["chunk"] for x in m["chunks"])):
+            meta=chunk_meta(m,ch);names={s["name"] for s in meta["streams"]}
+            structs=[];markets=[]
+            if "structural_context_1m.mpk.xz" in names:
+                sm=stream_meta(meta,"structural_context_1m.mpk.xz")
+                structs=list(decode_table(pkg/"chunks"/ch/"structural_context_1m.mpk.xz"))
+            if "market_context_1m.mpk.xz" in names:
+                mm=stream_meta(meta,"market_context_1m.mpk.xz")
+                markets=list(decode_table(pkg/"chunks"/ch/"market_context_1m.mpk.xz"))
+            si=mi=0
+            if "microstructure_1s.mpk.xz" not in names:continue
+            micro=list(decode_table(pkg/"chunks"/ch/"microstructure_1s.mpk.xz"))
+            for mr in micro:
+                ts=int(mr.get("ts_ms") or 0)
+                px=_num(mr.get("mid")) or _num(mr.get("best_bid")) or _num(mr.get("best_ask"))
+                if ts<=0 or not px:continue
+                while si<len(structs) and int(structs[si].get("ts_ms") or 0)<=ts:
+                    latest_struct=structs[si];si+=1
+                while mi<len(markets) and int(markets[mi].get("received_ts_ms") or markets[mi].get("ts_ms") or 0)<=ts:
+                    latest_market=markets[mi];mi+=1
+
+                minute=(ts//60_000)*60_000
+                if current_minute is None:
+                    current_minute=minute;bar={"ts_ms":minute,"open":px,"high":px,"low":px,"close":px,"volume":0.0,"turnover":0.0}
+                elif minute!=current_minute:
+                    minute_bars.append(bar)
+                    if len(minute_bars)>1600:minute_bars=minute_bars[-1600:]
+                    tech=_tech_from_minutes(minute_bars,ts)
+                    current_minute=minute;bar={"ts_ms":minute,"open":px,"high":px,"low":px,"close":px,"volume":0.0,"turnover":0.0}
+                else:
+                    bar["high"]=max(bar["high"],px);bar["low"]=min(bar["low"],px);bar["close"]=px
+
+                if ts<next_sample:continue
+                next_sample=ts+5000
+                price_hist.append((ts,px))
+                oi=_num(mr.get("open_interest"))
+                if oi is not None:oi_hist.append((ts,oi))
+                f60=_num(mr.get("flow_imbalance_60s"))
+                if f60 is not None:flow_hist.append((ts,f60))
+
+                x={}
+                for k,v in mr.items():
+                    nv=_num(v)
+                    if nv is not None:x[k]=nv
+                x.update(tech)
+                x["flow_imbalance_raw_15s"]=_num(mr.get("flow_imbalance_15s")) or 0.0
+                x["flow_imbalance_raw_60s"]=_num(mr.get("flow_imbalance_60s")) or 0.0
+                recent_flow=[v for t,v in flow_hist if t>=ts-300_000]
+                x["flow_imbalance_raw_300s"]=sum(recent_flow)/len(recent_flow) if recent_flow else x["flow_imbalance_raw_60s"]
+                x["bid_absorption_proxy_60s"]=_num(mr.get("bid_replenishment_proxy_ratio_60s")) or 0.0
+                x["ask_absorption_proxy_60s"]=_num(mr.get("ask_replenishment_proxy_ratio_60s")) or 0.0
+                x["book_bid_add_60s"]=_num(mr.get("bid_add_notional")) or 0.0
+                x["book_ask_add_60s"]=_num(mr.get("ask_add_notional")) or 0.0
+                x["book_bid_cancel_60s"]=_num(mr.get("bid_cancel_notional")) or 0.0
+                x["book_ask_cancel_60s"]=_num(mr.get("ask_cancel_notional")) or 0.0
+                x["liq_long_notional_raw_60s"]=_num(mr.get("long_liq_notional_60s")) or 0.0
+                x["liq_short_notional_raw_60s"]=_num(mr.get("short_liq_notional_60s")) or 0.0
+
+                for sec in (30,60,180,300,900):
+                    old=_value_at(price_hist,ts-sec*1000)
+                    if old and old>0:
+                        ret=px/old-1.0;x[f"ret_{sec}s"]=ret
+                    pp=[(t,p) for t,p in price_hist if t>=ts-sec*1000]
+                    if len(pp)>=2:
+                        vals=[p for _,p in pp];hh=max(vals);ll=min(vals);span=max(hh-ll,1e-12)
+                        hi_t=max(pp,key=lambda z:z[1])[0];lo_t=min(pp,key=lambda z:z[1])[0]
+                        x[f"survival_since_high_{sec}s"]=(ts-hi_t)/1000.0
+                        x[f"survival_since_low_{sec}s"]=(ts-lo_t)/1000.0
+                        x[f"retracement_from_high_{sec}s"]=(hh-px)/span
+                        x[f"retracement_from_low_{sec}s"]=(px-ll)/span
+                        diffs=[b/a-1 for a,b in zip(vals,vals[1:]) if a>0]
+                        if diffs:
+                            x[f"positive_persistence_{sec}s"]=sum(d>0 for d in diffs)/len(diffs)
+                            x[f"negative_persistence_{sec}s"]=sum(d<0 for d in diffs)/len(diffs)
+
+                bn=_num(mr.get("buy_notional_60s")) or 0.0;sn=_num(mr.get("sell_notional_60s")) or 0.0
+                r60=x.get("ret_60s",0.0)
+                if bn>0:x["buy_efficiency_60s"]=max(r60,0.0)/bn
+                if sn>0:x["sell_efficiency_60s"]=max(-r60,0.0)/sn
+                x["buy_efficiency_300s"]=x.get("buy_efficiency_60s",0.0)
+                x["sell_efficiency_300s"]=x.get("sell_efficiency_60s",0.0)
+
+                if oi is not None:
+                    for sec in (60,300):
+                        past=_value_at(oi_hist,ts-sec*1000)
+                        if past and past>0:
+                            d=oi/past-1.0;x[f"oi_delta_{sec}s"]=d
+                            rr=x.get(f"ret_{sec}s")
+                            if rr is not None:x[f"price_oi_interaction_{sec}s"]=rr*d
+
+                if latest_struct:_flatten_numeric("struct",latest_struct,x)
+                if latest_market:
+                    ar=latest_market.get("account_ratio")
+                    if isinstance(ar,dict):_flatten_numeric("account",ar,x)
+                    st=latest_market.get("server_time")
+                    if isinstance(st,dict):_flatten_numeric("server",st,x)
+                    inst=latest_market.get("instrument")
+                    if isinstance(inst,dict):_flatten_numeric("instrument",inst,x)
+
+                if len(price_hist)>0:
+                    vals60=[p for t,p in price_hist if t>=ts-3_600_000]
+                    if vals60:
+                        hi=max(vals60);lo=min(vals60)
+                        x["rolling_60m_high"]=hi;x["rolling_60m_low"]=lo
+                        x["dist_rolling_60m_high"]=px/hi-1.0;x["dist_rolling_60m_low"]=px/lo-1.0
+
+                x=augment_with_agents(x)
+                rows.append({"ts_ms":ts,"price":px,"high":px,"low":px,"features":x,"source":"live_full116_fast"})
+    return rows
+
 def main():
     import argparse
     ap=argparse.ArgumentParser()
@@ -193,8 +347,8 @@ def main():
     ap.add_argument("--output",type=Path,required=True)
     args=ap.parse_args();args.output.mkdir(parents=True,exist_ok=True)
     hist=build_historical(args.historical_root)
-    cal=build_live_phase(args.live_root,"calibration")
-    hold=build_live_phase(args.live_root,"holdout")
+    cal=build_live_phase_fast(args.live_root,"calibration")
+    hold=build_live_phase_fast(args.live_root,"holdout")
     quant=add_frozen_quant_overlay(hist,cal,hold)
     write_jsonl_gz(args.output/"historical.jsonl.gz",hist)
     write_jsonl_gz(args.output/"calibration.jsonl.gz",cal)
