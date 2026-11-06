@@ -83,8 +83,8 @@ jobs:
       - name: Train baseline and enriched Local-only models
         run: |
           rm -rf compare && mkdir -p compare/baseline compare/enriched
-          python -m research.hype_local_only.train_history             --snapshots history30/candidate_snapshots.jsonl.gz             --model-out compare/baseline/local_only_model.pkl             --memory-out compare/baseline/LOCAL_RELATIONSHIP_MEMORY.json             --report-out compare/baseline/HISTORICAL_TRAINING_REPORT.json
-          python -m research.hype_local_only.train_history             --snapshots gaps/candidate_snapshots_enriched.jsonl.gz             --model-out compare/enriched/local_only_model.pkl             --memory-out compare/enriched/LOCAL_RELATIONSHIP_MEMORY.json             --report-out compare/enriched/HISTORICAL_TRAINING_REPORT.json
+          python -m research.hype_local_only.train_history             --snapshots history30/candidate_snapshots.jsonl.gz             --compact-1m history30/compact_1m.jsonl.gz             --labels-gz history30/labels.json.gz             --model-out compare/baseline/local_only_model.pkl             --memory-out compare/baseline/LOCAL_RELATIONSHIP_MEMORY.json             --report-out compare/baseline/HISTORICAL_TRAINING_REPORT.json
+          python -m research.hype_local_only.train_history             --snapshots gaps/candidate_snapshots_enriched.jsonl.gz             --compact-1m history30/compact_1m.jsonl.gz             --labels-gz history30/labels.json.gz             --model-out compare/enriched/local_only_model.pkl             --memory-out compare/enriched/LOCAL_RELATIONSHIP_MEMORY.json             --report-out compare/enriched/HISTORICAL_TRAINING_REPORT.json
 
       - name: OOS promotion gate
         run: |
