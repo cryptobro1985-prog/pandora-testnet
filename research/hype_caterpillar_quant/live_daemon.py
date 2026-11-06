@@ -23,6 +23,33 @@ def save_state(state,path):
     tmp.replace(path)
 
 
+def bootstrap_full_h1(state):
+    """Deterministically seed the live learner with the relay's full H1 graph.
+
+    This removes process-start ordering races between context_capture and the
+    learner. Failure is non-fatal because websocket/context streams still run.
+    """
+    base=os.environ.get("HYPE_REST_RELAY_URL","").strip().rstrip("/")
+    if not base:return {"ok":False,"reason":"relay_not_configured","h1":len(state.candles.get("60",{}))}
+    try:
+        r=requests.get(base+"/hype-context",headers={"User-Agent":"PANDORA-Caterpillar-H1-Bootstrap/1.0"},timeout=20)
+        r.raise_for_status();obj=r.json()
+        rows=((obj.get("candles") or {}).get("60") or [])
+        if not isinstance(rows,list):rows=[]
+        state.update_market_context({
+            "received_ts_ms":int(time.time()*1000),
+            "initial_backfill":True,
+            "candles":{"60":rows},
+            "ticker":obj.get("ticker") or {},
+            "account_ratio":obj.get("account_ratio") or {},
+            "server_time":{"ok":True,"value":obj.get("server_time") or {}},
+            "rest_relay_configured":True,
+        })
+        return {"ok":True,"relay_rows":len(rows),"h1":len(state.candles.get("60",{}))}
+    except Exception as exc:
+        return {"ok":False,"reason":repr(exc),"h1":len(state.candles.get("60",{}))}
+
+
 def compact_status(report):
     q=report.get("quant") or {}
     return {
@@ -128,6 +155,8 @@ def main():
     learner=CaterpillarQuantLearner.load(cp) if cp.exists() else new_from_config(args.config)
     fs_path=args.checkpoint_dir/"feature_state.pkl"
     state=load_state(fs_path)
+    h1_bootstrap=bootstrap_full_h1(state)
+    print("CATERPILLAR_H1_BOOTSTRAP "+json.dumps(h1_bootstrap,separators=(",",":")),flush=True)
     tail=Tailer()
     actions=args.checkpoint_dir/"caterpillar_actions.jsonl"
     gaps=args.checkpoint_dir/"caterpillar_gaps.jsonl"
