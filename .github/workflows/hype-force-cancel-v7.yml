@@ -20,6 +20,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/42191168822/cancel" || true
-          gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/42191168822/force-cancel" || true
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/42191758053/cancel" || true
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/42191758053/force-cancel" || true
           echo "superseded collector cancellation requested"
