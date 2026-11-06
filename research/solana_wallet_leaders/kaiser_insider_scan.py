@@ -30,7 +30,7 @@ STATE = ROOT / "state.json"
 REPORT = ROOT / "latest_report.json"
 DORADO = ROOT / "dorado_candidates.yaml"
 
-RPC = os.getenv("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com").strip()
+RPC = (os.getenv("SOLANA_RPC_URL") or "").strip() or "https://api.mainnet-beta.solana.com"
 UA = {"User-Agent": "pandora-pumpfun-insider-research/2.0"}
 MAX_TOKENS = max(8, int(os.getenv("MAX_TOKENS", "48")))
 SIGS_PER_TOKEN = max(20, min(250, int(os.getenv("SIGNATURES_PER_TOKEN", "90"))))
@@ -455,6 +455,12 @@ def main() -> None:
         if mint_i % 5 == 0:
             print(json.dumps({"phase": "scan", "mints_done": mint_i, "tx_seen": tx_seen, "new_events": len(new_events), "errors": len(errors)}), flush=True)
         time.sleep(RPC_SLEEP)
+
+    if mints and tx_seen == 0:
+        raise RuntimeError(
+            "RPC/data-path failure: discovered Pump.fun mints but decoded zero transactions; "
+            f"rpc={RPC!r} errors={len(errors)} first_error={(errors[0] if errors else 'none')}"
+        )
 
     events = dedupe_events(list(state.get("events") or []) + new_events)
     state["events"] = events
