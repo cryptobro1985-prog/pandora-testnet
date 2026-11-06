@@ -128,12 +128,21 @@ def simulate(rows,gene):
     daily=-1.0 if equity<=0 else (equity/START_EQUITY)**(1/days)-1
     pf=gp/gl if gl>0 else (99.0 if gp>0 else 0.0)
     loss_rate=losses/len(trades) if trades else 1.0
+    side_metrics={}
+    for label in ("LONG","SHORT"):
+        rr=[t for t in trades if t["side"]==label]
+        sw=sum(t["pnl"]>0 for t in rr);sgp=sum(max(0,t["pnl"]) for t in rr);sgl=-sum(min(0,t["pnl"]) for t in rr)
+        side_metrics[label.lower()]={"trades":len(rr),"wins":sw,"losses":len(rr)-sw,
+            "win_rate":sw/len(rr) if rr else None,
+            "profit_factor":(sgp/sgl if sgl>0 else (99.0 if sgp>0 else None)),
+            "net_pnl":sum(t["pnl"] for t in rr)}
     objective=(-99 if equity<=0 else math.log(equity/START_EQUITY)/days)-3.5*maxdd-8*liqs-1.5*loss_rate
     if len(trades)<4:objective-=2
     return {"final":equity,"return_pct":(equity/START_EQUITY-1)*100,"daily_geom":daily,
             "trades":len(trades),"wins":wins,"losses":losses,"loss_rate":loss_rate,
             "win_rate":wins/len(trades) if trades else 0.0,"max_dd_pct":maxdd*100,
-            "profit_factor":pf,"liquidations":liqs,"objective":objective,"detail":trades}
+            "profit_factor":pf,"long":side_metrics["long"],"short":side_metrics["short"],
+            "liquidations":liqs,"objective":objective,"detail":trades}
 
 def mutate_weights(base,rng,scale=.35):
     return {k:clamp(v+rng.gauss(0,scale),-1.5,1.8) for k,v in base.items()}
@@ -208,13 +217,23 @@ def main():
     for z in top:
         oo=simulate(oos,z["gene"]);ho=simulate(hold,z["gene"])
         z["historical_oos"]=strip(oo);z["live_holdout"]=strip(ho)
+        both_sides_ok=True
+        for mm in (oo,ho):
+            for side in ("long","short"):
+                sm=mm.get(side,{})
+                if sm.get("trades",0)>=3 and (sm.get("profit_factor") is None or sm.get("profit_factor")<.90):
+                    both_sides_ok=False
         z["sanity_pass"]=(
             oo["final"]>START_EQUITY and ho["final"]>START_EQUITY and
             oo["liquidations"]==0 and ho["liquidations"]==0 and
             oo["max_dd_pct"]<=35 and ho["max_dd_pct"]<=35 and
-            oo["profit_factor"]>1.05 and ho["profit_factor"]>1.05
+            oo["profit_factor"]>1.05 and ho["profit_factor"]>1.05 and both_sides_ok
         )
-        z["provisional_50pct_daily"]=z["sanity_pass"] and min(oo["daily_geom"],ho["daily_geom"])>=.50
+        z["zero_loss_target"]=z["sanity_pass"] and oo["losses"]==0 and ho["losses"]==0
+        z["provisional_50pct_daily"]=(
+            z["sanity_pass"] and min(oo["daily_geom"],ho["daily_geom"])>=.50 and
+            max(oo["loss_rate"],ho["loss_rate"])<=.20
+        )
     out={"family":args.family,"round":args.round,"evaluated":len(rows),"top":top,
          "best_search":top[0] if top else None,
          "seed_genes_next":[z["gene"] for z in top[:6]],
