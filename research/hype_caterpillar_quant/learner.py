@@ -1496,6 +1496,11 @@ class CaterpillarQuantLearner:
             structural_side=1 if c.side=="LOW" else -1
             if self.position.side!=structural_side:
                 events.extend(self._close(ts_ms,price,"OPPOSITE_LOCAL_CONFIRMED"))
+        if self.position is not None:
+            p=self.position
+            cur=p.side*(float(price)/max(p.entry_price,1e-9)-1.0)
+            p.mfe=max(p.mfe,cur)
+            p.mae=min(p.mae,cur)
 
         if c is not None:
             self._sample_direct_policy(ts_ms,price,x,c,qd)
