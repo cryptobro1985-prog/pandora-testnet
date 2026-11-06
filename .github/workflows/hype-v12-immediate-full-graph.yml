@@ -1,4 +1,4 @@
-name: HYPE v21 Direct Caterpillar Policy Live
+name: HYPE v22 Learned Local + Direct Policy Live
 # compact-110-v4-fixed-pack
 # 2026-11-06-local-low-restart
 # caterpillar-quant-v15-direct-relay-1000h1-isolated
@@ -24,14 +24,14 @@ permissions:
   issues: write
 
 concurrency:
-  group: hype-v21-direct-policy-${{ github.ref }}
+  group: hype-v22-learned-local-policy-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   CAPTURE_MINUTES: "170"
   HYPE_REST_RELAY_URL: "https://hype-rest-relay.onrender.com"
   CATERPILLAR_QUANT_ENABLED: "1"
-  CATERPILLAR_POLICY_MODE: "direct-policy-v6"
+  CATERPILLAR_POLICY_MODE: "learned-local-v2-direct-policy-v7"
   CATERPILLAR_MONITOR_URL: "https://hype-caterpillar-quant-monitor.onrender.com/api/ingest"
   ASTRA_CORTEX_ENABLED: "1"
   CORTEX_LOCAL_ENABLED: "1"
