@@ -31,7 +31,7 @@ HTML=r'''<!doctype html>
 </style>
 </head>
 <body><div class="wrap">
-<div class="hero"><div><div class="eyebrow">PANDORA · HYPE</div><div class="title">Caterpillar Quant</div><div class="sub" id="updated">Подключение…</div></div><div class="pulse"><i class="dot"></i><span id="live">LIVE</span></div></div>
+<div class="hero"><div><div class="eyebrow">PANDORA · HYPE</div><div class="title">Caterpillar Quant</div><div class="sub" id="updated">Подключение…</div><div class="small">UI v4 · CORTEX 20B · Fibonacci · Learned Entry</div></div><div class="pulse"><i class="dot"></i><span id="live">LIVE</span></div></div>
 <div class="grid">
 <div class="card"><div class="k">Статус</div><div class="v cyan" id="status">—</div><div class="small" id="fresh">—</div></div>
 <div class="card"><div class="k">Связи</div><div class="v" id="rels">0</div><div class="small"><span class="good" id="pos">+0</span> · <span class="bad" id="neg">−0</span></div></div>
@@ -183,6 +183,13 @@ def telegram_setup():
         requests.post(api+"/setMyDescription",json={"description":"HYPE Caterpillar Quant — live learning monitor"},timeout=15)
         requests.post(api+"/setMyShortDescription",json={"short_description":"HYPE Quant live monitor"},timeout=15)
     except Exception:pass
+
+@app.after_request
+def no_cache(resp):
+    resp.headers["Cache-Control"]="no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"]="no-cache"
+    resp.headers["Expires"]="0"
+    return resp
 
 @app.get("/")
 def index():return Response(HTML,mimetype="text/html")
