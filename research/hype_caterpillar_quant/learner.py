@@ -666,9 +666,13 @@ class CaterpillarQuantLearner:
 
     def paper_snapshot(self):
         p=self.position
+        current_return=None
+        if p is not None and finite(self.last_price) and p.entry_price>0:
+            current_return=p.side*(float(self.last_price)/p.entry_price-1.0)
         return {"equity":self.equity,"peak_equity":self.peak_equity,"max_drawdown":self.max_drawdown,
                 "open_position":None if p is None else {
                     "side":side_name(p.side),"entry_ts_ms":p.entry_ts_ms,"entry_price":p.entry_price,
+                    "mark_price":self.last_price,"current_return":current_return,
                     "mfe":p.mfe,"mae":p.mae,"leverage":p.leverage,"margin_fraction":p.margin_fraction,
                     "local_id":p.local_id,"reentry_no":p.reentry_no},
                 "closed_trades":len(self.trades),"reentries":self.reentries}
@@ -720,6 +724,7 @@ class CaterpillarQuantLearner:
         relationships=self._relationships_report()
         checks=sum(self.prediction_checks.values())
         errors=sum(self.prediction_errors.values())
+        paper=self.paper_snapshot()
         return {
             "version":self.VERSION,"research_only":True,"real_orders":False,
             "learning_status":"LEARNING",
@@ -740,6 +745,7 @@ class CaterpillarQuantLearner:
             "caterpillar_vs_straight_delta_pct":((self.path_equity-self.baseline_equity)/100.0)*100.0,
             "straight_local_closed_legs":len(self.baseline_trades),
             "max_drawdown_pct":self.max_drawdown*100.0,
+            "open_position":paper["open_position"],
             "closed_trades":len(self.trades),"wins":wins,
             "win_rate":wins/len(self.trades) if self.trades else None,
             "profit_factor":gp/gl if gl>0 else (None if gp==0 else 99.0),
