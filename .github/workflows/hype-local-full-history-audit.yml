@@ -49,6 +49,30 @@ jobs:
                   raw.append(item)
           print("STRICT_PIVOTS",json.dumps(raw,separators=(",",":")))
           if raw: print("LATEST_STRICT_PIVOT",json.dumps(raw[-1],separators=(",",":")))
+          # Causal local-to-local reference: enter only when K2 has completed.
+          idx={int(x["start_ms"]):x for x in rows}
+          enriched=[]
+          for p in raw:
+              h=int(p["hour_ms"])
+              confirm=idx.get(h+2*3_600_000)
+              if confirm:
+                  p=dict(p);p["available_ms"]=h+3*3_600_000;p["confirm_price"]=float(confirm["close"]);enriched.append(p)
+          fee=0.0016; eq1=100.0; eq5=100.0; legs=[]
+          for a,b in zip(enriched,enriched[1:]):
+              if a["side"]==b["side"]: continue
+              side=1 if a["side"]=="LOW" else -1
+              gross=side*(b["confirm_price"]/a["confirm_price"]-1.0)
+              net=gross-fee
+              before1,before5=eq1,eq5
+              eq1*=max(0.0,1.0+net);eq5*=max(0.0,1.0+5.0*net)
+              legs.append({"side":"LONG" if side>0 else "SHORT","from_local":a["price"],"to_local":b["price"],
+                           "entry_confirm_price":a["confirm_price"],"exit_confirm_price":b["confirm_price"],
+                           "net_return":net,"eq1_before":before1,"eq1_after":eq1,"eq5_before":before5,"eq5_after":eq5})
+          print("CAUSAL_BASELINE",json.dumps({"bars":len(rows),"pivots":len(enriched),"legs":len(legs),
+                "wins":sum(x["net_return"]>0 for x in legs),
+                "return_1x_pct":eq1-100.0,"equity_1x":eq1,
+                "return_20pct_25x_reference_pct":eq5-100.0,"equity_20pct_25x_reference":eq5,
+                "note":"K2-confirmed causal reference; no liquidation/slippage model","last_10_legs":legs[-10:]},separators=(",",":")))
           lows=sorted(rows,key=lambda x:x["low"])[:10]
           print("LOWEST_10",json.dumps([{"start_ms":x["start_ms"],"low":x["low"],"high":x["high"]} for x in lows],separators=(",",":")))
           PY
