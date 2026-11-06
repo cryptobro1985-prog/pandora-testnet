@@ -218,6 +218,11 @@ def main():
     states=historical_states(bars,candidates)
     cfg=load_config(args.config)
     learner=OnlineQuantLearner(copy.deepcopy(cfg))
+    full_action_space=copy.deepcopy(learner.config["action_space"])
+    # During fitting the action grid does not affect labels or model updates.
+    # Keep a tiny grid here; restore the full high-growth grid for policy search.
+    learner.config["action_space"]["leverage"]=[1]
+    learner.config["action_space"]["margin_fraction"]=[0.02]
 
     # Discovery/pretrain only. Last 4 validation days and final 7 OOS days stay unseen.
     for ts,px,x,b in states:
@@ -225,6 +230,7 @@ def main():
             learner.observe(ts,px,x)
     learner.pending.clear()
     pretrain_report=learner.report()
+    learner.config["action_space"]=copy.deepcopy(full_action_space)
 
     profiles=[]
     for min_conf in (.57,.62,.67):
@@ -241,10 +247,13 @@ def main():
     oos=simulate(learner,states,OOS,END,best)
 
     # Freeze evidence first; only now absorb validation+OOS into the historical warmstart.
+    learner.config["action_space"]["leverage"]=[1]
+    learner.config["action_space"]["margin_fraction"]=[0.02]
     for ts,px,x,b in states:
         if TRAIN_END<=ts<END:
             learner.observe(ts,px,x)
     learner.pending.clear()
+    learner.config["action_space"]=copy.deepcopy(full_action_space)
     learner.save(args.output/"quant_learner.pkl")
 
     report={
