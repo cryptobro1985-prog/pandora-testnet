@@ -57,6 +57,45 @@ def choose(valid,p):
         row=(score,m["precision"],m["f1"],m["recall"],float(th),m)
         if best is None or row[:4]>best[:4]:best=row
     return (best[4],best[5]) if best else (.5,metrics(valid,p,.5))
+def feature_relationships(rows,names,topn=60):
+    out=[]
+    for side in ("LOW","HIGH"):
+        rr=[r for r in rows if r["side"]==side and int(r["delay_s"])==300]
+        pos=[r for r in rr if r["strict_true"]];neg=[r for r in rr if not r["strict_true"]]
+        base=len(pos)/max(1,len(rr))
+        feats=[]
+        for k in names:
+            pv=[float(r["features"][k]) for r in pos if finite(r["features"].get(k))]
+            nv=[float(r["features"][k]) for r in neg if finite(r["features"].get(k))]
+            if len(pv)<3 or len(nv)<8:continue
+            med=float(np.median(pv+nv));mad=float(np.median(np.abs(np.asarray(pv+nv)-med)))
+            scale=max(1e-9,1.4826*mad,abs(med)*.02)
+            eff=(float(np.median(pv))-float(np.median(nv)))/scale
+            if not math.isfinite(eff):continue
+            feats.append({"feature":k,"effect":eff,"threshold":med,
+                          "true_median":float(np.median(pv)),"false_median":float(np.median(nv)),
+                          "true_support":len(pv),"false_support":len(nv)})
+        feats.sort(key=lambda z:abs(z["effect"]),reverse=True)
+        pairs=[]
+        for i,a in enumerate(feats[:18]):
+            for b in feats[i+1:18]:
+                sat=[]
+                for r in rr:
+                    f=r["features"]
+                    if not finite(f.get(a["feature"])) or not finite(f.get(b["feature"])):continue
+                    aa=float(f[a["feature"]])>=a["threshold"] if a["effect"]>0 else float(f[a["feature"]])<=a["threshold"]
+                    bb=float(f[b["feature"]])>=b["threshold"] if b["effect"]>0 else float(f[b["feature"]])<=b["threshold"]
+                    if aa and bb:sat.append(r)
+                if len(sat)<8:continue
+                rate=sum(bool(r["strict_true"]) for r in sat)/len(sat)
+                pairs.append({"a":a["feature"],"b":b["feature"],"support":len(sat),
+                              "positive_rate":rate,"baseline_rate":base,"lift":rate/max(base,1e-9)})
+        pairs.sort(key=lambda z:(z["lift"],z["support"]),reverse=True)
+        out.append((side,{"baseline_positive_rate":base,
+                          "top_features":feats[:topn],
+                          "top_pairs":pairs[:topn]}))
+    return dict(out)
+
 def fit_one(train,valid,oos,names,kind):
     X=matrix(train,names);y=np.asarray([int(r["strict_true"]) for r in train])
     if kind=="extra":
@@ -79,10 +118,16 @@ def main():
     train=[r for r in rows if r["candidate_ts_ms"]<a]
     valid=[r for r in rows if a<=r["candidate_ts_ms"]<b]
     oos=[r for r in rows if r["candidate_ts_ms"]>=b]
-    models={};report={"split":{"train_end_ms":a,"valid_end_ms":b},"features":len(names),"rows":{"train":len(train),"valid":len(valid),"oos":len(oos)},"models":{}}
+    models={};report={"split":{"train_end_ms":a,"valid_end_ms":b},"features":len(names),"rows":{"train":len(train),"valid":len(valid),"oos":len(oos)},"models":{},"relationships":feature_relationships(train+valid,names)}
     for kind in ("extra","histgb"):
         m,th,vm,om=fit_one(train,valid,oos,names,kind);models[kind]=m
-        report["models"][kind]={"threshold":th,"validation":vm,"oos":om}
+        ready=bool(om["accepted"]>=5 and om["tp"]>=5 and om["precision"]>=.90 and om["recall"]>=.30)
+        report["models"][kind]={"threshold":th,"validation":vm,"oos":om,
+                              "holdout_90pct_gate":{"passed":ready,"precision_min":.90,"recall_min":.30,"tp_min":5,"accepted_min":5}}
+    report["overall_90pct_gate"]={
+        "passed":any(v["holdout_90pct_gate"]["passed"] for v in report["models"].values()),
+        "meaning":"research readiness only; not a profit guarantee or future-performance guarantee"
+    }
     # final refit on all data only after OOS report is frozen
     full={}
     X=matrix(rows,names);y=np.asarray([int(r["strict_true"]) for r in rows]);sw=np.where(y==1,max(1.,(len(y)-y.sum())/max(1,y.sum())),1.)
