@@ -1,6 +1,6 @@
 {
-  "status": "FAILED",
-  "run_id": "42370675879",
-  "sha": "ea2ee2db5b1151c21896648dcc6c3c880af83f6b",
-  "finished_ts_ms": 1794054750360
+  "status": "RUNNING",
+  "run_id": "42372938145",
+  "sha": "9e1b601a53cabf4ef0f00465c138a53eed8ba143",
+  "started_ts_ms": 1794054760327
 }
