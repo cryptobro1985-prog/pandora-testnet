@@ -1,0 +1,651 @@
+{
+  "schema": "pandora-offline-data-integrity-v1",
+  "valid": true,
+  "files_checked": 56,
+  "gzip_files_checked": 10,
+  "manifest_entries_checked": 11,
+  "errors": [],
+  "warnings": [
+    "Gzip/JSON/checksum validity does not certify causal model inputs.",
+    "Original 6261 snapshots are correlated repeated views of 1797 selected candidates, not 6261 independent events.",
+    "Original candidate eligibility uses full-minute extrema: 0s/30s observations are selected retrospectively within that minute.",
+    "Six-hour record candidate selection misses internal teacher pivots; evaluate all teacher events, including candidates never generated.",
+    "High/low timestamps equal bucket start may be initialization placeholders; exact subminute extreme timing is not independently recoverable without raw trades.",
+    "Raw trade archives and 5s bars were discarded; recorded hashes/provenance cannot be recomputed from retained raw sources.",
+    "Mark/index/OI/funding source coverage is complete, but receipt/publication latency is unobserved; as-of lags require forward validation and sensitivity analysis."
+  ],
+  "serialization": [
+    {
+      "path": "BUNDLE_MANIFEST.json",
+      "bytes": 7268,
+      "sha256": "689d7cecfc027eeaa34c2d78991a0162194473f1b0b13e40452fea99a7139a83",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/cortex_research/CORTEX_HYPOTHESIS_REPORT.json",
+      "bytes": 75808,
+      "sha256": "42ec81d22332c456ecc71309302b007ffed2f788b509cfe4e003855ac09aa184",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/cortex_research/CORTEX_RESEARCH_MEMORY.json",
+      "bytes": 75871,
+      "sha256": "f676c2d9df743731b5898e94f27905f848bdc81d5dc90562e396d813480f9e47",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/cortex_research/SMOKE_BENCHMARK.json",
+      "bytes": 254,
+      "sha256": "21dfbd3d9b09bce0196199708197526b125b0e1fc820e97ef6fa85f07e77e76b",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/enriched_pretrain_rejected_or_candidate/HISTORICAL_GAP_MANIFEST.json",
+      "bytes": 1645,
+      "sha256": "f5be2227d14925eaec9fa9d67e3f975652802eb9d239ec51974fb71888f9e697",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/enriched_pretrain_rejected_or_candidate/HISTORICAL_TRAINING_REPORT.json",
+      "bytes": 7500,
+      "sha256": "33b668a6e70241f7dbcd8ea7f56ded14cf5bc3d3394f84103dd9c0ea3a8a42ae",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/enriched_pretrain_rejected_or_candidate/LOCAL_RELATIONSHIP_MEMORY.json",
+      "bytes": 157457,
+      "sha256": "858dd1fb929a4f6c8110141e21e0e911c878b05866c7c9ca76f2c2ad496b8b87",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/enriched_pretrain_rejected_or_candidate/PROMOTION.json",
+      "bytes": 3805,
+      "sha256": "9ff5610902dcefc3d5405cd2653aac699d33f34d54f56862fc541ba997f9cd90",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/historical_gaps/candidate_snapshots_enriched.jsonl.gz",
+      "bytes": 4477393,
+      "sha256": "c175fe12342d070f5d30524fe63446266777a8e3ba857c9e7b06535b10a64964",
+      "records": 6261,
+      "valid": true
+    },
+    {
+      "path": "artifacts/historical_gaps/funding.jsonl.gz",
+      "bytes": 709,
+      "sha256": "1515f1c224c85f522715c665c513a003e88874b47d56b490de6ee448d6097574",
+      "records": 90,
+      "valid": true
+    },
+    {
+      "path": "artifacts/historical_gaps/index_1m.jsonl.gz",
+      "bytes": 562677,
+      "sha256": "9f1093f2f4b25473304e49dc26936f4ccd42bc41237ab1fd6d4b1b179ad5b884",
+      "records": 43200,
+      "valid": true
+    },
+    {
+      "path": "artifacts/historical_gaps/manifest.json",
+      "bytes": 1645,
+      "sha256": "f5be2227d14925eaec9fa9d67e3f975652802eb9d239ec51974fb71888f9e697",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/historical_gaps/mark_1m.jsonl.gz",
+      "bytes": 540148,
+      "sha256": "a43658f55e292ec231eac757a4e40136057afe5af4309f2de55f2b92647bedc1",
+      "records": 43200,
+      "valid": true
+    },
+    {
+      "path": "artifacts/historical_gaps/open_interest_5m.jsonl.gz",
+      "bytes": 70100,
+      "sha256": "b63eec1505e4ae5b43ee71b72c3c72b2b9352aa044097433a9faf45066b2bd3d",
+      "records": 8640,
+      "valid": true
+    },
+    {
+      "path": "artifacts/history_30d_local116/artifact_manifest.json",
+      "bytes": 800,
+      "sha256": "fb9ea70bd6c3b7f32e2d8cc7f5e12d077336bf59239e8b7c028d03733233df23",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/history_30d_local116/candidate_snapshots.jsonl.gz",
+      "bytes": 4043926,
+      "sha256": "b60ab75745483a9903ce1af7a5e251e646273631e78b83997956fc62369fe9c3",
+      "records": 6261,
+      "valid": true
+    },
+    {
+      "path": "artifacts/history_30d_local116/compact_1m.jsonl.gz",
+      "bytes": 4192386,
+      "sha256": "dea89e1eaf9ad47a0d47564e0880f4cd6e5cdfdc523f750a54777963bbca10ee",
+      "records": 43198,
+      "valid": true
+    },
+    {
+      "path": "artifacts/history_30d_local116/feature_availability.json",
+      "bytes": 4243,
+      "sha256": "93b55eaa42bb4e335d9cfe00e0ffb725d366a2645064c92536266ef9fe9fd641",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/history_30d_local116/labels.json.gz",
+      "bytes": 4860,
+      "sha256": "d512b8438637f21f22c9b9996d3b2ea9806be0242a006967baae995cf6ea913f",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/history_30d_local116/manifest.json",
+      "bytes": 13030,
+      "sha256": "90f5c3dabb194bac5c62063d9e40df295d0aa1e915ac82b8994b4054ccc72158",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/history_30d_local116/summary.json",
+      "bytes": 11036,
+      "sha256": "f66f5315ba942e82b6eb08ed177dd0364a6b4390728bf70ac22588157ec0cb9c",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/history_gap_oos/PROMOTION.json",
+      "bytes": 3805,
+      "sha256": "9ff5610902dcefc3d5405cd2653aac699d33f34d54f56862fc541ba997f9cd90",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/history_gap_oos/baseline/HISTORICAL_TRAINING_REPORT.json",
+      "bytes": 7459,
+      "sha256": "63458b081e09aa2361e493c9415d039aa903b10b12a0e9ddb3e66215d0b29151",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/history_gap_oos/enriched/HISTORICAL_TRAINING_REPORT.json",
+      "bytes": 7500,
+      "sha256": "33b668a6e70241f7dbcd8ea7f56ded14cf5bc3d3394f84103dd9c0ea3a8a42ae",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/latest_checkpoint/CORTEX_LOCAL_ONLY_STATUS.json",
+      "bytes": 218,
+      "sha256": "1af37611099acebf6e6b41440e517fefaebf65f10757329042ed6f5a32a59962",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/latest_checkpoint/HISTORICAL_TRAINING_REPORT.json",
+      "bytes": 7459,
+      "sha256": "63458b081e09aa2361e493c9415d039aa903b10b12a0e9ddb3e66215d0b29151",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/latest_checkpoint/LOCAL_EVENTS.jsonl",
+      "bytes": 396583,
+      "sha256": "56732e7bb0dd6e9f472c612115855792de86e78c211f15023dfa4ca605975d62",
+      "records": 313,
+      "valid": true
+    },
+    {
+      "path": "artifacts/latest_checkpoint/LOCAL_LIVE_LABELS.jsonl",
+      "bytes": 12139,
+      "sha256": "0595049c148e8d47d37ba6c03a37c4e7ec991c05fd5d42575f7bb03fdca8bed0",
+      "records": 77,
+      "valid": true
+    },
+    {
+      "path": "artifacts/latest_checkpoint/LOCAL_ONLY_STATUS.json",
+      "bytes": 14017,
+      "sha256": "01ad268e170a9a248094d196686bf42fb5023bebd2bb27fd61fe2949c84f74f9",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/latest_checkpoint/LOCAL_RELATIONSHIP_MEMORY.json",
+      "bytes": 157089,
+      "sha256": "070ceedba010b04e13aba3546c41e97d724e1e9a985def3d11f6f704dfacc061",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/latest_evidence/CORTEX_LOCAL_ONLY_STATUS.json",
+      "bytes": 218,
+      "sha256": "1af37611099acebf6e6b41440e517fefaebf65f10757329042ed6f5a32a59962",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/latest_evidence/HISTORICAL_TRAINING_REPORT.json",
+      "bytes": 7459,
+      "sha256": "63458b081e09aa2361e493c9415d039aa903b10b12a0e9ddb3e66215d0b29151",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/latest_evidence/LOCAL_EVENTS.jsonl",
+      "bytes": 396583,
+      "sha256": "56732e7bb0dd6e9f472c612115855792de86e78c211f15023dfa4ca605975d62",
+      "records": 313,
+      "valid": true
+    },
+    {
+      "path": "artifacts/latest_evidence/LOCAL_LIVE_LABELS.jsonl",
+      "bytes": 12139,
+      "sha256": "0595049c148e8d47d37ba6c03a37c4e7ec991c05fd5d42575f7bb03fdca8bed0",
+      "records": 77,
+      "valid": true
+    },
+    {
+      "path": "artifacts/latest_evidence/LOCAL_ONLY_STATUS.json",
+      "bytes": 14017,
+      "sha256": "01ad268e170a9a248094d196686bf42fb5023bebd2bb27fd61fe2949c84f74f9",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/latest_evidence/LOCAL_RELATIONSHIP_MEMORY.json",
+      "bytes": 157089,
+      "sha256": "070ceedba010b04e13aba3546c41e97d724e1e9a985def3d11f6f704dfacc061",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/quantum_research/HISTORICAL_TRAINING_REPORT.json",
+      "bytes": 155200,
+      "sha256": "4c9868a7ec9acdc2390efca2b8dbe2ed6775912e4e19e706716b55162ffc4027",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/quantum_research/LOCAL_RELATIONSHIP_MEMORY.json",
+      "bytes": 54720,
+      "sha256": "a1b5dd75d6e180867999757ae7bfefd49dfa6e02c6d277c7784be596f07851d3",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/quantum_research/SUPERSEDED_INVALID_SELECTION_REPORT.json",
+      "bytes": 155759,
+      "sha256": "b4549da026588cf17bd9752bc674b59e7b0e1f05bbe3812f130b08cc9b6f5133",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/quantum_research/causal_candidates.jsonl.gz",
+      "bytes": 1527666,
+      "sha256": "72f41330fcf6af506b3680ee3712bd4aa150fd6d194fbe81bec1a3755f57904e",
+      "records": 2341,
+      "valid": true
+    },
+    {
+      "path": "artifacts/quantum_research/locked_oos_predictions.jsonl.gz",
+      "bytes": 34963,
+      "sha256": "5b089713e2101652cbad54634f0eccc26c451a1beda25ac38abcf562b1d77200",
+      "records": 490,
+      "valid": true
+    },
+    {
+      "path": "docs/FEATURE_AVAILABILITY.json",
+      "bytes": 5231,
+      "sha256": "186c0123b3fb01b3135835511a8f9342d980d7f7e55e45c032f1412c3bf8e86c",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "docs/INPUT_INTEGRITY.json",
+      "bytes": 374,
+      "sha256": "9f1ce0950fa9b7e85d6c6a2cfe6721d7c71684710c08cb1b0d338951ceff99ab",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "docs/LOCAL_ONLY_RECENT_RUNS.json",
+      "bytes": 2706,
+      "sha256": "4e3ce36362a73626f241806035110b2481654b06fcc397da28740b29213f6c4b",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "docs/NETWORK_CHECK.json",
+      "bytes": 572,
+      "sha256": "5c61efdf4e8cb3c152c2a305b6c9ae6cde5505ef5d961f54bbf7b7978e1abb84",
+      "json_type": "list",
+      "valid": true
+    },
+    {
+      "path": "docs/ORIGINAL_INPUT_HASHES.json",
+      "bytes": 15494,
+      "sha256": "8ba123c621427d25b02a6f247997a78762429d23e52c8551ad55674e032739b1",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "docs/WORKFLOW_SYNTAX.json",
+      "bytes": 5599,
+      "sha256": "59221e7e58325ce490d015b719dc2d2deeaaf2615d085297e64211cbcd6549c4",
+      "json_type": "list",
+      "valid": true
+    },
+    {
+      "path": "docs/official_sources/INITIAL_FETCH_RESULTS.json",
+      "bytes": 1126,
+      "sha256": "69bfc60ccddba2b10c8bb6265f560662a27f7bd5a8399eb191789588964b398e",
+      "json_type": "list",
+      "valid": true
+    },
+    {
+      "path": "src/research/hype_local_v5/results/acquisition/acquisition.json",
+      "bytes": 1552,
+      "sha256": "1a821ba172effee0315534037511a0c7f0b2dcdfbe129318f9e2ef477d95c821",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "src/research/hype_local_v5/results/historical/run_status.json",
+      "bytes": 258,
+      "sha256": "8391a361a033bf278a8aaf785d2f64cb8d145b0fb4a0fa5739fa6d8f324d93d2",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "src/research/hype_local_v5/results/prior_method_attempt/acquisition.json",
+      "bytes": 1354,
+      "sha256": "f36089ec97770ce9db2f7d38de8fda62e21a0b6df51d83adc6df2202914b1219",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "src/research/hype_local_v5/results/prior_method_attempt/historical_method.json",
+      "bytes": 547,
+      "sha256": "93bde325eb8366e64940a880a339ab07eca9f36604204371087855f97ad40881",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "src/research/hype_local_v5/results/runtime_network.json",
+      "bytes": 183,
+      "sha256": "3fa0dc7cf4d396d8069e364260aeb6945ad2324b1b88d4cf8b6776b55c836360",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "src/research/hype_local_v5/results/software_validation.json",
+      "bytes": 733,
+      "sha256": "9c2f4e4dc9a747bca984063c3fd07ce136c54e42222c3e33eeababc719e58846",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "src/research/hype_quant/config.json",
+      "bytes": 1594,
+      "sha256": "7af24f73e35cc274f457f1da041539e9d27e0e7c016cac3b5a73781c36a543e0",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "validation/current/REPORT.json",
+      "bytes": 2281,
+      "sha256": "548a6fbac3ee688b51fe4de716338fc32578340a1c39478138be358a67b97945",
+      "json_type": "dict",
+      "valid": true
+    }
+  ],
+  "manifest_checks": [
+    {
+      "manifest": "artifacts/historical_gaps/manifest.json",
+      "file": "candidate_snapshots_enriched.jsonl.gz",
+      "valid": true
+    },
+    {
+      "manifest": "artifacts/historical_gaps/manifest.json",
+      "file": "funding.jsonl.gz",
+      "valid": true
+    },
+    {
+      "manifest": "artifacts/historical_gaps/manifest.json",
+      "file": "index_1m.jsonl.gz",
+      "valid": true
+    },
+    {
+      "manifest": "artifacts/historical_gaps/manifest.json",
+      "file": "mark_1m.jsonl.gz",
+      "valid": true
+    },
+    {
+      "manifest": "artifacts/historical_gaps/manifest.json",
+      "file": "open_interest_5m.jsonl.gz",
+      "valid": true
+    },
+    {
+      "manifest": "artifacts/history_30d_local116/artifact_manifest.json",
+      "file": "candidate_snapshots.jsonl.gz",
+      "valid": true
+    },
+    {
+      "manifest": "artifacts/history_30d_local116/artifact_manifest.json",
+      "file": "compact_1m.jsonl.gz",
+      "valid": true
+    },
+    {
+      "manifest": "artifacts/history_30d_local116/artifact_manifest.json",
+      "file": "feature_availability.json",
+      "valid": true
+    },
+    {
+      "manifest": "artifacts/history_30d_local116/artifact_manifest.json",
+      "file": "labels.json.gz",
+      "valid": true
+    },
+    {
+      "manifest": "artifacts/history_30d_local116/artifact_manifest.json",
+      "file": "manifest.json",
+      "valid": true
+    },
+    {
+      "manifest": "artifacts/history_30d_local116/artifact_manifest.json",
+      "file": "summary.json",
+      "valid": true
+    }
+  ],
+  "history": {
+    "period": [
+      "2026-10-04T00:00:00+00:00",
+      "2026-11-03T00:00:00+00:00"
+    ],
+    "minute_rows": 43198,
+    "expected_minutes": 43200,
+    "missing_minutes": [
+      {
+        "ts_ms": 1791078240000,
+        "utc": "2026-10-04T01:44:00+00:00"
+      },
+      {
+        "ts_ms": 1791087540000,
+        "utc": "2026-10-04T04:19:00+00:00"
+      }
+    ],
+    "completed_h1_rows": 718,
+    "retained_trade_count": 14594337,
+    "source_archive_days": 30,
+    "raw_archives_retained": false,
+    "five_second_rows_claimed_but_not_retained": 456504,
+    "labels": {
+      "strict": {
+        "labels": 77,
+        "finalized": 76,
+        "side_counts": {
+          "LOW": 39,
+          "HIGH": 38
+        },
+        "exact_reproduction": true,
+        "exclusions": [
+          {
+            "hour_ms": 1791100800000,
+            "reason": "missing_hour"
+          },
+          {
+            "hour_ms": 1791104400000,
+            "reason": "missing_hour"
+          },
+          {
+            "hour_ms": 1791108000000,
+            "reason": "missing_hour"
+          },
+          {
+            "hour_ms": 1792270800000,
+            "reason": "ambiguous_high_low_order"
+          }
+        ],
+        "labels_represented_by_candidate_snapshots": 77,
+        "candidate_coverage": 1.0,
+        "confirmation_delay_hours_min": 2.0,
+        "confirmation_delay_hours_max": 3.0,
+        "terminal_label_censored": true,
+        "collapsed_reference_finalization": "next opposite retained pivot availability; distinct from K2 confirmation"
+      },
+      "internal": {
+        "labels": 123,
+        "finalized": 122,
+        "side_counts": {
+          "HIGH": 62,
+          "LOW": 61
+        },
+        "exact_reproduction": true,
+        "exclusions": [
+          {
+            "hour_ms": 1791090000000,
+            "reason": "missing_hour"
+          },
+          {
+            "hour_ms": 1791093600000,
+            "reason": "missing_hour"
+          },
+          {
+            "hour_ms": 1791097200000,
+            "reason": "missing_hour"
+          },
+          {
+            "hour_ms": 1791208800000,
+            "reason": "ambiguous_high_low_order"
+          },
+          {
+            "hour_ms": 1792270800000,
+            "reason": "ambiguous_high_low_order"
+          },
+          {
+            "hour_ms": 1792587600000,
+            "reason": "ambiguous_high_low_order"
+          },
+          {
+            "hour_ms": 1792764000000,
+            "reason": "ambiguous_high_low_order"
+          },
+          {
+            "hour_ms": 1792792800000,
+            "reason": "ambiguous_high_low_order"
+          },
+          {
+            "hour_ms": 1793484000000,
+            "reason": "ambiguous_high_low_order"
+          },
+          {
+            "hour_ms": 1793520000000,
+            "reason": "ambiguous_high_low_order"
+          }
+        ],
+        "labels_represented_by_candidate_snapshots": 95,
+        "candidate_coverage": 0.7723577235772358,
+        "confirmation_delay_hours_min": 1.0,
+        "confirmation_delay_hours_max": 2.0,
+        "terminal_label_censored": true,
+        "collapsed_reference_finalization": "next opposite retained pivot availability; distinct from K2 confirmation"
+      }
+    },
+    "candidates": 1797,
+    "snapshots": 6261,
+    "snapshots_by_delay_s": {
+      "0": 1797,
+      "30": 1366,
+      "60": 1129,
+      "180": 689,
+      "300": 543,
+      "600": 396,
+      "900": 341
+    },
+    "mean_snapshots_per_candidate": 3.4841402337228713,
+    "source_boundary_leakage_exposure": {
+      "snapshots_inside_unfinished_5s_bucket": 6240,
+      "snapshots_inside_unfinished_minute": 6244,
+      "minute_features_using_uncompleted_source_bar": 6261,
+      "note": "Source code slices bucket starts, then uses final OHLC/flow. Counts show timing exposure, not a claim that each numeric value changes."
+    },
+    "extreme_timestamps_equal_bucket_start": {
+      "high_ts_ms": 7924,
+      "low_ts_ms": 7519
+    },
+    "original_snapshot_features_status": "QUARANTINED: partial-bucket future leakage; rebuild from completed compact minutes",
+    "gap_sources": {
+      "mark": {
+        "rows": 43200,
+        "expected_rows": 43200,
+        "first_ts_ms": 1791072000000,
+        "last_ts_ms": 1793663940000,
+        "cadence_ms": 60000,
+        "complete_grid": true,
+        "receipt_time_available": false,
+        "timestamp_semantics": "bar start; close requires +60000ms"
+      },
+      "index": {
+        "rows": 43200,
+        "expected_rows": 43200,
+        "first_ts_ms": 1791072000000,
+        "last_ts_ms": 1793663940000,
+        "cadence_ms": 60000,
+        "complete_grid": true,
+        "receipt_time_available": false,
+        "timestamp_semantics": "bar start; close requires +60000ms"
+      },
+      "oi": {
+        "rows": 8640,
+        "expected_rows": 8640,
+        "first_ts_ms": 1791072000000,
+        "last_ts_ms": 1793663700000,
+        "cadence_ms": 300000,
+        "complete_grid": true,
+        "receipt_time_available": false,
+        "timestamp_semantics": "exchange observation/settlement timestamp"
+      },
+      "funding": {
+        "rows": 90,
+        "expected_rows": 90,
+        "first_ts_ms": 1791072000000,
+        "last_ts_ms": 1793635200000,
+        "cadence_ms": 28800000,
+        "complete_grid": true,
+        "receipt_time_available": false,
+        "timestamp_semantics": "exchange observation/settlement timestamp"
+      }
+    },
+    "archived_enriched_rows": 6261,
+    "archived_gap_join": "completion-safe; instant publication assumed; no historical receipt timestamps; upstream features quarantined"
+  },
+  "scope": "JSON/gzip/manifest/chronology only; pickle deserialization deliberately excluded"
+}

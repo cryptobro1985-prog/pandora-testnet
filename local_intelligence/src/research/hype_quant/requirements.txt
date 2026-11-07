@@ -1,0 +1,5 @@
+river==0.26.1
+numpy>=2.0,<3
+msgpack>=1.1,<2
+requests==2.34.2
+websockets==17.4

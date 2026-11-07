@@ -1,0 +1,8 @@
+river==0.26.1
+numpy==2.5.4
+scipy==1.18.1
+scikit-learn==1.9.1
+threadpoolctl==3.8.0
+requests==2.34.2
+msgpack==1.2.4
+websockets==17.4

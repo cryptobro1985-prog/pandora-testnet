@@ -1,0 +1,8 @@
+{
+  "observations_current": true,
+  "observed_phase": "running",
+  "spec_revision": "1",
+  "network_mode": "restricted",
+  "network_state": "enforced",
+  "custom_allowed_hosts": []
+}

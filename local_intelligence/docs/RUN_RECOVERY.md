@@ -1,0 +1,9 @@
+# Runtime validation and recovery
+
+Use the exact commands in README_INTELLIGENCE_RU.md. Seed only an empty directory from the evaluated research checkpoint. A runtime generation, its pointer and replay cursors are one atomic state. SHA256 is a corruption check, not authentication of arbitrary third-party pickle content.
+
+Completed failure-path tests cover writer exclusion, corrupt-current fallback, rejection when no intact generation exists, partial/rotated JSONL input, receipt-independent replay deduplication, crash after learning before checkpoint, delayed finalization, duplicate positives without synthetic negatives, proxy price censoring and legacy status compatibility. A subprocess integration test loads the actual saved trained estimator, drains an explicitly synthetic public-tape fixture, restarts without adding labels/events, and exercises statistical Cortex with no provider connection.
+
+Expected side changes only after a delayed H1 teacher, not a prediction. Exact public-trade extremes preserve source and receipt clocks; book-mid-only proposals cannot train negative examples or become accepted signals. Ambiguous, unfinished and missing reference outcomes remain censored/pending. Online training updates an isolated learner; forward challenger remains frozen for a preregistered cohort. Promotion never occurs from historical OOS alone.
+
+Live exchange connection, live restart continuity on a remote runner, prolonged online learning and any provider's availability remain unverified. No workflow was dispatched or deployment made in this task. Workflow checkpoint upload now retains complete generations even following an earlier failed step; cancellation does not interrupt an active segment. Old single-model enriched-history automatic replacement was removed. Statistical Cortex is the tested default; local LLM startup is opt-in and never deletes unrelated toolchains or runs an unverified installer.

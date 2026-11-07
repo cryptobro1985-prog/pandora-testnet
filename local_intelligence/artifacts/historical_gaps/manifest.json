@@ -1,0 +1,57 @@
+{
+  "version": "HYPE-LOCAL-HISTORICAL-GAPS-v1",
+  "symbol": "HYPEUSDT",
+  "period": [
+    "2026-10-04T00:00:00Z",
+    "2026-11-03T00:00:00Z"
+  ],
+  "sources": {
+    "mark": "Bybit /v5/market/mark-price-kline 1m",
+    "index": "Bybit /v5/market/index-price-kline 1m",
+    "open_interest": "Bybit /v5/market/open-interest 5min",
+    "funding": "Bybit /v5/market/funding/history"
+  },
+  "counts": {
+    "mark": 43200,
+    "index": 43200,
+    "oi": 8640,
+    "funding": 90
+  },
+  "snapshot_coverage": {
+    "rows": 6261,
+    "mark": 6261,
+    "index": 6261,
+    "oi": 6261,
+    "funding": 6261,
+    "basis": 6261
+  },
+  "join_rule": "only source timestamp <= snapshot; mark/index use last fully completed 1m bar",
+  "never_synthesized": [
+    "historical L50 replay",
+    "historical liquidation websocket events",
+    "historical receive timestamps/latency",
+    "historical websocket sequence health"
+  ],
+  "files": {
+    "candidate_snapshots_enriched.jsonl.gz": {
+      "bytes": 4477393,
+      "sha256": "c175fe12342d070f5d30524fe63446266777a8e3ba857c9e7b06535b10a64964"
+    },
+    "funding.jsonl.gz": {
+      "bytes": 709,
+      "sha256": "1515f1c224c85f522715c665c513a003e88874b47d56b490de6ee448d6097574"
+    },
+    "index_1m.jsonl.gz": {
+      "bytes": 562677,
+      "sha256": "9f1093f2f4b25473304e49dc26936f4ccd42bc41237ab1fd6d4b1b179ad5b884"
+    },
+    "mark_1m.jsonl.gz": {
+      "bytes": 540148,
+      "sha256": "a43658f55e292ec231eac757a4e40136057afe5af4309f2de55f2b92647bedc1"
+    },
+    "open_interest_5m.jsonl.gz": {
+      "bytes": 70100,
+      "sha256": "b63eec1505e4ae5b43ee71b72c3c72b2b9352aa044097433a9faf45066b2bd3d"
+    }
+  }
+}

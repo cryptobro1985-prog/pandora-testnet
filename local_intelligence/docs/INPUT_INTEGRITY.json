@@ -1,0 +1,10 @@
+{
+  "zip_sha256": "93bf8ba0b121c54c7b71512b0efc42085e806cfda3a86e01f40d98ffb115d765",
+  "archive_regular_files": 129,
+  "declared_sha256_valid": 127,
+  "declared_mismatch": [
+    "SHA256SUMS.txt"
+  ],
+  "declared_missing": [],
+  "note": "Original manifest self-hash cannot match its own generated contents; all other declared files verified against upload before changes."
+}

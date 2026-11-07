@@ -1,0 +1,5 @@
+# Retain small evidence reports, never commit downloaded market payloads.
+results/acquisition/archives/
+results/acquisition/artifacts/
+results/acquisition/raw/
+results/acquisition/oi/

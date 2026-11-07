@@ -1,0 +1,1488 @@
+{
+  "version": "HYPE-CAUSAL-RELATIONSHIPS-v2",
+  "status": "training-only descriptive; independent validation required",
+  "heads": {
+    "LOW_60s": {
+      "top_feature_relationships": [
+        {
+          "feature": "m1__reversals_3m",
+          "effect": 1000000.0,
+          "median": 0.0,
+          "scale": 1e-06,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__efficiency_3m",
+          "effect": 7.142857142851344,
+          "median": -1.0,
+          "scale": 0.02,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__rev_ret_15m_bps",
+          "effect": -0.5372362465991932,
+          "median": -42.45615803265545,
+          "scale": 25.91176980111671,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__range_15m_bps",
+          "effect": 0.4944088758923169,
+          "median": 63.11279978580053,
+          "scale": 28.65668659100132,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_15m_bps",
+          "effect": 0.46346500054916295,
+          "median": 54.03042702249783,
+          "scale": 25.81596066735402,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__efficiency_180m",
+          "effect": 0.4619781818277548,
+          "median": -0.13016528925619922,
+          "scale": 0.055715777477135124,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_60m",
+          "effect": 0.4501163069539035,
+          "median": 0.061296859169197,
+          "scale": 0.04668210133802194,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__acceleration_3_15m_bps",
+          "effect": 0.43078031248404,
+          "median": -7.097393691466225,
+          "scale": 11.834663810596965,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__efficiency_15m",
+          "effect": -0.40073701007656776,
+          "median": -0.4247080516287636,
+          "scale": 0.208686972159621,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_low_15m_bps",
+          "effect": 0.38112862322591606,
+          "median": 6.8461889548143695,
+          "scale": 5.708220831055259,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_low_180m_bps",
+          "effect": 0.38112862322591606,
+          "median": 6.8461889548143695,
+          "scale": 5.708220831055259,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_low_1m_bps",
+          "effect": 0.38112862322591606,
+          "median": 6.8461889548143695,
+          "scale": 5.708220831055259,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_low_360m_bps",
+          "effect": 0.38112862322591606,
+          "median": 6.8461889548143695,
+          "scale": 5.708220831055259,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_low_3m_bps",
+          "effect": 0.38112862322591606,
+          "median": 6.8461889548143695,
+          "scale": 5.708220831055259,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_low_5m_bps",
+          "effect": 0.38112862322591606,
+          "median": 6.8461889548143695,
+          "scale": 5.708220831055259,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_low_60m_bps",
+          "effect": 0.38112862322591606,
+          "median": 6.8461889548143695,
+          "scale": 5.708220831055259,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__retrace_bps",
+          "effect": 0.38112862322591606,
+          "median": 6.8461889548143695,
+          "scale": 5.708220831055259,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__range_1m_bps",
+          "effect": 0.32614577391308375,
+          "median": 16.494337764647593,
+          "scale": 9.860389452926563,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__lower_wick",
+          "effect": -0.2976363549331768,
+          "median": 0.35897435897432006,
+          "scale": 0.23569538461537648,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_3m_bps",
+          "effect": -0.29644525780871817,
+          "median": 20.592877577192414,
+          "scale": 13.438737121667677,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__volatility_180m_bps",
+          "effect": -0.2934050788483902,
+          "median": 7.938129698891367,
+          "scale": 2.2743181908170795,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_360m",
+          "effect": 0.2810533736942695,
+          "median": 0.03074141048824725,
+          "scale": 0.02545142333467093,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_180m_bps",
+          "effect": -0.2643720762145377,
+          "median": 177.18335619570257,
+          "scale": 58.4680936624643,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__body_rev_bps",
+          "effect": 0.2548615646609993,
+          "median": -4.9091801669132185,
+          "scale": 9.297891343163384,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__rev_ret_1m_bps",
+          "effect": 0.2548615646609993,
+          "median": -4.9091801669132185,
+          "scale": 9.297891343163384,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_15m",
+          "effect": 0.2524512073856074,
+          "median": 0.111111111111115,
+          "scale": 0.08179067599067902,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__rev_ret_1440m_bps",
+          "effect": 0.24622710781202312,
+          "median": -245.4861024398769,
+          "scale": 235.38820153580687,
+          "support": 401,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__efficiency_360m",
+          "effect": 0.24241587348872062,
+          "median": -0.08180943214629381,
+          "scale": 0.03929593078762656,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_180m",
+          "effect": 0.23005719149441148,
+          "median": 0.037922506183022404,
+          "scale": 0.03219850878549255,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__reversals_60m",
+          "effect": -0.22483025315886507,
+          "median": 28.0,
+          "scale": 4.4478,
+          "support": 411,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        }
+      ],
+      "top_pair_relationships": [],
+      "baseline_positive_rate": 0.05596107055961071,
+      "support": 411
+    },
+    "LOW_180s": {
+      "top_feature_relationships": [
+        {
+          "feature": "m1__efficiency_3m",
+          "effect": 0.8886663003440651,
+          "median": 0.8397435897434125,
+          "scale": 0.2375961538464167,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "seq__delta_volatility_60m_bps",
+          "effect": 0.7699599298221654,
+          "median": 0.04583637355796544,
+          "scale": 0.19297492719889228,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__reversals_15m",
+          "effect": -0.6744907594765952,
+          "median": 6.0,
+          "scale": 1.4826,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "seq__delta_retrace_bps",
+          "effect": 0.6492748084680392,
+          "median": 7.785456266857782,
+          "scale": 12.129964035416902,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__efficiency_5m",
+          "effect": 0.6178897213840823,
+          "median": -0.09466178816021772,
+          "scale": 0.5575625928041441,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__rev_ret_3m_bps",
+          "effect": 0.5982009945962065,
+          "median": 3.261677196466639,
+          "scale": 13.053843170789914,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__rev_ret_5m_bps",
+          "effect": 0.5941820404261042,
+          "median": -9.456662596340482,
+          "scale": 18.519934706588803,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__volatility_3m_bps",
+          "effect": 0.5768819037522988,
+          "median": 8.072941267501061,
+          "scale": 5.81733566560747,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_low_1440m_bps",
+          "effect": 0.5643552480028318,
+          "median": 54.3056620117266,
+          "scale": 57.40948054841422,
+          "support": 254,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__acceleration_5_60m_bps",
+          "effect": 0.5357398886857186,
+          "median": -2.841186320575636,
+          "scale": 17.785575566259396,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__efficiency_180m",
+          "effect": 0.4752640872186873,
+          "median": -0.12027364040292404,
+          "scale": 0.06092760956175424,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__reversals_60m",
+          "effect": -0.44966050631773014,
+          "median": 28.0,
+          "scale": 4.4478,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_180m_bps",
+          "effect": -0.43825783803590523,
+          "median": 166.8256162561521,
+          "scale": 54.81194346948447,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "seq__delta_position_60m",
+          "effect": 0.41382739075280367,
+          "median": 0.07234011955566938,
+          "scale": 0.10588516564471412,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__lower_wick",
+          "effect": -0.4060901049899758,
+          "median": 0.1334682860998581,
+          "scale": 0.19788008097164964,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__acceleration_3_15m_bps",
+          "effect": 0.3989028869221937,
+          "median": 9.802067597553755,
+          "scale": 13.986564158023313,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__rev_ret_180m_bps",
+          "effect": 0.362720588947274,
+          "median": -127.96475624817117,
+          "scale": 66.33801000647145,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_15m",
+          "effect": 0.3588018290209167,
+          "median": 0.2978260869565059,
+          "scale": 0.1940269160616824,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__efficiency_60m",
+          "effect": 0.35877020782606034,
+          "median": -0.18545321227055747,
+          "scale": 0.09351712399618953,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__range_15m_bps",
+          "effect": 0.34550914878818123,
+          "median": 60.65124837141056,
+          "scale": 27.576191890743246,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_5m",
+          "effect": 0.344280068548335,
+          "median": 0.5324134135314806,
+          "scale": 0.37114485981304757,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__efficiency_15m",
+          "effect": 0.33033704761690663,
+          "median": -0.28358290010911563,
+          "scale": 0.22878027531708578,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__volatility_15m_bps",
+          "effect": 0.30863590769873755,
+          "median": 8.90968549819101,
+          "scale": 3.709304574908957,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_360m",
+          "effect": 0.2698056000079923,
+          "median": 0.07208455014182188,
+          "scale": 0.05462335938690079,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__volatility_180m_bps",
+          "effect": -0.26346292410891853,
+          "median": 8.03699776634691,
+          "scale": 2.443853736736223,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_1440m",
+          "effect": 0.2565157606868303,
+          "median": 0.11956055547827649,
+          "scale": 0.13811046537859223,
+          "support": 254,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_3m",
+          "effect": 0.255314271999066,
+          "median": 0.7218512548929382,
+          "scale": 0.28936710526314613,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__rev_ret_1440m_bps",
+          "effect": 0.25130057905639785,
+          "median": -234.05168866077463,
+          "scale": 248.8816426393123,
+          "support": 254,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_60m",
+          "effect": 0.24618256767342334,
+          "median": 0.15753799629813622,
+          "scale": 0.11313372771575964,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_15m_bps",
+          "effect": -0.23289257434042113,
+          "median": 43.467159242998044,
+          "scale": 24.269774126080662,
+          "support": 262,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        }
+      ],
+      "top_pair_relationships": [],
+      "baseline_positive_rate": 0.08778625954198473,
+      "support": 262
+    },
+    "LOW_300s": {
+      "top_feature_relationships": [
+        {
+          "feature": "m1__reversals_3m",
+          "effect": 1000000.0,
+          "median": 0.0,
+          "scale": 1e-06,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__reversals_15m",
+          "effect": 0.6744907594765952,
+          "median": 6.0,
+          "scale": 1.4826,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__reversals_5m",
+          "effect": 0.6744907594765952,
+          "median": 1.0,
+          "scale": 1.4826,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__range_5m_bps",
+          "effect": 0.5870272097065814,
+          "median": 31.651954602773813,
+          "scale": 15.725904691407235,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__volatility_5m_bps",
+          "effect": 0.5800945453344071,
+          "median": 8.615627609820686,
+          "scale": 4.762193757750866,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_360m",
+          "effect": 0.49256557139768553,
+          "median": 0.0982482863671018,
+          "scale": 0.06523885276409094,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__range_1m_bps",
+          "effect": 0.48417458598514035,
+          "median": 11.084016847704437,
+          "scale": 6.650021674974419,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_180m",
+          "effect": 0.4599034840385025,
+          "median": 0.11985957873621081,
+          "scale": 0.08205843423261398,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__rev_ret_180m_bps",
+          "effect": 0.43980072587580765,
+          "median": -119.00012538327398,
+          "scale": 63.298484274592994,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_low_1m_bps",
+          "effect": 0.43016358138424804,
+          "median": 5.1571738687195,
+          "scale": 5.1433854511067825,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__efficiency_60m",
+          "effect": 0.42337579437844136,
+          "median": -0.1657754010695151,
+          "scale": 0.08646669157915392,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_60m",
+          "effect": 0.3959083951176711,
+          "median": 0.19961977186312416,
+          "scale": 0.12249718417964961,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_3m",
+          "effect": -0.3893378287683656,
+          "median": 0.6438356164383121,
+          "scale": 0.3880613322359075,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__efficiency_180m",
+          "effect": 0.3761223708327562,
+          "median": -0.10883587590867093,
+          "scale": 0.05895227518964679,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__rev_ret_3m_bps",
+          "effect": -0.37012604141996713,
+          "median": 4.99782146243799,
+          "scale": 12.583435332268886,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_180m_bps",
+          "effect": -0.354423915525582,
+          "median": 159.6053754002491,
+          "scale": 58.99213358363718,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "seq__delta_rev_ret_5m_bps",
+          "effect": -0.3541589850835026,
+          "median": 15.80756047355081,
+          "scale": 14.924005562162451,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__volatility_180m_bps",
+          "effect": -0.31669231475197784,
+          "median": 8.118750513251184,
+          "scale": 2.3729115939696777,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__acceleration_3_15m_bps",
+          "effect": -0.30369939345856983,
+          "median": 10.646786843604872,
+          "scale": 12.488061597944437,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_5m_bps",
+          "effect": -0.2547256987745923,
+          "median": 7.802050824790019,
+          "scale": 7.4692190086877215,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__volatility_15m_bps",
+          "effect": 0.2524064421107329,
+          "median": 9.386833252459711,
+          "scale": 3.605320189762901,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "seq__delta_rev_ret_3m_bps",
+          "effect": -0.25090542554916095,
+          "median": 1.2843827804132069,
+          "scale": 17.692398637752913,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__acceleration_5_60m_bps",
+          "effect": 0.24216060652305443,
+          "median": 14.451956474791917,
+          "scale": 14.870554633912597,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__efficiency_15m",
+          "effect": 0.22983655193773184,
+          "median": -0.2054794520547897,
+          "scale": 0.21391260317530672,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__reversals_1440m",
+          "effect": -0.22483025315886507,
+          "median": 701.0,
+          "scale": 35.5824,
+          "support": 204,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__reversals_60m",
+          "effect": -0.22483025315886507,
+          "median": 28.0,
+          "scale": 4.4478,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__range_180m_bps",
+          "effect": -0.21887898765409025,
+          "median": 188.70069341821116,
+          "scale": 65.95611834600805,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__volatility_360m_bps",
+          "effect": -0.2163814024193848,
+          "median": 8.15270233257848,
+          "scale": 2.4768414476849694,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__rev_ret_5m_bps",
+          "effect": 0.2150972645163186,
+          "median": 9.509093070247943,
+          "scale": 15.393880891695359,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__volatility_3m_bps",
+          "effect": 0.2060528598057779,
+          "median": 6.719805672315535,
+          "scale": 4.833547795990444,
+          "support": 211,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        }
+      ],
+      "top_pair_relationships": [],
+      "baseline_positive_rate": 0.10900473933649289,
+      "support": 211
+    },
+    "HIGH_60s": {
+      "top_feature_relationships": [
+        {
+          "feature": "m1__reversals_3m",
+          "effect": 500000.0,
+          "median": 0.0,
+          "scale": 1e-06,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__efficiency_3m",
+          "effect": 2.9411764705897125,
+          "median": -1.0,
+          "scale": 0.02,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__range_1m_bps",
+          "effect": 1.0687951580490334,
+          "median": 11.511636620535892,
+          "scale": 6.802697597967581,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__reversals_15m",
+          "effect": 0.6744907594765952,
+          "median": 6.0,
+          "scale": 1.4826,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_180m",
+          "effect": -0.5825243571396462,
+          "median": 0.9683296934401,
+          "scale": 0.027186396505705056,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_5m",
+          "effect": -0.5360061029395592,
+          "median": 0.8333333333333383,
+          "scale": 0.13372078272608434,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__efficiency_360m",
+          "effect": -0.4515391042874238,
+          "median": -0.06806836007375439,
+          "scale": 0.041656418150003816,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_15m",
+          "effect": -0.4480106924435045,
+          "median": 0.9007042253521237,
+          "scale": 0.0823922791293095,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_1440m_bps",
+          "effect": -0.4230341589609314,
+          "median": 83.70960377454439,
+          "scale": 111.45903697141031,
+          "support": 295,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__acceleration_3_15m_bps",
+          "effect": 0.42151029059547607,
+          "median": -5.147999622574062,
+          "scale": 8.966938848037774,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_60m",
+          "effect": -0.4204085841170453,
+          "median": 0.945176315651268,
+          "scale": 0.045347029897711985,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_360m",
+          "effect": -0.41511492009545875,
+          "median": 0.9766800161663713,
+          "scale": 0.01953360032332743,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__range_3m_bps",
+          "effect": 0.3946087164177978,
+          "median": 21.428369115936707,
+          "scale": 11.14686327940481,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__close_position",
+          "effect": -0.3815979009137001,
+          "median": 0.5629401408450393,
+          "scale": 0.3695986763315108,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_1m",
+          "effect": -0.3815979009137001,
+          "median": 0.5629401408450393,
+          "scale": 0.3695986763315108,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__retrace_bps",
+          "effect": 0.38041876128673896,
+          "median": 4.659018127734504,
+          "scale": 3.988493657631318,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_15m_bps",
+          "effect": 0.38040634864058814,
+          "median": 4.661189784512798,
+          "scale": 3.9932875401664303,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_180m_bps",
+          "effect": 0.38040634864058814,
+          "median": 4.661189784512798,
+          "scale": 3.9932875401664303,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_1m_bps",
+          "effect": 0.38040634864058814,
+          "median": 4.661189784512798,
+          "scale": 3.9932875401664303,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_360m_bps",
+          "effect": 0.38040634864058814,
+          "median": 4.661189784512798,
+          "scale": 3.9932875401664303,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_3m_bps",
+          "effect": 0.38040634864058814,
+          "median": 4.661189784512798,
+          "scale": 3.9932875401664303,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_5m_bps",
+          "effect": 0.38040634864058814,
+          "median": 4.661189784512798,
+          "scale": 3.9932875401664303,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_60m_bps",
+          "effect": 0.38040634864058814,
+          "median": 4.661189784512798,
+          "scale": 3.9932875401664303,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_1440m",
+          "effect": 0.3626848454728501,
+          "median": 0.8146929824561375,
+          "scale": 0.2525249482554708,
+          "support": 295,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__efficiency_15m",
+          "effect": 0.35944446245685696,
+          "median": -0.444247699351742,
+          "scale": 0.22662802938364002,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__lower_wick",
+          "effect": -0.3511237717376951,
+          "median": 0.09559884559888357,
+          "scale": 0.14173484848490478,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_low_5m_bps",
+          "effect": 0.3231539905702205,
+          "median": 21.281883241910382,
+          "scale": 12.984841639041385,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_3m",
+          "effect": -0.30496433383813926,
+          "median": 0.783482142857143,
+          "scale": 0.1758511765046701,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__efficiency_5m",
+          "effect": 0.30273894762390535,
+          "median": -0.7284162378501793,
+          "scale": 0.4026500857633242,
+          "support": 312,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__reversals_1440m",
+          "effect": 0.2922793291065246,
+          "median": 695.0,
+          "scale": 44.477999999999994,
+          "support": 295,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        }
+      ],
+      "top_pair_relationships": [],
+      "baseline_positive_rate": 0.07051282051282051,
+      "support": 312
+    },
+    "HIGH_180s": {
+      "top_feature_relationships": [
+        {
+          "feature": "m1__position_360m",
+          "effect": -0.6794447408008492,
+          "median": 0.942196531791911,
+          "scale": 0.04388515387017248,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_15m_bps",
+          "effect": 0.5877039249873336,
+          "median": 12.656771372683284,
+          "scale": 8.562383073588409,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_180m_bps",
+          "effect": 0.5877039249873336,
+          "median": 12.656771372683284,
+          "scale": 8.562383073588409,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_360m_bps",
+          "effect": 0.5877039249873336,
+          "median": 12.656771372683284,
+          "scale": 8.562383073588409,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_3m_bps",
+          "effect": 0.5877039249873336,
+          "median": 12.656771372683284,
+          "scale": 8.562383073588409,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_5m_bps",
+          "effect": 0.5877039249873336,
+          "median": 12.656771372683284,
+          "scale": 8.562383073588409,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_60m_bps",
+          "effect": 0.5877039249873336,
+          "median": 12.656771372683284,
+          "scale": 8.562383073588409,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__retrace_bps",
+          "effect": 0.5871750329101555,
+          "median": 12.640772236267583,
+          "scale": 8.545678831530848,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_180m",
+          "effect": -0.5682268462189111,
+          "median": 0.9245283018867942,
+          "scale": 0.05221954478089899,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__efficiency_3m",
+          "effect": 0.5246039240378931,
+          "median": 0.7500000000001776,
+          "scale": 0.37064999999973663,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__range_3m_bps",
+          "effect": 0.4918367512021671,
+          "median": 17.27911530929438,
+          "scale": 9.317140545030947,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__efficiency_360m",
+          "effect": -0.4741731479524851,
+          "median": -0.06396976483762609,
+          "scale": 0.03955542879306297,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_60m",
+          "effect": -0.46743465023930164,
+          "median": 0.8666666666666625,
+          "scale": 0.08743538461538068,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__range_5m_bps",
+          "effect": 0.44810906999841116,
+          "median": 23.153020416755155,
+          "scale": 10.99366501750039,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_1m_bps",
+          "effect": 0.4308087591684679,
+          "median": 3.4977264777902306,
+          "scale": 3.518306255081415,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "seq__delta_rev_ret_3m_bps",
+          "effect": 0.4232581105180259,
+          "median": 14.744732206405375,
+          "scale": 12.258114480786364,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_3m",
+          "effect": -0.39336601515422914,
+          "median": 0.29629629629629434,
+          "scale": 0.2910288888888228,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__range_1m_bps",
+          "effect": 0.38774263151022154,
+          "median": 7.155591670406913,
+          "scale": 4.088852358453659,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "seq__delta_position_60m",
+          "effect": -0.35568175281335795,
+          "median": -0.06107954545453487,
+          "scale": 0.0753168865137899,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__acceleration_3_15m_bps",
+          "effect": -0.350880563721099,
+          "median": 7.722995812662559,
+          "scale": 8.321165297798633,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__upper_wick",
+          "effect": 0.34741627214292803,
+          "median": 0.16949152542358184,
+          "scale": 0.25128813559300245,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__rev_ret_1440m_bps",
+          "effect": 0.341012055312348,
+          "median": -114.51433770890861,
+          "scale": 190.8529322508063,
+          "support": 182,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__lower_wick",
+          "effect": 0.3386544948196163,
+          "median": 0.19999999999982948,
+          "scale": 0.29651999999974715,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_5m",
+          "effect": -0.3382270149110968,
+          "median": 0.5,
+          "scale": 0.27486404494381117,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__reversals_60m",
+          "effect": -0.3372453797382976,
+          "median": 28.0,
+          "scale": 4.4478,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__reversals_1440m",
+          "effect": 0.2997736708784867,
+          "median": 694.5,
+          "scale": 40.0302,
+          "support": 182,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_15m",
+          "effect": -0.29481590321162543,
+          "median": 0.7374429223744423,
+          "scale": 0.15013809102959724,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "seq__delta_rev_ret_5m_bps",
+          "effect": 0.2557073791483231,
+          "median": 9.666886585933954,
+          "scale": 13.210633914688078,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "seq__delta_volatility_60m_bps",
+          "effect": -0.2334665863171102,
+          "median": 0.014393668722171071,
+          "scale": 0.11037196565094406,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__rev_ret_60m_bps",
+          "effect": -0.21980654421963455,
+          "median": -52.63157894736858,
+          "scale": 37.823564509593155,
+          "support": 193,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        }
+      ],
+      "top_pair_relationships": [],
+      "baseline_positive_rate": 0.11398963730569948,
+      "support": 193
+    },
+    "HIGH_300s": {
+      "top_feature_relationships": [
+        {
+          "feature": "m1__reversals_3m",
+          "effect": 50.0,
+          "median": 1.0,
+          "scale": 0.02,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_360m",
+          "effect": -1.083908712968557,
+          "median": 0.9238964992389689,
+          "scale": 0.04289708796415792,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__retrace_bps",
+          "effect": 0.9297685832072913,
+          "median": 14.917421417155463,
+          "scale": 11.630016742887207,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_15m_bps",
+          "effect": 0.9296602752156864,
+          "median": 14.939707608578878,
+          "scale": 11.673963644004973,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_180m_bps",
+          "effect": 0.9296602752156864,
+          "median": 14.939707608578878,
+          "scale": 11.673963644004973,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_360m_bps",
+          "effect": 0.9296602752156864,
+          "median": 14.939707608578878,
+          "scale": 11.673963644004973,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_5m_bps",
+          "effect": 0.9296602752156864,
+          "median": 14.939707608578878,
+          "scale": 11.673963644004973,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_60m_bps",
+          "effect": 0.9296602752156864,
+          "median": 14.939707608578878,
+          "scale": 11.673963644004973,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_180m",
+          "effect": -0.8946584134313175,
+          "median": 0.8976377952755938,
+          "scale": 0.06455044001853866,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_1m_bps",
+          "effect": 0.8433249150547513,
+          "median": 3.55281856939893,
+          "scale": 3.7506048824035894,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__range_1m_bps",
+          "effect": 0.7256438555765812,
+          "median": 7.481829841811116,
+          "scale": 4.73872578235099,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__acceleration_5_60m_bps",
+          "effect": 0.6819003031462845,
+          "median": 9.638286658653627,
+          "scale": 9.917670540566611,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__reversals_15m",
+          "effect": 0.6744907594765952,
+          "median": 6.0,
+          "scale": 1.4826,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__reversals_5m",
+          "effect": 0.6744907594765952,
+          "median": 1.0,
+          "scale": 1.4826,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_60m",
+          "effect": -0.6610910723773492,
+          "median": 0.8223938223938159,
+          "scale": 0.10446891891892324,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__volatility_3m_bps",
+          "effect": 0.6563467312595705,
+          "median": 5.251254745150608,
+          "scale": 3.9109903533078803,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__efficiency_360m",
+          "effect": -0.5977329396099031,
+          "median": -0.05870841487279821,
+          "scale": 0.03794838065862238,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "seq__delta_rev_ret_3m_bps",
+          "effect": 0.5801368485668585,
+          "median": 1.0813148788924032,
+          "scale": 11.525004126159523,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_high_3m_bps",
+          "effect": 0.5661464507455632,
+          "median": 7.857419024932533,
+          "scale": 7.760161073412921,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_3m",
+          "effect": -0.550828752846752,
+          "median": 0.29921259842526027,
+          "scale": 0.3264199597142984,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__rev_ret_3m_bps",
+          "effect": 0.5331431534266989,
+          "median": 3.3200531208499307,
+          "scale": 8.194436115612664,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__body_rev_bps",
+          "effect": 0.5021541602126843,
+          "median": 1.8857250612858145,
+          "scale": 6.057463358990469,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__rev_ret_1m_bps",
+          "effect": 0.5021541602126843,
+          "median": 1.8857250612858145,
+          "scale": 6.057463358990469,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__efficiency_5m",
+          "effect": 0.4896728419863855,
+          "median": 0.4532871972318547,
+          "scale": 0.4643655384399278,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__position_15m",
+          "effect": -0.4870082612515933,
+          "median": 0.6167512690355118,
+          "scale": 0.22167064514725543,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__lower_wick",
+          "effect": -0.48236267415917883,
+          "median": 0.15999999999996817,
+          "scale": 0.2372159999999528,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__range_5m_bps",
+          "effect": 0.48110139410468883,
+          "median": 23.00700267786615,
+          "scale": 11.315980544902247,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__distance_low_5m_bps",
+          "effect": -0.47793723012135947,
+          "median": 4.721992680911669,
+          "scale": 5.2909889597205835,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__range_3m_bps",
+          "effect": 0.4464230366221365,
+          "median": 14.79917997986302,
+          "scale": 7.901491510871787,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        },
+        {
+          "feature": "m1__rev_ret_360m_bps",
+          "effect": -0.43163513943376364,
+          "median": -117.9875333926983,
+          "scale": 84.63599057683405,
+          "support": 149,
+          "status": "descriptive training-only; not multiple-testing-corrected evidence"
+        }
+      ],
+      "top_pair_relationships": [],
+      "baseline_positive_rate": 0.1476510067114094,
+      "support": 149
+    }
+  }
+}

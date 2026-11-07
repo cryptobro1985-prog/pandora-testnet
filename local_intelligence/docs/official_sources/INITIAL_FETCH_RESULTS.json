@@ -1,0 +1,38 @@
+[
+  {
+    "source": "openai_gpt_oss_model_card",
+    "url": "https://raw.githubusercontent.com/openai/gpt-oss/main/gpt-oss-20b-MODEL_CARD.md",
+    "ok": false,
+    "error": "HTTP Error 404: Not Found"
+  },
+  {
+    "source": "openai_gpt_oss_readme",
+    "url": "https://raw.githubusercontent.com/openai/gpt-oss/main/README.md",
+    "ok": true,
+    "bytes": 24453
+  },
+  {
+    "source": "qwen3_model_card",
+    "url": "https://huggingface.co/Qwen/Qwen3-8B/raw/main/README.md",
+    "ok": false,
+    "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
+  },
+  {
+    "source": "llama_server",
+    "url": "https://raw.githubusercontent.com/ggml-org/llama.cpp/master/tools/server/README.md",
+    "ok": true,
+    "bytes": 136429
+  },
+  {
+    "source": "chronos2_model_card",
+    "url": "https://huggingface.co/amazon/chronos-2/raw/main/README.md",
+    "ok": false,
+    "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
+  },
+  {
+    "source": "openai_api_pricing",
+    "url": "https://openai.com/api/pricing/",
+    "ok": false,
+    "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
+  }
+]

@@ -1,0 +1,88 @@
+{
+  "checks": [
+    {
+      "name": "dependencies",
+      "command": [
+        "/workspace/pandora-intelligence/.venv/bin/python",
+        "-m",
+        "pip",
+        "check"
+      ],
+      "exit_code": 0,
+      "seconds": 0.199,
+      "log": "dependencies.log"
+    },
+    {
+      "name": "software_tests",
+      "command": [
+        "/workspace/pandora-intelligence/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests",
+        "src/research/hype_local_v5/tests",
+        "src/research/hype_history_backfill/test_integrity.py",
+        "src/research/hype_local_only/tests",
+        "--junitxml=/workspace/pandora-intelligence/PANDORA_HYPE_LOCAL_ONLY_CODEX/validation/current/software.xml"
+      ],
+      "exit_code": 0,
+      "seconds": 8.102,
+      "log": "software_tests.log",
+      "counts": {
+        "tests": 194,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "quantum_self",
+      "command": [
+        "/workspace/pandora-intelligence/.venv/bin/python",
+        "-m",
+        "research.hype_quant.test_self"
+      ],
+      "exit_code": 0,
+      "seconds": 4.817,
+      "log": "quantum_self.log"
+    },
+    {
+      "name": "features_116",
+      "command": [
+        "/workspace/pandora-intelligence/.venv/bin/python",
+        "-m",
+        "research.hype_quant.test_116_features"
+      ],
+      "exit_code": 0,
+      "seconds": 0.102,
+      "log": "features_116.log"
+    },
+    {
+      "name": "legacy_cortex_self",
+      "command": [
+        "/workspace/pandora-intelligence/.venv/bin/python",
+        "-m",
+        "research.hype_quant.test_astra_cortex"
+      ],
+      "exit_code": 0,
+      "seconds": 1.045,
+      "log": "legacy_cortex_self.log"
+    },
+    {
+      "name": "compact_roundtrip",
+      "command": [
+        "/workspace/pandora-intelligence/.venv/bin/python",
+        "src/research/hype_local_v5/test_compact_smoke.py"
+      ],
+      "exit_code": 0,
+      "seconds": 0.117,
+      "log": "compact_roundtrip.log"
+    }
+  ],
+  "monitor_unchanged": true,
+  "protected_changes": [],
+  "offline_software_passed": true,
+  "live_exchange_verified": false,
+  "external_llm_verified": false,
+  "note": "Offline fixtures are software validation, not evidence of live market quality."
+}

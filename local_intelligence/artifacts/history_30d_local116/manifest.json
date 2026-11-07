@@ -1,0 +1,327 @@
+{
+  "candidate_snapshots": 6261,
+  "candidates": 1797,
+  "compression": "final compact JSONL/JSON gzip level 9",
+  "discovery_start": "2026-10-11T00:00:00+00:00",
+  "feature_contract": "116-point canonical; availability-aware",
+  "five_second_bars": 456504,
+  "future_leakage_guard": "offline labels/points 83..110 never enter feature dictionaries",
+  "integrity": {
+    "days": [
+      {
+        "archive_bytes": 5514194,
+        "archive_sha256": "811adef9619f43a666141fdd8ead70005fecd425ea3832fbbb571561fc9fe4b2",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-04.csv.gz",
+        "date": "2026-10-04",
+        "first_ts_ms": 1791072002277,
+        "last_ts_ms": 1791158399485,
+        "max_intertrade_gap_s": 84.975,
+        "rows": 145207
+      },
+      {
+        "archive_bytes": 15946804,
+        "archive_sha256": "adaf39e65c090e9e64eaf0acff89e3d1ecace727345a438997683c350c83cb80",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-05.csv.gz",
+        "date": "2026-10-05",
+        "first_ts_ms": 1791158400485,
+        "last_ts_ms": 1791244793213,
+        "max_intertrade_gap_s": 25.388,
+        "rows": 427546
+      },
+      {
+        "archive_bytes": 10169874,
+        "archive_sha256": "cb8d7221fd85573b99d908b37c104f4ee4bc7d094be5587c47c17a6afe68a019",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-06.csv.gz",
+        "date": "2026-10-06",
+        "first_ts_ms": 1791244800548,
+        "last_ts_ms": 1791331198971,
+        "max_intertrade_gap_s": 48.602,
+        "rows": 271194
+      },
+      {
+        "archive_bytes": 13279635,
+        "archive_sha256": "0b5c357cebe586f653b18adfffe8700a5aa189a868db901dc29552e8b6ca7574",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-07.csv.gz",
+        "date": "2026-10-07",
+        "first_ts_ms": 1791331200595,
+        "last_ts_ms": 1791417596052,
+        "max_intertrade_gap_s": 33.376,
+        "rows": 353245
+      },
+      {
+        "archive_bytes": 16163806,
+        "archive_sha256": "4d48fbd531f7adb63f301eccf828ec2da3a982e66652ac41adf97782a8c2be36",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-08.csv.gz",
+        "date": "2026-10-08",
+        "first_ts_ms": 1791417600433,
+        "last_ts_ms": 1791503997425,
+        "max_intertrade_gap_s": 27.157,
+        "rows": 433084
+      },
+      {
+        "archive_bytes": 7947660,
+        "archive_sha256": "785f778a0301a1b361e2f79ef4a1192056fb654d4ea36aa258a0323284a6deef",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-09.csv.gz",
+        "date": "2026-10-09",
+        "first_ts_ms": 1791504000330,
+        "last_ts_ms": 1791590397612,
+        "max_intertrade_gap_s": 32.748,
+        "rows": 211367
+      },
+      {
+        "archive_bytes": 5901054,
+        "archive_sha256": "fc30494ebc9be039e6f9a6a07d8bb3f0a3a90c901b001e3c441fc2cc815288c5",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-10.csv.gz",
+        "date": "2026-10-10",
+        "first_ts_ms": 1791590400835,
+        "last_ts_ms": 1791676799685,
+        "max_intertrade_gap_s": 74.38,
+        "rows": 154931
+      },
+      {
+        "archive_bytes": 5753495,
+        "archive_sha256": "b6dc462cf7511c42366d9e0ea53c9581f651cb7e4a7c3e40c01a30cea1befe9d",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-11.csv.gz",
+        "date": "2026-10-11",
+        "first_ts_ms": 1791676803543,
+        "last_ts_ms": 1791763193170,
+        "max_intertrade_gap_s": 40.898,
+        "rows": 152222
+      },
+      {
+        "archive_bytes": 12669112,
+        "archive_sha256": "b5c3e17544013af3193bb142a440ea52824ae3378e25e96873992bfdd6948a81",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-12.csv.gz",
+        "date": "2026-10-12",
+        "first_ts_ms": 1791763200515,
+        "last_ts_ms": 1791849597684,
+        "max_intertrade_gap_s": 30.221,
+        "rows": 324108
+      },
+      {
+        "archive_bytes": 14510659,
+        "archive_sha256": "64a817f478f646d039e53bc29148692593ca86627c8fab18bc67226b49d607b2",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-13.csv.gz",
+        "date": "2026-10-13",
+        "first_ts_ms": 1791849600145,
+        "last_ts_ms": 1791935992245,
+        "max_intertrade_gap_s": 75.155,
+        "rows": 370121
+      },
+      {
+        "archive_bytes": 17023367,
+        "archive_sha256": "0dd31c9bc17f2c0a1a0e0c876f47afd63ef6450a819a8e8ba39b293a9c25b3d0",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-14.csv.gz",
+        "date": "2026-10-14",
+        "first_ts_ms": 1791936000573,
+        "last_ts_ms": 1792022394771,
+        "max_intertrade_gap_s": 40.931,
+        "rows": 434592
+      },
+      {
+        "archive_bytes": 23371349,
+        "archive_sha256": "be667d102b7f60f9145ab7b9b36c07847d91b0f1fc27302bbea9d71415668475",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-15.csv.gz",
+        "date": "2026-10-15",
+        "first_ts_ms": 1792022400172,
+        "last_ts_ms": 1792108799495,
+        "max_intertrade_gap_s": 26.183,
+        "rows": 600453
+      },
+      {
+        "archive_bytes": 16294842,
+        "archive_sha256": "32f46afb8fc9148403023d04bf8ff62b83a377849f46a734950776a8efae39df",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-16.csv.gz",
+        "date": "2026-10-16",
+        "first_ts_ms": 1792108800453,
+        "last_ts_ms": 1792195198507,
+        "max_intertrade_gap_s": 35.353,
+        "rows": 417404
+      },
+      {
+        "archive_bytes": 9122858,
+        "archive_sha256": "d41ce78325dbd6555294daafe2fb8f8b353da0b3aba8384b13967159c6dc547d",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-17.csv.gz",
+        "date": "2026-10-17",
+        "first_ts_ms": 1792195200276,
+        "last_ts_ms": 1792281598507,
+        "max_intertrade_gap_s": 40.397,
+        "rows": 229684
+      },
+      {
+        "archive_bytes": 12416508,
+        "archive_sha256": "fe7c92feea65c012bda0f196650c5692d40bac5cfa40f078ecf1b28921cd27fb",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-18.csv.gz",
+        "date": "2026-10-18",
+        "first_ts_ms": 1792281600922,
+        "last_ts_ms": 1792367999817,
+        "max_intertrade_gap_s": 49.705,
+        "rows": 315370
+      },
+      {
+        "archive_bytes": 13563112,
+        "archive_sha256": "651058e648bb7a02c006b0e3c93de78912c68933c4b47e497491be31bd371310",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-19.csv.gz",
+        "date": "2026-10-19",
+        "first_ts_ms": 1792368000316,
+        "last_ts_ms": 1792454398653,
+        "max_intertrade_gap_s": 39.794,
+        "rows": 345430
+      },
+      {
+        "archive_bytes": 16777865,
+        "archive_sha256": "557faccadb80ecc973c90d57a5f4e827709bfba12f65d1e5666db1c275b669d7",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-20.csv.gz",
+        "date": "2026-10-20",
+        "first_ts_ms": 1792454402158,
+        "last_ts_ms": 1792540798734,
+        "max_intertrade_gap_s": 30.215,
+        "rows": 425983
+      },
+      {
+        "archive_bytes": 19884946,
+        "archive_sha256": "0ca1cbee262945570c87606780c882f7dd72a5176904f475df5d6943feb08ca1",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-21.csv.gz",
+        "date": "2026-10-21",
+        "first_ts_ms": 1792540801122,
+        "last_ts_ms": 1792627199451,
+        "max_intertrade_gap_s": 29.686,
+        "rows": 502888
+      },
+      {
+        "archive_bytes": 17415528,
+        "archive_sha256": "0fe4b8797753ef4bd265fda5cb64c965d4e39002be3625545edd7e0ed10cfc09",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-22.csv.gz",
+        "date": "2026-10-22",
+        "first_ts_ms": 1792627200122,
+        "last_ts_ms": 1792713598508,
+        "max_intertrade_gap_s": 31.229,
+        "rows": 435060
+      },
+      {
+        "archive_bytes": 14715259,
+        "archive_sha256": "3fc94a5aebc2ad702fcc5606af55f5bc627175d5135e0af7a4ab8ff3b3f71ec3",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-23.csv.gz",
+        "date": "2026-10-23",
+        "first_ts_ms": 1792713600455,
+        "last_ts_ms": 1792799999370,
+        "max_intertrade_gap_s": 37.448,
+        "rows": 365856
+      },
+      {
+        "archive_bytes": 15934515,
+        "archive_sha256": "642ec865a8201ff09969d4cf6682a63c4e33ca4a16a6ff535c51de5e66940e0e",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-24.csv.gz",
+        "date": "2026-10-24",
+        "first_ts_ms": 1792800000294,
+        "last_ts_ms": 1792886398513,
+        "max_intertrade_gap_s": 45.716,
+        "rows": 397503
+      },
+      {
+        "archive_bytes": 9686973,
+        "archive_sha256": "24e7b6289bb4c114cc6bf0a110738a8d2ef7d12475679308aa10e192e950f75f",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-25.csv.gz",
+        "date": "2026-10-25",
+        "first_ts_ms": 1792886400629,
+        "last_ts_ms": 1792972799925,
+        "max_intertrade_gap_s": 30.214,
+        "rows": 240660
+      },
+      {
+        "archive_bytes": 21394421,
+        "archive_sha256": "502573796384521c2e1ab127017d71cb05db51e24e334dd41fc6828aaf3864cc",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-26.csv.gz",
+        "date": "2026-10-26",
+        "first_ts_ms": 1792972800201,
+        "last_ts_ms": 1793059198518,
+        "max_intertrade_gap_s": 31.608,
+        "rows": 539008
+      },
+      {
+        "archive_bytes": 16012543,
+        "archive_sha256": "c81a5525b2dcaae570e652dcc2fdb54cdfc51beae38bb8c35a7542512851fa73",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-27.csv.gz",
+        "date": "2026-10-27",
+        "first_ts_ms": 1793059200268,
+        "last_ts_ms": 1793145599050,
+        "max_intertrade_gap_s": 30.489,
+        "rows": 402075
+      },
+      {
+        "archive_bytes": 16481962,
+        "archive_sha256": "9f0a0610f956dcacd1b294117e0be21bb36269f7101fe2373be2a21a7872b45a",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-28.csv.gz",
+        "date": "2026-10-28",
+        "first_ts_ms": 1793145600040,
+        "last_ts_ms": 1793231998516,
+        "max_intertrade_gap_s": 30.217,
+        "rows": 414134
+      },
+      {
+        "archive_bytes": 102153831,
+        "archive_sha256": "cf9a6da8401ade605c4f62b719b24cf839196156d5a01d70e03469fdba3cd170",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-29.csv.gz",
+        "date": "2026-10-29",
+        "first_ts_ms": 1793232000389,
+        "last_ts_ms": 1793318399718,
+        "max_intertrade_gap_s": 25.605,
+        "rows": 2561697
+      },
+      {
+        "archive_bytes": 61099414,
+        "archive_sha256": "ebeca7f237089560b7a34371136784b6036cc588834ee6790e7cffbac38423af",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-30.csv.gz",
+        "date": "2026-10-30",
+        "first_ts_ms": 1793318400055,
+        "last_ts_ms": 1793404799980,
+        "max_intertrade_gap_s": 17.531,
+        "rows": 1530218
+      },
+      {
+        "archive_bytes": 24117764,
+        "archive_sha256": "7d97de92c40d1c4eea99382701de78a3849621b650b32a811adc45c9119a62ad",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-10-31.csv.gz",
+        "date": "2026-10-31",
+        "first_ts_ms": 1793404800004,
+        "last_ts_ms": 1793491199076,
+        "max_intertrade_gap_s": 26.725,
+        "rows": 603828
+      },
+      {
+        "archive_bytes": 13797985,
+        "archive_sha256": "28a3563d6fbbc02fa3b278a0c323ca1e3fdbe35495797b8cd00ac52adb6ea043",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-11-01.csv.gz",
+        "date": "2026-11-01",
+        "first_ts_ms": 1793491200002,
+        "last_ts_ms": 1793577598508,
+        "max_intertrade_gap_s": 30.217,
+        "rows": 344829
+      },
+      {
+        "archive_bytes": 25890405,
+        "archive_sha256": "5e1e3cb2ae90c0751d25fdb4024b5060a0bc245294ef8978eb2d5982b10b61f5",
+        "archive_url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT2026-11-02.csv.gz",
+        "date": "2026-11-02",
+        "first_ts_ms": 1793577600301,
+        "last_ts_ms": 1793663999808,
+        "max_intertrade_gap_s": 18.921,
+        "rows": 644640
+      }
+    ],
+    "max_intertrade_gap_s": 84.975,
+    "suspicious_gaps_over_300s": [],
+    "total_trades": 14594337
+  },
+  "internal_labels": 123,
+  "minute_bars": 43198,
+  "oos_start": "2026-10-27T00:00:00+00:00",
+  "period": [
+    "2026-10-04T00:00:00+00:00",
+    "2026-11-03T00:00:00+00:00"
+  ],
+  "raw_archives_retained": false,
+  "strict_labels": 77,
+  "symbol": "HYPE",
+  "train_end": "2026-10-23T00:00:00+00:00"
+}

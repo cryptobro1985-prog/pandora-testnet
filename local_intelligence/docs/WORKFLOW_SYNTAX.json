@@ -1,0 +1,230 @@
+[
+  {
+    "workflow": "DEPRECATED_hype-v12-immediate-full-graph.yml",
+    "step": "Cancel superseded HYPE collector runs",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "DEPRECATED_hype-v12-immediate-full-graph.yml",
+    "step": "Install research dependencies",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "DEPRECATED_hype-v12-immediate-full-graph.yml",
+    "step": "Validate compact research format and Caterpillar Quant",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "DEPRECATED_hype-v12-immediate-full-graph.yml",
+    "step": "Restore latest Caterpillar Quant checkpoint",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "DEPRECATED_hype-v12-immediate-full-graph.yml",
+    "step": "Capture and compact segment 1",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "DEPRECATED_hype-v12-immediate-full-graph.yml",
+    "step": "Install research dependencies",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "DEPRECATED_hype-v12-immediate-full-graph.yml",
+    "step": "Capture and compact segment 2",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "DEPRECATED_hype-v12-immediate-full-graph.yml",
+    "step": "Install research dependencies",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "DEPRECATED_hype-v12-immediate-full-graph.yml",
+    "step": "Capture and compact segment 3",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "DEPRECATED_hype-v12-immediate-full-graph.yml",
+    "step": "Install research dependencies",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "DEPRECATED_hype-v12-immediate-full-graph.yml",
+    "step": "Capture and compact segment 4",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "DEPRECATED_hype-v12-immediate-full-graph.yml",
+    "step": "Build manifest-only combined index",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "DEPRECATED_hype-v12-immediate-full-graph.yml",
+    "step": "Build immutable training + model archive",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "DEPRECATED_hype-v12-immediate-full-graph.yml",
+    "step": "Publish immutable durable learning archive",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "DEPRECATED_hype-v12-immediate-full-graph.yml",
+    "step": "Start next continuous HYPE collector chunk",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "export-local-only-codex.yml",
+    "step": "Build source tree",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "export-local-only-codex.yml",
+    "step": "Save latest live status",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "export-local-only-codex.yml",
+    "step": "Download immutable training artifacts",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "export-local-only-codex.yml",
+    "step": "Write Codex handoff",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "export-local-only-codex.yml",
+    "step": "Security scan and checksums",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "export-local-only-codex.yml",
+    "step": "Create zip",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "hype-local-history-gap-backfill.yml",
+    "step": "Install dependencies",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "hype-local-history-gap-backfill.yml",
+    "step": "Wait for Frankfurt history relay",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "hype-local-history-gap-backfill.yml",
+    "step": "Download existing 30-day Local archive",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "hype-local-history-gap-backfill.yml",
+    "step": "Backfill mark index OI funding and causal-join snapshots",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "hype-local-history-gap-backfill.yml",
+    "step": "Train baseline and enriched Local-only models",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "hype-local-history-gap-backfill.yml",
+    "step": "OOS promotion gate",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "hype-local-history-gap-backfill.yml",
+    "step": "Package enriched pretrain candidate",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "hype-local-only.yml",
+    "step": "Install dependencies",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "hype-local-only.yml",
+    "step": "Restore Local-only checkpoint if present",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "hype-local-only.yml",
+    "step": "Download 30-day labelled Local dataset",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "hype-local-only.yml",
+    "step": "Pretrain Quantum HIGH/LOW heads and build Cortex memory",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "hype-local-only.yml",
+    "step": "Start optional Cortex 20B in parallel",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "hype-local-only.yml",
+    "step": "Run Local-only live collection and inference",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "hype-local-only.yml",
+    "step": "Validate Local-only state",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "hype-local-only.yml",
+    "step": "Continue Local-only learning loop",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "local-116-30d.yml",
+    "step": "Compile and contract smoke",
+    "exit_code": 0,
+    "error": ""
+  },
+  {
+    "workflow": "local-116-30d.yml",
+    "step": "Run 30D local research with ephemeral raw cache",
+    "exit_code": 0,
+    "error": ""
+  }
+]

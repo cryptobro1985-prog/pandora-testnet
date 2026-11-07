@@ -1,0 +1,26 @@
+{
+  "candidate_snapshots.jsonl.gz": {
+    "bytes": 4043926,
+    "sha256": "b60ab75745483a9903ce1af7a5e251e646273631e78b83997956fc62369fe9c3"
+  },
+  "compact_1m.jsonl.gz": {
+    "bytes": 4192386,
+    "sha256": "dea89e1eaf9ad47a0d47564e0880f4cd6e5cdfdc523f750a54777963bbca10ee"
+  },
+  "feature_availability.json": {
+    "bytes": 4243,
+    "sha256": "93b55eaa42bb4e335d9cfe00e0ffb725d366a2645064c92536266ef9fe9fd641"
+  },
+  "labels.json.gz": {
+    "bytes": 4860,
+    "sha256": "d512b8438637f21f22c9b9996d3b2ea9806be0242a006967baae995cf6ea913f"
+  },
+  "manifest.json": {
+    "bytes": 13030,
+    "sha256": "90f5c3dabb194bac5c62063d9e40df295d0aa1e915ac82b8994b4054ccc72158"
+  },
+  "summary.json": {
+    "bytes": 11036,
+    "sha256": "f66f5315ba942e82b6eb08ed177dd0364a6b4390728bf70ac22588157ec0cb9c"
+  }
+}

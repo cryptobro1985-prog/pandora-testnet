@@ -1,0 +1,452 @@
+name: HYPE v22 Learned Local + Direct Policy Live
+# compact-110-v4-fixed-pack
+# 2026-11-06-local-low-restart
+# caterpillar-quant-v15-direct-relay-1000h1-isolated
+
+# Deprecated from active runtime on 2026-11-06. Local-Only model is authoritative.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+  issues: write
+
+concurrency:
+  group: hype-v22-learned-local-policy-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CAPTURE_MINUTES: "30"
+  HYPE_REST_RELAY_URL: "https://hype-rest-relay.onrender.com"
+  CATERPILLAR_QUANT_ENABLED: "1"
+  CATERPILLAR_POLICY_MODE: "learned-local-v3-direct-policy-v7"
+  CATERPILLAR_MONITOR_URL: "https://hype-caterpillar-quant-monitor.onrender.com/api/ingest"
+  ASTRA_CORTEX_ENABLED: "1"
+  CORTEX_LOCAL_ENABLED: "1"
+  CORTEX_BACKEND: "local_llama"
+  CORTEX_LOCAL_URL: "http://127.0.0.1:8081"
+  CORTEX_PORT: "8081"
+  CORTEX_CTX_SIZE: "4096"
+  CORTEX_THREADS: "4"
+  CORTEX_HF_MODEL: "ggml-org/gpt-oss-20b-GGUF:MXFP4"
+  ASTRA_CORTEX_MODEL: "gpt-oss-20b-local"
+  ASTRA_CORTEX_REASONING_EFFORT: "high"
+  ASTRA_CORTEX_INTERVAL_SECONDS: "300"
+  ASTRA_CORTEX_URGENT_INTERVAL_SECONDS: "60"
+  ASTRA_CORTEX_TIMEOUT_SECONDS: "300"
+  CORTEX_SPRINT_HOURS: "24"
+  CORTEX_24H_TARGET_DECISIONS: "240"
+  CORTEX_24H_TARGET_MATURED: "600"
+
+jobs:
+  segment_1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - name: Cancel superseded HYPE collector runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SELF="${GITHUB_RUN_ID}"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs?branch=${GITHUB_REF_NAME}&per_page=100" --jq             '.workflow_runs[] | select(.path==".github/workflows/hype-h1-v6-forward-12h.yml") | select(.status=="in_progress" or .status=="queued" or .status=="pending") | .id' |
+          while read -r ID; do
+            [ -z "$ID" ] && continue
+            if [ "$ID" -lt "$SELF" ]; then
+              echo "cancel_superseded_run=$ID"
+              gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/$ID/cancel" >/dev/null || true
+            fi
+          done
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install research dependencies
+        run: |
+          python -m pip install -r research/hype_local_v5/requirements-research.txt
+          python -m pip install -r research/hype_quant/requirements.txt
+      - name: Validate compact research format and Caterpillar Quant
+        run: |
+          python -m py_compile research/hype_local_v5/compact_pack.py research/hype_local_v5/decode_compact.py research/hype_local_v5/context_capture.py research/hype_local_v5/resilient_capture.py
+          python -m py_compile research/hype_quant/astra_cortex.py research/hype_caterpillar_quant/learner.py research/hype_caterpillar_quant/strategy_lab.py research/hype_caterpillar_quant/live_daemon.py
+          bash -n research/hype_local_v5/capture_pack_segment.sh
+          bash -n research/hype_quant/start_local_cortex.sh
+          python research/hype_local_v5/test_compact_smoke.py
+          python -m research.hype_quant.test_self
+          python -m research.hype_quant.test_astra_cortex
+          python -m research.hype_caterpillar_quant.test_self
+      - name: Restore latest Caterpillar Quant checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf cq_warm cq_release_restore
+          mkdir -p cq_warm
+          RESTORED=0
+
+          # Fast path: freshest unexpired Actions checkpoint.
+          ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" --jq '
+            .artifacts
+            | map(select((.expired|not) and (.name=="HYPE-CATERPILLAR-QUANT-CHECKPOINT" or (.name|startswith("HYPE-CATERPILLAR-QUANT-checkpoint-"))))) as $all
+            | ($all | map(select(.name=="HYPE-CATERPILLAR-QUANT-CHECKPOINT")) | sort_by(.created_at) | reverse | .[0] // null) as $base
+            | if $base then
+                ($all | map(select(.created_at >= $base.created_at)) | sort_by(.created_at) | reverse | .[0].id // $base.id)
+              else
+                ($all | sort_by(.created_at) | reverse | .[0].id // empty)
+              end
+          ')"
+          if [ -n "$ID" ]; then
+            if gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$ID/zip" > cq.zip                && unzip -q cq.zip -d cq_warm                && test -f cq_warm/caterpillar_quant.pkl                && test -f cq_warm/feature_state.pkl; then
+              RESTORED=1
+              echo "restored_actions_checkpoint=$ID"
+            else
+              echo "actions_checkpoint_invalid=$ID; falling back to immutable release archive" >&2
+              rm -rf cq_warm cq.zip
+              mkdir -p cq_warm
+            fi
+          fi
+
+          # Durable path: immutable GitHub Release archives do not use Actions retention.
+          if [ "$RESTORED" -eq 0 ]; then
+            TAG="$(gh release list --repo "${GITHUB_REPOSITORY}" --limit 100 --json tagName,createdAt --jq '
+              map(select(.tagName | startswith("hype-learning-archive-")))
+              | sort_by(.createdAt) | reverse | .[0].tagName // empty
+            ')"
+            if [ -n "$TAG" ]; then
+              mkdir -p cq_release_restore
+              gh release download "$TAG" --repo "${GITHUB_REPOSITORY}"                 --pattern "HYPE-CATERPILLAR-QUANT-CHECKPOINT.tar.gz"                 --dir cq_release_restore
+              tar -xzf cq_release_restore/HYPE-CATERPILLAR-QUANT-CHECKPOINT.tar.gz -C cq_warm
+              test -f cq_warm/caterpillar_quant.pkl
+              test -f cq_warm/feature_state.pkl
+              RESTORED=1
+              echo "restored_durable_release=$TAG"
+            fi
+          fi
+
+          if [ "$RESTORED" -eq 0 ]; then
+            echo "no_prior_checkpoint_found; starting first generation"
+          fi
+      - name: Capture and compact segment 1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CATERPILLAR_STATUS_ISSUE: "24"
+          CATERPILLAR_WARMSTART_DIR: cq_warm
+        run: bash research/hype_local_v5/capture_pack_segment.sh out/hype_v6_12h_segment_1 "$CAPTURE_MINUTES"
+      - name: Upload compact segment 1
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-H1-V6-12H-segment-1
+          path: out/hype_v6_12h_segment_1_upload
+          if-no-files-found: error
+          retention-days: 2
+          compression-level: 0
+      - name: Upload Caterpillar Quant checkpoint 1
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-CATERPILLAR-QUANT-checkpoint-1
+          path: out/hype_v6_12h_segment_1_upload/caterpillar_quant
+          if-no-files-found: warn
+          retention-days: 2
+
+  segment_2:
+    needs: segment_1
+    if: ${{ success() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install research dependencies
+        run: |
+          python -m pip install -r research/hype_local_v5/requirements-research.txt
+          python -m pip install -r research/hype_quant/requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: HYPE-CATERPILLAR-QUANT-checkpoint-1
+          path: cq_warm
+      - name: Capture and compact segment 2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CATERPILLAR_STATUS_ISSUE: "24"
+          CATERPILLAR_WARMSTART_DIR: cq_warm
+        run: bash research/hype_local_v5/capture_pack_segment.sh out/hype_v6_12h_segment_2 "$CAPTURE_MINUTES"
+      - name: Upload compact segment 2
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-H1-V6-12H-segment-2
+          path: out/hype_v6_12h_segment_2_upload
+          if-no-files-found: error
+          retention-days: 2
+          compression-level: 0
+      - name: Upload Caterpillar Quant checkpoint 2
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-CATERPILLAR-QUANT-checkpoint-2
+          path: out/hype_v6_12h_segment_2_upload/caterpillar_quant
+          if-no-files-found: warn
+          retention-days: 2
+
+  segment_3:
+    needs: segment_2
+    if: ${{ success() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install research dependencies
+        run: |
+          python -m pip install -r research/hype_local_v5/requirements-research.txt
+          python -m pip install -r research/hype_quant/requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: HYPE-CATERPILLAR-QUANT-checkpoint-2
+          path: cq_warm
+      - name: Capture and compact segment 3
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CATERPILLAR_STATUS_ISSUE: "24"
+          CATERPILLAR_WARMSTART_DIR: cq_warm
+        run: bash research/hype_local_v5/capture_pack_segment.sh out/hype_v6_12h_segment_3 "$CAPTURE_MINUTES"
+      - name: Upload compact segment 3
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-H1-V6-12H-segment-3
+          path: out/hype_v6_12h_segment_3_upload
+          if-no-files-found: error
+          retention-days: 2
+          compression-level: 0
+      - name: Upload Caterpillar Quant checkpoint 3
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-CATERPILLAR-QUANT-checkpoint-3
+          path: out/hype_v6_12h_segment_3_upload/caterpillar_quant
+          if-no-files-found: warn
+          retention-days: 2
+
+  segment_4:
+    needs: segment_3
+    if: ${{ success() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install research dependencies
+        run: |
+          python -m pip install -r research/hype_local_v5/requirements-research.txt
+          python -m pip install -r research/hype_quant/requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: HYPE-CATERPILLAR-QUANT-checkpoint-3
+          path: cq_warm
+      - name: Capture and compact segment 4
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CATERPILLAR_STATUS_ISSUE: "24"
+          CATERPILLAR_WARMSTART_DIR: cq_warm
+        run: bash research/hype_local_v5/capture_pack_segment.sh out/hype_v6_12h_segment_4 "$CAPTURE_MINUTES"
+      - name: Upload compact segment 4
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-H1-V6-12H-segment-4
+          path: out/hype_v6_12h_segment_4_upload
+          if-no-files-found: error
+          retention-days: 2
+          compression-level: 0
+      - name: Upload Caterpillar Quant checkpoint 4
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-CATERPILLAR-QUANT-checkpoint-4
+          path: out/hype_v6_12h_segment_4_upload/caterpillar_quant
+          if-no-files-found: warn
+          retention-days: 2
+
+  combine:
+    needs: segment_4
+    if: ${{ success() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download compact segment artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: HYPE-H1-V6-12H-segment-*
+          path: downloaded
+      - uses: actions/download-artifact@v4
+        with:
+          name: HYPE-CATERPILLAR-QUANT-checkpoint-4
+          path: cq_final
+      - name: Build manifest-only combined index
+        run: |
+          mkdir -p combined_index
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("downloaded")
+          rows=[]
+          schemas=[]
+          for p in sorted(root.rglob("PACK_MANIFEST.json")):
+              m=json.loads(p.read_text())
+              rows.append({
+                  "artifact_dir":str(p.parent),
+                  "format_version":m.get("format_version"),
+                  "source_bytes":m.get("source_bytes"),
+                  "packed_bytes":m.get("packed_bytes"),
+                  "compression_ratio":m.get("compression_ratio"),
+                  "all_110_supported":m.get("all_110_supported"),
+                  "canonical_point_count":m.get("canonical_point_count"),
+                  "chunks":m.get("chunks",[]),
+              })
+              s=p.parent/"SCHEMA_110.json"
+              if s.exists(): schemas.append(json.loads(s.read_text()))
+          total=sum((x.get("packed_bytes") or 0) for x in rows)
+          out={"research_only":True,"symbol":"HYPEUSDT","segments":rows,
+               "packed_bytes_total":total,"target_note":"12h compact package target <100 MB on measured reference; activity dependent.",
+               "no_payload_duplication":True}
+          Path("combined_index/HYPE_12H_RESEARCH_MANIFEST.json").write_text(json.dumps(out,indent=2)+"\n")
+          if schemas:
+              Path("combined_index/SCHEMA_110.json").write_text(json.dumps(schemas[0],indent=2)+"\n")
+          PY
+          cp research/hype_local_v5/decode_compact.py combined_index/decode_compact.py
+      - name: Upload combined index only
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-H1-V6-12H-COMBINED-INDEX
+          path: combined_index
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+      - name: Upload durable Caterpillar Quant checkpoint
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-CATERPILLAR-QUANT-CHECKPOINT
+          path: cq_final
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Build immutable training + model archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p durable
+          test -f cq_final/caterpillar_quant.pkl
+          test -f cq_final/feature_state.pkl
+
+          tar -czf durable/HYPE-CATERPILLAR-QUANT-CHECKPOINT.tar.gz -C cq_final .
+          tar -czf "durable/HYPE-TRAINING-DATA-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.tar.gz" downloaded combined_index
+
+          python - <<'PY'
+          import hashlib, json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          durable=Path("durable")
+          checkpoint=Path("cq_final")
+          required=[
+              "caterpillar_quant.pkl",
+              "feature_state.pkl",
+              "CATERPILLAR_QUANT_REPORT.json",
+          ]
+          optional=[
+              "astra_cortex_state.json",
+              "astra_paper_state.json",
+              "three_strategy_lab_v5_learned_local_direct_policy.json",
+              "astra_actions.jsonl",
+              "caterpillar_actions.jsonl",
+              "caterpillar_gaps.jsonl",
+          ]
+
+          def sha256(p):
+              h=hashlib.sha256()
+              with p.open("rb") as f:
+                  for chunk in iter(lambda:f.read(1024*1024),b""):
+                      h.update(chunk)
+              return h.hexdigest()
+
+          checkpoint_files=[]
+          for p in sorted(checkpoint.rglob("*")):
+              if p.is_file():
+                  checkpoint_files.append({
+                      "path":str(p.relative_to(checkpoint)),
+                      "bytes":p.stat().st_size,
+                      "sha256":sha256(p),
+                  })
+
+          archive_files=[]
+          for p in sorted(durable.glob("*.tar.gz")):
+              archive_files.append({
+                  "name":p.name,
+                  "bytes":p.stat().st_size,
+                  "sha256":sha256(p),
+              })
+
+          missing=[name for name in required if not (checkpoint/name).exists()]
+          if missing:
+              raise SystemExit("missing required checkpoint state: "+",".join(missing))
+
+          manifest={
+              "archive_version":"hype-durable-learning-v1",
+              "research_only":True,
+              "symbol":"HYPEUSDT",
+              "run_id":os.environ["GITHUB_RUN_ID"],
+              "run_attempt":os.environ["GITHUB_RUN_ATTEMPT"],
+              "branch":os.environ["GITHUB_REF_NAME"],
+              "commit_sha":os.environ["GITHUB_SHA"],
+              "created_at":datetime.now(timezone.utc).isoformat(),
+              "policy":"NO_RESET_ON_TIME_BOUNDARY",
+              "restore_policy":"latest valid Actions checkpoint, otherwise latest immutable release checkpoint",
+              "required_checkpoint_files":required,
+              "optional_state_files":{name:(checkpoint/name).exists() for name in optional},
+              "checkpoint_files":checkpoint_files,
+              "archives":archive_files,
+              "training_data_preserved":True,
+              "checkpoint_preserved":True,
+          }
+          (durable/"HYPE-DURABLE-MANIFEST.json").write_text(
+              json.dumps(manifest,indent=2,ensure_ascii=False)+"\n",encoding="utf-8"
+          )
+          PY
+          (cd durable && sha256sum *.tar.gz HYPE-DURABLE-MANIFEST.json > SHA256SUMS)
+
+      - name: Publish immutable durable learning archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="hype-learning-archive-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$TAG"             --repo "${GITHUB_REPOSITORY}"             --target "${GITHUB_SHA}"             --title "HYPE durable learning archive ${GITHUB_RUN_ID}/${GITHUB_RUN_ATTEMPT}"             --notes "Immutable research archive. Contains compact causal training data, Caterpillar/Local model checkpoint, feature state, CORTEX/strategy state when produced, reports, and integrity hashes. Time boundaries never reset learning."             --prerelease
+          gh release upload "$TAG" durable/* --repo "${GITHUB_REPOSITORY}"
+          echo "durable_release=$TAG"
+
+
+
+  restart_next:
+    needs: combine
+    if: ${{ success() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Start next continuous HYPE collector chunk
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          echo "Self-chaining next HYPE collector run..."
+          gh workflow run hype-v12-immediate-full-graph.yml --repo "${GITHUB_REPOSITORY}" --ref "${GITHUB_REF_NAME}"

@@ -1,0 +1,8 @@
+# Names only — no secret values.
+GITHUB_TOKEN=
+SOLANA_RPC_URL=
+CORTEX_LOCAL_URL=http://127.0.0.1:8081
+ASTRA_CORTEX_MODEL=gpt-oss-20b-local
+CORTEX_HF_MODEL=ggml-org/gpt-oss-20b-GGUF:MXFP4
+LOCAL_ONLY_MONITOR_URL=
+HYPE_RELAY_URL=

@@ -1,0 +1,45 @@
+CORTEX20B: reclaiming runner disk
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/root       145G   37G  108G  26% /
+CORTEX20B: installing llama.cpp launcher
+Version: b12110
+Probing CUDA...
+Downloading cuda-probe...
+Probing ROCm...
+Downloading rocm-probe...
+Probing Vulkan...
+Downloading vulkan-probe...
+Downloading featcode...
+Probing CPU...
+Found: avx
+Found: f16c
+Found: fma
+Found: avx2
+Found: bmi2
+Found: avx512f
+Found: avx512vl
+Found: avx512bw
+Found: avx512cd
+Found: avx512dq
+Found: avx512vnni
+Found: avx512vbmi
+Found: avx512bf16
+Downloading llama...
+Installation completed successfully
+
+Run the following command to start it:
+
+  llama serve
+
+/home/runner/.local/bin/llama
+version: 0.9.0-dev (build 12110, commit cd959bae9)
+built with Clang 22.1.8 for Linux x86_64
+CORTEX20B: starting ggml-org/gpt-oss-20b-GGUF:MXFP4 on 127.0.0.1:8081
+CORTEX20B_WAIT attempt=12
+0.00.001.075 I srv  llama_server: initializing ...
+0.00.218.080 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/root       145G   46G  100G  32% /
+CORTEX20B_READY attempt=24
+{"status":"ok"}Filesystem      Size  Used Avail Use% Mounted on
+/dev/root       145G   48G   97G  34% /

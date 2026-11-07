@@ -1,0 +1,38 @@
+{
+  "observed_at_utc": "2026-11-04T14:23:52.191945+00:00",
+  "probes": [
+    {
+      "source": "github_actions",
+      "api_path": "/repos/cryptobro1985-prog/pandora-testnet/actions/artifacts/13278474318",
+      "authentication": "existing_gh_configuration",
+      "status": "unavailable",
+      "error": "Get \"https://api.github.com/repos/cryptobro1985-prog/pandora-testnet/actions/artifacts/13278474318\": Forbidden\n"
+    }
+  ],
+  "files": [],
+  "errors": [],
+  "artifact_metadata": {
+    "13278474318": "universal-minute-HYPE",
+    "13279637097": "PANDORA-UNIVERSAL-30D-FINAL",
+    "13319113404": "HYPE-H1-LOCAL-V5-TICKS-0",
+    "13318817968": "HYPE-H1-LOCAL-V5-TICKS-1",
+    "13319258376": "HYPE-H1-LOCAL-V5-TICKS-2",
+    "13319686512": "HYPE-H1-LOCAL-V5-TICKS-3",
+    "13318779319": "HYPE-H1-LOCAL-V5-TICKS-4",
+    "13319471883": "HYPE-H1-LOCAL-V5-TICKS-5",
+    "13321242644": "HYPE-H1-LOCAL-V5-LIVE-MICROSTRUCTURE"
+  },
+  "historical_microstructure": {
+    "book": "not available from candle or executed-trade archives",
+    "liquidations": "not inferable from executed trades",
+    "oi": "5min REST history does not provide historical 30s OI"
+  },
+  "fetch_requested": true,
+  "source_selection": "artifacts",
+  "selected_artifact_ids": [
+    13278474318
+  ],
+  "complete": false,
+  "downloaded_files": 0,
+  "download_phase_successful": false
+}

@@ -1,0 +1,10 @@
+[
+  {
+    "url": "https://api.bybit.com/v5/market/time",
+    "error": "HTTPSConnectionPool(host='api.bybit.com', port=443): Max retries exceeded with url: /v5/market/time (Caused by ProxyError('Unable to connect to proxy', OSError('Tunnel connection failed: 403 Forbidden')))"
+  },
+  {
+    "url": "https://stream.bybit.com/v5/public/linear",
+    "error": "HTTPSConnectionPool(host='stream.bybit.com', port=443): Max retries exceeded with url: /v5/public/linear (Caused by ProxyError('Unable to connect to proxy', OSError('Tunnel connection failed: 403 Forbidden')))"
+  }
+]

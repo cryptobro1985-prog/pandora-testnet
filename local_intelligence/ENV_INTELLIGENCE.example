@@ -1,0 +1,12 @@
+# Optional advisory provider; inference does not require any API key.
+CORTEX_BACKEND=disabled
+CORTEX_LOCAL_URL=http://127.0.0.1:8081
+ASTRA_CORTEX_MODEL=gpt-oss-20b-local
+CORTEX_TIMEOUT_SECONDS=20
+# Supply a local verified GGUF and installed launcher explicitly to use an LLM.
+CORTEX_MODEL_PATH=
+CORTEX_LLAMA_BIN=
+# Collector may optionally use an existing read-only REST relay.
+HYPE_REST_RELAY_URL=
+# Remote publication requires an explicit CLI flag. Offline replay disables it.
+LOCAL_ONLY_MONITOR_URL=

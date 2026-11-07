@@ -1,0 +1,179 @@
+{
+  "auxiliary": {
+    "enriched_rows": 6261,
+    "manifest_integrity": {
+      "candidate_snapshots_enriched.jsonl.gz": {
+        "bytes_match": true,
+        "sha256_matches": true
+      },
+      "funding.jsonl.gz": {
+        "bytes_match": true,
+        "sha256_matches": true
+      },
+      "index_1m.jsonl.gz": {
+        "bytes_match": true,
+        "sha256_matches": true
+      },
+      "mark_1m.jsonl.gz": {
+        "bytes_match": true,
+        "sha256_matches": true
+      },
+      "open_interest_5m.jsonl.gz": {
+        "bytes_match": true,
+        "sha256_matches": true
+      }
+    },
+    "receive_provenance": "unknown; source_time_only",
+    "safe_source_time_features": [
+      "completed mark/index basis",
+      "OI log and timestamped deltas",
+      "funding"
+    ],
+    "source_availability_violations": [],
+    "source_counts": {
+      "funding.jsonl.gz": 90,
+      "index_1m.jsonl.gz": 43200,
+      "mark_1m.jsonl.gz": 43200,
+      "open_interest_5m.jsonl.gz": 8640
+    },
+    "unsafe_until_rebuilt": [
+      "mark/index divided by legacy 5s final price",
+      "OI notional using legacy price"
+    ]
+  },
+  "contract": {
+    "input": 86,
+    "metadata": 2,
+    "target_eval": 28,
+    "total": 116
+  },
+  "historical_receive_timestamps": "unavailable; exchange timestamps are not receive timestamps",
+  "labels": {
+    "internal": 123,
+    "internal_exclusions": 10,
+    "strict": 77,
+    "strict_exclusions": 4
+  },
+  "legacy_snapshot_causality": "failed: 5s bars selected by start<t and full final close/flow; minute bars selected by start<=t and full OHLC",
+  "minute_bars": {
+    "duplicate_starts": 0,
+    "first_start_ms": 1791072000000,
+    "last_start_ms": 1793663940000,
+    "missing_intervals": [
+      {
+        "after_start_ms": 1791078180000,
+        "before_start_ms": 1791078300000,
+        "missing_minutes": 1
+      },
+      {
+        "after_start_ms": 1791087480000,
+        "before_start_ms": 1791087600000,
+        "missing_minutes": 1
+      }
+    ],
+    "rows": 43198
+  },
+  "snapshots": {
+    "candidates": 1797,
+    "duplicate_candidate_stage_rows": 0,
+    "feature_name_observation_counts": {
+      "age_s": 6261,
+      "atr_h1_frac": 6261,
+      "buy_15s_log": 6237,
+      "buy_180s_log": 6261,
+      "buy_300s_log": 6261,
+      "buy_30s_log": 6261,
+      "buy_5s_log": 5985,
+      "buy_60s_log": 6261,
+      "directional_3h_rev": 6261,
+      "directional_6h_rev": 6261,
+      "distance_high_24h_bps": 6261,
+      "distance_high_60m_bps": 6261,
+      "distance_high_6h_bps": 6261,
+      "distance_low_24h_bps": 6261,
+      "distance_low_60m_bps": 6261,
+      "distance_low_6h_bps": 6261,
+      "imbalance_15s": 6237,
+      "imbalance_180s": 6261,
+      "imbalance_300s": 6261,
+      "imbalance_30s": 6261,
+      "imbalance_5s": 5985,
+      "imbalance_60s": 6261,
+      "max_trade_15s_log": 6237,
+      "max_trade_180s_log": 6261,
+      "max_trade_300s_log": 6261,
+      "max_trade_30s_log": 6261,
+      "max_trade_5s_log": 5985,
+      "max_trade_60s_log": 6261,
+      "old_eff_15s": 6237,
+      "old_eff_180s": 6261,
+      "old_eff_300s": 6261,
+      "old_eff_30s": 6261,
+      "old_eff_5s": 5985,
+      "old_eff_60s": 6261,
+      "position_24h": 6261,
+      "position_60m": 6261,
+      "position_6h": 6261,
+      "ret_15s": 6237,
+      "ret_180s": 6261,
+      "ret_300s": 6261,
+      "ret_30s": 6261,
+      "ret_5s": 5985,
+      "ret_60s": 6261,
+      "retrace_bps": 6261,
+      "rev_eff_15s": 6237,
+      "rev_eff_180s": 6261,
+      "rev_eff_300s": 6261,
+      "rev_eff_30s": 6261,
+      "rev_eff_5s": 5985,
+      "rev_eff_60s": 6261,
+      "rev_flow_15s": 6237,
+      "rev_flow_180s": 6261,
+      "rev_flow_300s": 6261,
+      "rev_flow_30s": 6261,
+      "rev_flow_5s": 5985,
+      "rev_flow_60s": 6261,
+      "rev_ret_15s": 6237,
+      "rev_ret_180s": 6261,
+      "rev_ret_300s": 6261,
+      "rev_ret_30s": 6261,
+      "rev_ret_5s": 5985,
+      "rev_ret_60s": 6261,
+      "reversal_attempts": 6261,
+      "sell_15s_log": 6237,
+      "sell_180s_log": 6261,
+      "sell_300s_log": 6261,
+      "sell_30s_log": 6261,
+      "sell_5s_log": 5985,
+      "sell_60s_log": 6261,
+      "total_15s_log": 6237,
+      "total_180s_log": 6261,
+      "total_300s_log": 6261,
+      "total_30s_log": 6261,
+      "total_5s_log": 5985,
+      "total_60s_log": 6261,
+      "trade_count_15s": 6237,
+      "trade_count_180s": 6261,
+      "trade_count_300s": 6261,
+      "trade_count_30s": 6261,
+      "trade_count_5s": 5985,
+      "trade_count_60s": 6261,
+      "turnover_24h_log": 6261,
+      "volatility_60m": 6261,
+      "volume_24h_log": 6261
+    },
+    "forbidden_feature_names": [],
+    "nonfinite_feature_values": 0,
+    "rows": 6261
+  },
+  "unavailable_historical_families": {
+    "111": "runner clock offset absent",
+    "112-113": "contemporaneous instrument and account ratio history absent",
+    "116": "historical websocket continuity cannot be reconstructed",
+    "44-57": "L50 primary replay absent",
+    "65-76": "liquidation primary websocket events absent",
+    "77-78": "raw receipt/latency and live micro snapshot provenance absent"
+  },
+  "usable_reconstruction": "completed compact 1m OHLC through bar_end<=prediction; gap windows unavailable",
+  "version": "PANDORA-FEATURE-AUDIT-v1"
+}

@@ -1,0 +1,45 @@
+test_buffer_is_bounded (test_cortex_meta.MetaTests.test_buffer_is_bounded) ... ok
+test_checksum_tamper_detected (test_cortex_meta.MetaTests.test_checksum_tamper_detected) ... ok
+test_forward_validation_respects_history_boundary_and_maturity (test_cortex_meta.MetaTests.test_forward_validation_respects_history_boundary_and_maturity) ... ok
+test_hourly_event_count_ignores_candidate_multiplicity (test_cortex_meta.MetaTests.test_hourly_event_count_ignores_candidate_multiplicity) ... ok
+test_live_proposal_cannot_borrow_older_historical_labels (test_cortex_meta.MetaTests.test_live_proposal_cannot_borrow_older_historical_labels) ... ok
+test_mismatched_evidence_and_future_timestamp_are_not_current (test_cortex_meta.MetaTests.test_mismatched_evidence_and_future_timestamp_are_not_current) ... ok
+test_missing_is_unknown (test_cortex_meta.MetaTests.test_missing_is_unknown) ... ok
+test_oos_features_and_labels_never_change_hypotheses (test_cortex_meta.MetaTests.test_oos_features_and_labels_never_change_hypotheses) ... ok
+test_partial_json_is_not_recovered (test_cortex_meta.MetaTests.test_partial_json_is_not_recovered) ... ok
+test_proposals_remain_unvalidated_and_deduplicated (test_cortex_meta.MetaTests.test_proposals_remain_unvalidated_and_deduplicated) ... ok
+test_purge_and_embargo_and_reserved_oos (test_cortex_meta.MetaTests.test_purge_and_embargo_and_reserved_oos) ... ok
+test_repeated_polls_do_not_create_independent_evidence (test_cortex_meta.MetaTests.test_repeated_polls_do_not_create_independent_evidence) ... ok
+test_research_preserves_rejection_and_never_promotes (test_cortex_meta.MetaTests.test_research_preserves_rejection_and_never_promotes) ... ok
+test_single_writer_lock_releases_on_close (test_cortex_meta.MetaTests.test_single_writer_lock_releases_on_close) ... ok
+test_stale_status_abstains_and_does_not_record (test_cortex_meta.MetaTests.test_stale_status_abstains_and_does_not_record) ... ok
+test_targets_are_not_features (test_cortex_meta.MetaTests.test_targets_are_not_features) ... ok
+test_worker_returns_immediately_and_prevents_parallel_calls (test_cortex_meta.MetaTests.test_worker_returns_immediately_and_prevents_parallel_calls) ... ok
+test_disabled_by_default (test_cortex_provider.ConfigTests.test_disabled_by_default) ... ok
+test_local_endpoint_is_loopback_without_credentials_or_paths (test_cortex_provider.ConfigTests.test_local_endpoint_is_loopback_without_credentials_or_paths) ... ok
+test_openai_requires_explicit_model_and_key (test_cortex_provider.ConfigTests.test_openai_requires_explicit_model_and_key) ... ok
+test_secret_excluded_from_repr_and_local_adapter (test_cortex_provider.ConfigTests.test_secret_excluded_from_repr_and_local_adapter) ... ok
+test_timeout_bounds (test_cortex_provider.ConfigTests.test_timeout_bounds) ... ok
+test_hypothesis_is_strict_and_rejects_targets (test_cortex_provider.ContractTests.test_hypothesis_is_strict_and_rejects_targets) ... ok
+test_rejects_extra_or_missing_fields (test_cortex_provider.ContractTests.test_rejects_extra_or_missing_fields) ... ok
+test_valid_decision (test_cortex_provider.ContractTests.test_valid_decision) ... ok
+test_arbitrary_bad_request_is_not_retried (test_cortex_provider.ProviderTests.test_arbitrary_bad_request_is_not_retried) ... ok
+test_confirmed_verdict_requires_matured_matching_teacher (test_cortex_provider.ProviderTests.test_confirmed_verdict_requires_matured_matching_teacher) ... ok
+test_explicit_schema_unsupported_gets_one_fallback (test_cortex_provider.ProviderTests.test_explicit_schema_unsupported_gets_one_fallback) ... ok
+test_http_failures_do_not_expose_remote_content (test_cortex_provider.ProviderTests.test_http_failures_do_not_expose_remote_content) ... ok
+test_hypotheses_require_feature_present_in_payload (test_cortex_provider.ProviderTests.test_hypotheses_require_feature_present_in_payload) ... ok
+test_incomplete_or_refusal_rejected (test_cortex_provider.ProviderTests.test_incomplete_or_refusal_rejected) ... ok
+test_local_strict_schema_and_metadata (test_cortex_provider.ProviderTests.test_local_strict_schema_and_metadata) ... ok
+test_markdown_and_embedded_json_are_rejected (test_cortex_provider.ProviderTests.test_markdown_and_embedded_json_are_rejected) ... ok
+test_openai_fixed_endpoint_and_structured_output (test_cortex_provider.ProviderTests.test_openai_fixed_endpoint_and_structured_output) ... ok
+test_reasoning_content_is_not_salvaged (test_cortex_provider.ProviderTests.test_reasoning_content_is_not_salvaged) ... ok
+test_response_and_prompt_size_limits (test_cortex_provider.ProviderTests.test_response_and_prompt_size_limits) ... ok
+test_timeout_or_connection_failure_sanitized (test_cortex_provider.ProviderTests.test_timeout_or_connection_failure_sanitized) ... ok
+test_existing_binary_local_model_and_runner_temp_fallback (test_cortex_provider.StartupTests.test_existing_binary_local_model_and_runner_temp_fallback) ... ok
+test_missing_model_fails_without_install_or_launch (test_cortex_provider.StartupTests.test_missing_model_fails_without_install_or_launch) ... ok
+test_startup_timeout_kills_own_child (test_cortex_provider.StartupTests.test_startup_timeout_kills_own_child) ... ok
+
+----------------------------------------------------------------------
+Ran 40 tests in 1.392s
+
+OK

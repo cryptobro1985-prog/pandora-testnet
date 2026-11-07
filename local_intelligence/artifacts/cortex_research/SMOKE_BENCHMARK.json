@@ -1,0 +1,10 @@
+{
+  "statistical_analyze_including_atomic_persistence_ms": {
+    "p50": 2.997004499945888,
+    "p95": 4.927779000013288,
+    "p99": 5.1006999999572145
+  },
+  "python_tracemalloc_peak_bytes": 159755,
+  "iterations": 150,
+  "synthetic_timing_only": true
+}

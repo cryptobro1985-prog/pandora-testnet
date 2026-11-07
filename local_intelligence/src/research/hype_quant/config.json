@@ -1,0 +1,74 @@
+{
+  "version": "HYPE-QUANT-LEARNER-v2",
+  "research_only": true,
+  "symbol": "HYPEUSDT",
+  "state_sample_seconds": 5,
+  "horizons_seconds": [
+    60,
+    180,
+    300,
+    600,
+    900,
+    1800
+  ],
+  "aspirational_daily_return_target": 1,
+  "objective_order": [
+    "avoid simulated liquidation/ruin",
+    "preserve capital and limit drawdown",
+    "maximize net expectancy after costs",
+    "maximize MFE capture with low MAE",
+    "pursue +100% daily benchmark only when consistent with the above constraints"
+  ],
+  "action_space": {
+    "directions": [
+      "FLAT",
+      "LONG",
+      "SHORT"
+    ],
+    "leverage": [
+      1,
+      2,
+      3,
+      5,
+      8,
+      10,
+      15,
+      20,
+      25
+    ],
+    "margin_fraction": [
+      0.02,
+      0.05,
+      0.1,
+      0.15,
+      0.2
+    ]
+  },
+  "modeled_costs": {
+    "taker_fee_bps_per_side": 5.5,
+    "slippage_bps_per_side": 2,
+    "latency_bps_per_round_trip": 1
+  },
+  "risk": {
+    "max_simulated_equity_drawdown": 0.25,
+    "liquidation_safety_fraction": 0.55,
+    "ruin_penalty": 1000,
+    "liquidation_penalty": 500,
+    "drawdown_penalty": 8,
+    "turnover_penalty": 0.15,
+    "min_confidence_to_act": 0.57
+  },
+  "champion": {
+    "min_forward_labels_before_promotion": 120,
+    "min_relative_net_expectancy_improvement": 0.05,
+    "max_calibration_degradation": 0.03,
+    "require_no_liquidations": true,
+    "min_side_forward_labels_before_promotion": 30,
+    "max_side_net_expectancy_degradation": 0
+  },
+  "pattern_memory": {
+    "max_examples": 20000,
+    "neighbors": 31
+  },
+  "training_sample_seconds": 15
+}
