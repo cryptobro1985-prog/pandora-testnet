@@ -1,0 +1,87 @@
+name: HYPE Jul-Aug Staged Pretrain
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/hype_full_micro_202607/build_base_fast.py"
+      - ".github/workflows/hype-julaug-staged-pretrain.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: hype-julaug-staged-pretrain
+  cancel-in-progress: true
+
+jobs:
+  staged-pretrain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install stack
+        run: |
+          python -m pip install -r research/hype_local_v5/requirements-research.txt
+          python -m pip install numpy scikit-learn river
+          python -m py_compile research/hype_full_micro_202607/build_base_fast.py research/hype_full_micro_202607/train_full_micro.py
+
+      - name: Build fast Jul-Aug causal base dataset
+        run: |
+          set -euo pipefail
+          rm -rf staged_base staged_cache staged_model
+          mkdir -p staged_base staged_cache staged_model
+          python -m research.hype_full_micro_202607.build_base_fast             --output staged_base             --cache staged_cache
+          test -s staged_base/candidate_snapshots.jsonl.gz
+          rm -rf staged_cache
+
+      - name: Start staged training immediately
+        run: |
+          set -euo pipefail
+          python -m research.hype_full_micro_202607.train_full_micro             --snapshots staged_base/candidate_snapshots.jsonl.gz             --output staged_model
+          test -s staged_model/HYPE_FULL_MICRO_202607_REPORT.json
+          python - <<'PY'
+          import json,pathlib
+          p=pathlib.Path("staged_model/HYPE_FULL_MICRO_202607_REPORT.json")
+          r=json.loads(p.read_text())
+          r["status"]="STAGED_BASE_PRETRAIN_ONLY"
+          r["final_full_micro_holdout_valid"]=False
+          r["note"]="Warm-start on Jul-Aug causal base features while continuous L50/liquidation replay builds. Do not use as final 90pct gate."
+          p.write_text(json.dumps(r,indent=2)+"\n")
+          PY
+
+      - name: Publish staged report
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p research/hype_full_micro_202607/results
+          cp staged_model/HYPE_FULL_MICRO_202607_REPORT.json research/hype_full_micro_202607/results/STAGED_PRETRAIN_LATEST.json
+          git config user.name "pandora-research-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add research/hype_full_micro_202607/results/STAGED_PRETRAIN_LATEST.json
+          git commit -m "research(hype): publish Jul-Aug staged pretrain [skip ci]" || true
+          git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104 || true
+          git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104 || true
+
+      - name: Upload staged model
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-JULAUG-STAGED-PRETRAIN-${{ github.run_id }}
+          path: |
+            staged_model/**
+            staged_base/summary.json
+            staged_base/manifest.json
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 9
