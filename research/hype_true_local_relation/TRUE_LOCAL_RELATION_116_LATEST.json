@@ -1,0 +1,56 @@
+{
+  "title": "HYPE True Local Relation — 116-point retrospective scan",
+  "period": ["2026-07-12T17:00:00+00:00", "2026-08-07T00:00:00+00:00"],
+  "definition": {
+    "true_local_labels": "Future/post-event history is used retrospectively to identify which historical extrema were real strict Local LOW/HIGH. The relation itself describes market state at the exact extreme and immediately before it.",
+    "strict_locals_in_snapshot_window": 47,
+    "low": 23,
+    "high": 24,
+    "hard_negative_same_side_extrema": {"low": 632, "high": 573}
+  },
+  "contract": {
+    "fixed_points": 116,
+    "roles": {"causal_or_quality_inputs": 86, "teacher_eval": 28, "metadata": 2},
+    "historical_manifest_claimed_available_inputs": 83,
+    "historical_manifest_missing_input_ids": [111, 112, 113],
+    "audit_note": "The compact July-Aug artifact contains ~300 numeric snapshot dimensions derived from the fixed contract plus raw L50 levels. Some contract concepts (notably full dynamic L50 replenishment/cancellation/absorption and some explicit multi-timeframe/sequence fields) were not materialized as standalone historical columns in this artifact; therefore the result is the strongest relation supported by the actually recorded historical state, not a claim that every nominal contract item had an independent raw column."
+  },
+  "single_relation": {
+    "name": "RELATIVE_TERMINAL_EXHAUSTION / ABSORPTION_DIVERGENCE",
+    "plain": "A real local appears when price pushes materially farther into a same-side structural extreme, but the side that created the move loses price-impact efficiency while the opposite side becomes more efficient and near-touch book liquidity thickens/absorbs the continuing pressure. LOW and HIGH are mirrored versions of the same terminal-state divergence.",
+    "low": "LOW: deeper downside extension + sellers still active but 60–180s seller price-impact efficiency falls + buyer share/efficiency improves on short windows + near bid/book liquidity is thicker.",
+    "high": "HIGH: deeper upside extension + buyers still active but 30–180s buyer price-impact efficiency falls + seller counter-efficiency improves + near-touch L50 depth is materially thicker."
+  },
+  "low_medians": {
+    "penetration_6h_bps": {"true": 13.734138037758692, "false": 7.286913379693782, "relative_change_pct": 88.5},
+    "penetration_60m_bps": {"true": 13.734138037758692, "false": 7.675484975569469, "relative_change_pct": 78.9},
+    "buyer_counter_share_15s": {"true": 0.36406131690171273, "false": 0.22806662338451017, "relative_change_pct": 59.6},
+    "buyer_counter_share_30s": {"true": 0.3772682780278377, "false": 0.27632650966522926, "relative_change_pct": 36.5},
+    "seller_trend_efficiency_60s": {"true": 0.004356275765189143, "false": 0.006341220107429471, "relative_change_pct": -31.3},
+    "seller_trend_efficiency_180s": {"true": 0.0028014656616414013, "false": 0.00477729490385582, "relative_change_pct": -41.4},
+    "buyer_counter_efficiency_30s_magnitude": {"true": 0.01491996530956568, "false": 0.021137621294512104, "relative_change_pct": -29.4},
+    "buyer_counter_efficiency_180s_magnitude": {"true": 0.004728497946794051, "false": 0.008597768379094706, "relative_change_pct": -45.0},
+    "near_book_depth_5_levels": {"true": 322.0899999999999, "false": 278.56, "relative_change_pct": 15.6}
+  },
+  "high_medians": {
+    "penetration_6h_bps": {"true": 8.64824308374812, "false": 5.217798089206527, "relative_change_pct": 65.7},
+    "penetration_60m_bps": {"true": 9.097036068831388, "false": 5.668830575111805, "relative_change_pct": 60.5},
+    "seller_counter_share_15s": {"true": 0.2746311561272681, "false": 0.22684030851272124, "relative_change_pct": 21.1},
+    "buyer_trend_efficiency_30s": {"true": 0.00452163602164442, "false": 0.008416414657020168, "relative_change_pct": -46.3},
+    "buyer_trend_efficiency_60s": {"true": 0.005938438017018253, "false": 0.007420956573353327, "relative_change_pct": -20.0},
+    "buyer_trend_efficiency_180s": {"true": 0.00454072886718555, "false": 0.005757186797104836, "relative_change_pct": -21.1},
+    "seller_counter_efficiency_30s_magnitude": {"true": 0.009356997842320717, "false": 0.02241690708626498, "relative_change_pct": -58.3},
+    "near_book_depth_5_levels": {"true": 326.845, "false": 248.29000000000002, "relative_change_pct": 31.6},
+    "near_book_depth_10_levels": {"true": 686.88, "false": 600.3900000000001, "relative_change_pct": 14.4},
+    "near_book_depth_25_levels": {"true": 3316.12, "false": 2832.5200000000004, "relative_change_pct": 17.1}
+  },
+  "whole_state_scan": {
+    "method": "All historically materialized numeric dimensions plus causal derived interactions were scanned. Features whose direction was not stable across chronological quarters were down-weighted/ignored. Group-balanced composite used structure, flow, price-impact efficiency, L50 book, liquidations, OI and market context.",
+    "low_historical_separation_auc": 0.8478260869565217,
+    "high_historical_separation_auc": 0.81260907504363,
+    "low_quarter_auc": [0.6770186335403726, 0.907051282051282, 0.7546875, 0.9225806451612903],
+    "high_quarter_auc": [0.7418981481481481, 0.8857808857808858, 0.6981891348088531, 0.9500000000000001],
+    "interpretation": "These are retrospective separation statistics on this historical window, not prospective live precision."
+  },
+  "bottom_line": "The relationship is not buyers exceed sellers or one static indicator. It is a divergence: continuation flow remains present, but its ability to move price decays exactly as structural penetration deepens and opposite-side absorption/counter-efficiency plus near-book depth strengthen. That is the common terminal state behind both real LOW and real HIGH in this sample."
+}
