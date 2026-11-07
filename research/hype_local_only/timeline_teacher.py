@@ -78,7 +78,7 @@ def matrix(rows,names):
     return x
 
 def fit(rows,split_fn,workers=4,all_data=False):
-    fitrows=[r for r in rows if (all_data and split_fn(r["ts_ms"]) in ("train","valid","oos")) or (not all_data and split_fn(r["ts_ms"])=="train")]
+    fitrows=list(rows) if all_data else [r for r in rows if split_fn(r["ts_ms"])=="train"]
     if not fitrows:raise RuntimeError("no timeline fit rows")
     names=schema(fitrows)
     x=matrix(fitrows,names);y=np.asarray([CLASSES.index(r["label"]) for r in fitrows],dtype=np.int64)
