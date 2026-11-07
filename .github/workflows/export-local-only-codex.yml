@@ -1,0 +1,278 @@
+name: Export HYPE Local-Only Codex Bundle
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/export-local-only-codex.yml"
+
+permissions:
+  contents: read
+  actions: read
+  issues: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+          fetch-depth: 1
+
+      - name: Build source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="PANDORA_HYPE_LOCAL_ONLY_CODEX"
+          rm -rf "$ROOT"
+          mkdir -p "$ROOT/src/research" "$ROOT/workflows" "$ROOT/artifacts" "$ROOT/docs"
+
+          cp -a research/hype_local_only "$ROOT/src/research/"
+          cp -a research/hype_quant "$ROOT/src/research/"
+          cp -a research/hype_local_v5 "$ROOT/src/research/"
+          cp -a research/hype_history_backfill "$ROOT/src/research/"
+          cp -a research/hype_rest_relay "$ROOT/src/research/"
+          cp -a research/hype_caterpillar_monitor "$ROOT/src/research/"
+          cp -a research/local_116_30d "$ROOT/src/research/"
+
+          cp .github/workflows/hype-local-only.yml "$ROOT/workflows/"
+          cp .github/workflows/hype-local-history-gap-backfill.yml "$ROOT/workflows/"
+          cp .github/workflows/local-116-30d.yml "$ROOT/workflows/"
+          cp .github/workflows/hype-v12-immediate-full-graph.yml "$ROOT/workflows/DEPRECATED_hype-v12-immediate-full-graph.yml"
+          cp .github/workflows/export-local-only-codex.yml "$ROOT/workflows/"
+
+          git rev-parse HEAD > "$ROOT/docs/GIT_SHA.txt"
+          git log -1 --format='%H%n%cI%n%s' > "$ROOT/docs/GIT_COMMIT.txt"
+
+      - name: Save latest live status
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="PANDORA_HYPE_LOCAL_ONLY_CODEX"
+          gh api "repos/${GITHUB_REPOSITORY}/issues/24" --jq '.body' > "$ROOT/docs/LIVE_STATUS_ISSUE_24.md" || true
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=30"             --jq '{workflow_runs:[.workflow_runs[]|select(.name=="HYPE LOCAL-ONLY — 30D Pretrain + Live")|{id,run_number,status,conclusion,created_at,updated_at,head_sha}]}'             > "$ROOT/docs/LOCAL_ONLY_RECENT_RUNS.json" || true
+
+      - name: Download immutable training artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="PANDORA_HYPE_LOCAL_ONLY_CODEX"
+
+          fetch_artifact () {
+            local name="$1"
+            local dest="$2"
+            local id
+            id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=$name"               --jq ".artifacts | map(select((.expired|not) and .name==\"$name\")) | sort_by(.created_at) | reverse | .[0].id // empty")"
+            if [ -z "$id" ]; then
+              echo "missing artifact: $name" | tee -a "$ROOT/docs/MISSING_ARTIFACTS.txt"
+              return 0
+            fi
+            mkdir -p "$ROOT/artifacts/$dest"
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$id/zip" > "/tmp/$dest.zip"
+            unzip -q "/tmp/$dest.zip" -d "$ROOT/artifacts/$dest"
+            echo "$name artifact_id=$id" >> "$ROOT/docs/ARTIFACT_IDS.txt"
+          }
+
+          fetch_artifact "HYPE-LOCAL-ONLY-CHECKPOINT" "latest_checkpoint"
+          fetch_artifact "local116-HYPE" "history_30d_local116"
+          fetch_artifact "HYPE-LOCAL-HISTORICAL-GAPS" "historical_gaps"
+          fetch_artifact "HYPE-LOCAL-ONLY-ENRICHED-PRETRAIN" "enriched_pretrain_rejected_or_candidate"
+
+          # Latest evidence artifact has a dynamic run-id suffix.
+          EVID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100"             --jq '.artifacts | map(select((.expired|not) and (.name|startswith("HYPE-LOCAL-ONLY-EVIDENCE-")))) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          if [ -n "$EVID" ]; then
+            mkdir -p "$ROOT/artifacts/latest_evidence"
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$EVID/zip" > /tmp/evidence.zip
+            unzip -q /tmp/evidence.zip -d "$ROOT/artifacts/latest_evidence"
+            echo "HYPE-LOCAL-ONLY-EVIDENCE artifact_id=$EVID" >> "$ROOT/docs/ARTIFACT_IDS.txt"
+          fi
+
+          OOS="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100"             --jq '.artifacts | map(select((.expired|not) and (.name|startswith("HYPE-LOCAL-HISTORY-GAP-OOS-")))) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          if [ -n "$OOS" ]; then
+            mkdir -p "$ROOT/artifacts/history_gap_oos"
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$OOS/zip" > /tmp/oos.zip
+            unzip -q /tmp/oos.zip -d "$ROOT/artifacts/history_gap_oos"
+            echo "HYPE-LOCAL-HISTORY-GAP-OOS artifact_id=$OOS" >> "$ROOT/docs/ARTIFACT_IDS.txt"
+          fi
+
+      - name: Write Codex handoff
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="PANDORA_HYPE_LOCAL_ONLY_CODEX"
+          cat > "$ROOT/CODEX_HANDOFF.md" <<'EOF'
+          # PANDORA — HYPE LOCAL-ONLY / CODEX HANDOFF
+
+          ## AUTHORITATIVE GOAL
+          There is only one research objective now:
+          detect a forming **Local LOW** and **Local HIGH** as early and causally as possible.
+
+          Intended eventual execution logic (NOT enabled in this bundle):
+          - confirmed/approved Local LOW -> long leg
+          - next Local HIGH -> close long / reverse short
+          - next Local LOW -> close short / reverse long
+
+          **Real orders are OFF.** This package is model/research infrastructure.
+
+          ## ACTIVE ARCHITECTURE
+          1. 30-day supervised pretrain from HYPE history.
+          2. Strict H1 L6/K2 pivot labels are the teacher; future bars are LABELS ONLY.
+          3. Quantum heads: LOW/HIGH x 60s/180s/300s.
+          4. Full-H1 baseline trained across the saved H1 history.
+          5. Live FeatureState exposes the causal subset of the 116-point contract.
+          6. Live labels mature later when the strict teacher becomes known.
+          7. Cortex receives 30-day relationship memory + current Quant evidence and explains support/contradictions.
+          8. Checkpoint continuity is mandatory across workflow segments.
+
+          ## DISABLED / NON-AUTHORITATIVE
+          - Caterpillar trading strategy
+          - Fibonacci strategy
+          - Direct Policy
+          - Three-Strategy Lab
+          - Entry/exit/re-entry/profit optimization heads
+          - Only-Profit research loop
+
+          Some legacy/support files remain because active collectors/monitor infrastructure imports shared utilities.
+          They must NOT become decision authorities for Local detection.
+
+          ## IMPORTANT FILES
+          - src/research/hype_local_only/model.py
+          - src/research/hype_local_only/train_history.py
+          - src/research/hype_local_only/live_features.py
+          - src/research/hype_local_only/live_daemon.py
+          - src/research/hype_local_only/cortex_daemon.py
+          - src/research/hype_quant/feature_contract.py
+          - src/research/hype_quant/features.py
+          - src/research/hype_quant/raw_state.py
+          - src/research/hype_quant/start_local_cortex.sh
+          - src/research/hype_local_v5/labels.py
+          - src/research/hype_local_v5/resilient_capture.py
+          - src/research/hype_local_v5/context_capture.py
+          - src/research/local_116_30d/run_symbol.py
+          - src/research/hype_history_backfill/run.py
+          - src/research/hype_rest_relay/app.py
+          - src/research/hype_caterpillar_monitor/app.py (name is legacy; UI/payload is Local-Only)
+          - workflows/hype-local-only.yml
+          - workflows/hype-local-history-gap-backfill.yml
+
+          ## DATA / MODELS
+          artifacts/latest_checkpoint/
+          - current Local-only model pickle, feature state, runtime state, relationship memory and reports.
+
+          artifacts/history_30d_local116/
+          - saved 30-day Local research dataset / candidate snapshots / compact bars / labels / manifest.
+
+          artifacts/historical_gaps/
+          - historical Bybit mark/index/OI/funding causal backfill.
+
+          artifacts/history_gap_oos/
+          - baseline vs enriched OOS comparison and promotion verdict.
+
+          artifacts/enriched_pretrain_rejected_or_candidate/
+          - enriched model candidate. DO NOT assume it is superior; inspect PROMOTION.json.
+          - Automatic promotion is gated; previous enriched attempts did not clearly beat baseline.
+
+          artifacts/latest_evidence/
+          - recent live status / events / training reports.
+
+          ## CURRENT KNOWN STATE AT EXPORT TIME
+          - Historical micro labels: 2361.
+          - Full H1 pretrain is enabled.
+          - Live causal input coverage reached 86/86 supported predictive inputs.
+          - Live online labels have been accumulating on top of pretrain.
+          - Precision-first thresholds replaced the old recall-heavy thresholds.
+          - Historical mark/index/OI/funding were backfilled, but promotion is OOS-gated.
+          - Cortex had a local llama.cpp compatibility issue with response_format=json_object;
+            current source contains a fallback request without JSON mode.
+          - Review docs/LIVE_STATUS_ISSUE_24.md for the exact most recent exported live state.
+
+          ## CODEX PRIORITIES
+          1. Deep audit for target leakage. No target/eval/future information may enter predictive inputs.
+          2. Verify checkpoint restore/save is lossless across every workflow segment.
+          3. Improve OOS precision AND recall, especially LOW, without cherry-picking the OOS period.
+          4. Audit candidate generation so internal H1 locals are not missed and false candidates do not explode.
+          5. Audit historical-vs-live feature scale/name parity.
+          6. Verify the latest-candidate-per-hour live teacher assignment.
+          7. Fix/strengthen Cortex startup and schema handling; Cortex is analysis/meta-evidence, not an oracle.
+          8. Add walk-forward evaluation / calibration and probability reliability diagnostics.
+          9. Keep all live-only sources availability-aware; never fabricate historical L50/liquidation/latency.
+          10. Keep real order submission disabled until a separate explicit decision.
+
+          ## SECURITY
+          No API secrets, Telegram tokens, private keys or exchange credentials are intentionally included.
+          Environment-variable NAMES may appear in source; secret VALUES must be supplied externally.
+          EOF
+
+          cat > "$ROOT/ENVIRONMENT.example" <<'EOF'
+          # Names only — no secret values.
+          GITHUB_TOKEN=
+          SOLANA_RPC_URL=
+          CORTEX_LOCAL_URL=http://127.0.0.1:8081
+          ASTRA_CORTEX_MODEL=gpt-oss-20b-local
+          CORTEX_HF_MODEL=ggml-org/gpt-oss-20b-GGUF:MXFP4
+          LOCAL_ONLY_MONITOR_URL=
+          HYPE_RELAY_URL=
+          EOF
+
+      - name: Security scan and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="PANDORA_HYPE_LOCAL_ONLY_CODEX"
+
+          # Remove caches/compiled files if present.
+          find "$ROOT" -type d \( -name __pycache__ -o -name .pytest_cache \) -prune -exec rm -rf {} +
+          find "$ROOT" -type f \( -name '*.pyc' -o -name '.env' -o -name '.env.*' \) -delete
+
+          # Fail on obvious pasted Telegram-style bot tokens. Variable names are okay.
+          if grep -RIE --binary-files=without-match '[0-9]{8,12}:[A-Za-z0-9_-]{30,}' "$ROOT"; then
+            echo "Potential Telegram token found; refusing export."
+            exit 1
+          fi
+
+          # Fail on common PEM private-key material.
+          if grep -RIE --binary-files=without-match 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY' "$ROOT"; then
+            echo "Private key material found; refusing export."
+            exit 1
+          fi
+
+          find "$ROOT" -type f -print0 | sort -z | xargs -0 sha256sum > "$ROOT/SHA256SUMS.txt"
+
+          python - <<'PY'
+          import json, os, pathlib
+          root=pathlib.Path("PANDORA_HYPE_LOCAL_ONLY_CODEX")
+          files=[str(p.relative_to(root)) for p in root.rglob("*") if p.is_file()]
+          (root/"BUNDLE_MANIFEST.json").write_text(json.dumps({
+            "bundle":"PANDORA_HYPE_LOCAL_ONLY_CODEX",
+            "git_sha":os.environ.get("GITHUB_SHA"),
+            "repository":os.environ.get("GITHUB_REPOSITORY"),
+            "branch":os.environ.get("GITHUB_REF_NAME"),
+            "file_count":len(files)+1,
+            "files":files,
+            "real_orders":False,
+            "secrets_included":False,
+          },indent=2)+"\n")
+          PY
+
+      - name: Create zip
+        run: |
+          zip -qr PANDORA_HYPE_LOCAL_ONLY_CODEX.zip PANDORA_HYPE_LOCAL_ONLY_CODEX
+          ls -lh PANDORA_HYPE_LOCAL_ONLY_CODEX.zip
+          unzip -l PANDORA_HYPE_LOCAL_ONLY_CODEX.zip | tail -n 5
+
+      - name: Upload Codex bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: PANDORA-HYPE-LOCAL-ONLY-CODEX-BUNDLE
+          path: PANDORA_HYPE_LOCAL_ONLY_CODEX.zip
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
