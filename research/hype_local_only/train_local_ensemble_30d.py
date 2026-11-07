@@ -21,6 +21,7 @@ import numpy as np
 import torch
 from torch import nn
 import torch.nn.functional as F
+from sklearn.ensemble import ExtraTreesClassifier
 
 from research.hype_local_only.fin_jepa_adapter import HypeFinJEPA,validate_scalar_schema
 from research.hype_local_only.model import LocalOnlyModel,STAGES
@@ -203,6 +204,28 @@ def train_river(rows):
         m.learn(r["side"],stage,r["features"],bool(r["strict_true"]),repeat=2 if r["strict_true"] else 1)
     return m
 
+def train_trees(samples,workers):
+    models={}
+    train=samples["train"]
+    for side in ("LOW","HIGH"):
+      for stage in PRED_STAGES:
+        ss=[z for z in train if z["side"]==side and z["stage"]==stage]
+        if len(ss)<12:continue
+        y=np.asarray([int(z["y"]) for z in ss])
+        if len(np.unique(y))<2:continue
+        x=np.stack([z["tab"] for z in ss])
+        m=ExtraTreesClassifier(n_estimators=500,max_depth=10,min_samples_leaf=2,max_features="sqrt",
+                               class_weight="balanced_subsample",n_jobs=max(1,int(workers)),random_state=SEED)
+        m.fit(x,y);models[(side,stage)]=m
+    return models
+
+def attach_tree_probs(samples,models):
+    for split in samples:
+      for z in samples[split]:
+        m=models.get((z["side"],z["stage"]))
+        if m is None:z["p_tree"]=0.5
+        else:z["p_tree"]=float(m.predict_proba(z["tab"][None,:])[0,1])
+
 def attach_probs(samples,fin,quant,river):
     fin.eval();quant.eval()
     for split in ("train","valid","oos"):
@@ -230,7 +253,7 @@ def attach_river_probs(samples,rows,river):
 def candidate_metrics(ss,weights,threshold):
     by=defaultdict(list);truth={}
     for z in ss:
-        p=weights[0]*z["p_fin"]+weights[1]*z["p_quant"]+weights[2]*z["p_river"]
+        p=weights[0]*z["p_fin"]+weights[1]*z["p_quant"]+weights[2]*z["p_river"]+weights[3]*z["p_tree"]
         by[z["candidate_id"]].append((z["stage"],p,z))
         truth[z["candidate_id"]]=bool(z["y"])
     accepted=[]
@@ -253,30 +276,31 @@ def choose_ensemble(valid):
     vals=[0,0.25,0.5,0.75,1.0]
     for a in vals:
       for b in vals:
-        c=1-a-b
-        if c<0 or c>1:continue
+       for c in vals:
+        d=1-a-b-c
+        if d<0 or d>1:continue
         for th in np.arange(.30,.96,.05):
-            m=candidate_metrics(valid,(a,b,c),float(th))
+            m=candidate_metrics(valid,(a,b,c,d),float(th))
             if m["accepted"]<5 or m["tp"]<3 or m["recall"]<.35:continue
             objective=.55*m["precision"]+.30*m["f1"]+.15*m["recall"]-.00015*(m["median_delay_s"] or 300)
-            row=(objective,m["precision"],m["f1"],m["recall"],-float(th),(a,b,c),float(th),m)
+            row=(objective,m["precision"],m["f1"],m["recall"],-float(th),(a,b,c,d),float(th),m)
             grid.append(row)
             if best is None or row[:5]>best[:5]:best=row
     if best is None:
-        w=(1/3,1/3,1/3);th=.5;m=candidate_metrics(valid,w,th)
+        w=(.25,.25,.25,.25);th=.5;m=candidate_metrics(valid,w,th)
         return w,th,m
     return best[5],best[6],best[7]
 
 def expert_oos(oos):
     out={}
-    for name,key in (("fin_jepa","p_fin"),("quant_local","p_quant"),("river_local","p_river")):
+    for name,key in (("fin_jepa","p_fin"),("quant_local","p_quant"),("river_local","p_river"),("extra_trees","p_tree")):
         best=None
         for th in np.arange(.30,.86,.05):
             # temporary convert chosen expert into p_fin and use weight 1
             tmp=[]
             for z in oos:
-                q=dict(z);q["p_fin"]=z[key];q["p_quant"]=0;q["p_river"]=0;tmp.append(q)
-            m=candidate_metrics(tmp,(1,0,0),float(th))
+                q=dict(z);q["p_fin"]=z[key];q["p_quant"]=0;q["p_river"]=0;q["p_tree"]=0;tmp.append(q)
+            m=candidate_metrics(tmp,(1,0,0,0),float(th))
             if best is None or m["f1"]>best["f1"]:best={**m,"threshold_for_diagnostic_only":float(th)}
         out[name]=best
     return out
@@ -301,7 +325,8 @@ def main():
     samples=build_samples(rows,names,med,scale)
     fin,quant,val_loss=train_models(samples,len(names)*2,args.epochs,args.workers)
     river=train_river(rows)
-    attach_probs(samples,fin,quant,river);attach_river_probs(samples,rows,river)
+    trees=train_trees(samples,args.workers)
+    attach_probs(samples,fin,quant,river);attach_river_probs(samples,rows,river);attach_tree_probs(samples,trees)
     weights,threshold,val_metrics=choose_ensemble(samples["valid"])
     oos_metrics=candidate_metrics(samples["oos"],weights,threshold)
     diag=expert_oos(samples["oos"])
@@ -326,9 +351,9 @@ def main():
       "split":{"train_before":"2026-10-23 minus 3h purge","validation":"2026-10-23..2026-10-27 minus 3h purge",
                "untouched_oos":"2026-10-27..2026-11-03 minus 3h terminal maturity purge"},
       "samples":{k:len(v) for k,v in samples.items()},
-      "experts":["Fin-JEPA sequential","Quant-style tabular MLP","River LocalOnly logistic"],
+      "experts":["Fin-JEPA sequential","Quant-style tabular MLP","River LocalOnly logistic","ExtraTrees side-stage nonlinear"],
       "fin_jepa_validation_loss":val_loss,
-      "ensemble":{"weights":{"fin_jepa":weights[0],"quant_local":weights[1],"river_local":weights[2]},
+      "ensemble":{"weights":{"fin_jepa":weights[0],"quant_local":weights[1],"river_local":weights[2],"extra_trees":weights[3]},
                   "threshold":threshold,"validation":val_metrics,"oos":oos_metrics},
       "expert_oos_diagnostic_thresholds_not_used_for_selection":diag,
       "oos_baseline_true_candidate_rate":baseline_rate,
@@ -337,7 +362,7 @@ def main():
       "feature_names":list(names),
       "note":"10/10 is awarded only when untouched OOS passes the declared gate; no metric is invented or backfilled."
     }
-    bundle={"fin_jepa":fin.state_dict(),"quant_local":quant.state_dict(),"river_local":river,
+    bundle={"fin_jepa":fin.state_dict(),"quant_local":quant.state_dict(),"river_local":river,"extra_trees":trees,
             "feature_names":list(names),"median":med,"scale":scale,"weights":weights,"threshold":threshold,
             "source_sha256":report["source"]["sha256"]}
     torch.save(bundle,args.output/"HYPE_LOCAL_ENSEMBLE.pt")
