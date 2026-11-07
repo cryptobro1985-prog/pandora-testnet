@@ -55,7 +55,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install numpy polars pyarrow requests scikit-learn zstandard
-          python -m py_compile             research/hype_full_micro_202607/build_full_micro.py             research/hype_full_micro_202607/train_full_micro.py
+          python -m py_compile \
+            research/hype_full_micro_202607/build_full_micro.py \
+            research/hype_full_micro_202607/train_full_micro.py \
+            research/hype_full_micro_202607/find_low_high_relations.py
 
       - name: Build complete causal Jul-Aug HYPE dataset
         run: |
@@ -86,6 +89,36 @@ jobs:
           assert a["causal_input_points"] == 86
           PY
 
+      - name: Find exact-time LOW and HIGH relations
+        run: |
+          python -m research.hype_full_micro_202607.find_low_high_relations \
+            --snapshots full_micro_out/candidate_snapshots_full_micro.jsonl.gz \
+            --out full_micro_relations | tee full_micro_relation.log
+          test -s full_micro_relations/LOW_HIGH_RELATIONS_LATEST.json
+          python - <<'PY'
+          import gzip,json
+          rows=[]
+          with gzip.open("full_micro_out/candidate_snapshots_full_micro.jsonl.gz","rt") as f:
+              for line in f:
+                  if line.strip():
+                      r=json.loads(line)
+                      if int(r["delay_s"])==0: rows.append(r)
+          keys={k for r in rows for k in (r.get("features") or {})}
+          must=[
+              "m1_ret_bps","m3_ret_bps","m5_ret_bps","h1_ret_bps",
+              "buy_eff_60s","sell_eff_60s",
+              "fullmicro_bid_replenish_notional_60s",
+              "fullmicro_ask_replenish_notional_60s",
+              "fullmicro_bid_absorption_proxy_60s",
+              "fullmicro_ask_absorption_proxy_60s",
+              "fullmicro_book_churn_notional_60s",
+          ]
+          missing=[k for k in must if k not in keys]
+          assert not missing, f"missing dynamic relation features: {missing}"
+          print(json.dumps({"exact_rows":len(rows),"dynamic_feature_assertions":"OK"}))
+          PY
+          gzip -9 -f full_micro_relation.log
+
       - name: Train full-micro Local models
         run: |
           python -m research.hype_full_micro_202607.train_full_micro             --snapshots full_micro_out/candidate_snapshots_full_micro.jsonl.gz             --output full_micro_model | tee full_micro_train.log
@@ -101,6 +134,7 @@ jobs:
           cp full_micro_out/manifest.json research/hype_full_micro_202607/results/LATEST_MANIFEST.json
           cp full_micro_out/feature_availability.json research/hype_full_micro_202607/results/LATEST_FEATURE_AVAILABILITY.json
           cp full_micro_model/HYPE_FULL_MICRO_202607_REPORT.json research/hype_full_micro_202607/results/LATEST_REPORT.json
+          cp full_micro_relations/LOW_HIGH_RELATIONS_LATEST.json research/hype_full_micro_202607/results/LOW_HIGH_RELATIONS_LATEST.json
           git config user.name "pandora-research-bot"
           git config user.email "actions@users.noreply.github.com"
           git add research/hype_full_micro_202607/results
@@ -114,7 +148,9 @@ jobs:
           name: HYPE-FULL-MICRO-202607-DATA-${{ github.run_id }}
           path: |
             full_micro_out/**
+            full_micro_relations/**
             full_micro_build.log.gz
+            full_micro_relation.log.gz
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
