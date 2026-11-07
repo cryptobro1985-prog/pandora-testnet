@@ -60,6 +60,78 @@ def strict_pivots(state,ts_ms):
         else:raw.append(item)
     return raw
 
+def structural_replay_48h(state,ts_ms):
+    """Recover the confirmed H1 Local sequence for the last 48h.
+
+    Uses only pivots whose K2 confirmation was already available at ts_ms.
+    This is causal structural memory, not a future-looking label feed.
+    """
+    cutoff=int(ts_ms)-48*H
+    piv=[z for z in strict_pivots(state,ts_ms)
+         if int(z.get("available_ms",0))<=int(ts_ms) and int(z.get("hour_ms",0))>=cutoff]
+    highs=[z for z in piv if z["side"]=="HIGH"]
+    lows=[z for z in piv if z["side"]=="LOW"]
+    last=piv[-1] if piv else None
+    previous=piv[-2] if len(piv)>=2 else None
+    leg=("UP_TO_NEXT_HIGH" if last and last["side"]=="LOW"
+         else "DOWN_TO_NEXT_LOW" if last and last["side"]=="HIGH" else "UNKNOWN")
+    high_structure="UNKNOWN"
+    low_structure="UNKNOWN"
+    if len(highs)>=2:
+        high_structure="HIGHER_HIGH" if highs[-1]["price"]>highs[-2]["price"] else "LOWER_HIGH"
+    if len(lows)>=2:
+        low_structure="HIGHER_LOW" if lows[-1]["price"]>lows[-2]["price"] else "LOWER_LOW"
+    if high_structure=="HIGHER_HIGH" and low_structure=="HIGHER_LOW":
+        regime="UP_STRUCTURE"
+    elif high_structure=="LOWER_HIGH" and low_structure=="LOWER_LOW":
+        regime="DOWN_STRUCTURE"
+    else:
+        regime="MIXED_STRUCTURE"
+    current=float(getattr(state,"last_price",0) or 0)
+    anchor_move_bps=None
+    if last and current>0 and float(last["price"])>0:
+        anchor_move_bps=(current/float(last["price"])-1.0)*10000.0
+    swing_bps=None
+    if last and previous and float(previous["price"])>0:
+        swing_bps=abs(float(last["price"])/float(previous["price"])-1.0)*10000.0
+    return {
+        "window_hours":48,
+        "confirmed_local_count":len(piv),
+        "locals":piv,
+        "last_local":last,
+        "previous_local":previous,
+        "active_leg":leg,
+        "high_structure":high_structure,
+        "low_structure":low_structure,
+        "regime":regime,
+        "anchor_move_bps":anchor_move_bps,
+        "last_swing_bps":swing_bps,
+        "hours_since_last_local":(None if not last else max(0.0,(int(ts_ms)-int(last["hour_ms"]))/H)),
+    }
+
+def replay48_features(replay,price,ts_ms):
+    out={}
+    if not replay:return out
+    out["structure48_active_leg_up"]=1.0 if replay.get("active_leg")=="UP_TO_NEXT_HIGH" else 0.0
+    out["structure48_active_leg_down"]=1.0 if replay.get("active_leg")=="DOWN_TO_NEXT_LOW" else 0.0
+    out["structure48_regime_up"]=1.0 if replay.get("regime")=="UP_STRUCTURE" else 0.0
+    out["structure48_regime_down"]=1.0 if replay.get("regime")=="DOWN_STRUCTURE" else 0.0
+    out["structure48_higher_high"]=1.0 if replay.get("high_structure")=="HIGHER_HIGH" else 0.0
+    out["structure48_lower_high"]=1.0 if replay.get("high_structure")=="LOWER_HIGH" else 0.0
+    out["structure48_higher_low"]=1.0 if replay.get("low_structure")=="HIGHER_LOW" else 0.0
+    out["structure48_lower_low"]=1.0 if replay.get("low_structure")=="LOWER_LOW" else 0.0
+    out["structure48_confirmed_local_count"]=float(replay.get("confirmed_local_count") or 0)
+    if isinstance(replay.get("hours_since_last_local"),(int,float)):
+        out["structure48_hours_since_last_local"]=float(replay["hours_since_last_local"])
+    if isinstance(replay.get("last_swing_bps"),(int,float)):
+        out["structure48_last_swing_bps"]=float(replay["last_swing_bps"])
+    last=replay.get("last_local") or {}
+    if isinstance(last.get("price"),(int,float)) and float(last["price"])>0 and price>0:
+        out["structure48_distance_from_last_local_bps"]=(float(price)/float(last["price"])-1.0)*10000.0
+        out["structure48_last_side_low"]=1.0 if last.get("side")=="LOW" else 0.0
+        out["structure48_last_side_high"]=1.0 if last.get("side")=="HIGH" else 0.0
+    return out
+
 def strict_label(state,p,ts_ms):
     if ts_ms<p.mature_ms:return None
     rows={r["start_ms"]:r for r in completed_h1(state,ts_ms)}
@@ -103,6 +175,8 @@ def publish_issue(status):
         f"**Status:** {status.get('status')}  ",
         f"**Expected next Local:** {status.get('expected_side') or 'UNKNOWN'}  ",
         f"**Last teacher Local:** {status.get('last_teacher_local') or '—'}  ",
+        f"**48h leg:** {(status.get('structure_48h') or {}).get('active_leg','UNKNOWN')} · {(status.get('structure_48h') or {}).get('regime','UNKNOWN')}  ",
+        f"**48h locals:** {[(z.get('side'),z.get('price')) for z in (status.get('structure_48h') or {}).get('locals',[])]}  ",
         f"**Candidate:** {c.get('side','—')} @ {c.get('extreme_price','—')} · age {c.get('age_s','—')}s  ",
         f"**P60/P180/P300:** {p.get('60','—')} / {p.get('180','—')} / {p.get('300','—')}  ",
         f"**Stage:** {c.get('stage','WAIT')}  ",
@@ -132,11 +206,12 @@ def main():
     fp=args.checkpoint_dir/"feature_state.pkl";state=load_pickle(fp,FeatureState())
     rp=args.checkpoint_dir/"local_runtime.pkl"
     rt=load_pickle(rp,{"candidates":{"LOW":None,"HIGH":None},"pending":[],"expected_side":None,
-                       "last_teacher_local":None,"latest_by_hour":{}})
+                       "last_teacher_local":None,"latest_by_hour":{},"structure_48h":{}})
     candidates=rt.get("candidates") or {"LOW":None,"HIGH":None}
     pending=[Pending(**z) if isinstance(z,dict) else z for z in rt.get("pending",[])]
     expected=rt.get("expected_side");last_teacher=rt.get("last_teacher_local")
     latest_by_hour=rt.get("latest_by_hour") or {}
+    structure_48h=rt.get("structure_48h") or {}
 
     tail=Tailer();stop=False
     def stopfn(*_):
@@ -175,6 +250,16 @@ def main():
 
             # H1 baseline learns every matured Local in the backfill/live history.
             model.train_h1_history(state,ts)
+
+            # Rebuild the last 48h structural memory from the REST/WS H1 backfill.
+            # This makes workflow restarts remember the prior LOW/HIGH sequence.
+            fresh48=structural_replay_48h(state,ts)
+            if fresh48.get("confirmed_local_count"):
+                structure_48h=fresh48
+                recovered=fresh48.get("last_local")
+                if recovered and (last_teacher is None or int(recovered["hour_ms"])>=int(last_teacher.get("hour_ms",0))):
+                    last_teacher=recovered
+                    expected="HIGH" if recovered["side"]=="LOW" else "LOW"
 
             piv=strict_pivots(state,ts)
             if piv:
@@ -222,6 +307,7 @@ def main():
                 for stage in STAGES:
                     if age<stage or stage in c.stages_done:continue
                     fx=live_to_archive_features(side,age,c.extreme_price,price,x,state)
+                    fx.update(replay48_features(structure_48h,price,ts))
                     prob,accepted=model.predict(side,stage,fx)
                     h1_prior=model.h1_prior(side)
                     c.snapshots[stage]=fx;c.probabilities[stage]=prob;c.stages_done.add(stage)
@@ -266,6 +352,7 @@ def main():
             status={
                 "status":"LEARNING_LIVE" if model.live_labels else "HISTORY_PRETRAINED_LIVE_WATCH",
                 "updated_ts_ms":ts,"expected_side":expected,"last_teacher_local":last_teacher,
+                "structure_48h":structure_48h,
                 "candidate":None if c is None else {
                     "candidate_id":c.candidate_id,"side":c.side,"extreme_price":c.extreme_price,
                     "age_s":round(max(0.0,(ts-c.extreme_ts_ms)/1000.0),1),
@@ -309,7 +396,7 @@ def main():
             model.save(mp);save_pickle(fp,state)
             save_pickle(rp,{"candidates":candidates,"pending":[asdict(z) for z in pending],
                 "expected_side":expected,"last_teacher_local":last_teacher,
-                "latest_by_hour":latest_by_hour})
+                "latest_by_hour":latest_by_hour,"structure_48h":structure_48h})
             if status:status_path.write_text(json.dumps(status,indent=2)+"\n")
             next_save=now+30
         if now>=next_monitor and status:
@@ -321,7 +408,7 @@ def main():
     model.save(mp);save_pickle(fp,state)
     save_pickle(rp,{"candidates":candidates,"pending":[asdict(z) for z in pending],
         "expected_side":expected,"last_teacher_local":last_teacher,
-        "latest_by_hour":latest_by_hour})
+        "latest_by_hour":latest_by_hour,"structure_48h":structure_48h})
     if status:
         status_path.write_text(json.dumps(status,indent=2)+"\n");publish_monitor(status);publish_issue(status)
     print("LOCAL_ONLY="+json.dumps(status,separators=(",",":"),ensure_ascii=False),flush=True)
