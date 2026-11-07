@@ -51,6 +51,7 @@ jobs:
           python -m py_compile \
             research/hype_local_only/model.py \
             research/hype_local_only/live_features.py \
+            research/hype_local_only/feature_discovery.py \
             research/hype_local_only/train_history.py \
             research/hype_local_only/live_daemon.py \
             research/hype_local_only/cortex_daemon.py
