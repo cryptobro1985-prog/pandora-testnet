@@ -27,6 +27,7 @@ from research.hype_local_only.fin_jepa_adapter import HypeFinJEPA,validate_scala
 from research.hype_local_only.model import LocalOnlyModel,STAGES
 from research.hype_local_only.h1_teacher_context import load_minutes,build_index,causal_h1_features
 from research.hype_local_only.feature_discovery import scalar_interactions,historical_indicator_features
+from research.hype_local_only.timeline_teacher import build_timeline_rows,fit as fit_timeline,attach_candidate_probabilities,classification_metrics
 from research.hype_quant.feature_contract import POINTS,INPUT_IDS,TARGET_IDS,METADATA_IDS
 
 TRAIN_END=1792713600000   # 2026-10-23T00:00:00Z
@@ -306,7 +307,7 @@ def attach_river_probs(samples,rows,river):
 def candidate_metrics(ss,weights,threshold):
     by=defaultdict(list);truth={}
     for z in ss:
-        p=weights[0]*z["p_fin"]+weights[1]*z["p_quant"]+weights[2]*z["p_river"]+weights[3]*z["p_tree"]
+        p=weights[0]*z["p_fin"]+weights[1]*z["p_quant"]+weights[2]*z["p_river"]+weights[3]*z["p_tree"]+weights[4]*z["p_timeline"]
         by[z["candidate_id"]].append((z["stage"],p,z))
         truth[z["candidate_id"]]=bool(z["y"])
     accepted=[]
@@ -330,30 +331,31 @@ def choose_ensemble(valid):
     for a in vals:
       for b in vals:
        for c in vals:
-        d=1-a-b-c
-        if d<0 or d>1:continue
-        for th in np.arange(.30,.96,.05):
-            m=candidate_metrics(valid,(a,b,c,d),float(th))
+        for d in vals:
+         e=1-a-b-c-d
+         if e<0 or e>1:continue
+         for th in np.arange(.30,.96,.05):
+            m=candidate_metrics(valid,(a,b,c,d,e),float(th))
             if m["accepted"]<5 or m["tp"]<3 or m["recall"]<.35:continue
             objective=.55*m["precision"]+.30*m["f1"]+.15*m["recall"]-.00015*(m["median_delay_s"] or 300)
-            row=(objective,m["precision"],m["f1"],m["recall"],-float(th),(a,b,c,d),float(th),m)
+            row=(objective,m["precision"],m["f1"],m["recall"],-float(th),(a,b,c,d,e),float(th),m)
             grid.append(row)
             if best is None or row[:5]>best[:5]:best=row
     if best is None:
-        w=(.25,.25,.25,.25);th=.5;m=candidate_metrics(valid,w,th)
+        w=(.20,.20,.20,.20,.20);th=.5;m=candidate_metrics(valid,w,th)
         return w,th,m
     return best[5],best[6],best[7]
 
 def expert_oos(oos):
     out={}
-    for name,key in (("fin_jepa","p_fin"),("quant_local","p_quant"),("river_local","p_river"),("extra_trees","p_tree")):
+    for name,key in (("fin_jepa","p_fin"),("quant_local","p_quant"),("river_local","p_river"),("extra_trees","p_tree"),("timeline_teacher","p_timeline")):
         best=None
         for th in np.arange(.30,.86,.05):
             # temporary convert chosen expert into p_fin and use weight 1
             tmp=[]
             for z in oos:
-                q=dict(z);q["p_fin"]=z[key];q["p_quant"]=0;q["p_river"]=0;q["p_tree"]=0;tmp.append(q)
-            m=candidate_metrics(tmp,(1,0,0,0),float(th))
+                q=dict(z);q["p_fin"]=z[key];q["p_quant"]=0;q["p_river"]=0;q["p_tree"]=0;q["p_timeline"]=0;tmp.append(q)
+            m=candidate_metrics(tmp,(1,0,0,0,0),float(th))
             if best is None or m["f1"]>best["f1"]:best={**m,"threshold_for_diagnostic_only":float(th)}
         out[name]=best
     return out
@@ -383,6 +385,11 @@ def main():
     names=schema_from_train(rows)
     med,scale=robust_norm(rows,names)
     samples=build_samples(rows,names,med,scale)
+    timeline_rows=build_timeline_rows(minutes,all_teacher)
+    timeline_model,timeline_names=fit_timeline(timeline_rows,split_name,args.workers,all_data=False)
+    attach_candidate_probabilities(samples,timeline_rows,timeline_model,timeline_names)
+    timeline_validation=classification_metrics(timeline_rows,timeline_model,timeline_names,split_name,"valid")
+    timeline_oos=classification_metrics(timeline_rows,timeline_model,timeline_names,split_name,"oos")
     fin,quant,val_loss=train_models(samples,len(names)*2,args.epochs,args.workers)
     river=train_river(rows)
     trees=train_trees(samples,args.workers)
@@ -396,8 +403,9 @@ def main():
     fin_full,quant_full,all_samples=finetune_all(fin_full,quant_full,samples,epochs=8)
     river_full=train_river_all(rows)
     trees_full=train_trees({"train":all_samples},args.workers)
+    timeline_full,timeline_names_full=fit_timeline(timeline_rows,split_name,args.workers,all_data=True)
     full_teacher_bundle={"fin_jepa":fin_full.state_dict(),"quant_local":quant_full.state_dict(),
-                         "river_local":river_full,"extra_trees":trees_full,
+                         "river_local":river_full,"extra_trees":trees_full,"timeline_teacher":timeline_full,"timeline_feature_names":list(timeline_names_full),
                          "feature_names":list(names),"median":med,"scale":scale,
                          "source_sha256":sha256(args.snapshots),
                          "teacher":"strict finalized H1 L6/K2 LOW/HIGH; all other candidates are NONE",
@@ -431,9 +439,10 @@ def main():
                         "full30d_refit_examples":len(all_samples),
                         "full30d_checkpoint":"HYPE_LOCAL_FULL30D_TEACHER.pt",
                         "full30d_refit_happens_after_oos_metrics_are_frozen":True},
-      "experts":["Fin-JEPA sequential","Quant-style tabular MLP","River LocalOnly logistic","ExtraTrees side-stage nonlinear"],
+      "experts":["Fin-JEPA sequential","Quant-style tabular MLP","River LocalOnly logistic","ExtraTrees side-stage nonlinear","Full-minute HIGH/LOW/NONE timeline teacher"],
       "fin_jepa_validation_loss":val_loss,
-      "ensemble":{"weights":{"fin_jepa":weights[0],"quant_local":weights[1],"river_local":weights[2],"extra_trees":weights[3]},
+      "timeline_teacher":{"feature_count":len(timeline_names),"validation":timeline_validation,"oos":timeline_oos},
+      "ensemble":{"weights":{"fin_jepa":weights[0],"quant_local":weights[1],"river_local":weights[2],"extra_trees":weights[3],"timeline_teacher":weights[4]},
                   "threshold":threshold,"validation":val_metrics,"oos":oos_metrics},
       "expert_oos_diagnostic_thresholds_not_used_for_selection":diag,
       "oos_baseline_true_candidate_rate":baseline_rate,
@@ -442,7 +451,7 @@ def main():
       "feature_names":list(names),
       "note":"10/10 is awarded only when untouched OOS passes the declared gate; no metric is invented or backfilled."
     }
-    bundle={"fin_jepa":fin.state_dict(),"quant_local":quant.state_dict(),"river_local":river,"extra_trees":trees,
+    bundle={"fin_jepa":fin.state_dict(),"quant_local":quant.state_dict(),"river_local":river,"extra_trees":trees,"timeline_teacher":timeline_model,"timeline_feature_names":list(timeline_names),
             "feature_names":list(names),"median":med,"scale":scale,"weights":weights,"threshold":threshold,
             "source_sha256":report["source"]["sha256"]}
     torch.save(bundle,args.output/"HYPE_LOCAL_ENSEMBLE.pt")
