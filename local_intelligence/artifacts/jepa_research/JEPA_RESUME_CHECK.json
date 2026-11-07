@@ -1,0 +1,7 @@
+{
+  "checkpoint_pointer_unchanged": true,
+  "completed_epochs": 8,
+  "additional_training_steps": 0,
+  "completed_probe_comparison_reused": true,
+  "note": "Existing input hashes and coherent checkpoint verified; no old model or dataset rebuilt."
+}

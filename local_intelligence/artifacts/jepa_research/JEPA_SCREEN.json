@@ -1,0 +1,114 @@
+{
+  "champion_unchanged": true,
+  "config": {
+    "batch": 128,
+    "context": 60,
+    "ema": 0.99,
+    "epochs": 8,
+    "hidden": 32,
+    "horizons": [
+      1,
+      3,
+      5
+    ],
+    "latent": 16,
+    "learning_rate": 0.0005,
+    "seed": 20261107,
+    "stride": 5,
+    "train_cutoff_ms": 1792432800000,
+    "validation_end_ms": 1792519200000,
+    "validation_start_ms": 1792476000000
+  },
+  "dataset_sha256": "dea89e1eaf9ad47a0d47564e0880f4cd6e5cdfdc523f750a54777963bbca10ee",
+  "elapsed_seconds": 9.250460012000076,
+  "features": [
+    "body_bps",
+    "range_bps",
+    "upper_wick",
+    "lower_wick",
+    "close_position",
+    "direction",
+    "higher_high",
+    "higher_low",
+    "flow_imbalance",
+    "log_turnover",
+    "log_trade_count",
+    "return_5m",
+    "return_15m",
+    "path_efficiency_15m",
+    "volatility_15m",
+    "flow_price_divergence"
+  ],
+  "hardware": "CPU,2threads",
+  "historical_receipt_assumption": "completed minute availability at close where actual receipt is absent",
+  "history": [
+    {
+      "epoch": 1,
+      "training_objective": 0.029599243723269966
+    },
+    {
+      "epoch": 2,
+      "training_objective": 0.018423975290109713
+    },
+    {
+      "epoch": 3,
+      "training_objective": 0.013551096716481779
+    },
+    {
+      "epoch": 4,
+      "training_objective": 0.010502481496789388
+    },
+    {
+      "epoch": 5,
+      "training_objective": 0.00860658404417336
+    },
+    {
+      "epoch": 6,
+      "training_objective": 0.007233817324352761
+    },
+    {
+      "epoch": 7,
+      "training_objective": 0.006227406310952372
+    },
+    {
+      "epoch": 8,
+      "training_objective": 0.005565733816992078
+    }
+  ],
+  "next": "frozen two-probe chronological comparison",
+  "parameters": 21352,
+  "promoted": false,
+  "real_orders": false,
+  "schema": "PANDORA-NUMERIC-JEPA-v1",
+  "screen": {
+    "beats_both_trivial_baselines": true,
+    "loss_decreases": true,
+    "passed": true,
+    "per_horizon": {
+      "1": {
+        "persistence_mse": 0.0021780808456242085,
+        "prediction_mse": 0.002379841636866331
+      },
+      "3": {
+        "persistence_mse": 0.006479891017079353,
+        "prediction_mse": 0.005407104734331369
+      },
+      "5": {
+        "persistence_mse": 0.010469875298440456,
+        "prediction_mse": 0.00857093557715416
+      }
+    },
+    "persistence_mse": 0.006375949364155531,
+    "prediction_mse": 0.005452627316117287,
+    "representation": {
+      "effective_rank": 3.483870029449463,
+      "finite": true,
+      "mean_dimension_std": 0.17265728116035461
+    },
+    "scope": "held-out SSL latent space, not Local accuracy",
+    "training_mean_mse": 0.04377301037311554,
+    "validation_windows": 143
+  },
+  "subminute_targets": "unavailable from minute archive; no 5s/15s/30s values fabricated",
+  "training_windows": 4497
+}

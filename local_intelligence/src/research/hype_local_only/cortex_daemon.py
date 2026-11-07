@@ -13,6 +13,7 @@ import time
 from .cortex_meta import (StatisticalCortex, atomic_json, canonical, clean_features,
                           load_memory, save_memory, VERSION)
 from .cortex_provider import AdapterConfig, CortexProvider
+from .jepa_research import causal_cortex_evidence
 
 def acquire_owner(directory: Path):
     handle = (directory / "cortex_daemon.lock").open("a+")
@@ -99,6 +100,7 @@ def build_payload(status, report, memory, now_ms):
             "features": features, "allowed_features": sorted(features),
             "feature_snapshot": {k: v for k, v in (status.get("cortex_evidence") or {}).items() if k != "features"},
             "statistical_analysis": report,
+            "jepa_evidence": causal_cortex_evidence(status.get("jepa_evidence"), now_ms),
             "research_hypotheses": [{k: h.get(k) for k in ("id", "conditions", "side", "stage_s", "status")}
                                     for h in memory.get("hypotheses", [])[:48]],
             "constraints": {"advisory_only": True, "may_modify_quantum": False,
@@ -166,6 +168,7 @@ def main():
                     "decision": last_llm["decision"] if relevant else report["decision"],
                     "candidate_side": (status.get("candidate") or {}).get("side"),
                     "memory_version": memory.get("version"), "statistical_analysis": report,
+            "jepa_evidence": causal_cortex_evidence(status.get("jepa_evidence"), now_ms),
                     "llm": {"configured_backend": provider.config.backend, "model": provider.config.model,
                             "configured": provider.available, "availability_reason": provider.availability_reason,
                             "configuration_error": provider_config_error,

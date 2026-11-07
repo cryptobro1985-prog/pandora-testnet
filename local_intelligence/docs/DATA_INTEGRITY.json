@@ -1,8 +1,8 @@
 {
   "schema": "pandora-offline-data-integrity-v1",
   "valid": true,
-  "files_checked": 56,
-  "gzip_files_checked": 10,
+  "files_checked": 68,
+  "gzip_files_checked": 11,
   "manifest_entries_checked": 11,
   "errors": [],
   "warnings": [
@@ -17,8 +17,8 @@
   "serialization": [
     {
       "path": "BUNDLE_MANIFEST.json",
-      "bytes": 7268,
-      "sha256": "689d7cecfc027eeaa34c2d78991a0162194473f1b0b13e40452fea99a7139a83",
+      "bytes": 11439,
+      "sha256": "7c0ead4ca4db28430c7f51b1c1093ff0b7f759358ab9ad206afb29da4806c3c2",
       "json_type": "dict",
       "valid": true
     },
@@ -184,6 +184,83 @@
       "valid": true
     },
     {
+      "path": "artifacts/jepa_research/INCIDENT_ERROR_MEMORY.jsonl",
+      "bytes": 2109,
+      "sha256": "4626e3d2137b6e3365d37340822007b5bdc3dac134bf264754de1e6822e1a8a8",
+      "records": 3,
+      "valid": true
+    },
+    {
+      "path": "artifacts/jepa_research/INCIDENT_REPLAY.json",
+      "bytes": 12421,
+      "sha256": "5a3a87984cef9b5751b03407689796411794ef47a2d4480361e0a687dc08476f",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/jepa_research/INCIDENT_SOURCE.json",
+      "bytes": 17601,
+      "sha256": "4ffee71af9198052009182dc02fbae5419049dd5da38cab2bc99724cff7f8f2c",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/jepa_research/JEPA_COMPARISON.json",
+      "bytes": 116506,
+      "sha256": "ea8e4093abef1cb88e092bc3d3e5e46f0670080cd1e9538d338ba70a979a9257",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/jepa_research/JEPA_RESUME_CHECK.json",
+      "bytes": 249,
+      "sha256": "1bf7b2f0386094da3b9510f107bdc571903b9667883ab5fab98dc2643ac23b5d",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/jepa_research/JEPA_SCREEN.json",
+      "bytes": 2806,
+      "sha256": "9aef1478a01921b9049262c6cfac3b8fe54fd0ec3f2db4d45b76205ab7e1924c",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/jepa_research/PROBE_OOS_PREDICTIONS.jsonl.gz",
+      "bytes": 15301,
+      "sha256": "25e8332f74a1912c35f5bef7a09d43c53808a24e05d79d7db70e0e72a68c0ef5",
+      "records": 980,
+      "valid": true
+    },
+    {
+      "path": "artifacts/jepa_research/ssl_checkpoint/RUNTIME_CURRENT.json",
+      "bytes": 165,
+      "sha256": "7cb610334921b17ee976b9560b17b6be8ca100b0a27b7da2368e1d4c5c80ef65",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/jepa_research/ssl_checkpoint/runtime_generations/01794032694049925873-d6b0974ac8/manifest.json",
+      "bytes": 179,
+      "sha256": "dbedc1564ca4d2321b0d792a3b822941ccdce79c21551ad8d90a5ad4af1e61ec",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/jepa_research/ssl_checkpoint/runtime_generations/01794032695476180090-83adddc8dc/manifest.json",
+      "bytes": 179,
+      "sha256": "5c8e96739e149048b3658249c75caa2cf21fd959fce2dd30b924422f1826bee1",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/jepa_research/ssl_checkpoint/runtime_generations/01794032839968439218-17d0ba2be9/manifest.json",
+      "bytes": 179,
+      "sha256": "66d48e96e4e37c3991afd8f4404d6dc6d9fe08f0f6ba9fc29f3031ba4e92d901",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
       "path": "artifacts/latest_checkpoint/CORTEX_LOCAL_ONLY_STATUS.json",
       "bytes": 218,
       "sha256": "1af37611099acebf6e6b41440e517fefaebf65f10757329042ed6f5a32a59962",
@@ -317,6 +394,13 @@
       "valid": true
     },
     {
+      "path": "docs/JEPA_REFERENCES.json",
+      "bytes": 12857,
+      "sha256": "c6a371e3c8bdd316233a34918692061a0486db4fbd8bc874d2b3718de3fdfa38",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
       "path": "docs/LOCAL_ONLY_RECENT_RUNS.json",
       "bytes": 2706,
       "sha256": "4e3ce36362a73626f241806035110b2481654b06fcc397da28740b29213f6c4b",
@@ -402,8 +486,8 @@
     },
     {
       "path": "validation/current/REPORT.json",
-      "bytes": 2281,
-      "sha256": "548a6fbac3ee688b51fe4de716338fc32578340a1c39478138be358a67b97945",
+      "bytes": 2266,
+      "sha256": "30bd44a239167afed4a64d9abb005995bcf5e1b64657160e7b5b5a3e39ee8a26",
       "json_type": "dict",
       "valid": true
     }

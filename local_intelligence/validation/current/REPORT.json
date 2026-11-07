@@ -9,7 +9,7 @@
         "check"
       ],
       "exit_code": 0,
-      "seconds": 0.199,
+      "seconds": 0.231,
       "log": "dependencies.log"
     },
     {
@@ -23,13 +23,13 @@
         "src/research/hype_local_v5/tests",
         "src/research/hype_history_backfill/test_integrity.py",
         "src/research/hype_local_only/tests",
-        "--junitxml=/workspace/pandora-intelligence/PANDORA_HYPE_LOCAL_ONLY_CODEX/validation/current/software.xml"
+        "--junitxml=/workspace/pandora-testnet/local_intelligence/validation/current/software.xml"
       ],
       "exit_code": 0,
-      "seconds": 8.102,
+      "seconds": 10.429,
       "log": "software_tests.log",
       "counts": {
-        "tests": 194,
+        "tests": 207,
         "failures": 0,
         "errors": 0,
         "skipped": 0
@@ -43,7 +43,7 @@
         "research.hype_quant.test_self"
       ],
       "exit_code": 0,
-      "seconds": 4.817,
+      "seconds": 4.734,
       "log": "quantum_self.log"
     },
     {
@@ -54,7 +54,7 @@
         "research.hype_quant.test_116_features"
       ],
       "exit_code": 0,
-      "seconds": 0.102,
+      "seconds": 0.112,
       "log": "features_116.log"
     },
     {
@@ -65,7 +65,7 @@
         "research.hype_quant.test_astra_cortex"
       ],
       "exit_code": 0,
-      "seconds": 1.045,
+      "seconds": 1.019,
       "log": "legacy_cortex_self.log"
     },
     {
@@ -75,7 +75,7 @@
         "src/research/hype_local_v5/test_compact_smoke.py"
       ],
       "exit_code": 0,
-      "seconds": 0.117,
+      "seconds": 0.111,
       "log": "compact_roundtrip.log"
     }
   ],

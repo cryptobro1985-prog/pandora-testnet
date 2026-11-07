@@ -205,6 +205,18 @@ class LocalRuntime:
             stale = old is not None and ts - old.extreme_ts_ms > H
             if not extends and not stale:
                 continue
+            if old is not None:
+                old.invalidated = True
+                reason = ("NEW_MORE_EXTREME_PRICE" if
+                          (proposal_price < old.extreme_price if side == "LOW" else proposal_price > old.extreme_price)
+                          else "SOURCE_OR_AGE_REPLACEMENT")
+                self.events.append({"event_id": f"superseded:{old.candidate_id}:{extreme_ts}:{observed_ts}",
+                                    "event": "CANDIDATE_SUPERSEDED", "ts_ms": ts,
+                                    "candidate_id": old.candidate_id, "old_price": old.extreme_price,
+                                    "new_price": proposal_price, "side": side, "reason": reason})
+                last_signal = self.champion.last_signal
+                if last_signal and last_signal.get("candidate_id") == old.candidate_id:
+                    last_signal.update(invalidated=True, invalidated_ts_ms=ts, invalidation_reason=reason)
             evidence = {"proposal": "MULTIWINDOW_CAUSAL", "windows": [name for name, _ in hit], "accepted_stages": [],
                         "price_reference": price_reference, "extreme_source_ts_ms": extreme_ts,
                         "extreme_received_ts_ms": observed_ts, "proposal_observed_ts_ms": ts,

@@ -1,0 +1,533 @@
+{
+  "schema_version": 1,
+  "incident": "HIGH_78.5515",
+  "candidate_id": "H-1794006398013",
+  "research_only": true,
+  "real_orders": false,
+  "source_files": [
+    {
+      "path": "artifacts/latest_evidence/LOCAL_EVENTS.jsonl",
+      "sha256": "56732e7bb0dd6e9f472c612115855792de86e78c211f15023dfa4ca605975d62",
+      "duplicate_latest_checkpoint_identical": true
+    },
+    {
+      "path": "artifacts/latest_evidence/LOCAL_LIVE_LABELS.jsonl",
+      "sha256": "0595049c148e8d47d37ba6c03a37c4e7ec991c05fd5d42575f7bb03fdca8bed0",
+      "duplicate_latest_checkpoint_identical": true
+    },
+    {
+      "path": "artifacts/latest_evidence/LOCAL_ONLY_STATUS.json",
+      "sha256": "01ad268e170a9a248094d196686bf42fb5023bebd2bb27fd61fe2949c84f74f9",
+      "duplicate_latest_checkpoint_identical": true
+    }
+  ],
+  "chronology": [
+    {
+      "event": "NEW_CANDIDATE",
+      "ts_ms": 1794006398013,
+      "side": "HIGH",
+      "price": 78.5515,
+      "candidate_id": "H-1794006398013",
+      "evidence": {
+        "proposal": "MULTIWINDOW_CAUSAL",
+        "windows": [
+          "5m"
+        ]
+      },
+      "source_path": "artifacts/latest_evidence/LOCAL_EVENTS.jsonl",
+      "source_line": 145,
+      "utc": "2026-11-06T23:06:38.013000+00:00"
+    },
+    {
+      "event": "LOCAL_STAGE",
+      "ts_ms": 1794006459036,
+      "side": "HIGH",
+      "stage": 60,
+      "probability": 0.8308365023663673,
+      "threshold": 0.62,
+      "accepted": true,
+      "h1_prior": 0.35553753036118024,
+      "expected_side": "HIGH",
+      "candidate_id": "H-1794006398013",
+      "relationship_evidence": {
+        "supports": [
+          {
+            "feature": "rev_eff_30s",
+            "value": 0.016881216114108265,
+            "historical_median": 0.004690868421926439,
+            "effect": 0.9783557435682978
+          },
+          {
+            "feature": "position_60m",
+            "value": 0.3666666666667058,
+            "historical_median": 0.921989041554269,
+            "effect": -0.8262464771241776
+          },
+          {
+            "feature": "distance_high_60m_bps",
+            "value": 25.408672062559035,
+            "historical_median": 7.101936128726116,
+            "effect": 0.7290398923943684
+          },
+          {
+            "feature": "distance_high_6h_bps",
+            "value": 43.87612794762852,
+            "historical_median": 7.101936128726116,
+            "effect": 0.7290398923943684
+          },
+          {
+            "feature": "reversal_attempts",
+            "value": 2.0,
+            "historical_median": 4.0,
+            "effect": -0.6744907594765952
+          },
+          {
+            "feature": "ret_30s",
+            "value": -0.0002928462748043037,
+            "historical_median": -0.00011557058570921264,
+            "effect": -0.6391036902991774
+          },
+          {
+            "feature": "rev_ret_30s",
+            "value": 0.0002928462748043037,
+            "historical_median": 0.00011557058570921264,
+            "effect": 0.6391036902991774
+          },
+          {
+            "feature": "position_6h",
+            "value": 0.5688360450563283,
+            "historical_median": 0.9638591750178299,
+            "effect": -0.6363523673828189
+          }
+        ],
+        "contradicts": [
+          {
+            "feature": "rev_eff_15s",
+            "value": -0.0,
+            "historical_median": 0.00017511325498219545,
+            "effect": 21.608163656131662
+          },
+          {
+            "feature": "retrace_bps",
+            "value": 4.455675575895102,
+            "historical_median": 6.981621130152105,
+            "effect": 0.7709194577857248
+          },
+          {
+            "feature": "directional_3h_rev",
+            "value": -0.003758533404924602,
+            "historical_median": -0.005410383331414748,
+            "effect": -0.5526571787559343
+          },
+          {
+            "feature": "ret_60s",
+            "value": -0.0002801173946535007,
+            "historical_median": -0.0004784080806163882,
+            "effect": -0.45197043561242417
+          },
+          {
+            "feature": "rev_ret_60s",
+            "value": 0.0002801173946535007,
+            "historical_median": 0.0004784080806163882,
+            "effect": 0.45197043561242417
+          },
+          {
+            "feature": "sell_300s_log",
+            "value": 10.398268802954025,
+            "historical_median": 12.287771794329107,
+            "effect": 0.44144455090483625
+          },
+          {
+            "feature": "trade_count_180s",
+            "value": 219.0,
+            "historical_median": 994.0,
+            "effect": 0.4272475215791517
+          },
+          {
+            "feature": "buy_300s_log",
+            "value": 11.027347221021023,
+            "historical_median": 12.86546320869332,
+            "effect": 0.396227281308381
+          }
+        ]
+      },
+      "source_path": "artifacts/latest_evidence/LOCAL_EVENTS.jsonl",
+      "source_line": 146,
+      "utc": "2026-11-06T23:07:39.036000+00:00"
+    },
+    {
+      "event": "FORMING_LOCAL",
+      "side": "HIGH",
+      "price": 78.5515,
+      "candidate_id": "H-1794006398013",
+      "detected_ts_ms": 1794006459036,
+      "probability": 0.8308365023663673,
+      "h1_prior": 0.35553753036118024,
+      "stage": 60,
+      "state": "FORMING_LOCAL",
+      "next_expected": "HIGH",
+      "source_path": "artifacts/latest_evidence/LOCAL_EVENTS.jsonl",
+      "source_line": 147,
+      "utc": "2026-11-06T23:07:39.036000+00:00"
+    },
+    {
+      "event": "LOCAL_STAGE",
+      "ts_ms": 1794006578016,
+      "side": "HIGH",
+      "stage": 180,
+      "probability": 1.350242572616971e-05,
+      "threshold": 0.75,
+      "accepted": false,
+      "h1_prior": 0.35553753036118024,
+      "expected_side": "HIGH",
+      "candidate_id": "H-1794006398013",
+      "relationship_evidence": {
+        "supports": [
+          {
+            "feature": "rev_eff_30s",
+            "value": 0.015885859348604394,
+            "historical_median": 0.0,
+            "effect": 1982496.4712724583
+          },
+          {
+            "feature": "rev_eff_60s",
+            "value": 0.03540941371986494,
+            "historical_median": 0.0019071380929398898,
+            "effect": 1.8536251834225357
+          },
+          {
+            "feature": "buy_5s_log",
+            "value": 0.0,
+            "historical_median": 6.528656330348579,
+            "effect": -0.8479284116204262
+          },
+          {
+            "feature": "retrace_bps",
+            "value": 11.584756497330373,
+            "historical_median": 10.639429726565508,
+            "effect": 0.6368962036606397
+          },
+          {
+            "feature": "ret_180s",
+            "value": -0.0011584756497330373,
+            "historical_median": -0.0010085414747116328,
+            "effect": -0.6280324059652304
+          },
+          {
+            "feature": "rev_ret_180s",
+            "value": 0.0011584756497330373,
+            "historical_median": 0.0010085414747116328,
+            "effect": 0.6280324059652304
+          },
+          {
+            "feature": "position_6h",
+            "value": 0.49874843554442455,
+            "historical_median": 0.9455687369155629,
+            "effect": -0.5868830727015576
+          },
+          {
+            "feature": "distance_high_60m_bps",
+            "value": 32.56415648638544,
+            "historical_median": 11.661807580174433,
+            "effect": 0.5740316219130198
+          }
+        ],
+        "contradicts": [
+          {
+            "feature": "directional_3h_rev",
+            "value": -0.0028764286262177308,
+            "historical_median": -0.005877786403460039,
+            "effect": -0.5133230611681603
+          },
+          {
+            "feature": "trade_count_300s",
+            "value": 407.0,
+            "historical_median": 1373.0,
+            "effect": 0.4573470106992298
+          },
+          {
+            "feature": "position_24h",
+            "value": 0.6763692731656881,
+            "historical_median": 0.8225058004640349,
+            "effect": 0.39243155514444245
+          },
+          {
+            "feature": "buy_300s_log",
+            "value": 11.082895235076894,
+            "historical_median": 12.681806949765251,
+            "effect": 0.35336867107099357
+          },
+          {
+            "feature": "distance_high_24h_bps",
+            "value": 119.74178089612097,
+            "historical_median": 58.42209324574243,
+            "effect": -0.3053755322102288
+          },
+          {
+            "feature": "total_300s_log",
+            "value": 11.568485080802388,
+            "historical_median": 13.255981861936242,
+            "effect": 0.23046061925675163
+          },
+          {
+            "feature": "trade_count_30s",
+            "value": 54.0,
+            "historical_median": 76.0,
+            "effect": 0.22483025315886507
+          },
+          {
+            "feature": "buy_180s_log",
+            "value": 10.8717407475145,
+            "historical_median": 11.416910199011072,
+            "effect": 0.21482475289785458
+          }
+        ]
+      },
+      "source_path": "artifacts/latest_evidence/LOCAL_EVENTS.jsonl",
+      "source_line": 148,
+      "utc": "2026-11-06T23:09:38.016000+00:00"
+    },
+    {
+      "event": "LOCAL_STAGE",
+      "ts_ms": 1794006699005,
+      "side": "HIGH",
+      "stage": 300,
+      "probability": 0.9971110316004237,
+      "threshold": 0.79,
+      "accepted": true,
+      "h1_prior": 0.35553753036118024,
+      "expected_side": "HIGH",
+      "candidate_id": "H-1794006398013",
+      "relationship_evidence": {
+        "supports": [
+          {
+            "feature": "rev_eff_30s",
+            "value": 0.0,
+            "historical_median": 0.0,
+            "effect": 8326161.95900737
+          },
+          {
+            "feature": "rev_eff_15s",
+            "value": 0.0,
+            "historical_median": 0.0,
+            "effect": 3409808.587741075
+          },
+          {
+            "feature": "position_6h",
+            "value": 0.522528160200251,
+            "historical_median": 0.931034482758626,
+            "effect": -1.1258162514539867
+          },
+          {
+            "feature": "distance_high_60m_bps",
+            "value": 30.13525825215302,
+            "historical_median": 13.959800943579292,
+            "effect": 1.0131177310371984
+          },
+          {
+            "feature": "distance_high_6h_bps",
+            "value": 48.611420816901955,
+            "historical_median": 13.959800943579292,
+            "effect": 1.0131177310371984
+          },
+          {
+            "feature": "rev_eff_60s",
+            "value": 0.017410496150454993,
+            "historical_median": 0.0010383976878354045,
+            "effect": 0.932325375897004
+          },
+          {
+            "feature": "position_60m",
+            "value": 0.24920634920636797,
+            "historical_median": 0.8236196319018435,
+            "effect": -0.7940020356217092
+          },
+          {
+            "feature": "total_5s_log",
+            "value": 7.591242774647285,
+            "historical_median": 7.436148682315035,
+            "effect": 0.5992584733414912
+          }
+        ],
+        "contradicts": [
+          {
+            "feature": "retrace_bps",
+            "value": 9.165961184700588,
+            "historical_median": 13.94034050572479,
+            "effect": 1.0143542276043949
+          },
+          {
+            "feature": "imbalance_5s",
+            "value": 1.0,
+            "historical_median": 0.2786957663313194,
+            "effect": -1.0100500732343434
+          },
+          {
+            "feature": "rev_flow_5s",
+            "value": -1.0,
+            "historical_median": -0.2786957663313194,
+            "effect": 1.0100500732343434
+          },
+          {
+            "feature": "trade_count_15s",
+            "value": 10.0,
+            "historical_median": 31.0,
+            "effect": 0.7935185405607001
+          },
+          {
+            "feature": "sell_15s_log",
+            "value": 2.4159887754886897,
+            "historical_median": 7.656461705158668,
+            "effect": 0.7738774320622193
+          },
+          {
+            "feature": "ret_300s",
+            "value": -0.0009165961184700588,
+            "historical_median": -0.0014320334875522756,
+            "effect": -0.7109810127353269
+          },
+          {
+            "feature": "rev_ret_300s",
+            "value": 0.0009165961184700588,
+            "historical_median": 0.0014320334875522756,
+            "effect": 0.7109810127353269
+          },
+          {
+            "feature": "trade_count_30s",
+            "value": 16.0,
+            "historical_median": 71.0,
+            "effect": 0.6660596249831378
+          }
+        ]
+      },
+      "source_path": "artifacts/latest_evidence/LOCAL_EVENTS.jsonl",
+      "source_line": 149,
+      "utc": "2026-11-06T23:11:39.005000+00:00"
+    },
+    {
+      "event": "LOCAL_SIGNAL",
+      "side": "HIGH",
+      "price": 78.5515,
+      "candidate_id": "H-1794006398013",
+      "detected_ts_ms": 1794006699005,
+      "probability": 0.9971110316004237,
+      "h1_prior": 0.35553753036118024,
+      "stage": 300,
+      "state": "LOCAL_SIGNAL",
+      "next_expected": "LOW",
+      "source_path": "artifacts/latest_evidence/LOCAL_EVENTS.jsonl",
+      "source_line": 150,
+      "utc": "2026-11-06T23:11:39.005000+00:00"
+    }
+  ],
+  "first_higher_high": {
+    "event": "NEW_CANDIDATE",
+    "ts_ms": 1794006753000,
+    "side": "HIGH",
+    "price": 78.5575,
+    "candidate_id": "H-1794006753000",
+    "evidence": {
+      "proposal": "MULTIWINDOW_CAUSAL",
+      "windows": [
+        "5m"
+      ]
+    },
+    "source_path": "artifacts/latest_evidence/LOCAL_EVENTS.jsonl",
+    "source_line": 151,
+    "utc": "2026-11-06T23:12:33+00:00"
+  },
+  "seconds_signal_to_first_higher_high": 53.995,
+  "highest_later_recorded_candidate": {
+    "event": "NEW_CANDIDATE",
+    "ts_ms": 1794020864000,
+    "side": "HIGH",
+    "price": 79.6195,
+    "candidate_id": "H-1794020864000",
+    "evidence": {
+      "proposal": "MULTIWINDOW_CAUSAL",
+      "windows": [
+        "5m",
+        "15m",
+        "60m",
+        "6h"
+      ]
+    },
+    "source_path": "artifacts/latest_evidence/LOCAL_EVENTS.jsonl",
+    "source_line": 313,
+    "utc": "2026-11-07T03:07:44+00:00"
+  },
+  "matured_teacher_labels": [
+    {
+      "ts_ms": 1794016804001,
+      "candidate_id": "H-1794006398013",
+      "side": "HIGH",
+      "stage": 60,
+      "label": false,
+      "is_latest_extreme_in_hour": false,
+      "teacher": "H1_L6_K2_STRICT",
+      "source_path": "artifacts/latest_evidence/LOCAL_LIVE_LABELS.jsonl",
+      "source_line": 50,
+      "utc": "2026-11-07T02:00:04.001000+00:00"
+    },
+    {
+      "ts_ms": 1794016804001,
+      "candidate_id": "H-1794006398013",
+      "side": "HIGH",
+      "stage": 180,
+      "label": false,
+      "is_latest_extreme_in_hour": false,
+      "teacher": "H1_L6_K2_STRICT",
+      "source_path": "artifacts/latest_evidence/LOCAL_LIVE_LABELS.jsonl",
+      "source_line": 51,
+      "utc": "2026-11-07T02:00:04.001000+00:00"
+    },
+    {
+      "ts_ms": 1794016804001,
+      "candidate_id": "H-1794006398013",
+      "side": "HIGH",
+      "stage": 300,
+      "label": false,
+      "is_latest_extreme_in_hour": false,
+      "teacher": "H1_L6_K2_STRICT",
+      "source_path": "artifacts/latest_evidence/LOCAL_LIVE_LABELS.jsonl",
+      "source_line": 52,
+      "utc": "2026-11-07T02:00:04.001000+00:00"
+    }
+  ],
+  "recorded_explicit_invalidation_or_supersession": [],
+  "supersession_interpretation": "First higher HIGH after signal is factual superseding price evidence. Original log contains no explicit invalidation/supersession event; do not represent a newly replayed state transition as an original event.",
+  "latest_status_summary": {
+    "updated_ts_ms": 1794020918000,
+    "expected_side": "LOW",
+    "last_teacher_local": {
+      "side": "LOW",
+      "price": 77.359,
+      "hour_ms": 1793980800000,
+      "available_ms": 1793991600000
+    },
+    "last_signal": {
+      "side": "HIGH",
+      "price": 78.5515,
+      "candidate_id": "H-1794006398013",
+      "detected_ts_ms": 1794006699005,
+      "probability": 0.9971110316004237,
+      "h1_prior": 0.35553753036118024,
+      "stage": 300,
+      "state": "LOCAL_SIGNAL"
+    }
+  },
+  "observed_failure": "LOCAL_SIGNAL changed next_expected from HIGH to LOW without a new authoritative HIGH teacher; last_signal remained original after higher highs and false matured labels.",
+  "replay_required_behavior": [
+    "Model-only HIGH must not change structural expected_side.",
+    "Later higher high supersedes or invalidates original candidate and withdraws active signal.",
+    "Only authoritative delayed H1 teacher may advance structural leg."
+  ],
+  "available_old_quantum_evidence": "Recorded per-stage probabilities, H1 prior, thresholds and selected relationship supports/contradicts; these are logged historical outputs, not fresh predictions from current Champion.",
+  "unavailable_in_examined_latest_sources": [
+    "Complete per-timestamp causal 86-input sequence at incident and raw tick/orderbook stream.",
+    "Historical exact encoder-ready context, predicted future latent, continuation probability, JEPA HIGH probability or Quantum/JEPA disagreement: JEPA did not run at incident.",
+    "Exact old model state and optimizer at each candidate stage; later checkpoint is not proof of historical stage weights."
+  ],
+  "new_jepa_incident_outputs": null,
+  "scope_limitation": "Event/state replay is supported; a numerical JEPA incident replay cannot be claimed from sparse event logs. Dense market data must be recovered and provenance checked before that comparison."
+}

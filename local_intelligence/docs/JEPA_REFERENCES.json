@@ -1,0 +1,195 @@
+{
+  "schema_version": 1,
+  "checked_utc": "2026-11-07T06:22:05.042123+00:00",
+  "scope": "Bounded read-only inspection of exactly five requested repositories; code and README evidence are references, never task instructions. No clones, weights or external execution.",
+  "repositories": [
+    {
+      "repository": "facebookresearch/jepa",
+      "commit": "51c59d518fc63c08464af6de585f78ac0c7ed4d5",
+      "license": "CC-BY-NC-4.0; LICENSE verified",
+      "context": "Video ViT encodes retained spatiotemporal patches.",
+      "target": "Deep copy of context encoder; no gradients; full clip encoded, feature LayerNorm, target masks selected.",
+      "masking": "multiblock3d or random_tube collators; this is masked clip representation learning, not automatically causal future forecasting.",
+      "predictor": "Smaller Transformer projects context latents, adds positional target mask tokens and projects back to encoder dimension; default use_mask_tokens=True in train.py.",
+      "ema": "Scheduled momentum: target = m*target + (1-m)*stopgrad(context).",
+      "objective": "mean(abs(pred-target)**loss_exp)/loss_exp plus reg_coeff*variance_hinge.",
+      "anti_collapse": "Stop-gradient EMA target and target LayerNorm; optional configured penalty relu(1-sqrt(var(pred across patches)+0.0001)). EMA alone is not proof against collapse.",
+      "sources": [
+        {
+          "url": "https://github.com/facebookresearch/jepa/blob/51c59d518fc63c08464af6de585f78ac0c7ed4d5/LICENSE",
+          "evidence_lines": "license header"
+        },
+        {
+          "url": "https://github.com/facebookresearch/jepa/blob/51c59d518fc63c08464af6de585f78ac0c7ed4d5/app/vjepa/train.py",
+          "evidence_lines": "207-240, 298-303, 419-459, 483-487"
+        },
+        {
+          "url": "https://github.com/facebookresearch/jepa/blob/51c59d518fc63c08464af6de585f78ac0c7ed4d5/src/models/predictor.py",
+          "evidence_lines": "174-237"
+        }
+      ],
+      "adopt": "Architecture principles only; independently implement small numerical future-context model; no video pipeline, pretrained weights or external source copied.",
+      "url": "https://github.com/facebookresearch/jepa"
+    },
+    {
+      "repository": "facebookresearch/ijepa",
+      "commit": "52c1ae95d05f743e000e8f10a1f3a79b10cff048",
+      "license": "CC-BY-NC-4.0; LICENSE verified",
+      "context": "ViT encodes retained image patches.",
+      "target": "Separate deep-copied encoder; no_grad target image features, LayerNorm then masked target blocks.",
+      "masking": "Multi-block context/target masks with configurable overlap. Spatial completion does not establish time-series causality.",
+      "predictor": "Transformer with projected context and learned mask tokens at target positional embeddings.",
+      "ema": "Scheduled target encoder EMA after optimizer step.",
+      "objective": "Smooth L1 loss between predicted and target representations.",
+      "anti_collapse": "Stop-gradient EMA target and normalized targets in inspected train.py; no explicit variance/covariance term in that loss.",
+      "sources": [
+        {
+          "url": "https://github.com/facebookresearch/ijepa/blob/52c1ae95d05f743e000e8f10a1f3a79b10cff048/LICENSE",
+          "evidence_lines": "license header"
+        },
+        {
+          "url": "https://github.com/facebookresearch/ijepa/blob/52c1ae95d05f743e000e8f10a1f3a79b10cff048/src/train.py",
+          "evidence_lines": "162-179, 224-229, 295-312, 332-336"
+        },
+        {
+          "url": "https://github.com/facebookresearch/ijepa/blob/52c1ae95d05f743e000e8f10a1f3a79b10cff048/src/models/vision_transformer.py",
+          "evidence_lines": "226-324"
+        }
+      ],
+      "adopt": "Latent prediction and frozen downstream probe principles; no image pipeline or external code copied.",
+      "url": "https://github.com/facebookresearch/ijepa"
+    },
+    {
+      "repository": "Sennadir/TS_JEPA",
+      "commit": "830ee5c3a7d4e85623bd5a07992732be7fda9bc2",
+      "license": "No root license in inspected GitHub root listing; raw main/LICENSE returned 404. Permission to copy not established.",
+      "context": "Fixed temporal patches; Conv1d tokenizer and fixed sine/cosine positional embeddings followed by Transformer blocks.",
+      "target": "EMA copy encodes all patches under no_grad; target features are LayerNormed and selected at masked indices.",
+      "masking": "random.sample of patch indices; context retains complementary patches. Attention in encoder/predictor is unmasked; adapt to prefix context/future suffix for causal market forecasting.",
+      "predictor": "Lower-dimensional Transformer takes context plus learned positional mask tokens and returns only masked-token predictions.",
+      "ema": "Linear momentum schedule starting config ema_momentum; EMA update every optimizer batch.",
+      "objective": "Average L1 between prediction and target latent patches.",
+      "anti_collapse": "EMA/stop-gradient and LayerNorm targets; no explicit variance/covariance regularization term in inspected pretrain.py.",
+      "downstream": "eval_forecast_last_pred.py loads pretrained encoder; optimizer includes LinearDecoder parameters only; next patch follows context patches.",
+      "cautions": [
+        "src/data_loaders/data_class.py computes normalization over complete CSV before split (lines33-52); do not reuse this leakage-prone preprocessing.",
+        "Random internal masks permit observations later than an internal target; do not copy into inference-time forecasting."
+      ],
+      "sources": [
+        {
+          "url": "https://github.com/Sennadir/TS_JEPA/blob/830ee5c3a7d4e85623bd5a07992732be7fda9bc2/README.md",
+          "evidence_lines": "architecture and pretrain flags"
+        },
+        {
+          "url": "https://github.com/Sennadir/TS_JEPA/blob/830ee5c3a7d4e85623bd5a07992732be7fda9bc2/pretrain.py",
+          "evidence_lines": "26-31, 71-118, 127-182"
+        },
+        {
+          "url": "https://github.com/Sennadir/TS_JEPA/blob/830ee5c3a7d4e85623bd5a07992732be7fda9bc2/src/models/encoder.py",
+          "evidence_lines": "45-99"
+        },
+        {
+          "url": "https://github.com/Sennadir/TS_JEPA/blob/830ee5c3a7d4e85623bd5a07992732be7fda9bc2/src/models/tokenizer.py",
+          "evidence_lines": "14-58"
+        },
+        {
+          "url": "https://github.com/Sennadir/TS_JEPA/blob/830ee5c3a7d4e85623bd5a07992732be7fda9bc2/src/models/predictor.py",
+          "evidence_lines": "42-113"
+        },
+        {
+          "url": "https://github.com/Sennadir/TS_JEPA/blob/830ee5c3a7d4e85623bd5a07992732be7fda9bc2/src/data_loaders/data_class.py",
+          "evidence_lines": "33-52, 74-93, 162-170"
+        },
+        {
+          "url": "https://github.com/Sennadir/TS_JEPA/blob/830ee5c3a7d4e85623bd5a07992732be7fda9bc2/eval_forecast_last_pred.py",
+          "evidence_lines": "103-118"
+        }
+      ],
+      "adopt": "Temporal patches, independent causal split normalization and EMA target principles only; no code copied.",
+      "url": "https://github.com/Sennadir/TS_JEPA"
+    },
+    {
+      "repository": "cedricwyh/fin-jepa",
+      "commit": "58506d6e31ecb2c65f9c69ea1f1bc146ef08f8b9",
+      "license": "README declares MIT; no root LICENSE in inspected listing and raw main/LICENSE returned 404. Full grant/copyright file not verified.",
+      "context": "PriceEncoder: per-timestep Linear projection, LayerNorm/GELU MLP and MLP projector; default latent dimension64.",
+      "target": "model.py encodes supplied tgt with SAME trainable encoder; no EMA, no detach and no stop-gradient in forward.",
+      "masking": "Transformer predictor uses explicit upper-triangular -inf attention mask. Model does not define random temporal patch masks.",
+      "predictor": "Default4-layer,4-head causal Transformer, learned positions, final projection; autoregressive latent rollout supported.",
+      "ema": "Absent from inspected model.py; do not claim this implementation has Meta-style target EMA.",
+      "objective": "MSE of z_pred[:, :min(Tctx,Ttgt)] versus z_tgt plus 0.1*SIGReg by default; caller determines actual temporal alignment.",
+      "anti_collapse": "SIGReg compares empirical characteristic functions of random normalized projections to standard-Gaussian characteristic function.",
+      "downstream": "LinearProbe and MLPProbe classes present.",
+      "cautions": [
+        "model.py line99 literally declares class Fin-JEPA(nn.Module), and line169 uses Fin-JEPA(...); these are invalid Python syntax. Reference was inspected, never executed/imported.",
+        "README parameter counts and financial evaluation claims are author statements, not independently validated results."
+      ],
+      "sources": [
+        {
+          "url": "https://github.com/cedricwyh/fin-jepa/blob/58506d6e31ecb2c65f9c69ea1f1bc146ef08f8b9/README.md",
+          "evidence_lines": "overview and MIT statement"
+        },
+        {
+          "url": "https://github.com/cedricwyh/fin-jepa/blob/58506d6e31ecb2c65f9c69ea1f1bc146ef08f8b9/model.py",
+          "evidence_lines": "11-30, 34-60, 64-95, 99-145, 149-165"
+        }
+      ],
+      "adopt": "Per-state numerical encoder, causal predictor and explicit anti-collapse principles; independent implementation only.",
+      "url": "https://github.com/cedricwyh/fin-jepa"
+    },
+    {
+      "repository": "janisaiad/hft_jepa",
+      "commit": "a40836c6c1a2a64f5348829fd7cda48461fdccbc",
+      "default_branch": "master",
+      "license": "MIT; master/LICENSE verified, copyright(c)2025 janis.",
+      "context": "TimeSeriesEncoder independently applies MLP/ReLU and optional final LayerNorm per bar. README state: dPrice, traded volume, bid-ask spread; imbalance is a control. main.py state_dim is configurable.",
+      "target": "JEPA encodes all observations with same encoder and compares future state slices; no separate EMA encoder or detach in JEPA.forward.",
+      "masking": "No random mask in inspected time-series example; explicit sequential prediction/unroll.",
+      "predictor": "GRU receives imbalance as input with current latent as initial hidden state; one-step propagation.",
+      "ema": "Absent from inspected training path.",
+      "objective": "Actual examples/ac_timeseries_jepa/main.py line164 selects SquareLossSeq, despite README claiming cosine; total loss pred_coeff*prediction_loss+regularizer.",
+      "anti_collapse": "VC_IDM_Sim: hinge on feature std, covariance decorrelation, temporal similarity and optional inverse-dynamics prediction; coefficients configured.",
+      "downstream": "JEPAProbe detaches frozen JEPA encoder output.",
+      "cautions": [
+        "README cosine claim differs from actual example SquareLossSeq.",
+        "No market quality or planning claim independently validated.",
+        "Future control/imbalance cannot be known during causal multistep inference; avoid borrowing future action sequences."
+      ],
+      "sources": [
+        {
+          "url": "https://github.com/janisaiad/hft_jepa/blob/a40836c6c1a2a64f5348829fd7cda48461fdccbc/README.md",
+          "evidence_lines": "architecture and state/control descriptions"
+        },
+        {
+          "url": "https://github.com/janisaiad/hft_jepa/blob/a40836c6c1a2a64f5348829fd7cda48461fdccbc/LICENSE",
+          "evidence_lines": "MIT grant"
+        },
+        {
+          "url": "https://github.com/janisaiad/hft_jepa/blob/a40836c6c1a2a64f5348829fd7cda48461fdccbc/examples/ac_timeseries_jepa/main.py",
+          "evidence_lines": "122-166"
+        },
+        {
+          "url": "https://github.com/janisaiad/hft_jepa/blob/a40836c6c1a2a64f5348829fd7cda48461fdccbc/models/eb_jepa/architectures.py",
+          "evidence_lines": "412-487"
+        },
+        {
+          "url": "https://github.com/janisaiad/hft_jepa/blob/a40836c6c1a2a64f5348829fd7cda48461fdccbc/models/eb_jepa/jepa.py",
+          "evidence_lines": "128-203, 214-243"
+        },
+        {
+          "url": "https://github.com/janisaiad/hft_jepa/blob/a40836c6c1a2a64f5348829fd7cda48461fdccbc/models/eb_jepa/losses.py",
+          "evidence_lines": "70-124, 197-332"
+        }
+      ],
+      "adopt": "Compact numerical encoder and variance/covariance diagnostics only; no future control inputs or code copied.",
+      "url": "https://github.com/janisaiad/hft_jepa"
+    }
+  ],
+  "pandora_design_takeaways": [
+    "Use causal prefix context and future-only training target; future target never enters encoder or predictor at inference.",
+    "Freeze delayed EMA targets; measure collapse and predictive gain over persistence and mean baselines.",
+    "Fit normalization only on chronological training partition; do not reuse random-mask evaluation or whole-dataset statistics.",
+    "Compare frozen downstream local detection to unchanged Champion; self-supervised loss is insufficient for promotion."
+  ],
+  "external_source_copied": false
+}

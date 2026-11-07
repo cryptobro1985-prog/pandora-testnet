@@ -13,7 +13,7 @@ def included():
     return sorted(p for p in ROOT.rglob('*') if p.is_file() and
                   not set(p.relative_to(ROOT).parts).intersection({'.venv','__pycache__','.pytest_cache','.git'})
                   and p.suffix not in {'.pyc','.pyo'}
-                  and p.name not in {'.local_writer.lock','.cortex_writer.lock'})
+                  and p.name not in {'.local_writer.lock','.cortex_writer.lock','.jepa_writer.lock'})
 
 def main():
     ap=argparse.ArgumentParser(description=__doc__)

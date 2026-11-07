@@ -9,7 +9,12 @@ ROOT=Path(__file__).resolve().parents[1]
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--output',type=Path,default=ROOT/'validation/current')
-    args=ap.parse_args();out=args.output.resolve();out.mkdir(parents=True,exist_ok=True)
+    ap.add_argument('--jepa',action='store_true',help='require optional CPU Torch and JEPA tests')
+    args=ap.parse_args()
+    if args.jepa:
+        import importlib.util
+        if importlib.util.find_spec('torch') is None:raise SystemExit('Install requirements-jepa.txt first')
+    out=args.output.resolve();out.mkdir(parents=True,exist_ok=True)
     env=os.environ.copy();env['PYTHONPATH']=str(ROOT/'src')
     env.update(OMP_NUM_THREADS='2',OPENBLAS_NUM_THREADS='2',MKL_NUM_THREADS='2',
                CORTEX_BACKEND='disabled',LOCAL_ONLY_MONITOR_URL='',GITHUB_TOKEN='',GH_TOKEN='')

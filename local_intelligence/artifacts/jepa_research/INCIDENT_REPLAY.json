@@ -1,0 +1,402 @@
+{
+  "candidate_id": "H-1794006398013",
+  "expected_side_before_and_after_prediction": "HIGH",
+  "limitations": [
+    "Archived M1 OHLC exists, but original receipt clocks and subminute tape are absent.",
+    "Flow/trade-count inputs are explicitly missing. Availability is assumed at completed-minute end.",
+    "This is not the exact live state and is not independent evidence of general detection quality."
+  ],
+  "mode": "RETROSPECTIVE_CLOSED_MINUTE_RECONSTRUCTION",
+  "new_high": 78.5575,
+  "numeric_replay_does_not_reconstruct_original_runtime": true,
+  "original_receipt_times_known": false,
+  "promoted": false,
+  "real_orders": false,
+  "rows": [
+    {
+      "current_champion_jepa_high_disagreement": 0.025734859693442316,
+      "current_champion_would_accept_HIGH": false,
+      "current_frozen_champion_high_probability": 0.10668380144162347,
+      "diagnostics_evaluation_only": {
+        "horizon_disagreement": 0.002534624421969056,
+        "latent_norm": 3.961457418956348,
+        "prediction_error": 0.0050009083934128284,
+        "uncertainty_interpretation": "dispersion, not calibrated posterior uncertainty"
+      },
+      "feature_masks_unknown": [
+        "historical_flow",
+        "trade_count",
+        "original_receipt_latency"
+      ],
+      "feature_source_max_end_ms": 1794006420000,
+      "future_target_available_ms": 1794006720000,
+      "jepa_decisions": {
+        "jepa_linear": {
+          "local_threshold": 0.08937345684854014,
+          "most_probable_class": "0",
+          "would_accept_HIGH": false
+        },
+        "quantum_jepa_linear": {
+          "local_threshold": 0.16583130385033693,
+          "most_probable_class": "0",
+          "would_accept_HIGH": false
+        }
+      },
+      "jepa_probabilities": {
+        "jepa_linear": {
+          "0": 0.9753059696811377,
+          "1": 0.005355925505131491,
+          "2": 0.01933810481373071
+        },
+        "quantum_jepa_linear": {
+          "0": 0.8395489648652348,
+          "1": 0.0795020933865841,
+          "2": 0.08094894174818115
+        }
+      },
+      "latent": [
+        1.384316086769104,
+        -0.17989985644817352,
+        -0.9273501038551331,
+        1.9542163610458374,
+        -0.9520953893661499,
+        -0.3003047704696655,
+        0.7105324864387512,
+        -0.4096584916114807,
+        -1.3282122611999512,
+        1.8999676704406738,
+        0.3930588960647583,
+        -0.4262923002243042,
+        -0.8013051152229309,
+        -0.719775915145874,
+        -0.6292980313301086,
+        0.3601893484592438
+      ],
+      "old_accepted": true,
+      "old_quantum_probability": 0.8308365023663673,
+      "predicted_future_latent": [
+        [
+          1.3834763765335083,
+          -0.16768614947795868,
+          -0.929834246635437,
+          1.9272085428237915,
+          -0.9569646716117859,
+          -0.31489306688308716,
+          0.7028465270996094,
+          -0.40524694323539734,
+          -1.346093773841858,
+          1.9047050476074219,
+          0.3881842792034149,
+          -0.4163362383842468,
+          -0.7979909777641296,
+          -0.7212598323822021,
+          -0.6191946864128113,
+          0.3896467387676239
+        ],
+        [
+          1.3807551860809326,
+          -0.1711038500070572,
+          -0.928307294845581,
+          1.9244133234024048,
+          -0.9659966230392456,
+          -0.3089451491832733,
+          0.7052077651023865,
+          -0.4039514362812042,
+          -1.3405075073242188,
+          1.9023630619049072,
+          0.39496806263923645,
+          -0.42194831371307373,
+          -0.7979573607444763,
+          -0.7242172360420227,
+          -0.6177464127540588,
+          0.39143505692481995
+        ],
+        [
+          1.3805893659591675,
+          -0.17029917240142822,
+          -0.9228370189666748,
+          1.9194772243499756,
+          -0.9648977518081665,
+          -0.3105263411998749,
+          0.7107910513877869,
+          -0.40141206979751587,
+          -1.3380235433578491,
+          1.9082281589508057,
+          0.3927619159221649,
+          -0.423825204372406,
+          -0.8056358695030212,
+          -0.7248342037200928,
+          -0.6166806817054749,
+          0.386333167552948
+        ]
+      ],
+      "prediction_ts_ms": 1794006459036,
+      "probability_class_map": {
+        "0": "CONTINUATION",
+        "1": "LOW",
+        "2": "HIGH"
+      },
+      "stage": 60
+    },
+    {
+      "current_champion_jepa_high_disagreement": 0.04908804873838833,
+      "current_champion_would_accept_HIGH": true,
+      "current_frozen_champion_high_probability": 0.1647748587518974,
+      "diagnostics_evaluation_only": {
+        "horizon_disagreement": 0.003774572629481554,
+        "latent_distance": 0.002075436137111942,
+        "latent_norm": 3.960079706430933,
+        "latent_velocity": 0.002075436137111942,
+        "prediction_error": 0.008169368840754032,
+        "uncertainty_interpretation": "dispersion, not calibrated posterior uncertainty"
+      },
+      "feature_masks_unknown": [
+        "historical_flow",
+        "trade_count",
+        "original_receipt_latency"
+      ],
+      "feature_source_max_end_ms": 1794006540000,
+      "future_target_available_ms": 1794006840000,
+      "jepa_decisions": {
+        "jepa_linear": {
+          "local_threshold": 0.08937345684854014,
+          "most_probable_class": "0",
+          "would_accept_HIGH": false
+        },
+        "quantum_jepa_linear": {
+          "local_threshold": 0.16583130385033693,
+          "most_probable_class": "0",
+          "would_accept_HIGH": false
+        }
+      },
+      "jepa_probabilities": {
+        "jepa_linear": {
+          "0": 0.9708463407492094,
+          "1": 0.008002243995288079,
+          "2": 0.021151415255502428
+        },
+        "quantum_jepa_linear": {
+          "0": 0.7970897344843586,
+          "1": 0.0872234555021323,
+          "2": 0.11568681001350907
+        }
+      },
+      "latent": [
+        1.4846030473709106,
+        -0.17802447080612183,
+        -1.0163044929504395,
+        1.9348808526992798,
+        -0.9033734202384949,
+        -0.34553757309913635,
+        0.6752738952636719,
+        -0.4158112704753876,
+        -1.2875419855117798,
+        1.8174118995666504,
+        0.37039515376091003,
+        -0.4208638370037079,
+        -0.8851598501205444,
+        -0.7346499562263489,
+        -0.5356930494308472,
+        0.46928152441978455
+      ],
+      "old_accepted": false,
+      "old_quantum_probability": 1.350242572616971e-05,
+      "predicted_future_latent": [
+        [
+          1.4826403856277466,
+          -0.16736304759979248,
+          -1.0186413526535034,
+          1.910738468170166,
+          -0.9053779244422913,
+          -0.36092638969421387,
+          0.6660832762718201,
+          -0.41281986236572266,
+          -1.3066750764846802,
+          1.8225747346878052,
+          0.36418211460113525,
+          -0.4089599847793579,
+          -0.8803237080574036,
+          -0.7349592447280884,
+          -0.5268154740333557,
+          0.49800020456314087
+        ],
+        [
+          1.4779540300369263,
+          -0.17256903648376465,
+          -1.0119602680206299,
+          1.9067468643188477,
+          -0.9183239340782166,
+          -0.34927302598953247,
+          0.671942412853241,
+          -0.41331738233566284,
+          -1.2960907220840454,
+          1.8222192525863647,
+          0.3725951910018921,
+          -0.41948384046554565,
+          -0.8803568482398987,
+          -0.7410812973976135,
+          -0.5266426205635071,
+          0.4972596764564514
+        ],
+        [
+          1.4774259328842163,
+          -0.17198076844215393,
+          -1.0054441690444946,
+          1.9008179903030396,
+          -0.9179427623748779,
+          -0.35047447681427,
+          0.6785618662834167,
+          -0.41048386693000793,
+          -1.292822241783142,
+          1.8284246921539307,
+          0.370829701423645,
+          -0.42197445034980774,
+          -0.8887647986412048,
+          -0.7422177791595459,
+          -0.5252627730369568,
+          0.4917190372943878
+        ]
+      ],
+      "prediction_ts_ms": 1794006578016,
+      "probability_class_map": {
+        "0": "CONTINUATION",
+        "1": "LOW",
+        "2": "HIGH"
+      },
+      "stage": 180
+    },
+    {
+      "current_champion_jepa_high_disagreement": 0.1085418417215478,
+      "current_champion_would_accept_HIGH": true,
+      "current_frozen_champion_high_probability": 0.16635937157323952,
+      "diagnostics_evaluation_only": {
+        "horizon_disagreement": 0.0034303111024200916,
+        "latent_acceleration": 2.240729942199243e-05,
+        "latent_distance": 0.001000819338402216,
+        "latent_norm": 3.959907373689518,
+        "latent_velocity": 0.001000819338402216,
+        "prediction_error": 0.013155024498701096,
+        "uncertainty_interpretation": "dispersion, not calibrated posterior uncertainty"
+      },
+      "feature_masks_unknown": [
+        "historical_flow",
+        "trade_count",
+        "original_receipt_latency"
+      ],
+      "feature_source_max_end_ms": 1794006660000,
+      "future_target_available_ms": 1794006960000,
+      "jepa_decisions": {
+        "jepa_linear": {
+          "local_threshold": 0.08937345684854014,
+          "most_probable_class": "0",
+          "would_accept_HIGH": false
+        },
+        "quantum_jepa_linear": {
+          "local_threshold": 0.16583130385033693,
+          "most_probable_class": "0",
+          "would_accept_HIGH": false
+        }
+      },
+      "jepa_probabilities": {
+        "jepa_linear": {
+          "0": 0.9631438148151069,
+          "1": 0.01088825466936873,
+          "2": 0.02596793051552448
+        },
+        "quantum_jepa_linear": {
+          "0": 0.7798458214346212,
+          "1": 0.16233664871368694,
+          "2": 0.05781752985169172
+        }
+      },
+      "latent": [
+        1.4714927673339844,
+        -0.18727704882621765,
+        -1.0224921703338623,
+        1.956441044807434,
+        -0.9228559732437134,
+        -0.3151027262210846,
+        0.6280668377876282,
+        -0.43677762150764465,
+        -1.276779294013977,
+        1.832200527191162,
+        0.4176829159259796,
+        -0.4469197988510132,
+        -0.821328341960907,
+        -0.715135931968689,
+        -0.5736513733863831,
+        0.44131556153297424
+      ],
+      "old_accepted": true,
+      "old_quantum_probability": 0.9971110316004237,
+      "predicted_future_latent": [
+        [
+          1.4696860313415527,
+          -0.17629224061965942,
+          -1.0251049995422363,
+          1.931800365447998,
+          -0.9249968528747559,
+          -0.33026760816574097,
+          0.6189230680465698,
+          -0.43370962142944336,
+          -1.2960842847824097,
+          1.8374156951904297,
+          0.4117947220802307,
+          -0.4350379705429077,
+          -0.8166245818138123,
+          -0.7157525420188904,
+          -0.5645731091499329,
+          0.4702537953853607
+        ],
+        [
+          1.4651908874511719,
+          -0.18125292658805847,
+          -1.0193473100662231,
+          1.928715705871582,
+          -0.9361562132835388,
+          -0.32096195220947266,
+          0.6242716908454895,
+          -0.4332704544067383,
+          -1.287086009979248,
+          1.8365323543548584,
+          0.41941067576408386,
+          -0.4431159496307373,
+          -0.8178858160972595,
+          -0.7209848165512085,
+          -0.5637391805648804,
+          0.46928930282592773
+        ],
+        [
+          1.4647420644760132,
+          -0.18072333931922913,
+          -1.013041377067566,
+          1.922951340675354,
+          -0.9358581304550171,
+          -0.322077214717865,
+          0.6307585835456848,
+          -0.43039369583129883,
+          -1.283842921257019,
+          1.842663049697876,
+          0.4175068140029907,
+          -0.4456923007965088,
+          -0.8259819149971008,
+          -0.7218999266624451,
+          -0.5625808238983154,
+          0.46377602219581604
+        ]
+      ],
+      "prediction_ts_ms": 1794006699005,
+      "probability_class_map": {
+        "0": "CONTINUATION",
+        "1": "LOW",
+        "2": "HIGH"
+      },
+      "stage": 300
+    }
+  ],
+  "schema": "PANDORA-HIGH-78.5515-REPLAY-v1",
+  "source_pickle_sha256": "980bb6e7d7d5a3233b640fa8817a33d87878c1e40b43c72ec80af7f346726a34",
+  "structural_control_flow_test": "tests/test_jepa.py::test_incident_785515_higher_high_invalidates_signal_without_flipping_teacher",
+  "superseded_at_ms": 1794006753000,
+  "teacher_outcome": false
+}
