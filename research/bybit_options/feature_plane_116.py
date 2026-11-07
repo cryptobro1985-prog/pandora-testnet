@@ -36,7 +36,7 @@ def _trade_side(row: dict[str, Any]) -> str:
 
 def _window(rows: list[dict[str, Any]], now_ms: int, width_ms: int) -> list[dict[str, Any]]:
     cutoff = now_ms - width_ms
-    return [x for x in rows if _ts(x) >= cutoff]
+    return [x for x in rows if cutoff <= _ts(x) <= now_ms]
 
 
 def _trade_features(rows: list[dict[str, Any]], width_ms: int) -> tuple[list[str], list[float]]:
