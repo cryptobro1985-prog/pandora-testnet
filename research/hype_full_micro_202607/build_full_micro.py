@@ -250,9 +250,15 @@ def agg(rows,rev):
     buy=sum(x["buy_notional"] for x in rows);sell=sum(x["sell_notional"] for x in rows);tot=buy+sell
     ret=rows[-1]["close"]/rows[0]["open"]-1 if rows[0]["open"] else 0.0
     imb=(buy-sell)/tot if tot else 0.0
+    trend_notional=buy if rev>0 else sell
     return {"imbalance":imb,"rev_flow":imb*rev,"ret":ret,"rev_ret":ret*rev,
-            "buy":buy,"sell":sell,"total":tot,"trade_count":sum(x["trade_count"] for x in rows),
-            "rev_eff":max(ret*rev,0)/(buy if rev>0 else sell+1e-12)*1e6 if (buy if rev>0 else sell)>0 else 0.0}
+            "buy":buy,"sell":sell,"total":tot,"cvd":buy-sell,
+            "trade_count":sum(x["trade_count"] for x in rows),
+            "buy_eff":max(ret,0)/(buy+1e-12)*1e6 if buy>0 else 0.0,
+            "sell_eff":max(-ret,0)/(sell+1e-12)*1e6 if sell>0 else 0.0,
+            "buy_response":ret/(buy+1e-12)*1e6 if buy>0 else 0.0,
+            "sell_response":-ret/(sell+1e-12)*1e6 if sell>0 else 0.0,
+            "rev_eff":max(ret*rev,0)/(trend_notional+1e-12)*1e6 if trend_notional>0 else 0.0}
 
 def base_features(c,t,sec5,mins):
     starts=[x["start_ms"] for x in sec5];mstarts=[x["start_ms"] for x in mins];rev=1 if c["side"]=="LOW" else -1
@@ -261,6 +267,26 @@ def base_features(c,t,sec5,mins):
     for w in WINDOWS:
         a=agg(secwin(sec5,starts,t,w),rev)
         for k,v in a.items():f[f"{k}_{w}s_log" if k in ("buy","sell","total") else f"{k}_{w}s"]=math.log1p(v) if k in ("buy","sell","total") else v
+    # Explicit causal M1/M3/M5/H1 state ending at the exact snapshot timestamp.
+    for w,name in ((60,"m1"),(180,"m3"),(300,"m5"),(3600,"h1")):
+        rr=secwin(sec5,starts,t,w)
+        if rr:
+            op=float(rr[0]["open"]);cl=float(rr[-1]["close"])
+            hi=max(float(x["high"]) for x in rr);lo=min(float(x["low"]) for x in rr)
+            turn=sum(float(x.get("turnover",0.0)) for x in rr)
+            vol=sum(float(x.get("volume",0.0)) for x in rr)
+            f[f"{name}_ret_bps"]=(cl/op-1)*10000 if op else 0.0
+            f[f"{name}_range_bps"]=(hi/lo-1)*10000 if lo else 0.0
+            f[f"{name}_close_position"]=(cl-lo)/max(hi-lo,1e-12)
+            f[f"{name}_turnover_log"]=math.log1p(max(turn,0.0))
+            f[f"{name}_volume_log"]=math.log1p(max(vol,0.0))
+    for short,long in ((5,15),(15,60),(30,180),(60,300)):
+        a=f.get(f"imbalance_{short}s");b=f.get(f"imbalance_{long}s")
+        if finite(a) and finite(b):f[f"dominance_transition_{short}_{long}"]=float(a)-float(b)
+        a=f.get(f"buy_eff_{short}s");b=f.get(f"buy_eff_{long}s")
+        if finite(a) and finite(b):f[f"buy_eff_accel_{short}_{long}"]=float(a)-float(b)
+        a=f.get(f"sell_eff_{short}s");b=f.get(f"sell_eff_{long}s")
+        if finite(a) and finite(b):f[f"sell_eff_accel_{short}_{long}"]=float(a)-float(b)
     j=bisect.bisect_right(mstarts,t-60000)-1
     if j>=0:
         for n,name in ((60,"60m"),(360,"6h"),(1440,"24h")):
@@ -341,11 +367,12 @@ def liq_features(events,t):
     return out
 
 def book_replay(path,target_times,carry=None):
-    state=carry or {"bids":{},"asks":{},"last_u":None,"valid":False,"gap_count":0}
+    state=carry or {"bids":{},"asks":{},"last_u":None,"valid":False,"gap_count":0,"events":[]}
+    state.setdefault("events",[])
     snaps={};df=read_parquet(path)
     if df is None or df.height==0:
         state["valid"]=False
-        return {t:book_features(state) for t in target_times},state,[]
+        return {t:book_features(state,t) for t in target_times},state,[]
     cs=df.columns
     tc=first_col(cs,"received_time","event_time","transaction_time","timestamp","time")
     pc=first_col(cs,"price");qc=first_col(cs,"quantity","qty","size");sc=first_col(cs,"side")
@@ -376,7 +403,7 @@ def book_replay(path,target_times,carry=None):
         r0=g[0];tt=to_ms(r0.get(tc))
         if tt is None:continue
         while ti<len(targets) and targets[ti]<tt:
-            snaps[targets[ti]]=book_features(state);ti+=1
+            snaps[targets[ti]]=book_features(state,targets[ti]);ti+=1
         et=str(r0.get(typ,"")).lower() if typ else ""
         u=num(r0.get(uc)) if uc else None
         u=int(u) if u is not None else None
@@ -403,19 +430,39 @@ def book_replay(path,target_times,carry=None):
             elif u is not None:
                 state["last_u"]=u
 
+        dyn={"ts_ms":tt,"bid_add":0.0,"ask_add":0.0,"bid_replenish":0.0,"ask_replenish":0.0,
+             "bid_insert":0.0,"ask_insert":0.0,"bid_remove":0.0,"ask_remove":0.0,"updates":0.0}
+        is_snapshot="snapshot" in et
         for r in non_noop:
             p=num(r.get(pc));q=num(r.get(qc))
             if p is None or q is None:continue
             side=str(r.get(sc,"")).lower()
-            book=state["bids"] if side.startswith("b") or side=="buy" else state["asks"]
-            if q<=0:book.pop(p,None)
-            else:book[p]=q
+            is_bid=side.startswith("b") or side=="buy"
+            book=state["bids"] if is_bid else state["asks"]
+            old=float(book.get(p,0.0))
+            new=max(float(q),0.0)
+            if not is_snapshot and state.get("valid"):
+                add=max(new-old,0.0)*p
+                rem=max(old-new,0.0)*p
+                if add>0:
+                    dyn["bid_add" if is_bid else "ask_add"]+=add
+                    if old>0:dyn["bid_replenish" if is_bid else "ask_replenish"]+=add
+                    else:dyn["bid_insert" if is_bid else "ask_insert"]+=add
+                if rem>0:dyn["bid_remove" if is_bid else "ask_remove"]+=rem
+                dyn["updates"]+=1.0
+            if new<=0:book.pop(p,None)
+            else:book[p]=new
+        if not is_snapshot and dyn["updates"]>0:
+            state["events"].append(dyn)
+        cutoff=tt-300_000
+        if state["events"]:
+            state["events"]=[e for e in state["events"] if int(e["ts_ms"])>=cutoff]
 
     while ti<len(targets):
-        snaps[targets[ti]]=book_features(state);ti+=1
+        snaps[targets[ti]]=book_features(state,targets[ti]);ti+=1
     return snaps,state,cs
 
-def book_features(state):
+def book_features(state,t=None):
     if not state or not state.get("valid"):
         return {"fullmicro_book_valid":0.0,"fullmicro_book_gap_count":float((state or {}).get("gap_count",0))}
     b=sorted(state["bids"].items(),reverse=True)[:50];a=sorted(state["asks"].items())[:50]
@@ -432,6 +479,19 @@ def book_features(state):
     for i,(p,q) in enumerate(a,1):
         out[f"fullmicro_ask_{i:02d}_dist_bps"]=(p/mid-1)*10000
         out[f"fullmicro_ask_{i:02d}_log_qty"]=math.log1p(max(q,0))
+    if t is not None:
+        ev=state.get("events",[])
+        for sec in WINDOWS:
+            qev=[e for e in ev if int(t)-sec*1000<=int(e["ts_ms"])<=int(t)]
+            for key in ("bid_add","ask_add","bid_replenish","ask_replenish","bid_insert","ask_insert","bid_remove","ask_remove","updates"):
+                out[f"fullmicro_{key}_notional_{sec}s" if key!="updates" else f"fullmicro_book_update_count_{sec}s"]=float(sum(e.get(key,0.0) for e in qev))
+            ba=out.get(f"fullmicro_bid_add_notional_{sec}s",0.0);br=out.get(f"fullmicro_bid_remove_notional_{sec}s",0.0)
+            aa=out.get(f"fullmicro_ask_add_notional_{sec}s",0.0);ar=out.get(f"fullmicro_ask_remove_notional_{sec}s",0.0)
+            out[f"fullmicro_bid_defense_ratio_{sec}s"]=ba/(br+1e-12)
+            out[f"fullmicro_ask_defense_ratio_{sec}s"]=aa/(ar+1e-12)
+            out[f"fullmicro_book_churn_notional_{sec}s"]=ba+br+aa+ar
+            out[f"fullmicro_bid_cancel_proxy_notional_{sec}s"]=br
+            out[f"fullmicro_ask_cancel_proxy_notional_{sec}s"]=ar
     return out
 
 def enrich(src,records,schemas):
@@ -454,9 +514,10 @@ def enrich(src,records,schemas):
             bsn,book_state,cs=book_replay(bp,targets,book_state)
             schemas.setdefault("orderbook",cs);bp.unlink(missing_ok=True)
         else:
-            if book_state is None:book_state={"bids":{},"asks":{},"last_u":None,"valid":False,"gap_count":0}
+            if book_state is None:book_state={"bids":{},"asks":{},"last_u":None,"valid":False,"gap_count":0,"events":[]}
+            book_state.setdefault("events",[])
             book_state["valid"]=False;book_state["gap_count"]=int(book_state.get("gap_count",0))+1
-            bsn={t:book_features(book_state) for t in targets}
+            bsn={t:book_features(book_state,t) for t in targets}
 
         scalar_snaps={k:{} for k in ("open_interest","mark_price","ticker")}
         if dt in needed_aux:
@@ -478,6 +539,15 @@ def enrich(src,records,schemas):
         for r in sorted(byhour.get(dt,[]),key=lambda z:z["snapshot_ts_ms"]):
             t=r["snapshot_ts_ms"];f=r["features"]
             f.update(bsn.get(t,{"fullmicro_book_valid":0.0}))
+            # Replenishment/disappearance combined with executed flow gives explicit
+            # bid/ask absorption evidence rather than a static depth-only proxy.
+            for sec in WINDOWS:
+                buy=math.expm1(f.get(f"buy_{sec}s_log",0.0)) if finite(f.get(f"buy_{sec}s_log")) else 0.0
+                sell=math.expm1(f.get(f"sell_{sec}s_log",0.0)) if finite(f.get(f"sell_{sec}s_log")) else 0.0
+                bidrep=f.get(f"fullmicro_bid_replenish_notional_{sec}s")
+                askrep=f.get(f"fullmicro_ask_replenish_notional_{sec}s")
+                if finite(bidrep):f[f"fullmicro_bid_absorption_proxy_{sec}s"]=float(bidrep)/(sell+1e-12)
+                if finite(askrep):f[f"fullmicro_ask_absorption_proxy_{sec}s"]=float(askrep)/(buy+1e-12)
             f.update(liq_features(liq_recent,t))
             for kind in ("open_interest","mark_price","ticker"):
                 z=scalar_snaps[kind].get(t,{})
