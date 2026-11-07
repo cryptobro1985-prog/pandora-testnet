@@ -245,7 +245,7 @@
     "Quant-style tabular MLP",
     "River LocalOnly logistic"
   ],
-  "fin_jepa_validation_loss": 0.3297440856695175,
+  "fin_jepa_validation_loss": 0.3297695964574814,
   "ensemble": {
     "weights": {
       "fin_jepa": 0.75,
@@ -308,13 +308,13 @@
     "river_local": {
       "candidates": 253,
       "reference_true": 20,
-      "accepted": 159,
+      "accepted": 160,
       "tp": 17,
-      "fp": 142,
+      "fp": 143,
       "fn": 3,
-      "precision": 0.1069182389937107,
+      "precision": 0.10625,
       "recall": 0.85,
-      "f1": 0.1899441340782123,
+      "f1": 0.18888888888888888,
       "median_delay_s": 60.0,
       "threshold_for_diagnostic_only": 0.49999999999999994
     }
