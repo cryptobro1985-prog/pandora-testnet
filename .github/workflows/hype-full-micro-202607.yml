@@ -30,6 +30,23 @@ jobs:
           ref: research/hype-h1-local-v5-oi-microstructure-20261104
           fetch-depth: 1
 
+      - name: Publish RUNNING marker
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p research/hype_full_micro_202607/results
+          python - <<'PY'
+          import json,os,time,pathlib
+          p=pathlib.Path("research/hype_full_micro_202607/results/RUN_STATUS.json")
+          json.dump({"status":"RUNNING","run_id":os.getenv("GITHUB_RUN_ID"),"sha":os.getenv("GITHUB_SHA"),"started_ts_ms":int(time.time()*1000)},p.open("w"),indent=2)
+          PY
+          git config user.name "pandora-research-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add research/hype_full_micro_202607/results/RUN_STATUS.json
+          git commit -m "research(hype): full-micro teacher RUNNING [skip ci]" || true
+          git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104 || true
+          git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104 || true
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -112,3 +129,22 @@ jobs:
           if-no-files-found: error
           retention-days: 60
           compression-level: 9
+
+      - name: Publish final run status
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p research/hype_full_micro_202607/results
+          python - <<'PY'
+          import json,os,time,pathlib
+          ok=pathlib.Path("full_micro_model/HYPE_FULL_MICRO_202607_REPORT.json").exists()
+          p=pathlib.Path("research/hype_full_micro_202607/results/RUN_STATUS.json")
+          json.dump({"status":"SUCCESS" if ok else "FAILED","run_id":os.getenv("GITHUB_RUN_ID"),"sha":os.getenv("GITHUB_SHA"),"finished_ts_ms":int(time.time()*1000)},p.open("w"),indent=2)
+          PY
+          git config user.name "pandora-research-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add research/hype_full_micro_202607/results/RUN_STATUS.json
+          git commit -m "research(hype): full-micro teacher run status [skip ci]" || true
+          git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104 || true
+          git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104 || true
