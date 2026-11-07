@@ -57,7 +57,7 @@ def split_name(ts):
     ts=int(ts)
     if ts<TRAIN_END-PURGE_MS:return "train"
     if TRAIN_END<=ts<OOS_START-PURGE_MS:return "valid"
-    if OOS_START<=ts<END_MS:return "oos"
+    if OOS_START<=ts<END_MS-PURGE_MS:return "oos"
     return "purged"
 
 def schema_from_train(rows,min_coverage=.02):
@@ -319,7 +319,7 @@ def main():
       "source":{"snapshots":str(args.snapshots),"sha256":sha256(args.snapshots),"rows":len(rows),
                 "availability":availability},
       "split":{"train_before":"2026-10-23 minus 3h purge","validation":"2026-10-23..2026-10-27 minus 3h purge",
-               "untouched_oos":"2026-10-27..2026-11-03"},
+               "untouched_oos":"2026-10-27..2026-11-03 minus 3h terminal maturity purge"},
       "samples":{k:len(v) for k,v in samples.items()},
       "experts":["Fin-JEPA sequential","Quant-style tabular MLP","River LocalOnly logistic"],
       "fin_jepa_validation_loss":val_loss,
