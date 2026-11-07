@@ -37,6 +37,29 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Publish RUNNING marker
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p research/hype_local_only/results
+          python - <<'PY'
+          import json,os,pathlib
+          p=pathlib.Path("research/hype_local_only/results/HYPE_LOCAL_ENSEMBLE_RUN_STATUS.json")
+          json.dump({
+            "status":"RUNNING",
+            "github_run_id":os.environ.get("GITHUB_RUN_ID"),
+            "github_sha":os.environ.get("GITHUB_SHA"),
+            "started_by":"hype-local-ensemble-30d"
+          },p.open("w"),indent=2)
+          PY
+          git config user.name "pandora-research-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add research/hype_local_only/results/HYPE_LOCAL_ENSEMBLE_RUN_STATUS.json
+          git commit -m "research(hype): Local ensemble training RUNNING [skip ci]" || true
+          git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104 || true
+          git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104 || true
+
+
       - name: Install research stack
         run: |
           python -m pip install --upgrade pip
