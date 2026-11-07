@@ -54,6 +54,7 @@ jobs:
             research/hype_local_only/feature_discovery.py \
             research/hype_local_only/train_history.py \
             research/hype_local_only/live_daemon.py \
+            research/hype_local_only/live_relationship_miner.py \
             research/hype_local_only/cortex_daemon.py
 
       - name: Cancel deprecated Caterpillar / Direct-Policy live runs
@@ -236,6 +237,13 @@ jobs:
           test -s local_cp/LOCAL_ONLY_STATUS.json
           test -s local_cp/local_only_model.pkl
 
+      - name: Mine matured live discovery relationships
+        run: |
+          python -m research.hype_local_only.live_relationship_miner \
+            --labels local_cp/LOCAL_LIVE_LABELS.jsonl \
+            --output local_cp/LIVE_DISCOVERY_RELATIONSHIPS.json
+          test -s local_cp/LIVE_DISCOVERY_RELATIONSHIPS.json
+
       - name: Validate Local-only state
         run: |
           python - <<'PY'
@@ -272,6 +280,7 @@ jobs:
             local_cp/LOCAL_RELATIONSHIP_MEMORY.json
             local_cp/LOCAL_EVENTS.jsonl
             local_cp/LOCAL_LIVE_LABELS.jsonl
+            local_cp/LIVE_DISCOVERY_RELATIONSHIPS.json
           if-no-files-found: warn
           retention-days: 30
           compression-level: 6
