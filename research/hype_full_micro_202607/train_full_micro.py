@@ -3,6 +3,7 @@ import argparse,gzip,json,math,pickle
 from collections import defaultdict
 from pathlib import Path
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor
 from sklearn.ensemble import ExtraTreesClassifier,HistGradientBoostingClassifier
 from sklearn.metrics import precision_recall_fscore_support
 
@@ -100,7 +101,7 @@ def fit_one(train,valid,oos,names,kind):
     X=matrix(train,names);y=np.asarray([int(r["strict_true"]) for r in train])
     if kind=="extra":
         m=ExtraTreesClassifier(n_estimators=700,max_depth=14,min_samples_leaf=2,max_features="sqrt",
-                               class_weight="balanced_subsample",n_jobs=4,random_state=SEED)
+                               class_weight="balanced_subsample",n_jobs=2,random_state=SEED)
     else:
         # explicit sample weights handle the severe class imbalance.
         m=HistGradientBoostingClassifier(max_iter=350,max_leaf_nodes=31,l2_regularization=2.0,learning_rate=.05,random_state=SEED)
@@ -119,8 +120,12 @@ def main():
     valid=[r for r in rows if a<=r["candidate_ts_ms"]<b]
     oos=[r for r in rows if r["candidate_ts_ms"]>=b]
     models={};report={"split":{"train_end_ms":a,"valid_end_ms":b},"features":len(names),"rows":{"train":len(train),"valid":len(valid),"oos":len(oos)},"models":{},"relationships":feature_relationships(train+valid,names)}
-    for kind in ("extra","histgb"):
-        m,th,vm,om=fit_one(train,valid,oos,names,kind);models[kind]=m
+    def train_kind(kind):
+        return kind,fit_one(train,valid,oos,names,kind)
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        results=list(ex.map(train_kind,("extra","histgb")))
+    for kind,(m,th,vm,om) in results:
+        models[kind]=m
         ready=bool(om["accepted"]>=5 and om["tp"]>=5 and om["precision"]>=.95 and om["recall"]>=.30)
         report["models"][kind]={"threshold":th,"validation":vm,"oos":om,
                               "holdout_95pct_gate":{"passed":ready,"precision_min":.95,"recall_min":.30,"tp_min":5,"accepted_min":5}}
@@ -132,7 +137,7 @@ def main():
     full={}
     X=matrix(rows,names);y=np.asarray([int(r["strict_true"]) for r in rows]);sw=np.where(y==1,max(1.,(len(y)-y.sum())/max(1,y.sum())),1.)
     for kind in ("extra","histgb"):
-        if kind=="extra":m=ExtraTreesClassifier(n_estimators=900,max_depth=14,min_samples_leaf=2,max_features="sqrt",class_weight="balanced_subsample",n_jobs=4,random_state=SEED)
+        if kind=="extra":m=ExtraTreesClassifier(n_estimators=900,max_depth=14,min_samples_leaf=2,max_features="sqrt",class_weight="balanced_subsample",n_jobs=2,random_state=SEED)
         else:m=HistGradientBoostingClassifier(max_iter=400,max_leaf_nodes=31,l2_regularization=2.0,learning_rate=.05,random_state=SEED)
         try:m.fit(X,y,sample_weight=sw)
         except TypeError:m.fit(X,y)
