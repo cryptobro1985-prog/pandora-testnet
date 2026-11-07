@@ -1,0 +1,43 @@
+{
+  "objective": "One mirrored Local LOW/HIGH relation after scanning the full available causal contract, not a top-5 rule list.",
+  "contract": {
+    "total_points": 116,
+    "causal_or_quality_inputs": 86,
+    "target_eval_teacher_only": 28,
+    "metadata_only": 2,
+    "historically_available_inputs": 83,
+    "unavailable_historical_input_ids": [
+      111,
+      112,
+      113
+    ]
+  },
+  "exact_time_dataset": {
+    "strict_locals_in_snapshot_period": 47,
+    "low": 23,
+    "high": 24,
+    "same_side_hard_negatives": 1205
+  },
+  "relation": {
+    "name": "TERMINAL_SWING_EXHAUSTION",
+    "plain": "LOW and HIGH are mirror images of one state: the active swing pushes to a fresh structural extreme, but counter-flow rises relative to continuation flow, reversal-side/defensive book depth strengthens, and continuation price-impact efficiency loses persistence. The Local is the terminal point of this divergence, not merely a breakout.",
+    "components_scanned": "all available causal groups and derived interactions: structure, M1/M3/M5/H1 context, trade flow, price response, L50 depth/shape, OI, mark/index/basis/funding, liquidations, 24h context, quality masks."
+  },
+  "frozen_holdout": {
+    "method": "chronological 65% train + 17.5% validation for relation weighting; final 17.5% frozen test untouched",
+    "test_rows": 220,
+    "true_locals": 9,
+    "composite_dimensions_with_nonzero_stable_weight": 31,
+    "roc_auc": 0.7224855186940494,
+    "average_precision": 0.124185697228186,
+    "base_rate": 0.04090909090909091,
+    "top_10pct_of_score": {
+      "rows": 22,
+      "true_locals": 4,
+      "precision": 0.18181818181818182,
+      "recall": 0.4444444444444444
+    }
+  },
+  "interpretation": "The relation is real enough to rank true locals above hard negatives better than chance, but it is NOT yet precise enough to be called a production detector or a 95% gate.",
+  "next": "Continue searching for a stronger invariant form of the same single relation across all available inputs; do not revert to candidate-only breakout classification and do not use future data in X."
+}
