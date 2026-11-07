@@ -125,8 +125,9 @@ jobs:
         run: |
           rm -rf ensemble_out
           mkdir -p ensemble_out
-          python -m research.hype_local_only.train_local_ensemble_30d             --snapshots "${{ steps.data.outputs.snapshots }}"             --availability history30/feature_availability.json             --compact-1m history30/compact_1m.jsonl.gz             --output ensemble_out             --epochs 18             --workers 4
+          python -m research.hype_local_only.train_local_ensemble_30d             --snapshots "${{ steps.data.outputs.snapshots }}"             --availability history30/feature_availability.json             --compact-1m history30/compact_1m.jsonl.gz             --labels-gz history30/labels.json.gz             --output ensemble_out             --epochs 18             --workers 4
           test -s ensemble_out/HYPE_LOCAL_ENSEMBLE.pt
+          test -s ensemble_out/HYPE_LOCAL_FULL30D_TEACHER.pt
           test -s ensemble_out/HYPE_LOCAL_ENSEMBLE_REPORT.json
 
       - name: Upload immutable trained bundle
