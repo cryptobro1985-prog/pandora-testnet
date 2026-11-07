@@ -549,13 +549,35 @@ def main():
     ap=argparse.ArgumentParser();ap.add_argument("--output",type=Path,required=True);ap.add_argument("--cache",type=Path,required=True)
     args=ap.parse_args();args.output.mkdir(parents=True,exist_ok=True)
     src=Source(args.cache,os.getenv("CRYPTOHFTDATA_API_KEY"))
-    # Multitask network I/O: fetch all hourly sources in parallel while preserving
-    # deterministic sequential orderbook replay afterward.
-    prefetch_hours(src,START-timedelta(hours=24),END,
-                   ("trades","orderbook","liquidations","open_interest","mark_price","ticker"))
+
+    # Phase 1: only trades are needed to construct strict labels/candidates.
+    # Download them first, in parallel.
+    prefetch_hours(src,START-timedelta(hours=24),END,("trades",))
     sec5,mins,schemas=load_trades(src)
     strict,strict_exc=structural_labels(mins,lookback=6,lookahead=2)
     cands=candidates(mins,strict);records=target_records(cands,sec5,mins)
+
+    # Phase 2: L50 must be continuous over every hour, but auxiliary scalar/liq
+    # archives are only useful near actual candidate snapshot hours.
+    prefetch_hours(src,START-timedelta(hours=24),END,("orderbook",))
+    candidate_hours=sorted({
+        datetime.fromtimestamp(r["snapshot_ts_ms"]/1000,tz=timezone.utc).replace(minute=0,second=0,microsecond=0)
+        for r in records
+    })
+    aux_hours=sorted(set(candidate_hours)|{h-timedelta(hours=1) for h in candidate_hours})
+    if aux_hours:
+        with ThreadPoolExecutor(max_workers=(8 if src.api_key else 2)) as ex:
+            futs=[]
+            for dt in aux_hours:
+                for kind in ("liquidations","open_interest","mark_price","ticker"):
+                    futs.append(ex.submit(src.get,dt,kind,False))
+            done=0
+            for fut in as_completed(futs):
+                fut.result();done+=1
+                if done%100==0:
+                    print(json.dumps({"aux_prefetch_done":done,"aux_prefetch_total":len(futs),
+                                      "downloads":src.downloads,"bytes":src.bytes}),flush=True)
+
     ratio_rows=fetch_account_ratio()
     records=attach_account_ratio(records,ratio_rows)
     records=enrich(src,records,schemas)
