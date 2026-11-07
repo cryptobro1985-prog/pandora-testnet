@@ -24,6 +24,7 @@ import torch.nn.functional as F
 
 from research.hype_local_only.fin_jepa_adapter import HypeFinJEPA,validate_scalar_schema
 from research.hype_local_only.model import LocalOnlyModel,STAGES
+from research.hype_local_only.h1_teacher_context import load_minutes,build_index,causal_h1_features
 from research.hype_quant.feature_contract import POINTS,INPUT_IDS,TARGET_IDS,METADATA_IDS
 
 TRAIN_END=1792713600000   # 2026-10-23T00:00:00Z
@@ -139,7 +140,7 @@ def labels_tensor(samples):return torch.tensor([s["y"] for s in samples],dtype=t
 
 def weighted_bce(logits,y):
     pos=float(y.sum());neg=float(len(y)-pos)
-    pw=max(1.0,min(12.0,neg/max(1.0,pos)))
+    pw=max(1.0,min(6.0,math.sqrt(neg/max(1.0,pos))))
     return F.binary_cross_entropy_with_logits(logits,y,pos_weight=torch.tensor(pw,device=logits.device))
 
 def train_models(samples,input_dim,epochs,workers):
@@ -199,7 +200,7 @@ def train_river(rows):
         if split_name(r["candidate_ts_ms"])!="train":continue
         stage=int(r["delay_s"])
         if stage not in PRED_STAGES:continue
-        m.learn(r["side"],stage,r["features"],bool(r["strict_true"]),repeat=4 if r["strict_true"] else 1)
+        m.learn(r["side"],stage,r["features"],bool(r["strict_true"]),repeat=2 if r["strict_true"] else 1)
     return m
 
 def attach_probs(samples,fin,quant,river):
@@ -254,11 +255,11 @@ def choose_ensemble(valid):
       for b in vals:
         c=1-a-b
         if c<0 or c>1:continue
-        for th in np.arange(.30,.86,.05):
+        for th in np.arange(.30,.96,.05):
             m=candidate_metrics(valid,(a,b,c),float(th))
-            if m["accepted"]<3:continue
-            objective=.55*m["f1"]+.30*m["precision"]+.15*m["recall"]-.0002*(m["median_delay_s"] or 300)
-            row=(objective,m["f1"],m["precision"],m["recall"],-float(th),(a,b,c),float(th),m)
+            if m["accepted"]<5 or m["tp"]<3 or m["recall"]<.35:continue
+            objective=.55*m["precision"]+.30*m["f1"]+.15*m["recall"]-.00015*(m["median_delay_s"] or 300)
+            row=(objective,m["precision"],m["f1"],m["recall"],-float(th),(a,b,c),float(th),m)
             grid.append(row)
             if best is None or row[:5]>best[:5]:best=row
     if best is None:
@@ -285,12 +286,16 @@ def main():
     ap.add_argument("--snapshots",type=Path,required=True)
     ap.add_argument("--output",type=Path,required=True)
     ap.add_argument("--availability",type=Path)
+    ap.add_argument("--compact-1m",type=Path,required=True)
     ap.add_argument("--epochs",type=int,default=18)
     ap.add_argument("--workers",type=int,default=4)
     args=ap.parse_args();args.output.mkdir(parents=True,exist_ok=True)
     random.seed(SEED);np.random.seed(SEED);torch.manual_seed(SEED)
     assert len(POINTS)==116 and len(INPUT_IDS)==86 and not(INPUT_IDS&TARGET_IDS)
     rows=load_rows(args.snapshots)
+    minutes=load_minutes(args.compact_1m); minute_ends=build_index(minutes)
+    for r in rows:
+        r["features"].update(causal_h1_features(minutes,minute_ends,int(r["snapshot_ts_ms"]),r["side"],float(r["extreme_price"])))
     names=schema_from_train(rows)
     med,scale=robust_norm(rows,names)
     samples=build_samples(rows,names,med,scale)
@@ -316,7 +321,7 @@ def main():
                   "metadata_points":len(METADATA_IDS),"scalar_features_used":len(names),
                   "model_input_width_with_missing_masks":len(names)*2,
                   "rule":"TARGET_EVAL/METADATA never enter X; missing historical inputs are masked, never fabricated"},
-      "source":{"snapshots":str(args.snapshots),"sha256":sha256(args.snapshots),"rows":len(rows),
+      "source":{"snapshots":str(args.snapshots),"sha256":sha256(args.snapshots),"compact_1m_sha256":sha256(args.compact_1m),"rows":len(rows),
                 "availability":availability},
       "split":{"train_before":"2026-10-23 minus 3h purge","validation":"2026-10-23..2026-10-27 minus 3h purge",
                "untouched_oos":"2026-10-27..2026-11-03 minus 3h terminal maturity purge"},
