@@ -14,7 +14,7 @@ they are never fabricated.
 Research-only. No order placement and no automatic live promotion.
 """
 from __future__ import annotations
-import argparse,gzip,hashlib,json,math,random
+import argparse,copy,gzip,hashlib,json,math,random
 from collections import defaultdict
 from pathlib import Path
 import numpy as np
@@ -43,6 +43,25 @@ def sha256(path):
     with Path(path).open("rb") as f:
         for b in iter(lambda:f.read(1024*1024),b""):h.update(b)
     return h.hexdigest()
+
+def load_teacher_labels(path):
+    with gzip.open(path,"rt",encoding="utf-8") as f:obj=json.load(f)
+    labels=list(obj.get("strict") or [])
+    finalized=[x for x in labels if x.get("reference_finalized",True)]
+    return labels,finalized
+
+def apply_teacher(rows,finalized):
+    valid_ids={int(x["label_id"]) for x in finalized}
+    seen=set()
+    for r in rows:
+        lid=r.get("strict_label_id")
+        ok=lid is not None and int(lid) in valid_ids
+        r["strict_true"]=bool(ok)
+        if ok:seen.add(int(lid))
+    sides={s:sum(1 for x in finalized if x.get("side")==s) for s in ("LOW","HIGH")}
+    return {"strict_labels_total":len(finalized),"strict_labels_by_side":sides,
+            "strict_label_ids_seen_in_candidate_replay":len(seen),
+            "strict_label_ids_missing_from_candidate_replay":sorted(valid_ids-seen)}
 
 def load_rows(path):
     rows=[]
@@ -226,6 +245,39 @@ def attach_tree_probs(samples,models):
         if m is None:z["p_tree"]=0.5
         else:z["p_tree"]=float(m.predict_proba(z["tab"][None,:])[0,1])
 
+def finetune_all(fin,quant,samples,epochs=8):
+    all_samples=[z for split in ("train","valid","oos") for z in samples[split]]
+    rng=random.Random(SEED+1)
+    opt_f=torch.optim.AdamW(fin.parameters(),lr=1e-4,weight_decay=1e-4)
+    opt_q=torch.optim.AdamW(quant.parameters(),lr=1.5e-4,weight_decay=1e-4)
+    for _ in range(int(epochs)):
+        order=list(range(len(all_samples)));rng.shuffle(order)
+        fin.train();quant.train()
+        for stage in PRED_STAGES:
+            ids=[i for i in order if all_samples[i]["stage"]==stage]
+            for p in range(0,len(ids),64):
+                ss=[all_samples[i] for i in ids[p:p+64]]
+                if not ss:continue
+                x=torch.tensor(np.stack([z["seq"] for z in ss]));y=labels_tensor(ss);side=side_tensor(ss)
+                out=fin(x);logits=torch.where(side==0,out["local_logits"]["LOW"],out["local_logits"]["HIGH"])
+                loss=weighted_bce(logits,y)+.20*out["latent_loss"]
+                opt_f.zero_grad();loss.backward();torch.nn.utils.clip_grad_norm_(fin.parameters(),1.0);opt_f.step()
+        for p in range(0,len(order),64):
+            ss=[all_samples[i] for i in order[p:p+64]]
+            x=torch.tensor(np.stack([z["tab"] for z in ss]));st=torch.tensor([z["stage"] for z in ss],dtype=torch.float32)
+            y=labels_tensor(ss);side=side_tensor(ss)
+            loss=weighted_bce(quant(x,st,side),y)
+            opt_q.zero_grad();loss.backward();torch.nn.utils.clip_grad_norm_(quant.parameters(),1.0);opt_q.step()
+    return fin,quant,all_samples
+
+def train_river_all(rows):
+    m=LocalOnlyModel()
+    for r in sorted(rows,key=lambda z:int(z["snapshot_ts_ms"])):
+        stage=int(r["delay_s"])
+        if stage not in PRED_STAGES:continue
+        m.learn(r["side"],stage,r["features"],bool(r["strict_true"]),repeat=2 if r["strict_true"] else 1)
+    return m
+
 def attach_probs(samples,fin,quant,river):
     fin.eval();quant.eval()
     for split in ("train","valid","oos"):
@@ -311,12 +363,15 @@ def main():
     ap.add_argument("--output",type=Path,required=True)
     ap.add_argument("--availability",type=Path)
     ap.add_argument("--compact-1m",type=Path,required=True)
+    ap.add_argument("--labels-gz",type=Path,required=True)
     ap.add_argument("--epochs",type=int,default=18)
     ap.add_argument("--workers",type=int,default=4)
     args=ap.parse_args();args.output.mkdir(parents=True,exist_ok=True)
     random.seed(SEED);np.random.seed(SEED);torch.manual_seed(SEED)
     assert len(POINTS)==116 and len(INPUT_IDS)==86 and not(INPUT_IDS&TARGET_IDS)
     rows=load_rows(args.snapshots)
+    all_teacher,finalized_teacher=load_teacher_labels(args.labels_gz)
+    teacher_coverage=apply_teacher(rows,finalized_teacher)
     minutes=load_minutes(args.compact_1m); minute_ends=build_index(minutes)
     for r in rows:
         r["features"].update(causal_h1_features(minutes,minute_ends,int(r["snapshot_ts_ms"]),r["side"],float(r["extreme_price"])))
@@ -330,6 +385,19 @@ def main():
     weights,threshold,val_metrics=choose_ensemble(samples["valid"])
     oos_metrics=candidate_metrics(samples["oos"],weights,threshold)
     diag=expert_oos(samples["oos"])
+    # Freeze honest evaluation first. Only after metrics are immutable, fit a
+    # separate teacher checkpoint on ALL 30 days/all finalized labels.
+    fin_full=copy.deepcopy(fin);quant_full=copy.deepcopy(quant)
+    fin_full,quant_full,all_samples=finetune_all(fin_full,quant_full,samples,epochs=8)
+    river_full=train_river_all(rows)
+    trees_full=train_trees({"train":all_samples},args.workers)
+    full_teacher_bundle={"fin_jepa":fin_full.state_dict(),"quant_local":quant_full.state_dict(),
+                         "river_local":river_full,"extra_trees":trees_full,
+                         "feature_names":list(names),"median":med,"scale":scale,
+                         "source_sha256":sha256(args.snapshots),
+                         "teacher":"strict finalized H1 L6/K2 LOW/HIGH; all other candidates are NONE",
+                         "all_30d_examples":len(all_samples)}
+    torch.save(full_teacher_bundle,args.output/"HYPE_LOCAL_FULL30D_TEACHER.pt")
     baseline_rate=oos_metrics["reference_true"]/max(1,oos_metrics["candidates"])
     gate=bool(oos_metrics["accepted"]>=5 and oos_metrics["precision"]>=.70 and oos_metrics["recall"]>=.50 and oos_metrics["f1"]>=.60)
     technical=[
@@ -346,11 +414,18 @@ def main():
                   "metadata_points":len(METADATA_IDS),"scalar_features_used":len(names),
                   "model_input_width_with_missing_masks":len(names)*2,
                   "rule":"TARGET_EVAL/METADATA never enter X; missing historical inputs are masked, never fabricated"},
-      "source":{"snapshots":str(args.snapshots),"sha256":sha256(args.snapshots),"compact_1m_sha256":sha256(args.compact_1m),"rows":len(rows),
+      "source":{"snapshots":str(args.snapshots),"sha256":sha256(args.snapshots),"compact_1m_sha256":sha256(args.compact_1m),"labels_sha256":sha256(args.labels_gz),"rows":len(rows),
                 "availability":availability},
       "split":{"train_before":"2026-10-23 minus 3h purge","validation":"2026-10-23..2026-10-27 minus 3h purge",
                "untouched_oos":"2026-10-27..2026-11-03 minus 3h terminal maturity purge"},
       "samples":{k:len(v) for k,v in samples.items()},
+      "teacher_replay":{"task":"market state -> LOW / HIGH / NONE",
+                        "all_strict_labels_in_file":len(all_teacher),
+                        **teacher_coverage,
+                        "negative_teacher":"every structural candidate without a finalized strict label is NONE",
+                        "full30d_refit_examples":len(all_samples),
+                        "full30d_checkpoint":"HYPE_LOCAL_FULL30D_TEACHER.pt",
+                        "full30d_refit_happens_after_oos_metrics_are_frozen":True},
       "experts":["Fin-JEPA sequential","Quant-style tabular MLP","River LocalOnly logistic","ExtraTrees side-stage nonlinear"],
       "fin_jepa_validation_loss":val_loss,
       "ensemble":{"weights":{"fin_jepa":weights[0],"quant_local":weights[1],"river_local":weights[2],"extra_trees":weights[3]},
