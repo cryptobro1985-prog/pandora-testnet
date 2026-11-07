@@ -38,11 +38,21 @@ def call_cortex(url,model,payload,timeout):
       "supporting_relationships, contradicting_relationships, missing_live_evidence, summary. "
       "verdict must be FORMING_HIGH, FORMING_LOW, CONFIRMED_HIGH, CONFIRMED_LOW, or WAIT."
     )
-    req={"model":model,"messages":[{"role":"system","content":system},{"role":"user","content":json.dumps(payload,separators=(",",":"))}],
-         "temperature":0.05,"max_tokens":1200,"response_format":{"type":"json_object"}}
-    r=requests.post(url.rstrip("/")+"/v1/chat/completions",json=req,timeout=timeout)
-    r.raise_for_status();obj=r.json();msg=((obj.get("choices") or [{}])[0].get("message") or {})
-    return json_object(msg.get("content") or msg.get("reasoning_content") or "")
+    base={"model":model,"messages":[{"role":"system","content":system},{"role":"user","content":json.dumps(payload,separators=(",",":"))}],
+          "temperature":0.05,"max_tokens":1200}
+    last=None
+    for with_json_mode in (True,False):
+        req=dict(base)
+        if with_json_mode:
+            req["response_format"]={"type":"json_object"}
+        r=requests.post(url.rstrip("/")+"/v1/chat/completions",json=req,timeout=timeout)
+        if r.status_code==400 and with_json_mode:
+            last=RuntimeError("local_cortex_json_mode_unsupported: "+r.text[:300])
+            continue
+        r.raise_for_status()
+        obj=r.json();msg=((obj.get("choices") or [{}])[0].get("message") or {})
+        return json_object(msg.get("content") or msg.get("reasoning_content") or "")
+    raise last or RuntimeError("local_cortex_request_failed")
 
 def main():
     ap=argparse.ArgumentParser()
