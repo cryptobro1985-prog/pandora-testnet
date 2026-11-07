@@ -194,7 +194,7 @@ def candidates(mins,labels):
     return [c for c in out if c["extreme_ts_ms"]>=ms(START)]
 
 def secwin(sec5,starts,end,seconds):
-    return sec5[bisect.bisect_left(starts,end-seconds*1000):bisect.bisect_right(starts,end-1)]
+    return sec5[bisect.bisect_left(starts,end-seconds*1000):bisect.bisect_right(starts,end-5000)]
 def agg(rows,rev):
     if not rows:return {}
     buy=sum(x["buy_notional"] for x in rows);sell=sum(x["sell_notional"] for x in rows);tot=buy+sell
@@ -211,7 +211,7 @@ def base_features(c,t,sec5,mins):
     for w in WINDOWS:
         a=agg(secwin(sec5,starts,t,w),rev)
         for k,v in a.items():f[f"{k}_{w}s_log" if k in ("buy","sell","total") else f"{k}_{w}s"]=math.log1p(v) if k in ("buy","sell","total") else v
-    j=bisect.bisect_right(mstarts,t)-1
+    j=bisect.bisect_right(mstarts,t-60000)-1
     if j>=0:
         for n,name in ((60,"60m"),(360,"6h"),(1440,"24h")):
             rr=mins[max(0,j-n+1):j+1]
