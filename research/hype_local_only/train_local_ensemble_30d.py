@@ -144,6 +144,30 @@ def build_samples(rows,names,med,scale):
                                "tab":vectorize(r["features"],names,med,scale).astype(np.float32)})
     return out
 
+def build_all_matured_samples(rows,names,med,scale):
+    by=defaultdict(list)
+    for r in rows:
+        if int(r["candidate_ts_ms"])>=END_MS-PURGE_MS: continue
+        by[r["candidate_id"]].append(r)
+    out=[]
+    for cid,rr in by.items():
+        rr=sorted(rr,key=lambda z:int(z["delay_s"]))
+        stage_map={int(r["delay_s"]):r for r in rr}
+        for stage in PRED_STAGES:
+            r=stage_map.get(stage)
+            if not r: continue
+            seq=[]
+            for d in DELAYS:
+                if d>stage: break
+                q=stage_map.get(d)
+                if q is not None: seq.append(vectorize(q["features"],names,med,scale))
+            if not seq: continue
+            out.append({"candidate_id":cid,"side":r["side"],"stage":stage,
+                        "ts":int(r["candidate_ts_ms"]),"y":float(bool(r["strict_true"])),
+                        "seq":np.stack(seq).astype(np.float32),
+                        "tab":vectorize(r["features"],names,med,scale).astype(np.float32)})
+    return out
+
 class QuantLocalExpert(nn.Module):
     def __init__(self,n_features):
         super().__init__()
@@ -247,8 +271,7 @@ def attach_tree_probs(samples,models):
         if m is None:z["p_tree"]=0.5
         else:z["p_tree"]=float(m.predict_proba(z["tab"][None,:])[0,1])
 
-def finetune_all(fin,quant,samples,epochs=8):
-    all_samples=[z for split in ("train","valid","oos") for z in samples[split]]
+def finetune_all(fin,quant,all_samples,epochs=8):
     rng=random.Random(SEED+1)
     opt_f=torch.optim.AdamW(fin.parameters(),lr=1e-4,weight_decay=1e-4)
     opt_q=torch.optim.AdamW(quant.parameters(),lr=1.5e-4,weight_decay=1e-4)
@@ -275,6 +298,7 @@ def finetune_all(fin,quant,samples,epochs=8):
 def train_river_all(rows):
     m=LocalOnlyModel()
     for r in sorted(rows,key=lambda z:int(z["snapshot_ts_ms"])):
+        if int(r["candidate_ts_ms"])>=END_MS-PURGE_MS: continue
         stage=int(r["delay_s"])
         if stage not in PRED_STAGES:continue
         m.learn(r["side"],stage,r["features"],bool(r["strict_true"]),repeat=2 if r["strict_true"] else 1)
@@ -400,16 +424,18 @@ def main():
     # Freeze honest evaluation first. Only after metrics are immutable, fit a
     # separate teacher checkpoint on ALL 30 days/all finalized labels.
     fin_full=copy.deepcopy(fin);quant_full=copy.deepcopy(quant)
-    fin_full,quant_full,all_samples=finetune_all(fin_full,quant_full,samples,epochs=8)
+    all_refit_samples=build_all_matured_samples(rows,names,med,scale)
+    fin_full,quant_full,all_refit_samples=finetune_all(fin_full,quant_full,all_refit_samples,epochs=8)
     river_full=train_river_all(rows)
-    trees_full=train_trees({"train":all_samples},args.workers)
-    timeline_full,timeline_names_full=fit_timeline(timeline_rows,split_name,args.workers,all_data=True)
+    trees_full=train_trees({"train":all_refit_samples},args.workers)
+    mature_timeline=[r for r in timeline_rows if int(r["ts_ms"])<END_MS-PURGE_MS]
+    timeline_full,timeline_names_full=fit_timeline(mature_timeline,split_name,args.workers,all_data=True)
     full_teacher_bundle={"fin_jepa":fin_full.state_dict(),"quant_local":quant_full.state_dict(),
                          "river_local":river_full,"extra_trees":trees_full,"timeline_teacher":timeline_full,"timeline_feature_names":list(timeline_names_full),
                          "feature_names":list(names),"median":med,"scale":scale,
                          "source_sha256":sha256(args.snapshots),
                          "teacher":"strict finalized H1 L6/K2 LOW/HIGH; all other candidates are NONE",
-                         "all_30d_examples":len(all_samples)}
+                         "all_30d_examples":len(all_refit_samples),"ensemble_weights":weights,"ensemble_threshold":threshold}
     torch.save(full_teacher_bundle,args.output/"HYPE_LOCAL_FULL30D_TEACHER.pt")
     baseline_rate=oos_metrics["reference_true"]/max(1,oos_metrics["candidates"])
     gate=bool(oos_metrics["accepted"]>=5 and oos_metrics["precision"]>=.70 and oos_metrics["recall"]>=.50 and oos_metrics["f1"]>=.60)
@@ -436,7 +462,7 @@ def main():
                         "all_strict_labels_in_file":len(all_teacher),
                         **teacher_coverage,
                         "negative_teacher":"every structural candidate without a finalized strict label is NONE",
-                        "full30d_refit_examples":len(all_samples),
+                        "full30d_refit_examples":len(all_refit_samples),
                         "full30d_checkpoint":"HYPE_LOCAL_FULL30D_TEACHER.pt",
                         "full30d_refit_happens_after_oos_metrics_are_frozen":True},
       "experts":["Fin-JEPA sequential","Quant-style tabular MLP","River LocalOnly logistic","ExtraTrees side-stage nonlinear","Full-minute HIGH/LOW/NONE timeline teacher"],
