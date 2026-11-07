@@ -1,7 +1,7 @@
 {
   "status": "workflow_failed_before_report",
   "train_outcome": "cancelled",
-  "github_run_id": "42358841503",
+  "github_run_id": "42358996546",
   "base_artifact_id": "13435356156",
   "gap_artifact_id": "13533587104"
 }
