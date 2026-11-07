@@ -253,7 +253,9 @@ def main():
                             repeat=(4 if y else 1))
                 append_jsonl(lablog,{"ts_ms":ts,"candidate_id":item.candidate_id,"side":item.side,
                     "stage":item.stage,"label":bool(y),"is_latest_extreme_in_hour":is_latest,
-                    "teacher":"H1_L6_K2_STRICT"})
+                    "teacher":"H1_L6_K2_STRICT","feature_count":len(item.x),
+                    "discovery_feature_count":sum(str(k).startswith("discovery__") for k in item.x),
+                    "features":item.x})
             pending=keep
 
             c=candidates.get(expected) if expected else None
@@ -286,6 +288,7 @@ def main():
                 "h1_baseline":model.h1_shadow,
                 "h1_training":{"labels":model.h1_labels,"positive":model.h1_positive},
                 "seen_input_count":cov.get("seen_input_count"),"feature_contract":cov,
+                "discovery_feature_count":(sum(str(k).startswith("discovery__") for k in c.snapshots[max(c.stages_done)]) if c is not None and c.stages_done else 0),
                 "last_signal":model.last_signal,
                 "mode":"LOCAL_ONLY","local_target":"FULL_HISTORY_STRICT_H1_L6_K2",
                 "github_run_id":os.getenv("GITHUB_RUN_ID"),"github_sha":os.getenv("GITHUB_SHA"),
