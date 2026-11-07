@@ -1,0 +1,114 @@
+{
+  "generated_from": "HYPE-FULL-MICRO-202607-DATA-42376949791",
+  "objective": "Find side-specific exact-time relationships that remain directionally useful across four chronological quarters of the Jul-Aug retrospective sample.",
+  "caveat": "This uses the pre-dynamic-L50 artifact. A new rebuild is running with explicit replenishment/removal/churn/absorption and causal M1/M3/M5/H1 state; this file is the stability baseline to beat.",
+  "LOW": {
+    "true_locals": 23,
+    "hard_negatives": 632,
+    "composite_relation": [
+      {
+        "feature": "trend_share_15",
+        "direction": "lower",
+        "true_median": 0.6359386830982873,
+        "false_median": 0.7719333766154887
+      },
+      {
+        "feature": "spread_bps",
+        "direction": "higher",
+        "true_median": 0.18283374013797904,
+        "false_median": 0.17207409760151454
+      },
+      {
+        "feature": "trade_count_60",
+        "direction": "higher",
+        "true_median": 661,
+        "false_median": 559
+      },
+      {
+        "feature": "signed_trend_ret_delta_30_180",
+        "direction": "higher",
+        "true_median": -0.0009922822259991193,
+        "false_median": -0.0013984093301626643
+      },
+      {
+        "feature": "counter_share_30",
+        "direction": "higher",
+        "true_median": 0.3772682780278377,
+        "false_median": 0.27632650966522926
+      },
+      {
+        "feature": "penetration_60m",
+        "direction": "higher",
+        "true_median": 13.734138037758692,
+        "false_median": 7.675484975569469
+      },
+      {
+        "feature": "trend_share_180",
+        "direction": "lower",
+        "true_median": 0.5926987245075418,
+        "false_median": 0.6468172361486777
+      },
+      {
+        "feature": "trend_eff_ratio_60_300",
+        "direction": "lower",
+        "true_median": 1.2543269260259748,
+        "false_median": 1.4325857824177424
+      },
+      {
+        "feature": "trend_eff_delta_30_180",
+        "direction": "higher",
+        "true_median": 0.002849777047006412,
+        "false_median": 0.001974687978083166
+      }
+    ],
+    "quarter_auc": [
+      0.875,
+      0.8205128205128205,
+      0.83125,
+      0.8213141025641025
+    ],
+    "min_quarter_auc": 0.8205128205128205,
+    "mean_quarter_auc": 0.8370192307692308,
+    "interpretation": "The LOW relation is unusually stable across every chronological quarter: seller share falls on 15s and 180s windows, buyer counter-share rises on 30s, 60m downside penetration is deeper, activity is higher, and continuation price-impact/efficiency shows a short-vs-long divergence."
+  },
+  "HIGH": {
+    "true_locals": 24,
+    "hard_negatives": 573,
+    "composite_relation": [
+      {
+        "feature": "total_depth_5",
+        "direction": "higher",
+        "true_median": 326.845,
+        "false_median": 248.29000000000002
+      },
+      {
+        "feature": "trend_impact_delta_60_300",
+        "direction": "lower",
+        "true_median": -0.00007037934610580978,
+        "false_median": 0.0013790172699634793
+      },
+      {
+        "feature": "extreme_position_6h",
+        "direction": "higher",
+        "true_median": 0.03174215086577015,
+        "false_median": 0.022549019607839282
+      },
+      {
+        "feature": "support_depth_25",
+        "direction": "higher",
+        "true_median": 1455.2849999999999,
+        "false_median": 1208.3100000000002
+      }
+    ],
+    "quarter_auc": [
+      0.7132867132867132,
+      0.7383449883449883,
+      0.6901408450704225,
+      0.7751724137931034
+    ],
+    "min_quarter_auc": 0.6901408450704225,
+    "mean_quarter_auc": 0.7292362401238068,
+    "interpretation": "The HIGH relation is weaker in the old static-book artifact: near-touch/25-level depth is heavier, the 6h upside extension is more extreme, and short-vs-long buy price-impact decays. Dynamic ask replenishment/removal/absorption is the key missing measurement now being rebuilt."
+  },
+  "conclusion": "LOW already shows a stable multi-dimensional terminal-exhaustion signature across all four quarters. HIGH shows the same family but weaker because the old artifact only had static L50 depth. The new dynamic-L50 rebuild is explicitly designed to measure the missing absorption/churn component."
+}
