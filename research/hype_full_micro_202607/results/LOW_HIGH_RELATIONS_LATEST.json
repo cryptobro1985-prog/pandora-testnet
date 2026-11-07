@@ -1,0 +1,499 @@
+{
+  "objective": "Find exactly one relationship for Local LOW and exactly one for Local HIGH across the fixed 116-point contract. Future teacher/eval points never enter X.",
+  "LOW": {
+    "side": "LOW",
+    "rows": {
+      "development": 393,
+      "validation": 131,
+      "frozen_test": 131
+    },
+    "true_locals": {
+      "development": 12,
+      "validation": 4,
+      "frozen_test": 7
+    },
+    "contract": {
+      "total_points": 116,
+      "causal_quality_inputs": 86,
+      "teacher_eval_points": 28,
+      "metadata_points": 2
+    },
+    "available_raw_dimensions_scanned": 300,
+    "stable_relation_dimensions": 147,
+    "validation": {
+      "roc_auc": 0.7755905511811023,
+      "average_precision": 0.185737504658578,
+      "threshold_selection": {
+        "threshold": 0.34761904761904755,
+        "accepted": 62,
+        "tp": 4,
+        "fp": 58,
+        "fn": 0,
+        "precision": 0.06451612903225806,
+        "recall": 1.0
+      }
+    },
+    "frozen_test": {
+      "roc_auc": 0.5414746543778801,
+      "average_precision": 0.07498700351946626,
+      "threshold": 0.34761904761904755,
+      "accepted": 44,
+      "tp": 3,
+      "fp": 41,
+      "fn": 4,
+      "precision": 0.06818181818181818,
+      "recall": 0.42857142857142855
+    },
+    "relation_definition": "Single side-specific composite relation built from every causal feature whose direction is stable in both development and validation. All unstable dimensions are retained in the scan but receive zero weight.",
+    "top_relation_dimensions": [
+      {
+        "feature": "fullmicro_ask_01_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.18121172353455817
+      },
+      {
+        "feature": "fullmicro_bid_01_dist_bps",
+        "direction": "lower_in_true_local",
+        "weight": 0.18121172353455817
+      },
+      {
+        "feature": "fullmicro_spread_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.18121172353455817
+      },
+      {
+        "feature": "fullmicro_ticker_last_price",
+        "direction": "lower_in_true_local",
+        "weight": 0.17957130358705164
+      },
+      {
+        "feature": "fullmicro_mark_price_index_price",
+        "direction": "lower_in_true_local",
+        "weight": 0.17574365704286965
+      },
+      {
+        "feature": "fullmicro_mark_price_mark_price",
+        "direction": "lower_in_true_local",
+        "weight": 0.175087489063867
+      },
+      {
+        "feature": "fullmicro_ticker_high_price",
+        "direction": "lower_in_true_local",
+        "weight": 0.16896325459317585
+      },
+      {
+        "feature": "fullmicro_ticker_low_price",
+        "direction": "lower_in_true_local",
+        "weight": 0.1488594040968343
+      },
+      {
+        "feature": "fullmicro_ask_04_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.14184164479440065
+      },
+      {
+        "feature": "fullmicro_ask_09_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.14041994750656162
+      },
+      {
+        "feature": "fullmicro_bid_22_log_qty",
+        "direction": "higher_in_true_local",
+        "weight": 0.13779527559055116
+      },
+      {
+        "feature": "distance_low_24h_bps",
+        "direction": "lower_in_true_local",
+        "weight": 0.1321084864391951
+      },
+      {
+        "feature": "fullmicro_ask_30_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.12992125984251968
+      },
+      {
+        "feature": "position_24h",
+        "direction": "lower_in_true_local",
+        "weight": 0.12970253718285218
+      },
+      {
+        "feature": "fullmicro_ask_31_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.12948381452318447
+      },
+      {
+        "feature": "fullmicro_ask_34_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.12926509186351698
+      },
+      {
+        "feature": "fullmicro_ask_35_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.1279527559055118
+      },
+      {
+        "feature": "fullmicro_ask_05_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.12784339457567806
+      },
+      {
+        "feature": "fullmicro_ask_32_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.1277340332458442
+      },
+      {
+        "feature": "fullmicro_ask_33_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.1277340332458442
+      },
+      {
+        "feature": "fullmicro_ask_36_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.12664041994750652
+      },
+      {
+        "feature": "fullmicro_ask_38_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.12642169728783903
+      },
+      {
+        "feature": "fullmicro_ask_37_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.12620297462817143
+      },
+      {
+        "feature": "fullmicro_ask_08_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.12598425196850394
+      },
+      {
+        "feature": "fullmicro_ask_10_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.12598425196850394
+      },
+      {
+        "feature": "fullmicro_ask_43_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.12598425196850394
+      },
+      {
+        "feature": "fullmicro_ask_42_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.12489063867016625
+      },
+      {
+        "feature": "fullmicro_ask_44_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.12445319335083116
+      },
+      {
+        "feature": "fullmicro_ask_49_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.12445319335083116
+      },
+      {
+        "feature": "fullmicro_ask_41_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.12445319335083105
+      },
+      {
+        "feature": "fullmicro_ask_45_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.12423447069116356
+      },
+      {
+        "feature": "fullmicro_ask_47_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.12401574803149606
+      },
+      {
+        "feature": "fullmicro_ask_48_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.12401574803149606
+      },
+      {
+        "feature": "fullmicro_ask_50_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.12401574803149606
+      },
+      {
+        "feature": "fullmicro_ask_39_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.12379702537182857
+      },
+      {
+        "feature": "fullmicro_ask_46_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.12357830271216097
+      },
+      {
+        "feature": "fullmicro_ask_40_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.12314085739282588
+      },
+      {
+        "feature": "fullmicro_bid_45_log_qty",
+        "direction": "higher_in_true_local",
+        "weight": 0.12215660542432194
+      },
+      {
+        "feature": "fullmicro_ask_13_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.1220472440944882
+      },
+      {
+        "feature": "fullmicro_ask_14_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.11953193350831137
+      }
+    ]
+  },
+  "HIGH": {
+    "side": "HIGH",
+    "rows": {
+      "development": 358,
+      "validation": 119,
+      "frozen_test": 120
+    },
+    "true_locals": {
+      "development": 15,
+      "validation": 4,
+      "frozen_test": 5
+    },
+    "contract": {
+      "total_points": 116,
+      "causal_quality_inputs": 86,
+      "teacher_eval_points": 28,
+      "metadata_points": 2
+    },
+    "available_raw_dimensions_scanned": 300,
+    "stable_relation_dimensions": 103,
+    "validation": {
+      "roc_auc": 0.8913043478260869,
+      "average_precision": 0.47957839262187085,
+      "threshold_selection": {
+        "threshold": 0.20324675324675318,
+        "accepted": 3,
+        "tp": 2,
+        "fp": 1,
+        "fn": 2,
+        "precision": 0.6666666666666666,
+        "recall": 0.5
+      }
+    },
+    "frozen_test": {
+      "roc_auc": 0.5826086956521739,
+      "average_precision": 0.07823104315039799,
+      "threshold": 0.20324675324675318,
+      "accepted": 1,
+      "tp": 0,
+      "fp": 1,
+      "fn": 5,
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    "relation_definition": "Single side-specific composite relation built from every causal feature whose direction is stable in both development and validation. All unstable dimensions are retained in the scan but receive zero weight.",
+    "top_relation_dimensions": [
+      {
+        "feature": "fullmicro_ask_24_log_qty",
+        "direction": "higher_in_true_local",
+        "weight": 0.12391304347826093
+      },
+      {
+        "feature": "fullmicro_ask_16_log_qty",
+        "direction": "lower_in_true_local",
+        "weight": 0.12167152575315843
+      },
+      {
+        "feature": "fullmicro_bid_12_log_qty",
+        "direction": "higher_in_true_local",
+        "weight": 0.11360544217687074
+      },
+      {
+        "feature": "fullmicro_bid_30_log_qty",
+        "direction": "higher_in_true_local",
+        "weight": 0.11304347826086958
+      },
+      {
+        "feature": "fullmicro_ask_32_log_qty",
+        "direction": "lower_in_true_local",
+        "weight": 0.09999999999999998
+      },
+      {
+        "feature": "fullmicro_bid_17_log_qty",
+        "direction": "higher_in_true_local",
+        "weight": 0.09290573372206035
+      },
+      {
+        "feature": "fullmicro_bid_20_log_qty",
+        "direction": "higher_in_true_local",
+        "weight": 0.09251700680272124
+      },
+      {
+        "feature": "fullmicro_ask_27_log_qty",
+        "direction": "lower_in_true_local",
+        "weight": 0.08610301263362491
+      },
+      {
+        "feature": "fullmicro_bid_18_log_qty",
+        "direction": "lower_in_true_local",
+        "weight": 0.08182701652089408
+      },
+      {
+        "feature": "fullmicro_ask_37_log_qty",
+        "direction": "lower_in_true_local",
+        "weight": 0.08075801749271139
+      },
+      {
+        "feature": "distance_high_6h_bps",
+        "direction": "lower_in_true_local",
+        "weight": 0.08043478260869569
+      },
+      {
+        "feature": "fullmicro_bid_36_log_qty",
+        "direction": "lower_in_true_local",
+        "weight": 0.08017492711370267
+      },
+      {
+        "feature": "fullmicro_ask_04_log_qty",
+        "direction": "higher_in_true_local",
+        "weight": 0.07826086956521738
+      },
+      {
+        "feature": "fullmicro_ask_11_log_qty",
+        "direction": "lower_in_true_local",
+        "weight": 0.07717391304347826
+      },
+      {
+        "feature": "fullmicro_bid_37_log_qty",
+        "direction": "lower_in_true_local",
+        "weight": 0.07570456754130228
+      },
+      {
+        "feature": "fullmicro_bid_48_log_qty",
+        "direction": "lower_in_true_local",
+        "weight": 0.07560738581146742
+      },
+      {
+        "feature": "fullmicro_bid_14_log_qty",
+        "direction": "lower_in_true_local",
+        "weight": 0.06501457725947524
+      },
+      {
+        "feature": "fullmicro_mark_price_funding_rate",
+        "direction": "higher_in_true_local",
+        "weight": 0.061807580174927046
+      },
+      {
+        "feature": "fullmicro_ask_04_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.06054421768707485
+      },
+      {
+        "feature": "fullmicro_ask_01_log_qty",
+        "direction": "higher_in_true_local",
+        "weight": 0.05675413022351794
+      },
+      {
+        "feature": "fullmicro_ask_14_log_qty",
+        "direction": "lower_in_true_local",
+        "weight": 0.05607385811467441
+      },
+      {
+        "feature": "fullmicro_ask_19_log_qty",
+        "direction": "higher_in_true_local",
+        "weight": 0.054518950437317804
+      },
+      {
+        "feature": "distance_high_60m_bps",
+        "direction": "lower_in_true_local",
+        "weight": 0.05434782608695654
+      },
+      {
+        "feature": "fullmicro_ask_25_log_qty",
+        "direction": "lower_in_true_local",
+        "weight": 0.05422740524781344
+      },
+      {
+        "feature": "fullmicro_ask_13_log_qty",
+        "direction": "higher_in_true_local",
+        "weight": 0.05413022351797869
+      },
+      {
+        "feature": "fullmicro_ask_05_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.05335276967930036
+      },
+      {
+        "feature": "fullmicro_bid_22_log_qty",
+        "direction": "higher_in_true_local",
+        "weight": 0.052186588921282806
+      },
+      {
+        "feature": "fullmicro_bid_43_log_qty",
+        "direction": "higher_in_true_local",
+        "weight": 0.051409135082604474
+      },
+      {
+        "feature": "fullmicro_bid_28_log_qty",
+        "direction": "lower_in_true_local",
+        "weight": 0.05102040816326531
+      },
+      {
+        "feature": "fullmicro_bid_01_log_qty",
+        "direction": "higher_in_true_local",
+        "weight": 0.05014577259475206
+      },
+      {
+        "feature": "fullmicro_ticker_price_change_percent",
+        "direction": "lower_in_true_local",
+        "weight": 0.049076773566569476
+      },
+      {
+        "feature": "position_6h",
+        "direction": "higher_in_true_local",
+        "weight": 0.048882410106899865
+      },
+      {
+        "feature": "fullmicro_ask_42_log_qty",
+        "direction": "higher_in_true_local",
+        "weight": 0.047826086956521685
+      },
+      {
+        "feature": "fullmicro_bid_05_log_qty",
+        "direction": "higher_in_true_local",
+        "weight": 0.04771622934888242
+      },
+      {
+        "feature": "fullmicro_ask_08_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.045966958211856146
+      },
+      {
+        "feature": "fullmicro_ask_07_log_qty",
+        "direction": "higher_in_true_local",
+        "weight": 0.04565217391304344
+      },
+      {
+        "feature": "fullmicro_ask_07_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.045383867832847424
+      },
+      {
+        "feature": "fullmicro_ask_06_dist_bps",
+        "direction": "higher_in_true_local",
+        "weight": 0.04344023323615165
+      },
+      {
+        "feature": "ret_180s",
+        "direction": "higher_in_true_local",
+        "weight": 0.04305150631681243
+      },
+      {
+        "feature": "rev_ret_180s",
+        "direction": "lower_in_true_local",
+        "weight": 0.04305150631681243
+      }
+    ]
+  }
+}
