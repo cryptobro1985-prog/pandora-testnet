@@ -18,7 +18,7 @@ permissions:
 
 concurrency:
   group: hype-local-only
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   HYPE_REST_RELAY_URL: "https://hype-rest-relay.onrender.com"
@@ -233,6 +233,7 @@ jobs:
           fi
 
           echo "capture_rc=${CAP_RC} local_rc=${LOCAL_RC}"
+          test "${CAP_RC}" -eq 0
           test "${LOCAL_RC}" -eq 0
           test -s local_cp/LOCAL_ONLY_STATUS.json
           test -s local_cp/local_only_model.pkl
@@ -243,6 +244,47 @@ jobs:
             --labels local_cp/LOCAL_LIVE_LABELS.jsonl \
             --output local_cp/LIVE_DISCOVERY_RELATIONSHIPS.json
           test -s local_cp/LIVE_DISCOVERY_RELATIONSHIPS.json
+
+      - name: Write continuous-learning manifest
+        run: |
+          python - <<'PY'
+          import json,os,time
+          from pathlib import Path
+          from research.hype_local_only.model import LocalOnlyModel
+          cp=Path("local_cp")
+          q=LocalOnlyModel.load(cp/"local_only_model.pkl")
+          s=json.loads((cp/"LOCAL_ONLY_STATUS.json").read_text())
+          live_labels_path=cp/"LOCAL_LIVE_LABELS.jsonl"
+          live_rows=sum(1 for line in live_labels_path.open(encoding="utf-8") if line.strip()) if live_labels_path.exists() else 0
+          cap_files=list(Path("live_capture").rglob("*.jsonl"))
+          cap_bytes=sum(p.stat().st_size for p in cap_files if p.exists())
+          out={
+            "status":"CONTINUOUS_LEARNING",
+            "run_id":os.getenv("GITHUB_RUN_ID"),
+            "sha":os.getenv("GITHUB_SHA"),
+            "generated_ts_ms":int(time.time()*1000),
+            "research_only":True,
+            "real_orders":False,
+            "teacher":"H1_L6_K2_STRICT",
+            "task":"market state -> LOCAL_LOW / LOCAL_HIGH / NONE",
+            "historical_labels":sum(q.labels.values())-int(q.live_labels),
+            "live_matured_labels":int(q.live_labels),
+            "live_label_rows_persisted":live_rows,
+            "pending_labels":s.get("pending_labels"),
+            "expected_side":s.get("expected_side"),
+            "last_teacher_local":s.get("last_teacher_local"),
+            "structure_48h":s.get("structure_48h"),
+            "base_input_points_seen":s.get("seen_input_count"),
+            "dynamic_feature_names_seen":(s.get("feature_contract") or {}).get("feature_names_seen_count"),
+            "max_features_in_one_state":(s.get("feature_contract") or {}).get("max_features_in_one_state"),
+            "discovery_feature_count":s.get("discovery_feature_count"),
+            "raw_capture_jsonl_files":len(cap_files),
+            "raw_capture_bytes":cap_bytes,
+            "checkpoint_files":[p.name for p in cp.iterdir() if p.is_file()],
+          }
+          (cp/"CONTINUOUS_LEARNING_MANIFEST.json").write_text(json.dumps(out,indent=2,ensure_ascii=False)+"\n")
+          print(json.dumps(out,indent=2,ensure_ascii=False))
+          PY
 
       - name: Validate Local-only state
         run: |
@@ -259,6 +301,22 @@ jobs:
           assert s["real_orders"] is False
           assert s["feature_contract"]["point_count"]==116
           PY
+
+      - name: Upload raw 24x7 market evidence for this cycle
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-LOCAL-RAW-${{ github.run_id }}
+          path: |
+            live_capture/**/HYPE_live_raw_frames.jsonl
+            live_capture/**/HYPE_live_microstructure_1s.jsonl
+            live_capture/**/HYPE_live_liquidations.jsonl
+            live_capture/**/HYPE_market_context.jsonl
+            live_capture/**/HYPE_structural_context_1m.jsonl
+            live_capture/**/RESILIENT_CAPTURE_MANIFEST.json
+            live_capture/**/CHUNK_STATUS.json
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 6
 
       - name: Upload canonical Local-only checkpoint
         uses: actions/upload-artifact@v4
@@ -281,6 +339,7 @@ jobs:
             local_cp/LOCAL_EVENTS.jsonl
             local_cp/LOCAL_LIVE_LABELS.jsonl
             local_cp/LIVE_DISCOVERY_RELATIONSHIPS.json
+            local_cp/CONTINUOUS_LEARNING_MANIFEST.json
           if-no-files-found: warn
           retention-days: 30
           compression-level: 6
