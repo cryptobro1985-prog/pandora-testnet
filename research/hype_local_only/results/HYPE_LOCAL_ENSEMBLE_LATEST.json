@@ -243,38 +243,40 @@
   "experts": [
     "Fin-JEPA sequential",
     "Quant-style tabular MLP",
-    "River LocalOnly logistic"
+    "River LocalOnly logistic",
+    "ExtraTrees side-stage nonlinear"
   ],
   "fin_jepa_validation_loss": 0.3297695964574814,
   "ensemble": {
     "weights": {
-      "fin_jepa": 0.75,
-      "quant_local": 0.25,
-      "river_local": 0.0
+      "fin_jepa": 0,
+      "quant_local": 0,
+      "river_local": 0.5,
+      "extra_trees": 0.5
     },
-    "threshold": 0.44999999999999996,
+    "threshold": 0.39999999999999997,
     "validation": {
       "candidates": 137,
       "reference_true": 9,
-      "accepted": 18,
-      "tp": 5,
-      "fp": 13,
-      "fn": 4,
-      "precision": 0.2777777777777778,
-      "recall": 0.5555555555555556,
-      "f1": 0.3703703703703704,
-      "median_delay_s": 60.0
+      "accepted": 26,
+      "tp": 7,
+      "fp": 19,
+      "fn": 2,
+      "precision": 0.2692307692307692,
+      "recall": 0.7777777777777778,
+      "f1": 0.39999999999999997,
+      "median_delay_s": 300.0
     },
     "oos": {
       "candidates": 253,
       "reference_true": 20,
-      "accepted": 63,
-      "tp": 7,
-      "fp": 56,
-      "fn": 13,
-      "precision": 0.1111111111111111,
-      "recall": 0.35,
-      "f1": 0.1686746987951807,
+      "accepted": 151,
+      "tp": 15,
+      "fp": 136,
+      "fn": 5,
+      "precision": 0.09933774834437085,
+      "recall": 0.75,
+      "f1": 0.17543859649122806,
       "median_delay_s": 60.0
     }
   },
@@ -317,6 +319,19 @@
       "f1": 0.18888888888888888,
       "median_delay_s": 60.0,
       "threshold_for_diagnostic_only": 0.49999999999999994
+    },
+    "extra_trees": {
+      "candidates": 253,
+      "reference_true": 20,
+      "accepted": 36,
+      "tp": 9,
+      "fp": 27,
+      "fn": 11,
+      "precision": 0.25,
+      "recall": 0.45,
+      "f1": 0.32142857142857145,
+      "median_delay_s": 180.0,
+      "threshold_for_diagnostic_only": 0.35
     }
   },
   "oos_baseline_true_candidate_rate": 0.07905138339920949,
