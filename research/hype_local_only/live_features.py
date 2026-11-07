@@ -1,6 +1,7 @@
 from __future__ import annotations
 import math,statistics
 from typing import Any
+from research.hype_local_only.feature_discovery import discover_live_features
 
 WINDOWS=(5,15,30,60,180,300)
 
@@ -99,6 +100,10 @@ def live_to_archive_features(side:str,age_s:float,extreme_price:float,price:floa
         d=b-a;s=1 if d>0 else -1 if d<0 else 0
         if s:signs.append(s)
     out["reversal_attempts"]=float(sum(a!=b for a,b in zip(signs,signs[1:])))
+
+    # Discovery layer: indicators, structure/patterns, L50, liquidations,
+    # OI/flow/price interactions. All values are causal at this timestamp.
+    out.update(discover_live_features(side,price,x,state))
 
     # Preserve every live-only causal input as a separate namespace. Historical
     # training has no weight for these dimensions; they become learnable only
