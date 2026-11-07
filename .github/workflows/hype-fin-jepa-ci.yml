@@ -1,0 +1,26 @@
+name: HYPE Fin-JEPA isolated adapter CI
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/hype-h1-local-v5-oi-microstructure-20261104]
+    paths:
+      - 'research/hype_local_only/fin_jepa_adapter.py'
+      - 'research/hype_local_only/test_fin_jepa_adapter.py'
+      - '.github/workflows/hype-fin-jepa-ci.yml'
+permissions:
+  contents: read
+jobs:
+  fin-jepa-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install CPU PyTorch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Compile and run isolated tests
+        run: |
+          python -m py_compile research/hype_local_only/fin_jepa_adapter.py
+          python -m unittest research.hype_local_only.test_fin_jepa_adapter -v
