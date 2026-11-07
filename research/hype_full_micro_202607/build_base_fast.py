@@ -11,8 +11,8 @@ def main():
     args=ap.parse_args()
 
     # Same H1 teacher/candidate logic as the audited 30D pipeline, but on Jul-Aug.
-    base.START=datetime(2026,7,12,17,tzinfo=timezone.utc)
-    base.DISCOVERY=datetime(2026,7,16,tzinfo=timezone.utc)
+    base.START=datetime(2026,7,13,0,tzinfo=timezone.utc)
+    base.DISCOVERY=datetime(2026,7,17,tzinfo=timezone.utc)
     base.TRAIN_END=datetime(2026,7,29,tzinfo=timezone.utc)
     base.OOS=datetime(2026,8,2,tzinfo=timezone.utc)
     base.END=datetime(2026,8,7,tzinfo=timezone.utc)
