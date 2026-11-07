@@ -121,12 +121,12 @@ def main():
     models={};report={"split":{"train_end_ms":a,"valid_end_ms":b},"features":len(names),"rows":{"train":len(train),"valid":len(valid),"oos":len(oos)},"models":{},"relationships":feature_relationships(train+valid,names)}
     for kind in ("extra","histgb"):
         m,th,vm,om=fit_one(train,valid,oos,names,kind);models[kind]=m
-        ready=bool(om["accepted"]>=5 and om["tp"]>=5 and om["precision"]>=.90 and om["recall"]>=.30)
+        ready=bool(om["accepted"]>=5 and om["tp"]>=5 and om["precision"]>=.95 and om["recall"]>=.30)
         report["models"][kind]={"threshold":th,"validation":vm,"oos":om,
-                              "holdout_90pct_gate":{"passed":ready,"precision_min":.90,"recall_min":.30,"tp_min":5,"accepted_min":5}}
-    report["overall_90pct_gate"]={
-        "passed":any(v["holdout_90pct_gate"]["passed"] for v in report["models"].values()),
-        "meaning":"research readiness only; not a profit guarantee or future-performance guarantee"
+                              "holdout_95pct_gate":{"passed":ready,"precision_min":.95,"recall_min":.30,"tp_min":5,"accepted_min":5}}
+    report["overall_95pct_gate"]={
+        "passed":any(v["holdout_95pct_gate"]["passed"] for v in report["models"].values()),
+        "meaning":"research precision gate on frozen holdout only; not a profit guarantee or future-performance guarantee"
     }
     # final refit on all data only after OOS report is frozen
     full={}
