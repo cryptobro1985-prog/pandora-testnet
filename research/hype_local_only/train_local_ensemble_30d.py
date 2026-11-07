@@ -26,6 +26,7 @@ from sklearn.ensemble import ExtraTreesClassifier
 from research.hype_local_only.fin_jepa_adapter import HypeFinJEPA,validate_scalar_schema
 from research.hype_local_only.model import LocalOnlyModel,STAGES
 from research.hype_local_only.h1_teacher_context import load_minutes,build_index,causal_h1_features
+from research.hype_local_only.feature_discovery import scalar_interactions,historical_indicator_features
 from research.hype_quant.feature_contract import POINTS,INPUT_IDS,TARGET_IDS,METADATA_IDS
 
 TRAIN_END=1792713600000   # 2026-10-23T00:00:00Z
@@ -372,9 +373,13 @@ def main():
     rows=load_rows(args.snapshots)
     all_teacher,finalized_teacher=load_teacher_labels(args.labels_gz)
     teacher_coverage=apply_teacher(rows,finalized_teacher)
-    minutes=load_minutes(args.compact_1m); minute_ends=build_index(minutes)
+    minutes=load_minutes(args.compact_1m)
+    h1_index=build_index(minutes)
+    minute_end_times=[int(z["bar_end_ms"]) for z in minutes]
     for r in rows:
-        r["features"].update(causal_h1_features(minutes,minute_ends,int(r["snapshot_ts_ms"]),r["side"],float(r["extreme_price"])))
+        r["features"].update(causal_h1_features(minutes,h1_index,int(r["snapshot_ts_ms"]),r["side"],float(r["extreme_price"])))
+        r["features"].update(historical_indicator_features(minutes,minute_end_times,int(r["snapshot_ts_ms"]),r["side"]))
+        r["features"].update({"discovery__"+k:float(v) for k,v in scalar_interactions(r["features"],r["side"]).items() if finite(v)})
     names=schema_from_train(rows)
     med,scale=robust_norm(rows,names)
     samples=build_samples(rows,names,med,scale)
