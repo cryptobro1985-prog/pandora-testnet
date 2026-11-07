@@ -142,6 +142,13 @@ jobs:
           PY
           fi
 
+          if test -s local_cp/LOCAL_LIVE_LABELS.recent.jsonl.gz && ! test -s local_cp/LOCAL_LIVE_LABELS.jsonl; then
+            gzip -cd local_cp/LOCAL_LIVE_LABELS.recent.jsonl.gz > local_cp/LOCAL_LIVE_LABELS.jsonl
+          fi
+          if test -s local_cp/LOCAL_EVENTS.recent.jsonl.gz && ! test -s local_cp/LOCAL_EVENTS.jsonl; then
+            gzip -cd local_cp/LOCAL_EVENTS.recent.jsonl.gz > local_cp/LOCAL_EVENTS.jsonl
+          fi
+
           if test -s local_cp/local_only_model.pkl && test -s local_cp/LOCAL_RELATIONSHIP_MEMORY.json; then
             echo "found=1" >> "${GITHUB_OUTPUT}"
           else
@@ -302,30 +309,57 @@ jobs:
           assert s["feature_contract"]["point_count"]==116
           PY
 
+      - name: Compact learner logs and raw market evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          if test -s local_cp/LOCAL_EVENTS.jsonl; then
+            tail -n 5000 local_cp/LOCAL_EVENTS.jsonl > local_cp/LOCAL_EVENTS.recent.jsonl
+            gzip -9 -f local_cp/LOCAL_EVENTS.recent.jsonl
+          fi
+          if test -s local_cp/LOCAL_LIVE_LABELS.jsonl; then
+            tail -n 20000 local_cp/LOCAL_LIVE_LABELS.jsonl > local_cp/LOCAL_LIVE_LABELS.recent.jsonl
+            gzip -9 -f local_cp/LOCAL_LIVE_LABELS.recent.jsonl
+          fi
+          find live_capture -type f -name '*.jsonl' -size +0c -print0 | xargs -0 -r -n1 gzip -9
+          find live_capture -type f -name '*.log' -size +0c -print0 | xargs -0 -r -n1 gzip -9
+          du -sh local_cp live_capture || true
+
       - name: Upload raw 24x7 market evidence for this cycle
         uses: actions/upload-artifact@v4
         with:
           name: HYPE-LOCAL-RAW-${{ github.run_id }}
           path: |
-            live_capture/**/HYPE_live_raw_frames.jsonl
-            live_capture/**/HYPE_live_microstructure_1s.jsonl
-            live_capture/**/HYPE_live_liquidations.jsonl
-            live_capture/**/HYPE_market_context.jsonl
-            live_capture/**/HYPE_structural_context_1m.jsonl
+            live_capture/**/HYPE_live_raw_frames.jsonl.gz
+            live_capture/**/HYPE_live_microstructure_1s.jsonl.gz
+            live_capture/**/HYPE_live_liquidations.jsonl.gz
+            live_capture/**/HYPE_market_context.jsonl.gz
+            live_capture/**/HYPE_structural_context_1m.jsonl.gz
             live_capture/**/RESILIENT_CAPTURE_MANIFEST.json
             live_capture/**/CHUNK_STATUS.json
           if-no-files-found: warn
-          retention-days: 14
-          compression-level: 6
+          retention-days: 3
+          compression-level: 0
 
       - name: Upload canonical Local-only checkpoint
         uses: actions/upload-artifact@v4
         with:
           name: HYPE-LOCAL-ONLY-CHECKPOINT
-          path: local_cp/**
-          if-no-files-found: error
-          retention-days: 90
-          compression-level: 0
+          path: |
+            local_cp/local_only_model.pkl
+            local_cp/feature_state.pkl
+            local_cp/local_runtime.pkl
+            local_cp/LOCAL_ONLY_STATUS.json
+            local_cp/LOCAL_RELATIONSHIP_MEMORY.json
+            local_cp/LIVE_DISCOVERY_RELATIONSHIPS.json
+            local_cp/HISTORICAL_TRAINING_REPORT.json
+            local_cp/HISTORICAL_GAP_PROMOTION.json
+            local_cp/CONTINUOUS_LEARNING_MANIFEST.json
+            local_cp/LOCAL_EVENTS.recent.jsonl.gz
+            local_cp/LOCAL_LIVE_LABELS.recent.jsonl.gz
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 9
 
       - name: Upload live evidence snapshot
         uses: actions/upload-artifact@v4
@@ -336,13 +370,39 @@ jobs:
             local_cp/CORTEX_LOCAL_ONLY_STATUS.json
             local_cp/HISTORICAL_TRAINING_REPORT.json
             local_cp/LOCAL_RELATIONSHIP_MEMORY.json
-            local_cp/LOCAL_EVENTS.jsonl
-            local_cp/LOCAL_LIVE_LABELS.jsonl
+            local_cp/LOCAL_EVENTS.recent.jsonl.gz
+            local_cp/LOCAL_LIVE_LABELS.recent.jsonl.gz
             local_cp/LIVE_DISCOVERY_RELATIONSHIPS.json
             local_cp/CONTINUOUS_LEARNING_MANIFEST.json
           if-no-files-found: warn
-          retention-days: 30
-          compression-level: 6
+          retention-days: 7
+          compression-level: 9
+
+      - name: Prune old Local research artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os,subprocess
+          repo=os.environ["GITHUB_REPOSITORY"]
+          keep={"HYPE-LOCAL-ONLY-CHECKPOINT":3}
+          prefixes={"HYPE-LOCAL-RAW-":12,"HYPE-LOCAL-ONLY-EVIDENCE-":12}
+          raw=subprocess.check_output(["gh","api",f"repos/{repo}/actions/artifacts?per_page=100"],text=True)
+          arts=json.loads(raw).get("artifacts",[])
+          groups={}
+          for a in arts:
+              name=a.get("name","")
+              key=name if name in keep else next((p for p in prefixes if name.startswith(p)),None)
+              if key: groups.setdefault(key,[]).append(a)
+          for key,items in groups.items():
+              limit=keep.get(key,prefixes.get(key,0))
+              items=sorted(items,key=lambda x:x.get("created_at",""),reverse=True)
+              for a in items[limit:]:
+                  subprocess.run(["gh","api","--method","DELETE",f"repos/{repo}/actions/artifacts/{a['id']}"],check=False)
+                  print("deleted",key,a["id"])
+          PY
 
       - name: Continue Local-only learning loop
         if: success()
