@@ -1,7 +1,7 @@
 {
   "schema": "pandora-offline-data-integrity-v1",
   "valid": true,
-  "files_checked": 68,
+  "files_checked": 78,
   "gzip_files_checked": 11,
   "manifest_entries_checked": 11,
   "errors": [],
@@ -17,8 +17,8 @@
   "serialization": [
     {
       "path": "BUNDLE_MANIFEST.json",
-      "bytes": 11439,
-      "sha256": "7c0ead4ca4db28430c7f51b1c1093ff0b7f759358ab9ad206afb29da4806c3c2",
+      "bytes": 13243,
+      "sha256": "f3e033166020075e8e3f3b9f3e6919fb268dfea2712b7873579b7742c1be7ff9",
       "json_type": "dict",
       "valid": true
     },
@@ -68,6 +68,76 @@
       "path": "artifacts/enriched_pretrain_rejected_or_candidate/PROMOTION.json",
       "bytes": 3805,
       "sha256": "9ff5610902dcefc3d5405cd2653aac699d33f34d54f56862fc541ba997f9cd90",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/full_history_research/ANALYZER_SMOKE.json",
+      "bytes": 10005,
+      "sha256": "8272d63e3331990df7bffa5c62f762d6d62431b904b461c77deeed6193bc7257",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/full_history_research/CASE_MEMORY_SEED.json",
+      "bytes": 159,
+      "sha256": "f1a68506fbd91ac2b3ae4d5b01ca800967aefe2f5cc068690d0953facb808004",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/full_history_research/FEATURE_COVERAGE.json",
+      "bytes": 3603,
+      "sha256": "c527b2376d4ee35c48fab246a39add8611c415f3f76431dfc46a7f0ece216630",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/full_history_research/FEATURE_METADATA.json",
+      "bytes": 6297,
+      "sha256": "1b63984e97ef43b784037f24b0a69f76fee26e4666da557b6f317a7dce85eda7",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/full_history_research/FULL_HISTORY_RESULT.json",
+      "bytes": 55086,
+      "sha256": "a88572357cbce76cc8cd098ed5c5772e20113c00b07ba47a0fe547a5b95b7e71",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/full_history_research/JEPA_LATENT_CACHE.json",
+      "bytes": 159,
+      "sha256": "f04b53aa771b51099ff7888cf8a258263ea1e054dff00bc54ebe1e681de305bb",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/full_history_research/PLAN.json",
+      "bytes": 1501,
+      "sha256": "4cefa8e8732797553fe3324d8f7465c87ce6280b0c170841806e65d71393221e",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/full_history_research/TEACHER_CLOCK_REPLAY.json",
+      "bytes": 292,
+      "sha256": "9f329c06a52e7fe48a19d83f024cf43fce495912f852567faaf659313cfbcccc",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/full_history_research/event_memory/RUNTIME_CURRENT.json",
+      "bytes": 85,
+      "sha256": "73e19ce2ca7e4e5ae606c9a0fb5d1c20b33e0a38ba5a3504840779f73f7906c8",
+      "json_type": "dict",
+      "valid": true
+    },
+    {
+      "path": "artifacts/full_history_research/event_memory/runtime_generations/01794036795669518129-a24e80760d/manifest.json",
+      "bytes": 179,
+      "sha256": "fe9781e8537007d44ec97549add84664f0ceb100fc170ebb5308be50510c88e8",
       "json_type": "dict",
       "valid": true
     },
@@ -487,7 +557,7 @@
     {
       "path": "validation/current/REPORT.json",
       "bytes": 2266,
-      "sha256": "30bd44a239167afed4a64d9abb005995bcf5e1b64657160e7b5b5a3e39ee8a26",
+      "sha256": "47fcc84c565a4835c9b333b6931b7c43744e0413e89e54c3686f7e28c2bf9f2c",
       "json_type": "dict",
       "valid": true
     }

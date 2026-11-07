@@ -5,6 +5,7 @@ import argparse,hashlib,json,zipfile
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
+CACHE_EXCLUDES={'artifacts/full_history_research/features.npz','artifacts/full_history_research/frozen_jepa_latents.npz'}
 
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -12,8 +13,8 @@ def digest(path):
 def included():
     return sorted(p for p in ROOT.rglob('*') if p.is_file() and
                   not set(p.relative_to(ROOT).parts).intersection({'.venv','__pycache__','.pytest_cache','.git'})
-                  and p.suffix not in {'.pyc','.pyo'}
-                  and p.name not in {'.local_writer.lock','.cortex_writer.lock','.jepa_writer.lock'})
+                  and p.suffix not in {'.pyc','.pyo'} and str(p.relative_to(ROOT)) not in CACHE_EXCLUDES
+                  and p.name not in {'.local_writer.lock','.cortex_writer.lock','.jepa_writer.lock','.full_history_writer.lock','.case_writer.lock','.analyzer_writer.lock'})
 
 def main():
     ap=argparse.ArgumentParser(description=__doc__)

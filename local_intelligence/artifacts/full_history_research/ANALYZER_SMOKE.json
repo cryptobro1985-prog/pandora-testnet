@@ -1,0 +1,305 @@
+{
+  "as_of_ms": 1793088241000,
+  "candidates": [],
+  "confidence_requirement": "independent forward precision/recall gate not met",
+  "cortex_evidence": {
+    "candidate_scores": {
+      "HIGH": 0.006383691889238904,
+      "LOW": 0.0
+    },
+    "requires_more_evidence": true,
+    "role": "numeric evidence and error analysis; no authority to promote"
+  },
+  "expected_side": null,
+  "feature_coverage": {
+    "actual_source_clocks": {
+      "funding": {
+        "assumed_available_at_ms": 1793088001000,
+        "historical_receipt_unknown": true,
+        "observed": true,
+        "received_ts_ms": null,
+        "source_end_ms": 1793088000000,
+        "source_ts_ms": 1793088000000,
+        "stale": false
+      },
+      "index": {
+        "assumed_available_at_ms": 1793088241000,
+        "historical_receipt_unknown": true,
+        "observed": true,
+        "received_ts_ms": null,
+        "source_end_ms": 1793088240000,
+        "source_ts_ms": 1793088180000,
+        "stale": false
+      },
+      "mark": {
+        "assumed_available_at_ms": 1793088241000,
+        "historical_receipt_unknown": true,
+        "observed": true,
+        "received_ts_ms": null,
+        "source_end_ms": 1793088240000,
+        "source_ts_ms": 1793088180000,
+        "stale": false
+      },
+      "minutes": {
+        "assumed_available_at_ms": 1793088240000,
+        "historical_receipt_unknown": true,
+        "received_ts_ms": null,
+        "source_end_ms": 1793088240000,
+        "source_start_ms": 1793088180000,
+        "stale": false
+      },
+      "oi": {
+        "assumed_available_at_ms": 1793088001000,
+        "historical_receipt_unknown": true,
+        "observed": true,
+        "received_ts_ms": null,
+        "source_end_ms": 1793088000000,
+        "source_ts_ms": 1793088000000,
+        "stale": false
+      }
+    },
+    "allowed_predictive_points": 86,
+    "contract_points": 116,
+    "live_only_untrained": [
+      "L50",
+      "liquidation stream",
+      "receive-latency"
+    ],
+    "provided_predictive_points": 0,
+    "target_fields_excluded": 0,
+    "trained_source_families": [
+      "completed candles",
+      "executed flow/counts",
+      "mark/index",
+      "OI",
+      "funding"
+    ]
+  },
+  "high_confidence_decision": null,
+  "last_teacher": null,
+  "missing_trained_sources": [],
+  "model_role": "evaluated_historical_frozen",
+  "real_orders": false,
+  "research_only": true,
+  "scores": {
+    "HIGH": {
+      "accepted_research_candidate": false,
+      "calibration_scope": "evaluated_historical_frozen",
+      "candidate": {
+        "age_s": 19.224,
+        "candidate_id": "HIGH:1793088220776:78.328",
+        "candidate_ts_ms": 1793088220776,
+        "extreme_interval_end_ms": 1793088240000,
+        "extreme_interval_start_ms": 1793088180000,
+        "extreme_price": 78.328,
+        "extreme_time_exact": true,
+        "hour_ms": 1793088000000,
+        "side": "HIGH"
+      },
+      "case_memory": {
+        "cases": [
+          {
+            "distance": 2.608143365205224,
+            "event_key": "HIGH:1791946800000",
+            "extreme_price": 82.754,
+            "id": "HIGH:1791948824400:82.754:1",
+            "label_available_ms": 1792011600000,
+            "local_true": true,
+            "prediction_ts_ms": 1791948840000,
+            "side": "HIGH",
+            "strict_label_id": 26
+          },
+          {
+            "distance": 2.700346533931903,
+            "event_key": "HIGH:1792141200000",
+            "extreme_price": 81.671,
+            "id": "HIGH:1792141600841:81.671:0",
+            "label_available_ms": 1792152000000,
+            "local_true": false,
+            "prediction_ts_ms": 1792141620000,
+            "side": "HIGH",
+            "strict_label_id": null
+          },
+          {
+            "distance": 2.7323811848958335,
+            "event_key": "HIGH:1792101600000",
+            "extreme_price": 82.451,
+            "id": "HIGH:1792101645168:82.451:0",
+            "label_available_ms": 1792112400000,
+            "local_true": false,
+            "prediction_ts_ms": 1792101660000,
+            "side": "HIGH",
+            "strict_label_id": null
+          },
+          {
+            "distance": 2.7760820531133397,
+            "event_key": "HIGH:1792393200000",
+            "extreme_price": 80.38,
+            "id": "HIGH:1792393270878:80.38:0",
+            "label_available_ms": 1792404000000,
+            "local_true": false,
+            "prediction_ts_ms": 1792393320000,
+            "side": "HIGH",
+            "strict_label_id": null
+          },
+          {
+            "distance": 2.7869047098491917,
+            "event_key": "HIGH:1791781200000",
+            "extreme_price": 87.94,
+            "id": "HIGH:1791781213290:87.94:0",
+            "label_available_ms": 1791792000000,
+            "local_true": false,
+            "prediction_ts_ms": 1791781260000,
+            "side": "HIGH",
+            "strict_label_id": null
+          },
+          {
+            "distance": 2.7927947542560636,
+            "event_key": "HIGH:1792882800000",
+            "extreme_price": 76.618,
+            "id": "HIGH:1792884713208:76.618:0",
+            "label_available_ms": 1792893600000,
+            "local_true": false,
+            "prediction_ts_ms": 1792884720000,
+            "side": "HIGH",
+            "strict_label_id": null
+          },
+          {
+            "distance": 2.798246620899409,
+            "event_key": "HIGH:1792447200000",
+            "extreme_price": 79.047,
+            "id": "HIGH:1792447659288:79.047:0",
+            "label_available_ms": 1792458000000,
+            "local_true": false,
+            "prediction_ts_ms": 1792447680000,
+            "side": "HIGH",
+            "strict_label_id": null
+          },
+          {
+            "distance": 2.877839501224347,
+            "event_key": "HIGH:1792717200000",
+            "extreme_price": 78.072,
+            "id": "HIGH:1792720010338:78.072:0",
+            "label_available_ms": 1792728000000,
+            "local_true": false,
+            "prediction_ts_ms": 1792720020000,
+            "side": "HIGH",
+            "strict_label_id": null
+          },
+          {
+            "distance": 2.8809735502176617,
+            "event_key": "HIGH:1793016000000",
+            "extreme_price": 77.648,
+            "id": "HIGH:1793017775068:77.648:0",
+            "label_available_ms": 1793026800000,
+            "local_true": false,
+            "prediction_ts_ms": 1793017800000,
+            "side": "HIGH",
+            "strict_label_id": null
+          },
+          {
+            "distance": 2.887446920670087,
+            "event_key": "HIGH:1791532800000",
+            "extreme_price": 86.11,
+            "id": "HIGH:1791533367041:86.11:0",
+            "label_available_ms": 1791543600000,
+            "local_true": false,
+            "prediction_ts_ms": 1791533400000,
+            "side": "HIGH",
+            "strict_label_id": null
+          },
+          {
+            "distance": 2.8953951555698074,
+            "event_key": "HIGH:1792220400000",
+            "extreme_price": 80.184,
+            "id": "HIGH:1792222118637:80.184:0",
+            "label_available_ms": 1792231200000,
+            "local_true": false,
+            "prediction_ts_ms": 1792222140000,
+            "side": "HIGH",
+            "strict_label_id": null
+          },
+          {
+            "distance": 2.906161332011816,
+            "event_key": "HIGH:1791774000000",
+            "extreme_price": 87.22,
+            "id": "HIGH:1791774943975:87.22:0",
+            "label_available_ms": 1791784800000,
+            "local_true": false,
+            "prediction_ts_ms": 1791774960000,
+            "side": "HIGH",
+            "strict_label_id": null
+          },
+          {
+            "distance": 2.9204156220848883,
+            "event_key": "HIGH:1791284400000",
+            "extreme_price": 93.69,
+            "id": "HIGH:1791285572039:93.69:0",
+            "label_available_ms": 1791295200000,
+            "local_true": false,
+            "prediction_ts_ms": 1791285600000,
+            "side": "HIGH",
+            "strict_label_id": null
+          },
+          {
+            "distance": 2.9297713094682836,
+            "event_key": "HIGH:1791421200000",
+            "extreme_price": 88.77,
+            "id": "HIGH:1791421539770:88.77:0",
+            "label_available_ms": 1791432000000,
+            "local_true": false,
+            "prediction_ts_ms": 1791421560000,
+            "side": "HIGH",
+            "strict_label_id": null
+          },
+          {
+            "distance": 2.938242138914801,
+            "event_key": "HIGH:1792389600000",
+            "extreme_price": 80.19,
+            "id": "HIGH:1792391629869:80.19:0",
+            "label_available_ms": 1792400400000,
+            "local_true": false,
+            "prediction_ts_ms": 1792391640000,
+            "side": "HIGH",
+            "strict_label_id": null
+          },
+          {
+            "distance": 2.942509437674907,
+            "event_key": "HIGH:1791777600000",
+            "extreme_price": 87.38,
+            "id": "HIGH:1791777644400:87.38:0",
+            "label_available_ms": 1791788400000,
+            "local_true": false,
+            "prediction_ts_ms": 1791777660000,
+            "side": "HIGH",
+            "strict_label_id": null
+          }
+        ],
+        "empirical_local_rate": 0.0625,
+        "events": 16,
+        "interpretation": "neighbor event frequency, not calibrated forecast confidence",
+        "probability": null,
+        "rate_ci95": [
+          0.01111934476464252,
+          0.28328737570298945
+        ],
+        "state": "PAST_CASE_EVIDENCE"
+      },
+      "high_confidence_validated": false,
+      "probability": 0.006383691889238904,
+      "real_orders": false,
+      "research_only": true,
+      "score": 0.006383691889238904,
+      "side": "HIGH",
+      "state": "CONTINUATION",
+      "threshold": 0.04742739379832519
+    },
+    "LOW": {
+      "probability": null,
+      "research_only": true,
+      "score": 0.0,
+      "state": "CONTINUATION"
+    }
+  },
+  "state": "CONTINUATION"
+}

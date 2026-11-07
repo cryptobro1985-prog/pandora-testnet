@@ -1,0 +1,7 @@
+{
+  "cases": 370,
+  "columns": 201,
+  "normalization_at_query_uses_past_cases_only": true,
+  "unique_positive_locals": 76,
+  "used_all_matured_events": true
+}

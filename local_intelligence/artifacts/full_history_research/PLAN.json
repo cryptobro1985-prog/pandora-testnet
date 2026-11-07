@@ -1,0 +1,23 @@
+{
+  "experiment": "full-saved-history-dense-local-v1",
+  "frozen_before_new_scoring": true,
+  "sources": ["all retained completed minutes", "buy/sell flow and counts", "mark/index", "open interest", "funding"],
+  "target": "finalized alternating H1 L6/K2 extreme observed within the past 300s",
+  "states": "all eligible closed minute states, including background; no old survivor snapshot fitting",
+  "models": ["full_hgb", "full_hgb_jepa"],
+  "heads": ["LOW", "HIGH"],
+  "hgb": {"max_iter": 120, "max_leaf_nodes": 15, "min_samples_leaf": 60, "l2_regularization": 20, "learning_rate": 0.05, "class_weight": "balanced"},
+  "folds": [["2026-10-22", "2026-10-23", "2026-10-23", "2026-10-25"], ["2026-10-23", "2026-10-25", "2026-10-25", "2026-10-27"]],
+  "embargo_hours": 6,
+  "calibration": "separate chronological natural-prevalence Platt fit",
+  "selection": "highest mean validation event F1 across both sides, tie by lower event false count",
+  "thresholds": "per-side validation event F1 only",
+  "historical_holdout": ["2026-10-27", "2026-11-03"],
+  "holdout_warning": "already viewed by older studies; no independent forward claim",
+  "final_fit": "one selected learner on every matured label in all saved 30 days; no independent calibration claim",
+  "old_champion_retraining": false,
+  "promotion": "independent forward gate required; no historical-only activation",
+  "resource_limit": "2 CPU threads, two fixed architectures, no search",
+  "real_orders": false,
+  "monitor_unchanged": true
+}

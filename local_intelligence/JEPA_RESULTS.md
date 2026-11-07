@@ -1,5 +1,8 @@
 # Numeric JEPA: completed bounded experiment
 
+Полный проход по всей сохранённой истории и новый анализатор: [FULL_HISTORY_RESULTS.md](FULL_HISTORY_RESULTS.md).
+
+
 **Champion remains `linear_temporal_ensemble`. JEPA promotion and forward activation are OFF. MONITOR UNCHANGED: YES. Real orders OFF.**
 
 Implemented an independent CPU JEPA:32-unit GRU context encoder;16-dimensional latent; detached EMA target; horizon-conditioned residual predictor; temporal masking and variance/covariance regularization. Context is60 completed minutes, pooled over fast/medium/structural scales; targets are1/3/5 minutes. Total21,352 parameters including EMA. Source ideas/licenses and pinned reference commits: `docs/JEPA_REFERENCES.json`. No external model code/weights copied.

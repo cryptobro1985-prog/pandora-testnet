@@ -1,0 +1,1619 @@
+{
+  "candidate_population": "causal six-completed-H1 extreme, max300s",
+  "comparison_warning": "same dates/teachers, different complete proposal pipelines; historical period previously viewed, not new forward evidence",
+  "dataset": {
+    "HIGH": {
+      "active_states": 2033,
+      "labelled_states": 42535,
+      "positive_events": 38,
+      "positive_states": 190
+    },
+    "LOW": {
+      "active_states": 2442,
+      "labelled_states": 42514,
+      "positive_events": 38,
+      "positive_states": 190
+    }
+  },
+  "dense_minutes_used": true,
+  "elapsed_seconds": 176.3534524359984,
+  "folds": [
+    {
+      "boundaries": [
+        "2026-10-22",
+        "2026-10-23",
+        "2026-10-23",
+        "2026-10-25"
+      ],
+      "models": {
+        "full_hgb": {
+          "metrics": {
+            "HIGH": {
+              "accepted": 4,
+              "deduplication": "first accepted side:hour; all stages share one event",
+              "detection_delay_s": {
+                "p50": 272.898,
+                "p95": 275.71500000000003,
+                "teacher_interval_p50_lower": 240.0,
+                "teacher_interval_p50_upper": 300.0,
+                "timestamp_provenance": "recorded individual-trade extreme timestamp; raw trades not retained"
+              },
+              "f1": 0.6666666666666666,
+              "false_events": 2,
+              "false_signals_per_hour": 0.041666666666666664,
+              "missed_events": 0,
+              "missed_local_rate": 0.0,
+              "precision": 0.5,
+              "precision_ci95": [
+                0.15003898915214947,
+                0.8499610108478506
+              ],
+              "recall": 1.0,
+              "recall_ci95": [
+                0.34238022750665303,
+                1.0
+              ],
+              "teacher_events": 2,
+              "true_events": 2
+            },
+            "LOW": {
+              "accepted": 7,
+              "deduplication": "first accepted side:hour; all stages share one event",
+              "detection_delay_s": {
+                "p50": 50.621,
+                "p95": 50.621,
+                "teacher_interval_p50_lower": 0.0,
+                "teacher_interval_p50_upper": 60.0,
+                "timestamp_provenance": "recorded individual-trade extreme timestamp; raw trades not retained"
+              },
+              "f1": 0.25,
+              "false_events": 6,
+              "false_signals_per_hour": 0.125,
+              "missed_events": 0,
+              "missed_local_rate": 0.0,
+              "precision": 0.14285714285714285,
+              "precision_ci95": [
+                0.02567962434474355,
+                0.5131278292743189
+              ],
+              "recall": 1.0,
+              "recall_ci95": [
+                0.20654931437723745,
+                1.0
+              ],
+              "teacher_events": 1,
+              "true_events": 1
+            },
+            "event": {
+              "accepted": 11,
+              "deduplication": "first accepted side:hour; all stages share one event",
+              "detection_delay_s": {
+                "p50": 269.768,
+                "p95": 275.402,
+                "teacher_interval_p50_lower": 240.0,
+                "teacher_interval_p50_upper": 300.0,
+                "timestamp_provenance": "recorded individual-trade extreme timestamp; raw trades not retained"
+              },
+              "f1": 0.42857142857142855,
+              "false_events": 8,
+              "false_signals_per_hour": 0.16666666666666666,
+              "missed_events": 0,
+              "missed_local_rate": 0.0,
+              "precision": 0.2727272727272727,
+              "precision_ci95": [
+                0.09746059290024889,
+                0.5656453011761291
+              ],
+              "recall": 1.0,
+              "recall_ci95": [
+                0.4385029682449546,
+                1.0
+              ],
+              "teacher_events": 3,
+              "true_events": 3
+            },
+            "per_minute": {
+              "HIGH": {
+                "accuracy": 0.9948433161443871,
+                "brier": 0.0033025261081279685,
+                "calibration_bins": [
+                  {
+                    "low": 0.0,
+                    "mean_probability": 0.000830691303371509,
+                    "n": 2474,
+                    "observed_rate": 0.0004042037186742118
+                  },
+                  {
+                    "low": 0.1,
+                    "mean_probability": 0.14451831132675974,
+                    "n": 13,
+                    "observed_rate": 0.15384615384615385
+                  },
+                  {
+                    "low": 0.2,
+                    "mean_probability": 0.26561617547560706,
+                    "n": 17,
+                    "observed_rate": 0.058823529411764705
+                  },
+                  {
+                    "low": 0.30000000000000004,
+                    "mean_probability": 0.3313407840303437,
+                    "n": 14,
+                    "observed_rate": 0.42857142857142855
+                  },
+                  {
+                    "low": 0.4,
+                    "mean_probability": 0.41791116049693217,
+                    "n": 3,
+                    "observed_rate": 0.0
+                  }
+                ],
+                "ece": 0.0028983854523778425,
+                "f1": 0.23529411764705882,
+                "fn": 8,
+                "fp": 5,
+                "log_loss": 0.01089560886838688,
+                "n": 2521,
+                "pr_auc": 0.27189188262717673,
+                "precision": 0.2857142857142857,
+                "precision_ci95": [
+                  0.08221892400405678,
+                  0.6410655481673808
+                ],
+                "recall": 0.2,
+                "recall_ci95": [
+                  0.05668215145437519,
+                  0.5098375284633583
+                ],
+                "tn": 2506,
+                "tp": 2
+              },
+              "LOW": {
+                "accuracy": 0.9660135945621752,
+                "brier": 0.0058140524382476605,
+                "calibration_bins": [
+                  {
+                    "low": 0.0,
+                    "mean_probability": 0.0009188187420594403,
+                    "n": 2423,
+                    "observed_rate": 0.0020635575732562937
+                  },
+                  {
+                    "low": 0.1,
+                    "mean_probability": 0.14133349020364663,
+                    "n": 39,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.2,
+                    "mean_probability": 0.23481957709252005,
+                    "n": 16,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.30000000000000004,
+                    "mean_probability": 0.3241112016408053,
+                    "n": 8,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.4,
+                    "mean_probability": 0.44962190500325694,
+                    "n": 4,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.5,
+                    "mean_probability": 0.5433882324764868,
+                    "n": 1,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.6000000000000001,
+                    "mean_probability": 0.6628315507210942,
+                    "n": 3,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.7000000000000001,
+                    "mean_probability": 0.7686708818364754,
+                    "n": 1,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.8,
+                    "mean_probability": 0.8400504329974527,
+                    "n": 3,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.9,
+                    "mean_probability": 0.9177551531300047,
+                    "n": 3,
+                    "observed_rate": 0.0
+                  }
+                ],
+                "ece": 0.009999268011759538,
+                "f1": 0.0449438202247191,
+                "fn": 3,
+                "fp": 82,
+                "log_loss": 0.01948166047215147,
+                "n": 2501,
+                "pr_auc": 0.033971819062520225,
+                "precision": 0.023809523809523808,
+                "precision_ci95": [
+                  0.006553902690167361,
+                  0.08271441008569919
+                ],
+                "recall": 0.4,
+                "recall_ci95": [
+                  0.11762077423264783,
+                  0.769275718723987
+                ],
+                "tn": 2414,
+                "tp": 2
+              }
+            },
+            "warning": "minute rows correlated; event recall counts all finalized reference locals"
+          },
+          "partitions": {
+            "HIGH": {
+              "calibration": 1080,
+              "calibration_positive": 0,
+              "max_train_label_available_ms": 1792605600000,
+              "train": 24889,
+              "train_positive": 110,
+              "validation": 2521
+            },
+            "LOW": {
+              "calibration": 1064,
+              "calibration_positive": 0,
+              "max_train_label_available_ms": 1792605600000,
+              "train": 24888,
+              "train_positive": 115,
+              "validation": 2501
+            }
+          },
+          "thresholds": {
+            "HIGH": 0.33483167322756646,
+            "LOW": 0.08534851491976764
+          }
+        },
+        "full_hgb_jepa": {
+          "metrics": {
+            "HIGH": {
+              "accepted": 4,
+              "deduplication": "first accepted side:hour; all stages share one event",
+              "detection_delay_s": {
+                "p50": 242.89799999999997,
+                "p95": 267.08099999999996,
+                "teacher_interval_p50_lower": 210.0,
+                "teacher_interval_p50_upper": 270.0,
+                "timestamp_provenance": "recorded individual-trade extreme timestamp; raw trades not retained"
+              },
+              "f1": 0.6666666666666666,
+              "false_events": 2,
+              "false_signals_per_hour": 0.041666666666666664,
+              "missed_events": 0,
+              "missed_local_rate": 0.0,
+              "precision": 0.5,
+              "precision_ci95": [
+                0.15003898915214947,
+                0.8499610108478506
+              ],
+              "recall": 1.0,
+              "recall_ci95": [
+                0.34238022750665303,
+                1.0
+              ],
+              "teacher_events": 2,
+              "true_events": 2
+            },
+            "LOW": {
+              "accepted": 7,
+              "deduplication": "first accepted side:hour; all stages share one event",
+              "detection_delay_s": {
+                "p50": 290.621,
+                "p95": 290.621,
+                "teacher_interval_p50_lower": 240.0,
+                "teacher_interval_p50_upper": 300.0,
+                "timestamp_provenance": "recorded individual-trade extreme timestamp; raw trades not retained"
+              },
+              "f1": 0.25,
+              "false_events": 6,
+              "false_signals_per_hour": 0.125,
+              "missed_events": 0,
+              "missed_local_rate": 0.0,
+              "precision": 0.14285714285714285,
+              "precision_ci95": [
+                0.02567962434474355,
+                0.5131278292743189
+              ],
+              "recall": 1.0,
+              "recall_ci95": [
+                0.20654931437723745,
+                1.0
+              ],
+              "teacher_events": 1,
+              "true_events": 1
+            },
+            "event": {
+              "accepted": 11,
+              "deduplication": "first accepted side:hour; all stages share one event",
+              "detection_delay_s": {
+                "p50": 269.768,
+                "p95": 288.53569999999996,
+                "teacher_interval_p50_lower": 240.0,
+                "teacher_interval_p50_upper": 300.0,
+                "timestamp_provenance": "recorded individual-trade extreme timestamp; raw trades not retained"
+              },
+              "f1": 0.42857142857142855,
+              "false_events": 8,
+              "false_signals_per_hour": 0.16666666666666666,
+              "missed_events": 0,
+              "missed_local_rate": 0.0,
+              "precision": 0.2727272727272727,
+              "precision_ci95": [
+                0.09746059290024889,
+                0.5656453011761291
+              ],
+              "recall": 1.0,
+              "recall_ci95": [
+                0.4385029682449546,
+                1.0
+              ],
+              "teacher_events": 3,
+              "true_events": 3
+            },
+            "per_minute": {
+              "HIGH": {
+                "accuracy": 0.9936533121777072,
+                "brier": 0.0034206130793250117,
+                "calibration_bins": [
+                  {
+                    "low": 0.0,
+                    "mean_probability": 0.0008211860337320445,
+                    "n": 2476,
+                    "observed_rate": 0.0004038772213247173
+                  },
+                  {
+                    "low": 0.1,
+                    "mean_probability": 0.14527386164687392,
+                    "n": 6,
+                    "observed_rate": 0.3333333333333333
+                  },
+                  {
+                    "low": 0.2,
+                    "mean_probability": 0.2519157612384336,
+                    "n": 21,
+                    "observed_rate": 0.14285714285714285
+                  },
+                  {
+                    "low": 0.30000000000000004,
+                    "mean_probability": 0.34989078432239024,
+                    "n": 17,
+                    "observed_rate": 0.23529411764705882
+                  },
+                  {
+                    "low": 0.5,
+                    "mean_probability": 0.5124341938197404,
+                    "n": 1,
+                    "observed_rate": 0.0
+                  }
+                ],
+                "ece": 0.0027419365184239504,
+                "f1": 0.2,
+                "fn": 8,
+                "fp": 8,
+                "log_loss": 0.01111938408217491,
+                "n": 2521,
+                "pr_auc": 0.24075176801783682,
+                "precision": 0.2,
+                "precision_ci95": [
+                  0.05668215145437519,
+                  0.5098375284633583
+                ],
+                "recall": 0.2,
+                "recall_ci95": [
+                  0.05668215145437519,
+                  0.5098375284633583
+                ],
+                "tn": 2503,
+                "tp": 2
+              },
+              "LOW": {
+                "accuracy": 0.9836065573770492,
+                "brier": 0.004514413439334916,
+                "calibration_bins": [
+                  {
+                    "low": 0.0,
+                    "mean_probability": 0.0008428429369831306,
+                    "n": 2422,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.1,
+                    "mean_probability": 0.14611197375286564,
+                    "n": 45,
+                    "observed_rate": 0.1111111111111111
+                  },
+                  {
+                    "low": 0.2,
+                    "mean_probability": 0.24382882713303441,
+                    "n": 12,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.30000000000000004,
+                    "mean_probability": 0.3306779787696016,
+                    "n": 9,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.4,
+                    "mean_probability": 0.41728181018682203,
+                    "n": 3,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.5,
+                    "mean_probability": 0.5442508809038541,
+                    "n": 3,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.6000000000000001,
+                    "mean_probability": 0.6478778433407189,
+                    "n": 3,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.7000000000000001,
+                    "mean_probability": 0.7423138294793802,
+                    "n": 3,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.9,
+                    "mean_probability": 0.9095623450603937,
+                    "n": 1,
+                    "observed_rate": 0.0
+                  }
+                ],
+                "ece": 0.0069904788418903,
+                "f1": 0.046511627906976744,
+                "fn": 4,
+                "fp": 37,
+                "log_loss": 0.015089614574721476,
+                "n": 2501,
+                "pr_auc": 0.07398646116953514,
+                "precision": 0.02631578947368421,
+                "precision_ci95": [
+                  0.004660587685768783,
+                  0.1349487611595213
+                ],
+                "recall": 0.2,
+                "recall_ci95": [
+                  0.03622410863243014,
+                  0.6244653702374747
+                ],
+                "tn": 2459,
+                "tp": 1
+              }
+            },
+            "warning": "minute rows correlated; event recall counts all finalized reference locals"
+          },
+          "partitions": {
+            "HIGH": {
+              "calibration": 1080,
+              "calibration_positive": 0,
+              "max_train_label_available_ms": 1792605600000,
+              "train": 24889,
+              "train_positive": 110,
+              "validation": 2521
+            },
+            "LOW": {
+              "calibration": 1064,
+              "calibration_positive": 0,
+              "max_train_label_available_ms": 1792605600000,
+              "train": 24888,
+              "train_positive": 115,
+              "validation": 2501
+            }
+          },
+          "thresholds": {
+            "HIGH": 0.35406603067955206,
+            "LOW": 0.17889017548477834
+          }
+        }
+      }
+    },
+    {
+      "boundaries": [
+        "2026-10-23",
+        "2026-10-25",
+        "2026-10-25",
+        "2026-10-27"
+      ],
+      "models": {
+        "full_hgb": {
+          "metrics": {
+            "HIGH": {
+              "accepted": 9,
+              "deduplication": "first accepted side:hour; all stages share one event",
+              "detection_delay_s": {
+                "p50": 241.601,
+                "p95": 241.601,
+                "teacher_interval_p50_lower": 240.0,
+                "teacher_interval_p50_upper": 300.0,
+                "timestamp_provenance": "recorded individual-trade extreme timestamp; raw trades not retained"
+              },
+              "f1": 0.18181818181818182,
+              "false_events": 8,
+              "false_signals_per_hour": 0.16666666666666666,
+              "missed_events": 1,
+              "missed_local_rate": 0.5,
+              "precision": 0.1111111111111111,
+              "precision_ci95": [
+                0.019890887638544907,
+                0.434999705576656
+              ],
+              "recall": 0.5,
+              "recall_ci95": [
+                0.09453120573423074,
+                0.9054687942657693
+              ],
+              "teacher_events": 2,
+              "true_events": 1
+            },
+            "LOW": {
+              "accepted": 4,
+              "deduplication": "first accepted side:hour; all stages share one event",
+              "detection_delay_s": {
+                "p50": 294.858,
+                "p95": 294.858,
+                "teacher_interval_p50_lower": 240.0,
+                "teacher_interval_p50_upper": 300.0,
+                "timestamp_provenance": "recorded individual-trade extreme timestamp; raw trades not retained"
+              },
+              "f1": 0.4,
+              "false_events": 3,
+              "false_signals_per_hour": 0.0625,
+              "missed_events": 0,
+              "missed_local_rate": 0.0,
+              "precision": 0.25,
+              "precision_ci95": [
+                0.04558726080970055,
+                0.6993581574175981
+              ],
+              "recall": 1.0,
+              "recall_ci95": [
+                0.20654931437723745,
+                1.0
+              ],
+              "teacher_events": 1,
+              "true_events": 1
+            },
+            "event": {
+              "accepted": 13,
+              "deduplication": "first accepted side:hour; all stages share one event",
+              "detection_delay_s": {
+                "p50": 268.22950000000003,
+                "p95": 292.19515,
+                "teacher_interval_p50_lower": 240.0,
+                "teacher_interval_p50_upper": 300.0,
+                "timestamp_provenance": "recorded individual-trade extreme timestamp; raw trades not retained"
+              },
+              "f1": 0.25,
+              "false_events": 11,
+              "false_signals_per_hour": 0.22916666666666666,
+              "missed_events": 1,
+              "missed_local_rate": 0.3333333333333333,
+              "precision": 0.15384615384615385,
+              "precision_ci95": [
+                0.043258178358081184,
+                0.4223463101948254
+              ],
+              "recall": 0.6666666666666666,
+              "recall_ci95": [
+                0.2076596008020477,
+                0.9385080552796037
+              ],
+              "teacher_events": 3,
+              "true_events": 2
+            },
+            "per_minute": {
+              "HIGH": {
+                "accuracy": 0.9811093247588425,
+                "brier": 0.005238901577030484,
+                "calibration_bins": [
+                  {
+                    "low": 0.0,
+                    "mean_probability": 0.0013473676264137125,
+                    "n": 2472,
+                    "observed_rate": 0.0040453074433656954
+                  },
+                  {
+                    "low": 0.1,
+                    "mean_probability": 0.14570028921407147,
+                    "n": 8,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.2,
+                    "mean_probability": 0.23734609715730204,
+                    "n": 3,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.4,
+                    "mean_probability": 0.4549994147179449,
+                    "n": 1,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.6000000000000001,
+                    "mean_probability": 0.6599901966117572,
+                    "n": 1,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.7000000000000001,
+                    "mean_probability": 0.7571064043174331,
+                    "n": 1,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.8,
+                    "mean_probability": 0.8710525723640788,
+                    "n": 1,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.9,
+                    "mean_probability": 0.9178473876155537,
+                    "n": 1,
+                    "observed_rate": 0.0
+                  }
+                ],
+                "ece": 0.004906729826493789,
+                "f1": 0.04081632653061224,
+                "fn": 9,
+                "fp": 38,
+                "log_loss": 0.023753498988354892,
+                "n": 2488,
+                "pr_auc": 0.05381780730929476,
+                "precision": 0.02564102564102564,
+                "precision_ci95": [
+                  0.004540703100990098,
+                  0.13180990169850076
+                ],
+                "recall": 0.1,
+                "recall_ci95": [
+                  0.017876213095072896,
+                  0.4041500267952385
+                ],
+                "tn": 2440,
+                "tp": 1
+              },
+              "LOW": {
+                "accuracy": 0.9932432432432432,
+                "brier": 0.0029535494145459503,
+                "calibration_bins": [
+                  {
+                    "low": 0.0,
+                    "mean_probability": 0.0012768926334428027,
+                    "n": 2472,
+                    "observed_rate": 0.0004045307443365696
+                  },
+                  {
+                    "low": 0.1,
+                    "mean_probability": 0.13246373573919554,
+                    "n": 19,
+                    "observed_rate": 0.15789473684210525
+                  },
+                  {
+                    "low": 0.2,
+                    "mean_probability": 0.24799865156017037,
+                    "n": 11,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.30000000000000004,
+                    "mean_probability": 0.3556359376247664,
+                    "n": 6,
+                    "observed_rate": 0.16666666666666666
+                  },
+                  {
+                    "low": 0.4,
+                    "mean_probability": 0.42868225479053257,
+                    "n": 5,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.5,
+                    "mean_probability": 0.5591064915942549,
+                    "n": 3,
+                    "observed_rate": 0.0
+                  }
+                ],
+                "ece": 0.004102622874591333,
+                "f1": 0.10526315789473684,
+                "fn": 4,
+                "fp": 13,
+                "log_loss": 0.010568183881393165,
+                "n": 2516,
+                "pr_auc": 0.07983951799087786,
+                "precision": 0.07142857142857142,
+                "precision_ci95": [
+                  0.012722215247890939,
+                  0.31468704424151117
+                ],
+                "recall": 0.2,
+                "recall_ci95": [
+                  0.03622410863243014,
+                  0.6244653702374747
+                ],
+                "tn": 2498,
+                "tp": 1
+              }
+            },
+            "warning": "minute rows correlated; event recall counts all finalized reference locals"
+          },
+          "partitions": {
+            "HIGH": {
+              "calibration": 2520,
+              "calibration_positive": 10,
+              "max_train_label_available_ms": 1792691940000,
+              "train": 26329,
+              "train_positive": 110,
+              "validation": 2488
+            },
+            "LOW": {
+              "calibration": 2500,
+              "calibration_positive": 5,
+              "max_train_label_available_ms": 1792692000000,
+              "train": 26312,
+              "train_positive": 115,
+              "validation": 2516
+            }
+          },
+          "thresholds": {
+            "HIGH": 0.04742739379832519,
+            "LOW": 0.2976668754491911
+          }
+        },
+        "full_hgb_jepa": {
+          "metrics": {
+            "HIGH": {
+              "accepted": 10,
+              "deduplication": "first accepted side:hour; all stages share one event",
+              "detection_delay_s": {
+                "p50": 241.601,
+                "p95": 241.601,
+                "teacher_interval_p50_lower": 240.0,
+                "teacher_interval_p50_upper": 300.0,
+                "timestamp_provenance": "recorded individual-trade extreme timestamp; raw trades not retained"
+              },
+              "f1": 0.16666666666666666,
+              "false_events": 9,
+              "false_signals_per_hour": 0.1875,
+              "missed_events": 1,
+              "missed_local_rate": 0.5,
+              "precision": 0.1,
+              "precision_ci95": [
+                0.017876213095072896,
+                0.4041500267952385
+              ],
+              "recall": 0.5,
+              "recall_ci95": [
+                0.09453120573423074,
+                0.9054687942657693
+              ],
+              "teacher_events": 2,
+              "true_events": 1
+            },
+            "LOW": {
+              "accepted": 4,
+              "deduplication": "first accepted side:hour; all stages share one event",
+              "detection_delay_s": {
+                "p50": 294.858,
+                "p95": 294.858,
+                "teacher_interval_p50_lower": 240.0,
+                "teacher_interval_p50_upper": 300.0,
+                "timestamp_provenance": "recorded individual-trade extreme timestamp; raw trades not retained"
+              },
+              "f1": 0.4,
+              "false_events": 3,
+              "false_signals_per_hour": 0.0625,
+              "missed_events": 0,
+              "missed_local_rate": 0.0,
+              "precision": 0.25,
+              "precision_ci95": [
+                0.04558726080970055,
+                0.6993581574175981
+              ],
+              "recall": 1.0,
+              "recall_ci95": [
+                0.20654931437723745,
+                1.0
+              ],
+              "teacher_events": 1,
+              "true_events": 1
+            },
+            "event": {
+              "accepted": 14,
+              "deduplication": "first accepted side:hour; all stages share one event",
+              "detection_delay_s": {
+                "p50": 268.22950000000003,
+                "p95": 292.19515,
+                "teacher_interval_p50_lower": 240.0,
+                "teacher_interval_p50_upper": 300.0,
+                "timestamp_provenance": "recorded individual-trade extreme timestamp; raw trades not retained"
+              },
+              "f1": 0.23529411764705882,
+              "false_events": 12,
+              "false_signals_per_hour": 0.25,
+              "missed_events": 1,
+              "missed_local_rate": 0.3333333333333333,
+              "precision": 0.14285714285714285,
+              "precision_ci95": [
+                0.040093921271464966,
+                0.39941379496970353
+              ],
+              "recall": 0.6666666666666666,
+              "recall_ci95": [
+                0.2076596008020477,
+                0.9385080552796037
+              ],
+              "teacher_events": 3,
+              "true_events": 2
+            },
+            "per_minute": {
+              "HIGH": {
+                "accuracy": 0.9762861736334405,
+                "brier": 0.004917519317338401,
+                "calibration_bins": [
+                  {
+                    "low": 0.0,
+                    "mean_probability": 0.0012839310550958594,
+                    "n": 2472,
+                    "observed_rate": 0.0040453074433656954
+                  },
+                  {
+                    "low": 0.1,
+                    "mean_probability": 0.12446079719193423,
+                    "n": 8,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.2,
+                    "mean_probability": 0.24156454676125946,
+                    "n": 3,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.30000000000000004,
+                    "mean_probability": 0.39066800581975386,
+                    "n": 2,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.4,
+                    "mean_probability": 0.4692527183163424,
+                    "n": 1,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.8,
+                    "mean_probability": 0.8750197190339465,
+                    "n": 2,
+                    "observed_rate": 0.0
+                  }
+                ],
+                "ece": 0.004641129669471877,
+                "f1": 0.03278688524590164,
+                "fn": 9,
+                "fp": 50,
+                "log_loss": 0.022936380542779262,
+                "n": 2488,
+                "pr_auc": 0.05391136839601621,
+                "precision": 0.0196078431372549,
+                "precision_ci95": [
+                  0.0034696926410608536,
+                  0.10304568726144975
+                ],
+                "recall": 0.1,
+                "recall_ci95": [
+                  0.017876213095072896,
+                  0.4041500267952385
+                ],
+                "tn": 2428,
+                "tp": 1
+              },
+              "LOW": {
+                "accuracy": 0.9960254372019078,
+                "brier": 0.002970888338791558,
+                "calibration_bins": [
+                  {
+                    "low": 0.0,
+                    "mean_probability": 0.001092697295673513,
+                    "n": 2465,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.1,
+                    "mean_probability": 0.13251546892883656,
+                    "n": 23,
+                    "observed_rate": 0.17391304347826086
+                  },
+                  {
+                    "low": 0.2,
+                    "mean_probability": 0.24264052137793915,
+                    "n": 15,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.30000000000000004,
+                    "mean_probability": 0.35846072899436565,
+                    "n": 7,
+                    "observed_rate": 0.14285714285714285
+                  },
+                  {
+                    "low": 0.4,
+                    "mean_probability": 0.44622148203449136,
+                    "n": 2,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.5,
+                    "mean_probability": 0.5886648404441198,
+                    "n": 1,
+                    "observed_rate": 0.0
+                  },
+                  {
+                    "low": 0.6000000000000001,
+                    "mean_probability": 0.6500706620381657,
+                    "n": 3,
+                    "observed_rate": 0.0
+                  }
+                ],
+                "ece": 0.004859219301561691,
+                "f1": 0.16666666666666666,
+                "fn": 4,
+                "fp": 6,
+                "log_loss": 0.010448325086534288,
+                "n": 2516,
+                "pr_auc": 0.10887263996507694,
+                "precision": 0.14285714285714285,
+                "precision_ci95": [
+                  0.02567962434474355,
+                  0.5131278292743189
+                ],
+                "recall": 0.2,
+                "recall_ci95": [
+                  0.03622410863243014,
+                  0.6244653702374747
+                ],
+                "tn": 2505,
+                "tp": 1
+              }
+            },
+            "warning": "minute rows correlated; event recall counts all finalized reference locals"
+          },
+          "partitions": {
+            "HIGH": {
+              "calibration": 2520,
+              "calibration_positive": 10,
+              "max_train_label_available_ms": 1792691940000,
+              "train": 26329,
+              "train_positive": 110,
+              "validation": 2488
+            },
+            "LOW": {
+              "calibration": 2500,
+              "calibration_positive": 5,
+              "max_train_label_available_ms": 1792692000000,
+              "train": 26312,
+              "train_positive": 115,
+              "validation": 2516
+            }
+          },
+          "thresholds": {
+            "HIGH": 0.03763009037160153,
+            "LOW": 0.37518496938249385
+          }
+        }
+      }
+    }
+  ],
+  "full_history_fit": {
+    "all_matured_states": {
+      "HIGH": 42535,
+      "LOW": 42514
+    },
+    "calibration_mapping": "transferred_old_fold_not_independent",
+    "fit_available_until_ms": 1793664000000,
+    "forward_validated": false,
+    "independently_calibrated": false,
+    "role": "all_30_day_research_learner",
+    "source_hashes": {
+      "artifacts/history_30d_local116/labels.json.gz": "d512b8438637f21f22c9b9996d3b2ea9806be0242a006967baae995cf6ea913f",
+      "historical_gaps/funding.jsonl.gz": "1515f1c224c85f522715c665c513a003e88874b47d56b490de6ee448d6097574",
+      "historical_gaps/index_1m.jsonl.gz": "9f1093f2f4b25473304e49dc26936f4ccd42bc41237ab1fd6d4b1b179ad5b884",
+      "historical_gaps/mark_1m.jsonl.gz": "a43658f55e292ec231eac757a4e40136057afe5af4309f2de55f2b92647bedc1",
+      "historical_gaps/open_interest_5m.jsonl.gz": "b63eec1505e4ae5b43ee71b72c3c72b2b9352aa044097433a9faf45066b2bd3d",
+      "history_30d_local116/compact_1m.jsonl.gz": "dea89e1eaf9ad47a0d47564e0880f4cd6e5cdfdc523f750a54777963bbca10ee"
+    },
+    "threshold_selected_until_ms": 1793059200000,
+    "thresholds_require_forward_revalidation": true
+  },
+  "historical_holdout": {
+    "full_hgb": {
+      "HIGH": {
+        "accepted": 30,
+        "deduplication": "first accepted side:hour; all stages share one event",
+        "detection_delay_s": {
+          "p50": 38.461,
+          "p95": 120.36859999999997,
+          "teacher_interval_p50_lower": 0.0,
+          "teacher_interval_p50_upper": 60.0,
+          "timestamp_provenance": "recorded individual-trade extreme timestamp; raw trades not retained"
+        },
+        "f1": 0.25,
+        "false_events": 25,
+        "false_signals_per_hour": 0.1488095238095238,
+        "missed_events": 5,
+        "missed_local_rate": 0.5,
+        "precision": 0.16666666666666666,
+        "precision_ci95": [
+          0.0733654237184855,
+          0.3356435050641603
+        ],
+        "recall": 0.5,
+        "recall_ci95": [
+          0.236593090512564,
+          0.7634069094874361
+        ],
+        "teacher_events": 10,
+        "true_events": 5
+      },
+      "LOW": {
+        "accepted": 9,
+        "deduplication": "first accepted side:hour; all stages share one event",
+        "detection_delay_s": {
+          "p50": 57.642,
+          "p95": 57.642,
+          "teacher_interval_p50_lower": 0.0,
+          "teacher_interval_p50_upper": 60.0,
+          "timestamp_provenance": "recorded individual-trade extreme timestamp; raw trades not retained"
+        },
+        "f1": 0.1111111111111111,
+        "false_events": 8,
+        "false_signals_per_hour": 0.047619047619047616,
+        "missed_events": 8,
+        "missed_local_rate": 0.8888888888888888,
+        "precision": 0.1111111111111111,
+        "precision_ci95": [
+          0.019890887638544907,
+          0.434999705576656
+        ],
+        "recall": 0.1111111111111111,
+        "recall_ci95": [
+          0.019890887638544907,
+          0.434999705576656
+        ],
+        "teacher_events": 9,
+        "true_events": 1
+      },
+      "event": {
+        "accepted": 39,
+        "deduplication": "first accepted side:hour; all stages share one event",
+        "detection_delay_s": {
+          "p50": 41.704,
+          "p95": 118.82849999999999,
+          "teacher_interval_p50_lower": 0.0,
+          "teacher_interval_p50_upper": 60.0,
+          "timestamp_provenance": "recorded individual-trade extreme timestamp; raw trades not retained"
+        },
+        "f1": 0.20689655172413793,
+        "false_events": 33,
+        "false_signals_per_hour": 0.19642857142857142,
+        "missed_events": 13,
+        "missed_local_rate": 0.6842105263157895,
+        "precision": 0.15384615384615385,
+        "precision_ci95": [
+          0.07247472376982099,
+          0.29729463648926696
+        ],
+        "recall": 0.3157894736842105,
+        "recall_ci95": [
+          0.1536437908779228,
+          0.5398959232467253
+        ],
+        "teacher_events": 19,
+        "true_events": 6
+      },
+      "per_minute": {
+        "HIGH": {
+          "accuracy": 0.9612103174603175,
+          "brier": 0.015695180831563006,
+          "calibration_bins": [
+            {
+              "low": 0.0,
+              "mean_probability": 0.000550253412994725,
+              "n": 9703,
+              "observed_rate": 0.001442852725961043
+            },
+            {
+              "low": 0.1,
+              "mean_probability": 0.14343941340514496,
+              "n": 56,
+              "observed_rate": 0.07142857142857142
+            },
+            {
+              "low": 0.2,
+              "mean_probability": 0.25124471326792663,
+              "n": 37,
+              "observed_rate": 0.13513513513513514
+            },
+            {
+              "low": 0.30000000000000004,
+              "mean_probability": 0.3477604652693207,
+              "n": 54,
+              "observed_rate": 0.1111111111111111
+            },
+            {
+              "low": 0.4,
+              "mean_probability": 0.4543820740577963,
+              "n": 32,
+              "observed_rate": 0.03125
+            },
+            {
+              "low": 0.5,
+              "mean_probability": 0.5411233316623254,
+              "n": 31,
+              "observed_rate": 0.06451612903225806
+            },
+            {
+              "low": 0.6000000000000001,
+              "mean_probability": 0.6410011989439569,
+              "n": 30,
+              "observed_rate": 0.1
+            },
+            {
+              "low": 0.7000000000000001,
+              "mean_probability": 0.7416713990828573,
+              "n": 33,
+              "observed_rate": 0.15151515151515152
+            },
+            {
+              "low": 0.8,
+              "mean_probability": 0.8659473739295201,
+              "n": 18,
+              "observed_rate": 0.0
+            },
+            {
+              "low": 0.9,
+              "mean_probability": 0.9698041477780107,
+              "n": 86,
+              "observed_rate": 0.11627906976744186
+            }
+          ],
+          "ece": 0.018132844149695612,
+          "f1": 0.17684210526315788,
+          "fn": 8,
+          "fp": 383,
+          "log_loss": 0.05462166057163804,
+          "n": 10080,
+          "pr_auc": 0.10422968319728595,
+          "precision": 0.0988235294117647,
+          "precision_ci95": [
+            0.0739449147863175,
+            0.13088942903448855
+          ],
+          "recall": 0.84,
+          "recall_ci95": [
+            0.7148578393696501,
+            0.916625793219666
+          ],
+          "tn": 9647,
+          "tp": 42
+        },
+        "LOW": {
+          "accuracy": 0.9900645802285146,
+          "brier": 0.0057818693183978205,
+          "calibration_bins": [
+            {
+              "low": 0.0,
+              "mean_probability": 0.0007297647269210052,
+              "n": 9916,
+              "observed_rate": 0.003630496167809601
+            },
+            {
+              "low": 0.1,
+              "mean_probability": 0.14406444702383098,
+              "n": 56,
+              "observed_rate": 0.07142857142857142
+            },
+            {
+              "low": 0.2,
+              "mean_probability": 0.2511877259313672,
+              "n": 30,
+              "observed_rate": 0.03333333333333333
+            },
+            {
+              "low": 0.30000000000000004,
+              "mean_probability": 0.3431028582506356,
+              "n": 26,
+              "observed_rate": 0.15384615384615385
+            },
+            {
+              "low": 0.4,
+              "mean_probability": 0.4290258952760118,
+              "n": 12,
+              "observed_rate": 0.0
+            },
+            {
+              "low": 0.5,
+              "mean_probability": 0.5406011285934815,
+              "n": 8,
+              "observed_rate": 0.0
+            },
+            {
+              "low": 0.6000000000000001,
+              "mean_probability": 0.664869406718095,
+              "n": 14,
+              "observed_rate": 0.0
+            },
+            {
+              "low": 0.7000000000000001,
+              "mean_probability": 0.7368331661363271,
+              "n": 3,
+              "observed_rate": 0.0
+            }
+          ],
+          "ece": 0.0064857783465639045,
+          "f1": 0.07407407407407407,
+          "fn": 41,
+          "fp": 59,
+          "log_loss": 0.024199557449427436,
+          "n": 10065,
+          "pr_auc": 0.07475050701525654,
+          "precision": 0.06349206349206349,
+          "precision_ci95": [
+            0.024965618013394072,
+            0.15219177845306375
+          ],
+          "recall": 0.08888888888888889,
+          "recall_ci95": [
+            0.035111116726370226,
+            0.20733575334289356
+          ],
+          "tn": 9961,
+          "tp": 4
+        }
+      },
+      "warning": "minute rows correlated; event recall counts all finalized reference locals"
+    },
+    "full_hgb_jepa": {
+      "HIGH": {
+        "accepted": 27,
+        "deduplication": "first accepted side:hour; all stages share one event",
+        "detection_delay_s": {
+          "p50": 26.403,
+          "p95": 37.255199999999995,
+          "teacher_interval_p50_lower": 0.0,
+          "teacher_interval_p50_upper": 60.0,
+          "timestamp_provenance": "recorded individual-trade extreme timestamp; raw trades not retained"
+        },
+        "f1": 0.16216216216216217,
+        "false_events": 24,
+        "false_signals_per_hour": 0.14285714285714285,
+        "missed_events": 7,
+        "missed_local_rate": 0.7,
+        "precision": 0.1111111111111111,
+        "precision_ci95": [
+          0.038520348283098374,
+          0.2805780081827982
+        ],
+        "recall": 0.3,
+        "recall_ci95": [
+          0.10779126740630099,
+          0.6032218525388546
+        ],
+        "teacher_events": 10,
+        "true_events": 3
+      },
+      "LOW": {
+        "accepted": 7,
+        "deduplication": "first accepted side:hour; all stages share one event",
+        "detection_delay_s": {
+          "p50": 57.642,
+          "p95": 57.642,
+          "teacher_interval_p50_lower": 0.0,
+          "teacher_interval_p50_upper": 60.0,
+          "timestamp_provenance": "recorded individual-trade extreme timestamp; raw trades not retained"
+        },
+        "f1": 0.125,
+        "false_events": 6,
+        "false_signals_per_hour": 0.03571428571428571,
+        "missed_events": 8,
+        "missed_local_rate": 0.8888888888888888,
+        "precision": 0.14285714285714285,
+        "precision_ci95": [
+          0.02567962434474355,
+          0.5131278292743189
+        ],
+        "recall": 0.1111111111111111,
+        "recall_ci95": [
+          0.019890887638544907,
+          0.434999705576656
+        ],
+        "teacher_events": 9,
+        "true_events": 1
+      },
+      "event": {
+        "accepted": 34,
+        "deduplication": "first accepted side:hour; all stages share one event",
+        "detection_delay_s": {
+          "p50": 32.432,
+          "p95": 54.764849999999996,
+          "teacher_interval_p50_lower": 0.0,
+          "teacher_interval_p50_upper": 60.0,
+          "timestamp_provenance": "recorded individual-trade extreme timestamp; raw trades not retained"
+        },
+        "f1": 0.1509433962264151,
+        "false_events": 30,
+        "false_signals_per_hour": 0.17857142857142858,
+        "missed_events": 15,
+        "missed_local_rate": 0.7894736842105263,
+        "precision": 0.11764705882352941,
+        "precision_ci95": [
+          0.04671446664882335,
+          0.26620842770371833
+        ],
+        "recall": 0.21052631578947367,
+        "recall_ci95": [
+          0.08507676632916253,
+          0.43334278443814167
+        ],
+        "teacher_events": 19,
+        "true_events": 4
+      },
+      "per_minute": {
+        "HIGH": {
+          "accuracy": 0.9606150793650794,
+          "brier": 0.015840727181637298,
+          "calibration_bins": [
+            {
+              "low": 0.0,
+              "mean_probability": 0.0005690801159042814,
+              "n": 9715,
+              "observed_rate": 0.0014410705095213587
+            },
+            {
+              "low": 0.1,
+              "mean_probability": 0.14548427023509122,
+              "n": 57,
+              "observed_rate": 0.15789473684210525
+            },
+            {
+              "low": 0.2,
+              "mean_probability": 0.259577585480254,
+              "n": 36,
+              "observed_rate": 0.16666666666666666
+            },
+            {
+              "low": 0.30000000000000004,
+              "mean_probability": 0.340825011386923,
+              "n": 40,
+              "observed_rate": 0.025
+            },
+            {
+              "low": 0.4,
+              "mean_probability": 0.45217539807237006,
+              "n": 37,
+              "observed_rate": 0.0
+            },
+            {
+              "low": 0.5,
+              "mean_probability": 0.5472398638672561,
+              "n": 39,
+              "observed_rate": 0.15384615384615385
+            },
+            {
+              "low": 0.6000000000000001,
+              "mean_probability": 0.6545153447247438,
+              "n": 29,
+              "observed_rate": 0.13793103448275862
+            },
+            {
+              "low": 0.7000000000000001,
+              "mean_probability": 0.7491719184190764,
+              "n": 23,
+              "observed_rate": 0.0
+            },
+            {
+              "low": 0.8,
+              "mean_probability": 0.8632638695131861,
+              "n": 19,
+              "observed_rate": 0.0
+            },
+            {
+              "low": 0.9,
+              "mean_probability": 0.9708435990866275,
+              "n": 85,
+              "observed_rate": 0.11764705882352941
+            }
+          ],
+          "ece": 0.017694944423276453,
+          "f1": 0.16771488469601678,
+          "fn": 10,
+          "fp": 387,
+          "log_loss": 0.05558433236033846,
+          "n": 10080,
+          "pr_auc": 0.09827400787359794,
+          "precision": 0.0936768149882904,
+          "precision_ci95": [
+            0.06954859987807926,
+            0.12505072918878044
+          ],
+          "recall": 0.8,
+          "recall_ci95": [
+            0.6696289406777459,
+            0.887562499842239
+          ],
+          "tn": 9643,
+          "tp": 40
+        },
+        "LOW": {
+          "accuracy": 0.9913561847988077,
+          "brier": 0.006031031071085064,
+          "calibration_bins": [
+            {
+              "low": 0.0,
+              "mean_probability": 0.0007716500819187905,
+              "n": 9928,
+              "observed_rate": 0.003928283642224013
+            },
+            {
+              "low": 0.1,
+              "mean_probability": 0.1473333388365292,
+              "n": 54,
+              "observed_rate": 0.018518518518518517
+            },
+            {
+              "low": 0.2,
+              "mean_probability": 0.24219094280260403,
+              "n": 19,
+              "observed_rate": 0.0
+            },
+            {
+              "low": 0.30000000000000004,
+              "mean_probability": 0.3517897122197067,
+              "n": 17,
+              "observed_rate": 0.058823529411764705
+            },
+            {
+              "low": 0.4,
+              "mean_probability": 0.4442421703475907,
+              "n": 16,
+              "observed_rate": 0.1875
+            },
+            {
+              "low": 0.5,
+              "mean_probability": 0.5494087857221768,
+              "n": 8,
+              "observed_rate": 0.125
+            },
+            {
+              "low": 0.6000000000000001,
+              "mean_probability": 0.6628215621011517,
+              "n": 12,
+              "observed_rate": 0.0
+            },
+            {
+              "low": 0.7000000000000001,
+              "mean_probability": 0.7436348846410915,
+              "n": 9,
+              "observed_rate": 0.0
+            },
+            {
+              "low": 0.8,
+              "mean_probability": 0.8050543280846832,
+              "n": 2,
+              "observed_rate": 0.0
+            }
+          ],
+          "ece": 0.007117430469881688,
+          "f1": 0.08421052631578947,
+          "fn": 41,
+          "fp": 46,
+          "log_loss": 0.024786582656276562,
+          "n": 10065,
+          "pr_auc": 0.075872511645979,
+          "precision": 0.08,
+          "precision_ci95": [
+            0.03154951408859298,
+            0.18838246918342838
+          ],
+          "recall": 0.08888888888888889,
+          "recall_ci95": [
+            0.035111116726370226,
+            0.20733575334289356
+          ],
+          "tn": 9974,
+          "tp": 4
+        }
+      },
+      "warning": "minute rows correlated; event recall counts all finalized reference locals"
+    }
+  },
+  "next": "independent forward paper validation; raw all-history scores are not calibrated near-certainty",
+  "old_champion_unchanged": true,
+  "old_pipeline_reference": {
+    "accepted": 23,
+    "deduplication": "first accepted side:hour; all stages share one event",
+    "detection_delay_s": {
+      "p50": 180.0,
+      "p95": 300.0,
+      "teacher_interval_p50_lower": 177.194,
+      "teacher_interval_p50_upper": 237.194,
+      "timestamp_provenance": "recorded individual-trade extreme timestamp; raw trades not retained"
+    },
+    "f1": 0.23809523809523808,
+    "false_events": 18,
+    "false_signals_per_hour": 0.10714285714285714,
+    "missed_events": 14,
+    "missed_local_rate": 0.7368421052631579,
+    "precision": 0.21739130434782608,
+    "precision_ci95": [
+      0.09663978026586204,
+      0.4190348301626401
+    ],
+    "recall": 0.2631578947368421,
+    "recall_ci95": [
+      0.11806412346782508,
+      0.487915508978151
+    ],
+    "teacher_events": 19,
+    "true_events": 5
+  },
+  "params": {
+    "class_weight": "balanced",
+    "early_stopping": false,
+    "l2_regularization": 20.0,
+    "learning_rate": 0.05,
+    "max_iter": 120,
+    "max_leaf_nodes": 15,
+    "min_samples_leaf": 60,
+    "random_state": 20261107
+  },
+  "promoted": false,
+  "raw_feature_count": 196,
+  "real_orders": false,
+  "rows": 43198,
+  "schema": "FULL-SAVED-HISTORY-LOCAL-v1",
+  "selected": "full_hgb",
+  "selection": {
+    "full_hgb": {
+      "mean_validation_event_f1": 0.3392857142857143,
+      "negative_false_events": -9.5
+    },
+    "full_hgb_jepa": {
+      "mean_validation_event_f1": 0.3319327731092437,
+      "negative_false_events": -10.0
+    }
+  },
+  "source_hashes": {
+    "artifacts/history_30d_local116/labels.json.gz": "d512b8438637f21f22c9b9996d3b2ea9806be0242a006967baae995cf6ea913f",
+    "historical_gaps/funding.jsonl.gz": "1515f1c224c85f522715c665c513a003e88874b47d56b490de6ee448d6097574",
+    "historical_gaps/index_1m.jsonl.gz": "9f1093f2f4b25473304e49dc26936f4ccd42bc41237ab1fd6d4b1b179ad5b884",
+    "historical_gaps/mark_1m.jsonl.gz": "a43658f55e292ec231eac757a4e40136057afe5af4309f2de55f2b92647bedc1",
+    "historical_gaps/open_interest_5m.jsonl.gz": "b63eec1505e4ae5b43ee71b72c3c72b2b9352aa044097433a9faf45066b2bd3d",
+    "history_30d_local116/compact_1m.jsonl.gz": "dea89e1eaf9ad47a0d47564e0880f4cd6e5cdfdc523f750a54777963bbca10ee"
+  },
+  "ssl_encoder_training_cutoff_ms": 1792432800000,
+  "target": "finalized alternating strict H1 L6/K2"
+}

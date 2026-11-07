@@ -2,3 +2,9 @@ __pycache__/
 .pytest_cache/
 .venv/
 .jepa_writer.lock
+
+.full_history_writer.lock
+.case_writer.lock
+.analyzer_writer.lock
+artifacts/full_history_research/features.npz
+artifacts/full_history_research/frozen_jepa_latents.npz

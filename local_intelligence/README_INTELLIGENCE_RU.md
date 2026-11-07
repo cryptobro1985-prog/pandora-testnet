@@ -1,5 +1,8 @@
 # PANDORA Local Intelligence — результат и запуск
 
+Полный проход по всей сохранённой истории и новый анализатор: [FULL_HISTORY_RESULTS.md](FULL_HISTORY_RESULTS.md).
+
+
 Это исследовательская сборка Quantum + Cortex для HYPEUSDT. Код, исходная история, новые модели и отчёты включены. Торговые ордера не реализованы и не разрешены.
 
 **MONITOR UNCHANGED: YES.** HTML/CSS/JS, публичные маршруты монитора и relay проверяются по исходным SHA-256. Render не развёртывался; сборка сохраняется в отдельной research-ветке GitHub.

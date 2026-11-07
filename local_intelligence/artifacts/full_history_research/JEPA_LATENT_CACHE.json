@@ -1,0 +1,5 @@
+{
+  "checkpoint_sha256": "547cb1867bc30978926bd93185e8f7736d0dbca89b427718040c164e03d23fee",
+  "encoder_frozen": true,
+  "training_cutoff_ms": 1792432800000
+}

@@ -1,0 +1,105 @@
+{
+  "all_fitted_preprocessing": "none; deterministic causal rolling summaries only",
+  "auxiliary_channels": {
+    "funding": {
+      "first_source_ms": 1791072000000,
+      "historical_receipt_unknown_rows": 90,
+      "last_source_ms": 1793635200000,
+      "matrix_observed_rows": 43198,
+      "matrix_stale_rows": 0,
+      "max_source_age_ms": 43200000,
+      "rows": 90
+    },
+    "index": {
+      "first_source_ms": 1791072000000,
+      "historical_receipt_unknown_rows": 43200,
+      "last_source_ms": 1793663940000,
+      "matrix_observed_rows": 43197,
+      "matrix_stale_rows": 0,
+      "max_source_age_ms": 180000,
+      "rows": 43200
+    },
+    "mark": {
+      "first_source_ms": 1791072000000,
+      "historical_receipt_unknown_rows": 43200,
+      "last_source_ms": 1793663940000,
+      "matrix_observed_rows": 43197,
+      "matrix_stale_rows": 0,
+      "max_source_age_ms": 180000,
+      "rows": 43200
+    },
+    "oi": {
+      "first_source_ms": 1791072000000,
+      "historical_receipt_unknown_rows": 8640,
+      "last_source_ms": 1793663700000,
+      "matrix_observed_rows": 43198,
+      "matrix_stale_rows": 0,
+      "max_source_age_ms": 900000,
+      "rows": 8640
+    }
+  },
+  "excluded_sources": [
+    "candidate_snapshots_enriched",
+    "all old candidate snapshots",
+    "teacher labels",
+    "future bars"
+  ],
+  "expected_minute_slots": 43200,
+  "feature_matrix": {
+    "bytes": 33867232,
+    "columns": 196,
+    "dtype": "float32",
+    "rows": 43198
+  },
+  "first_minute_start_ms": 1791072000000,
+  "last_minute_end_ms": 1793664000000,
+  "missing_minute_slots": 2,
+  "not_retained_or_not_reconstructed": [
+    "L50/order-book history",
+    "liquidations",
+    "separate buy/sell quantity",
+    "exchange receive clocks",
+    "intra-minute paths"
+  ],
+  "observed_flow_rows": 43198,
+  "retained_minute_rows": 43198,
+  "schema_version": 1,
+  "source_hashes": {
+    "historical_gaps/funding.jsonl.gz": "1515f1c224c85f522715c665c513a003e88874b47d56b490de6ee448d6097574",
+    "historical_gaps/index_1m.jsonl.gz": "9f1093f2f4b25473304e49dc26936f4ccd42bc41237ab1fd6d4b1b179ad5b884",
+    "historical_gaps/mark_1m.jsonl.gz": "a43658f55e292ec231eac757a4e40136057afe5af4309f2de55f2b92647bedc1",
+    "historical_gaps/open_interest_5m.jsonl.gz": "b63eec1505e4ae5b43ee71b72c3c72b2b9352aa044097433a9faf45066b2bd3d",
+    "history_30d_local116/compact_1m.jsonl.gz": "dea89e1eaf9ad47a0d47564e0880f4cd6e5cdfdc523f750a54777963bbca10ee"
+  },
+  "time_assumptions": {
+    "h1": "only complete contiguous UTC hours made from completed retained minutes; missing minutes invalidate their hour",
+    "historical_receipt_latency": "unknown; the one-second auxiliary lag is an explicit replay assumption, not a measured receipt clock",
+    "known_receipts": "when present, availability is no earlier than the recorded receipt",
+    "mark_index": "source ts_ms is bar start; available only at source+60,000+1,000ms",
+    "minutes": "completed trade bars assumed finalized at bar_end_ms; missing historical receive clocks are unknown",
+    "missing": "NaN measurements and separate observed/stale/source_time_only/received_clock_known flags; never backward fill",
+    "oi_funding": "available only at source ts_ms+1,000ms"
+  },
+  "used_numeric_sources": [
+    "trade OHLC",
+    "total quantity/volume (aliases)",
+    "turnover",
+    "buy/sell notional and count",
+    "trade count",
+    "maximum trade notional",
+    "high/low source timestamps",
+    "mark/index OHLC",
+    "OI",
+    "funding"
+  ],
+  "valid_minute_rows": 43198,
+  "windows_minutes": [
+    1,
+    3,
+    5,
+    15,
+    60,
+    180,
+    360
+  ]
+}

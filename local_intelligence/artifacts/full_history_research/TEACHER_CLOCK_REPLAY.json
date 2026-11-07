@@ -1,0 +1,8 @@
+{
+  "all_confirmations_waited_for_maturity": true,
+  "confirmed_references": 76,
+  "median_final_reference_delay_seconds": 37380.0,
+  "model_probability_claim": null,
+  "scope": "deterministic delayed teacher availability, not ML prediction accuracy",
+  "terminal_reference_unconfirmed": 1
+}
