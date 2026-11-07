@@ -10,6 +10,7 @@ on:
       - "research/hype_local_only/test_fin_jepa_adapter.py"
       - "research/hype_local_only/train_local_ensemble_30d.py"
       - "research/hype_local_only/h1_teacher_context.py"
+      - "research/hype_local_only/feature_discovery.py"
       - ".github/workflows/hype-local-ensemble-30d.yml"
 
 permissions:
@@ -66,7 +67,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install numpy river scikit-learn
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-          python -m py_compile research/hype_local_only/fin_jepa_adapter.py research/hype_local_only/h1_teacher_context.py research/hype_local_only/train_local_ensemble_30d.py
+          python -m py_compile research/hype_local_only/fin_jepa_adapter.py research/hype_local_only/h1_teacher_context.py research/hype_local_only/feature_discovery.py research/hype_local_only/train_local_ensemble_30d.py
           python -m unittest research.hype_local_only.test_fin_jepa_adapter -v
 
       - name: Recover verified 30D dataset and optional enrichment
