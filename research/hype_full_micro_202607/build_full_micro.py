@@ -13,13 +13,18 @@ from research.hype_quant.feature_contract import POINTS,INPUT_IDS,TARGET_IDS,MET
 API="https://api.cryptohftdata.com/v1/download"
 SYMBOL="HYPEUSDT"
 EXCHANGE="bybit"
-START=datetime(2026,7,12,16,tzinfo=timezone.utc)
+START=datetime(2026,7,12,17,tzinfo=timezone.utc)
 END=datetime(2026,8,7,0,tzinfo=timezone.utc)
 DELAYS=(0,30,60,180,300)
 WINDOWS=(5,15,30,60,180,300)
 H=3_600_000
 
 def finite(x):return isinstance(x,(int,float,np.number)) and math.isfinite(float(x))
+def num(x):
+    try:
+        v=float(x)
+        return v if math.isfinite(v) else None
+    except Exception:return None
 def ms(dt):return int(dt.timestamp()*1000)
 
 def first_col(cols,*names):
@@ -48,7 +53,7 @@ class Source:
     def __init__(self,cache:Path,api_key:str|None=None):
         self.cache=cache;cache.mkdir(parents=True,exist_ok=True)
         self.api_key=(api_key or "").strip()
-        self.last=0.0;self.downloads=0;self.missing=[];self.bytes=0
+        self.last=0.0;self.downloads=0;self.missing=[];self.bytes=0;self.counts=defaultdict(int)
     def path(self,dt,kind):
         return f"{EXCHANGE}/{dt:%Y-%m-%d}/{dt:%H}/{SYMBOL}_{kind}.parquet"
     def get(self,dt,kind,required=False):
@@ -77,7 +82,7 @@ class Source:
                 fn.unlink(missing_ok=True);self.missing.append(rel)
                 if required:raise RuntimeError(f"empty required {rel}")
                 return None
-            self.downloads+=1;self.bytes+=fn.stat().st_size
+            self.downloads+=1;self.bytes+=fn.stat().st_size;self.counts[kind]+=1
             return fn
         except Exception:
             fn.unlink(missing_ok=True)
@@ -131,14 +136,14 @@ def finish(b,w):
 
 def load_trades(src):
     sec5=[];mins=[];b5=b1=None;schemas={}
-    dt=START-timedelta(hours=8)
+    dt=START-timedelta(hours=24)
     while dt<END:
-        p=src.get(dt,"trades",required=dt>=START)
+        p=src.get(dt,"trades",required=False)
         if p:
             schemas.setdefault("trades",cols_sample(p))
             df=read_parquet(p)
             for t,px,q,s in trade_rows(df):
-                if t<ms(START-timedelta(hours=8)) or t>=ms(END):continue
+                if t<ms(START-timedelta(hours=24)) or t>=ms(END):continue
                 k5=t//5000*5000;k1=t//60000*60000
                 if b5 is None or b5["start_ms"]!=k5:
                     if b5:sec5.append(finish(b5,5000))
@@ -226,79 +231,123 @@ def target_records(cands,sec5,mins):
                         "features":base_features(c,t,sec5,mins)})
     return out
 
-def scalar_at(df,t):
-    if df is None or df.height==0:return {}
-    cs=df.columns;tc=first_col(cs,"received_time","event_time","timestamp","time")
-    if not tc:return {}
-    best=None;bestt=-1
-    for r in df.iter_rows(named=True):
-        tt=to_ms(r.get(tc))
-        if tt is not None and tt<=t and tt>=bestt:best=r;bestt=tt
-    if best is None:return {}
-    out={}
-    for k,v in best.items():
-        if finite(v):out[k]=float(v)
-    out["_ts_ms"]=bestt
-    return out
+def scalar_snapshots(df,targets,carry=None):
+    """Causal forward-fill for pre-Sep-2026 Bybit change-only scalar files."""
+    state=dict(carry or {});snaps={};rows=[];cs=[]
+    if df is not None and df.height:
+        cs=df.columns
+        tc=first_col(cs,"timestamp","event_time","received_time","time")
+        if tc:
+            for r in df.iter_rows(named=True):
+                tt=to_ms(r.get(tc))
+                if tt is not None:rows.append((tt,r))
+            rows.sort(key=lambda z:z[0])
+    idx=0
+    def apply(tt,r):
+        state["_last_ts_ms"]=tt
+        for k,v in r.items():
+            if k in ("timestamp","event_time","received_time","time"):continue
+            z=num(v)
+            if z is not None:state[k]=z
+    for t in sorted(targets):
+        while idx<len(rows) and rows[idx][0]<=t:
+            apply(*rows[idx]);idx+=1
+        snap={k:v for k,v in state.items() if k!="_last_ts_ms"}
+        snap["_ts_ms"]=state.get("_last_ts_ms")
+        snaps[t]=snap
+    while idx<len(rows):
+        apply(*rows[idx]);idx+=1
+    return snaps,state,cs
 
-def liq_features(df,t):
-    if df is None or df.height==0:return {}
-    cs=df.columns;tc=first_col(cs,"received_time","event_time","timestamp","time")
+def liquidation_events(df):
+    if df is None or df.height==0:return [],[]
+    cs=df.columns
+    tc=first_col(cs,"trade_time","event_time","timestamp","received_time","time")
     pc=first_col(cs,"price","average_price");qc=first_col(cs,"quantity","qty","size");sc=first_col(cs,"side")
-    if not tc:return {}
-    rows=[]
+    if not tc:return [],cs
+    out=[]
     for r in df.iter_rows(named=True):
-        tt=to_ms(r.get(tc))
-        if tt is None or not(t-300000<=tt<=t):continue
-        p=float(r.get(pc) or 0) if pc else 0;q=float(r.get(qc) or 0) if qc else 0
-        side=str(r.get(sc,"")).lower() if sc else ""
-        rows.append((tt,p*q,side))
+        tt=to_ms(r.get(tc));p=num(r.get(pc)) if pc else None;q=num(r.get(qc)) if qc else None
+        if tt is None or p is None or q is None:continue
+        s=str(r.get(sc,"")).strip().lower() if sc else ""
+        # CryptoHFTData publishes the liquidation ORDER side:
+        # SELL = a long position was liquidated; BUY = a short was liquidated.
+        position="LONG" if s=="sell" else "SHORT" if s=="buy" else "UNKNOWN"
+        out.append((tt,p*q,position))
+    out.sort(key=lambda z:z[0])
+    return out,cs
+
+def liq_features(events,t):
     out={}
     for sec in (5,15,60,180,300):
-        q=[z for z in rows if z[0]>=t-sec*1000]
-        lng=sum(n for _,n,s in q if "buy" in s or "long" in s);sht=sum(n for _,n,s in q if "sell" in s or "short" in s)
-        out[f"fullmicro_liq_count_{sec}s"]=float(len(q));out[f"fullmicro_long_liq_notional_{sec}s"]=lng;out[f"fullmicro_short_liq_notional_{sec}s"]=sht
+        q=[z for z in events if t-sec*1000<=z[0]<=t]
+        lng=sum(n for _,n,pos in q if pos=="LONG");sht=sum(n for _,n,pos in q if pos=="SHORT")
+        out[f"fullmicro_liq_count_{sec}s"]=float(len(q))
+        out[f"fullmicro_long_liq_notional_{sec}s"]=lng
+        out[f"fullmicro_short_liq_notional_{sec}s"]=sht
         den=lng+sht
         if den:out[f"fullmicro_liq_imbalance_{sec}s"]=(sht-lng)/den
     return out
 
 def book_replay(path,target_times,carry=None):
-    bids,asks=carry if carry else ({},{})
-    snaps={};df=read_parquet(path)
-    if df is None or df.height==0:return snaps,(bids,asks),[]
+    state=carry or {"bids":{},"asks":{},"last_u":None,"valid":False,"gap_count":0}
+    bids=state["bids"];asks=state["asks"];snaps={}
+    df=read_parquet(path)
+    if df is None or df.height==0:
+        state["valid"]=False
+        return {t:book_features(state) for t in target_times},state,[]
     cs=df.columns
-    tc=first_col(cs,"received_time","event_time","timestamp","time")
+    tc=first_col(cs,"received_time","event_time","transaction_time","timestamp","time")
     pc=first_col(cs,"price");qc=first_col(cs,"quantity","qty","size");sc=first_col(cs,"side")
-    typ=first_col(cs,"update_type","type","action")
-    msgc=first_col(cs,"final_update_id","update_id","sequence","received_time","event_time")
+    typ=first_col(cs,"event_type","update_type","type","action")
+    uc=first_col(cs,"final_update_id","update_id")
+    msgc=uc or first_col(cs,"event_time","received_time","timestamp")
     if not all((tc,pc,qc,sc)):raise RuntimeError(f"orderbook schema unsupported {cs}")
-    targets=sorted(target_times);ti=0;lastmsg=None
+    targets=sorted(target_times);ti=0;lastmsg=object()
     for r in df.iter_rows(named=True):
         tt=to_ms(r.get(tc))
         if tt is None:continue
         while ti<len(targets) and targets[ti]<tt:
-            snaps[targets[ti]]=book_features(bids,asks);ti+=1
+            snaps[targets[ti]]=book_features(state);ti+=1
         msg=r.get(msgc) if msgc else tt
-        is_snap="snapshot" in str(r.get(typ,"")).lower() if typ else False
-        if is_snap and msg!=lastmsg:bids.clear();asks.clear()
-        lastmsg=msg
-        try:p=float(r.get(pc));q=float(r.get(qc))
-        except Exception:continue
+        if msg!=lastmsg:
+            et=str(r.get(typ,"")).lower() if typ else ""
+            u=num(r.get(uc)) if uc else None
+            u=int(u) if u is not None else None
+            if "snapshot" in et:
+                bids.clear();asks.clear();state["valid"]=True
+            else:
+                prev=state.get("last_u")
+                if prev is not None and u is not None and u!=int(prev)+1:
+                    state["valid"]=False;state["gap_count"]=int(state.get("gap_count",0))+1
+            if u is not None:state["last_u"]=u
+            lastmsg=msg
+        p=num(r.get(pc));q=num(r.get(qc))
+        if p is None or q is None:continue
         side=str(r.get(sc,"")).lower();book=bids if side.startswith("b") or side=="buy" else asks
         if q<=0:book.pop(p,None)
         else:book[p]=q
-    while ti<len(targets):snaps[targets[ti]]=book_features(bids,asks);ti+=1
-    return snaps,(bids,asks),cs
+    while ti<len(targets):
+        snaps[targets[ti]]=book_features(state);ti+=1
+    return snaps,state,cs
 
-def book_features(bids,asks):
-    b=sorted(bids.items(),reverse=True)[:50];a=sorted(asks.items())[:50]
-    if not b or not a:return {"fullmicro_book_valid":0.0}
-    bb=b[0][0];aa=a[0][0];mid=(bb+aa)/2;out={"fullmicro_book_valid":1.0,"fullmicro_spread_bps":(aa-bb)/mid*10000}
+def book_features(state):
+    if not state or not state.get("valid"):
+        return {"fullmicro_book_valid":0.0,"fullmicro_book_gap_count":float((state or {}).get("gap_count",0))}
+    b=sorted(state["bids"].items(),reverse=True)[:50];a=sorted(state["asks"].items())[:50]
+    if not b or not a:return {"fullmicro_book_valid":0.0,"fullmicro_book_gap_count":float(state.get("gap_count",0))}
+    bb=b[0][0];aa=a[0][0];mid=(bb+aa)/2
+    out={"fullmicro_book_valid":1.0,"fullmicro_book_gap_count":float(state.get("gap_count",0)),
+         "fullmicro_spread_bps":(aa-bb)/mid*10000}
     for n in (5,10,25,50):
         bn=sum(p*q for p,q in b[:n]);an=sum(p*q for p,q in a[:n]);den=bn+an
         if den:out[f"fullmicro_book_imbalance_{n}"]=(bn-an)/den
-    for i,(p,q) in enumerate(b,1):out[f"fullmicro_bid_{i:02d}_dist_bps"]=(p/mid-1)*10000;out[f"fullmicro_bid_{i:02d}_log_qty"]=math.log1p(max(q,0))
-    for i,(p,q) in enumerate(a,1):out[f"fullmicro_ask_{i:02d}_dist_bps"]=(p/mid-1)*10000;out[f"fullmicro_ask_{i:02d}_log_qty"]=math.log1p(max(q,0))
+    for i,(p,q) in enumerate(b,1):
+        out[f"fullmicro_bid_{i:02d}_dist_bps"]=(p/mid-1)*10000
+        out[f"fullmicro_bid_{i:02d}_log_qty"]=math.log1p(max(q,0))
+    for i,(p,q) in enumerate(a,1):
+        out[f"fullmicro_ask_{i:02d}_dist_bps"]=(p/mid-1)*10000
+        out[f"fullmicro_ask_{i:02d}_log_qty"]=math.log1p(max(q,0))
     return out
 
 def enrich(src,records,schemas):
@@ -306,33 +355,55 @@ def enrich(src,records,schemas):
     for r in records:
         dt=datetime.fromtimestamp(r["snapshot_ts_ms"]/1000,tz=timezone.utc).replace(minute=0,second=0,microsecond=0)
         byhour[dt].append(r)
-    carry=None
-    for dt in sorted(byhour):
-        # previous hour helps recover continuity if the target hour lacks a checkpoint.
-        prev=src.get(dt-timedelta(hours=1),"orderbook")
-        if prev:
-            _,carry,cs=book_replay(prev,[],carry);schemas.setdefault("orderbook",cs);prev.unlink(missing_ok=True)
+    book_state=None
+    scalar_state={k:{} for k in ("open_interest","mark_price","ticker")}
+    liq_recent=[]
+    dt=START-timedelta(hours=24)
+    while dt<END:
+        targets=sorted(r["snapshot_ts_ms"] for r in byhour.get(dt,[]))
+
         bp=src.get(dt,"orderbook")
-        targets=[r["snapshot_ts_ms"] for r in byhour[dt]]
-        bsn={}
         if bp:
-            bsn,carry,cs=book_replay(bp,targets,carry);schemas.setdefault("orderbook",cs);bp.unlink(missing_ok=True)
-        aux={}
-        for kind in ("liquidations","open_interest","mark_price","ticker"):
+            bsn,book_state,cs=book_replay(bp,targets,book_state)
+            schemas.setdefault("orderbook",cs);bp.unlink(missing_ok=True)
+        else:
+            if book_state is None:book_state={"bids":{},"asks":{},"last_u":None,"valid":False,"gap_count":0}
+            book_state["valid"]=False;book_state["gap_count"]=int(book_state.get("gap_count",0))+1
+            bsn={t:book_features(book_state) for t in targets}
+
+        lp=src.get(dt,"liquidations")
+        if lp:
+            ldf=read_parquet(lp);ev,cs=liquidation_events(ldf);liq_recent.extend(ev)
+            schemas.setdefault("liquidations",cs);lp.unlink(missing_ok=True)
+        # Keep only events that could affect a 300s window in this/next hour.
+        floor=ms(dt)-300_000
+        liq_recent=[z for z in liq_recent if z[0]>=floor]
+
+        scalar_snaps={}
+        for kind in ("open_interest","mark_price","ticker"):
             p=src.get(dt,kind)
-            if p:
-                aux[kind]=read_parquet(p);schemas.setdefault(kind,cols_sample(p));p.unlink(missing_ok=True)
-            else:aux[kind]=None
-        for r in byhour[dt]:
+            df=read_parquet(p) if p else None
+            snaps,scalar_state[kind],cs=scalar_snapshots(df,targets,scalar_state[kind])
+            scalar_snaps[kind]=snaps
+            if cs:schemas.setdefault(kind,cs)
+            if p:p.unlink(missing_ok=True)
+
+        for r in sorted(byhour.get(dt,[]),key=lambda z:z["snapshot_ts_ms"]):
             t=r["snapshot_ts_ms"];f=r["features"]
             f.update(bsn.get(t,{"fullmicro_book_valid":0.0}))
-            f.update(liq_features(aux["liquidations"],t))
+            f.update(liq_features(liq_recent,t))
             for kind in ("open_interest","mark_price","ticker"):
-                z=scalar_at(aux[kind],t)
+                z=scalar_snaps[kind].get(t,{})
+                stamp=z.get("_ts_ms")
+                if stamp is not None:f[f"fullmicro_{kind}_age_ms"]=float(max(0,t-stamp))
                 for k,v in z.items():
-                    if k=="_ts_ms":f[f"fullmicro_{kind}_age_ms"]=float(t-v)
-                    elif finite(v):f[f"fullmicro_{kind}_{k}"]=float(v)
-        print(json.dumps({"hour":dt.isoformat(),"records":len(byhour[dt]),"downloads":src.downloads,"bytes":src.bytes}),flush=True)
+                    if k!="_ts_ms" and finite(v):f[f"fullmicro_{kind}_{k}"]=float(v)
+
+        if targets or dt.hour==0:
+            print(json.dumps({"hour":dt.isoformat(),"records":len(targets),"downloads":src.downloads,
+                              "bytes":src.bytes,"book_valid":bool(book_state and book_state.get("valid")),
+                              "book_gaps":int((book_state or {}).get("gap_count",0))}),flush=True)
+        dt+=timedelta(hours=1)
     return records
 
 def write_jsonl_gz(path,rows):
@@ -354,11 +425,22 @@ def main():
     strict,strict_exc=structural_labels(mins,lookback=6,lookahead=2)
     cands=candidates(mins,strict);records=target_records(cands,sec5,mins)
     records=enrich(src,records,schemas)
-    observed=set(range(1,44))|set(range(44,77))|{78,79,80,114,115,116}
+    observed=set(range(1,44))|{77,78,79,80,116}
+    if src.counts.get("orderbook",0) and any(r["features"].get("fullmicro_book_valid")==1.0 for r in records):
+        observed|=set(range(44,58))
+    if src.counts.get("open_interest",0):
+        observed|={58,59,60,61,115}
+    if src.counts.get("mark_price",0):
+        observed|={2,3,62,114}
+    if src.counts.get("ticker",0):
+        observed|={63,64}
+    if src.counts.get("liquidations",0):
+        observed|=set(range(65,77))
     availability={"points_total":116,"causal_input_points":len(INPUT_IDS),"target_eval_points":len(TARGET_IDS),"metadata_points":len(METADATA_IDS),
                   "historically_observed_or_derived_input_ids":sorted(observed&set(INPUT_IDS)),
                   "missing_input_ids":sorted(set(INPUT_IDS)-observed),
-                  "note":"targets 83-110 are labels/evaluation only and never enter X"}
+                  "source_file_counts":dict(src.counts),
+                  "note":"targets 83-110 are labels/evaluation only and never enter X; unavailable causal inputs are not fabricated"}
     write_jsonl_gz(args.output/"candidate_snapshots_full_micro.jsonl.gz",records)
     write_jsonl_gz(args.output/"compact_1m.jsonl.gz",[r for r in mins if r["start_ms"]>=ms(START)])
     write_json_gz(args.output/"labels.json.gz",{"strict":strict,"strict_exclusions":strict_exc})
@@ -366,7 +448,7 @@ def main():
     manifest={"symbol":SYMBOL,"period":[START.isoformat(),END.isoformat()],"strict_labels":len(strict),
               "strict_low":sum(x["side"]=="LOW" for x in strict),"strict_high":sum(x["side"]=="HIGH" for x in strict),
               "candidates":len(cands),"snapshots":len(records),"source":"CryptoHFTData Bybit hourly Parquet/Zstd",
-              "downloaded_files":src.downloads,"downloaded_bytes":src.bytes,"missing_files":src.missing,
+              "downloaded_files":src.downloads,"downloaded_bytes":src.bytes,"source_file_counts":dict(src.counts),"missing_files":src.missing,
               "schemas":schemas,"raw_files_retained":False,"compression":"gzip-9 compact outputs",
               "future_leakage_guard":"strict labels and target/eval points never enter causal features"}
     (args.output/"manifest.json").write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+"\n")
