@@ -292,8 +292,7 @@ def liq_features(events,t):
 
 def book_replay(path,target_times,carry=None):
     state=carry or {"bids":{},"asks":{},"last_u":None,"valid":False,"gap_count":0}
-    bids=state["bids"];asks=state["asks"];snaps={}
-    df=read_parquet(path)
+    snaps={};df=read_parquet(path)
     if df is None or df.height==0:
         state["valid"]=False
         return {t:book_features(state) for t in target_times},state,[]
@@ -302,32 +301,66 @@ def book_replay(path,target_times,carry=None):
     pc=first_col(cs,"price");qc=first_col(cs,"quantity","qty","size");sc=first_col(cs,"side")
     typ=first_col(cs,"event_type","update_type","type","action")
     uc=first_col(cs,"final_update_id","update_id")
-    msgc=uc or first_col(cs,"event_time","received_time","timestamp")
+    firstc=first_col(cs,"first_update_id")
+    seqc=first_col(cs,"last_update_id")
     if not all((tc,pc,qc,sc)):raise RuntimeError(f"orderbook schema unsupported {cs}")
-    targets=sorted(target_times);ti=0;lastmsg=object()
-    for r in df.iter_rows(named=True):
+
+    # Preserve published row order. Group contiguous rows belonging to one Bybit message.
+    raw=list(df.iter_rows(named=True))
+    groups=[];cur=[];last_key=None
+    for r in raw:
         tt=to_ms(r.get(tc))
+        u=num(r.get(uc)) if uc else None
+        seq=num(r.get(seqc)) if seqc else None
+        et=str(r.get(typ,"")).lower() if typ else ""
+        # received_time is the safest message discriminator when present; u/seq keep noop messages distinct.
+        recv=r.get("received_time") if "received_time" in r else None
+        key=(recv,tt,int(u) if u is not None else None,int(seq) if seq is not None else None,et)
+        if cur and key!=last_key:
+            groups.append(cur);cur=[]
+        cur.append(r);last_key=key
+    if cur:groups.append(cur)
+
+    targets=sorted(target_times);ti=0
+    for g in groups:
+        r0=g[0];tt=to_ms(r0.get(tc))
         if tt is None:continue
         while ti<len(targets) and targets[ti]<tt:
             snaps[targets[ti]]=book_features(state);ti+=1
-        msg=r.get(msgc) if msgc else tt
-        if msg!=lastmsg:
-            et=str(r.get(typ,"")).lower() if typ else ""
-            u=num(r.get(uc)) if uc else None
-            u=int(u) if u is not None else None
-            if "snapshot" in et:
-                bids.clear();asks.clear();state["valid"]=True
-            else:
-                prev=state.get("last_u")
-                if prev is not None and u is not None and u!=int(prev)+1:
-                    state["valid"]=False;state["gap_count"]=int(state.get("gap_count",0))+1
+        et=str(r0.get(typ,"")).lower() if typ else ""
+        u=num(r0.get(uc)) if uc else None
+        u=int(u) if u is not None else None
+        first_u=num(r0.get(firstc)) if firstc else None
+        non_noop=[r for r in g if str(r.get(sc,"")).lower() in ("bid","ask","buy","sell")]
+
+        if "snapshot" in et:
+            # July/Aug 2026 archives can contain old REST depth snapshots from Bybit's
+            # 1000-level stream. They are NOT valid resets for orderbook.50.
+            # Native WS/checkpoint snapshots contain at most 50 bid + 50 ask rows.
+            # Ignore larger REST snapshots completely; keep current 50-level chain.
+            if len(non_noop)>100:
+                continue
+            state["bids"].clear();state["asks"].clear();state["valid"]=True
             if u is not None:state["last_u"]=u
-            lastmsg=msg
-        p=num(r.get(pc));q=num(r.get(qc))
-        if p is None or q is None:continue
-        side=str(r.get(sc,"")).lower();book=bids if side.startswith("b") or side=="buy" else asks
-        if q<=0:book.pop(p,None)
-        else:book[p]=q
+        else:
+            prev=state.get("last_u")
+            if u==1:
+                # Bybit service reset: wait for the corresponding WS snapshot.
+                state["valid"]=False;state["last_u"]=u
+            elif prev is not None and u is not None and u!=int(prev)+1:
+                state["valid"]=False;state["gap_count"]=int(state.get("gap_count",0))+1
+                state["last_u"]=u
+            elif u is not None:
+                state["last_u"]=u
+
+        for r in non_noop:
+            p=num(r.get(pc));q=num(r.get(qc))
+            if p is None or q is None:continue
+            side=str(r.get(sc,"")).lower()
+            book=state["bids"] if side.startswith("b") or side=="buy" else state["asks"]
+            if q<=0:book.pop(p,None)
+            else:book[p]=q
+
     while ti<len(targets):
         snaps[targets[ti]]=book_features(state);ti+=1
     return snaps,state,cs
@@ -356,6 +389,8 @@ def enrich(src,records,schemas):
     for r in records:
         dt=datetime.fromtimestamp(r["snapshot_ts_ms"]/1000,tz=timezone.utc).replace(minute=0,second=0,microsecond=0)
         byhour[dt].append(r)
+    needed_aux=set(byhour)
+    needed_aux|={h-timedelta(hours=1) for h in byhour}
     book_state=None
     scalar_state={k:{} for k in ("open_interest","mark_price","ticker")}
     liq_recent=[]
@@ -363,6 +398,7 @@ def enrich(src,records,schemas):
     while dt<END:
         targets=sorted(r["snapshot_ts_ms"] for r in byhour.get(dt,[]))
 
+        # L50 must be continuous: replay every hourly partition in order.
         bp=src.get(dt,"orderbook")
         if bp:
             bsn,book_state,cs=book_replay(bp,targets,book_state)
@@ -372,22 +408,22 @@ def enrich(src,records,schemas):
             book_state["valid"]=False;book_state["gap_count"]=int(book_state.get("gap_count",0))+1
             bsn={t:book_features(book_state) for t in targets}
 
-        lp=src.get(dt,"liquidations")
-        if lp:
-            ldf=read_parquet(lp);ev,cs=liquidation_events(ldf);liq_recent.extend(ev)
-            schemas.setdefault("liquidations",cs);lp.unlink(missing_ok=True)
-        # Keep only events that could affect a 300s window in this/next hour.
+        scalar_snaps={k:{} for k in ("open_interest","mark_price","ticker")}
+        if dt in needed_aux:
+            lp=src.get(dt,"liquidations")
+            if lp:
+                ldf=read_parquet(lp);ev,cs=liquidation_events(ldf);liq_recent.extend(ev)
+                schemas.setdefault("liquidations",cs);lp.unlink(missing_ok=True)
+            for kind in ("open_interest","mark_price","ticker"):
+                p=src.get(dt,kind)
+                df=read_parquet(p) if p else None
+                snaps,scalar_state[kind],cs=scalar_snapshots(df,targets,scalar_state[kind])
+                scalar_snaps[kind]=snaps
+                if cs:schemas.setdefault(kind,cs)
+                if p:p.unlink(missing_ok=True)
+
         floor=ms(dt)-300_000
         liq_recent=[z for z in liq_recent if z[0]>=floor]
-
-        scalar_snaps={}
-        for kind in ("open_interest","mark_price","ticker"):
-            p=src.get(dt,kind)
-            df=read_parquet(p) if p else None
-            snaps,scalar_state[kind],cs=scalar_snapshots(df,targets,scalar_state[kind])
-            scalar_snaps[kind]=snaps
-            if cs:schemas.setdefault(kind,cs)
-            if p:p.unlink(missing_ok=True)
 
         for r in sorted(byhour.get(dt,[]),key=lambda z:z["snapshot_ts_ms"]):
             t=r["snapshot_ts_ms"];f=r["features"]
