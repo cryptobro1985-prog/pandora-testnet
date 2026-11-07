@@ -9,6 +9,7 @@ on:
       - "research/hype_local_only/fin_jepa_adapter.py"
       - "research/hype_local_only/test_fin_jepa_adapter.py"
       - "research/hype_local_only/train_local_ensemble_30d.py"
+      - "research/hype_local_only/h1_teacher_context.py"
       - ".github/workflows/hype-local-ensemble-30d.yml"
 
 permissions:
@@ -65,7 +66,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install numpy river
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-          python -m py_compile             research/hype_local_only/fin_jepa_adapter.py             research/hype_local_only/train_local_ensemble_30d.py
+          python -m py_compile research/hype_local_only/fin_jepa_adapter.py research/hype_local_only/h1_teacher_context.py research/hype_local_only/train_local_ensemble_30d.py
           python -m unittest research.hype_local_only.test_fin_jepa_adapter -v
 
       - name: Recover verified 30D dataset and optional enrichment
@@ -124,7 +125,7 @@ jobs:
         run: |
           rm -rf ensemble_out
           mkdir -p ensemble_out
-          python -m research.hype_local_only.train_local_ensemble_30d             --snapshots "${{ steps.data.outputs.snapshots }}"             --availability history30/feature_availability.json             --output ensemble_out             --epochs 18             --workers 4
+          python -m research.hype_local_only.train_local_ensemble_30d             --snapshots "${{ steps.data.outputs.snapshots }}"             --availability history30/feature_availability.json             --compact-1m history30/compact_1m.jsonl.gz             --output ensemble_out             --epochs 18             --workers 4
           test -s ensemble_out/HYPE_LOCAL_ENSEMBLE.pt
           test -s ensemble_out/HYPE_LOCAL_ENSEMBLE_REPORT.json
 
