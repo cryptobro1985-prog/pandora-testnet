@@ -33,7 +33,7 @@ def call_cortex(url,model,payload,timeout):
     system=(
       "You are HYPE Local Cortex. Your only task is to analyze whether the current market state "
       "is consistent with a forming Local HIGH or Local LOW. You are not a trading strategy. "
-      "Use the supplied 30-day relationship memory and current Quant probabilities. "
+      "Use the supplied 30-day relationship memory, matured live discovery relationships, and current Quant probabilities. "
       "Never invent unavailable inputs. Return strict JSON with keys verdict, confidence, "
       "supporting_relationships, contradicting_relationships, missing_live_evidence, summary. "
       "verdict must be FORMING_HIGH, FORMING_LOW, CONFIRMED_HIGH, CONFIRMED_LOW, or WAIT."
@@ -62,6 +62,7 @@ def main():
     args=ap.parse_args()
     memory=json.loads((args.checkpoint_dir/"LOCAL_RELATIONSHIP_MEMORY.json").read_text())
     status_path=args.checkpoint_dir/"LOCAL_ONLY_STATUS.json"
+    live_memory_path=args.checkpoint_dir/"LIVE_DISCOVERY_RELATIONSHIPS.json"
     out=args.checkpoint_dir/"CORTEX_LOCAL_ONLY_STATUS.json"
     url=os.getenv("CORTEX_LOCAL_URL","http://127.0.0.1:8081")
     model=os.getenv("ASTRA_CORTEX_MODEL","gpt-oss-20b-local")
@@ -72,8 +73,13 @@ def main():
             candidate=status.get("candidate") or {}
             side=candidate.get("side") or status.get("expected_side") or "HIGH"
             if side not in ("LOW","HIGH"):side="HIGH"
+            live_memory={}
+            if live_memory_path.exists():
+                try: live_memory=json.loads(live_memory_path.read_text())
+                except Exception: live_memory={}
             payload={
               "historical_relationship_memory":compact_memory(memory,side),
+              "live_discovery_relationship_memory":compact_memory(live_memory,side),
               "expected_next_local":status.get("expected_side"),
               "last_teacher_local":status.get("last_teacher_local"),
               "candidate":candidate,
@@ -82,6 +88,7 @@ def main():
               "last_signal":status.get("last_signal"),
               "input_coverage":(status.get("feature_contract") or {}).get("seen_input_ids"),
               "missing_inputs":(status.get("feature_contract") or {}).get("missing_seen_input_ids"),
+              "discovery_feature_count":status.get("discovery_feature_count"),
               "instruction":"Compare current evidence with the 30-day true-vs-false Local relationships. Do not make trading decisions."
             }
             decision=call_cortex(url,model,payload,180)
