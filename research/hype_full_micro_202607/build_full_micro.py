@@ -11,6 +11,7 @@ from research.hype_local_v5.labels import structural_labels
 from research.hype_quant.feature_contract import POINTS,INPUT_IDS,TARGET_IDS,METADATA_IDS
 
 API="https://api.cryptohftdata.com/v1/download"
+BYBIT_RATIO="https://api.bybit.com/v5/market/account-ratio"
 SYMBOL="HYPEUSDT"
 EXCHANGE="bybit"
 START=datetime(2026,7,12,17,tzinfo=timezone.utc)
@@ -406,6 +407,47 @@ def enrich(src,records,schemas):
         dt+=timedelta(hours=1)
     return records
 
+def fetch_account_ratio():
+    rows=[]
+    day=START-timedelta(hours=1)
+    while day<END:
+        nxt=min(day+timedelta(days=1),END)
+        cursor=None
+        while True:
+            params={"category":"linear","symbol":SYMBOL,"period":"5min","limit":500,
+                    "startTime":ms(day),"endTime":ms(nxt)}
+            if cursor:params["cursor"]=cursor
+            try:
+                r=requests.get(BYBIT_RATIO,params=params,timeout=30);r.raise_for_status();obj=r.json()
+                if obj.get("retCode")!=0:break
+                part=(obj.get("result") or {}).get("list") or []
+                for z in part:
+                    t=to_ms(z.get("timestamp"));buy=num(z.get("buyRatio"));sell=num(z.get("sellRatio"))
+                    if t is None or buy is None or sell is None:continue
+                    rows.append({"ts_ms":t,"buy_ratio":buy,"sell_ratio":sell,
+                                 "long_short_ratio":buy/sell if sell else None})
+                cursor=(obj.get("result") or {}).get("nextPageCursor") or None
+                if not cursor:break
+            except Exception:break
+        day=nxt
+    uniq={int(z["ts_ms"]):z for z in rows}
+    return [uniq[k] for k in sorted(uniq)]
+
+def attach_account_ratio(records,ratio_rows):
+    if not ratio_rows:return records
+    ts=[z["ts_ms"] for z in ratio_rows]
+    for r in records:
+        t=int(r["snapshot_ts_ms"]);j=bisect.bisect_right(ts,t)-1
+        if j<0:continue
+        z=ratio_rows[j];age=t-z["ts_ms"]
+        if age>30*60*1000:continue
+        f=r["features"]
+        f["fullmicro_account_buy_ratio"]=float(z["buy_ratio"])
+        f["fullmicro_account_sell_ratio"]=float(z["sell_ratio"])
+        if finite(z.get("long_short_ratio")):f["fullmicro_account_long_short_ratio"]=float(z["long_short_ratio"])
+        f["fullmicro_account_ratio_age_ms"]=float(max(0,age))
+    return records
+
 def write_jsonl_gz(path,rows):
     with gzip.open(path,"wt",encoding="utf-8",compresslevel=9) as f:
         for r in rows:f.write(json.dumps(r,separators=(",",":"),allow_nan=False)+"\n")
@@ -424,6 +466,8 @@ def main():
     sec5,mins,schemas=load_trades(src)
     strict,strict_exc=structural_labels(mins,lookback=6,lookahead=2)
     cands=candidates(mins,strict);records=target_records(cands,sec5,mins)
+    ratio_rows=fetch_account_ratio()
+    records=attach_account_ratio(records,ratio_rows)
     records=enrich(src,records,schemas)
     observed=set(range(1,44))|{77,78,79,80,116}
     if src.counts.get("orderbook",0) and any(r["features"].get("fullmicro_book_valid")==1.0 for r in records):
@@ -436,6 +480,8 @@ def main():
         observed|={63,64}
     if src.counts.get("liquidations",0):
         observed|=set(range(65,77))
+    if ratio_rows:
+        observed|={113}
     availability={"points_total":116,"causal_input_points":len(INPUT_IDS),"target_eval_points":len(TARGET_IDS),"metadata_points":len(METADATA_IDS),
                   "historically_observed_or_derived_input_ids":sorted(observed&set(INPUT_IDS)),
                   "missing_input_ids":sorted(set(INPUT_IDS)-observed),
@@ -448,7 +494,7 @@ def main():
     manifest={"symbol":SYMBOL,"period":[START.isoformat(),END.isoformat()],"strict_labels":len(strict),
               "strict_low":sum(x["side"]=="LOW" for x in strict),"strict_high":sum(x["side"]=="HIGH" for x in strict),
               "candidates":len(cands),"snapshots":len(records),"source":"CryptoHFTData Bybit hourly Parquet/Zstd",
-              "downloaded_files":src.downloads,"downloaded_bytes":src.bytes,"source_file_counts":dict(src.counts),"missing_files":src.missing,
+              "downloaded_files":src.downloads,"downloaded_bytes":src.bytes,"source_file_counts":dict(src.counts),"account_ratio_rows":len(ratio_rows),"missing_files":src.missing,
               "schemas":schemas,"raw_files_retained":False,"compression":"gzip-9 compact outputs",
               "future_leakage_guard":"strict labels and target/eval points never enter causal features"}
     (args.output/"manifest.json").write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+"\n")
