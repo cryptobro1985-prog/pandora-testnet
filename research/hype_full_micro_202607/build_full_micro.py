@@ -7,6 +7,8 @@ import numpy as np
 import polars as pl
 import requests
 import zstandard as zstd
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
 
 from research.hype_local_v5.labels import structural_labels
 from research.hype_quant.feature_contract import POINTS,INPUT_IDS,TARGET_IDS,METADATA_IDS
@@ -55,20 +57,21 @@ class Source:
     def __init__(self,cache:Path,api_key:str|None=None):
         self.cache=cache;cache.mkdir(parents=True,exist_ok=True)
         self.api_key=(api_key or "").strip()
-        self.last=0.0;self.downloads=0;self.missing=[];self.bytes=0;self.counts=defaultdict(int)
+        self.last=0.0;self.downloads=0;self.missing=[];self.bytes=0;self.counts=defaultdict(int);self.lock=Lock()
     def path(self,dt,kind):
         return f"{EXCHANGE}/{dt:%Y-%m-%d}/{dt:%H}/{SYMBOL}_{kind}.parquet"
     def get(self,dt,kind,required=False):
         rel=self.path(dt,kind);fn=self.cache/f"{dt:%Y%m%d_%H}_{kind}.parquet"
         if fn.exists() and fn.stat().st_size>32:return fn
         if not self.api_key:
-            wait=1.05-(time.time()-self.last)
-            if wait>0:time.sleep(wait)
+            with self.lock:
+                wait=1.02-(time.time()-self.last)
+                if wait>0:time.sleep(wait)
+                self.last=time.time()
         params={"file":rel}
         if self.api_key:params["api_key"]=self.api_key
         try:
             r=requests.get(API,params=params,timeout=90,stream=True)
-            self.last=time.time()
             if r.status_code in (404,400):
                 self.missing.append(rel)
                 if required:raise RuntimeError(f"missing required {rel}: {r.status_code} {r.text[:160]}")
@@ -84,7 +87,8 @@ class Source:
                 fn.unlink(missing_ok=True);self.missing.append(rel)
                 if required:raise RuntimeError(f"empty required {rel}")
                 return None
-            self.downloads+=1;self.bytes+=fn.stat().st_size;self.counts[kind]+=1
+            with self.lock:
+                self.downloads+=1;self.bytes+=fn.stat().st_size;self.counts[kind]+=1
             return fn
         except Exception:
             fn.unlink(missing_ok=True)
@@ -108,6 +112,27 @@ def decoded_parquet(path):
     except Exception:
         return None,None
     return None,None
+
+def prefetch_hours(src,start,end,kinds,workers=None):
+    """Download independent hourly partitions concurrently; replay remains sequential."""
+    hours=[];dt=start
+    while dt<end:
+        hours.append(dt);dt+=timedelta(hours=1)
+    if workers is None:
+        workers=8 if src.api_key else 2
+    jobs=[(dt,kind) for dt in hours for kind in kinds]
+    def one(item):
+        dt,kind=item
+        p=src.get(dt,kind)
+        return dt,kind,str(p) if p else None
+    with ThreadPoolExecutor(max_workers=max(1,int(workers))) as ex:
+        futs=[ex.submit(one,j) for j in jobs]
+        done=0
+        for fut in as_completed(futs):
+            fut.result();done+=1
+            if done%100==0:
+                print(json.dumps({"prefetch_done":done,"prefetch_total":len(jobs),
+                                  "downloads":src.downloads,"bytes":src.bytes}),flush=True)
 
 def cols_sample(path):
     q,tmp=decoded_parquet(path)
@@ -524,6 +549,10 @@ def main():
     ap=argparse.ArgumentParser();ap.add_argument("--output",type=Path,required=True);ap.add_argument("--cache",type=Path,required=True)
     args=ap.parse_args();args.output.mkdir(parents=True,exist_ok=True)
     src=Source(args.cache,os.getenv("CRYPTOHFTDATA_API_KEY"))
+    # Multitask network I/O: fetch all hourly sources in parallel while preserving
+    # deterministic sequential orderbook replay afterward.
+    prefetch_hours(src,START-timedelta(hours=24),END,
+                   ("trades","orderbook","liquidations","open_interest","mark_price","ticker"))
     sec5,mins,schemas=load_trades(src)
     strict,strict_exc=structural_labels(mins,lookback=6,lookahead=2)
     cands=candidates(mins,strict);records=target_records(cands,sec5,mins)
