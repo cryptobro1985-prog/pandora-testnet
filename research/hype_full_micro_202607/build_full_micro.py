@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 import requests
+import zstandard as zstd
 
 from research.hype_local_v5.labels import structural_labels
 from research.hype_quant.feature_contract import POINTS,INPUT_IDS,TARGET_IDS,METADATA_IDS
@@ -90,15 +91,39 @@ class Source:
             if required:raise
             self.missing.append(rel);return None
 
+def decoded_parquet(path):
+    """CryptoHFTData files before 2026-08-19 can have an outer Zstandard wrapper."""
+    if not path:return None,None
+    path=Path(path)
+    try:
+        magic=path.open("rb").read(4)
+        if magic==b"PAR1":return path,None
+        if magic==b"\x28\xb5\x2f\xfd":
+            out=path.with_suffix(path.suffix+".decoded")
+            with path.open("rb") as src,out.open("wb") as dst:
+                zstd.ZstdDecompressor().copy_stream(src,dst)
+            if out.open("rb").read(4)!=b"PAR1":
+                out.unlink(missing_ok=True);return None,None
+            return out,out
+    except Exception:
+        return None,None
+    return None,None
+
 def cols_sample(path):
-    if not path:return []
-    try:return pl.read_parquet(path,n_rows=3).columns
+    q,tmp=decoded_parquet(path)
+    if q is None:return []
+    try:return pl.read_parquet(q,n_rows=3).columns
     except Exception:return []
+    finally:
+        if tmp:tmp.unlink(missing_ok=True)
 
 def read_parquet(path):
-    if not path:return None
-    try:return pl.read_parquet(path)
+    q,tmp=decoded_parquet(path)
+    if q is None:return None
+    try:return pl.read_parquet(q)
     except Exception:return None
+    finally:
+        if tmp:tmp.unlink(missing_ok=True)
 
 def trade_rows(df):
     if df is None or df.height==0:return
@@ -141,8 +166,8 @@ def load_trades(src):
     while dt<END:
         p=src.get(dt,"trades",required=False)
         if p:
-            schemas.setdefault("trades",cols_sample(p))
             df=read_parquet(p)
+            if df is not None:schemas.setdefault("trades",df.columns)
             for t,px,q,s in trade_rows(df):
                 if t<ms(START-timedelta(hours=24)) or t>=ms(END):continue
                 k5=t//5000*5000;k1=t//60000*60000
