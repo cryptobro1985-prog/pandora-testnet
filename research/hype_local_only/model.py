@@ -62,7 +62,7 @@ class LocalOnlyModel:
         if not hasattr(self,"internal_positive"):
             self.internal_positive={(s,h):0 for s in ("LOW","HIGH") for h in STAGES}
         if not hasattr(self,"internal_thresholds"):
-            self.internal_thresholds={(s,h):0.5 for s in ("LOW","HIGH") for h in STAGES}
+            self.internal_thresholds={(s,h):0.80 for s in ("LOW","HIGH") for h in STAGES}
         if not hasattr(self,"internal_live_labels"):
             self.internal_live_labels=0
 
