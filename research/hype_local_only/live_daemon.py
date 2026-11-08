@@ -22,6 +22,12 @@ from research.hype_false_local_entry.high_flow_shadow import (
     contract as high_flow_shadow_contract,
     should_emit_shadow as should_emit_high_flow_shadow,
 )
+from research.hype_false_local_entry.early60_strong_reversal_shadow import (
+    Early60State, capture_flow15 as capture_early60_flow15,
+    checkpoint_sample as early60_checkpoint_sample,
+    contract as early60_shadow_contract,
+    evaluate_once as evaluate_early60_once,
+)
 
 H=3_600_000
 
@@ -245,6 +251,7 @@ def main():
     rp=args.checkpoint_dir/"local_runtime.pkl"
     rt=load_pickle(rp,{"candidates":{"LOW":None,"HIGH":None},"hard_candidates":{"LOW":None,"HIGH":None},
                        "hard_high_flow_shadow":{"LOW":None,"HIGH":None},
+                       "hard_early60_shadow":{"LOW":None,"HIGH":None},
                        "pending":[],"expected_side":None,
                        "last_teacher_local":None,"latest_by_hour":{},"structure_48h":{}})
     candidates=rt.get("candidates") or {"LOW":None,"HIGH":None}
@@ -256,6 +263,10 @@ def main():
     for _side in ("LOW","HIGH"):
         _z=(rt.get("hard_high_flow_shadow") or {}).get(_side)
         hard_high_flow_shadow[_side]=HighFlowShadowState(**_z) if isinstance(_z,dict) else _z
+    hard_early60_shadow={}
+    for _side in ("LOW","HIGH"):
+        _z=(rt.get("hard_early60_shadow") or {}).get(_side)
+        hard_early60_shadow[_side]=Early60State(**_z) if isinstance(_z,dict) else _z
     pending=[Pending(**z) if isinstance(z,dict) else z for z in rt.get("pending",[])]
     expected=rt.get("expected_side");last_teacher=rt.get("last_teacher_local")
     latest_by_hour=rt.get("latest_by_hour") or {}
@@ -358,9 +369,11 @@ def main():
                             completed_m1_rows=completed_m1(state,ts),
                         )
                         hard_candidates[side]=_new_hard
-                        if (side=="HIGH" and _new_hard is not None
+                        if (_new_hard is not None
                                 and (_old_hard is None or _new_hard.candidate_id!=_old_hard.candidate_id)):
-                            hard_high_flow_shadow[side]=HighFlowShadowState(_new_hard.candidate_id)
+                            hard_early60_shadow[side]=Early60State(_new_hard.candidate_id)
+                            if side=="HIGH":
+                                hard_high_flow_shadow[side]=HighFlowShadowState(_new_hard.candidate_id)
                     hour=(int(ts)//H)*H
                     latest_by_hour[f"{side}:{hour}"]=c.candidate_id
                     append_jsonl(evlog,{"event":"NEW_CANDIDATE","ts_ms":ts,"side":side,"price":price,
@@ -414,12 +427,74 @@ def main():
             # only and never changes expected/core direction by itself.
             hard120_live={}
             high_flow_shadow_live={}
+            early60_shadow_live={}
             for side in ("LOW","HIGH"):
                 hc=hard_candidates.get(side)
                 if hc is None:
                     hard120_live[side]=None
                     high_flow_shadow_live[side]=None
+                    early60_shadow_live[side]=None
                     continue
+
+                early_state=hard_early60_shadow.get(side)
+                if early_state is None or early_state.candidate_id!=hc.candidate_id:
+                    early_state=Early60State(hc.candidate_id)
+                    hard_early60_shadow[side]=early_state
+                early_flow_capture=capture_early60_flow15(
+                    early_state,candidate_ts_ms=int(hc.extreme_ts_ms),
+                    trades=list(state.trades),observed_ms=int(ts)
+                )
+                early_sample=early60_checkpoint_sample(
+                    int(hc.extreme_ts_ms),completed_m1(state,ts),int(ts)
+                )
+                early_ready=False
+                if early_sample is None:
+                    early_metrics={"ready":False,"reason":"waiting_checkpoint",
+                                   "flow_capture":early_flow_capture}
+                elif not early_state.checkpoint_evaluated:
+                    early_ready,early_metrics=evaluate_early60_once(
+                        early_state,side=side,extreme_price=float(hc.extreme_price),
+                        pre_move_180_bps=float(hc.pre_move_180_bps),
+                        sample=early_sample,expected_side=expected
+                    )
+                    early_metrics["flow_capture"]=early_flow_capture
+                    if early_ready:
+                        append_jsonl(evlog,{
+                            "event":"INTERNAL_EARLY60_STRONG_REVERSAL_SHADOW",
+                            "ts_ms":int(ts),
+                            "signal_ts_ms":int(early_sample.get("sample_ts_ms") or ts),
+                            "candidate_ts_ms":int(hc.extreme_ts_ms),
+                            "candidate_id":hc.candidate_id,"side":hc.side,
+                            "price":float(hc.extreme_price),
+                            "mark_price":float(early_sample.get("mark_price") or price),
+                            "teacher":INTERNAL.name,
+                            "shadow_contract":"EARLY60_STRONG_REVERSAL_SHADOW_V1",
+                            "primary_contract":"INTERNAL_HARD120_CHECKPOINT_V2",
+                            "core_flip_authorized":False,
+                            "metrics":early_metrics,
+                        })
+                else:
+                    early_metrics={
+                        "ready":False,
+                        "reason":"already_emitted" if early_state.emitted else "checkpoint_already_consumed",
+                        "checkpoint_evaluated":early_state.checkpoint_evaluated,
+                        "checkpoint_missed":early_state.checkpoint_missed,
+                        "flow_15":early_state.flow_15,
+                        "flow_15_trade_count":early_state.flow_15_trade_count,
+                        "flow_capture":early_flow_capture,
+                    }
+                early60_shadow_live[side]={
+                    "candidate_id":early_state.candidate_id,
+                    "flow_15":early_state.flow_15,
+                    "flow_15_trade_count":early_state.flow_15_trade_count,
+                    "flow_15_sample_end_ms":early_state.flow_15_sample_end_ms,
+                    "flow_15_missed":early_state.flow_15_missed,
+                    "checkpoint_evaluated":early_state.checkpoint_evaluated,
+                    "checkpoint_missed":early_state.checkpoint_missed,
+                    "emitted":early_state.emitted,
+                    "checkpoint":early_metrics,
+                }
+
                 shadow_state=hard_high_flow_shadow.get(side)
                 if side=="HIGH":
                     if shadow_state is None or shadow_state.candidate_id!=hc.candidate_id:
@@ -570,6 +645,16 @@ def main():
             if cfp.exists():
                 try:hard120_plus_shadow_forward=json.loads(cfp.read_text(encoding="utf-8"))
                 except Exception:hard120_plus_shadow_forward={}
+            early60_shadow_forward={}
+            e60p=args.checkpoint_dir/"EARLY60_STRONG_REVERSAL_FORWARD_STATUS.json"
+            if e60p.exists():
+                try:early60_shadow_forward=json.loads(e60p.read_text(encoding="utf-8"))
+                except Exception:early60_shadow_forward={}
+            full_shadow_stack_forward={}
+            fssp=args.checkpoint_dir/"EARLY60_PLUS_HARD120_HIGH_FLOW_FORWARD_STATUS.json"
+            if fssp.exists():
+                try:full_shadow_stack_forward=json.loads(fssp.read_text(encoding="utf-8"))
+                except Exception:full_shadow_stack_forward={}
             status={
                 "status":"LEARNING_LIVE" if (model.live_labels or model.internal_live_labels) else "HISTORY_PRETRAINED_LIVE_WATCH",
                 "updated_ts_ms":ts,"expected_side":expected,"last_teacher_local":last_teacher,
@@ -602,10 +687,14 @@ def main():
                 "hard120_contract":survival_contract(),
                 "hard120":hard120_live,
                 "hard120_forward":hard120_forward,
+                "early60_shadow_contract":early60_shadow_contract(),
+                "early60_shadow":early60_shadow_live,
+                "early60_shadow_forward":early60_shadow_forward,
                 "high_flow_shadow_contract":high_flow_shadow_contract(),
                 "high_flow_shadow":high_flow_shadow_live,
                 "high_flow_shadow_forward":high_flow_shadow_forward,
                 "hard120_plus_high_flow_forward":hard120_plus_shadow_forward,
+                "early60_plus_hard120_high_flow_forward":full_shadow_stack_forward,
                 "forward_first_signal":forward_first_signal,
                 "model_report":model.report(),
                 "h1_baseline":model.h1_shadow,
@@ -633,6 +722,7 @@ def main():
             save_pickle(rp,{"candidates":candidates,
                 "hard_candidates":{k:(None if v is None else v.to_dict()) for k,v in hard_candidates.items()},
                 "hard_high_flow_shadow":{k:(None if v is None else v.to_dict()) for k,v in hard_high_flow_shadow.items()},
+                "hard_early60_shadow":{k:(None if v is None else v.to_dict()) for k,v in hard_early60_shadow.items()},
                 "pending":[asdict(z) for z in pending],
                 "expected_side":expected,"last_teacher_local":last_teacher,
                 "latest_by_hour":latest_by_hour,"structure_48h":structure_48h})
@@ -647,6 +737,8 @@ def main():
     model.save(mp);save_pickle(fp,state)
     save_pickle(rp,{"candidates":candidates,
         "hard_candidates":{k:(None if v is None else v.to_dict()) for k,v in hard_candidates.items()},
+        "hard_high_flow_shadow":{k:(None if v is None else v.to_dict()) for k,v in hard_high_flow_shadow.items()},
+        "hard_early60_shadow":{k:(None if v is None else v.to_dict()) for k,v in hard_early60_shadow.items()},
         "pending":[asdict(z) for z in pending],
         "expected_side":expected,"last_teacher_local":last_teacher,
         "latest_by_hour":latest_by_hour,"structure_48h":structure_48h})
