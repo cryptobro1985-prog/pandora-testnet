@@ -31,10 +31,10 @@
 <div class="row"><span>48h leg</span><b id="leg">—</b></div><div class="row"><span>Regime</span><b id="regime">—</b></div>
 </div>
 <div class="card wide">
-<div class="k">EARLY60 strong reversal · shadow</div>
+<div class="k">EARLY60 · research shadow</div>
 <div class="row"><span>LOW</span><b id="earlylow">—</b></div><div class="row"><span>HIGH</span><b id="earlyhigh">—</b></div>
 <div class="metric"><span>Forward precision / recall</span><b id="earlypr">—</b></div><div class="bar"><div class="fill" id="earlybar"></div></div>
-<div class="small">60m one-shot · strong retrace + reversal flow · forward-only · core flip OFF.</div>
+<div class="small">60m one-shot · forward-only. September HIGH did not pass preferred precision gate · core flip OFF.</div>
 </div>
 <div class="card wide">
 <div class="k">HARD120 primary</div><div class="row"><span>LOW</span><b id="hardlow">—</b></div><div class="row"><span>HIGH</span><b id="hardhigh">—</b></div>
@@ -42,22 +42,30 @@
 <div class="small">Primary contract frozen · 6h origin · 120m survival · one-shot checkpoint.</div>
 </div>
 <div class="card wide">
-<div class="k">HIGH60 retrace veto · shadow</div>
+<div class="k">HIGH60 veto · research shadow</div>
 <div class="row"><span>HIGH primary</span><b id="high60state">—</b></div>
 <div class="metric"><span>Forward precision / recall</span><b id="high60pr">—</b></div><div class="bar"><div class="fill" id="high60bar"></div></div>
-<div class="small">HIGH HARD120 mirror only if +60m retrace ≥ 0.50%. Primary unchanged · core flip OFF.</div>
+<div class="small">September HIGH full-stack did not pass 80% precision. Research telemetry only · core flip OFF.</div>
 </div>
 <div class="card wide">
-<div class="k">HIGH flow shadow</div><div class="row"><span>Candidate</span><b id="shadow">—</b></div>
+<div class="k">HIGH preferred · HARD120 + Flow V2</div>
+<div class="row"><span>Candidate</span><b id="v2state">—</b></div>
+<div class="row"><span>Historical 3-period</span><b class="good">80.0–96.7% precision · 40.0–48.3% recall</b></div>
+<div class="metric"><span>Forward precision / recall</span><b id="v2pr">—</b></div><div class="bar"><div class="fill" id="v2bar"></div></div>
+<div class="row"><span>Forward gate</span><b id="v2gate">ACCUMULATING</b></div>
+<div class="small">Preferred HIGH forward candidate. Three-period development, not untouched OOS. HARD120 primary unchanged · core flip OFF.</div>
+</div>
+<div class="card wide">
+<div class="k">HIGH flow V1 · superseded shadow</div><div class="row"><span>Candidate</span><b id="shadow">—</b></div>
 <div class="metric"><span>Forward precision</span><b id="shadowp">—</b></div><div class="bar"><div class="fill" id="shadowbar"></div></div>
-<div class="small">Shadow challenger only. Не меняет primary HARD120.</div>
+<div class="small">Superseded by V2 after three-period development. Historical telemetry only; primary HARD120 unchanged.</div>
 </div>
 <div class="card wide">
-<div class="k">Persistence HARD120 · challenger</div>
+<div class="k">Persistence HARD120 · research shadow</div>
 <div class="row"><span>Rule</span><b>hold ≥65% of max reversal @120m</b></div>
 <div class="row"><span>LOW</span><b id="persistlow">—</b></div><div class="row"><span>HIGH</span><b id="persisthigh">—</b></div>
 <div class="metric"><span>Forward precision / recall</span><b id="persistpr">—</b></div><div class="bar"><div class="fill" id="persistbar"></div></div>
-<div class="small">Shadow-only. Frozen primary HARD120 remains unchanged.</div>
+<div class="small">September HIGH full-stack missed precision gate. Shadow-only; frozen primary HARD120 remains unchanged.</div>
 </div>
 <div class="card wide">
 <div class="k">Full persistence stack forward</div>
@@ -106,6 +114,8 @@ function render(s){
  const hm=fwd(s,"hard120_forward"),hp=hm.precision;$("hardp").textContent=pct(hp);$("hardbar").style.width=Math.max(0,Math.min(100,Number(hp||0)*100))+"%";
  const hv=(s.high60_veto||{}).HIGH;$("high60state").textContent=hv?(hv.candidate_id+" · "+(hv.confirmed_for_veto_stack?"CONFIRMED":"VETO/WATCH")):"—";
  const hvm=fwd(s,"high60_veto_forward"),hvp=hvm.precision;$("high60pr").textContent=pct(hvp)+" / "+pct(hvm.recall);$("high60bar").style.width=Math.max(0,Math.min(100,Number(hvp||0)*100))+"%";
+ const v2=(s.high_flow_v2||{}).HIGH;$("v2state").textContent=v2?(v2.candidate_id+" · "+(v2.emitted?"EMITTED":"WATCH")):"—";
+ const v2m=fwd(s,"hard120_plus_high_flow_v2_forward"),v2p=v2m.precision,v2g=(s.hard120_plus_high_flow_v2_forward||{}).promotion_gate||{};$("v2pr").textContent=pct(v2p)+" / "+pct(v2m.recall);$("v2bar").style.width=Math.max(0,Math.min(100,Number(v2p||0)*100))+"%";$("v2gate").textContent=v2g.passed?"PASS":"ACCUMULATING";$("v2gate").className=v2g.passed?"good":"amber";
  const sh=(s.high_flow_shadow||{}).HIGH;$("shadow").textContent=sh?(sh.candidate_id+" · "+(sh.emitted?"EMITTED":"WATCH")):"—";
  const sm=fwd(s,"high_flow_shadow_forward"),sp=sm.precision;$("shadowp").textContent=pct(sp);$("shadowbar").style.width=Math.max(0,Math.min(100,Number(sp||0)*100))+"%";
  const ps=s.hard120_persistence||{};$("persistlow").textContent=hardText(ps.LOW);$("persisthigh").textContent=hardText(ps.HIGH);
