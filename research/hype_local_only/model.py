@@ -29,7 +29,7 @@ class Candidate:
     evidence:dict[str,Any]=field(default_factory=dict)
 
 class LocalOnlyModel:
-    VERSION="HYPE-LOCAL-ONLY-v1"
+    VERSION="HYPE-LOCAL-ONLY-v2-DUAL-SCOPE"
     def __init__(self):
         self.models={(s,h):classifier() for s in ("LOW","HIGH") for h in STAGES}
         self.labels={(s,h):0 for s in ("LOW","HIGH") for h in STAGES}
@@ -45,6 +45,49 @@ class LocalOnlyModel:
         self.h1_thresholds={side:0.5 for side in ("LOW","HIGH")}
         self.h1_last_trained_hour_ms=None
         self.h1_shadow={}
+        # Broad INTERNAL L3/K1 tactical learner is deliberately separate from
+        # the STRICT L6/K2/core model so the two label contracts never mix.
+        self.internal_models={(s,h):classifier() for s in ("LOW","HIGH") for h in STAGES}
+        self.internal_labels={(s,h):0 for s in ("LOW","HIGH") for h in STAGES}
+        self.internal_positive={(s,h):0 for s in ("LOW","HIGH") for h in STAGES}
+        self.internal_thresholds={(s,h):0.5 for s in ("LOW","HIGH") for h in STAGES}
+        self.internal_live_labels=0
+
+    def _ensure_internal_scope(self):
+        """Backwards-compatible upgrade for checkpoints pickled before v2."""
+        if not hasattr(self,"internal_models"):
+            self.internal_models={(s,h):classifier() for s in ("LOW","HIGH") for h in STAGES}
+        if not hasattr(self,"internal_labels"):
+            self.internal_labels={(s,h):0 for s in ("LOW","HIGH") for h in STAGES}
+        if not hasattr(self,"internal_positive"):
+            self.internal_positive={(s,h):0 for s in ("LOW","HIGH") for h in STAGES}
+        if not hasattr(self,"internal_thresholds"):
+            self.internal_thresholds={(s,h):0.5 for s in ("LOW","HIGH") for h in STAGES}
+        if not hasattr(self,"internal_live_labels"):
+            self.internal_live_labels=0
+
+    def learn_internal(self,side,stage,x,y,source="history",repeat=1):
+        """Learn tactical INTERNAL L3/K1 labels without contaminating STRICT."""
+        self._ensure_internal_scope()
+        key=(str(side),int(stage));xx=clean(x)
+        for _ in range(max(1,int(repeat))):
+            self.internal_models[key].learn_one(xx,bool(y))
+        self.internal_labels[key]+=1
+        self.internal_positive[key]+=int(bool(y))
+        if source=="live":self.internal_live_labels+=1
+
+    def internal_probability(self,side,stage,x):
+        self._ensure_internal_scope()
+        try:
+            p=self.internal_models[(str(side),int(stage))].predict_proba_one(clean(x))
+            return float(p.get(True,p.get(1,0.5)))
+        except Exception:
+            return 0.5
+
+    def predict_internal(self,side,stage,x):
+        self._ensure_internal_scope()
+        p=self.internal_probability(side,stage,x)
+        return p,p>=float(self.internal_thresholds[(str(side),int(stage))])
 
     def learn(self,side,stage,x,y,source="history",repeat=1):
         key=(str(side),int(stage))
@@ -157,6 +200,7 @@ class LocalOnlyModel:
                 "pairs":(head.get("top_pair_relationships") or [])[:limit]}
 
     def report(self):
+        self._ensure_internal_scope()
         return {
             "version":self.VERSION,
             "labels":{f"{s}_{h}s":self.labels[(s,h)] for s in ("LOW","HIGH") for h in STAGES},
@@ -165,6 +209,15 @@ class LocalOnlyModel:
             "history_meta":self.history_meta,
             "live_labels":self.live_labels,
             "last_signal":self.last_signal,
+            "internal_tactical":{
+                "teacher":"INTERNAL_L3_K1",
+                "role":"TACTICAL_ONLY",
+                "labels":{f"{s}_{h}s":self.internal_labels[(s,h)] for s in ("LOW","HIGH") for h in STAGES},
+                "positive":{f"{s}_{h}s":self.internal_positive[(s,h)] for s in ("LOW","HIGH") for h in STAGES},
+                "thresholds":{f"{s}_{h}s":self.internal_thresholds[(s,h)] for s in ("LOW","HIGH") for h in STAGES},
+                "live_labels":self.internal_live_labels,
+                "core_flip_authorized":False,
+            },
             "h1":{"labels":self.h1_labels,"positive":self.h1_positive,
                   "thresholds":self.h1_thresholds,"shadow":self.h1_shadow,
                   "last_trained_hour_ms":self.h1_last_trained_hour_ms},
