@@ -28,6 +28,10 @@ from research.hype_false_local_entry.early60_strong_reversal_shadow import (
     contract as early60_shadow_contract,
     evaluate_once as evaluate_early60_once,
 )
+from research.hype_false_local_entry.hard120_persistence_shadow import (
+    contract as hard120_persistence_contract,
+    persistence_metrics as hard120_persistence_metrics,
+)
 
 H=3_600_000
 
@@ -428,12 +432,14 @@ def main():
             hard120_live={}
             high_flow_shadow_live={}
             early60_shadow_live={}
+            hard120_persistence_live={}
             for side in ("LOW","HIGH"):
                 hc=hard_candidates.get(side)
                 if hc is None:
                     hard120_live[side]=None
                     high_flow_shadow_live[side]=None
                     early60_shadow_live[side]=None
+                    hard120_persistence_live[side]=None
                     continue
 
                 early_state=hard_early60_shadow.get(side)
@@ -577,6 +583,41 @@ def main():
                     "checkpoint":shadow_metrics,
                 }
 
+                persistence_metrics={"ready":False,"reason":"PRIMARY_HARD120_NOT_EMITTED"}
+                persistence_ready=False
+                if hard_stage and sample is not None and bool(sample.get("fresh_observation")):
+                    persistence_metrics=hard120_persistence_metrics(
+                        side=side,
+                        extreme_price=float(hc.extreme_price),
+                        retrace_bps=float(hard_metrics.get("retrace_bps") or 0.0),
+                        candidate_ts_ms=int(hc.extreme_ts_ms),
+                        sample_ts_ms=int(sample.get("sample_ts_ms") or ts),
+                        completed_m1_rows=completed_m1(state,ts),
+                    )
+                    persistence_ready=bool(persistence_metrics.get("ready"))
+                    if persistence_ready:
+                        append_jsonl(evlog,{
+                            "event":"INTERNAL_HARD120_PERSISTENCE_SHADOW",
+                            "ts_ms":int(ts),
+                            "signal_ts_ms":int(sample.get("sample_ts_ms") or ts),
+                            "candidate_ts_ms":int(hc.extreme_ts_ms),
+                            "candidate_id":hc.candidate_id,"side":hc.side,
+                            "price":float(hc.extreme_price),
+                            "mark_price":float(sample.get("mark_price") or price),
+                            "teacher":INTERNAL.name,
+                            "shadow_contract":"HARD120_REVERSAL_PERSISTENCE_SHADOW_V1",
+                            "primary_contract":"INTERNAL_HARD120_CHECKPOINT_V2",
+                            "core_flip_authorized":False,
+                            "metrics":persistence_metrics,
+                        })
+                hard120_persistence_live[side]={
+                    "candidate_id":hc.candidate_id,
+                    "side":hc.side,
+                    "primary_emitted":bool(hard_stage),
+                    "shadow_ready":persistence_ready,
+                    "metrics":persistence_metrics,
+                }
+
                 if hard_stage:
                     hc.emitted=True
                     append_jsonl(evlog,{
@@ -655,6 +696,16 @@ def main():
             if fssp.exists():
                 try:full_shadow_stack_forward=json.loads(fssp.read_text(encoding="utf-8"))
                 except Exception:full_shadow_stack_forward={}
+            persistence_forward={}
+            pfp=args.checkpoint_dir/"HARD120_PERSISTENCE_FORWARD_STATUS.json"
+            if pfp.exists():
+                try:persistence_forward=json.loads(pfp.read_text(encoding="utf-8"))
+                except Exception:persistence_forward={}
+            persistence_full_stack_forward={}
+            pfsp=args.checkpoint_dir/"EARLY60_PLUS_PERSISTENCE_HARD120_HIGH_FLOW_FORWARD_STATUS.json"
+            if pfsp.exists():
+                try:persistence_full_stack_forward=json.loads(pfsp.read_text(encoding="utf-8"))
+                except Exception:persistence_full_stack_forward={}
             status={
                 "status":"LEARNING_LIVE" if (model.live_labels or model.internal_live_labels) else "HISTORY_PRETRAINED_LIVE_WATCH",
                 "updated_ts_ms":ts,"expected_side":expected,"last_teacher_local":last_teacher,
@@ -687,6 +738,9 @@ def main():
                 "hard120_contract":survival_contract(),
                 "hard120":hard120_live,
                 "hard120_forward":hard120_forward,
+                "hard120_persistence_contract":hard120_persistence_contract(),
+                "hard120_persistence":hard120_persistence_live,
+                "hard120_persistence_forward":persistence_forward,
                 "early60_shadow_contract":early60_shadow_contract(),
                 "early60_shadow":early60_shadow_live,
                 "early60_shadow_forward":early60_shadow_forward,
@@ -695,6 +749,7 @@ def main():
                 "high_flow_shadow_forward":high_flow_shadow_forward,
                 "hard120_plus_high_flow_forward":hard120_plus_shadow_forward,
                 "early60_plus_hard120_high_flow_forward":full_shadow_stack_forward,
+                "early60_plus_persistence_hard120_high_flow_forward":persistence_full_stack_forward,
                 "forward_first_signal":forward_first_signal,
                 "model_report":model.report(),
                 "h1_baseline":model.h1_shadow,
