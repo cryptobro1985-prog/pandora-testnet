@@ -77,12 +77,16 @@ def terminal_internal_labels(rows: list[dict]) -> list[dict]:
 
 
 def internal_signal_records(events: list[dict], labels: list[dict],
-                            event_name: str="INTERNAL_TACTICAL_SIGNAL") -> list[dict]:
+                            event_names="INTERNAL_TACTICAL_SIGNAL") -> list[dict]:
+    if isinstance(event_names,str):
+        names={event_names}
+    else:
+        names={str(x) for x in event_names}
     truth={str(x["candidate_id"]):int(x["label_id"]) for x in labels}
     out=[]
     seen=set()
     for r in events:
-        if r.get("event")!=event_name:
+        if r.get("event") not in names:
             continue
         if r.get("candidate_ts_ms") is None:
             continue
@@ -109,12 +113,13 @@ def internal_signal_records(events: list[dict], labels: list[dict],
 
 
 def audit(labels_path: Path, events_path: Path, *,
-          event_name: str="INTERNAL_TACTICAL_SIGNAL",
+          event_names="INTERNAL_TACTICAL_SIGNAL",
           actionable: bool=False) -> dict:
     label_rows=read_jsonl(labels_path)
     event_rows=read_jsonl(events_path)
     labels=terminal_internal_labels(label_rows)
-    signals=internal_signal_records(event_rows,labels,event_name=event_name)
+    names=[event_names] if isinstance(event_names,str) else list(event_names)
+    signals=internal_signal_records(event_rows,labels,event_names=names)
 
     if len(labels)<2:
         metrics={
@@ -138,7 +143,8 @@ def audit(labels_path: Path, events_path: Path, *,
         "teacher":"INTERNAL_L3_K1_TERMINAL_FINALIZED",
         "objective":("FIRST_ACCEPTED_ACTIONABLE_SIGNAL_BEFORE_NEXT_LOCAL"
                      if actionable else "FIRST_ACCEPTED_SIGNAL_PER_COMPLETED_INTERNAL_SWING"),
-        "signal_event":event_name,
+        "signal_events":names,
+        "signal_event":names[0] if len(names)==1 else "+".join(names),
         "actionable_deadline_enabled":bool(actionable),
         "terminal_labels":len(labels),
         "tactical_signal_rows":len(signals),
@@ -153,10 +159,11 @@ def main():
     ap.add_argument("--labels",type=Path,required=True)
     ap.add_argument("--events",type=Path,required=True)
     ap.add_argument("--output",type=Path,required=True)
-    ap.add_argument("--event-name",default="INTERNAL_TACTICAL_SIGNAL")
+    ap.add_argument("--event-name",action="append",default=None)
     ap.add_argument("--actionable",action="store_true")
     args=ap.parse_args()
-    out=audit(args.labels,args.events,event_name=args.event_name,actionable=args.actionable)
+    names=args.event_name or ["INTERNAL_TACTICAL_SIGNAL"]
+    out=audit(args.labels,args.events,event_names=names,actionable=args.actionable)
     args.output.write_text(json.dumps(out,indent=2,ensure_ascii=False)+"\n",encoding="utf-8")
     print("FIRST_SIGNAL_FORWARD="+json.dumps({
         "status":out["status"],
