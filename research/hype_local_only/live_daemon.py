@@ -922,6 +922,7 @@ def main():
     save_pickle(rp,{"candidates":candidates,
         "hard_candidates":{k:(None if v is None else v.to_dict()) for k,v in hard_candidates.items()},
         "hard_high_flow_shadow":{k:(None if v is None else v.to_dict()) for k,v in hard_high_flow_shadow.items()},
+        "hard_high_flow_v2_emitted":hard_high_flow_v2_emitted,
         "hard_early60_shadow":{k:(None if v is None else v.to_dict()) for k,v in hard_early60_shadow.items()},
         "pending":[asdict(z) for z in pending],
         "expected_side":expected,"last_teacher_local":last_teacher,
