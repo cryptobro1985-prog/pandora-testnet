@@ -131,7 +131,9 @@ jobs:
           if old is not None:
               # Keep the live H1 teacher learner and operational context.
               for attr in ("h1_models","h1_labels","h1_positive","h1_thresholds",
-                           "h1_last_trained_hour_ms","h1_shadow","last_signal"):
+                           "h1_last_trained_hour_ms","h1_shadow","last_signal",
+                           "internal_models","internal_labels","internal_positive",
+                           "internal_thresholds","internal_live_labels"):
                   if hasattr(old,attr):setattr(new,attr,getattr(old,attr))
               new.history_meta["live_labels_before_history_upgrade"]=int(getattr(old,"live_labels",0) or 0)
           new.save(dst)
@@ -272,10 +274,12 @@ jobs:
             "generated_ts_ms":int(time.time()*1000),
             "research_only":True,
             "real_orders":False,
-            "teacher":"H1_L6_K2_STRICT",
-            "task":"market state -> LOCAL_LOW / LOCAL_HIGH / NONE",
+            "teacher":"DUAL_INTERNAL_L3_K1__STRICT_L6_K2",
+            "task":"market state -> INTERNAL tactical local + STRICT core local",
             "historical_labels":sum(q.labels.values())-int(q.live_labels),
             "live_matured_labels":int(q.live_labels),
+            "internal_live_matured_labels":int(getattr(q,"internal_live_labels",0) or 0),
+            "internal_labels_total":sum(getattr(q,"internal_labels",{}).values()),
             "live_label_rows_persisted":live_rows,
             "pending_labels":s.get("pending_labels"),
             "expected_side":s.get("expected_side"),
@@ -301,7 +305,9 @@ jobs:
           from research.hype_local_only.model import LocalOnlyModel
           q=LocalOnlyModel.load(Path("local_cp/local_only_model.pkl"))
           s=json.load(open("local_cp/LOCAL_ONLY_STATUS.json"))
-          print("labels",sum(q.labels.values()),"live_labels",q.live_labels)
+          q._ensure_internal_scope()
+          print("strict_labels",sum(q.labels.values()),"strict_live",q.live_labels,
+                "internal_labels",sum(q.internal_labels.values()),"internal_live",q.internal_live_labels)
           print("status",json.dumps(s,indent=2))
           assert sum(q.labels.values()) > 0
           assert s["research_only"] is True
