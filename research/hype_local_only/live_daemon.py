@@ -382,8 +382,13 @@ def main():
                 opts=[z for z in candidates.values() if z is not None]
                 c=max(opts,key=lambda z:max(z.probabilities.values(),default=0.0),default=None)
             cov=state.coverage_report()
+            forward_first_signal={}
+            fsp=args.checkpoint_dir/"FIRST_SIGNAL_FORWARD_STATUS.json"
+            if fsp.exists():
+                try:forward_first_signal=json.loads(fsp.read_text(encoding="utf-8"))
+                except Exception:forward_first_signal={}
             status={
-                "status":"LEARNING_LIVE" if model.live_labels else "HISTORY_PRETRAINED_LIVE_WATCH",
+                "status":"LEARNING_LIVE" if (model.live_labels or model.internal_live_labels) else "HISTORY_PRETRAINED_LIVE_WATCH",
                 "updated_ts_ms":ts,"expected_side":expected,"last_teacher_local":last_teacher,
                 "structure_48h":structure_48h,
                 "candidate":None if c is None else {
@@ -411,6 +416,7 @@ def main():
                 "internal_live_labels":model.internal_live_labels,
                 "pending_labels":len(pending),
                 "teacher_contract":teacher_contract(),
+                "forward_first_signal":forward_first_signal,
                 "model_report":model.report(),
                 "h1_baseline":model.h1_shadow,
                 "h1_training":{"labels":model.h1_labels,"positive":model.h1_positive},
