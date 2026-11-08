@@ -114,7 +114,7 @@ jobs:
       - name: Validate migrated checkpoint and dual runtime
         run: |
           python - <<'PY'
-          import json
+          import json,pickle
           from pathlib import Path
           from research.hype_local_only.model import LocalOnlyModel
           cp=Path("local_cp")
@@ -135,6 +135,12 @@ jobs:
           assert s["model_report"]["h1"]["online_training_enabled"] is False
           assert s["model_report"]["internal_tactical"]["core_flip_authorized"] is False
           assert all(x.get("terminal_finalized") is True for x in (s.get("structure_48h") or {}).get("locals",[]))
+          assert s["hard120_contract"]["name"]=="INTERNAL_HARD120_SURVIVAL_V1"
+          assert s["hard120_contract"]["core_flip_authorized"] is False
+          assert set((s.get("hard120") or {}).keys())=={"LOW","HIGH"}
+          with (cp/"local_runtime.pkl").open("rb") as fh:
+              runtime=pickle.load(fh)
+          assert "hard_candidates" in runtime
           print(json.dumps({
               "status":"PASS",
               "strict_live_labels":m.live_labels,
@@ -143,6 +149,8 @@ jobs:
               "pending_labels":s.get("pending_labels"),
               "candidate":s.get("candidate"),
               "local_target":s.get("local_target"),
+              "hard120":s.get("hard120"),
+              "hard120_contract":s.get("hard120_contract"),
           },ensure_ascii=False))
           PY
       - uses: actions/upload-artifact@v4
