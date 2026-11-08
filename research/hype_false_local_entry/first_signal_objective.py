@@ -161,6 +161,94 @@ def summarize_first_signals(
     }
 
 
+def summarize_actionable_first_signals(
+    records: Iterable[Mapping[str, Any]],
+    labels: Iterable[Mapping[str, Any]],
+    *,
+    accepted: Callable[[Mapping[str, Any]], bool] | None = None,
+    timestamp_key: str = "signal_ts_ms",
+    candidate_timestamp_key: str = "candidate_ts_ms",
+    true_key: str = "internal_true",
+    label_id_key: str = "internal_label_id",
+) -> dict[str, Any]:
+    """First-signal score with a trading deadline at the NEXT Local extreme.
+
+    A detector for Local T is only useful for the T->next-Local swing if its
+    signal arrives before the next finalized Local's extreme.  Late signals are
+    counted as no-signal rather than retroactive successes.
+    """
+    labs=finalized_labels(labels)
+    if len(labs)<3:
+        base=summarize_first_signals([],labs[:1],accepted=accepted,
+            timestamp_key=timestamp_key,candidate_timestamp_key=candidate_timestamp_key,
+            true_key=true_key,label_id_key=label_id_key)
+        base["episodes"]=0;base["no_signal"]=0
+        base["actionable_deadline"]="NEXT_FINALIZED_LOCAL_EXTREME"
+        return base
+
+    episodes=build_episodes(labs[:-1])
+    deadlines={
+        ep.ep:int(labs[ep.ep+1]["extreme_interval_start_ms"])
+        for ep in episodes
+    }
+    by_ep: dict[int,list[tuple[int,Mapping[str,Any],SwingEpisode]]]=defaultdict(list)
+    accepted=accepted or (lambda r: bool(r.get("accepted")))
+
+    for row in records:
+        candidate_ts=int(row.get(candidate_timestamp_key,row.get(timestamp_key,0)) or 0)
+        ep=assign_episode(candidate_ts,str(row.get("side")),episodes)
+        if ep is None or not accepted(row):
+            continue
+        signal_ts=int(row.get(timestamp_key,candidate_ts) or candidate_ts)
+        if signal_ts>=deadlines[ep.ep]:
+            continue
+        by_ep[ep.ep].append((signal_ts,row,ep))
+
+    first_rows=[];true_first=false_first=0
+    low_tp=low_fp=high_tp=high_fp=0;delays_ms=[]
+    for ep in episodes:
+        rows=sorted(by_ep.get(ep.ep,[]),key=lambda z:(z[0],int(z[1].get(candidate_timestamp_key,z[0]))))
+        if not rows:
+            continue
+        signal_ts,row,_=rows[0]
+        is_true=bool(row.get(true_key)) and int(row.get(label_id_key) or -1)==ep.target_label_id
+        if is_true:
+            true_first+=1
+            delays_ms.append(max(0,signal_ts-int(row.get(candidate_timestamp_key,signal_ts))))
+            if ep.target_side=="LOW":low_tp+=1
+            else:high_tp+=1
+        else:
+            false_first+=1
+            if ep.target_side=="LOW":low_fp+=1
+            else:high_fp+=1
+        first_rows.append({
+            "episode":ep.ep,"target_label_id":ep.target_label_id,
+            "target_side":ep.target_side,"signal_ts_ms":signal_ts,
+            "deadline_ms":deadlines[ep.ep],
+            "candidate_id":row.get("candidate_id"),
+            "candidate_ts_ms":int(row.get(candidate_timestamp_key,signal_ts)),
+            "true_first":is_true,
+        })
+
+    accepted_n=true_first+false_first;total=len(episodes)
+    sd=sorted(delays_ms);median_delay=None
+    if sd:
+        n=len(sd);median_delay=float(sd[n//2]) if n%2 else (sd[n//2-1]+sd[n//2])/2.0
+    return {
+        "episodes":total,"accepted_first":accepted_n,
+        "true_first":true_first,"false_first":false_first,
+        "no_signal":total-accepted_n,
+        "precision":true_first/accepted_n if accepted_n else 0.0,
+        "recall":true_first/total if total else 0.0,
+        "false_first_rate":false_first/accepted_n if accepted_n else None,
+        "median_true_signal_delay_s":None if median_delay is None else median_delay/1000.0,
+        "by_side":{"LOW":{"true_first":low_tp,"false_first":low_fp},
+                   "HIGH":{"true_first":high_tp,"false_first":high_fp}},
+        "first_signals":first_rows,
+        "actionable_deadline":"NEXT_FINALIZED_LOCAL_EXTREME",
+    }
+
+
 def promotion_gate(metrics: Mapping[str, Any], *, min_precision: float = 0.80,
                    min_recall: float = 0.40, min_true_first: int = 10,
                    min_episodes: int = 20) -> dict[str, Any]:
