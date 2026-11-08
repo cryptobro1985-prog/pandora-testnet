@@ -47,6 +47,20 @@
 <div class="small">Shadow challenger only. Не меняет primary HARD120.</div>
 </div>
 <div class="card wide">
+<div class="k">Persistence HARD120 · challenger</div>
+<div class="row"><span>Rule</span><b>hold ≥65% of max reversal @120m</b></div>
+<div class="row"><span>LOW</span><b id="persistlow">—</b></div><div class="row"><span>HIGH</span><b id="persisthigh">—</b></div>
+<div class="metric"><span>Forward precision / recall</span><b id="persistpr">—</b></div><div class="bar"><div class="fill" id="persistbar"></div></div>
+<div class="small">Shadow-only. Frozen primary HARD120 remains unchanged.</div>
+</div>
+<div class="card wide">
+<div class="k">Full persistence stack forward</div>
+<div class="row"><span>Events</span><b>EARLY60 → PERSISTENCE120 → HIGH-flow</b></div>
+<div class="row"><span>True / False first</span><b id="pstacktf">—</b></div>
+<div class="row"><span>Precision / Recall</span><b id="pstackpr">—</b></div>
+<div class="row"><span>Gate</span><b id="pstackgate">—</b></div>
+</div>
+<div class="card wide">
 <div class="k">Full shadow stack forward</div>
 <div class="row"><span>Events</span><b>EARLY60 → HARD120 → HIGH-flow</b></div>
 <div class="row"><span>True / False first</span><b id="stacktf">—</b></div>
@@ -86,6 +100,9 @@ function render(s){
  const hm=fwd(s,"hard120_forward"),hp=hm.precision;$("hardp").textContent=pct(hp);$("hardbar").style.width=Math.max(0,Math.min(100,Number(hp||0)*100))+"%";
  const sh=(s.high_flow_shadow||{}).HIGH;$("shadow").textContent=sh?(sh.candidate_id+" · "+(sh.emitted?"EMITTED":"WATCH")):"—";
  const sm=fwd(s,"high_flow_shadow_forward"),sp=sm.precision;$("shadowp").textContent=pct(sp);$("shadowbar").style.width=Math.max(0,Math.min(100,Number(sp||0)*100))+"%";
+ const ps=s.hard120_persistence||{};$("persistlow").textContent=hardText(ps.LOW);$("persisthigh").textContent=hardText(ps.HIGH);
+ const pm=fwd(s,"hard120_persistence_forward"),pp=pm.precision;$("persistpr").textContent=pct(pp)+" / "+pct(pm.recall);$("persistbar").style.width=Math.max(0,Math.min(100,Number(pp||0)*100))+"%";
+ const psm=fwd(s,"early60_plus_persistence_hard120_high_flow_forward"),psg=(s.early60_plus_persistence_hard120_high_flow_forward||{}).promotion_gate||{};$("pstacktf").textContent=num(psm.true_first,0)+" / "+num(psm.false_first,0);$("pstackpr").textContent=pct(psm.precision)+" / "+pct(psm.recall);$("pstackgate").textContent=psg.passed?"PASS":"ACCUMULATING";$("pstackgate").className=psg.passed?"good":"amber";
  const stm=fwd(s,"early60_plus_hard120_high_flow_forward"),stg=(s.early60_plus_hard120_high_flow_forward||{}).promotion_gate||{};$("stacktf").textContent=num(stm.true_first,0)+" / "+num(stm.false_first,0);$("stackpr").textContent=pct(stm.precision)+" / "+pct(stm.recall);$("stackgate").textContent=stg.passed?"PASS":"ACCUMULATING";$("stackgate").className=stg.passed?"good":"amber";
  const fm=fwd(s,"forward_first_signal"),fg=(s.forward_first_signal||{}).promotion_gate||{};$("episodes").textContent=num(fm.episodes,0);$("tf").textContent=num(fm.true_first,0)+" / "+num(fm.false_first,0);$("pr").textContent=pct(fm.precision)+" / "+pct(fm.recall);$("gate").textContent=fg.passed?"PASS":"ACCUMULATING";$("gate").className=fg.passed?"good":"amber";
  $("cortex").textContent=s.cortex_state||((s.cortex||{}).state)||"—";$("inputs").textContent=num(s.seen_input_count,0)+" / 86";$("pending").textContent=num(s.pending_labels,0);
