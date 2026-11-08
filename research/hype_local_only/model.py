@@ -194,6 +194,32 @@ class LocalOnlyModel:
     def h1_prior(self,side):
         return float((self.h1_shadow or {}).get("low_probability" if side=="LOW" else "high_probability",0.5))
 
+    def update_h1_shadow_only(self,state,ts_ms):
+        """Score the latest completed H1 with frozen clean historical weights.
+
+        Online H1 learning is intentionally disabled for the terminal-local
+        system.  Raw K2 pivots can later be superseded by a better same-side
+        pivot, so teaching them immediately would contaminate the prior.
+        """
+        rows=self._completed_h1(state,ts_ms)
+        if len(rows)<7:
+            return
+        i=len(rows)-1
+        lowx=self._h1_features(rows,i,"LOW")
+        highx=self._h1_features(rows,i,"HIGH")
+        lp=float(self.h1_models["LOW"].predict_proba_one(lowx).get(True,0.5)) if lowx else 0.5
+        hp=float(self.h1_models["HIGH"].predict_proba_one(highx).get(True,0.5)) if highx else 0.5
+        self.h1_shadow={
+            "hour_ms":int(rows[i]["start_ms"]),
+            "low_probability":lp,
+            "high_probability":hp,
+            "side":"LOW" if lp>=hp else "HIGH",
+            "confidence":max(lp,hp),
+            "teacher":"H1_L6_K2_FINALIZED_PRETRAIN_FROZEN",
+            "future_used_as_input":False,
+            "online_learning":False,
+        }
+
     def relationship_evidence(self,side,stage,x,limit=8):
         head=((self.relationship_memory.get("heads") or {}).get(f"{side}_{stage}s") or {})
         rows=head.get("top_feature_relationships") or []
@@ -233,7 +259,9 @@ class LocalOnlyModel:
             },
             "h1":{"labels":self.h1_labels,"positive":self.h1_positive,
                   "thresholds":self.h1_thresholds,"shadow":self.h1_shadow,
-                  "last_trained_hour_ms":self.h1_last_trained_hour_ms},
+                  "last_trained_hour_ms":self.h1_last_trained_hour_ms,
+                  "online_training_enabled":False,
+                  "teacher":"STRICT_L6_K2_FINALIZED_PRETRAIN_FROZEN"},
         }
 
     def save(self,path:Path):
