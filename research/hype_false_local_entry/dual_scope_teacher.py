@@ -89,6 +89,86 @@ def matured_pivot_label(
     return bool(is_low if side == "LOW" else is_high)
 
 
+def collapsed_pivots(
+    completed_h1_rows: Iterable[Mapping],
+    teacher_scope: str | TeacherScope,
+) -> list[dict]:
+    """Causally reproduce alternating terminal-pivot candidates up to now.
+
+    Same-side pivots are collapsed: only the more extreme one survives.  The
+    final element is provisional; it is not a finalized Local until an opposite
+    matured pivot appears after it.
+    """
+    cfg=scope(teacher_scope)
+    rows=sorted(_rows_by_hour(completed_h1_rows).values(),key=lambda x:x["start_ms"])
+    raw=[]
+    for i in range(cfg.lookback,len(rows)-cfg.lookahead):
+        win=rows[i-cfg.lookback:i+cfg.lookahead+1]
+        if any(int(b["start_ms"])!=int(a["start_ms"])+HOUR_MS for a,b in zip(win,win[1:])):
+            continue
+        row=rows[i];past=rows[i-cfg.lookback:i];future=rows[i+1:i+cfg.lookahead+1]
+        hi=row["high"]>max(z["high"] for z in past) and row["high"]>=max(z["high"] for z in future)
+        lo=row["low"]<min(z["low"] for z in past) and row["low"]<=min(z["low"] for z in future)
+        if hi==lo:
+            continue
+        if not hi and not lo:
+            continue
+        side="HIGH" if hi else "LOW"
+        price=row["high"] if hi else row["low"]
+        item={"side":side,"price":price,"hour_ms":int(row["start_ms"]),
+              "available_ms":cfg.maturity_ms(int(row["start_ms"]))}
+        if raw and raw[-1]["side"]==side:
+            better=price>raw[-1]["price"] if side=="HIGH" else price<raw[-1]["price"]
+            if better:
+                raw[-1]=item
+        else:
+            raw.append(item)
+    return raw
+
+
+def finalized_terminal_label(
+    completed_h1_rows: Iterable[Mapping],
+    extreme_ts_ms: int,
+    side: str,
+    teacher_scope: str | TeacherScope,
+    now_ms: int,
+) -> Optional[bool]:
+    """Label terminal Local only after the next opposite pivot finalizes it.
+
+    Returns:
+      None  -> not mature yet OR still the last/provisional pivot;
+      False -> candidate hour is not the surviving terminal pivot;
+      True  -> candidate hour survived same-side replacement and a later
+               opposite pivot has matured, so it is causally finalized.
+    """
+    cfg=scope(teacher_scope)
+    side=str(side).upper()
+    if side not in {"LOW","HIGH"}:
+        raise ValueError("side must be LOW or HIGH")
+    hour=(int(extreme_ts_ms)//HOUR_MS)*HOUR_MS
+    if int(now_ms)<cfg.maturity_ms(hour):
+        return None
+
+    pivots=collapsed_pivots(completed_h1_rows,cfg)
+    match_index=None
+    for i,p in enumerate(pivots):
+        if p["hour_ms"]==hour and p["side"]==side:
+            match_index=i
+            break
+
+    if match_index is None:
+        # K bars have already matured.  The hour is either not a pivot or a
+        # same-side provisional pivot that was superseded by a better extreme.
+        return False
+
+    if match_index==len(pivots)-1:
+        # Still provisional.  Do not teach a false "terminal" truth.
+        return None
+
+    # A later opposite pivot exists in the collapsed sequence.
+    return bool(pivots[match_index+1]["side"]!=side)
+
+
 def teacher_contract() -> dict:
     return {
         "internal": {
@@ -106,4 +186,5 @@ def teacher_contract() -> dict:
             "rule": "macro/core local; may authorize core direction change after separate forward gate",
         },
         "future_leakage_guard": "lookahead bars are teacher-only and must be completed before labeling",
+        "terminal_finalization": "a pivot stays provisional until a later opposite matured pivot; same-side replacement makes the old provisional false",
     }
