@@ -13,8 +13,8 @@ from research.hype_false_local_entry.dual_scope_teacher import (
     INTERNAL, STRICT, collapsed_pivots, finalized_terminal_label, teacher_contract,
 )
 from research.hype_false_local_entry.hard_survival_gate import (
-    HardCandidate, contract as hard120_contract, maybe_start_or_extend as hard120_update,
-    should_emit as hard120_should_emit,
+    HardCandidate, contract as survival_contract, maybe_start_or_extend as survival_update,
+    next_signal as survival_next_signal,
 )
 
 H=3_600_000
@@ -338,7 +338,7 @@ def main():
                     # refreshes never reset it; only a genuinely more-extreme
                     # 6h candidate can replace the lineage.
                     if extends:
-                        hard_candidates[side]=hard120_update(
+                        hard_candidates[side]=survival_update(
                             hard_candidates.get(side),
                             side=side,price=float(price),ts_ms=int(ts),
                             candidate_id=c.candidate_id,windows=windows,
@@ -401,7 +401,7 @@ def main():
                 if hc is None:
                     hard120_live[side]=None
                     continue
-                hard_ready,hard_metrics=hard120_should_emit(
+                hard_stage,hard_metrics=survival_next_signal(
                     hc,now_ms=int(ts),mark_price=float(price),expected_side=expected
                 )
                 hard120_live[side]={
@@ -409,17 +409,20 @@ def main():
                     "extreme_price":hc.extreme_price,"extreme_ts_ms":hc.extreme_ts_ms,
                     "emitted":hc.emitted,**hard_metrics,
                 }
-                if hard_ready:
+                if hard_stage:
                     hc.emitted=True
+                    event_name=("INTERNAL_HARD90_SIGNAL" if hard_stage=="HARD90"
+                                else "INTERNAL_HARD120_SIGNAL")
                     append_jsonl(evlog,{
-                        "event":"INTERNAL_HARD120_SIGNAL",
+                        "event":event_name,
+                        "survival_stage":hard_stage,
                         "ts_ms":int(ts),"signal_ts_ms":int(ts),
                         "candidate_ts_ms":int(hc.extreme_ts_ms),
                         "candidate_id":hc.candidate_id,"side":hc.side,
                         "price":float(hc.extreme_price),
                         "mark_price":float(price),
                         "teacher":INTERNAL.name,
-                        "hard_contract":"INTERNAL_HARD120_SURVIVAL_V1",
+                        "hard_contract":"INTERNAL_SURVIVAL_LADDER_V1",
                         "core_flip_authorized":False,
                         "metrics":hard_metrics,
                     })
@@ -495,7 +498,7 @@ def main():
                 "internal_live_labels":model.internal_live_labels,
                 "pending_labels":len(pending),
                 "teacher_contract":teacher_contract(),
-                "hard120_contract":hard120_contract(),
+                "hard120_contract":survival_contract(),
                 "hard120":hard120_live,
                 "hard120_forward":hard120_forward,
                 "forward_first_signal":forward_first_signal,
