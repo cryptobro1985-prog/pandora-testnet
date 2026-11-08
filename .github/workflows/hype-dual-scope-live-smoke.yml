@@ -14,6 +14,10 @@ permissions:
   contents: read
   actions: read
 
+concurrency:
+  group: hype-dual-scope-live-smoke
+  cancel-in-progress: true
+
 env:
   HYPE_REST_RELAY_URL: "https://hype-rest-relay.onrender.com"
   LOCAL_ONLY_MONITOR_URL: ""
