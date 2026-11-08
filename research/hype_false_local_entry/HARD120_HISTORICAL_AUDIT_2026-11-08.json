@@ -1,50 +1,52 @@
 {
-  "title": "HYPE INTERNAL HARD120 Survival Gate — Historical Research Audit",
+  "title": "HYPE INTERNAL HARD120 Exact Checkpoint — Historical Research Audit",
   "date": "2026-11-08",
   "period": ["2026-10-04","2026-11-03"],
   "teacher": "INTERNAL_L3_K1 terminal-finalized",
   "research_only": true,
   "real_orders": false,
+  "contract": "INTERNAL_HARD120_CHECKPOINT_V2",
   "rule": {
     "candidate_origin": "6h trailing extreme",
     "same_side_survival_seconds": 7200,
     "min_retrace_bps": 40.0,
     "min_retrace_fraction_of_causal_pre_move_180m": 0.45,
+    "checkpoint_semantics": "evaluate once at the first causal observation at/after 120m; no late recovery crossing",
     "core_flip_authorized": false
   },
   "evaluation": {
     "objective": "first accepted actionable signal before the next finalized opposite Local extreme",
     "completed_actionable_episodes": 120,
     "accepted_first": 57,
-    "true_first": 52,
-    "false_first": 5,
+    "true_first": 53,
+    "false_first": 4,
     "no_signal": 63,
-    "precision": 0.9122807017543859,
-    "recall": 0.43333333333333335,
+    "precision": 0.9298245614035088,
+    "recall": 0.44166666666666665,
     "by_side": {
-      "LOW": {"true_first":25,"false_first":4,"precision":0.8620689655172413,"recall":0.4166666666666667,"episodes":60},
+      "LOW": {"true_first":26,"false_first":3,"precision":0.896551724137931,"recall":0.43333333333333335,"episodes":60},
       "HIGH": {"true_first":27,"false_first":1,"precision":0.9642857142857143,"recall":0.45,"episodes":60}
     },
     "chronological_blocks": [
       {"episodes":"1-30","true_first":15,"false_first":0,"precision":1.0,"recall":0.5},
-      {"episodes":"31-60","true_first":13,"false_first":2,"precision":0.8666666666666667,"recall":0.43333333333333335},
+      {"episodes":"31-60","true_first":12,"false_first":2,"precision":0.8571428571428571,"recall":0.4},
       {"episodes":"61-90","true_first":12,"false_first":1,"precision":0.9230769230769231,"recall":0.4},
-      {"episodes":"91-120","true_first":12,"false_first":2,"precision":0.8571428571428571,"recall":0.4}
+      {"episodes":"91-120","true_first":14,"false_first":1,"precision":0.9333333333333333,"recall":0.4666666666666667}
     ]
   },
   "tradeoff": {
-    "true_actionable_signals_with_next_target": 56,
-    "median_entry_distance_from_local_extreme_pct": 1.2095890707517654,
-    "median_remaining_swing_fraction": 0.4478766381271716,
-    "remaining_swing_fraction_iqr": [0.29891127,0.62346338],
-    "median_full_swing_pct": 2.7594956264782033
+    "true_actionable_signals": 53,
+    "median_entry_distance_from_local_extreme_pct": 1.2929140010743745,
+    "median_remaining_swing_fraction": 0.44722222222222674,
+    "remaining_swing_fraction_iqr": [0.29330544,0.61647211],
+    "median_full_swing_pct": 2.760290556900724
   },
-  "comparison": {
-    "120m_survival_only": {"precision":0.5454545454545454,"recall":0.5},
-    "120m_plus_6h_origin": {"precision":0.716,"recall":0.525},
-    "120m_plus_6h_origin_plus_retrace40_plus_fraction045": {"precision":0.9122807017543859,"recall":0.43333333333333335}
+  "correction": {
+    "supersedes_prior_hard120_counts": true,
+    "reason": "Earlier analysis and live prototype did not enforce identical one-shot checkpoint semantics. Recalculation now matches the production contract exactly.",
+    "discarded_dynamic_crossing_result": "Continuous recovery crossing after 120m is not the tested rule and must not be used for promotion."
   },
-  "warning": "The 40 bps and 0.45 thresholds were selected after studying this same 30-day archive. The chronological block stability is encouraging but is not untouched OOS evidence. HARD120 must pass the pre-registered forward gate before any promotion.",
+  "warning": "The 40 bps and 0.45 thresholds were selected after studying this same 30-day archive. These are historical research results, not untouched OOS proof. HARD120 must pass the pre-registered forward gate before promotion.",
   "forward_gate": {
     "min_episodes":20,
     "min_true_first":10,
