@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      MINIAPP_URL: "https://cdn.jsdelivr.net/gh/cryptobro1985-prog/pandora-testnet@6c3a58699647123ea0d1ab6ef5ccd52b706c63bd/research/hype_caterpillar_monitor_static/index.html"
+      MINIAPP_URL: "https://cdn.jsdelivr.net/gh/cryptobro1985-prog/pandora-testnet@3ef348be98a930ec04d43551b266cec5ce203dfa/research/hype_caterpillar_monitor_static/index.html"
       BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || secrets.HYPE_TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_TOKEN }}
     steps:
       - name: Verify fallback page
