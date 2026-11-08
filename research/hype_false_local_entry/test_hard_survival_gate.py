@@ -21,22 +21,24 @@ def test_pre_move_uses_only_completed_prior_rows():
 
 
 def test_stale_refresh_does_not_reset_hard_lineage():
-    c=maybe_start_or_extend(None,side="LOW",price=100,ts_ms=1_000,
+    base=181*60_000
+    c=maybe_start_or_extend(None,side="LOW",price=100,ts_ms=base,
         candidate_id="L-1",windows=["6h"],completed_m1_rows=bars())
-    same=maybe_start_or_extend(c,side="LOW",price=101,ts_ms=3_601_000,
+    same=maybe_start_or_extend(c,side="LOW",price=101,ts_ms=base+3_600_000,
         candidate_id="L-stale",windows=["6h"],completed_m1_rows=bars())
     assert same is c
     assert same.candidate_id=="L-1"
 
 
 def test_more_extreme_6h_candidate_resets_clock():
-    c=maybe_start_or_extend(None,side="LOW",price=100,ts_ms=1_000,
+    base=181*60_000
+    c=maybe_start_or_extend(None,side="LOW",price=100,ts_ms=base,
         candidate_id="L-1",windows=["6h"],completed_m1_rows=bars())
-    newer=maybe_start_or_extend(c,side="LOW",price=99,ts_ms=2_000,
+    newer=maybe_start_or_extend(c,side="LOW",price=99,ts_ms=base+60_000,
         candidate_id="L-2",windows=["6h"],completed_m1_rows=bars())
     assert newer is not c
     assert newer.candidate_id=="L-2"
-    assert newer.extreme_ts_ms==2_000
+    assert newer.extreme_ts_ms==base+60_000
 
 
 def test_non_6h_candidate_never_starts_hard_lineage():
