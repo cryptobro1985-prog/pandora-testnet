@@ -1,0 +1,63 @@
+name: HYPE HIGH Flow Regime V2 Development Replay
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/hype_false_local_entry/high_flow_regime_gate_v2.py"
+      - "research/hype_false_local_entry/replay_high_flow_regime_v2.py"
+      - ".github/workflows/hype-high-flow-regime-v2-development.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Restore three selection periods
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p octnov julaug sep
+          ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=local116-HYPE" --jq '.artifacts | map(select((.expired|not) and .name=="local116-HYPE")) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ID}/zip" > oct.zip
+          unzip -q oct.zip -d octnov
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13585701406/zip" > jul.zip
+          unzip -q jul.zip -d julaug
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13637558401/zip" > sep.zip
+          unzip -q sep.zip -d sep
+          echo "SEP_COMPACT=$(find sep -name compact_1m.jsonl.gz -print -quit)" >> "$GITHUB_ENV"
+          echo "SEP_LABELS=$(find sep -name labels.json.gz -print -quit)" >> "$GITHUB_ENV"
+      - name: Reproduce V2 selection-period behavior
+        run: |
+          python -m research.hype_false_local_entry.replay_high_flow_regime_v2             --compact-1m octnov/compact_1m.jsonl.gz --labels-gz octnov/labels.json.gz             --output OCTNOV_V2.json
+          python -m research.hype_false_local_entry.replay_high_flow_regime_v2             --compact-1m julaug/full_micro_out/compact_1m.jsonl.gz             --labels-gz julaug/full_micro_out/labels.json.gz --derive-internal             --output JULAUG_V2.json
+          python -m research.hype_false_local_entry.replay_high_flow_regime_v2             --compact-1m "$SEP_COMPACT" --labels-gz "$SEP_LABELS"             --output SEPTEMBER_V2_SELECTION.json
+          python - <<'PY'
+          import json
+          for n in ("OCTNOV_V2.json","JULAUG_V2.json","SEPTEMBER_V2_SELECTION.json"):
+              x=json.load(open(n));print(n,x["evaluation"],x["by_side"]["HIGH"])
+              assert x["contract"]["regime_gate"]["min_trend_to_vol"]==10.0
+              assert x["contract"]["regime_gate"]["min_candidate_range_bps"]==10.0
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-HIGH-FLOW-REGIME-V2-DEV-${{ github.run_id }}
+          path: |
+            OCTNOV_V2.json
+            JULAUG_V2.json
+            SEPTEMBER_V2_SELECTION.json
+          retention-days: 14
