@@ -1,15 +1,15 @@
-"""Causal HARD120 survival gate for broad HYPE INTERNAL locals.
+"""Causal HARD120 checkpoint gate for broad HYPE INTERNAL locals.
 
 This is a paper/research layer, deliberately separate from the early ML
-tactical learner.  It only uses information available at decision time:
+tactical learner. It uses only information available at decision time:
 
-1) the candidate was already a 6h trailing extreme when observed;
+1) the candidate originated as a 6h trailing extreme;
 2) no more-extreme same-side candidate replaced it for 120 minutes;
 3) price retraced at least 40 bps from the extreme; and
 4) that retrace recovered at least 45% of the causal 180-minute pre-move.
 
-The ladder uses a stricter 90-minute rung (65% recovery) and a 120-minute
-fallback (45% recovery). Thresholds were discovered on the
+The checkpoint is evaluated once. A later recovery crossing is never
+retroactively accepted. Thresholds were selected on the
 2026-10-04..2026-11-03 archive and therefore MUST be forward-validated before
 any promotion beyond PAPER.
 """
@@ -18,10 +18,8 @@ from __future__ import annotations
 from dataclasses import dataclass, asdict, field
 from typing import Iterable, Mapping, Optional
 
-EARLY_HARD_AGE_S = 5_400
 HARD_AGE_S = 7_200
 MIN_RETRACE_BPS = 40.0
-EARLY_MIN_RETRACE_FRACTION = 0.65
 MIN_RETRACE_FRACTION = 0.45
 REQUIRED_WINDOW = "6h"
 CHECKPOINT_GRACE_S = 90
@@ -146,19 +144,16 @@ def gate_metrics(candidate: HardCandidate, *, now_ms: int, mark_price: float) ->
 
 def next_signal(candidate: HardCandidate, *, now_ms: int, mark_price: float,
                 expected_side: str | None = None) -> tuple[str | None,dict]:
-    """Evaluate each rung exactly once at its causal checkpoint.
+    """Evaluate HARD120 exactly once at the causal checkpoint.
 
-    Historical research sampled the 90m and 120m checkpoints.  Live must not
-    wait for a later recovery crossing and retroactively call it HARD90/HARD120,
-    because that changes the tested rule.  We therefore consume each checkpoint
-    on the first observation at/after it.  A short grace only tolerates normal
-    scheduler/event jitter; a long restart gap marks the checkpoint missed.
+    Historical research sampled the 120-minute checkpoint. Live must not wait
+    for a later recovery crossing and retroactively call it HARD120. The first
+    observation at/after 120m consumes the checkpoint. A short grace tolerates
+    normal scheduler/event jitter; a long restart gap marks it missed.
     """
     m=gate_metrics(candidate,now_ms=now_ms,mark_price=mark_price)
     expected_ok=expected_side is None or str(expected_side).upper()==str(candidate.side).upper()
     m["expected_side_ok"]=expected_ok
-    m["early_age_ready"]=m["age_s"]>=EARLY_HARD_AGE_S
-    m["early_fraction_ready"]=m["retrace_fraction_pre_180"]>=EARLY_MIN_RETRACE_FRACTION
     m["checkpoint_grace_s"]=CHECKPOINT_GRACE_S
     m["evaluated_stages"]=list(candidate.evaluated_stages)
 
@@ -167,18 +162,7 @@ def next_signal(candidate: HardCandidate, *, now_ms: int, mark_price: float,
         return None,m
 
     stage=None
-    # Consume HARD90 once. If the process wakes much later than the checkpoint,
-    # do not grant a retroactive early signal.
-    if m["age_s"]>=EARLY_HARD_AGE_S and "HARD90" not in candidate.evaluated_stages:
-        candidate.evaluated_stages.append("HARD90")
-        within=m["age_s"]<=EARLY_HARD_AGE_S+CHECKPOINT_GRACE_S
-        m["hard90_within_checkpoint_window"]=within
-        if (within and m["has_6h_origin"] and m["retrace_ready"]
-                and m["early_fraction_ready"] and expected_ok):
-            stage="HARD90"
-
-    # If HARD90 did not fire, HARD120 is a separate one-shot fallback.
-    if stage is None and m["age_s"]>=HARD_AGE_S and "HARD120" not in candidate.evaluated_stages:
+    if m["age_s"]>=HARD_AGE_S and "HARD120" not in candidate.evaluated_stages:
         candidate.evaluated_stages.append("HARD120")
         within=m["age_s"]<=HARD_AGE_S+CHECKPOINT_GRACE_S
         m["hard120_within_checkpoint_window"]=within
@@ -201,18 +185,15 @@ def should_emit(candidate: HardCandidate, *, now_ms: int, mark_price: float,
 
 def contract() -> dict:
     return {
-        "name":"INTERNAL_SURVIVAL_LADDER_V1",
+        "name":"INTERNAL_HARD120_CHECKPOINT_V2",
         "role":"TACTICAL_HARD_PAPER_ONLY",
-        "stages":{
-            "HARD90":{"age_s":EARLY_HARD_AGE_S,"min_retrace_bps":MIN_RETRACE_BPS,
-                      "min_retrace_fraction_pre_180":EARLY_MIN_RETRACE_FRACTION},
-            "HARD120":{"age_s":HARD_AGE_S,"min_retrace_bps":MIN_RETRACE_BPS,
-                       "min_retrace_fraction_pre_180":MIN_RETRACE_FRACTION}
-        },
+        "age_s":HARD_AGE_S,
+        "min_retrace_bps":MIN_RETRACE_BPS,
+        "min_retrace_fraction_pre_180":MIN_RETRACE_FRACTION,
         "required_origin_window":REQUIRED_WINDOW,
         "same_side_invalidation":"any more-extreme same-side 6h candidate resets the clock",
         "stale_refresh_resets_clock":False,
-        "checkpoint_semantics":"each rung is evaluated once; no late recovery crossing is retroactively accepted",
+        "checkpoint_semantics":"HARD120 is evaluated once; no late recovery crossing is retroactively accepted",
         "checkpoint_grace_s":CHECKPOINT_GRACE_S,
         "core_flip_authorized":False,
         "historical_selection_warning":"thresholds were selected on the 30D research archive; forward validation is mandatory",
