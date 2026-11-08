@@ -13,6 +13,9 @@ on:
 permissions:
   contents: read
 
+env:
+  PYTHONPATH: ${{ github.workspace }}
+
 jobs:
   dual-scope-tests:
     runs-on: ubuntu-latest
