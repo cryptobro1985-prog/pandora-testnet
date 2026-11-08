@@ -464,11 +464,11 @@ def main():
             if fsp.exists():
                 try:forward_first_signal=json.loads(fsp.read_text(encoding="utf-8"))
                 except Exception:forward_first_signal={}
-            hard120_forward={}
-            hsp=args.checkpoint_dir/"HARD120_FORWARD_STATUS.json"
+            survival_forward={}
+            hsp=args.checkpoint_dir/"SURVIVAL_LADDER_FORWARD_STATUS.json"
             if hsp.exists():
-                try:hard120_forward=json.loads(hsp.read_text(encoding="utf-8"))
-                except Exception:hard120_forward={}
+                try:survival_forward=json.loads(hsp.read_text(encoding="utf-8"))
+                except Exception:survival_forward={}
             status={
                 "status":"LEARNING_LIVE" if (model.live_labels or model.internal_live_labels) else "HISTORY_PRETRAINED_LIVE_WATCH",
                 "updated_ts_ms":ts,"expected_side":expected,"last_teacher_local":last_teacher,
@@ -498,9 +498,11 @@ def main():
                 "internal_live_labels":model.internal_live_labels,
                 "pending_labels":len(pending),
                 "teacher_contract":teacher_contract(),
+                "survival_ladder_contract":survival_contract(),
+                "survival_ladder":hard120_live,
+                "survival_ladder_forward":survival_forward,
                 "hard120_contract":survival_contract(),
                 "hard120":hard120_live,
-                "hard120_forward":hard120_forward,
                 "forward_first_signal":forward_first_signal,
                 "model_report":model.report(),
                 "h1_baseline":model.h1_shadow,
