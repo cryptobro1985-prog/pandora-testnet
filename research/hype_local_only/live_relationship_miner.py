@@ -67,31 +67,35 @@ def pairs(rows,fx):
     out.sort(key=lambda z:(z["lift"],z["support"]),reverse=True)
     return out[:50]
 
+def split_scopes(rows):
+    """Never pool broad tactical labels with macro/core labels."""
+    strict=[r for r in rows if r.get("teacher") in (None,"H1_L6_K2_STRICT","STRICT_L6_K2")]
+    internal=[r for r in rows if r.get("teacher") in ("H1_L3_K1_INTERNAL","INTERNAL_L3_K1")]
+    return strict,internal
+
+def mine_heads(scope_rows):
+    heads={}
+    for side in ("LOW","HIGH"):
+      for stage in (60,180,300):
+        rr=[r for r in scope_rows if r["side"]==side and int(r["stage"])==stage]
+        fx=effects(rr)
+        heads[f"{side}_{stage}s"]={
+          "examples":len(rr),"true_examples":sum(bool(r.get("label")) for r in rr),
+          "false_examples":sum(not bool(r.get("label")) for r in rr),
+          "discovery_feature_names_seen":len({k for r in rr for k in r["features"] if k.startswith("discovery__")}),
+          "top_feature_relationships":fx[:80],"top_pair_relationships":pairs(rr,fx)
+        }
+    return heads
+
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--labels",type=Path,required=True)
     ap.add_argument("--output",type=Path,required=True)
     args=ap.parse_args()
     rows=load(args.labels)
-    strict_rows=[r for r in rows if r.get("teacher") in (None,"H1_L6_K2_STRICT","STRICT_L6_K2")]
-    internal_rows=[r for r in rows if r.get("teacher") in ("H1_L3_K1_INTERNAL","INTERNAL_L3_K1")]
-
-    def mine(scope_rows):
-        heads={}
-        for side in ("LOW","HIGH"):
-          for stage in (60,180,300):
-            rr=[r for r in scope_rows if r["side"]==side and int(r["stage"])==stage]
-            fx=effects(rr)
-            heads[f"{side}_{stage}s"]={
-              "examples":len(rr),"true_examples":sum(bool(r.get("label")) for r in rr),
-              "false_examples":sum(not bool(r.get("label")) for r in rr),
-              "discovery_feature_names_seen":len({k for r in rr for k in r["features"] if k.startswith("discovery__")}),
-              "top_feature_relationships":fx[:80],"top_pair_relationships":pairs(rr,fx)
-            }
-        return heads
-
-    heads=mine(strict_rows)
-    internal_heads=mine(internal_rows)
+    strict_rows,internal_rows=split_scopes(rows)
+    heads=mine_heads(strict_rows)
+    internal_heads=mine_heads(internal_rows)
     out={"version":"HYPE-LIVE-DISCOVERY-RELATIONSHIPS-v2-DUAL-SCOPE",
          "teacher":"DUAL_INTERNAL_L3_K1__STRICT_L6_K2",
          "labels_total":len(rows),"strict_labels_total":len(strict_rows),
