@@ -50,7 +50,7 @@ class LocalOnlyModel:
         self.internal_models={(s,h):classifier() for s in ("LOW","HIGH") for h in STAGES}
         self.internal_labels={(s,h):0 for s in ("LOW","HIGH") for h in STAGES}
         self.internal_positive={(s,h):0 for s in ("LOW","HIGH") for h in STAGES}
-        self.internal_thresholds={(s,h):0.5 for s in ("LOW","HIGH") for h in STAGES}
+        self.internal_thresholds={(s,h):0.80 for s in ("LOW","HIGH") for h in STAGES}
         self.internal_live_labels=0
 
     def _ensure_internal_scope(self):
@@ -86,8 +86,18 @@ class LocalOnlyModel:
 
     def predict_internal(self,side,stage,x):
         self._ensure_internal_scope()
+        key=(str(side),int(stage))
         p=self.internal_probability(side,stage,x)
-        return p,p>=float(self.internal_thresholds[(str(side),int(stage))])
+        # Cold-start protection: broad/tactical locals are more frequent and
+        # noisier.  A fresh/upgraded checkpoint must first accumulate matured
+        # INTERNAL teacher labels before it is allowed to emit a signal.
+        ready=self.internal_labels[key]>=20 and self.internal_positive[key]>=3
+        return p,bool(ready and p>=float(self.internal_thresholds[key]))
+
+    def internal_ready(self,side,stage):
+        self._ensure_internal_scope()
+        key=(str(side),int(stage))
+        return bool(self.internal_labels[key]>=20 and self.internal_positive[key]>=3)
 
     def learn(self,side,stage,x,y,source="history",repeat=1):
         key=(str(side),int(stage))
@@ -217,6 +227,9 @@ class LocalOnlyModel:
                 "thresholds":{f"{s}_{h}s":self.internal_thresholds[(s,h)] for s in ("LOW","HIGH") for h in STAGES},
                 "live_labels":self.internal_live_labels,
                 "core_flip_authorized":False,
+                "cold_start_min_labels":20,
+                "cold_start_min_positive":3,
+                "ready":{f"{s}_{h}s":self.internal_ready(s,h) for s in ("LOW","HIGH") for h in STAGES},
             },
             "h1":{"labels":self.h1_labels,"positive":self.h1_positive,
                   "thresholds":self.h1_thresholds,"shadow":self.h1_shadow,
