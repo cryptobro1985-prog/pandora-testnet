@@ -16,7 +16,6 @@ The replay intentionally mirrors INTERNAL_HARD120_CHECKPOINT_V2:
 from __future__ import annotations
 
 import argparse
-import bisect
 import gzip
 import json
 import statistics
@@ -24,9 +23,12 @@ from collections import deque
 from pathlib import Path
 from typing import Any
 
-HARD_AGE_MS=7_200_000
-MIN_RETRACE_BPS=40.0
-MIN_RETRACE_FRAC=0.45
+from research.hype_false_local_entry.hard_survival_gate import (
+    HardCandidate,
+    checkpoint_sample as production_checkpoint_sample,
+    gate_metrics,
+)
+
 LOOKBACKS=(5,15,60,180,360)
 
 
@@ -84,20 +86,26 @@ def more_extreme(side:str,new:float,old:float)->bool:
 
 def checkpoint(candidate:dict[str,Any],end_ms:int,bars:list[dict[str,Any]],
                end_times:list[int],closes:list[float])->dict[str,Any]|None:
-    target=int(candidate["extreme_ts_ms"])+HARD_AGE_MS
-    i=bisect.bisect_left(end_times,target)
-    if i>=len(bars) or int(end_times[i])>=int(end_ms):
-        return None
-    mark=float(closes[i]);p=float(candidate["extreme_price"])
-    retrace=((mark/p-1.0)*10_000.0 if candidate["side"]=="LOW"
-             else (p/mark-1.0)*10_000.0)
-    pm=float(candidate["pre_move_180_bps"])
-    frac=retrace/pm if pm>0 else 0.0
-    if retrace<MIN_RETRACE_BPS or frac<MIN_RETRACE_FRAC:
-        return None
+    # Use the production checkpoint sampler so historical/live sampling cannot
+    # silently drift apart. observed_ms=end_ms-1 keeps the reset/deadline bar
+    # itself out of the actionable window.
+    hc=HardCandidate(
+        side=str(candidate["side"]),
+        extreme_price=float(candidate["extreme_price"]),
+        extreme_ts_ms=int(candidate["extreme_ts_ms"]),
+        candidate_id="replay",
+        pre_move_180_bps=float(candidate["pre_move_180_bps"]),
+        origin_windows=["6h"],
+    )
+    sample=production_checkpoint_sample(hc,bars,observed_ms=int(end_ms)-1)
+    if sample is None:return None
+    m=gate_metrics(hc,now_ms=int(sample["sample_ts_ms"]),mark_price=float(sample["mark_price"]))
+    if not (m["retrace_ready"] and m["fraction_ready"]):return None
     return {
-        "signal_ts_ms":int(end_times[i]),"mark_price":mark,
-        "retrace_bps":retrace,"retrace_fraction_pre_180":frac,
+        "signal_ts_ms":int(sample["sample_ts_ms"]),
+        "mark_price":float(sample["mark_price"]),
+        "retrace_bps":float(m["retrace_bps"]),
+        "retrace_fraction_pre_180":float(m["retrace_fraction_pre_180"]),
     }
 
 
