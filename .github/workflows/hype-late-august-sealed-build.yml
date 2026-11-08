@@ -1,0 +1,49 @@
+name: HYPE Late August Sealed Tape Build
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/hype_full_micro_202608_late/build_base_late_august.py"
+      - ".github/workflows/hype-late-august-sealed-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build compact tape only
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          mkdir -p "$RUNNER_TEMP/hype-aug-cache" "$RUNNER_TEMP/hype-aug-out"
+          python -m research.hype_full_micro_202608_late.build_base_late_august             --cache "$RUNNER_TEMP/hype-aug-cache"             --output "$RUNNER_TEMP/hype-aug-out"
+          test -s "$RUNNER_TEMP/hype-aug-out/compact_1m.jsonl.gz"
+          test -s "$RUNNER_TEMP/hype-aug-out/labels.json.gz"
+          python - <<'PY'
+          import gzip,json,os
+          p=os.path.join(os.environ["RUNNER_TEMP"],"hype-aug-out","labels.json.gz")
+          with gzip.open(p,"rt") as f:x=json.load(f)
+          print("internal_finalized",sum(bool(r.get("reference_finalized")) for r in x.get("internal",[])))
+          print("NOTE: no stack replay executed in this workflow")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-LATE-AUGUST-SEALED-TAPE-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/hype-aug-out/compact_1m.jsonl.gz
+            ${{ runner.temp }}/hype-aug-out/labels.json.gz
+            ${{ runner.temp }}/hype-aug-out/manifest.json
+          retention-days: 14
+          compression-level: 1
