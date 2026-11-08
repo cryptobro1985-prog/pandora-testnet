@@ -103,5 +103,14 @@ def contract()->dict:
         "sealed_validation_period_not_scored_when_frozen":"2026-08-08..2026-09-01",
         "primary_contract_unchanged":True,
         "core_flip_authorized":False,
-        "promotion":"SEALED_PERIOD_THEN_FORWARD_ONLY",
+        "sealed_late_august_result":{
+            "overall_precision":0.813953488372093,
+            "overall_recall":0.3723404255319149,
+            "high_precision":0.75,
+            "high_recall":0.3829787234042553,
+            "shadow_signals":2,
+            "shadow_true":0,
+            "shadow_false":2
+        },
+        "promotion":"REJECTED_FAILED_SEALED_LATE_AUGUST",
     }
