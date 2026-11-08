@@ -207,6 +207,8 @@ def main():
     mp=args.checkpoint_dir/"local_only_model.pkl"
     if not mp.exists():raise SystemExit("local_only_model.pkl missing")
     model=LocalOnlyModel.load(mp)
+    # Old v1 checkpoints do not contain the tactical INTERNAL learner.
+    model._ensure_internal_scope()
     fp=args.checkpoint_dir/"feature_state.pkl";state=load_pickle(fp,FeatureState())
     rp=args.checkpoint_dir/"local_runtime.pkl"
     rt=load_pickle(rp,{"candidates":{"LOW":None,"HIGH":None},"pending":[],"expected_side":None,
