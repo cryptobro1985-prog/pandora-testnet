@@ -28,7 +28,9 @@ env:
   CORTEX_THREADS: "4"
   CORTEX_HF_MODEL: "ggml-org/gpt-oss-20b-GGUF:MXFP4"
   ASTRA_CORTEX_MODEL: "gpt-oss-20b-local"
-  LOCAL_ONLY_MONITOR_URL: "https://hype-caterpillar-quant-monitor.onrender.com/api/ingest"
+  # Render workspace is billing-suspended; direct POST would block the live
+  # daemon. Status continues through GitHub Issue #24 for the static fallback.
+  LOCAL_ONLY_MONITOR_URL: ""
 
 jobs:
   local-only:
