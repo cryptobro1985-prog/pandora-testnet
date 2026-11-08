@@ -67,7 +67,7 @@ def pre_move_180_bps(side: str, extreme_price: float,
     if p <= 0 or side not in {"LOW","HIGH"}:
         return 0.0
     rows=_completed_prior_rows(completed_m1_rows, ts_ms)[-180:]
-    if not rows:
+    if len(rows)<180:
         return 0.0
     if side=="LOW":
         prior_opp=max(float(r["high"]) for r in rows)
@@ -103,6 +103,9 @@ def maybe_start_or_extend(
     if current is not None and not more_extreme(side,price,current.extreme_price):
         return current
     pm=pre_move_180_bps(side,price,completed_m1_rows,ts_ms)
+    # Never freeze a denominator from a partial post-restart window.
+    if pm<=0:
+        return current
     return HardCandidate(
         side=str(side).upper(),
         extreme_price=float(price),
