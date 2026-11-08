@@ -347,6 +347,20 @@ jobs:
           python -m research.hype_local_only.forward_first_signal_audit \
             --labels local_cp/LOCAL_LIVE_LABELS.jsonl \
             --events local_cp/LOCAL_EVENTS.jsonl \
+            --event-name INTERNAL_HARD120_HIGH60_VETO_STACK_SIGNAL \
+            --actionable \
+            --output local_cp/HIGH60_VETO_FORWARD_STATUS.json
+          python -m research.hype_local_only.forward_first_signal_audit \
+            --labels local_cp/LOCAL_LIVE_LABELS.jsonl \
+            --events local_cp/LOCAL_EVENTS.jsonl \
+            --event-name INTERNAL_EARLY60_STRONG_REVERSAL_SHADOW \
+            --event-name INTERNAL_HARD120_HIGH60_VETO_STACK_SIGNAL \
+            --event-name INTERNAL_HARD120_HIGH_FLOW_SHADOW \
+            --actionable \
+            --output local_cp/EARLY60_PLUS_HIGH60_VETO_HIGH_FLOW_FORWARD_STATUS.json
+          python -m research.hype_local_only.forward_first_signal_audit \
+            --labels local_cp/LOCAL_LIVE_LABELS.jsonl \
+            --events local_cp/LOCAL_EVENTS.jsonl \
             --event-name INTERNAL_HARD120_PERSISTENCE_SHADOW \
             --actionable \
             --output local_cp/HARD120_PERSISTENCE_FORWARD_STATUS.json
@@ -364,6 +378,8 @@ jobs:
           test -s local_cp/HARD120_PLUS_HIGH_FLOW_FORWARD_STATUS.json
           test -s local_cp/EARLY60_STRONG_REVERSAL_FORWARD_STATUS.json
           test -s local_cp/EARLY60_PLUS_HARD120_HIGH_FLOW_FORWARD_STATUS.json
+          test -s local_cp/HIGH60_VETO_FORWARD_STATUS.json
+          test -s local_cp/EARLY60_PLUS_HIGH60_VETO_HIGH_FLOW_FORWARD_STATUS.json
           test -s local_cp/HARD120_PERSISTENCE_FORWARD_STATUS.json
           test -s local_cp/EARLY60_PLUS_PERSISTENCE_HARD120_HIGH_FLOW_FORWARD_STATUS.json
 
@@ -400,6 +416,8 @@ jobs:
             "hard120_plus_high_flow_forward":(json.loads((cp/"HARD120_PLUS_HIGH_FLOW_FORWARD_STATUS.json").read_text()) if (cp/"HARD120_PLUS_HIGH_FLOW_FORWARD_STATUS.json").exists() else {}),
             "early60_shadow_forward":(json.loads((cp/"EARLY60_STRONG_REVERSAL_FORWARD_STATUS.json").read_text()) if (cp/"EARLY60_STRONG_REVERSAL_FORWARD_STATUS.json").exists() else {}),
             "early60_plus_hard120_high_flow_forward":(json.loads((cp/"EARLY60_PLUS_HARD120_HIGH_FLOW_FORWARD_STATUS.json").read_text()) if (cp/"EARLY60_PLUS_HARD120_HIGH_FLOW_FORWARD_STATUS.json").exists() else {}),
+            "high60_veto_forward":(json.loads((cp/"HIGH60_VETO_FORWARD_STATUS.json").read_text()) if (cp/"HIGH60_VETO_FORWARD_STATUS.json").exists() else {}),
+            "early60_plus_high60_veto_high_flow_forward":(json.loads((cp/"EARLY60_PLUS_HIGH60_VETO_HIGH_FLOW_FORWARD_STATUS.json").read_text()) if (cp/"EARLY60_PLUS_HIGH60_VETO_HIGH_FLOW_FORWARD_STATUS.json").exists() else {}),
             "hard120_persistence_forward":(json.loads((cp/"HARD120_PERSISTENCE_FORWARD_STATUS.json").read_text()) if (cp/"HARD120_PERSISTENCE_FORWARD_STATUS.json").exists() else {}),
             "early60_plus_persistence_hard120_high_flow_forward":(json.loads((cp/"EARLY60_PLUS_PERSISTENCE_HARD120_HIGH_FLOW_FORWARD_STATUS.json").read_text()) if (cp/"EARLY60_PLUS_PERSISTENCE_HARD120_HIGH_FLOW_FORWARD_STATUS.json").exists() else {}),
             "pending_labels":s.get("pending_labels"),
@@ -488,6 +506,8 @@ jobs:
             local_cp/HARD120_PLUS_HIGH_FLOW_FORWARD_STATUS.json
             local_cp/EARLY60_STRONG_REVERSAL_FORWARD_STATUS.json
             local_cp/EARLY60_PLUS_HARD120_HIGH_FLOW_FORWARD_STATUS.json
+            local_cp/HIGH60_VETO_FORWARD_STATUS.json
+            local_cp/EARLY60_PLUS_HIGH60_VETO_HIGH_FLOW_FORWARD_STATUS.json
             local_cp/HARD120_PERSISTENCE_FORWARD_STATUS.json
             local_cp/EARLY60_PLUS_PERSISTENCE_HARD120_HIGH_FLOW_FORWARD_STATUS.json
             local_cp/TERMINAL_TEACHER_MIGRATION.json
