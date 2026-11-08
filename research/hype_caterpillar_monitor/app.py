@@ -235,7 +235,7 @@ def ingest():
     now_ms=time.time()*1000
     if updated>now_ms+300000 or updated<now_ms-900000:
         return jsonify({"ok":False,"error":"stale status payload"}),400
-    is_v2=(data.get("local_target") in ("STRICT_H1_L6_K2","FULL_HISTORY_STRICT_H1_L6_K2"))
+    is_v2=(data.get("local_target") in ("STRICT_H1_L6_K2","FULL_HISTORY_STRICT_H1_L6_K2","DUAL_INTERNAL_L3_K1__STRICT_L6_K2"))
     if _cache.get("v2_seen") and not is_v2:
         return jsonify({"ok":False,"error":"legacy policy payload ignored"}),409
     run_int=int(run_id)
