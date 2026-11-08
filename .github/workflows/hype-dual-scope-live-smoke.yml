@@ -59,6 +59,42 @@ jobs:
           else
             : > local_cp/LOCAL_EVENTS.jsonl
           fi
+      - name: Sanitize legacy checkpoint to terminal teacher
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          NEED="$(python - <<'PY'
+          from pathlib import Path
+          from research.hype_local_only.model import LocalOnlyModel
+          from research.hype_local_only.migrate_terminal_teacher import already_migrated
+          q=LocalOnlyModel.load(Path("local_cp/local_only_model.pkl"))
+          print("0" if already_migrated(q) else "1")
+          PY
+          )"
+          if [ "${NEED}" = "1" ]; then
+            mkdir -p terminal_clean_history terminal_clean
+            ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=local116-HYPE" --jq '.artifacts | map(select((.expired|not) and .name=="local116-HYPE")) | sort_by(.created_at) | reverse | .[0].id // empty')"
+            test -n "${ID}"
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ID}/zip" > terminal_clean_history.zip
+            unzip -q terminal_clean_history.zip -d terminal_clean_history
+            python -m research.hype_local_only.train_history \
+              --snapshots terminal_clean_history/candidate_snapshots.jsonl.gz \
+              --compact-1m terminal_clean_history/compact_1m.jsonl.gz \
+              --labels-gz terminal_clean_history/labels.json.gz \
+              --model-out terminal_clean/local_only_model.pkl \
+              --memory-out terminal_clean/LOCAL_RELATIONSHIP_MEMORY.json \
+              --report-out terminal_clean/HISTORICAL_TRAINING_REPORT.json
+            python -m research.hype_local_only.migrate_terminal_teacher \
+              --current-model local_cp/local_only_model.pkl \
+              --clean-model terminal_clean/local_only_model.pkl \
+              --runtime local_cp/local_runtime.pkl \
+              --report local_cp/TERMINAL_TEACHER_MIGRATION.json
+            cp terminal_clean/LOCAL_RELATIONSHIP_MEMORY.json local_cp/LOCAL_RELATIONSHIP_MEMORY.json
+            rm -f local_cp/LIVE_DISCOVERY_RELATIONSHIPS.json
+          fi
+
       - name: Run real capture through upgraded dual-scope daemon
         shell: bash
         run: |
@@ -86,6 +122,8 @@ jobs:
           m._ensure_internal_scope()
           s=json.loads((cp/"LOCAL_ONLY_STATUS.json").read_text())
           assert m.VERSION=="HYPE-LOCAL-ONLY-v2-DUAL-SCOPE"
+          assert (m.history_meta.get("terminal_teacher_migration") or {}).get("id")=="TERMINAL_TEACHER_CLEAN_V1"
+          assert m.live_labels==0
           assert s["local_target"]=="DUAL_INTERNAL_L3_K1__STRICT_L6_K2"
           assert s["teacher_contract"]["internal"]["name"]=="INTERNAL_L3_K1"
           assert s["teacher_contract"]["strict"]["name"]=="STRICT_L6_K2"
@@ -95,6 +133,7 @@ jobs:
           print(json.dumps({
               "status":"PASS",
               "strict_live_labels":m.live_labels,
+              "terminal_migration":m.history_meta.get("terminal_teacher_migration"),
               "internal_live_labels":m.internal_live_labels,
               "pending_labels":s.get("pending_labels"),
               "candidate":s.get("candidate"),
@@ -109,5 +148,6 @@ jobs:
             local_cp/LOCAL_ONLY_STATUS.json
             local_cp/dual_smoke_daemon.log
             local_cp/dual_smoke_capture.log
+            local_cp/TERMINAL_TEACHER_MIGRATION.json
           if-no-files-found: warn
           retention-days: 3
