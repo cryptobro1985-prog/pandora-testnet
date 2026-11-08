@@ -199,7 +199,7 @@ def telegram_setup():
     host=os.getenv("RENDER_EXTERNAL_HOSTNAME")
     fallback=os.getenv(
         "FALLBACK_MINIAPP_URL",
-        "https://cdn.jsdelivr.net/gh/cryptobro1985-prog/pandora-testnet@74289308f64f0bb4d918e725c03f4db523d7bf23/research/hype_caterpillar_monitor_static/index.html",
+        "https://cdn.jsdelivr.net/gh/cryptobro1985-prog/pandora-testnet@6c3a58699647123ea0d1ab6ef5ccd52b706c63bd/research/hype_caterpillar_monitor_static/index.html",
     )
     # The Telegram button must not depend on this Render process being awake.
     # MINIAPP_URL can override explicitly; otherwise use the GitHub/CDN
