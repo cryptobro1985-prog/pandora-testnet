@@ -2,6 +2,7 @@ from research.hype_false_local_entry.hard_survival_gate import (
     CHECKPOINT_GRACE_S,
     HARD_AGE_S,
     HardCandidate,
+    checkpoint_sample,
     contract,
     maybe_start_or_extend,
     next_signal,
@@ -13,7 +14,7 @@ from research.hype_false_local_entry.hard_survival_gate import (
 def bars(n=180):
     return [
         {"start_ms":i*60_000,"bar_end_ms":(i+1)*60_000,
-         "high":110.0-i*.01,"low":100.0-i*.01}
+         "high":110.0-i*.01,"low":100.0-i*.01,"close":105.0-i*.01}
         for i in range(n)
     ]
 
@@ -130,3 +131,33 @@ def test_boolean_wrapper_matches_checkpoint_signal():
     ok,m=should_emit(c,now_ms=HARD_AGE_S*1000,mark_price=101.0,expected_side="LOW")
     assert ok
     assert m["ready_stage"]=="HARD120"
+
+
+def test_checkpoint_sample_uses_first_completed_m1_close_after_120m():
+    c=HardCandidate("LOW",100.0,0,"sample",200.0,["6h"])
+    rows=[
+        {"start_ms":7_140_000,"bar_end_ms":7_200_000,"high":101,"low":99,"close":100.4},
+        {"start_ms":7_200_000,"bar_end_ms":7_260_000,"high":102,"low":100,"close":101.0},
+    ]
+    s=checkpoint_sample(c,rows,observed_ms=7_260_000)
+    assert s["sample_ts_ms"]==7_200_000
+    assert s["mark_price"]==100.4
+    assert s["fresh_observation"] is True
+
+
+def test_checkpoint_sample_is_not_available_before_bar_completion():
+    c=HardCandidate("HIGH",100.0,0,"sample2",200.0,["6h"])
+    rows=[
+        {"start_ms":7_200_000,"bar_end_ms":7_260_000,"high":101,"low":99,"close":99.0},
+    ]
+    assert checkpoint_sample(c,rows,observed_ms=7_250_000) is None
+
+
+def test_checkpoint_sample_reports_stale_restart_delay():
+    c=HardCandidate("LOW",100.0,0,"late-sample",200.0,["6h"])
+    rows=[
+        {"start_ms":7_140_000,"bar_end_ms":7_200_000,"high":101,"low":99,"close":100.8},
+    ]
+    s=checkpoint_sample(c,rows,observed_ms=7_200_000+(CHECKPOINT_GRACE_S+1)*1000)
+    assert s["fresh_observation"] is False
+    assert s["observation_delay_s"]>CHECKPOINT_GRACE_S
