@@ -45,3 +45,27 @@ def test_old_label_rows_without_extreme_timestamp_are_not_invented(tmp_path: Pat
     r=audit(labels,events)
     assert r["terminal_labels"]==0
     assert r["status"]=="ACCUMULATING_FORWARD_EVIDENCE"
+
+
+def test_hard120_event_uses_actionable_deadline(tmp_path: Path):
+    labels=tmp_path/"labels.jsonl";events=tmp_path/"events.jsonl"
+    label_rows=[
+        {"teacher":"INTERNAL_L3_K1","label":True,"candidate_id":"L1","side":"LOW",
+         "stage":60,"extreme_ts_ms":100_000,"extreme_price":10.0,"teacher_finalized_ts_ms":400_000},
+        {"teacher":"INTERNAL_L3_K1","label":True,"candidate_id":"H1","side":"HIGH",
+         "stage":60,"extreme_ts_ms":200_000,"extreme_price":12.0,"teacher_finalized_ts_ms":500_000},
+        {"teacher":"INTERNAL_L3_K1","label":True,"candidate_id":"L2","side":"LOW",
+         "stage":60,"extreme_ts_ms":300_000,"extreme_price":11.0,"teacher_finalized_ts_ms":600_000},
+    ]
+    # H1 signal arrives after the next Local's extreme, so it is too late.
+    event_rows=[
+        {"event":"INTERNAL_HARD120_SIGNAL","candidate_id":"H1","side":"HIGH",
+         "candidate_ts_ms":200_000,"signal_ts_ms":305_000},
+    ]
+    put(labels,label_rows);put(events,event_rows)
+    r=audit(labels,events,event_name="INTERNAL_HARD120_SIGNAL",actionable=True)
+    assert r["signal_event"]=="INTERNAL_HARD120_SIGNAL"
+    assert r["actionable_deadline_enabled"] is True
+    assert r["metrics"]["episodes"]==1
+    assert r["metrics"]["accepted_first"]==0
+    assert r["metrics"]["no_signal"]==1
