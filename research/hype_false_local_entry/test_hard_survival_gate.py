@@ -1,6 +1,12 @@
 from research.hype_false_local_entry.hard_survival_gate import (
-    CHECKPOINT_GRACE_S, EARLY_HARD_AGE_S, HARD_AGE_S, HardCandidate, contract, maybe_start_or_extend,
-    next_signal, pre_move_180_bps, should_emit,
+    CHECKPOINT_GRACE_S,
+    HARD_AGE_S,
+    HardCandidate,
+    contract,
+    maybe_start_or_extend,
+    next_signal,
+    pre_move_180_bps,
+    should_emit,
 )
 
 
@@ -14,7 +20,6 @@ def bars(n=180):
 
 def test_pre_move_uses_only_completed_prior_rows():
     rows=bars(180)
-    # Future row must be ignored.
     rows.append({"start_ms":180*60_000,"bar_end_ms":181*60_000,"high":999,"low":1})
     v=pre_move_180_bps("LOW",98.0,rows,180*60_000)
     assert 0 < v < 2_000
@@ -47,44 +52,47 @@ def test_non_6h_candidate_never_starts_hard_lineage():
     assert c is None
 
 
-def test_survival_ladder_uses_strict_90m_then_120m_fallback():
-    early=HardCandidate("LOW",100.0,0,"L90",200.0,["6h"])
-    stage,m=next_signal(early,now_ms=(EARLY_HARD_AGE_S-1)*1000,mark_price=101.4,expected_side="LOW")
-    assert stage is None and not m["early_age_ready"]
-
-    # 140 bps / 200 bps = 70%: strong enough exactly at HARD90.
-    stage,m=next_signal(early,now_ms=EARLY_HARD_AGE_S*1000,mark_price=101.4,expected_side="LOW")
-    assert stage=="HARD90"
-    assert m["early_fraction_ready"]
-    assert early.evaluated_stages==["HARD90"]
-
-    fallback=HardCandidate("LOW",100.0,0,"L120",200.0,["6h"])
-    # A weaker 50% recovery fails HARD90 permanently.
-    stage,_=next_signal(fallback,now_ms=EARLY_HARD_AGE_S*1000,mark_price=101.0,expected_side="LOW")
+def test_hard120_is_one_shot_checkpoint_not_late_crossing():
+    c=HardCandidate("LOW",100.0,0,"L120",200.0,["6h"])
+    stage,m=next_signal(c,now_ms=(HARD_AGE_S-1)*1000,mark_price=101.5,expected_side="LOW")
     assert stage is None
-    assert fallback.evaluated_stages==["HARD90"]
-    # A later 70% recovery before 120m must NOT be retroactively accepted.
-    stage,_=next_signal(fallback,now_ms=(EARLY_HARD_AGE_S+600)*1000,mark_price=101.4,expected_side="LOW")
-    assert stage is None
-    # The separate HARD120 fallback may pass at its checkpoint.
-    stage,m=next_signal(fallback,now_ms=HARD_AGE_S*1000,mark_price=101.0,expected_side="LOW")
+    assert c.evaluated_stages==[]
+
+    stage,m=next_signal(c,now_ms=HARD_AGE_S*1000,mark_price=101.0,expected_side="LOW")
     assert stage=="HARD120"
     assert m["retrace_fraction_pre_180"] >= .49
-    assert fallback.evaluated_stages==["HARD90","HARD120"]
+    assert c.evaluated_stages==["HARD120"]
 
-    blocked=HardCandidate("LOW",100.0,0,"blocked",200.0,["6h"])
-    stage,_=next_signal(blocked,now_ms=EARLY_HARD_AGE_S*1000,mark_price=101.4,expected_side="HIGH")
+    stage,_=next_signal(c,now_ms=(HARD_AGE_S+600)*1000,mark_price=102.0,expected_side="LOW")
     assert stage is None
+
+
+def test_failed_hard120_checkpoint_never_becomes_late_success():
+    c=HardCandidate("HIGH",100.0,0,"H120",200.0,["6h"])
+    stage,_=next_signal(c,now_ms=HARD_AGE_S*1000,mark_price=99.5,expected_side="HIGH")
+    assert stage is None
+    assert c.evaluated_stages==["HARD120"]
+
+    stage,_=next_signal(c,now_ms=(HARD_AGE_S+600)*1000,mark_price=98.0,expected_side="HIGH")
+    assert stage is None
+
+
+def test_expected_side_can_block_checkpoint_without_core_flip():
+    c=HardCandidate("LOW",100.0,0,"blocked",200.0,["6h"])
+    stage,_=next_signal(c,now_ms=HARD_AGE_S*1000,mark_price=101.0,expected_side="HIGH")
+    assert stage is None
+    assert c.evaluated_stages==["HARD120"]
 
 
 def test_contract_is_paper_only_and_never_core_flip():
     c=contract()
-    assert c["name"]=="INTERNAL_SURVIVAL_LADDER_V1"
+    assert c["name"]=="INTERNAL_HARD120_CHECKPOINT_V2"
     assert c["role"]=="TACTICAL_HARD_PAPER_ONLY"
-    assert c["stages"]["HARD90"]["age_s"]==EARLY_HARD_AGE_S
-    assert c["stages"]["HARD120"]["age_s"]==HARD_AGE_S
+    assert c["age_s"]==HARD_AGE_S
+    assert c["min_retrace_fraction_pre_180"]==0.45
     assert c["core_flip_authorized"] is False
     assert c["stale_refresh_resets_clock"] is False
+    assert "no late recovery" in c["checkpoint_semantics"]
 
 
 def test_partial_pre_move_window_cannot_start_lineage():
@@ -94,24 +102,31 @@ def test_partial_pre_move_window_cannot_start_lineage():
     assert c is None
 
 
-def test_late_restart_does_not_grant_retroactive_hard90():
+def test_late_restart_does_not_grant_retroactive_hard120():
     c=HardCandidate("HIGH",100.0,0,"H-late",200.0,["6h"])
     stage,m=next_signal(
         c,
-        now_ms=(EARLY_HARD_AGE_S+CHECKPOINT_GRACE_S+1)*1000,
+        now_ms=(HARD_AGE_S+CHECKPOINT_GRACE_S+1)*1000,
         mark_price=98.0,
         expected_side="HIGH",
     )
     assert stage is None
-    assert "HARD90" in c.evaluated_stages
-    assert m["hard90_within_checkpoint_window"] is False
+    assert "HARD120" in c.evaluated_stages
+    assert m["hard120_within_checkpoint_window"] is False
 
 
 def test_checkpoint_state_persists_in_candidate_dict():
     c=HardCandidate("LOW",100.0,0,"persist",200.0,["6h"])
-    next_signal(c,now_ms=EARLY_HARD_AGE_S*1000,mark_price=100.5,expected_side="LOW")
+    next_signal(c,now_ms=HARD_AGE_S*1000,mark_price=100.5,expected_side="LOW")
     d=c.to_dict()
-    assert d["evaluated_stages"]==["HARD90"]
+    assert d["evaluated_stages"]==["HARD120"]
     restored=HardCandidate(**d)
-    stage,_=next_signal(restored,now_ms=(EARLY_HARD_AGE_S+300)*1000,mark_price=101.5,expected_side="LOW")
+    stage,_=next_signal(restored,now_ms=(HARD_AGE_S+300)*1000,mark_price=101.5,expected_side="LOW")
     assert stage is None
+
+
+def test_boolean_wrapper_matches_checkpoint_signal():
+    c=HardCandidate("LOW",100.0,0,"bool",200.0,["6h"])
+    ok,m=should_emit(c,now_ms=HARD_AGE_S*1000,mark_price=101.0,expected_side="LOW")
+    assert ok
+    assert m["ready_stage"]=="HARD120"
