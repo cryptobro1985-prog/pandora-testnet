@@ -94,4 +94,10 @@ class CausalReversalMachine:
                 self.events.append(ev)
                 out.append(ev)
             self.active[side] = stage
+        # A confirmed reversal begins a fresh structural leg. Reset anchors
+        # after evaluating both sides, allowing nested H1 turns.
+        if any(event.core_flip for event in out):
+            self.anchor = {"LOW": low, "HIGH": high}
+            self.anchor_end = {"LOW": end, "HIGH": end}
+            self.active = {"LOW": "WATCH", "HIGH": "WATCH"}
         return out
