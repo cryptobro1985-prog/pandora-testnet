@@ -13,8 +13,12 @@ Frozen historical-tuned contract:
 - at least 100 trades in that 15m tape;
 - no retroactive signal after a long restart.
 
-The rule cleared the historical 80/40 gate on both inspected periods but was
-selected after inspecting history. It remains FORWARD_SCORE_ONLY.
+The rule cleared the historical 80/40 gate on Jul/Aug and Oct/Nov, but FAILED
+its first untouched September check as an additive stack component: HARD120
+alone scored 86.15% precision / 44.09% recall, while adding EARLY60 reduced
+precision to 82.35% at the same 44.09% recall. HIGH precision fell to 77.78%.
+Therefore EARLY60 is retained only as a diagnostic sensor/shadow and is NOT a
+promotion candidate.
 """
 from __future__ import annotations
 
@@ -184,6 +188,11 @@ def contract()->dict:
         "same_side_invalidation":"inherits HardCandidate 6h lineage replacement",
         "core_flip_authorized":False,
         "primary_contract_unchanged":True,
-        "historical_status":"DUAL_PERIOD_TUNED_ZERO_ADDED_FALSE_NOT_UNTOUCHED_OOS",
-        "promotion":"FORWARD_SCORE_ONLY",
+        "historical_status":"FAILED_UNTOUCHED_SEPTEMBER_AS_ADDITIVE_PROMOTION",
+        "untouched_september":{"hard120_precision":0.8615384615384616,
+                               "hard120_recall":0.4409448818897638,
+                               "stack_precision":0.8235294117647058,
+                               "stack_recall":0.4409448818897638,
+                               "high_stack_precision":0.7777777777777778},
+        "promotion":"DIAGNOSTIC_SHADOW_ONLY",
     }
