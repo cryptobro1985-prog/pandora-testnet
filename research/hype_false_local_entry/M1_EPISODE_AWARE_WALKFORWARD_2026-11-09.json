@@ -1,0 +1,49 @@
+{
+  "title":"HYPE M1 episode-aware expanding walk-forward audit",
+  "date":"2026-11-09",
+  "mode":"RESEARCH_PAPER_ONLY",
+  "source_artifact":"local116-HYPE / artifact 13435356156",
+  "period":["2026-10-04","2026-11-03"],
+  "teacher":"INTERNAL L3/K1 terminal-finalized",
+  "leakage_guard":{
+    "teacher_local_used_as_feature":false,
+    "future_bars_used":false,
+    "features":"completed M1 only: trailing-extreme strength, candidate-event history, retrace, realized volatility, path efficiency, executed buy/sell flow and pre-candidate M1 structure"
+  },
+  "evaluation":{
+    "folds":4,
+    "test_episodes_per_fold":15,
+    "total_expanding_oos_episodes":60,
+    "horizon_minutes":60,
+    "model":"ExtraTrees causal research challenger",
+    "precision_first_operating_point":{
+      "accepted_first":33,
+      "true_first":24,
+      "false_first":9,
+      "precision":0.7272727272727273,
+      "recall":0.4,
+      "LOW":{"accepted_first":19,"true_first":14,"false_first":5,"precision":0.7368421052631579},
+      "HIGH":{"accepted_first":14,"true_first":10,"false_first":4,"precision":0.7142857142857143}
+    },
+    "balanced_operating_point":{
+      "accepted_first":37,
+      "true_first":26,
+      "false_first":11,
+      "precision":0.7027027027027027,
+      "recall":0.43333333333333335
+    }
+  },
+  "comparison":{
+    "prior_60m_expanding_walk_forward":{"precision":0.5636,"recall":0.4697},
+    "precision_gain_points":16.37,
+    "interpretation":"candidate-history and causal M1 path/flow features materially improve first-signal discrimination, but do not reach the pre-registered 0.80 precision gate."
+  },
+  "hard120_context":{
+    "primary_contract":"INTERNAL_HARD120_CHECKPOINT_V2",
+    "oct_nov_historical":{"precision":0.9298245614035088,"recall":0.44166666666666665},
+    "independent_jul_aug":{"precision":0.8409090909090909,"recall":0.36633663366336633},
+    "verdict":"HARD120 remains the stronger primary precision layer; July/Aug precision passes 0.80 but recall misses the 0.40 gate, concentrated in HIGH."
+  },
+  "promotion":"NONE",
+  "next_action":"Keep HARD120 frozen; use the episode-aware M1 model as a research challenger and target HIGH recall/precision separately without changing the primary contract."
+}
