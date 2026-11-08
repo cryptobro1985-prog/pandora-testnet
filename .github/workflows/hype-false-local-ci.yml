@@ -28,8 +28,6 @@ jobs:
       - name: Install focused test dependencies
         run: python -m pip install --disable-pip-version-check pytest river
       - name: Compile changed research modules
-        run: |
-          python -m py_compile             research/hype_false_local_entry/first_signal_objective.py             research/hype_false_local_entry/dual_scope_teacher.py             research/hype_local_only/model.py             research/hype_local_only/live_daemon.py
+        run: python -m py_compile research/hype_false_local_entry/first_signal_objective.py research/hype_false_local_entry/dual_scope_teacher.py research/hype_local_only/model.py research/hype_local_only/live_daemon.py research/hype_local_only/live_relationship_miner.py research/hype_local_only/cortex_daemon.py
       - name: Run focused unit tests
-        run: |
-          pytest -q             research/hype_false_local_entry/test_first_signal_objective.py             research/hype_false_local_entry/test_dual_scope_teacher.py             research/hype_false_local_entry/test_causal_minute_candidates.py             research/hype_local_only/test_dual_scope_model.py
+        run: pytest -q research/hype_false_local_entry/test_first_signal_objective.py research/hype_false_local_entry/test_dual_scope_teacher.py research/hype_false_local_entry/test_causal_minute_candidates.py research/hype_local_only/test_dual_scope_model.py research/hype_local_only/test_relationship_scope_isolation.py
