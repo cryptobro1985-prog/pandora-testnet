@@ -157,6 +157,54 @@ jobs:
             echo "found=0" >> "${GITHUB_OUTPUT}"
           fi
 
+      - name: Detect legacy provisional-pivot checkpoint
+        id: terminal_migration
+        if: steps.restore.outputs.found == '1'
+        shell: bash
+        run: |
+          python - <<'PY' >> "${GITHUB_OUTPUT}"
+          from pathlib import Path
+          from research.hype_local_only.model import LocalOnlyModel
+          from research.hype_local_only.migrate_terminal_teacher import already_migrated
+          p=Path("local_cp/local_only_model.pkl")
+          q=LocalOnlyModel.load(p)
+          print("needed="+("0" if already_migrated(q) else "1"))
+          PY
+
+      - name: Rebuild clean finalized STRICT/H1 baseline for terminal migration
+        if: steps.restore.outputs.found == '1' && steps.terminal_migration.outputs.needed == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf terminal_clean_history terminal_clean
+          mkdir -p terminal_clean_history terminal_clean
+          ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=local116-HYPE" \
+            --jq '.artifacts | map(select((.expired|not) and .name=="local116-HYPE")) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          test -n "${ID}"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ID}/zip" > terminal_clean_history.zip
+          unzip -q terminal_clean_history.zip -d terminal_clean_history
+          test -s terminal_clean_history/candidate_snapshots.jsonl.gz
+          test -s terminal_clean_history/compact_1m.jsonl.gz
+          test -s terminal_clean_history/labels.json.gz
+          python -m research.hype_local_only.train_history \
+            --snapshots terminal_clean_history/candidate_snapshots.jsonl.gz \
+            --compact-1m terminal_clean_history/compact_1m.jsonl.gz \
+            --labels-gz terminal_clean_history/labels.json.gz \
+            --model-out terminal_clean/local_only_model.pkl \
+            --memory-out terminal_clean/LOCAL_RELATIONSHIP_MEMORY.json \
+            --report-out terminal_clean/HISTORICAL_TRAINING_REPORT.json
+          python -m research.hype_local_only.migrate_terminal_teacher \
+            --current-model local_cp/local_only_model.pkl \
+            --clean-model terminal_clean/local_only_model.pkl \
+            --runtime local_cp/local_runtime.pkl \
+            --report local_cp/TERMINAL_TEACHER_MIGRATION.json
+          cp terminal_clean/LOCAL_RELATIONSHIP_MEMORY.json local_cp/LOCAL_RELATIONSHIP_MEMORY.json
+          cp terminal_clean/HISTORICAL_TRAINING_REPORT.json local_cp/HISTORICAL_TRAINING_REPORT.json
+          rm -f local_cp/LIVE_DISCOVERY_RELATIONSHIPS.json
+          test -s local_cp/TERMINAL_TEACHER_MIGRATION.json
+
       - name: Download 30-day labelled Local dataset
         if: steps.restore.outputs.found != '1'
         env:
@@ -371,6 +419,7 @@ jobs:
             local_cp/HISTORICAL_GAP_PROMOTION.json
             local_cp/CONTINUOUS_LEARNING_MANIFEST.json
             local_cp/FIRST_SIGNAL_FORWARD_STATUS.json
+            local_cp/TERMINAL_TEACHER_MIGRATION.json
             local_cp/LOCAL_EVENTS.recent.jsonl.gz
             local_cp/LOCAL_LIVE_LABELS.recent.jsonl.gz
           if-no-files-found: warn
@@ -391,6 +440,7 @@ jobs:
             local_cp/LIVE_DISCOVERY_RELATIONSHIPS.json
             local_cp/CONTINUOUS_LEARNING_MANIFEST.json
             local_cp/FIRST_SIGNAL_FORWARD_STATUS.json
+            local_cp/TERMINAL_TEACHER_MIGRATION.json
           if-no-files-found: warn
           retention-days: 7
           compression-level: 9
