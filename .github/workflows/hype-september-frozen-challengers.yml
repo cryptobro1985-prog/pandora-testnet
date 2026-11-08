@@ -1,0 +1,78 @@
+name: HYPE September Frozen Challengers
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-september-frozen-challengers.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Restore untouched September artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p sep_art
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13637558401/zip" > sep.zip
+          unzip -q sep.zip -d sep_art
+          COMPACT="$(find sep_art -name compact_1m.jsonl.gz -print -quit)"
+          LABELS="$(find sep_art -name labels.json.gz -print -quit)"
+          test -n "$COMPACT" && test -s "$COMPACT"
+          test -n "$LABELS" && test -s "$LABELS"
+          echo "COMPACT=$COMPACT" >> "$GITHUB_ENV"
+          echo "LABELS=$LABELS" >> "$GITHUB_ENV"
+      - name: Replay challengers frozen before holdout result
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m research.hype_false_local_entry.replay_persistence_full_stack             --compact-1m "$COMPACT" --labels-gz "$LABELS"             --output SEPTEMBER_PERSISTENCE_FROZEN.json
+          python -m research.hype_false_local_entry.replay_high60_veto_stack             --compact-1m "$COMPACT" --labels-gz "$LABELS"             --output SEPTEMBER_HIGH60_FROZEN.json
+          python - <<'PY'
+          import json
+          p=json.load(open("SEPTEMBER_PERSISTENCE_FROZEN.json"))
+          h=json.load(open("SEPTEMBER_HIGH60_FROZEN.json"))
+          out={
+            "period":"2026-09-01..2026-10-01",
+            "holdout_result_was_not_used_to_select_thresholds":True,
+            "persistence65":{
+              "overall":p["evaluation"],"by_side":p["by_side"],
+              "contract":p["contracts"]["persistence"],
+            },
+            "high60_50bps":{
+              "overall":h["evaluation"],"by_side":h["by_side"],
+              "contract":h["contracts"]["high60_veto"],
+            },
+            "gate":{"min_precision":0.80,"min_recall":0.40},
+            "real_orders":False,
+          }
+          for key in ("persistence65","high60_50bps"):
+              m=out[key]["overall"]
+              out[key]["gate_passed"]=m["precision"]>=.80 and m["recall"]>=.40
+          open("SEPTEMBER_FROZEN_CHALLENGERS.json","w").write(json.dumps(out,indent=2)+"\n")
+          print(json.dumps(out,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-SEPTEMBER-FROZEN-CHALLENGERS-${{ github.run_id }}
+          path: |
+            SEPTEMBER_FROZEN_CHALLENGERS.json
+            SEPTEMBER_PERSISTENCE_FROZEN.json
+            SEPTEMBER_HIGH60_FROZEN.json
+          retention-days: 14
