@@ -12,6 +12,7 @@ episode scoring. Research/paper only.
 from __future__ import annotations
 
 import argparse,json
+from bisect import bisect_right
 from pathlib import Path
 from typing import Any
 
@@ -28,13 +29,10 @@ from research.hype_false_local_entry.hard120_persistence_shadow import (
 from research.hype_local_v5.labels import structural_labels
 
 
-def completed_to(bars:list[dict[str,Any]], sample_ts_ms:int)->list[dict[str,Any]]:
-    return [r for r in bars if int(r["bar_end_ms"])<=int(sample_ts_ms)]
-
-
 def replay(compact:Path,labels_gz:Path,derive_internal:bool=False)->dict[str,Any]:
     bars=read_jsonl_gz(compact)
     starts={int(b["start_ms"]):i for i,b in enumerate(bars)}
+    end_times=[int(b["bar_end_ms"]) for b in bars]
     candidates=[]
     for e in generate_candidates(bars):
         if 360 not in e["lookbacks_m"]:continue
@@ -73,13 +71,16 @@ def replay(compact:Path,labels_gz:Path,derive_internal:bool=False)->dict[str,Any
             if hard is None:return
             kind,flow=hard_or_high_flow_decision(cand,hard,bars,starts)
             if kind=="PRIMARY":
+                start_idx=starts.get(int(cand["bar_start_ms"]))
+                stop_idx=bisect_right(end_times,int(hard["signal_ts_ms"]))
+                path_rows=[] if start_idx is None else bars[start_idx+1:stop_idx]
                 pm=persistence_metrics(
                     side=str(cand["side"]),
                     extreme_price=float(cand["extreme_price"]),
                     retrace_bps=float(hard["retrace_bps"]),
                     candidate_ts_ms=int(cand["extreme_ts_ms"]),
                     sample_ts_ms=int(hard["signal_ts_ms"]),
-                    completed_m1_rows=completed_to(bars,int(hard["signal_ts_ms"])),
+                    completed_m1_rows=path_rows,
                 )
                 if not pm.get("ready"):
                     return
