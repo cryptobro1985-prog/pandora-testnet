@@ -14,10 +14,16 @@ from bisect import bisect_left
 def dense_completed_m1_candidates(rows):
     last_signal = None
     for bar in rows:
-        start = int(bar["ts_ms"])
-        # Compact 1m contract: prefer explicit bar_end_ms; otherwise ts_ms
-        # is interpreted as bar start. Never expose intrabar extremes early.
-        end = int(bar.get("bar_end_ms") or (start + int(bar.get("interval_ms", 60000))))
+        interval = int(bar.get("interval_ms", 60000))
+        explicit_end = bar.get("bar_end_ms")
+        if bar.get("start_ms") is not None:
+            start = int(bar["start_ms"])
+        else:
+            ts = int(bar["ts_ms"])
+            # Canonical compact_1m stores ts_ms == bar_end_ms. Generic rows
+            # without start_ms still treat ts_ms as bar start.
+            start = ts - interval if explicit_end is not None and int(explicit_end) == ts else ts
+        end = int(explicit_end if explicit_end is not None else start + interval)
         if end <= start or (last_signal is not None and start < last_signal):
             raise ValueError("overlapping, incomplete, or nonmonotonic minute bars")
         last_signal = end
