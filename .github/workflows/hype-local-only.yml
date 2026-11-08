@@ -326,6 +326,19 @@ jobs:
           python -m research.hype_local_only.forward_first_signal_audit \
             --labels local_cp/LOCAL_LIVE_LABELS.jsonl \
             --events local_cp/LOCAL_EVENTS.jsonl \
+            --event-name INTERNAL_HARD120_HIGH_FLOW_V2_SHADOW \
+            --actionable \
+            --output local_cp/HARD120_HIGH_FLOW_V2_FORWARD_STATUS.json
+          python -m research.hype_local_only.forward_first_signal_audit \
+            --labels local_cp/LOCAL_LIVE_LABELS.jsonl \
+            --events local_cp/LOCAL_EVENTS.jsonl \
+            --event-name INTERNAL_HARD120_SIGNAL \
+            --event-name INTERNAL_HARD120_HIGH_FLOW_V2_SHADOW \
+            --actionable \
+            --output local_cp/HARD120_PLUS_HIGH_FLOW_V2_FORWARD_STATUS.json
+          python -m research.hype_local_only.forward_first_signal_audit \
+            --labels local_cp/LOCAL_LIVE_LABELS.jsonl \
+            --events local_cp/LOCAL_EVENTS.jsonl \
             --event-name INTERNAL_HARD120_SIGNAL \
             --event-name INTERNAL_HARD120_HIGH_FLOW_SHADOW \
             --actionable \
@@ -376,6 +389,8 @@ jobs:
           test -s local_cp/HARD120_FORWARD_STATUS.json
           test -s local_cp/HARD120_HIGH_FLOW_SHADOW_FORWARD_STATUS.json
           test -s local_cp/HARD120_PLUS_HIGH_FLOW_FORWARD_STATUS.json
+          test -s local_cp/HARD120_HIGH_FLOW_V2_FORWARD_STATUS.json
+          test -s local_cp/HARD120_PLUS_HIGH_FLOW_V2_FORWARD_STATUS.json
           test -s local_cp/EARLY60_STRONG_REVERSAL_FORWARD_STATUS.json
           test -s local_cp/EARLY60_PLUS_HARD120_HIGH_FLOW_FORWARD_STATUS.json
           test -s local_cp/HIGH60_VETO_FORWARD_STATUS.json
@@ -412,6 +427,9 @@ jobs:
             "live_label_rows_persisted":live_rows,
             "first_signal_forward":(json.loads((cp/"FIRST_SIGNAL_FORWARD_STATUS.json").read_text()) if (cp/"FIRST_SIGNAL_FORWARD_STATUS.json").exists() else {}),
             "hard120_forward":(json.loads((cp/"HARD120_FORWARD_STATUS.json").read_text()) if (cp/"HARD120_FORWARD_STATUS.json").exists() else {}),
+            "preferred_high_forward_candidate":"HARD120_PLUS_HIGH_FLOW_V2",
+            "high_flow_v2_forward":(json.loads((cp/"HARD120_HIGH_FLOW_V2_FORWARD_STATUS.json").read_text()) if (cp/"HARD120_HIGH_FLOW_V2_FORWARD_STATUS.json").exists() else {}),
+            "hard120_plus_high_flow_v2_forward":(json.loads((cp/"HARD120_PLUS_HIGH_FLOW_V2_FORWARD_STATUS.json").read_text()) if (cp/"HARD120_PLUS_HIGH_FLOW_V2_FORWARD_STATUS.json").exists() else {}),
             "high_flow_shadow_forward":(json.loads((cp/"HARD120_HIGH_FLOW_SHADOW_FORWARD_STATUS.json").read_text()) if (cp/"HARD120_HIGH_FLOW_SHADOW_FORWARD_STATUS.json").exists() else {}),
             "hard120_plus_high_flow_forward":(json.loads((cp/"HARD120_PLUS_HIGH_FLOW_FORWARD_STATUS.json").read_text()) if (cp/"HARD120_PLUS_HIGH_FLOW_FORWARD_STATUS.json").exists() else {}),
             "early60_shadow_forward":(json.loads((cp/"EARLY60_STRONG_REVERSAL_FORWARD_STATUS.json").read_text()) if (cp/"EARLY60_STRONG_REVERSAL_FORWARD_STATUS.json").exists() else {}),
@@ -504,6 +522,8 @@ jobs:
             local_cp/HARD120_FORWARD_STATUS.json
             local_cp/HARD120_HIGH_FLOW_SHADOW_FORWARD_STATUS.json
             local_cp/HARD120_PLUS_HIGH_FLOW_FORWARD_STATUS.json
+            local_cp/HARD120_HIGH_FLOW_V2_FORWARD_STATUS.json
+            local_cp/HARD120_PLUS_HIGH_FLOW_V2_FORWARD_STATUS.json
             local_cp/EARLY60_STRONG_REVERSAL_FORWARD_STATUS.json
             local_cp/EARLY60_PLUS_HARD120_HIGH_FLOW_FORWARD_STATUS.json
             local_cp/HIGH60_VETO_FORWARD_STATUS.json
