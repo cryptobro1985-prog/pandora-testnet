@@ -29,6 +29,7 @@ class CausalReversalMachine:
         self.active = {"LOW": "WATCH", "HIGH": "WATCH"}
         self.core_side = None
         self.anchor = {"LOW": None, "HIGH": None}
+        self.anchor_end = {"LOW": None, "HIGH": None}
         self.events = []
 
     def on_bar(self, bar):
@@ -49,12 +50,17 @@ class CausalReversalMachine:
         out = []
         for side in ("LOW", "HIGH"):
             sgn = 1 if side == "LOW" else -1
-            # Rolling anchor from past/completed bars only; resets if a new
-            # extreme appears. Never assume the anchor is a true H1 local.
-            anchor = min(x["low"] for x in arr[-30:]) if sgn == 1 else max(x["high"] for x in arr[-30:])
-            if self.anchor[side] is None or (sgn == 1 and anchor < self.anchor[side]) or (sgn == -1 and anchor > self.anchor[side]):
+            # Keep the candidate extreme until a genuinely more extreme
+            # completed bar appears. Rolling-window expiry must never move
+            # an anchor forward or manufacture a fresh reversal.
+            observed = low if sgn == 1 else high
+            previous = self.anchor[side]
+            is_new = previous is None or (sgn == 1 and observed < previous) or (sgn == -1 and observed > previous)
+            if is_new:
+                self.anchor[side] = observed
+                self.anchor_end[side] = end
                 self.active[side] = "WATCH"
-            self.anchor[side] = anchor
+            anchor = self.anchor[side]
             retrace_bps = sgn * (close / anchor - 1) * 10000
             move3_bps = sgn * (close / arr[-4]["close"] - 1) * 10000
             move5_bps = sgn * (close / arr[-6]["close"] - 1) * 10000
