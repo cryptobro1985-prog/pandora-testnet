@@ -22,6 +22,10 @@ from research.hype_false_local_entry.high_flow_shadow import (
     contract as high_flow_shadow_contract,
     should_emit_shadow as should_emit_high_flow_shadow,
 )
+from research.hype_false_local_entry.high_flow_shadow_v2 import (
+    contract as high_flow_v2_contract,
+    qualifies as qualifies_high_flow_v2,
+)
 from research.hype_false_local_entry.early60_strong_reversal_shadow import (
     Early60State, capture_flow15 as capture_early60_flow15,
     checkpoint_sample as early60_checkpoint_sample,
@@ -260,6 +264,7 @@ def main():
     rp=args.checkpoint_dir/"local_runtime.pkl"
     rt=load_pickle(rp,{"candidates":{"LOW":None,"HIGH":None},"hard_candidates":{"LOW":None,"HIGH":None},
                        "hard_high_flow_shadow":{"LOW":None,"HIGH":None},
+                       "hard_high_flow_v2_emitted":{"LOW":None,"HIGH":None},
                        "hard_early60_shadow":{"LOW":None,"HIGH":None},
                        "pending":[],"expected_side":None,
                        "last_teacher_local":None,"latest_by_hour":{},"structure_48h":{}})
@@ -272,6 +277,7 @@ def main():
     for _side in ("LOW","HIGH"):
         _z=(rt.get("hard_high_flow_shadow") or {}).get(_side)
         hard_high_flow_shadow[_side]=HighFlowShadowState(**_z) if isinstance(_z,dict) else _z
+    hard_high_flow_v2_emitted=rt.get("hard_high_flow_v2_emitted") or {"LOW":None,"HIGH":None}
     hard_early60_shadow={}
     for _side in ("LOW","HIGH"):
         _z=(rt.get("hard_early60_shadow") or {}).get(_side)
@@ -383,6 +389,7 @@ def main():
                             hard_early60_shadow[side]=Early60State(_new_hard.candidate_id)
                             if side=="HIGH":
                                 hard_high_flow_shadow[side]=HighFlowShadowState(_new_hard.candidate_id)
+                                hard_high_flow_v2_emitted[side]=None
                     hour=(int(ts)//H)*H
                     latest_by_hour[f"{side}:{hour}"]=c.candidate_id
                     append_jsonl(evlog,{"event":"NEW_CANDIDATE","ts_ms":ts,"side":side,"price":price,
@@ -436,6 +443,7 @@ def main():
             # only and never changes expected/core direction by itself.
             hard120_live={}
             high_flow_shadow_live={}
+            high_flow_v2_live={}
             early60_shadow_live={}
             high60_veto_live={}
             hard120_persistence_live={}
@@ -444,6 +452,7 @@ def main():
                 if hc is None:
                     hard120_live[side]=None
                     high_flow_shadow_live[side]=None
+                    high_flow_v2_live[side]=None
                     early60_shadow_live[side]=None
                     high60_veto_live[side]=None
                     hard120_persistence_live[side]=None
@@ -590,6 +599,49 @@ def main():
                     "checkpoint":shadow_metrics,
                 }
 
+                v2_ready=False
+                v2_metrics={
+                    "ready":False,
+                    "reason":"HIGH_ONLY" if side!="HIGH" else "WAITING_CHECKPOINT",
+                }
+                if side=="HIGH" and shadow_state is not None and sample is not None:
+                    v2_ready,v2_metrics=qualifies_high_flow_v2(
+                        side=side,
+                        primary_emitted=bool(hard_stage),
+                        expected_side_ok=bool(hard_metrics.get("expected_side_ok")),
+                        checkpoint_fresh=bool(sample.get("fresh_observation")),
+                        retrace_bps=float(hard_metrics.get("retrace_bps") or 0.0),
+                        retrace_fraction_pre_180=float(hard_metrics.get("retrace_fraction_pre_180") or 0.0),
+                        flow_15=shadow_state.flow_15,
+                        trade_count=int(shadow_state.flow_15_trade_count or 0),
+                        already_emitted=(hard_high_flow_v2_emitted.get(side)==hc.candidate_id),
+                    )
+                    v2_metrics["flow_capture"]=flow_capture
+                    if v2_ready:
+                        hard_high_flow_v2_emitted[side]=hc.candidate_id
+                        append_jsonl(evlog,{
+                            "event":"INTERNAL_HARD120_HIGH_FLOW_V2_SHADOW",
+                            "ts_ms":int(ts),
+                            "signal_ts_ms":int(sample.get("sample_ts_ms") or ts),
+                            "candidate_ts_ms":int(hc.extreme_ts_ms),
+                            "candidate_id":hc.candidate_id,
+                            "side":"HIGH",
+                            "price":float(hc.extreme_price),
+                            "mark_price":float(sample.get("mark_price") or price),
+                            "teacher":INTERNAL.name,
+                            "shadow_contract":"HARD120_HIGH_FLOW_SHADOW_V2",
+                            "primary_contract":"INTERNAL_HARD120_CHECKPOINT_V2",
+                            "core_flip_authorized":False,
+                            "metrics":v2_metrics,
+                        })
+                high_flow_v2_live[side]=None if side!="HIGH" else {
+                    "candidate_id":hc.candidate_id,
+                    "flow_15":None if shadow_state is None else shadow_state.flow_15,
+                    "flow_15_trade_count":0 if shadow_state is None else shadow_state.flow_15_trade_count,
+                    "emitted":hard_high_flow_v2_emitted.get(side)==hc.candidate_id,
+                    "checkpoint":v2_metrics,
+                }
+
                 high60_sample=None
                 high60_confirmed=False
                 high60_metrics={"ready":False,"reason":"PRIMARY_HARD120_NOT_EMITTED"}
@@ -728,6 +780,16 @@ def main():
             if sfp.exists():
                 try:high_flow_shadow_forward=json.loads(sfp.read_text(encoding="utf-8"))
                 except Exception:high_flow_shadow_forward={}
+            high_flow_v2_forward={}
+            v2fp=args.checkpoint_dir/"HARD120_HIGH_FLOW_V2_FORWARD_STATUS.json"
+            if v2fp.exists():
+                try:high_flow_v2_forward=json.loads(v2fp.read_text(encoding="utf-8"))
+                except Exception:high_flow_v2_forward={}
+            hard120_plus_v2_forward={}
+            v2cfp=args.checkpoint_dir/"HARD120_PLUS_HIGH_FLOW_V2_FORWARD_STATUS.json"
+            if v2cfp.exists():
+                try:hard120_plus_v2_forward=json.loads(v2cfp.read_text(encoding="utf-8"))
+                except Exception:hard120_plus_v2_forward={}
             hard120_plus_shadow_forward={}
             cfp=args.checkpoint_dir/"HARD120_PLUS_HIGH_FLOW_FORWARD_STATUS.json"
             if cfp.exists():
@@ -805,6 +867,11 @@ def main():
                 "early60_shadow_contract":early60_shadow_contract(),
                 "early60_shadow":early60_shadow_live,
                 "early60_shadow_forward":early60_shadow_forward,
+                "preferred_high_forward_candidate":"HARD120_PLUS_HIGH_FLOW_V2",
+                "high_flow_v2_contract":high_flow_v2_contract(),
+                "high_flow_v2":high_flow_v2_live,
+                "high_flow_v2_forward":high_flow_v2_forward,
+                "hard120_plus_high_flow_v2_forward":hard120_plus_v2_forward,
                 "high_flow_shadow_contract":high_flow_shadow_contract(),
                 "high_flow_shadow":high_flow_shadow_live,
                 "high_flow_shadow_forward":high_flow_shadow_forward,
@@ -838,6 +905,7 @@ def main():
             save_pickle(rp,{"candidates":candidates,
                 "hard_candidates":{k:(None if v is None else v.to_dict()) for k,v in hard_candidates.items()},
                 "hard_high_flow_shadow":{k:(None if v is None else v.to_dict()) for k,v in hard_high_flow_shadow.items()},
+                "hard_high_flow_v2_emitted":hard_high_flow_v2_emitted,
                 "hard_early60_shadow":{k:(None if v is None else v.to_dict()) for k,v in hard_early60_shadow.items()},
                 "pending":[asdict(z) for z in pending],
                 "expected_side":expected,"last_teacher_local":last_teacher,
