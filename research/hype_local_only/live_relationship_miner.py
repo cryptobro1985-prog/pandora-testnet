@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Mine true-vs-false Local relationships from matured live labels.
 
-STRICT L6/K2 and INTERNAL L3/K1 examples are never pooled.  Older ledger rows
-without an explicit teacher are treated as STRICT for backward compatibility.
+STRICT L6/K2 and INTERNAL L3/K1 examples are never pooled.  Legacy rows from
+the provisional-pivot teacher are quarantined and never reused as truth.
 Dynamic live/L50/liquidation features remain eligible without changing the
 canonical 116-point contract.
 """
@@ -69,8 +69,11 @@ def pairs(rows,fx):
 
 def split_scopes(rows):
     """Never pool broad tactical labels with macro/core labels."""
-    strict=[r for r in rows if r.get("teacher") in (None,"H1_L6_K2_STRICT","STRICT_L6_K2")]
-    internal=[r for r in rows if r.get("teacher") in ("H1_L3_K1_INTERNAL","INTERNAL_L3_K1")]
+    # Only post-migration terminal-teacher rows are eligible.  Legacy
+    # H1_L6_K2_STRICT / missing-teacher rows used the old provisional-pivot
+    # semantics and are deliberately quarantined rather than reinterpreted.
+    strict=[r for r in rows if r.get("teacher")=="STRICT_L6_K2"]
+    internal=[r for r in rows if r.get("teacher")=="INTERNAL_L3_K1"]
     return strict,internal
 
 def mine_heads(scope_rows):
