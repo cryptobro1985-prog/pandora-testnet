@@ -28,6 +28,7 @@ from research.hype_false_local_entry.hard_survival_gate import (
     checkpoint_sample as production_checkpoint_sample,
     gate_metrics,
 )
+from research.hype_local_v5.labels import structural_labels
 
 LOOKBACKS=(5,15,60,180,360)
 
@@ -109,7 +110,7 @@ def checkpoint(candidate:dict[str,Any],end_ms:int,bars:list[dict[str,Any]],
     }
 
 
-def replay(compact:Path,labels_gz:Path)->dict[str,Any]:
+def replay(compact:Path,labels_gz:Path,derive_internal:bool=False)->dict[str,Any]:
     bars=read_jsonl_gz(compact)
     starts={int(b["start_ms"]):i for i,b in enumerate(bars)}
     end_times=[int(b["bar_end_ms"]) for b in bars]
@@ -123,11 +124,16 @@ def replay(compact:Path,labels_gz:Path)->dict[str,Any]:
         if pm<=0:continue
         e=dict(e);e["pre_move_180_bps"]=pm;candidates.append(e)
 
-    labels=[
-        dict(x) for x in (read_json_gz(labels_gz).get("internal") or [])
-        if bool(x.get("reference_finalized"))
-    ]
+    label_doc=read_json_gz(labels_gz)
+    internal=label_doc.get("internal") or []
+    label_source="artifact_internal"
+    if not internal and derive_internal:
+        internal,_=structural_labels(bars,lookback=3,lookahead=1)
+        label_source="derived_from_compact_m1_L3_K1"
+    labels=[dict(x) for x in internal if bool(x.get("reference_finalized"))]
     labels.sort(key=lambda x:int(x["extreme_interval_start_ms"]))
+    if len(labels)<3:
+        raise SystemExit("not enough INTERNAL labels; pass --derive-internal for legacy artifacts")
 
     rows=[]
     for j in range(1,len(labels)-1):
@@ -216,6 +222,8 @@ def replay(compact:Path,labels_gz:Path)->dict[str,Any]:
         "version":"HYPE-HARD120-EXACT-REPLAY-v1",
         "contract":"INTERNAL_HARD120_CHECKPOINT_V2",
         "research_only":True,"real_orders":False,
+        "label_source":label_source,
+        "internal_labels_finalized":len(labels),
         "candidate_generation":{"events_total":len(generate_candidates(bars)),"hard_6h_candidates":len(candidates)},
         "evaluation":overall,"by_side":by_side,"chronological_blocks":blocks,
         "tradeoff":tradeoff,"episode_rows":rows,
@@ -228,8 +236,9 @@ def main():
     ap.add_argument("--labels-gz",type=Path,required=True)
     ap.add_argument("--output",type=Path,required=True)
     ap.add_argument("--assert-reference",action="store_true")
+    ap.add_argument("--derive-internal",action="store_true")
     args=ap.parse_args()
-    out=replay(args.compact_1m,args.labels_gz)
+    out=replay(args.compact_1m,args.labels_gz,derive_internal=args.derive_internal)
     if args.assert_reference:
         m=out["evaluation"]
         assert m["episodes"]==120,m
