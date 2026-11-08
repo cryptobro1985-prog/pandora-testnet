@@ -1,0 +1,35 @@
+{
+  "title": "Legacy STRICT live-label contamination audit",
+  "date": "2026-11-08",
+  "source_workflow_run_id": 42459950734,
+  "source_checkpoint_artifact_id": 13611145348,
+  "ledger": "LOCAL_LIVE_LABELS.recent.jsonl.gz",
+  "rows": 467,
+  "teacher": "H1_L6_K2_STRICT",
+  "label_rows": {
+    "false": 455,
+    "true": 12
+  },
+  "unique_candidate_ids": {
+    "positive": 4,
+    "negative": 223
+  },
+  "positive_unique_sequence": [
+    {"side":"HIGH","candidate_id":"H-1794020864000","label_log_ts_ms":1794031201042},
+    {"side":"LOW","candidate_id":"L-1794071154015","label_log_ts_ms":1794081604016},
+    {"side":"LOW","candidate_id":"L-1794087077012","label_log_ts_ms":1794096005002},
+    {"side":"LOW","candidate_id":"L-1794114056016","label_log_ts_ms":1794124800006}
+  ],
+  "consecutive_same_side_positive_pairs": 2,
+  "minimum_provisional_positive_contamination": 2,
+  "interpretation": "Three successive LOW candidates were taught positive before an opposite terminal pivot finalized the leg. Under terminal-local semantics, at least the first two LOW positives were provisional/superseded rather than final Local LOWs.",
+  "checkpoint_status": {
+    "strict_live_labels_reported": 467,
+    "historical_stage_rows": 2361,
+    "h1_labels": {"LOW":835,"HIGH":835},
+    "h1_positive": {"LOW":51,"HIGH":44}
+  },
+  "action": "Discard legacy live-updated STRICT/H1 weights and rebuild them from clean finalized 30D historical pretrain; preserve isolated INTERNAL learner; quarantine legacy live relationship rows.",
+  "migration_id": "TERMINAL_TEACHER_CLEAN_V1",
+  "real_orders": false
+}
