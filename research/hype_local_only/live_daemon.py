@@ -411,18 +411,16 @@ def main():
                 }
                 if hard_stage:
                     hc.emitted=True
-                    event_name=("INTERNAL_HARD90_SIGNAL" if hard_stage=="HARD90"
-                                else "INTERNAL_HARD120_SIGNAL")
                     append_jsonl(evlog,{
-                        "event":event_name,
-                        "survival_stage":hard_stage,
+                        "event":"INTERNAL_HARD120_SIGNAL",
+                        "survival_stage":"HARD120",
                         "ts_ms":int(ts),"signal_ts_ms":int(ts),
                         "candidate_ts_ms":int(hc.extreme_ts_ms),
                         "candidate_id":hc.candidate_id,"side":hc.side,
                         "price":float(hc.extreme_price),
                         "mark_price":float(price),
                         "teacher":INTERNAL.name,
-                        "hard_contract":"INTERNAL_SURVIVAL_LADDER_V1",
+                        "hard_contract":"INTERNAL_HARD120_CHECKPOINT_V2",
                         "core_flip_authorized":False,
                         "metrics":hard_metrics,
                     })
@@ -464,11 +462,11 @@ def main():
             if fsp.exists():
                 try:forward_first_signal=json.loads(fsp.read_text(encoding="utf-8"))
                 except Exception:forward_first_signal={}
-            survival_forward={}
-            hsp=args.checkpoint_dir/"SURVIVAL_LADDER_FORWARD_STATUS.json"
+            hard120_forward={}
+            hsp=args.checkpoint_dir/"HARD120_FORWARD_STATUS.json"
             if hsp.exists():
-                try:survival_forward=json.loads(hsp.read_text(encoding="utf-8"))
-                except Exception:survival_forward={}
+                try:hard120_forward=json.loads(hsp.read_text(encoding="utf-8"))
+                except Exception:hard120_forward={}
             status={
                 "status":"LEARNING_LIVE" if (model.live_labels or model.internal_live_labels) else "HISTORY_PRETRAINED_LIVE_WATCH",
                 "updated_ts_ms":ts,"expected_side":expected,"last_teacher_local":last_teacher,
@@ -498,11 +496,9 @@ def main():
                 "internal_live_labels":model.internal_live_labels,
                 "pending_labels":len(pending),
                 "teacher_contract":teacher_contract(),
-                "survival_ladder_contract":survival_contract(),
-                "survival_ladder":hard120_live,
-                "survival_ladder_forward":survival_forward,
                 "hard120_contract":survival_contract(),
                 "hard120":hard120_live,
+                "hard120_forward":hard120_forward,
                 "forward_first_signal":forward_first_signal,
                 "model_report":model.report(),
                 "h1_baseline":model.h1_shadow,
