@@ -314,8 +314,23 @@ jobs:
             --event-name INTERNAL_HARD120_SIGNAL \
             --actionable \
             --output local_cp/HARD120_FORWARD_STATUS.json
+          python -m research.hype_local_only.forward_first_signal_audit \
+            --labels local_cp/LOCAL_LIVE_LABELS.jsonl \
+            --events local_cp/LOCAL_EVENTS.jsonl \
+            --event-name INTERNAL_HARD120_HIGH_FLOW_SHADOW \
+            --actionable \
+            --output local_cp/HARD120_HIGH_FLOW_SHADOW_FORWARD_STATUS.json
+          python -m research.hype_local_only.forward_first_signal_audit \
+            --labels local_cp/LOCAL_LIVE_LABELS.jsonl \
+            --events local_cp/LOCAL_EVENTS.jsonl \
+            --event-name INTERNAL_HARD120_SIGNAL \
+            --event-name INTERNAL_HARD120_HIGH_FLOW_SHADOW \
+            --actionable \
+            --output local_cp/HARD120_PLUS_HIGH_FLOW_FORWARD_STATUS.json
           test -s local_cp/FIRST_SIGNAL_FORWARD_STATUS.json
           test -s local_cp/HARD120_FORWARD_STATUS.json
+          test -s local_cp/HARD120_HIGH_FLOW_SHADOW_FORWARD_STATUS.json
+          test -s local_cp/HARD120_PLUS_HIGH_FLOW_FORWARD_STATUS.json
 
       - name: Write continuous-learning manifest
         run: |
@@ -346,6 +361,8 @@ jobs:
             "live_label_rows_persisted":live_rows,
             "first_signal_forward":(json.loads((cp/"FIRST_SIGNAL_FORWARD_STATUS.json").read_text()) if (cp/"FIRST_SIGNAL_FORWARD_STATUS.json").exists() else {}),
             "hard120_forward":(json.loads((cp/"HARD120_FORWARD_STATUS.json").read_text()) if (cp/"HARD120_FORWARD_STATUS.json").exists() else {}),
+            "high_flow_shadow_forward":(json.loads((cp/"HARD120_HIGH_FLOW_SHADOW_FORWARD_STATUS.json").read_text()) if (cp/"HARD120_HIGH_FLOW_SHADOW_FORWARD_STATUS.json").exists() else {}),
+            "hard120_plus_high_flow_forward":(json.loads((cp/"HARD120_PLUS_HIGH_FLOW_FORWARD_STATUS.json").read_text()) if (cp/"HARD120_PLUS_HIGH_FLOW_FORWARD_STATUS.json").exists() else {}),
             "pending_labels":s.get("pending_labels"),
             "expected_side":s.get("expected_side"),
             "last_teacher_local":s.get("last_teacher_local"),
@@ -428,6 +445,8 @@ jobs:
             local_cp/CONTINUOUS_LEARNING_MANIFEST.json
             local_cp/FIRST_SIGNAL_FORWARD_STATUS.json
             local_cp/HARD120_FORWARD_STATUS.json
+            local_cp/HARD120_HIGH_FLOW_SHADOW_FORWARD_STATUS.json
+            local_cp/HARD120_PLUS_HIGH_FLOW_FORWARD_STATUS.json
             local_cp/TERMINAL_TEACHER_MIGRATION.json
             local_cp/LOCAL_EVENTS.recent.jsonl.gz
             local_cp/LOCAL_LIVE_LABELS.recent.jsonl.gz
