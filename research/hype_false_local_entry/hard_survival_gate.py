@@ -8,16 +8,20 @@ tactical learner.  It only uses information available at decision time:
 3) price retraced at least 40 bps from the extreme; and
 4) that retrace recovered at least 45% of the causal 180-minute pre-move.
 
-The thresholds were discovered on the 2026-10-04..2026-11-03 archive and
-therefore MUST be forward-validated before any promotion beyond PAPER.
+The ladder uses a stricter 90-minute rung (65% recovery) and a 120-minute
+fallback (45% recovery). Thresholds were discovered on the
+2026-10-04..2026-11-03 archive and therefore MUST be forward-validated before
+any promotion beyond PAPER.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 from typing import Iterable, Mapping, Optional
 
+EARLY_HARD_AGE_S = 5_400
 HARD_AGE_S = 7_200
 MIN_RETRACE_BPS = 40.0
+EARLY_MIN_RETRACE_FRACTION = 0.65
 MIN_RETRACE_FRACTION = 0.45
 REQUIRED_WINDOW = "6h"
 
@@ -135,31 +139,44 @@ def gate_metrics(candidate: HardCandidate, *, now_ms: int, mark_price: float) ->
     }
 
 
-def should_emit(candidate: HardCandidate, *, now_ms: int, mark_price: float,
-                expected_side: str | None = None) -> tuple[bool,dict]:
+def next_signal(candidate: HardCandidate, *, now_ms: int, mark_price: float,
+                expected_side: str | None = None) -> tuple[str | None,dict]:
+    """Return HARD90 or HARD120 once, preferring the age-appropriate rung."""
     m=gate_metrics(candidate,now_ms=now_ms,mark_price=mark_price)
     expected_ok=expected_side is None or str(expected_side).upper()==str(candidate.side).upper()
-    ready=(
-        not candidate.emitted
-        and m["has_6h_origin"]
-        and m["age_ready"]
-        and m["retrace_ready"]
-        and m["fraction_ready"]
-        and expected_ok
-    )
     m["expected_side_ok"]=expected_ok
-    m["ready"]=bool(ready)
-    return bool(ready),m
+    m["early_age_ready"]=m["age_s"]>=EARLY_HARD_AGE_S
+    m["early_fraction_ready"]=m["retrace_fraction_pre_180"]>=EARLY_MIN_RETRACE_FRACTION
+
+    stage=None
+    if not candidate.emitted and m["has_6h_origin"] and m["retrace_ready"] and expected_ok:
+        if m["age_s"]>=HARD_AGE_S and m["fraction_ready"]:
+            stage="HARD120"
+        elif m["age_s"]>=EARLY_HARD_AGE_S and m["early_fraction_ready"]:
+            stage="HARD90"
+    m["ready_stage"]=stage
+    m["ready"]=stage is not None
+    return stage,m
+
+
+def should_emit(candidate: HardCandidate, *, now_ms: int, mark_price: float,
+                expected_side: str | None = None) -> tuple[bool,dict]:
+    """Backward-compatible boolean wrapper around the survival ladder."""
+    stage,m=next_signal(candidate,now_ms=now_ms,mark_price=mark_price,expected_side=expected_side)
+    return stage is not None,m
 
 
 def contract() -> dict:
     return {
-        "name":"INTERNAL_HARD120_SURVIVAL_V1",
+        "name":"INTERNAL_SURVIVAL_LADDER_V1",
         "role":"TACTICAL_HARD_PAPER_ONLY",
-        "age_s":HARD_AGE_S,
+        "stages":{
+            "HARD90":{"age_s":EARLY_HARD_AGE_S,"min_retrace_bps":MIN_RETRACE_BPS,
+                      "min_retrace_fraction_pre_180":EARLY_MIN_RETRACE_FRACTION},
+            "HARD120":{"age_s":HARD_AGE_S,"min_retrace_bps":MIN_RETRACE_BPS,
+                       "min_retrace_fraction_pre_180":MIN_RETRACE_FRACTION}
+        },
         "required_origin_window":REQUIRED_WINDOW,
-        "min_retrace_bps":MIN_RETRACE_BPS,
-        "min_retrace_fraction_pre_180":MIN_RETRACE_FRACTION,
         "same_side_invalidation":"any more-extreme same-side 6h candidate resets the clock",
         "stale_refresh_resets_clock":False,
         "core_flip_authorized":False,
