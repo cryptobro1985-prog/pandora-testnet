@@ -1,0 +1,64 @@
+name: HYPE HARD120 Cross-Period 202607
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-hard120-cross-period-202607.yml"
+      - "research/hype_false_local_entry/replay_hard120_30d.py"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  replay-202607:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download independent July-August compact artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p old_period
+          ARTIFACT_ID=13585701406
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" > old_period.zip
+          unzip -q old_period.zip -d old_period
+          test -s old_period/full_micro_out/compact_1m.jsonl.gz
+          test -s old_period/full_micro_out/labels.json.gz
+      - name: Replay frozen HARD120 with current INTERNAL teacher
+        run: |
+          python -m research.hype_false_local_entry.replay_hard120_30d \
+            --compact-1m old_period/full_micro_out/compact_1m.jsonl.gz \
+            --labels-gz old_period/full_micro_out/labels.json.gz \
+            --derive-internal \
+            --output HARD120_CROSS_PERIOD_202607.json
+          python - <<'PY'
+          import json
+          x=json.load(open("HARD120_CROSS_PERIOD_202607.json"))
+          m=x["evaluation"]
+          print("label_source",x["label_source"])
+          print("finalized_internal",x["internal_labels_finalized"])
+          print("precision",m["precision"],"recall",m["recall"],"true",m["true_first"],"false",m["false_first"])
+          assert x["label_source"]=="derived_from_compact_m1_L3_K1"
+          assert x["internal_labels_finalized"]==103
+          assert m["episodes"]==101
+          assert m["true_first"]==37
+          assert m["false_first"]==7
+          assert m["precision"]>0.84
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-HARD120-CROSS-PERIOD-202607-${{ github.run_id }}
+          path: HARD120_CROSS_PERIOD_202607.json
+          retention-days: 14
