@@ -122,14 +122,19 @@ jobs:
           m._ensure_internal_scope()
           s=json.loads((cp/"LOCAL_ONLY_STATUS.json").read_text())
           assert m.VERSION=="HYPE-LOCAL-ONLY-v2-DUAL-SCOPE"
-          assert (m.history_meta.get("terminal_teacher_migration") or {}).get("id")=="TERMINAL_TEACHER_CLEAN_V1"
-          assert m.live_labels==0
+          mig=m.history_meta.get("terminal_teacher_migration") or {}
+          assert mig.get("id")=="TERMINAL_TEACHER_CLEAN_V1"
+          assert mig.get("legacy_live_weights_discarded") is True
+          assert int(mig.get("strict_live_labels_discarded") or 0)>0
           assert s["local_target"]=="DUAL_INTERNAL_L3_K1__STRICT_L6_K2"
           assert s["teacher_contract"]["internal"]["name"]=="INTERNAL_L3_K1"
           assert s["teacher_contract"]["strict"]["name"]=="STRICT_L6_K2"
           assert "terminal_finalization" in s["teacher_contract"]
           assert s["research_only"] is True and s["real_orders"] is False
           assert "internal_tactical" in s["model_report"]
+          assert s["model_report"]["h1"]["online_training_enabled"] is False
+          assert s["model_report"]["internal_tactical"]["core_flip_authorized"] is False
+          assert all(x.get("terminal_finalized") is True for x in (s.get("structure_48h") or {}).get("locals",[]))
           print(json.dumps({
               "status":"PASS",
               "strict_live_labels":m.live_labels,
