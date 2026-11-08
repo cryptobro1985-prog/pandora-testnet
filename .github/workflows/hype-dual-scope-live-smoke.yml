@@ -141,9 +141,16 @@ jobs:
           assert hc["min_retrace_fraction_pre_180"]==0.45
           assert hc["core_flip_authorized"] is False
           assert set((s.get("hard120") or {}).keys())=={"LOW","HIGH"}
+          sc=s["high_flow_shadow_contract"]
+          assert sc["name"]=="HARD120_HIGH_FLOW_SHADOW_V1"
+          assert sc["role"]=="SHADOW_CHALLENGER_ONLY"
+          assert sc["core_flip_authorized"] is False
+          assert sc["primary_contract_unchanged"] is True
+          assert set((s.get("high_flow_shadow") or {}).keys())=={"LOW","HIGH"}
           with (cp/"local_runtime.pkl").open("rb") as fh:
               runtime=pickle.load(fh)
           assert "hard_candidates" in runtime
+          assert "hard_high_flow_shadow" in runtime
           print(json.dumps({
               "status":"PASS",
               "strict_live_labels":m.live_labels,
@@ -154,6 +161,8 @@ jobs:
               "local_target":s.get("local_target"),
               "hard120":s.get("hard120"),
               "hard120_contract":s.get("hard120_contract"),
+              "high_flow_shadow":s.get("high_flow_shadow"),
+              "high_flow_shadow_contract":s.get("high_flow_shadow_contract"),
           },ensure_ascii=False))
           PY
       - uses: actions/upload-artifact@v4
