@@ -10,6 +10,7 @@ def main():
     ap.add_argument("--cache",type=Path,required=True)
     args=ap.parse_args()
 
+    # FROZEN_STACK_VALIDATION: this builder must never tune shadow/HARD thresholds.
     # Third chronological validation window. Shadow/HARD thresholds are frozen
     # elsewhere and MUST NOT be fitted from this period.
     base.START=datetime(2026,9,1,0,tzinfo=timezone.utc)
