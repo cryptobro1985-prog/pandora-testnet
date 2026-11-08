@@ -18,16 +18,16 @@ def dense_completed_m1_candidates(rows):
         # Compact 1m contract: prefer explicit bar_end_ms; otherwise ts_ms
         # is interpreted as bar start. Never expose intrabar extremes early.
         end = int(bar.get("bar_end_ms") or (start + int(bar.get("interval_ms", 60000))))
-        if last_signal is not None and end <= last_signal:
-            raise ValueError("nonmonotonic completed minute timestamps")
+        if end <= start or (last_signal is not None and start < last_signal):
+            raise ValueError("overlapping, incomplete, or nonmonotonic minute bars")
         last_signal = end
         low, high = float(bar["low"]), float(bar["high"])
         if not 0 < low <= high:
             raise ValueError("invalid minute extrema")
         for side, price, field in (("LOW", low, "low_ts_ms"), ("HIGH", high, "high_ts_ms")):
             extreme_ts = int(bar.get(field) or start)
-            if extreme_ts > end:
-                raise ValueError("future intrabar extreme timestamp")
+            if not start <= extreme_ts < end:
+                raise ValueError("intrabar extreme timestamp outside completed minute")
             yield dict(side=side, extreme_ts_ms=extreme_ts,
                        signal_ts_ms=end, extreme_price=price,
                        source="dense_completed_m1", entry_signal=False)
