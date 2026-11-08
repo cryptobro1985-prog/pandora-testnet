@@ -1,0 +1,65 @@
+name: HYPE Telegram Monitor Fallback
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/telegram-monitor-fallback.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  switch-telegram-monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      MINIAPP_URL: "https://cdn.jsdelivr.net/gh/cryptobro1985-prog/pandora-testnet@74289308f64f0bb4d918e725c03f4db523d7bf23/research/hype_caterpillar_monitor_static/index.html"
+      BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || secrets.HYPE_TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_TOKEN }}
+    steps:
+      - name: Verify fallback page
+        shell: bash
+        run: |
+          set -euo pipefail
+          code="$(curl -L -sS -o /tmp/monitor.html -w '%{http_code}' --connect-timeout 10 --max-time 30 "$MINIAPP_URL")"
+          echo "fallback_http=$code"
+          test "$code" = "200"
+          grep -q "HYPE Local Monitor" /tmp/monitor.html
+          echo "FALLBACK_PAGE_OK"
+      - name: Switch Telegram menu button
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${BOT_TOKEN:-}" ]; then
+            echo "TOKEN_MISSING"
+            exit 3
+          fi
+          api="https://api.telegram.org/bot${BOT_TOKEN}"
+          payload="$(python - <<'PY'
+          import json,os
+          print(json.dumps({
+            "menu_button":{
+              "type":"web_app",
+              "text":"HYPE Monitor",
+              "web_app":{"url":os.environ["MINIAPP_URL"]}
+            }
+          },separators=(",",":")))
+          PY
+          )"
+          response="$(curl -sS --fail-with-body -X POST "$api/setChatMenuButton"             -H 'Content-Type: application/json' --data "$payload")"
+          python - <<'PY' "$response"
+          import json,sys
+          x=json.loads(sys.argv[1])
+          assert x.get("ok") is True,x
+          print("TELEGRAM_MENU_UPDATED")
+          PY
+          check="$(curl -sS --fail-with-body "$api/getChatMenuButton")"
+          python - <<'PY' "$check"
+          import json,os,sys
+          x=json.loads(sys.argv[1]); assert x.get("ok") is True,x
+          got=((x.get("result") or {}).get("web_app") or {}).get("url")
+          assert got==os.environ["MINIAPP_URL"],(got,os.environ["MINIAPP_URL"])
+          print("TELEGRAM_MENU_VERIFIED")
+          PY
