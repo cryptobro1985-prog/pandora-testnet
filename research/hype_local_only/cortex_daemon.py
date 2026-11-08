@@ -11,7 +11,7 @@ def json_object(text):
     return json.loads(text[a:b+1])
 
 def compact_memory(memory,side):
-    out={"micro":{},"h1":{}}
+    out={"micro":{},"internal_tactical":{},"h1":{}}
     for stage in (60,180,300):
         key=f"{side}_{stage}s";h=(memory.get("heads") or {}).get(key) or {}
         out["micro"][key]={
@@ -19,6 +19,13 @@ def compact_memory(memory,side):
             "top_feature_relationships":(h.get("top_feature_relationships") or [])[:12],
             "top_pair_relationships":(h.get("top_pair_relationships") or [])[:8],
             "true_examples":h.get("true_examples"),"false_examples":h.get("false_examples")
+        }
+        ih=(memory.get("internal_heads") or {}).get(key) or {}
+        out["internal_tactical"][key]={
+            "baseline_positive_rate":ih.get("baseline_positive_rate"),
+            "top_feature_relationships":(ih.get("top_feature_relationships") or [])[:12],
+            "top_pair_relationships":(ih.get("top_pair_relationships") or [])[:8],
+            "true_examples":ih.get("true_examples"),"false_examples":ih.get("false_examples")
         }
     h=(memory.get("h1_heads") or {}).get(side) or {}
     out["h1"][side]={
@@ -33,7 +40,7 @@ def call_cortex(url,model,payload,timeout):
     system=(
       "You are HYPE Local Cortex. Your only task is to analyze whether the current market state "
       "is consistent with a forming Local HIGH or Local LOW. You are not a trading strategy. "
-      "Use the supplied 30-day relationship memory, matured live discovery relationships, and current Quant probabilities. "
+      "Use the supplied 30-day relationship memory, SEPARATE STRICT and INTERNAL matured live relationships, and current Quant probabilities. "
       "Never invent unavailable inputs. Return strict JSON with keys verdict, confidence, "
       "supporting_relationships, contradicting_relationships, missing_live_evidence, summary. "
       "verdict must be FORMING_HIGH, FORMING_LOW, CONFIRMED_HIGH, CONFIRMED_LOW, or WAIT."
