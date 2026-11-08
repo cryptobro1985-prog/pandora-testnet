@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  HYPE_REST_RELAY_URL: "https://hype-rest-relay.onrender.com"
+  HYPE_REST_RELAY_URL: ""
   LOCAL_ONLY_MONITOR_URL: ""
 
 jobs:
