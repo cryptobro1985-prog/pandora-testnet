@@ -8,158 +8,159 @@ from typing import Optional
 class ReversalState(str, Enum):
     WATCH = "WATCH"
     FORMING = "FORMING"
-    EARLY_CONFIRM = "EARLY_CONFIRM"
+    EARLY_PROBE = "EARLY_PROBE"
     CONFIRMED = "CONFIRMED"
     HARD_CONFIRMED = "HARD_CONFIRMED"
+    ULTRA_CONFIRMED = "ULTRA_CONFIRMED"
+    INVALIDATED = "INVALIDATED"
 
 
-@dataclass
-class ReversalConfig:
-    # Research seeds from the 30D HYPE study. Recalibrate walk-forward before live use.
-    min_swing_atr_watch: float = 2.0
-    min_survival_s_forming: int = 180
-    min_survival_s_early: int = 600
-
-    retrace_fraction_soft: float = 0.08
-    retrace_fraction_strong: float = 0.12
-    rev_return_300s_soft: float = 0.0010
-
-    early_score: float = 7.0
-    confirm_score: float = 9.0
-    hard_score: float = 10.5
-    persistence_updates: int = 2
-
-
-@dataclass
-class ReversalSnapshot:
+@dataclass(frozen=True)
+class Evidence:
     side: str
-    survival_s: float
+    survival_s: int
     swing_atr_mult: float
     retrace_fraction: float
-
-    rev_return_300s: float
-    rev_flow_180s: float
-    rev_eff_180s: float
-    old_eff_180s: float
-
-    macd_hist_rev: float
-    macd_slope3_rev: float
-
-    oi_notional_delta_rev: Optional[float] = None
+    edge_recovery_60m: float
+    edge_recovery_6h: float
+    rev_return_180s: float = 0.0
+    rev_return_300s: float = 0.0
+    rev_flow_180s: float = 0.0
+    rev_flow_3m: float = 0.0
+    rev_eff_300s: float = 0.0
+    macd_hist_rev_bps: float = 0.0
+    macd_slope3_rev_bps: float = 0.0
     same_side_extreme_broken: bool = False
+    oi_delta_rev: Optional[float] = None
 
 
-@dataclass
-class ReversalDecision:
+@dataclass(frozen=True)
+class Decision:
     state: ReversalState
-    score: float
+    target_paper_fraction: float
+    invalidate_stop_at_extreme: bool
     reason: str
-    paper_fraction_of_intended_position: float
 
 
-class HypeFalseLocalEntryEngine:
-    """
-    Research / paper-only reversal state machine.
+class FalseLocalEntryEngine:
+    """Causal H1 reversal detector for research/paper replay.
 
-    Core principle:
-    - never predict the exact extreme;
-    - candidate is immediately invalidated by a new same-side extreme;
-    - accumulate causal evidence that the old side lost price impact and
-      the opposite side is accepting price;
-    - use staged confidence instead of one binary local flag.
+    Ordinary intrawave corrections must not cause an immediate full reversal.
+    Evidence is accumulated in stages. A new same-side extreme invalidates the
+    candidate immediately.
 
-    paper_fraction_of_intended_position is a research replay variable,
-    not a real-money sizing recommendation.
+    Fractions are fractions of an intended paper position, not real-money
+    recommendations. Real order placement is deliberately absent.
     """
 
-    def __init__(self, config: ReversalConfig | None = None) -> None:
-        self.cfg = config or ReversalConfig()
-        self.state = ReversalState.WATCH
-        self._confirm_streak = 0
-
-    def reset(self) -> None:
-        self.state = ReversalState.WATCH
-        self._confirm_streak = 0
-
-    def _score(self, x: ReversalSnapshot) -> float:
-        s = 0.0
-
-        if x.swing_atr_mult >= self.cfg.min_swing_atr_watch:
-            s += 1.0
-        if x.swing_atr_mult >= 2.5:
-            s += 1.0
-
-        if x.survival_s >= self.cfg.min_survival_s_forming:
-            s += 1.0
-        if x.retrace_fraction >= self.cfg.retrace_fraction_soft:
-            s += 1.5
-        if x.retrace_fraction >= self.cfg.retrace_fraction_strong:
-            s += 1.5
-
-        if x.rev_return_300s >= self.cfg.rev_return_300s_soft:
-            s += 1.0
-
-        if x.rev_flow_180s > 0:
-            s += 0.75
-        if x.rev_eff_180s > x.old_eff_180s:
-            s += 1.5
-
-        if x.macd_hist_rev > 0:
-            s += 0.75
-        if x.macd_slope3_rev > 0:
-            s += 0.75
-
-        if x.oi_notional_delta_rev is not None and x.oi_notional_delta_rev > 0:
-            s += 0.5
-
-        return s
-
-    def update(self, x: ReversalSnapshot) -> ReversalDecision:
+    def evaluate(self, x: Evidence) -> Decision:
         if x.same_side_extreme_broken:
-            self.reset()
-            return ReversalDecision(
-                state=self.state,
-                score=0.0,
-                reason="INVALIDATED_NEW_SAME_SIDE_EXTREME",
-                paper_fraction_of_intended_position=0.0,
+            return Decision(
+                ReversalState.INVALIDATED,
+                0.0,
+                True,
+                "new same-side extreme invalidated the candidate",
             )
 
-        score = self._score(x)
+        if x.swing_atr_mult < 2.0 or x.survival_s < 600:
+            return Decision(ReversalState.FORMING, 0.0, True, "not mature enough")
 
-        if x.swing_atr_mult < self.cfg.min_swing_atr_watch:
-            self.state = ReversalState.WATCH
-            self._confirm_streak = 0
-            return ReversalDecision(self.state, score, "SWING_NOT_MATURE", 0.0)
-
-        if x.survival_s < self.cfg.min_survival_s_forming:
-            self.state = ReversalState.FORMING
-            self._confirm_streak = 0
-            return ReversalDecision(self.state, score, "WAIT_CAUSAL_SURVIVAL", 0.0)
-
-        if x.survival_s >= self.cfg.min_survival_s_early and score >= self.cfg.early_score:
-            self._confirm_streak += 1
-            self.state = ReversalState.EARLY_CONFIRM
-        else:
-            self._confirm_streak = 0
-            self.state = ReversalState.FORMING
-
-        if self._confirm_streak >= self.cfg.persistence_updates and score >= self.cfg.confirm_score:
-            self.state = ReversalState.CONFIRMED
-
-        if self._confirm_streak >= self.cfg.persistence_updates + 1 and score >= self.cfg.hard_score:
-            self.state = ReversalState.HARD_CONFIRMED
-
-        fraction = {
-            ReversalState.WATCH: 0.0,
-            ReversalState.FORMING: 0.0,
-            ReversalState.EARLY_CONFIRM: 0.20,
-            ReversalState.CONFIRMED: 0.60,
-            ReversalState.HARD_CONFIRMED: 1.00,
-        }[self.state]
-
-        return ReversalDecision(
-            state=self.state,
-            score=score,
-            reason="CAUSAL_REVERSAL_EVIDENCE",
-            paper_fraction_of_intended_position=fraction,
+        early_votes = sum(
+            [
+                x.retrace_fraction >= 0.08,
+                x.edge_recovery_60m >= 0.20,
+                x.edge_recovery_6h >= 0.08,
+                x.rev_return_300s >= 0.0,
+                x.macd_hist_rev_bps >= 0.0,
+                x.rev_flow_180s >= 0.0,
+            ]
         )
+        if x.survival_s >= 600 and early_votes >= 4:
+            best = Decision(
+                ReversalState.EARLY_PROBE,
+                0.10,
+                True,
+                "10m causal reversal probe",
+            )
+        else:
+            best = Decision(ReversalState.FORMING, 0.0, True, "insufficient early evidence")
+
+        if (
+            x.survival_s >= 1800
+            and x.swing_atr_mult >= 3.0
+            and x.retrace_fraction >= 0.12
+            and x.edge_recovery_60m >= 0.30
+            and x.edge_recovery_6h >= 0.20
+            and x.macd_hist_rev_bps >= -1.0
+            and x.rev_flow_3m >= -0.10
+        ):
+            best = Decision(
+                ReversalState.CONFIRMED,
+                0.35,
+                True,
+                "30m structural confirmation",
+            )
+
+        if (
+            x.survival_s >= 3600
+            and x.swing_atr_mult >= 3.5
+            and x.retrace_fraction >= 0.15
+            and x.edge_recovery_60m >= 0.20
+            and x.edge_recovery_6h >= 0.12
+            and x.macd_hist_rev_bps >= -3.0
+            and x.rev_flow_3m >= 0.10
+        ):
+            best = Decision(
+                ReversalState.HARD_CONFIRMED,
+                0.70,
+                True,
+                "60m high-confidence structural reversal",
+            )
+
+        if (
+            x.survival_s >= 3600
+            and x.swing_atr_mult >= 4.5
+            and x.retrace_fraction >= 0.15
+            and x.edge_recovery_60m >= 0.45
+            and x.edge_recovery_6h >= 0.10
+            and x.macd_hist_rev_bps >= -1.0
+            and x.rev_flow_3m >= 0.15
+        ):
+            best = Decision(
+                ReversalState.ULTRA_CONFIRMED,
+                1.00,
+                True,
+                "60m ultra gate; in-sample research only",
+            )
+
+        return best
+
+
+class PositionRouter:
+    """Paper router that prevents early opposite signals from whipsawing."""
+
+    def desired_fraction(
+        self,
+        current_side: Optional[str],
+        decision: Decision,
+        signal_side: str,
+    ) -> tuple[Optional[str], float]:
+        if decision.state in {
+            ReversalState.WATCH,
+            ReversalState.FORMING,
+            ReversalState.INVALIDATED,
+        }:
+            return current_side, 0.0 if current_side is None else 1.0
+
+        target_side = "LONG" if signal_side == "LOW" else "SHORT"
+
+        if current_side is None or current_side == target_side:
+            return target_side, decision.target_paper_fraction
+
+        if decision.state in {
+            ReversalState.EARLY_PROBE,
+            ReversalState.CONFIRMED,
+        }:
+            return current_side, 1.0
+
+        return target_side, decision.target_paper_fraction
