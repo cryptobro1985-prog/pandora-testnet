@@ -6,6 +6,8 @@ on:
       - research/hype-h1-local-v5-oi-microstructure-20261104
     paths:
       - "research/hype_full_micro_202609/build_base_september.py"
+      - "research/hype_false_local_entry/high60_retrace_veto.py"
+      - "research/hype_false_local_entry/replay_high60_veto_stack.py"
       - ".github/workflows/hype-september-untouched-shadow-stack.yml"
   workflow_dispatch:
 
@@ -35,20 +37,26 @@ jobs:
         run: |
           python -m research.hype_false_local_entry.replay_early60_plus_hard_stack             --compact-1m "$RUNNER_TEMP/hype-sep-out/compact_1m.jsonl.gz"             --labels-gz "$RUNNER_TEMP/hype-sep-out/labels.json.gz"             --output SEPTEMBER_FULL_STACK.json
           python -m research.hype_false_local_entry.replay_hard120_30d             --compact-1m "$RUNNER_TEMP/hype-sep-out/compact_1m.jsonl.gz"             --labels-gz "$RUNNER_TEMP/hype-sep-out/labels.json.gz"             --output SEPTEMBER_HARD120_ONLY.json
+          python -m research.hype_false_local_entry.replay_high60_veto_stack             --compact-1m "$RUNNER_TEMP/hype-sep-out/compact_1m.jsonl.gz"             --labels-gz "$RUNNER_TEMP/hype-sep-out/labels.json.gz"             --output SEPTEMBER_HIGH60_VETO_STACK.json
           python - <<'PY'
           import json
           full=json.load(open("SEPTEMBER_FULL_STACK.json"))
           hard=json.load(open("SEPTEMBER_HARD120_ONLY.json"))
-          fm=full["evaluation"]; hm=hard["evaluation"]
+          veto=json.load(open("SEPTEMBER_HIGH60_VETO_STACK.json"))
+          fm=full["evaluation"]; hm=hard["evaluation"]; vm=veto["evaluation"]
           print("SEPTEMBER_HARD120",json.dumps(hm,separators=(",",":")))
           print("SEPTEMBER_FULL_STACK",json.dumps(fm,separators=(",",":")))
           print("SEPTEMBER_SIDES",json.dumps(full["by_side"],separators=(",",":")))
+          print("SEPTEMBER_HIGH60_VETO",json.dumps(vm,separators=(",",":")))
+          print("SEPTEMBER_HIGH60_VETO_HIGH",json.dumps(veto["by_side"]["HIGH"],separators=(",",":")))
           result={
             "period":"2026-09-01..2026-10-01",
             "untouched_for_frozen_stack":True,
             "hard120":hm,
             "full_stack":fm,
+            "high60_veto_stack":vm,
             "by_side":full["by_side"],
+            "high60_veto_by_side":veto["by_side"],
             "gate":{"min_precision":0.80,"min_recall":0.40,
                     "passed":fm["precision"]>=0.80 and fm["recall"]>=0.40},
             "contracts":full["contracts"],
@@ -63,6 +71,7 @@ jobs:
             SEPTEMBER_UNTOUCHED_RESULT.json
             SEPTEMBER_FULL_STACK.json
             SEPTEMBER_HARD120_ONLY.json
+            SEPTEMBER_HIGH60_VETO_STACK.json
             ${{ runner.temp }}/hype-sep-out/manifest.json
             ${{ runner.temp }}/hype-sep-out/labels.json.gz
             ${{ runner.temp }}/hype-sep-out/compact_1m.jsonl.gz
