@@ -15,7 +15,7 @@ any promotion beyond PAPER.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from typing import Iterable, Mapping, Optional
 
 EARLY_HARD_AGE_S = 5_400
@@ -24,6 +24,7 @@ MIN_RETRACE_BPS = 40.0
 EARLY_MIN_RETRACE_FRACTION = 0.65
 MIN_RETRACE_FRACTION = 0.45
 REQUIRED_WINDOW = "6h"
+CHECKPOINT_GRACE_S = 90
 
 
 @dataclass
@@ -35,6 +36,7 @@ class HardCandidate:
     pre_move_180_bps: float
     origin_windows: list[str]
     emitted: bool = False
+    evaluated_stages: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -144,19 +146,47 @@ def gate_metrics(candidate: HardCandidate, *, now_ms: int, mark_price: float) ->
 
 def next_signal(candidate: HardCandidate, *, now_ms: int, mark_price: float,
                 expected_side: str | None = None) -> tuple[str | None,dict]:
-    """Return HARD90 or HARD120 once, preferring the age-appropriate rung."""
+    """Evaluate each rung exactly once at its causal checkpoint.
+
+    Historical research sampled the 90m and 120m checkpoints.  Live must not
+    wait for a later recovery crossing and retroactively call it HARD90/HARD120,
+    because that changes the tested rule.  We therefore consume each checkpoint
+    on the first observation at/after it.  A short grace only tolerates normal
+    scheduler/event jitter; a long restart gap marks the checkpoint missed.
+    """
     m=gate_metrics(candidate,now_ms=now_ms,mark_price=mark_price)
     expected_ok=expected_side is None or str(expected_side).upper()==str(candidate.side).upper()
     m["expected_side_ok"]=expected_ok
     m["early_age_ready"]=m["age_s"]>=EARLY_HARD_AGE_S
     m["early_fraction_ready"]=m["retrace_fraction_pre_180"]>=EARLY_MIN_RETRACE_FRACTION
+    m["checkpoint_grace_s"]=CHECKPOINT_GRACE_S
+    m["evaluated_stages"]=list(candidate.evaluated_stages)
+
+    if candidate.emitted:
+        m["ready_stage"]=None;m["ready"]=False
+        return None,m
 
     stage=None
-    if not candidate.emitted and m["has_6h_origin"] and m["retrace_ready"] and expected_ok:
-        if m["age_s"]>=HARD_AGE_S and m["fraction_ready"]:
-            stage="HARD120"
-        elif m["age_s"]>=EARLY_HARD_AGE_S and m["early_fraction_ready"]:
+    # Consume HARD90 once. If the process wakes much later than the checkpoint,
+    # do not grant a retroactive early signal.
+    if m["age_s"]>=EARLY_HARD_AGE_S and "HARD90" not in candidate.evaluated_stages:
+        candidate.evaluated_stages.append("HARD90")
+        within=m["age_s"]<=EARLY_HARD_AGE_S+CHECKPOINT_GRACE_S
+        m["hard90_within_checkpoint_window"]=within
+        if (within and m["has_6h_origin"] and m["retrace_ready"]
+                and m["early_fraction_ready"] and expected_ok):
             stage="HARD90"
+
+    # If HARD90 did not fire, HARD120 is a separate one-shot fallback.
+    if stage is None and m["age_s"]>=HARD_AGE_S and "HARD120" not in candidate.evaluated_stages:
+        candidate.evaluated_stages.append("HARD120")
+        within=m["age_s"]<=HARD_AGE_S+CHECKPOINT_GRACE_S
+        m["hard120_within_checkpoint_window"]=within
+        if (within and m["has_6h_origin"] and m["retrace_ready"]
+                and m["fraction_ready"] and expected_ok):
+            stage="HARD120"
+
+    m["evaluated_stages"]=list(candidate.evaluated_stages)
     m["ready_stage"]=stage
     m["ready"]=stage is not None
     return stage,m
@@ -182,6 +212,8 @@ def contract() -> dict:
         "required_origin_window":REQUIRED_WINDOW,
         "same_side_invalidation":"any more-extreme same-side 6h candidate resets the clock",
         "stale_refresh_resets_clock":False,
+        "checkpoint_semantics":"each rung is evaluated once; no late recovery crossing is retroactively accepted",
+        "checkpoint_grace_s":CHECKPOINT_GRACE_S,
         "core_flip_authorized":False,
         "historical_selection_warning":"thresholds were selected on the 30D research archive; forward validation is mandatory",
     }
