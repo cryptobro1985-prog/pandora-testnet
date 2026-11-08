@@ -1,0 +1,32 @@
+name: HYPE False-Local Dual-Scope CI
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/hype_false_local_entry/**"
+      - "research/hype_local_only/**"
+      - ".github/workflows/hype-false-local-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dual-scope-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused test dependencies
+        run: python -m pip install --disable-pip-version-check pytest river
+      - name: Compile changed research modules
+        run: |
+          python -m py_compile             research/hype_false_local_entry/first_signal_objective.py             research/hype_false_local_entry/dual_scope_teacher.py             research/hype_local_only/model.py             research/hype_local_only/live_daemon.py
+      - name: Run focused unit tests
+        run: |
+          pytest -q             research/hype_false_local_entry/test_first_signal_objective.py             research/hype_false_local_entry/test_dual_scope_teacher.py             research/hype_false_local_entry/test_causal_minute_candidates.py             research/hype_local_only/test_dual_scope_model.py
