@@ -1,0 +1,44 @@
+{
+  "title":"HYPE September frozen-challenger audit",
+  "period":"2026-09-01..2026-10-01",
+  "source_artifact_id":13637558401,
+  "challenger_run_id":42532927720,
+  "thresholds_frozen_before_holdout_result":true,
+  "promotion_gate":{
+    "min_precision":0.80,
+    "min_recall":0.40,
+    "must_pass_overall_and_each_side":["LOW","HIGH"]
+  },
+  "hard120_baseline":{
+    "overall":{"precision":0.8615384615384616,"recall":0.4409448818897638},
+    "LOW":{"precision":0.875,"recall":0.4444444444444444},
+    "HIGH":{"precision":0.8484848484848485,"recall":0.4375},
+    "side_gate_passed":true
+  },
+  "persistence65_full_frozen_stack":{
+    "overall":{"precision":0.8153846153846154,"recall":0.41732283464566927},
+    "LOW":{"precision":0.8709677419354839,"recall":0.42857142857142855},
+    "HIGH":{"precision":0.7647058823529411,"recall":0.40625},
+    "overall_gate_passed":true,
+    "side_gate_passed":false,
+    "promotion":"REJECTED"
+  },
+  "high60_50bps_full_frozen_stack":{
+    "overall":{"precision":0.8307692307692308,"recall":0.4251968503937008},
+    "LOW":{"precision":0.875,"recall":0.4444444444444444},
+    "HIGH":{"precision":0.7878787878787878,"recall":0.40625},
+    "overall_gate_passed":true,
+    "side_gate_passed":false,
+    "promotion":"REJECTED"
+  },
+  "hard120_plus_high_flow_preregistered":{
+    "overall":{"precision":0.8235294117647058,"recall":0.4409448818897638},
+    "LOW":{"precision":0.875,"recall":0.4444444444444444},
+    "HIGH":{"precision":0.7777777777777778,"recall":0.4375},
+    "shadow_signals":5,"shadow_true":2,"shadow_false":3,
+    "side_gate_passed":false,
+    "promotion":"REJECTED"
+  },
+  "decision":"Frozen HARD120 remains the only component that independently clears the 80/40 gate overall and on both sides in untouched September. Additive EARLY60/HIGH-flow/persistence/high60 stacks are not promoted. Continue with regime-conditioned HIGH-flow research and a new sealed period.",
+  "real_orders":false
+}
