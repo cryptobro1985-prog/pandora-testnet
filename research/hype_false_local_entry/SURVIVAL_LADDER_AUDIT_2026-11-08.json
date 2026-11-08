@@ -1,0 +1,39 @@
+{
+  "title":"HYPE INTERNAL Survival Ladder HARD90→HARD120 — Historical Research Audit",
+  "date":"2026-11-08",
+  "period":["2026-10-04","2026-11-03"],
+  "teacher":"INTERNAL_L3_K1 terminal-finalized",
+  "research_only":true,
+  "real_orders":false,
+  "ladder":{
+    "origin":"6h trailing extreme",
+    "HARD90":{"age_seconds":5400,"min_retrace_bps":40.0,"min_retrace_fraction_of_causal_pre_move_180m":0.65},
+    "HARD120":{"age_seconds":7200,"min_retrace_bps":40.0,"min_retrace_fraction_of_causal_pre_move_180m":0.45},
+    "single_emit_per_lineage":true,
+    "core_flip_authorized":false
+  },
+  "evaluation":{
+    "objective":"first accepted actionable ladder signal before next finalized opposite Local extreme",
+    "completed_actionable_episodes":120,
+    "accepted_first":59,
+    "true_first":54,
+    "false_first":5,
+    "no_signal":61,
+    "precision":0.9152542372881356,
+    "recall":0.45,
+    "chronological_blocks":[
+      {"episodes":"1-30","true_first":16,"false_first":0,"precision":1.0,"recall":0.5333333333333333},
+      {"episodes":"31-60","true_first":14,"false_first":2,"precision":0.875,"recall":0.4666666666666667},
+      {"episodes":"61-90","true_first":12,"false_first":1,"precision":0.9230769230769231,"recall":0.4},
+      {"episodes":"91-120","true_first":12,"false_first":2,"precision":0.8571428571428571,"recall":0.4}
+    ]
+  },
+  "comparison":{
+    "HARD120_only":{"precision":0.9122807017543859,"recall":0.43333333333333335,"true_first":52,"false_first":5},
+    "HARD90_then_HARD120":{"precision":0.9152542372881356,"recall":0.45,"true_first":54,"false_first":5},
+    "delta_true_first":2,
+    "delta_false_first":0
+  },
+  "warning":"Thresholds were selected after studying this same 30-day archive. Chronological stability is encouraging but not untouched OOS proof. The ladder is frozen and must pass the independent forward actionable first-signal gate before promotion.",
+  "forward_gate":{"min_episodes":20,"min_true_first":10,"min_precision":0.80,"min_recall":0.40,"authorization_if_passed":"PAPER_FORWARD_ONLY"}
+}
