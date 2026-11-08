@@ -1,0 +1,66 @@
+{
+  "status": "CAUSAL_CANDIDATE_COVERAGE_FIXED",
+  "generated_at_utc": "2026-11-08T08:24:00Z",
+  "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+  "period": ["2026-10-04", "2026-11-03"],
+  "artifacts": {
+    "base": "local116-HYPE / 13435356156",
+    "gap": "HYPE-LOCAL-HISTORICAL-GAPS / 13533587104",
+    "compact_m1_bars": 43198
+  },
+  "label_scope": {
+    "internal_finalized": 122,
+    "internal_by_side": {"LOW": 61, "HIGH": 61},
+    "strict_finalized": 76,
+    "strict_by_side": {"LOW": 38, "HIGH": 38}
+  },
+  "previous_candidate_space": {
+    "internal_seen": 95,
+    "internal_missing": 27,
+    "note": "This was the pre-expansion candidate replay recorded in LABEL_SCOPE_AUDIT_30D.json."
+  },
+  "new_completed_m1_generator": {
+    "lookbacks_minutes": [5, 15, 60, 180, 360],
+    "label_blind": true,
+    "future_bars_used": false,
+    "dedupe": "at most one event per side per completed bar; all satisfied lookbacks retained as metadata",
+    "timestamp_contract": {
+      "extreme_ts_ms": "recorded low_ts_ms/high_ts_ms when available",
+      "signal_ts_ms": "bar_end_ms for compact_1m; no extra +60s delay"
+    },
+    "candidate_events_after_lookback_dedupe": 22264,
+    "candidate_events_before_lookback_dedupe_equivalent": 45639,
+    "exact_coverage_tolerance_ms": 0,
+    "internal_covered": 122,
+    "internal_missing": 0,
+    "internal_recall": 1.0,
+    "strict_covered": 76,
+    "strict_missing": 0,
+    "strict_recall": 1.0
+  },
+  "survival_only_diagnostic": {
+    "warning": "Survival is not a classifier and these are in-sample diagnostics on the same 30D history.",
+    "1m": {"surviving_candidates": 11194, "true_internal_extremes_present": 122},
+    "3m": {"surviving_candidates": 7389, "true_internal_extremes_present": 122},
+    "5m": {"surviving_candidates": 6037, "true_internal_extremes_present": 122},
+    "10m": {"surviving_candidates": 4368, "true_internal_extremes_present": 122},
+    "15m": {"surviving_candidates": 3608, "true_internal_extremes_present": 122},
+    "20m": {"surviving_candidates": 3114, "true_internal_extremes_present": 122},
+    "30m": {"surviving_candidates": 2512, "true_internal_extremes_present": 122},
+    "60m": {"surviving_candidates": 1767, "true_internal_extremes_present": 122}
+  },
+  "structural_diagnostic_10m": {
+    "gate": "max satisfied trailing-extreme lookback >= 180 minutes",
+    "surviving_candidates": 666,
+    "true_internal_extremes_present": 122,
+    "recall_on_this_30d_sample": 1.0,
+    "event_level_precision_on_this_30d_sample": 0.1831831831831832,
+    "warning": "This is same-sample evidence, not an untouched OOS promotion gate."
+  },
+  "critical_interpretation": [
+    "Candidate-generation recall is no longer the bottleneck on this 30D artifact: every finalized internal and strict local is surfaced causally.",
+    "The remaining problem is ranking/confirmation: choose the terminal candidate before false intrawave corrections while preserving early swing capture.",
+    "Do not confuse 100% candidate coverage with 100% first-signal precision.",
+    "Next optimization must be chronological/OOS first-signal evaluation over the full 122-local internal scope, using the causal 116-point state where genuinely available."
+  ]
+}
