@@ -74,3 +74,10 @@ def test_contract_is_paper_only_and_never_core_flip():
     assert c["stages"]["HARD120"]["age_s"]==HARD_AGE_S
     assert c["core_flip_authorized"] is False
     assert c["stale_refresh_resets_clock"] is False
+
+
+def test_partial_pre_move_window_cannot_start_lineage():
+    partial=bars(60)
+    c=maybe_start_or_extend(None,side="LOW",price=98,ts_ms=180*60_000,
+        candidate_id="L-partial",windows=["6h"],completed_m1_rows=partial)
+    assert c is None
