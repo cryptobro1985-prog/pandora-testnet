@@ -69,7 +69,8 @@ def matured_pivot_label(
     if int(now_ms) < cfg.maturity_ms(hour):
         return None
 
-    by = _rows_by_hour(completed_h1_rows)
+    visible=[r for r in completed_h1_rows if int(r["start_ms"])+HOUR_MS<=int(now_ms)]
+    by = _rows_by_hour(visible)
     needed = [hour - j * HOUR_MS for j in range(cfg.lookback, 0, -1)]
     needed += [hour]
     needed += [hour + j * HOUR_MS for j in range(1, cfg.lookahead + 1)]
@@ -92,6 +93,7 @@ def matured_pivot_label(
 def collapsed_pivots(
     completed_h1_rows: Iterable[Mapping],
     teacher_scope: str | TeacherScope,
+    now_ms: int | None = None,
 ) -> list[dict]:
     """Causally reproduce alternating terminal-pivot candidates up to now.
 
@@ -100,7 +102,10 @@ def collapsed_pivots(
     matured pivot appears after it.
     """
     cfg=scope(teacher_scope)
-    rows=sorted(_rows_by_hour(completed_h1_rows).values(),key=lambda x:x["start_ms"])
+    visible=list(completed_h1_rows)
+    if now_ms is not None:
+        visible=[r for r in visible if int(r["start_ms"])+HOUR_MS<=int(now_ms)]
+    rows=sorted(_rows_by_hour(visible).values(),key=lambda x:x["start_ms"])
     raw=[]
     for i in range(cfg.lookback,len(rows)-cfg.lookahead):
         win=rows[i-cfg.lookback:i+cfg.lookahead+1]
@@ -149,7 +154,7 @@ def finalized_terminal_label(
     if int(now_ms)<cfg.maturity_ms(hour):
         return None
 
-    pivots=collapsed_pivots(completed_h1_rows,cfg)
+    pivots=collapsed_pivots(completed_h1_rows,cfg,now_ms=now_ms)
     match_index=None
     for i,p in enumerate(pivots):
         if p["hour_ms"]==hour and p["side"]==side:
