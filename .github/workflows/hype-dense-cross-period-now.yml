@@ -1,0 +1,86 @@
+name: HYPE Dense Sequential Cross-Period Now
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-dense-cross-period-now.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Restore Oct-Nov and Jul-Aug artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p octnov julaug/raw julaug
+          ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=local116-HYPE" --jq '.artifacts | map(select((.expired|not) and .name=="local116-HYPE")) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          test -n "$ID"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ID}/zip" > octnov.zip
+          unzip -q octnov.zip -d octnov
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13585701406/zip" > julaug.zip
+          unzip -q julaug.zip -d julaug/raw
+          cp julaug/raw/full_micro_out/compact_1m.jsonl.gz julaug/compact_1m.jsonl.gz
+          cp julaug/raw/full_micro_out/labels.json.gz julaug/legacy_labels.json.gz
+          test -s octnov/compact_1m.jsonl.gz
+          test -s octnov/labels.json.gz
+          test -s julaug/compact_1m.jsonl.gz
+      - name: Regenerate INTERNAL L3-K1 labels for Jul-Aug
+        run: |
+          python - <<'PY'
+          import gzip,json
+          from research.hype_local_v5.labels import structural_labels
+          bars=[]
+          with gzip.open("julaug/compact_1m.jsonl.gz","rt",encoding="utf-8") as f:
+              for line in f:
+                  if line.strip(): bars.append(json.loads(line))
+          internal,_=structural_labels(bars,lookback=3,lookahead=1)
+          doc={"internal":internal,"strict":[]}
+          with gzip.open("julaug/labels.json.gz","wt",encoding="utf-8") as f:
+              json.dump(doc,f,separators=(",",":"))
+          print("julaug_internal_finalized",sum(bool(x.get("reference_finalized")) for x in internal))
+          PY
+      - name: Replay same causal engine on both periods
+        run: |
+          python -m research.hype_false_local_entry.replay_dense_first_signal --base-dir octnov --out OCTNOV_DENSE.json
+          python -m research.hype_false_local_entry.replay_dense_first_signal --base-dir julaug --out JULAUG_DENSE.json
+          python - <<'PY'
+          import json
+          for name in ("OCTNOV_DENSE.json","JULAUG_DENSE.json"):
+              x=json.load(open(name))
+              m=x["first_signal"]["internal"]
+              print(name, json.dumps({
+                  "locals":m["finalized_locals"],
+                  "swings":m["complete_swings"],
+                  "detected":m["detected_locals"],
+                  "false_first":m["false_first"],
+                  "precision":m["first_signal_precision"],
+                  "median_lag_ms":m["median_lag_ms"],
+                  "entry_bps":m["median_entry_distance_bps"],
+                  "remaining":m["median_remaining_swing_fraction"],
+                  "adverse_bps":m["median_adverse_extension_bps"],
+              },separators=(",",":")))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-DENSE-CROSS-PERIOD-${{ github.run_id }}
+          path: |
+            OCTNOV_DENSE.json
+            JULAUG_DENSE.json
+          retention-days: 14
