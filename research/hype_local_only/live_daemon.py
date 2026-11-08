@@ -12,6 +12,10 @@ from research.hype_local_only.live_features import live_to_archive_features
 from research.hype_false_local_entry.dual_scope_teacher import (
     INTERNAL, STRICT, collapsed_pivots, finalized_terminal_label, teacher_contract,
 )
+from research.hype_false_local_entry.hard_survival_gate import (
+    HardCandidate, contract as hard120_contract, maybe_start_or_extend as hard120_update,
+    should_emit as hard120_should_emit,
+)
 
 H=3_600_000
 
@@ -45,6 +49,18 @@ def completed_h1(state,ts_ms):
         try:
             out.append({"start_ms":int(start),"high":float(b["high"]),"low":float(b["low"]),
                         "open":float(b["open"]),"close":float(b["close"])})
+        except Exception:pass
+    return out
+
+def completed_m1(state,ts_ms):
+    """Completed M1 bars only; used by the causal HARD120 pre-move feature."""
+    out=[]
+    for start in sorted(state.candles.get("1",{})):
+        if int(start)+60_000>int(ts_ms):continue
+        b=state.candles["1"][start]
+        try:
+            out.append({"start_ms":int(start),"bar_end_ms":int(start)+60_000,
+                        "high":float(b["high"]),"low":float(b["low"])})
         except Exception:pass
     return out
 
@@ -220,9 +236,14 @@ def main():
     model._ensure_internal_scope()
     fp=args.checkpoint_dir/"feature_state.pkl";state=load_pickle(fp,FeatureState())
     rp=args.checkpoint_dir/"local_runtime.pkl"
-    rt=load_pickle(rp,{"candidates":{"LOW":None,"HIGH":None},"pending":[],"expected_side":None,
+    rt=load_pickle(rp,{"candidates":{"LOW":None,"HIGH":None},"hard_candidates":{"LOW":None,"HIGH":None},
+                       "pending":[],"expected_side":None,
                        "last_teacher_local":None,"latest_by_hour":{},"structure_48h":{}})
     candidates=rt.get("candidates") or {"LOW":None,"HIGH":None}
+    hard_candidates={}
+    for _side in ("LOW","HIGH"):
+        _z=(rt.get("hard_candidates") or {}).get(_side)
+        hard_candidates[_side]=HardCandidate(**_z) if isinstance(_z,dict) else _z
     pending=[Pending(**z) if isinstance(z,dict) else z for z in rt.get("pending",[])]
     expected=rt.get("expected_side");last_teacher=rt.get("last_teacher_local")
     latest_by_hour=rt.get("latest_by_hour") or {}
@@ -309,9 +330,20 @@ def main():
                 extends=old is None or (price<old.extreme_price if side=="LOW" else price>old.extreme_price)
                 stale=old is not None and ts-old.extreme_ts_ms>H
                 if extends or stale:
-                    evidence={"proposal":"MULTIWINDOW_CAUSAL","windows":[n for n,_ in hit]}
+                    windows=[n for n,_ in hit]
+                    evidence={"proposal":"MULTIWINDOW_CAUSAL","windows":windows}
                     c=Candidate(side,float(price),int(ts),f"{side[0]}-{ts}",evidence=evidence)
                     candidates[side]=c
+                    # HARD120 keeps an independent lineage.  Hourly stale
+                    # refreshes never reset it; only a genuinely more-extreme
+                    # 6h candidate can replace the lineage.
+                    if extends:
+                        hard_candidates[side]=hard120_update(
+                            hard_candidates.get(side),
+                            side=side,price=float(price),ts_ms=int(ts),
+                            candidate_id=c.candidate_id,windows=windows,
+                            completed_m1_rows=completed_m1(state,ts),
+                        )
                     hour=(int(ts)//H)*H
                     latest_by_hour[f"{side}:{hour}"]=c.candidate_id
                     append_jsonl(evlog,{"event":"NEW_CANDIDATE","ts_ms":ts,"side":side,"price":price,
@@ -360,6 +392,37 @@ def main():
                         if stage==300:
                             expected="HIGH" if side=="LOW" else "LOW"
                         append_jsonl(evlog,{"event":signal_state,**model.last_signal,"next_expected":expected})
+
+            # Independent high-confidence survival layer.  It is paper/tactical
+            # only and never changes expected/core direction by itself.
+            hard120_live={}
+            for side in ("LOW","HIGH"):
+                hc=hard_candidates.get(side)
+                if hc is None:
+                    hard120_live[side]=None
+                    continue
+                hard_ready,hard_metrics=hard120_should_emit(
+                    hc,now_ms=int(ts),mark_price=float(price),expected_side=expected
+                )
+                hard120_live[side]={
+                    "candidate_id":hc.candidate_id,"side":hc.side,
+                    "extreme_price":hc.extreme_price,"extreme_ts_ms":hc.extreme_ts_ms,
+                    "emitted":hc.emitted,**hard_metrics,
+                }
+                if hard_ready:
+                    hc.emitted=True
+                    append_jsonl(evlog,{
+                        "event":"INTERNAL_HARD120_SIGNAL",
+                        "ts_ms":int(ts),"signal_ts_ms":int(ts),
+                        "candidate_ts_ms":int(hc.extreme_ts_ms),
+                        "candidate_id":hc.candidate_id,"side":hc.side,
+                        "price":float(hc.extreme_price),
+                        "mark_price":float(price),
+                        "teacher":INTERNAL.name,
+                        "hard_contract":"INTERNAL_HARD120_SURVIVAL_V1",
+                        "core_flip_authorized":False,
+                        "metrics":hard_metrics,
+                    })
 
             keep=[]
             for item in pending:
@@ -427,6 +490,8 @@ def main():
                 "internal_live_labels":model.internal_live_labels,
                 "pending_labels":len(pending),
                 "teacher_contract":teacher_contract(),
+                "hard120_contract":hard120_contract(),
+                "hard120":hard120_live,
                 "forward_first_signal":forward_first_signal,
                 "model_report":model.report(),
                 "h1_baseline":model.h1_shadow,
@@ -451,7 +516,9 @@ def main():
         now=time.time()
         if now>=next_save:
             model.save(mp);save_pickle(fp,state)
-            save_pickle(rp,{"candidates":candidates,"pending":[asdict(z) for z in pending],
+            save_pickle(rp,{"candidates":candidates,
+                "hard_candidates":{k:(None if v is None else v.to_dict()) for k,v in hard_candidates.items()},
+                "pending":[asdict(z) for z in pending],
                 "expected_side":expected,"last_teacher_local":last_teacher,
                 "latest_by_hour":latest_by_hour,"structure_48h":structure_48h})
             if status:status_path.write_text(json.dumps(status,indent=2)+"\n")
@@ -463,7 +530,9 @@ def main():
         if not events:time.sleep(.5)
 
     model.save(mp);save_pickle(fp,state)
-    save_pickle(rp,{"candidates":candidates,"pending":[asdict(z) for z in pending],
+    save_pickle(rp,{"candidates":candidates,
+        "hard_candidates":{k:(None if v is None else v.to_dict()) for k,v in hard_candidates.items()},
+        "pending":[asdict(z) for z in pending],
         "expected_side":expected,"last_teacher_local":last_teacher,
         "latest_by_hour":latest_by_hour,"structure_48h":structure_48h})
     if status:
