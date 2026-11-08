@@ -1,0 +1,68 @@
+name: HYPE Four-Regime Meta Extension Selection
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/hype_false_local_entry/cross_period_meta_extension.py"
+      - ".github/workflows/hype-four-regime-meta-selection.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  select:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install meta-selection dependencies
+        run: python -m pip install --disable-pip-version-check numpy pandas scikit-learn
+      - name: Restore four development tapes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p julaug lateaug sep octnov
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13585701406/zip" > jul.zip
+          unzip -q jul.zip -d julaug
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13638795292/zip" > late.zip
+          unzip -q late.zip -d lateaug
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13637558401/zip" > sep.zip
+          unzip -q sep.zip -d sep
+          ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=local116-HYPE" --jq '.artifacts | map(select((.expired|not) and .name=="local116-HYPE")) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ID}/zip" > oct.zip
+          unzip -q oct.zip -d octnov
+          echo "JA_C=$(find julaug -name compact_1m.jsonl.gz -print -quit)" >> "$GITHUB_ENV"
+          echo "JA_L=$(find julaug -name labels.json.gz -print -quit)" >> "$GITHUB_ENV"
+          echo "LA_C=$(find lateaug -name compact_1m.jsonl.gz -print -quit)" >> "$GITHUB_ENV"
+          echo "LA_L=$(find lateaug -name labels.json.gz -print -quit)" >> "$GITHUB_ENV"
+          echo "SP_C=$(find sep -name compact_1m.jsonl.gz -print -quit)" >> "$GITHUB_ENV"
+          echo "SP_L=$(find sep -name labels.json.gz -print -quit)" >> "$GITHUB_ENV"
+          echo "ON_C=$(find octnov -name compact_1m.jsonl.gz -print -quit)" >> "$GITHUB_ENV"
+          echo "ON_L=$(find octnov -name labels.json.gz -print -quit)" >> "$GITHUB_ENV"
+      - name: Run LOPO selector — June is absent
+        run: |
+          python -m research.hype_false_local_entry.cross_period_meta_extension             --julaug-compact "$JA_C" --julaug-labels "$JA_L"             --lateaug-compact "$LA_C" --lateaug-labels "$LA_L"             --sep-compact "$SP_C" --sep-labels "$SP_L"             --octnov-compact "$ON_C" --octnov-labels "$ON_L"             --output META_SELECTION.json
+          python - <<'PY'
+          import json
+          x=json.load(open("META_SELECTION.json"))
+          print(json.dumps(x["best"],indent=2)[:12000])
+          assert x["sealed_june_excluded_from_selection"] is True
+          assert x["primary"]=="INTERNAL_HARD120_CHECKPOINT_V2_UNCHANGED"
+          assert x["core_flip_authorized"] is False
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-FOUR-REGIME-META-SELECTION-${{ github.run_id }}
+          path: META_SELECTION.json
+          retention-days: 14
