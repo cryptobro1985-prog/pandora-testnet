@@ -1,0 +1,70 @@
+name: HYPE September Untouched Shadow Stack Validation
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/hype_full_micro_202609/build_base_september.py"
+      - ".github/workflows/hype-september-untouched-shadow-stack.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build untouched September compact tape
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          mkdir -p "$RUNNER_TEMP/hype-sep-cache" "$RUNNER_TEMP/hype-sep-out"
+          python research/hype_full_micro_202609/build_base_september.py             --cache "$RUNNER_TEMP/hype-sep-cache"             --output "$RUNNER_TEMP/hype-sep-out"
+          test -s "$RUNNER_TEMP/hype-sep-out/compact_1m.jsonl.gz"
+          test -s "$RUNNER_TEMP/hype-sep-out/labels.json.gz"
+      - name: Replay frozen full shadow stack
+        run: |
+          python -m research.hype_false_local_entry.replay_early60_plus_hard_stack             --compact-1m "$RUNNER_TEMP/hype-sep-out/compact_1m.jsonl.gz"             --labels-gz "$RUNNER_TEMP/hype-sep-out/labels.json.gz"             --output SEPTEMBER_FULL_STACK.json
+          python -m research.hype_false_local_entry.replay_hard120_30d             --compact-1m "$RUNNER_TEMP/hype-sep-out/compact_1m.jsonl.gz"             --labels-gz "$RUNNER_TEMP/hype-sep-out/labels.json.gz"             --output SEPTEMBER_HARD120_ONLY.json
+          python - <<'PY'
+          import json
+          full=json.load(open("SEPTEMBER_FULL_STACK.json"))
+          hard=json.load(open("SEPTEMBER_HARD120_ONLY.json"))
+          fm=full["evaluation"]; hm=hard["evaluation"]
+          print("SEPTEMBER_HARD120",json.dumps(hm,separators=(",",":")))
+          print("SEPTEMBER_FULL_STACK",json.dumps(fm,separators=(",",":")))
+          print("SEPTEMBER_SIDES",json.dumps(full["by_side"],separators=(",",":")))
+          result={
+            "period":"2026-09-01..2026-10-01",
+            "untouched_for_frozen_stack":True,
+            "hard120":hm,
+            "full_stack":fm,
+            "by_side":full["by_side"],
+            "gate":{"min_precision":0.80,"min_recall":0.40,
+                    "passed":fm["precision"]>=0.80 and fm["recall"]>=0.40},
+            "contracts":full["contracts"],
+            "real_orders":False,
+          }
+          open("SEPTEMBER_UNTOUCHED_RESULT.json","w").write(json.dumps(result,indent=2)+"\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-SEPTEMBER-UNTOUCHED-${{ github.run_id }}
+          path: |
+            SEPTEMBER_UNTOUCHED_RESULT.json
+            SEPTEMBER_FULL_STACK.json
+            SEPTEMBER_HARD120_ONLY.json
+            ${{ runner.temp }}/hype-sep-out/manifest.json
+            ${{ runner.temp }}/hype-sep-out/labels.json.gz
+            ${{ runner.temp }}/hype-sep-out/compact_1m.jsonl.gz
+          retention-days: 14
+          compression-level: 1
