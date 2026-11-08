@@ -80,4 +80,7 @@ def test_contract_is_shadow_only():
     assert c["name"]=="HARD120_HIGH_FLOW_SHADOW_V1"
     assert c["core_flip_authorized"] is False
     assert c["primary_contract_unchanged"] is True
-    assert c["historical_status"]=="CROSS_PERIOD_TUNED_NOT_OOS"
+    assert c["historical_status"]=="DUAL_PERIOD_80_40_GATE_PASSED_NOT_UNTOUCHED_OOS"
+    assert c["historical_dual_period"]["oct_nov"]["precision"]>0.93
+    assert c["historical_dual_period"]["jul_aug"]["recall"]>0.41
+    assert c["promotion"]=="FORWARD_SCORE_ONLY"
