@@ -1,0 +1,48 @@
+{
+  "generated_from": {
+    "base_artifact_id": 13435356156,
+    "gap_artifact_id": 13533587104,
+    "period": ["2026-10-04", "2026-11-03"],
+    "strict_finalized_locals": {"LOW": 38, "HIGH": 38},
+    "candidate_extrema": {"LOW": 942, "HIGH": 855},
+    "contract": {
+      "total_points": 116,
+      "causal_input_points": 86,
+      "teacher_eval_points": 28,
+      "metadata_points": 2,
+      "historically_observed_base": 46,
+      "historically_observed_after_mark_index_oi_funding_enrichment": 55
+    }
+  },
+  "objective": "Find a multi-parameter causal turning state indicating a formed H1 Local LOW/HIGH; tolerate slight timing/price miss, then hold to opposite H1 local.",
+  "result_name": "TERMINAL_EXHAUSTION_AND_REJECTION",
+  "observation": "The strongest stable separation is trajectory-based: exact extreme plus the first causal rejection state. 60s is an analysis checkpoint, not a mandatory fixed timer.",
+  "LOW": {
+    "physical_relation": "downside climax -> sell-side continuation loses efficiency -> price rejects the low -> counter/buyer state strengthens -> OI notional tends to rebuild -> formed LOW zone",
+    "parameters": {
+      "dretrace_bps:0->60": {"auc":0.6995881006864989,"direction":"higher","true_median":14.269932976423982,"false_median":6.356424266873439,"q_min":0.6473765432098766,"q_mean":0.7250347637554624,"strong_gate_threshold":21.99776647723608},
+      "ret_60s@60": {"auc":0.7003890160183066,"direction":"higher","true_median":0.0014262130632307635,"false_median":0.0006872079366269102,"q_min":0.640495867768595,"q_mean":0.7241547802130837,"strong_gate_threshold":0.0013974062169782543},
+      "dposition_6h:0->60": {"auc":0.6788558352402746,"direction":"higher","true_median":0.058102428240440485,"false_median":0.029314616019823388,"q_min":0.6226851851851852,"q_mean":0.6954859898309401,"strong_gate_threshold":0.07528440538404706},
+      "dhist_oi_notional_log:0->60": {"auc":0.6627459954233409,"direction":"higher","true_median":0.0015017573543474327,"false_median":0.0006546327595877699,"q_min":0.6280991735537189,"q_mean":0.6853503671167389,"strong_gate_threshold":0.002047053981420533},
+      "dimbalance_180s:30->60": {"auc":0.6477345537757437,"direction":"higher","true_median":0.053369507259420024,"false_median":0.023570473947434334,"q_min":0.5918626827717737,"q_mean":0.6515146178525795,"strong_gate_threshold":0.03259520995624567},
+      "dold_eff_15s:0->60": {"auc":0.5991197505960022,"direction":"lower","true_median":-0.0034280237884804408,"false_median":-0.0016532159362824528,"q_min":0.5570987654320988,"q_mean":0.6098216652896684,"strong_gate_threshold":-0.0032330892720629652},
+      "hist_mark_price_rel@60": {"auc":0.6477345537757437,"direction":"lower","true_median":-0.0003661278559140557,"false_median":-0.000129310344827549,"q_min":0.6109345200254291,"q_mean":0.6558485284480035,"strong_gate_threshold":0.00004901822653447409}
+    },
+    "rank_composite_holdout_auc": 0.8117612293144209
+  },
+  "HIGH": {
+    "physical_relation": "upside climax -> buy-side continuation loses efficiency/activity -> price rejects the high -> seller/counter state strengthens -> OI notional tends to contract -> formed HIGH zone",
+    "parameters": {
+      "retrace_bps@60": {"auc":0.688348229063224,"direction":"higher","true_median":13.357837999460331,"false_median":7.595432939677682,"q_min":0.6776859504132231,"q_mean":0.6886673289079706,"strong_gate_threshold":8.175851783182809},
+      "position_60m@60": {"auc":0.695106476884034,"direction":"lower","true_median":0.8568699069653742,"false_median":0.9212034383954065,"q_min":0.6643518518518519,"q_mean":0.7019518020353582,"strong_gate_threshold":0.9272994353135253},
+      "dbuy_5s_log:0->60": {"auc":0.6491816790297893,"direction":"lower","true_median":-5.015775665288852,"false_median":-3.5283082678323936,"q_min":0.5990740740740741,"q_mean":0.6591257349069849,"strong_gate_threshold":-3.2702102126614117},
+      "dtrade_count_5s:0->60": {"auc":0.6426174496644295,"direction":"lower","true_median":-220.5,"false_median":-116.0,"q_min":0.56640625,"q_mean":0.6379622158649638,"strong_gate_threshold":-155.6},
+      "imbalance_15s@60": {"auc":0.6267590027700831,"direction":"lower","true_median":-0.3056149968951407,"false_median":-0.039543827893855396,"q_min":0.5491525423728814,"q_mean":0.6329207338327705,"strong_gate_threshold":-0.04372266350012282},
+      "rev_eff_60s@60": {"auc":0.5856780315568795,"direction":"higher","true_median":0.0119685167744467,"false_median":0.007442140813770496,"q_min":0.5324074074074073,"q_mean":0.5886495609757642,"strong_gate_threshold":0.03789662005726633},
+      "dhist_oi_notional_log:0->60": {"auc":0.636158005075582,"direction":"lower","true_median":-0.0008272921547209933,"false_median":-0.00047928360429949635,"q_min":0.5537190082644627,"q_mean":0.6254127989756332,"strong_gate_threshold":-0.0004706534957188424},
+      "position_6h@60": {"auc":0.6773143550700651,"direction":"lower","true_median":0.9401439564410139,"false_median":0.9655249358473728,"q_min":0.625,"q_mean":0.6747226703777506,"strong_gate_threshold":0.951219512195124}
+    },
+    "rank_composite_holdout_auc": 0.8564405113077679
+  },
+  "warning": "Stable descriptive/causal relation parameters, not a 100% guaranteed classifier. Exact threshold calibration is regime-sensitive; use a composite state rather than a single threshold. Historical L50/liquidation inputs were not fabricated where unavailable."
+}
