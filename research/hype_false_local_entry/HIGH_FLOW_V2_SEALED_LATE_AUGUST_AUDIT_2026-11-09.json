@@ -1,0 +1,27 @@
+{
+  "title":"HYPE HIGH-flow regime V2 sealed late-August audit",
+  "period":"2026-08-08..2026-09-01",
+  "sealed_tape_run_id":42533153127,
+  "sealed_tape_artifact_id":13638795292,
+  "score_run_id":42533691601,
+  "score_artifact_id":13637954444,
+  "rule_frozen_before_scoring":true,
+  "hard120_baseline":{
+    "episodes":94,"accepted_first":42,"true_first":36,"false_first":6,
+    "precision":0.8571428571428571,"recall":0.3829787234042553,
+    "LOW":{"precision":0.8947368421052632,"recall":0.3617021276595745},
+    "HIGH":{"precision":0.8260869565217391,"recall":0.40425531914893614}
+  },
+  "high_flow_regime_v2":{
+    "episodes":94,"accepted_first":43,"true_first":35,"false_first":8,
+    "precision":0.813953488372093,"recall":0.3723404255319149,
+    "shadow_signals":2,"shadow_true":0,"shadow_false":2,
+    "LOW":{"precision":0.8947368421052632,"recall":0.3617021276595745},
+    "HIGH":{"precision":0.75,"recall":0.3829787234042553}
+  },
+  "promotion_gate":{"precision":0.80,"recall":0.40,"per_side_required":true},
+  "decision":"REJECTED",
+  "reason":"The pre-registered V2 shadow added two false-first HIGH signals and no true-first signals on the sealed period; recall also remained below 40%.",
+  "next_direction":"Use all four historical regimes for cross-period leave-one-period-out meta-learning; only future forward data can serve as the next untouched validation.",
+  "real_orders":false
+}
