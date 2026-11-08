@@ -33,11 +33,17 @@ class CausalReversalMachine:
         self.events = []
 
     def on_bar(self, bar):
-        ts = int(bar["ts_ms"])
-        end = int(bar.get("bar_end_ms") or ts + int(bar.get("interval_ms", 60000)))
+        interval = int(bar.get("interval_ms", 60000))
+        explicit_end = bar.get("bar_end_ms")
+        if bar.get("start_ms") is not None:
+            start = int(bar["start_ms"])
+        else:
+            ts = int(bar["ts_ms"])
+            start = ts - interval if explicit_end is not None and int(explicit_end) == ts else ts
+        end = int(explicit_end if explicit_end is not None else start + interval)
         if self.last_ts is not None and end <= self.last_ts:
             raise ValueError("bar must be completed and strictly chronological")
-        if end <= ts or (self.last_ts is not None and ts < self.last_ts):
+        if end <= start or (self.last_ts is not None and start < self.last_ts):
             raise ValueError("overlapping or incomplete M1 bar")
         high, low, close = (float(bar[k]) for k in ("high", "low", "close"))
         if not all(isfinite(v) for v in (high, low, close)) or not 0 < low <= close <= high:
