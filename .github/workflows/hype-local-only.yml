@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  HYPE_REST_RELAY_URL: "https://hype-rest-relay.onrender.com"
+  HYPE_REST_RELAY_URL: ""
   CORTEX_LOCAL_URL: "http://127.0.0.1:8081"
   CORTEX_PORT: "8081"
   CORTEX_CTX_SIZE: "4096"
