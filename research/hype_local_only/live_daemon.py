@@ -13,8 +13,9 @@ from research.hype_false_local_entry.dual_scope_teacher import (
     INTERNAL, STRICT, collapsed_pivots, finalized_terminal_label, teacher_contract,
 )
 from research.hype_false_local_entry.hard_survival_gate import (
-    HardCandidate, contract as survival_contract, maybe_start_or_extend as survival_update,
-    next_signal as survival_next_signal,
+    CHECKPOINT_GRACE_S, HardCandidate, checkpoint_sample as hard120_checkpoint_sample,
+    contract as survival_contract, gate_metrics as hard120_gate_metrics,
+    maybe_start_or_extend as survival_update, next_signal as survival_next_signal,
 )
 
 H=3_600_000
@@ -60,7 +61,8 @@ def completed_m1(state,ts_ms):
         b=state.candles["1"][start]
         try:
             out.append({"start_ms":int(start),"bar_end_ms":int(start)+60_000,
-                        "high":float(b["high"]),"low":float(b["low"])})
+                        "high":float(b["high"]),"low":float(b["low"]),
+                        "close":float(b["close"])})
         except Exception:pass
     return out
 
@@ -401,9 +403,30 @@ def main():
                 if hc is None:
                     hard120_live[side]=None
                     continue
-                hard_stage,hard_metrics=survival_next_signal(
-                    hc,now_ms=int(ts),mark_price=float(price),expected_side=expected
-                )
+                sample=hard120_checkpoint_sample(hc,completed_m1(state,ts),int(ts))
+                if sample is None:
+                    hard_stage=None
+                    hard_metrics=hard120_gate_metrics(
+                        hc,now_ms=int(ts),mark_price=float(price)
+                    )
+                    hard_metrics["checkpoint_sample_ready"]=False
+                elif sample["fresh_observation"]:
+                    hard_stage,hard_metrics=survival_next_signal(
+                        hc,now_ms=int(sample["sample_ts_ms"]),
+                        mark_price=float(sample["mark_price"]),expected_side=expected
+                    )
+                    hard_metrics.update(sample)
+                    hard_metrics["checkpoint_sample_ready"]=True
+                else:
+                    # The exact checkpoint bar exists but was only observed
+                    # after a long restart/gap. Consume the one-shot checkpoint
+                    # as missed; never emit a retroactive trade signal.
+                    hard_stage,hard_metrics=survival_next_signal(
+                        hc,now_ms=int(ts),mark_price=float(price),expected_side=expected
+                    )
+                    hard_metrics.update(sample)
+                    hard_metrics["checkpoint_sample_ready"]=True
+                    hard_metrics["checkpoint_missed_due_to_observation_delay"]=True
                 hard120_live[side]={
                     "candidate_id":hc.candidate_id,"side":hc.side,
                     "extreme_price":hc.extreme_price,"extreme_ts_ms":hc.extreme_ts_ms,
