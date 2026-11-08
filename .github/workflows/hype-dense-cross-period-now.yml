@@ -6,6 +6,9 @@ on:
       - research/hype-h1-local-v5-oi-microstructure-20261104
     paths:
       - ".github/workflows/hype-dense-cross-period-now.yml"
+      - "research/hype_false_local_entry/causal_sequential_engine.py"
+      - "research/hype_false_local_entry/dense_causal_reachability.py"
+      - "research/hype_false_local_entry/replay_dense_first_signal.py"
   workflow_dispatch:
 
 permissions:
