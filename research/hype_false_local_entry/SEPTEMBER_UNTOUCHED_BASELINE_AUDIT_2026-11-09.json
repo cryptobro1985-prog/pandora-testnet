@@ -1,0 +1,27 @@
+{
+  "title":"HYPE untouched September baseline audit",
+  "period":"2026-09-01..2026-10-01",
+  "source_run_id":42532438646,
+  "source_artifact_id":13637558401,
+  "untouched_for_threshold_selection":true,
+  "internal_complete_swings":127,
+  "hard120_only":{
+    "accepted_first":65,"true_first":56,"false_first":9,
+    "precision":0.8615384615384616,"recall":0.4409448818897638
+  },
+  "early60_hard120_high_flow_stack":{
+    "accepted_first":68,"true_first":56,"false_first":12,
+    "precision":0.8235294117647058,"recall":0.4409448818897638,
+    "early60_signals":12,"early60_true":9,"early60_false":3,
+    "LOW":{"precision":0.875,"recall":0.4444444444444444},
+    "HIGH":{"precision":0.7777777777777778,"recall":0.4375}
+  },
+  "decision":{
+    "hard120_gate_passed":true,
+    "full_stack_overall_gate_passed":true,
+    "full_stack_high_side_precision_gate_failed":true,
+    "early60_promotion":"REJECTED",
+    "reason":"EARLY60 added three false-first signals and zero additional true-first detections versus HARD120 on untouched September."
+  },
+  "real_orders":false
+}
