@@ -10,7 +10,7 @@ from research.hype_quant.live_daemon import Tailer,event_ts
 from research.hype_local_only.model import LocalOnlyModel,Candidate,STAGES
 from research.hype_local_only.live_features import live_to_archive_features
 from research.hype_false_local_entry.dual_scope_teacher import (
-    INTERNAL, STRICT, matured_pivot_label, teacher_contract,
+    INTERNAL, STRICT, finalized_terminal_label, teacher_contract,
 )
 
 H=3_600_000
@@ -140,7 +140,7 @@ def teacher_label(state,p,ts_ms):
     """Mature either INTERNAL L3/K1 or STRICT L6/K2 without future leakage."""
     if ts_ms<int(p.mature_ms):return None
     teacher_name=getattr(p,"teacher_scope",STRICT.name)
-    return matured_pivot_label(
+    return finalized_terminal_label(
         completed_h1(state,ts_ms),
         p.extreme_ts_ms,
         p.side,
@@ -366,6 +366,8 @@ def main():
                                 repeat=(4 if y else 1))
                 append_jsonl(lablog,{"ts_ms":ts,"candidate_id":item.candidate_id,"side":item.side,
                     "stage":item.stage,"label":bool(y),"is_latest_extreme_in_hour":is_latest,
+                    "extreme_ts_ms":int(item.extreme_ts_ms),"extreme_price":float(item.extreme_price),
+                    "teacher_finalized_ts_ms":int(ts),
                     "teacher":teacher_name,
                     "teacher_role":"TACTICAL" if teacher_name==INTERNAL.name else "CORE",
                     "core_flip_authorized":False if teacher_name==INTERNAL.name else None,
