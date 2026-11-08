@@ -1,0 +1,66 @@
+name: HYPE HARD120 Plus HIGH Flow Cross-Period
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/hype_false_local_entry/replay_hard120_plus_high_flow.py"
+      - ".github/workflows/hype-hard120-plus-high-flow-cross-period.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Restore both historical periods
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p octnov julaug
+          ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=local116-HYPE" --jq '.artifacts | map(select((.expired|not) and .name=="local116-HYPE")) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          test -n "$ID"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ID}/zip" > octnov.zip
+          unzip -q octnov.zip -d octnov
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13585701406/zip" > julaug.zip
+          unzip -q julaug.zip -d julaug
+      - name: Replay frozen primary plus HIGH shadow
+        run: |
+          python -m research.hype_false_local_entry.replay_hard120_plus_high_flow             --compact-1m octnov/compact_1m.jsonl.gz             --labels-gz octnov/labels.json.gz             --output OCTNOV_HARD120_PLUS_HIGH_FLOW.json
+          python -m research.hype_false_local_entry.replay_hard120_plus_high_flow             --compact-1m julaug/full_micro_out/compact_1m.jsonl.gz             --labels-gz julaug/full_micro_out/labels.json.gz             --derive-internal             --output JULAUG_HARD120_PLUS_HIGH_FLOW.json
+          python - <<'PY'
+          import json
+          a=json.load(open("OCTNOV_HARD120_PLUS_HIGH_FLOW.json"))
+          b=json.load(open("JULAUG_HARD120_PLUS_HIGH_FLOW.json"))
+          am=a["evaluation"];bm=b["evaluation"];bh=b["by_side"]["HIGH"]
+          print("OCTNOV",am)
+          print("JULAUG",bm)
+          print("JULAUG_HIGH",bh)
+          assert am["true_first"]==55 and am["false_first"]==4,am
+          assert am["precision"]>0.93 and am["recall"]>0.45,am
+          assert bm["true_first"]==42 and bm["false_first"]==7,bm
+          assert bm["precision"]>0.85 and bm["recall"]>0.41,bm
+          assert bh["true_first"]==20 and bh["false_first"]==5,bh
+          assert bh["precision"]>=0.80 and bh["recall"]>=0.40,bh
+          assert bm["shadow_signals"]==5 and bm["shadow_true"]==5 and bm["shadow_false"]==0,bm
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-HARD120-PLUS-HIGH-FLOW-${{ github.run_id }}
+          path: |
+            OCTNOV_HARD120_PLUS_HIGH_FLOW.json
+            JULAUG_HARD120_PLUS_HIGH_FLOW.json
+          retention-days: 14
