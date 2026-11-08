@@ -1,0 +1,29 @@
+{
+  "title":"HYPE HARD120 independent cross-period audit — 2026-07-12..2026-08-07",
+  "date":"2026-11-08",
+  "source_run_id":42393911761,
+  "source_artifact_id":13585701406,
+  "source_period":["2026-07-12T17:00:00Z","2026-08-07T00:00:00Z"],
+  "contract":"INTERNAL_HARD120_CHECKPOINT_V2",
+  "thresholds_changed":false,
+  "label_source":"INTERNAL L3/K1 terminal labels regenerated from compact M1 with the current teacher contract",
+  "internal_labels_finalized":103,
+  "completed_actionable_episodes":101,
+  "evaluation":{
+    "accepted_first":44,
+    "true_first":37,
+    "false_first":7,
+    "precision":0.8409090909090909,
+    "recall":0.36633663366336633,
+    "LOW":{"episodes":51,"true_first":22,"false_first":2,"precision":0.9166666666666666,"recall":0.43137254901960786},
+    "HIGH":{"episodes":50,"true_first":15,"false_first":5,"precision":0.75,"recall":0.30}
+  },
+  "verdict":{
+    "precision_gate_0_80":true,
+    "recall_gate_0_40":false,
+    "promotion_gate_passed":false,
+    "main_weakness":"HIGH regime generalization",
+    "action":"Keep primary HARD120 frozen. Improve HIGH only through a separate shadow challenger and require future forward confirmation."
+  },
+  "warning":"This older period was not used to select the original HARD120 thresholds, but it has now been inspected. Any new rule derived from it is cross-period tuned and is not untouched OOS evidence."
+}
