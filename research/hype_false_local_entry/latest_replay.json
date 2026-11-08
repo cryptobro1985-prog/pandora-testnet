@@ -1,0 +1,48 @@
+{
+  "status": "paper_ready_not_live_ready",
+  "reference_finalized_locals": 76,
+  "complete_swings": 75,
+  "early_probe_10m": {
+    "true_candidates_surviving": 75,
+    "false_candidates_surviving": 307,
+    "false_probe_retrace_bps_median": 25.831087151839682,
+    "false_probe_retrace_bps_p90": 67.73063870217172,
+    "tradeoff": {
+      "n": 75,
+      "median_entry_distance_pct": 0.364758698092027,
+      "median_remaining_swing_fraction": 0.8516413323514135,
+      "median_full_swing_pct": 3.0639336630050584
+    }
+  },
+  "confirmed_30m": {
+    "accepted": 21,
+    "true_first": 14,
+    "false_first": 7,
+    "precision": 0.6666666666666666,
+    "recall": 0.18666666666666668,
+    "quarter_precision": [0.6, 0.625, 0.6666666666666666, 1.0],
+    "median_remaining_swing_fraction": 0.7975661320294523
+  },
+  "hard_60m": {
+    "accepted": 18,
+    "true_first": 14,
+    "false_first": 4,
+    "precision": 0.7777777777777778,
+    "recall": 0.18666666666666668,
+    "quarter_precision": [0.8, 0.8333333333333334, 0.6, 1.0],
+    "median_remaining_swing_fraction": 0.7231871309218406
+  },
+  "ultra_60m_in_sample_only": {
+    "accepted": 9,
+    "true_first": 9,
+    "false_first": 0,
+    "precision": 1.0,
+    "recall": 0.12,
+    "quarter_precision": [1.0, 1.0, 1.0, 1.0]
+  },
+  "warnings": [
+    "ULTRA gate was selected after inspecting the same 30D sample; 9/9 is not an untouched OOS guarantee.",
+    "Historical full L50/liquidation coverage is incomplete and is not fabricated.",
+    "Real orders remain disabled; this is a paper/research engine."
+  ]
+}
