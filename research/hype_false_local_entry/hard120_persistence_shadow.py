@@ -47,7 +47,7 @@ def persistence_metrics(*, side:str, extreme_price:float, retrace_bps:float,
     ratio=retr/max(max_reversal_bps,1e-12)
     ratio=max(0.0,min(1.0,ratio))
     return {
-        "ready":ratio>=MIN_PERSISTENCE,
+        "ready":ratio+1e-12>=MIN_PERSISTENCE,
         "retrace_bps":retr,
         "max_reversal_bps":max_reversal_bps,
         "reversal_persistence":ratio,
