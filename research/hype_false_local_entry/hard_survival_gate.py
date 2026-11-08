@@ -117,6 +117,33 @@ def maybe_start_or_extend(
     )
 
 
+def checkpoint_sample(candidate: HardCandidate, completed_m1_rows: Iterable[Mapping],
+                      observed_ms: int) -> Optional[dict]:
+    """Return the first completed M1 close at/after the exact +120m target.
+
+    This is the sampling contract used by the historical replay. Live code can
+    additionally reject the sample when observation_delay_s exceeds the short
+    scheduler grace, preventing retroactive signals after a long restart.
+    """
+    target=int(candidate.extreme_ts_ms)+HARD_AGE_S*1000
+    best=None
+    for r in completed_m1_rows:
+        start=int(r.get("start_ms",r.get("ts_ms",0)) or 0)
+        end=int(r.get("bar_end_ms",start+60_000) or (start+60_000))
+        if end<target or end>int(observed_ms):
+            continue
+        try:close=float(r["close"])
+        except Exception:continue
+        if close<=0:continue
+        if best is None or end<best["sample_ts_ms"]:
+            best={"sample_ts_ms":end,"mark_price":close}
+    if best is None:return None
+    best["target_ts_ms"]=target
+    best["observation_delay_s"]=max(0.0,(int(observed_ms)-int(best["sample_ts_ms"]))/1000.0)
+    best["fresh_observation"]=best["observation_delay_s"]<=CHECKPOINT_GRACE_S
+    return best
+
+
 def gate_metrics(candidate: HardCandidate, *, now_ms: int, mark_price: float) -> dict:
     p=float(candidate.extreme_price)
     mark=float(mark_price)
@@ -193,7 +220,7 @@ def contract() -> dict:
         "required_origin_window":REQUIRED_WINDOW,
         "same_side_invalidation":"any more-extreme same-side 6h candidate resets the clock",
         "stale_refresh_resets_clock":False,
-        "checkpoint_semantics":"HARD120 is evaluated once; no late recovery crossing is retroactively accepted",
+        "checkpoint_semantics":"evaluate the first completed M1 close at/after +120m exactly once; no late recovery crossing is accepted",
         "checkpoint_grace_s":CHECKPOINT_GRACE_S,
         "core_flip_authorized":False,
         "historical_selection_warning":"thresholds were selected on the 30D research archive; forward validation is mandatory",
