@@ -1,0 +1,68 @@
+name: HYPE HIGH Flow V2 Three-Period Development
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/hype_false_local_entry/high_flow_shadow_v2.py"
+      - "research/hype_false_local_entry/replay_hard120_plus_high_flow_v2.py"
+      - ".github/workflows/hype-highflow-v2-three-period.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Restore all three periods
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p octnov julaug sep
+          ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=local116-HYPE" --jq '.artifacts | map(select((.expired|not) and .name=="local116-HYPE")) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ID}/zip" > oct.zip
+          unzip -q oct.zip -d octnov
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13585701406/zip" > jul.zip
+          unzip -q jul.zip -d julaug
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13637558401/zip" > sep.zip
+          unzip -q sep.zip -d sep/raw
+          cp "$(find sep/raw -name compact_1m.jsonl.gz -print -quit)" sep/compact_1m.jsonl.gz
+          cp "$(find sep/raw -name labels.json.gz -print -quit)" sep/labels.json.gz
+      - name: Replay V2 on all periods
+        run: |
+          python -m research.hype_false_local_entry.replay_hard120_plus_high_flow_v2             --compact-1m julaug/full_micro_out/compact_1m.jsonl.gz             --labels-gz julaug/full_micro_out/labels.json.gz --derive-internal             --output JULAUG_V2.json
+          python -m research.hype_false_local_entry.replay_hard120_plus_high_flow_v2             --compact-1m sep/compact_1m.jsonl.gz             --labels-gz sep/labels.json.gz             --output SEPTEMBER_V2.json
+          python -m research.hype_false_local_entry.replay_hard120_plus_high_flow_v2             --compact-1m octnov/compact_1m.jsonl.gz             --labels-gz octnov/labels.json.gz             --output OCTNOV_V2.json
+          python - <<'PY'
+          import json
+          periods={}
+          for key,file in [("jul_aug","JULAUG_V2.json"),("september","SEPTEMBER_V2.json"),("oct_nov","OCTNOV_V2.json")]:
+              x=json.load(open(file)); h=x["by_side"]["HIGH"]; periods[key]=h
+              print(key.upper(),json.dumps(h,separators=(",",":")))
+          gate=all(v["precision"]>=.80 and v["recall"]>=.40 for v in periods.values())
+          out={"status":"THREE_PERIOD_DEVELOPMENT_NOT_OOS","periods":periods,
+               "all_periods_80_40":gate,"promotion":"FORWARD_SCORE_ONLY","real_orders":False}
+          open("HIGH_FLOW_V2_THREE_PERIOD.json","w").write(json.dumps(out,indent=2)+"\n")
+          assert gate,out
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-HIGH-FLOW-V2-THREE-PERIOD-${{ github.run_id }}
+          path: |
+            JULAUG_V2.json
+            SEPTEMBER_V2.json
+            OCTNOV_V2.json
+            HIGH_FLOW_V2_THREE_PERIOD.json
+          retention-days: 14
