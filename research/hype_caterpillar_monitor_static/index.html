@@ -31,6 +31,12 @@
 <div class="row"><span>48h leg</span><b id="leg">—</b></div><div class="row"><span>Regime</span><b id="regime">—</b></div>
 </div>
 <div class="card wide">
+<div class="k">EARLY60 strong reversal · shadow</div>
+<div class="row"><span>LOW</span><b id="earlylow">—</b></div><div class="row"><span>HIGH</span><b id="earlyhigh">—</b></div>
+<div class="metric"><span>Forward precision / recall</span><b id="earlypr">—</b></div><div class="bar"><div class="fill" id="earlybar"></div></div>
+<div class="small">60m one-shot · strong retrace + reversal flow · forward-only · core flip OFF.</div>
+</div>
+<div class="card wide">
 <div class="k">HARD120 primary</div><div class="row"><span>LOW</span><b id="hardlow">—</b></div><div class="row"><span>HIGH</span><b id="hardhigh">—</b></div>
 <div class="metric"><span>Forward precision</span><b id="hardp">—</b></div><div class="bar"><div class="fill" id="hardbar"></div></div>
 <div class="small">Primary contract frozen · 6h origin · 120m survival · one-shot checkpoint.</div>
@@ -39,6 +45,13 @@
 <div class="k">HIGH flow shadow</div><div class="row"><span>Candidate</span><b id="shadow">—</b></div>
 <div class="metric"><span>Forward precision</span><b id="shadowp">—</b></div><div class="bar"><div class="fill" id="shadowbar"></div></div>
 <div class="small">Shadow challenger only. Не меняет primary HARD120.</div>
+</div>
+<div class="card wide">
+<div class="k">Full shadow stack forward</div>
+<div class="row"><span>Events</span><b>EARLY60 → HARD120 → HIGH-flow</b></div>
+<div class="row"><span>True / False first</span><b id="stacktf">—</b></div>
+<div class="row"><span>Precision / Recall</span><b id="stackpr">—</b></div>
+<div class="row"><span>Gate</span><b id="stackgate">—</b></div>
 </div>
 <div class="card wide">
 <div class="k">Forward first-signal gate</div>
@@ -67,10 +80,13 @@ function render(s){
  const c=s.candidate||{};$("candidate").textContent=c.side?c.side+" @ "+num(c.extreme_price,4):"WAIT";$("candidate").className="v "+(c.side==="LOW"?"good":c.side==="HIGH"?"bad":"amber");
  $("stage").textContent=c.stage||"WATCH";$("age").textContent=c.age_s==null?"—":num(c.age_s,0)+"s";$("h1prior").textContent=pct(c.h1_prior);$("windows").textContent=((c.evidence||{}).windows||[]).join(" / ")||"—";
  const t=s.last_teacher_local||{},st=s.structure_48h||{};$("teacher").textContent=t.side?t.side+" @ "+num(t.price,4):"—";$("leg").textContent=st.active_leg||"—";$("regime").textContent=st.regime||"—";
+ const e60=s.early60_shadow||{};$("earlylow").textContent=hardText(e60.LOW);$("earlyhigh").textContent=hardText(e60.HIGH);
+ const em=fwd(s,"early60_shadow_forward"),ep=em.precision;$("earlypr").textContent=pct(ep)+" / "+pct(em.recall);$("earlybar").style.width=Math.max(0,Math.min(100,Number(ep||0)*100))+"%";
  const h=s.hard120||{};$("hardlow").textContent=hardText(h.LOW);$("hardhigh").textContent=hardText(h.HIGH);
  const hm=fwd(s,"hard120_forward"),hp=hm.precision;$("hardp").textContent=pct(hp);$("hardbar").style.width=Math.max(0,Math.min(100,Number(hp||0)*100))+"%";
  const sh=(s.high_flow_shadow||{}).HIGH;$("shadow").textContent=sh?(sh.candidate_id+" · "+(sh.emitted?"EMITTED":"WATCH")):"—";
  const sm=fwd(s,"high_flow_shadow_forward"),sp=sm.precision;$("shadowp").textContent=pct(sp);$("shadowbar").style.width=Math.max(0,Math.min(100,Number(sp||0)*100))+"%";
+ const stm=fwd(s,"early60_plus_hard120_high_flow_forward"),stg=(s.early60_plus_hard120_high_flow_forward||{}).promotion_gate||{};$("stacktf").textContent=num(stm.true_first,0)+" / "+num(stm.false_first,0);$("stackpr").textContent=pct(stm.precision)+" / "+pct(stm.recall);$("stackgate").textContent=stg.passed?"PASS":"ACCUMULATING";$("stackgate").className=stg.passed?"good":"amber";
  const fm=fwd(s,"forward_first_signal"),fg=(s.forward_first_signal||{}).promotion_gate||{};$("episodes").textContent=num(fm.episodes,0);$("tf").textContent=num(fm.true_first,0)+" / "+num(fm.false_first,0);$("pr").textContent=pct(fm.precision)+" / "+pct(fm.recall);$("gate").textContent=fg.passed?"PASS":"ACCUMULATING";$("gate").className=fg.passed?"good":"amber";
  $("cortex").textContent=s.cortex_state||((s.cortex||{}).state)||"—";$("inputs").textContent=num(s.seen_input_count,0)+" / 86";$("pending").textContent=num(s.pending_labels,0);
  $("updated").textContent="данные "+new Date(Number(s.updated_ts_ms||now)).toLocaleString("ru-RU")+" · direct GitHub fallback";
