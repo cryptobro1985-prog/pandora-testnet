@@ -1,0 +1,62 @@
+{
+  "status": "LABEL_SCOPE_CORRECTION",
+  "period": ["2026-10-04", "2026-11-03"],
+  "artifact_counts": {
+    "candidate_structural_events": 1797,
+    "candidate_snapshots": 6261,
+    "internal_labels_total": 123,
+    "internal_labels_finalized": 122,
+    "internal_finalized_by_side": {"LOW": 61, "HIGH": 61},
+    "strict_labels_total": 77,
+    "strict_labels_finalized": 76,
+    "strict_finalized_by_side": {"LOW": 38, "HIGH": 38}
+  },
+  "candidate_replay_coverage": {
+    "strict_finalized_seen": 76,
+    "strict_finalized_missing": 0,
+    "internal_finalized_seen": 95,
+    "internal_finalized_missing": 27
+  },
+  "complete_alternating_swings": {
+    "strict": 75,
+    "internal": 121
+  },
+  "broad_internal_diagnostic_on_current_candidate_space": {
+    "warning": "These metrics cover only internal locals that exist in the current candidate replay. 27 finalized internal locals are absent from candidate space, so this is not full-system recall.",
+    "true_local_10m_matched_n": 94,
+    "median_10m_entry_distance_pct": 0.3261313652200226,
+    "median_10m_remaining_swing_fraction": 0.8486388980940944,
+    "median_full_swing_pct": 2.6474478609006313,
+    "10m_survival": {
+      "true_candidates": 94,
+      "false_candidates": 296
+    },
+    "confirmed_30m": {
+      "accepted_first": 20,
+      "true_first": 15,
+      "false_first": 5,
+      "precision": 0.75,
+      "recall_vs_all_121_internal_swings": 0.12396694214876033
+    },
+    "hard_60m": {
+      "accepted_first": 18,
+      "true_first": 14,
+      "false_first": 4,
+      "precision": 0.7777777777777778,
+      "recall_vs_all_121_internal_swings": 0.11570247933884298
+    },
+    "ultra_60m_in_sample_only": {
+      "accepted_first": 8,
+      "true_first": 7,
+      "false_first": 1,
+      "precision": 0.875,
+      "recall_vs_all_121_internal_swings": 0.05785123966942149
+    }
+  },
+  "interpretation": [
+    "The previous 76-local replay used only the strict finalized L6/K2 layer.",
+    "The same artifact contains a broader finalized internal layer of 122 locals = 61 LOW + 61 HIGH.",
+    "The current candidate generator fails to surface 27 of those internal locals, so candidate generation must be broadened before declaring the entry engine complete.",
+    "The previously discussed 88-extrema study and the ~117 raw H1 pivot count came from older/different structural definitions and are not numerically identical to either current internal or strict label contracts."
+  ]
+}
