@@ -135,12 +135,12 @@ jobs:
           assert s["model_report"]["h1"]["online_training_enabled"] is False
           assert s["model_report"]["internal_tactical"]["core_flip_authorized"] is False
           assert all(x.get("terminal_finalized") is True for x in (s.get("structure_48h") or {}).get("locals",[]))
-          sc=s["survival_ladder_contract"]
-          assert sc["name"]=="INTERNAL_SURVIVAL_LADDER_V1"
-          assert sc["stages"]["HARD90"]["age_s"]==5400
-          assert sc["stages"]["HARD120"]["age_s"]==7200
-          assert sc["core_flip_authorized"] is False
-          assert set((s.get("survival_ladder") or {}).keys())=={"LOW","HIGH"}
+          hc=s["hard120_contract"]
+          assert hc["name"]=="INTERNAL_HARD120_CHECKPOINT_V2"
+          assert hc["age_s"]==7200
+          assert hc["min_retrace_fraction_pre_180"]==0.45
+          assert hc["core_flip_authorized"] is False
+          assert set((s.get("hard120") or {}).keys())=={"LOW","HIGH"}
           with (cp/"local_runtime.pkl").open("rb") as fh:
               runtime=pickle.load(fh)
           assert "hard_candidates" in runtime
@@ -152,8 +152,8 @@ jobs:
               "pending_labels":s.get("pending_labels"),
               "candidate":s.get("candidate"),
               "local_target":s.get("local_target"),
-              "survival_ladder":s.get("survival_ladder"),
-              "survival_ladder_contract":s.get("survival_ladder_contract"),
+              "hard120":s.get("hard120"),
+              "hard120_contract":s.get("hard120_contract"),
           },ensure_ascii=False))
           PY
       - uses: actions/upload-artifact@v4
