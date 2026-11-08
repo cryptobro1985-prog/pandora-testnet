@@ -16,25 +16,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      MINIAPP_URL: "https://cdn.jsdelivr.net/gh/cryptobro1985-prog/pandora-testnet@853123f7448fcf3f04761964654ae5de195147ea/research/hype_caterpillar_monitor_static/index.html"
+      MINIAPP_URL: "https://br-delicate-cell-b96truj8-hypemonitor.compute.c-7.eu-central-1.aws.neon.tech/"
       BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || secrets.HYPE_TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_TOKEN }}
     steps:
       - name: Verify fallback page
         shell: bash
         run: |
           set -euo pipefail
-          code="$(curl -L -sS -o /tmp/monitor.html -w '%{http_code}' --connect-timeout 10 --max-time 30 "$MINIAPP_URL")"
+          headers="$(mktemp)"
+          code="$(curl -L -sS -D "$headers" -o /tmp/monitor.html -w '%{http_code}' --connect-timeout 10 --max-time 30 "$MINIAPP_URL")"
           echo "fallback_http=$code"
           test "$code" = "200"
+          grep -qi '^content-type: text/html' "$headers"
           grep -q "HYPE Local Monitor" /tmp/monitor.html
-          echo "FALLBACK_PAGE_OK"
+          echo "FALLBACK_PAGE_OK_HTML"
       - name: Switch Telegram menu button
         shell: bash
         run: |
           set -euo pipefail
           if [ -z "${BOT_TOKEN:-}" ]; then
             echo "MENU_SWITCH_SKIPPED_NO_TOKEN"
-            echo "Fallback WebApp is healthy; Telegram menu credential is not stored in Actions."
+            echo "Fallback WebApp is healthy HTML; Telegram menu credential is not stored in Actions."
             exit 0
           fi
           api="https://api.telegram.org/bot${BOT_TOKEN}"
@@ -49,7 +51,7 @@ jobs:
           },separators=(",",":")))
           PY
           )"
-          response="$(curl -sS --fail-with-body -X POST "$api/setChatMenuButton"             -H 'Content-Type: application/json' --data "$payload")"
+          response="$(curl -sS --fail-with-body -X POST "$api/setChatMenuButton" -H 'Content-Type: application/json' --data "$payload")"
           python - <<'PY' "$response"
           import json,sys
           x=json.loads(sys.argv[1])
