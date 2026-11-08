@@ -15,6 +15,7 @@ from pathlib import Path
 from research.hype_false_local_entry.first_signal_objective import (
     promotion_gate,
     summarize_first_signals,
+    summarize_actionable_first_signals,
 )
 
 INTERNAL_TEACHERS={"INTERNAL_L3_K1","H1_L3_K1_INTERNAL"}
@@ -75,12 +76,13 @@ def terminal_internal_labels(rows: list[dict]) -> list[dict]:
     return raw
 
 
-def internal_signal_records(events: list[dict], labels: list[dict]) -> list[dict]:
+def internal_signal_records(events: list[dict], labels: list[dict],
+                            event_name: str="INTERNAL_TACTICAL_SIGNAL") -> list[dict]:
     truth={str(x["candidate_id"]):int(x["label_id"]) for x in labels}
     out=[]
     seen=set()
     for r in events:
-        if r.get("event")!="INTERNAL_TACTICAL_SIGNAL":
+        if r.get("event")!=event_name:
             continue
         if r.get("candidate_ts_ms") is None:
             continue
@@ -106,11 +108,13 @@ def internal_signal_records(events: list[dict], labels: list[dict]) -> list[dict
     return out
 
 
-def audit(labels_path: Path, events_path: Path) -> dict:
+def audit(labels_path: Path, events_path: Path, *,
+          event_name: str="INTERNAL_TACTICAL_SIGNAL",
+          actionable: bool=False) -> dict:
     label_rows=read_jsonl(labels_path)
     event_rows=read_jsonl(events_path)
     labels=terminal_internal_labels(label_rows)
-    signals=internal_signal_records(event_rows,labels)
+    signals=internal_signal_records(event_rows,labels,event_name=event_name)
 
     if len(labels)<2:
         metrics={
@@ -123,7 +127,8 @@ def audit(labels_path: Path, events_path: Path) -> dict:
             "first_signals":[],
         }
     else:
-        metrics=summarize_first_signals(signals,labels)
+        metrics=(summarize_actionable_first_signals(signals,labels)
+                 if actionable else summarize_first_signals(signals,labels))
 
     gate=promotion_gate(metrics)
     return {
@@ -131,7 +136,10 @@ def audit(labels_path: Path, events_path: Path) -> dict:
         "research_only":True,
         "real_orders":False,
         "teacher":"INTERNAL_L3_K1_TERMINAL_FINALIZED",
-        "objective":"FIRST_ACCEPTED_SIGNAL_PER_COMPLETED_INTERNAL_SWING",
+        "objective":("FIRST_ACCEPTED_ACTIONABLE_SIGNAL_BEFORE_NEXT_LOCAL"
+                     if actionable else "FIRST_ACCEPTED_SIGNAL_PER_COMPLETED_INTERNAL_SWING"),
+        "signal_event":event_name,
+        "actionable_deadline_enabled":bool(actionable),
         "terminal_labels":len(labels),
         "tactical_signal_rows":len(signals),
         "metrics":metrics,
@@ -145,13 +153,17 @@ def main():
     ap.add_argument("--labels",type=Path,required=True)
     ap.add_argument("--events",type=Path,required=True)
     ap.add_argument("--output",type=Path,required=True)
+    ap.add_argument("--event-name",default="INTERNAL_TACTICAL_SIGNAL")
+    ap.add_argument("--actionable",action="store_true")
     args=ap.parse_args()
-    out=audit(args.labels,args.events)
+    out=audit(args.labels,args.events,event_name=args.event_name,actionable=args.actionable)
     args.output.write_text(json.dumps(out,indent=2,ensure_ascii=False)+"\n",encoding="utf-8")
     print("FIRST_SIGNAL_FORWARD="+json.dumps({
         "status":out["status"],
         "terminal_labels":out["terminal_labels"],
         "signals":out["tactical_signal_rows"],
+        "signal_event":out["signal_event"],
+        "actionable":out["actionable_deadline_enabled"],
         "metrics":{k:out["metrics"].get(k) for k in ("episodes","accepted_first","true_first","false_first","precision","recall")},
         "gate":out["promotion_gate"]["passed"],
     },separators=(",",":"),ensure_ascii=False))
