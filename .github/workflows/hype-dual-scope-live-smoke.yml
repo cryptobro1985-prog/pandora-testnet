@@ -6,6 +6,8 @@ on:
       - research/hype-h1-local-v5-oi-microstructure-20261104
     paths:
       - ".github/workflows/hype-dual-scope-live-smoke.yml"
+      - "research/hype_false_local_entry/**"
+      - "research/hype_local_only/**"
   workflow_dispatch:
 
 permissions:
@@ -83,6 +85,7 @@ jobs:
           assert s["local_target"]=="DUAL_INTERNAL_L3_K1__STRICT_L6_K2"
           assert s["teacher_contract"]["internal"]["name"]=="INTERNAL_L3_K1"
           assert s["teacher_contract"]["strict"]["name"]=="STRICT_L6_K2"
+          assert "terminal_finalization" in s["teacher_contract"]
           assert s["research_only"] is True and s["real_orders"] is False
           assert "internal_tactical" in s["model_report"]
           print(json.dumps({
