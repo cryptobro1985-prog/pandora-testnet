@@ -1,20 +1,9 @@
-# HYPE INTERNAL Survival Ladder — HARD90 → HARD120
+# SUPERSEDED — HARD90 → HARD120 survival ladder
 
-Frozen paper-only research contract.
+This experiment is retained only as an audit trail.
 
-The lineage starts only from a 6h trailing extreme and is not reset by the ordinary hourly stale-refresh. A more-extreme same-side 6h candidate resets the lineage.
+It was superseded after the replay was aligned to the exact live checkpoint semantics. The earlier ladder analysis mixed a looser recovery-crossing interpretation with fixed checkpoint claims. Under the corrected one-shot replay, the HARD90 rung did not justify its added complexity and could introduce an extra false first signal.
 
-- **HARD90:** 90 minutes survived, retrace >= 40 bps, and retrace recovers >= 65% of the causal 180-minute pre-move.
-- **HARD120 fallback:** 120 minutes survived, retrace >= 40 bps, and retrace recovers >= 45% of the same pre-move.
-- One lineage emits only once. Neither rung can flip the core direction.
+The active research contract is now **INTERNAL_HARD120_CHECKPOINT_V2**. See `HARD120_HISTORICAL_AUDIT_2026-11-08.json` / `.md`.
 
-On 120 fully actionable INTERNAL swings, the combined first-signal result was **54 true / 5 false = 91.53% precision, 45% recall**. The four chronological blocks were:
-
-- episodes 1–30: 100% precision / 53.3% recall;
-- 31–60: 87.5% / 46.7%;
-- 61–90: 92.3% / 40%;
-- 91–120: 85.7% / 40%.
-
-Compared with HARD120 alone, the early rung adds two correct actionable signals without adding a false first signal on this archive.
-
-Important: these thresholds were selected after studying this 30-day history, so the result is not untouched OOS evidence. The contract is now frozen. Promotion depends only on the independent forward actionable first-signal gate.
+Do not use this ladder report for promotion or performance claims.
