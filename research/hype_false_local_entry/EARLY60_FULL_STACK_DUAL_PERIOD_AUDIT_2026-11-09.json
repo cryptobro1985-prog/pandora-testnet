@@ -1,0 +1,65 @@
+{
+  "title":"HYPE EARLY60 + HARD120 + HIGH-flow dual-period audit",
+  "date":"2026-11-09",
+  "workflow_run_id":42531210218,
+  "mode":"RESEARCH_PAPER_ONLY",
+  "real_orders":false,
+  "contracts":{
+    "early60":"EARLY60_STRONG_REVERSAL_SHADOW_V1",
+    "primary":"INTERNAL_HARD120_CHECKPOINT_V2",
+    "high_flow":"HARD120_HIGH_FLOW_SHADOW_V1",
+    "core_flip_authorized":false
+  },
+  "early60_rule":{
+    "required_origin":"6h trailing extreme",
+    "age_minutes":60,
+    "min_retrace_bps":80,
+    "min_retrace_fraction_pre_180":0.60,
+    "min_reversal_flow_first_15m":0.20,
+    "min_trade_count_first_15m":100,
+    "checkpoint":"one-shot first completed M1 close at/after +60m"
+  },
+  "oct_nov_2026":{
+    "internal_labels":122,
+    "episodes":120,
+    "accepted_first":60,
+    "true_first":56,
+    "false_first":4,
+    "precision":0.9333333333333333,
+    "recall":0.4666666666666667,
+    "early60_signals":8,
+    "early60_true":8,
+    "early60_false":0,
+    "LOW":{"true_first":27,"false_first":3,"precision":0.9,"recall":0.45,"early60_true":4},
+    "HIGH":{"true_first":29,"false_first":1,"precision":0.9666666666666667,"recall":0.48333333333333334,"early60_true":4}
+  },
+  "jul_aug_2026":{
+    "internal_labels":103,
+    "episodes":101,
+    "accepted_first":50,
+    "true_first":43,
+    "false_first":7,
+    "precision":0.86,
+    "recall":0.42574257425742573,
+    "early60_signals":9,
+    "early60_true":9,
+    "early60_false":0,
+    "LOW":{"true_first":22,"false_first":2,"precision":0.9166666666666666,"recall":0.43137254901960786,"early60_true":6},
+    "HIGH":{"true_first":21,"false_first":5,"precision":0.8076923076923077,"recall":0.42,"early60_true":3}
+  },
+  "combined_early60_observation":{
+    "historical_early_signals":17,
+    "historical_early_true":17,
+    "historical_early_false":0,
+    "note":"17/17 is an inspected historical result, not an untouched probability estimate."
+  },
+  "historical_gate":{
+    "min_precision":0.80,
+    "min_recall":0.40,
+    "oct_nov_passed":true,
+    "jul_aug_passed":true,
+    "both_periods_passed":true
+  },
+  "promotion":"FORWARD_SCORE_ONLY",
+  "warning":"EARLY60 thresholds were selected after inspecting historical periods. No real-order or core-flip authorization follows from this audit. Untouched forward evidence is mandatory."
+}
