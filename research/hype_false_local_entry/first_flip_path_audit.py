@@ -53,7 +53,10 @@ def score_first_flips(bars, labels, flips, max_lag_ms=3600000):
                     full=sign*(target-extreme)
                     remaining=sign*(target-s.close)
                     row["remaining_swing_fraction"]=remaining/full if full>0 else None
-                    path=[b for b in bars if s.ts_ms <= int(b.get("bar_end_ms") or int(b["ts_ms"])+60000) <= stop]
+                    # Entry occurs at the CLOSE of the signal minute.
+                    # Its high/low preceded execution; exclude that candle
+                    # from post-entry adverse excursion.
+                    path=[b for b in bars if s.ts_ms < int(b.get("bar_end_ms") or int(b["ts_ms"])+60000) <= stop]
                     if path:
                         worst=min(float(b["low"]) for b in path) if sign==1 else max(float(b["high"]) for b in path)
                         row["adverse_extension_bps"]=max(0.,-sign*(worst/s.close-1)*10000)
