@@ -32,6 +32,11 @@ from research.hype_false_local_entry.hard120_persistence_shadow import (
     contract as hard120_persistence_contract,
     persistence_metrics as hard120_persistence_metrics,
 )
+from research.hype_false_local_entry.high60_retrace_veto import (
+    contract as high60_veto_contract,
+    sample_retrace60 as high60_sample_retrace,
+    high_primary_confirmed as high60_primary_confirmed,
+)
 
 H=3_600_000
 
@@ -432,6 +437,7 @@ def main():
             hard120_live={}
             high_flow_shadow_live={}
             early60_shadow_live={}
+            high60_veto_live={}
             hard120_persistence_live={}
             for side in ("LOW","HIGH"):
                 hc=hard_candidates.get(side)
@@ -439,6 +445,7 @@ def main():
                     hard120_live[side]=None
                     high_flow_shadow_live[side]=None
                     early60_shadow_live[side]=None
+                    high60_veto_live[side]=None
                     hard120_persistence_live[side]=None
                     continue
 
@@ -583,6 +590,46 @@ def main():
                     "checkpoint":shadow_metrics,
                 }
 
+                high60_sample=None
+                high60_confirmed=False
+                high60_metrics={"ready":False,"reason":"PRIMARY_HARD120_NOT_EMITTED"}
+                if hard_stage and sample is not None and bool(sample.get("fresh_observation")):
+                    high60_sample=high60_sample_retrace(
+                        side=side,
+                        candidate_ts_ms=int(hc.extreme_ts_ms),
+                        extreme_price=float(hc.extreme_price),
+                        completed_m1_rows=completed_m1(state,ts),
+                        observed_ms=int(sample.get("sample_ts_ms") or ts),
+                    )
+                    high60_confirmed,high60_metrics=high60_primary_confirmed(
+                        side=side,sample=high60_sample
+                    )
+                    high60_metrics["primary_hard120_emitted"]=True
+                    high60_metrics["core_flip_authorized"]=False
+                    if high60_confirmed:
+                        append_jsonl(evlog,{
+                            "event":"INTERNAL_HARD120_HIGH60_VETO_STACK_SIGNAL",
+                            "ts_ms":int(ts),
+                            "signal_ts_ms":int(sample.get("sample_ts_ms") or ts),
+                            "candidate_ts_ms":int(hc.extreme_ts_ms),
+                            "candidate_id":hc.candidate_id,"side":hc.side,
+                            "price":float(hc.extreme_price),
+                            "mark_price":float(sample.get("mark_price") or price),
+                            "teacher":INTERNAL.name,
+                            "shadow_contract":"HARD120_HIGH60_RETRACE_VETO_SHADOW_V1",
+                            "primary_contract":"INTERNAL_HARD120_CHECKPOINT_V2",
+                            "core_flip_authorized":False,
+                            "metrics":high60_metrics,
+                        })
+                high60_veto_live[side]={
+                    "candidate_id":hc.candidate_id,
+                    "side":hc.side,
+                    "primary_emitted":bool(hard_stage),
+                    "confirmed_for_veto_stack":bool(high60_confirmed),
+                    "sample":high60_sample,
+                    "metrics":high60_metrics,
+                }
+
                 persistence_metrics={"ready":False,"reason":"PRIMARY_HARD120_NOT_EMITTED"}
                 persistence_ready=False
                 if hard_stage and sample is not None and bool(sample.get("fresh_observation")):
@@ -696,6 +743,16 @@ def main():
             if fssp.exists():
                 try:full_shadow_stack_forward=json.loads(fssp.read_text(encoding="utf-8"))
                 except Exception:full_shadow_stack_forward={}
+            high60_veto_forward={}
+            hvp=args.checkpoint_dir/"HIGH60_VETO_FORWARD_STATUS.json"
+            if hvp.exists():
+                try:high60_veto_forward=json.loads(hvp.read_text(encoding="utf-8"))
+                except Exception:high60_veto_forward={}
+            high60_full_stack_forward={}
+            hvsp=args.checkpoint_dir/"EARLY60_PLUS_HIGH60_VETO_HIGH_FLOW_FORWARD_STATUS.json"
+            if hvsp.exists():
+                try:high60_full_stack_forward=json.loads(hvsp.read_text(encoding="utf-8"))
+                except Exception:high60_full_stack_forward={}
             persistence_forward={}
             pfp=args.checkpoint_dir/"HARD120_PERSISTENCE_FORWARD_STATUS.json"
             if pfp.exists():
@@ -738,6 +795,10 @@ def main():
                 "hard120_contract":survival_contract(),
                 "hard120":hard120_live,
                 "hard120_forward":hard120_forward,
+                "high60_veto_contract":high60_veto_contract(),
+                "high60_veto":high60_veto_live,
+                "high60_veto_forward":high60_veto_forward,
+                "early60_plus_high60_veto_high_flow_forward":high60_full_stack_forward,
                 "hard120_persistence_contract":hard120_persistence_contract(),
                 "hard120_persistence":hard120_persistence_live,
                 "hard120_persistence_forward":persistence_forward,
