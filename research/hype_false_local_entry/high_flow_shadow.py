@@ -123,6 +123,8 @@ def contract()->dict:
         "flow_capture_grace_s":FLOW_CAPTURE_GRACE_MS/1000,
         "core_flip_authorized":False,
         "primary_contract_unchanged":True,
-        "historical_status":"CROSS_PERIOD_TUNED_NOT_OOS",
+        "historical_status":"DUAL_PERIOD_80_40_GATE_PASSED_NOT_UNTOUCHED_OOS",
+        "historical_dual_period":{"oct_nov":{"precision":0.9322033898305084,"recall":0.4583333333333333},
+                                  "jul_aug":{"precision":0.8571428571428571,"recall":0.4158415841584158}},
         "promotion":"FORWARD_SCORE_ONLY",
     }
