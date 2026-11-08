@@ -1,0 +1,64 @@
+{
+  "title":"HYPE HARD120 + HIGH Flow Shadow dual-period audit",
+  "date":"2026-11-09",
+  "workflow_run_id":42530397814,
+  "workflow_commit":"6446ea13a97460f44cf8f2570acbcfe7d4a91bd3",
+  "mode":"RESEARCH_PAPER_ONLY",
+  "real_orders":false,
+  "primary_contract":"INTERNAL_HARD120_CHECKPOINT_V2",
+  "shadow_contract":"HARD120_HIGH_FLOW_SHADOW_V1",
+  "primary_unchanged":true,
+  "shadow_core_flip_authorized":false,
+  "rule":{
+    "side":"HIGH only",
+    "age_minutes":120,
+    "required_origin":"6h trailing extreme",
+    "min_retrace_bps":40,
+    "retrace_fraction_pre_180_band":[0.35,0.45],
+    "max_first_15m_flow_imbalance":-0.05,
+    "min_first_15m_trade_count":100
+  },
+  "oct_nov_2026":{
+    "period":["2026-10-04","2026-11-03"],
+    "internal_labels":122,
+    "episodes":120,
+    "accepted_first":59,
+    "true_first":55,
+    "false_first":4,
+    "precision":0.9322033898305084,
+    "recall":0.4583333333333333,
+    "shadow_signals":2,
+    "shadow_true":2,
+    "shadow_false":0,
+    "HIGH":{"episodes":60,"accepted_first":30,"true_first":29,"false_first":1,"precision":0.9666666666666667,"recall":0.48333333333333334}
+  },
+  "jul_aug_2026":{
+    "period":["2026-07-12T17:00:00Z","2026-08-07T00:00:00Z"],
+    "internal_labels":103,
+    "episodes":101,
+    "accepted_first":49,
+    "true_first":42,
+    "false_first":7,
+    "precision":0.8571428571428571,
+    "recall":0.4158415841584158,
+    "shadow_signals":5,
+    "shadow_true":5,
+    "shadow_false":0,
+    "HIGH":{"episodes":50,"accepted_first":25,"true_first":20,"false_first":5,"precision":0.8,"recall":0.4}
+  },
+  "comparison_to_primary_only":{
+    "oct_nov_primary":{"true_first":53,"false_first":4,"precision":0.9298245614035088,"recall":0.44166666666666665},
+    "jul_aug_primary":{"true_first":37,"false_first":7,"precision":0.8409090909090909,"recall":0.36633663366336633},
+    "delta_oct_nov":{"additional_true":2,"additional_false":0,"recall_points":1.6666666666666667},
+    "delta_jul_aug":{"additional_true":5,"additional_false":0,"recall_points":4.95049504950495}
+  },
+  "historical_gate":{
+    "min_precision":0.8,
+    "min_recall":0.4,
+    "oct_nov_passed":true,
+    "jul_aug_passed":true,
+    "both_periods_passed":true
+  },
+  "interpretation":"The combined research stack is the first tested configuration to clear 80% precision and 40% recall on both historical periods without changing the frozen primary HARD120 rule. All seven added shadow signals across the two periods were true-first.",
+  "warning":"The HIGH-flow rule was derived after inspecting historical periods, so this is cross-period tuned evidence, not untouched OOS proof. Promotion remains FORWARD_SCORE_ONLY until the pre-registered forward gate passes."
+}
