@@ -254,6 +254,14 @@ jobs:
             --output local_cp/LIVE_DISCOVERY_RELATIONSHIPS.json
           test -s local_cp/LIVE_DISCOVERY_RELATIONSHIPS.json
 
+      - name: Score terminal INTERNAL first-signal objective
+        run: |
+          python -m research.hype_local_only.forward_first_signal_audit \
+            --labels local_cp/LOCAL_LIVE_LABELS.jsonl \
+            --events local_cp/LOCAL_EVENTS.jsonl \
+            --output local_cp/FIRST_SIGNAL_FORWARD_STATUS.json
+          test -s local_cp/FIRST_SIGNAL_FORWARD_STATUS.json
+
       - name: Write continuous-learning manifest
         run: |
           python - <<'PY'
@@ -281,6 +289,7 @@ jobs:
             "internal_live_matured_labels":int(getattr(q,"internal_live_labels",0) or 0),
             "internal_labels_total":sum(getattr(q,"internal_labels",{}).values()),
             "live_label_rows_persisted":live_rows,
+            "first_signal_forward":(json.loads((cp/"FIRST_SIGNAL_FORWARD_STATUS.json").read_text()) if (cp/"FIRST_SIGNAL_FORWARD_STATUS.json").exists() else {}),
             "pending_labels":s.get("pending_labels"),
             "expected_side":s.get("expected_side"),
             "last_teacher_local":s.get("last_teacher_local"),
@@ -361,6 +370,7 @@ jobs:
             local_cp/HISTORICAL_TRAINING_REPORT.json
             local_cp/HISTORICAL_GAP_PROMOTION.json
             local_cp/CONTINUOUS_LEARNING_MANIFEST.json
+            local_cp/FIRST_SIGNAL_FORWARD_STATUS.json
             local_cp/LOCAL_EVENTS.recent.jsonl.gz
             local_cp/LOCAL_LIVE_LABELS.recent.jsonl.gz
           if-no-files-found: warn
@@ -380,6 +390,7 @@ jobs:
             local_cp/LOCAL_LIVE_LABELS.recent.jsonl.gz
             local_cp/LIVE_DISCOVERY_RELATIONSHIPS.json
             local_cp/CONTINUOUS_LEARNING_MANIFEST.json
+            local_cp/FIRST_SIGNAL_FORWARD_STATUS.json
           if-no-files-found: warn
           retention-days: 7
           compression-level: 9
