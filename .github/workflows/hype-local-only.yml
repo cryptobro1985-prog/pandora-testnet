@@ -57,7 +57,8 @@ jobs:
             research/hype_local_only/train_history.py \
             research/hype_local_only/live_daemon.py \
             research/hype_local_only/live_relationship_miner.py \
-            research/hype_local_only/cortex_daemon.py
+            research/hype_local_only/cortex_daemon.py \
+            research/hype_false_local_entry/hard120_persistence_shadow.py
 
       - name: Cancel deprecated Caterpillar / Direct-Policy live runs
         env:
@@ -343,12 +344,28 @@ jobs:
             --event-name INTERNAL_HARD120_HIGH_FLOW_SHADOW \
             --actionable \
             --output local_cp/EARLY60_PLUS_HARD120_HIGH_FLOW_FORWARD_STATUS.json
+          python -m research.hype_local_only.forward_first_signal_audit \
+            --labels local_cp/LOCAL_LIVE_LABELS.jsonl \
+            --events local_cp/LOCAL_EVENTS.jsonl \
+            --event-name INTERNAL_HARD120_PERSISTENCE_SHADOW \
+            --actionable \
+            --output local_cp/HARD120_PERSISTENCE_FORWARD_STATUS.json
+          python -m research.hype_local_only.forward_first_signal_audit \
+            --labels local_cp/LOCAL_LIVE_LABELS.jsonl \
+            --events local_cp/LOCAL_EVENTS.jsonl \
+            --event-name INTERNAL_EARLY60_STRONG_REVERSAL_SHADOW \
+            --event-name INTERNAL_HARD120_PERSISTENCE_SHADOW \
+            --event-name INTERNAL_HARD120_HIGH_FLOW_SHADOW \
+            --actionable \
+            --output local_cp/EARLY60_PLUS_PERSISTENCE_HARD120_HIGH_FLOW_FORWARD_STATUS.json
           test -s local_cp/FIRST_SIGNAL_FORWARD_STATUS.json
           test -s local_cp/HARD120_FORWARD_STATUS.json
           test -s local_cp/HARD120_HIGH_FLOW_SHADOW_FORWARD_STATUS.json
           test -s local_cp/HARD120_PLUS_HIGH_FLOW_FORWARD_STATUS.json
           test -s local_cp/EARLY60_STRONG_REVERSAL_FORWARD_STATUS.json
           test -s local_cp/EARLY60_PLUS_HARD120_HIGH_FLOW_FORWARD_STATUS.json
+          test -s local_cp/HARD120_PERSISTENCE_FORWARD_STATUS.json
+          test -s local_cp/EARLY60_PLUS_PERSISTENCE_HARD120_HIGH_FLOW_FORWARD_STATUS.json
 
       - name: Write continuous-learning manifest
         run: |
@@ -383,6 +400,8 @@ jobs:
             "hard120_plus_high_flow_forward":(json.loads((cp/"HARD120_PLUS_HIGH_FLOW_FORWARD_STATUS.json").read_text()) if (cp/"HARD120_PLUS_HIGH_FLOW_FORWARD_STATUS.json").exists() else {}),
             "early60_shadow_forward":(json.loads((cp/"EARLY60_STRONG_REVERSAL_FORWARD_STATUS.json").read_text()) if (cp/"EARLY60_STRONG_REVERSAL_FORWARD_STATUS.json").exists() else {}),
             "early60_plus_hard120_high_flow_forward":(json.loads((cp/"EARLY60_PLUS_HARD120_HIGH_FLOW_FORWARD_STATUS.json").read_text()) if (cp/"EARLY60_PLUS_HARD120_HIGH_FLOW_FORWARD_STATUS.json").exists() else {}),
+            "hard120_persistence_forward":(json.loads((cp/"HARD120_PERSISTENCE_FORWARD_STATUS.json").read_text()) if (cp/"HARD120_PERSISTENCE_FORWARD_STATUS.json").exists() else {}),
+            "early60_plus_persistence_hard120_high_flow_forward":(json.loads((cp/"EARLY60_PLUS_PERSISTENCE_HARD120_HIGH_FLOW_FORWARD_STATUS.json").read_text()) if (cp/"EARLY60_PLUS_PERSISTENCE_HARD120_HIGH_FLOW_FORWARD_STATUS.json").exists() else {}),
             "pending_labels":s.get("pending_labels"),
             "expected_side":s.get("expected_side"),
             "last_teacher_local":s.get("last_teacher_local"),
@@ -469,6 +488,8 @@ jobs:
             local_cp/HARD120_PLUS_HIGH_FLOW_FORWARD_STATUS.json
             local_cp/EARLY60_STRONG_REVERSAL_FORWARD_STATUS.json
             local_cp/EARLY60_PLUS_HARD120_HIGH_FLOW_FORWARD_STATUS.json
+            local_cp/HARD120_PERSISTENCE_FORWARD_STATUS.json
+            local_cp/EARLY60_PLUS_PERSISTENCE_HARD120_HIGH_FLOW_FORWARD_STATUS.json
             local_cp/TERMINAL_TEACHER_MIGRATION.json
             local_cp/LOCAL_EVENTS.recent.jsonl.gz
             local_cp/LOCAL_LIVE_LABELS.recent.jsonl.gz
