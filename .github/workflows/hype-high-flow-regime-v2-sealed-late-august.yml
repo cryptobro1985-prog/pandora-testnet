@@ -1,0 +1,74 @@
+name: HYPE HIGH Flow Regime V2 Sealed Late August
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-high-flow-regime-v2-sealed-late-august.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Restore sealed tape
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p sealed
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13638795292/zip" > sealed.zip
+          unzip -q sealed.zip -d sealed
+          COMPACT="$(find sealed -name compact_1m.jsonl.gz -print -quit)"
+          LABELS="$(find sealed -name labels.json.gz -print -quit)"
+          test -s "$COMPACT"; test -s "$LABELS"
+          echo "COMPACT=$COMPACT" >> "$GITHUB_ENV"
+          echo "LABELS=$LABELS" >> "$GITHUB_ENV"
+      - name: First and only V2 score on sealed late August
+        run: |
+          python -m research.hype_false_local_entry.replay_high_flow_regime_v2             --compact-1m "$COMPACT" --labels-gz "$LABELS"             --output LATE_AUGUST_V2_SEALED.json
+          python -m research.hype_false_local_entry.replay_hard120_30d             --compact-1m "$COMPACT" --labels-gz "$LABELS"             --output LATE_AUGUST_HARD120_BASELINE.json
+          python - <<'PY'
+          import json
+          v=json.load(open("LATE_AUGUST_V2_SEALED.json"))
+          b=json.load(open("LATE_AUGUST_HARD120_BASELINE.json"))
+          vm=v["evaluation"]; sides=v["by_side"]
+          result={
+            "period":"2026-08-08..2026-09-01",
+            "sealed_before_v2_scoring":True,
+            "v2":vm,"v2_by_side":sides,
+            "hard120_baseline":b["evaluation"],
+            "hard120_by_side":b["by_side"],
+            "gate":{
+              "overall":vm["precision"]>=.80 and vm["recall"]>=.40,
+              "LOW":sides["LOW"]["precision"]>=.80 and sides["LOW"]["recall"]>=.40,
+              "HIGH":sides["HIGH"]["precision"]>=.80 and sides["HIGH"]["recall"]>=.40,
+            },
+            "contract":v["contract"]["regime_gate"],
+            "real_orders":False,
+          }
+          result["all_side_gate_passed"]=all(result["gate"].values())
+          print(json.dumps(result,indent=2))
+          open("LATE_AUGUST_V2_SEALED_RESULT.json","w").write(json.dumps(result,indent=2)+"\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-HIGH-FLOW-V2-SEALED-LATE-AUG-${{ github.run_id }}
+          path: |
+            LATE_AUGUST_V2_SEALED_RESULT.json
+            LATE_AUGUST_V2_SEALED.json
+            LATE_AUGUST_HARD120_BASELINE.json
+          retention-days: 14
