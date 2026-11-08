@@ -1,6 +1,6 @@
 from research.hype_false_local_entry.hard_survival_gate import (
-    HARD_AGE_S, HardCandidate, contract, maybe_start_or_extend,
-    pre_move_180_bps, should_emit,
+    EARLY_HARD_AGE_S, HARD_AGE_S, HardCandidate, contract, maybe_start_or_extend,
+    next_signal, pre_move_180_bps, should_emit,
 )
 
 
@@ -45,21 +45,32 @@ def test_non_6h_candidate_never_starts_hard_lineage():
     assert c is None
 
 
-def test_hard120_requires_age_retrace_fraction_and_expected_side():
+def test_survival_ladder_uses_strict_90m_then_120m_fallback():
     c=HardCandidate("LOW",100.0,0,"L",200.0,["6h"])
-    ok,m=should_emit(c,now_ms=(HARD_AGE_S-1)*1000,mark_price=101.0,expected_side="LOW")
-    assert not ok and not m["age_ready"]
-    # 100 bps retrace / 200 bps pre-move = 50%, so it passes after 120m.
-    ok,m=should_emit(c,now_ms=HARD_AGE_S*1000,mark_price=101.0,expected_side="LOW")
-    assert ok
-    assert m["retrace_bps"] >= 99
+    stage,m=next_signal(c,now_ms=(EARLY_HARD_AGE_S-1)*1000,mark_price=101.4,expected_side="LOW")
+    assert stage is None and not m["early_age_ready"]
+
+    # 140 bps / 200 bps = 70%: strong enough for HARD90.
+    stage,m=next_signal(c,now_ms=EARLY_HARD_AGE_S*1000,mark_price=101.4,expected_side="LOW")
+    assert stage=="HARD90"
+    assert m["early_fraction_ready"]
+
+    # A weaker 50% recovery does NOT pass at 90m, but does at 120m.
+    stage,_=next_signal(c,now_ms=EARLY_HARD_AGE_S*1000,mark_price=101.0,expected_side="LOW")
+    assert stage is None
+    stage,m=next_signal(c,now_ms=HARD_AGE_S*1000,mark_price=101.0,expected_side="LOW")
+    assert stage=="HARD120"
     assert m["retrace_fraction_pre_180"] >= .49
-    blocked,_=should_emit(c,now_ms=HARD_AGE_S*1000,mark_price=101.0,expected_side="HIGH")
-    assert not blocked
+
+    blocked,_=next_signal(c,now_ms=HARD_AGE_S*1000,mark_price=101.0,expected_side="HIGH")
+    assert blocked is None
 
 
 def test_contract_is_paper_only_and_never_core_flip():
     c=contract()
+    assert c["name"]=="INTERNAL_SURVIVAL_LADDER_V1"
     assert c["role"]=="TACTICAL_HARD_PAPER_ONLY"
+    assert c["stages"]["HARD90"]["age_s"]==EARLY_HARD_AGE_S
+    assert c["stages"]["HARD120"]["age_s"]==HARD_AGE_S
     assert c["core_flip_authorized"] is False
     assert c["stale_refresh_resets_clock"] is False
