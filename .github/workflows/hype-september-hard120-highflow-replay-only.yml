@@ -1,0 +1,69 @@
+name: HYPE September HARD120 Plus HIGH Flow Replay Only
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-september-hard120-highflow-replay-only.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Restore untouched September artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p sep
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13637558401/zip" > sep.zip
+          unzip -q sep.zip -d sep
+          C="$(find sep -name compact_1m.jsonl.gz -print -quit)"
+          L="$(find sep -name labels.json.gz -print -quit)"
+          test -n "$C"; test -n "$L"
+          cp "$C" sep/compact_1m.jsonl.gz
+          cp "$L" sep/labels.json.gz
+      - name: Replay frozen HARD120 plus HIGH flow
+        run: |
+          python -m research.hype_false_local_entry.replay_hard120_plus_high_flow             --compact-1m sep/compact_1m.jsonl.gz             --labels-gz sep/labels.json.gz             --output SEPTEMBER_HARD120_PLUS_HIGH_FLOW.json
+          python - <<'PY'
+          import json
+          x=json.load(open("SEPTEMBER_HARD120_PLUS_HIGH_FLOW.json"))
+          e=x["evaluation"]; h=x["by_side"]["HIGH"]; l=x["by_side"]["LOW"]
+          print("SEPTEMBER_HARD120_PLUS_HIGH_FLOW",json.dumps(e,separators=(",",":")))
+          print("SEPTEMBER_HIGH",json.dumps(h,separators=(",",":")))
+          print("SEPTEMBER_LOW",json.dumps(l,separators=(",",":")))
+          result={
+            "source_artifact":13637558401,
+            "period":"2026-09-01..2026-10-01",
+            "thresholds_frozen_before_result":True,
+            "evaluation":e,
+            "HIGH":h,
+            "LOW":l,
+            "high_gate_80_40":h["precision"]>=0.80 and h["recall"]>=0.40,
+            "overall_gate_80_40":e["precision"]>=0.80 and e["recall"]>=0.40,
+            "real_orders":False,
+          }
+          open("SEPTEMBER_HARD120_HIGHFLOW_UNTOUCHED_RESULT.json","w").write(json.dumps(result,indent=2)+"\n")
+          assert result["high_gate_80_40"],result
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-SEPTEMBER-HARD120-HIGHFLOW-${{ github.run_id }}
+          path: |
+            SEPTEMBER_HARD120_PLUS_HIGH_FLOW.json
+            SEPTEMBER_HARD120_HIGHFLOW_UNTOUCHED_RESULT.json
+          retention-days: 14
