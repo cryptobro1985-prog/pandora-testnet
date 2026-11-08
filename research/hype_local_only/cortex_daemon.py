@@ -10,56 +10,96 @@ def json_object(text):
     if a<0 or b<=a:raise ValueError("no JSON object")
     return json.loads(text[a:b+1])
 
+def _rel_trim(rows,n):
+    out=[]
+    for r in (rows or [])[:n]:
+        if not isinstance(r,dict):continue
+        out.append({k:r.get(k) for k in ("feature","effect","median","lift","support","a","b")
+                    if r.get(k) is not None})
+    return out
+
 def compact_memory(memory,side):
+    """Keep Cortex prompt comfortably below the 4k llama.cpp context."""
     out={"micro":{},"internal_tactical":{},"h1":{}}
     for stage in (60,180,300):
         key=f"{side}_{stage}s";h=(memory.get("heads") or {}).get(key) or {}
         out["micro"][key]={
-            "baseline_positive_rate":h.get("baseline_positive_rate"),
-            "top_feature_relationships":(h.get("top_feature_relationships") or [])[:12],
-            "top_pair_relationships":(h.get("top_pair_relationships") or [])[:8],
-            "true_examples":h.get("true_examples"),"false_examples":h.get("false_examples")
+            "rate":h.get("baseline_positive_rate"),
+            "features":_rel_trim(h.get("top_feature_relationships"),4),
+            "pairs":_rel_trim(h.get("top_pair_relationships"),2),
+            "n":[h.get("true_examples"),h.get("false_examples")]
         }
         ih=(memory.get("internal_heads") or {}).get(key) or {}
         out["internal_tactical"][key]={
-            "baseline_positive_rate":ih.get("baseline_positive_rate"),
-            "top_feature_relationships":(ih.get("top_feature_relationships") or [])[:12],
-            "top_pair_relationships":(ih.get("top_pair_relationships") or [])[:8],
-            "true_examples":ih.get("true_examples"),"false_examples":ih.get("false_examples")
+            "rate":ih.get("baseline_positive_rate"),
+            "features":_rel_trim(ih.get("top_feature_relationships"),4),
+            "pairs":_rel_trim(ih.get("top_pair_relationships"),2),
+            "n":[ih.get("true_examples"),ih.get("false_examples")]
         }
     h=(memory.get("h1_heads") or {}).get(side) or {}
     out["h1"][side]={
-        "baseline_positive_rate":h.get("baseline_positive_rate"),
-        "top_feature_relationships":(h.get("top_feature_relationships") or [])[:16],
-        "top_pair_relationships":(h.get("top_pair_relationships") or [])[:10],
-        "true_examples":h.get("true_examples"),"false_examples":h.get("false_examples")
+        "rate":h.get("baseline_positive_rate"),
+        "features":_rel_trim(h.get("top_feature_relationships"),6),
+        "pairs":_rel_trim(h.get("top_pair_relationships"),3),
+        "n":[h.get("true_examples"),h.get("false_examples")]
     }
     return out
 
+def compact_candidate(candidate):
+    c=candidate or {};ev=c.get("evidence") or {};rel=c.get("relationship_evidence") or {}
+    return {
+        "id":c.get("candidate_id"),"side":c.get("side"),"price":c.get("extreme_price"),
+        "age_s":c.get("age_s"),"stage":c.get("stage"),"h1_prior":c.get("h1_prior"),
+        "probabilities":c.get("probabilities"),
+        "internal_probabilities":c.get("internal_probabilities"),
+        "internal_accepted":c.get("internal_accepted"),
+        "windows":ev.get("windows"),"proposal":ev.get("proposal"),
+        "relationship_supports":_rel_trim(rel.get("supports"),5),
+        "relationship_contradicts":_rel_trim(rel.get("contradicts"),5),
+    }
+
+def discover_model_id(url,preferred,timeout=10):
+    """Use the actual model id exposed by llama.cpp; never invent an alias."""
+    try:
+        r=requests.get(url.rstrip("/")+"/v1/models",timeout=timeout)
+        r.raise_for_status()
+        ids=[str(x.get("id")) for x in (r.json().get("data") or []) if x.get("id")]
+        if preferred in ids:return preferred
+        if ids:return ids[0]
+    except Exception:
+        pass
+    return preferred
+
 def call_cortex(url,model,payload,timeout):
     system=(
-      "You are HYPE Local Cortex. Your only task is to analyze whether the current market state "
-      "is consistent with a forming Local HIGH or Local LOW. You are not a trading strategy. "
-      "Use the supplied 30-day relationship memory, SEPARATE STRICT and INTERNAL matured live relationships, and current Quant probabilities. "
-      "Never invent unavailable inputs. Return strict JSON with keys verdict, confidence, "
-      "supporting_relationships, contradicting_relationships, missing_live_evidence, summary. "
-      "verdict must be FORMING_HIGH, FORMING_LOW, CONFIRMED_HIGH, CONFIRMED_LOW, or WAIT."
+      "Analyze HYPE Local HIGH/LOW evidence only. No trading decisions. "
+      "Use only supplied causal evidence; never invent missing inputs. "
+      "Return one JSON object: verdict, confidence, supporting_relationships, "
+      "contradicting_relationships, missing_live_evidence, summary. "
+      "verdict: FORMING_HIGH|FORMING_LOW|CONFIRMED_HIGH|CONFIRMED_LOW|WAIT."
     )
-    base={"model":model,"messages":[{"role":"system","content":system},{"role":"user","content":json.dumps(payload,separators=(",",":"))}],
-          "temperature":0.05,"max_tokens":1200}
-    last=None
+    actual_model=discover_model_id(url,model)
+    base={"model":actual_model,
+          "messages":[{"role":"system","content":system},
+                      {"role":"user","content":json.dumps(payload,separators=(",",":"),ensure_ascii=False)}],
+          "temperature":0.0,"max_tokens":500}
+    errors=[]
     for with_json_mode in (True,False):
         req=dict(base)
-        if with_json_mode:
-            req["response_format"]={"type":"json_object"}
+        if with_json_mode:req["response_format"]={"type":"json_object"}
         r=requests.post(url.rstrip("/")+"/v1/chat/completions",json=req,timeout=timeout)
-        if r.status_code==400 and with_json_mode:
-            last=RuntimeError("local_cortex_json_mode_unsupported: "+r.text[:300])
-            continue
-        r.raise_for_status()
+        if r.status_code>=400:
+            body=(r.text or "")[:1200]
+            errors.append(f"http={r.status_code} json_mode={with_json_mode} model={actual_model} body={body}")
+            if r.status_code==400 and with_json_mode:
+                continue
+            raise RuntimeError("local_cortex_request_failed: "+" | ".join(errors))
         obj=r.json();msg=((obj.get("choices") or [{}])[0].get("message") or {})
-        return json_object(msg.get("content") or msg.get("reasoning_content") or "")
-    raise last or RuntimeError("local_cortex_request_failed")
+        parsed=json_object(msg.get("content") or msg.get("reasoning_content") or "")
+        parsed["_model_id"]=actual_model
+        return parsed
+    raise RuntimeError("local_cortex_request_failed: "+" | ".join(errors))
+
 
 def main():
     ap=argparse.ArgumentParser()
@@ -89,11 +129,10 @@ def main():
               "live_discovery_relationship_memory":compact_memory(live_memory,side),
               "expected_next_local":status.get("expected_side"),
               "last_teacher_local":status.get("last_teacher_local"),
-              "candidate":candidate,
+              "candidate":compact_candidate(candidate),
               "h1_baseline":status.get("h1_baseline"),
-              "h1_training":status.get("h1_training"),
               "last_signal":status.get("last_signal"),
-              "input_coverage":(status.get("feature_contract") or {}).get("seen_input_ids"),
+              "input_coverage_count":(status.get("feature_contract") or {}).get("seen_input_count"),
               "missing_inputs":(status.get("feature_contract") or {}).get("missing_seen_input_ids"),
               "discovery_feature_count":status.get("discovery_feature_count"),
               "instruction":"Compare current evidence with the 30-day true-vs-false Local relationships. Do not make trading decisions."
