@@ -1,4 +1,4 @@
-name: Render Keepalive
+name: HYPE Monitor Watchdog
 
 on:
   workflow_dispatch:
@@ -15,18 +15,44 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Keep PANDORA Render service awake
+      - name: Check HYPE monitor or GitHub fallback
         shell: bash
         run: |
-          URL="https://pandora-testnet-monitor-nfoc.onrender.com/health"
-          for attempt in 1 2 3 4; do
-            code="$(curl -L -sS -o /tmp/pandora-health.txt -w '%{http_code}' --connect-timeout 10 --max-time 45 "$URL" || true)"
-            echo "attempt=$attempt http=$code"
-            if [ "$code" = "200" ]; then
-              cat /tmp/pandora-health.txt
-              exit 0
-            fi
-            sleep 15
-          done
-          cat /tmp/pandora-health.txt || true
-          exit 1
+          set -euo pipefail
+
+          MONITOR="https://hype-caterpillar-quant-monitor.onrender.com/healthz"
+          ISSUE="https://api.github.com/repos/cryptobro1985-prog/pandora-testnet/issues/24"
+
+          code="$(curl -L -sS -o /tmp/hype-health.json -w '%{http_code}' --connect-timeout 8 --max-time 20 "$MONITOR" || true)"
+          echo "render_http=$code"
+          if [ "$code" = "200" ]; then
+            cat /tmp/hype-health.json
+            echo "MONITOR_RENDER_OK"
+            exit 0
+          fi
+
+          echo "Render unavailable; validating GitHub fallback status instead"
+          curl -L -sS --fail --connect-timeout 8 --max-time 20             -H 'Accept: application/vnd.github+json' "$ISSUE" > /tmp/issue.json
+
+          python - <<'PY'
+          import json,time,re
+          issue=json.load(open("/tmp/issue.json",encoding="utf-8"))
+          body=issue.get("body") or ""
+          i=body.find("~~~json")
+          start=body.find("{",i if i>=0 else 0)
+          end=body.rfind("}")
+          if start<0 or end<=start:
+              raise SystemExit("fallback status JSON missing")
+          s=json.loads(body[start:end+1])
+          ts=int(s.get("updated_ts_ms") or 0)
+          age=max(0,(int(time.time()*1000)-ts)/1000)
+          print("fallback_status=",s.get("status"))
+          print("fallback_age_seconds=",round(age,1))
+          print("expected_side=",s.get("expected_side"))
+          print("real_orders=",s.get("real_orders"))
+          if age>1200:
+              raise SystemExit(f"fallback stale: {age:.1f}s")
+          if s.get("real_orders") is not False:
+              raise SystemExit("research safety flag invalid")
+          print("GITHUB_FALLBACK_OK")
+          PY
