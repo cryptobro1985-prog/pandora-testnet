@@ -337,6 +337,7 @@ def main():
                         "candidate_id":c.candidate_id,"relationship_evidence":relation})
                     if internal_accepted and (expected is None or side==expected):
                         append_jsonl(evlog,{"event":"INTERNAL_TACTICAL_SIGNAL","ts_ms":ts,
+                            "signal_ts_ms":int(ts),"candidate_ts_ms":int(c.extreme_ts_ms),
                             "side":side,"price":c.extreme_price,"candidate_id":c.candidate_id,
                             "stage":stage,"probability":internal_prob,
                             "teacher":INTERNAL.name,"core_flip_authorized":False})
