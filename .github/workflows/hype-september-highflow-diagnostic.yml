@@ -1,0 +1,49 @@
+name: HYPE September HIGH Flow Diagnostic
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-september-highflow-diagnostic.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Restore September
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p sep
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13637558401/zip" > sep.zip
+          unzip -q sep.zip -d sep
+          cp "$(find sep -name compact_1m.jsonl.gz -print -quit)" sep/compact_1m.jsonl.gz
+          cp "$(find sep -name labels.json.gz -print -quit)" sep/labels.json.gz
+      - name: Replay and print all HIGH flow events
+        run: |
+          python -m research.hype_false_local_entry.replay_hard120_plus_high_flow             --compact-1m sep/compact_1m.jsonl.gz             --labels-gz sep/labels.json.gz             --output SEP_HIGHFLOW.json
+          python - <<'PY'
+          import json
+          x=json.load(open("SEP_HIGHFLOW.json"))
+          rows=[r for r in x["episode_rows"] if r.get("accepted") and r.get("side")=="HIGH" and r.get("kind")=="HIGH_FLOW_SHADOW"]
+          print("HIGHFLOW_ROWS="+json.dumps(rows,separators=(",",":")))
+          print("SUMMARY="+json.dumps(x["by_side"]["HIGH"],separators=(",",":")))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-SEPTEMBER-HIGHFLOW-DIAGNOSTIC-${{ github.run_id }}
+          path: SEP_HIGHFLOW.json
+          retention-days: 14
