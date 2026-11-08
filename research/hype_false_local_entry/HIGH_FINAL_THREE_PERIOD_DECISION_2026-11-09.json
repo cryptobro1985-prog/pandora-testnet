@@ -1,0 +1,88 @@
+{
+  "title": "HYPE HIGH final three-period development decision",
+  "date": "2026-11-09",
+  "mode": "RESEARCH_PAPER_ONLY",
+  "real_orders": false,
+  "preferred_high_forward_candidate": "INTERNAL_HARD120_CHECKPOINT_V2 + HARD120_HIGH_FLOW_SHADOW_V2",
+  "status": "PREFERRED_HIGH_FORWARD_NOT_OOS",
+  "rule": {
+    "primary": "HARD120 unchanged: 6h origin, exact +120m, retrace >=40 bps, fraction >=0.45",
+    "v2_expansion": "HIGH only, fraction [0.35,0.45), seller flow <= -0.08, >=100 trades, and (fraction <0.41 OR retrace >=75 bps)"
+  },
+  "high_metrics": {
+    "jul_aug_2026": {
+      "episodes": 50,
+      "true_first": 20,
+      "false_first": 5,
+      "precision": 0.8,
+      "recall": 0.4,
+      "v2_true": 5,
+      "v2_false": 0
+    },
+    "september_2026": {
+      "episodes": 64,
+      "true_first": 30,
+      "false_first": 6,
+      "precision": 0.8333333333333334,
+      "recall": 0.46875,
+      "v2_true": 3,
+      "v2_false": 1
+    },
+    "oct_nov_2026": {
+      "episodes": 60,
+      "true_first": 29,
+      "false_first": 1,
+      "precision": 0.9666666666666667,
+      "recall": 0.48333333333333334,
+      "v2_true": 2,
+      "v2_false": 0
+    }
+  },
+  "rejected_or_not_preferred": {
+    "september_raw_hard120": {
+      "precision": 0.8484848484848485,
+      "recall": 0.4375,
+      "note": "clean untouched baseline; robust but lower recall than selected three-period V2"
+    },
+    "september_hard120_plus_highflow_v1": {
+      "precision": 0.7777777777777778,
+      "recall": 0.4375,
+      "decision": "reject_as_universal_expansion"
+    },
+    "september_early60_full_stack": {
+      "precision": 0.7777777777777778,
+      "recall": 0.4375,
+      "decision": "do_not_promote_HIGH"
+    },
+    "september_high60_full_stack": {
+      "precision": 0.7878787878787878,
+      "recall": 0.40625,
+      "decision": "do_not_promote_HIGH"
+    },
+    "september_persistence_full_stack": {
+      "precision": 0.7647058823529411,
+      "recall": 0.40625,
+      "decision": "do_not_promote_HIGH"
+    }
+  },
+  "evidence_quality": {
+    "july_aug_and_oct_nov": "development periods",
+    "september": "was originally untouched for earlier frozen rules, but was inspected while selecting V2",
+    "v2_verdict": "three-period development fit; NOT untouched OOS proof",
+    "next_required_evidence": "new terminal-forward episodes only"
+  },
+  "forward_gate": {
+    "min_precision": 0.8,
+    "min_recall": 0.4,
+    "min_true_first": 10,
+    "min_episodes": 20,
+    "authorization": "PAPER_FORWARD_ONLY"
+  },
+  "safety": {
+    "primary_contract_unchanged": true,
+    "v2_core_flip_authorized": false,
+    "real_orders": false
+  },
+  "workflow_run_id": 42533533417,
+  "artifact_id": 13637554654
+}
