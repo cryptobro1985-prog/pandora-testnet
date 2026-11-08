@@ -9,6 +9,9 @@ from research.hype_quant.features import FeatureState
 from research.hype_quant.live_daemon import Tailer,event_ts
 from research.hype_local_only.model import LocalOnlyModel,Candidate,STAGES
 from research.hype_local_only.live_features import live_to_archive_features
+from research.hype_false_local_entry.dual_scope_teacher import (
+    INTERNAL, STRICT, matured_pivot_label, teacher_contract,
+)
 
 H=3_600_000
 
@@ -21,6 +24,7 @@ class Pending:
     extreme_ts_ms:int
     x:dict[str,float]
     mature_ms:int
+    teacher_scope:str="STRICT_L6_K2"
 
 def load_pickle(path,default):
     try:
@@ -132,17 +136,17 @@ def replay48_features(replay,price,ts_ms):
         out["structure48_last_side_high"]=1.0 if last.get("side")=="HIGH" else 0.0
     return out
 
-def strict_label(state,p,ts_ms):
-    if ts_ms<p.mature_ms:return None
-    rows={r["start_ms"]:r for r in completed_h1(state,ts_ms)}
-    h=(p.extreme_ts_ms//H)*H
-    need=[h-j*H for j in range(6,0,-1)]+[h,h+H,h+2*H]
-    if any(k not in rows for k in need):return None
-    row=rows[h];past=[rows[h-j*H] for j in range(6,0,-1)];future=[rows[h+H],rows[h+2*H]]
-    hi=row["high"]>max(z["high"] for z in past) and row["high"]>=max(z["high"] for z in future)
-    lo=row["low"]<min(z["low"] for z in past) and row["low"]<=min(z["low"] for z in future)
-    if hi==lo:return False
-    return bool(hi if p.side=="HIGH" else lo)
+def teacher_label(state,p,ts_ms):
+    """Mature either INTERNAL L3/K1 or STRICT L6/K2 without future leakage."""
+    if ts_ms<int(p.mature_ms):return None
+    teacher_name=getattr(p,"teacher_scope",STRICT.name)
+    return matured_pivot_label(
+        completed_h1(state,ts_ms),
+        p.extreme_ts_ms,
+        p.side,
+        teacher_name,
+        ts_ms,
+    )
 
 def append_jsonl(path,obj):
     with path.open("a",encoding="utf-8") as f:f.write(json.dumps(obj,separators=(",",":"),ensure_ascii=False)+"\n")
@@ -152,7 +156,7 @@ def publish_monitor(status):
     if not url:return
     payload=dict(status)
     payload["mode"]="LOCAL_ONLY"
-    payload["local_target"]="FULL_HISTORY_STRICT_H1_L6_K2"
+    payload["local_target"]="DUAL_INTERNAL_L3_K1__STRICT_L6_K2"
     payload["github_run_id"]=os.getenv("GITHUB_RUN_ID")
     payload["github_sha"]=os.getenv("GITHUB_SHA")
     payload["research_only"]=True
@@ -309,37 +313,61 @@ def main():
                     fx=live_to_archive_features(side,age,c.extreme_price,price,x,state)
                     fx.update(replay48_features(structure_48h,price,ts))
                     prob,accepted=model.predict(side,stage,fx)
+                    internal_prob,internal_accepted=model.predict_internal(side,stage,fx)
                     h1_prior=model.h1_prior(side)
                     c.snapshots[stage]=fx;c.probabilities[stage]=prob;c.stages_done.add(stage)
+                    c.evidence.setdefault("internal_probabilities",{})[str(stage)]=internal_prob
+                    c.evidence.setdefault("internal_accepted",{})[str(stage)]=internal_accepted
                     h=(c.extreme_ts_ms//H)*H
-                    pending.append(Pending(c.candidate_id,side,stage,c.extreme_price,c.extreme_ts_ms,fx,h+3*H))
+                    # One feature snapshot learns against TWO non-mixed teachers.
+                    # INTERNAL matures at K1 (+2H from pivot-hour start), STRICT at
+                    # K2 (+3H).  Neither label is available before its maturity.
+                    pending.append(Pending(c.candidate_id,side,stage,c.extreme_price,c.extreme_ts_ms,fx,h+2*H,INTERNAL.name))
+                    pending.append(Pending(c.candidate_id,side,stage,c.extreme_price,c.extreme_ts_ms,fx,h+3*H,STRICT.name))
                     relation=model.relationship_evidence(side,stage,fx)
                     append_jsonl(evlog,{"event":"LOCAL_STAGE","ts_ms":ts,"side":side,"stage":stage,
                         "probability":prob,"threshold":model.thresholds[(side,stage)],
                         "accepted":accepted,"h1_prior":h1_prior,"expected_side":expected,
+                        "internal_probability":internal_prob,
+                        "internal_threshold":model.internal_thresholds[(side,stage)],
+                        "internal_ready":model.internal_ready(side,stage),
+                        "internal_accepted":internal_accepted,
                         "candidate_id":c.candidate_id,"relationship_evidence":relation})
+                    if internal_accepted and (expected is None or side==expected):
+                        append_jsonl(evlog,{"event":"INTERNAL_TACTICAL_SIGNAL","ts_ms":ts,
+                            "side":side,"price":c.extreme_price,"candidate_id":c.candidate_id,
+                            "stage":stage,"probability":internal_prob,
+                            "teacher":INTERNAL.name,"core_flip_authorized":False})
                     if accepted and (expected is None or side==expected):
                         signal_state="FORMING_LOCAL" if stage==60 else "PROBABLE_LOCAL" if stage==180 else "LOCAL_SIGNAL"
                         model.last_signal={"side":side,"price":c.extreme_price,"candidate_id":c.candidate_id,
                             "detected_ts_ms":ts,"probability":prob,"h1_prior":h1_prior,
-                            "stage":stage,"state":signal_state}
+                            "stage":stage,"state":signal_state,"teacher":STRICT.name}
                         if stage==300:
                             expected="HIGH" if side=="LOW" else "LOW"
                         append_jsonl(evlog,{"event":signal_state,**model.last_signal,"next_expected":expected})
 
             keep=[]
             for item in pending:
-                y=strict_label(state,item,ts)
+                teacher_name=getattr(item,"teacher_scope",STRICT.name)
+                y=teacher_label(state,item,ts)
                 if y is None:
                     keep.append(item);continue
                 hour=(int(item.extreme_ts_ms)//H)*H
                 is_latest=(latest_by_hour.get(f"{item.side}:{hour}")==item.candidate_id)
                 y=bool(y and is_latest)
-                model.learn(item.side,item.stage,item.x,y,source="live",
-                            repeat=(4 if y else 1))
+                if teacher_name==INTERNAL.name:
+                    model.learn_internal(item.side,item.stage,item.x,y,source="live",
+                                         repeat=(4 if y else 1))
+                else:
+                    model.learn(item.side,item.stage,item.x,y,source="live",
+                                repeat=(4 if y else 1))
                 append_jsonl(lablog,{"ts_ms":ts,"candidate_id":item.candidate_id,"side":item.side,
                     "stage":item.stage,"label":bool(y),"is_latest_extreme_in_hour":is_latest,
-                    "teacher":"H1_L6_K2_STRICT","feature_count":len(item.x),
+                    "teacher":teacher_name,
+                    "teacher_role":"TACTICAL" if teacher_name==INTERNAL.name else "CORE",
+                    "core_flip_authorized":False if teacher_name==INTERNAL.name else None,
+                    "feature_count":len(item.x),
                     "discovery_feature_count":sum(str(k).startswith("discovery__") for k in item.x),
                     "features":item.x})
             pending=keep
@@ -358,6 +386,10 @@ def main():
                     "age_s":round(max(0.0,(ts-c.extreme_ts_ms)/1000.0),1),
                     "probabilities":{str(k):round(v,6) for k,v in c.probabilities.items()},
                     "thresholds":{str(k):model.thresholds[(c.side,k)] for k in STAGES},
+                    "internal_probabilities":dict((getattr(c,"evidence",{}) or {}).get("internal_probabilities") or {}),
+                    "internal_accepted":dict((getattr(c,"evidence",{}) or {}).get("internal_accepted") or {}),
+                    "internal_thresholds":{str(k):model.internal_thresholds[(c.side,k)] for k in STAGES},
+                    "internal_ready":{str(k):model.internal_ready(c.side,k) for k in STAGES},
                     "h1_prior":round(model.h1_prior(c.side),6),
                     "evidence":getattr(c,"evidence",{}),
                     "relationship_evidence":(
@@ -370,14 +402,17 @@ def main():
                             else "WATCH"
                 },
                 "historical_labels":sum(model.labels.values())-model.live_labels,
-                "live_labels":model.live_labels,"pending_labels":len(pending),
+                "live_labels":model.live_labels,
+                "internal_live_labels":model.internal_live_labels,
+                "pending_labels":len(pending),
+                "teacher_contract":teacher_contract(),
                 "model_report":model.report(),
                 "h1_baseline":model.h1_shadow,
                 "h1_training":{"labels":model.h1_labels,"positive":model.h1_positive},
                 "seen_input_count":cov.get("seen_input_count"),"feature_contract":cov,
                 "discovery_feature_count":(sum(str(k).startswith("discovery__") for k in c.snapshots[max(c.stages_done)]) if c is not None and c.stages_done else 0),
                 "last_signal":model.last_signal,
-                "mode":"LOCAL_ONLY","local_target":"FULL_HISTORY_STRICT_H1_L6_K2",
+                "mode":"LOCAL_ONLY","local_target":"DUAL_INTERNAL_L3_K1__STRICT_L6_K2",
                 "github_run_id":os.getenv("GITHUB_RUN_ID"),"github_sha":os.getenv("GITHUB_SHA"),
                 "cortex_state":"RELATIONSHIP_MEMORY_READY",
                 "cortex":{},
