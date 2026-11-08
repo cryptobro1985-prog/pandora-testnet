@@ -10,7 +10,7 @@ from research.hype_quant.live_daemon import Tailer,event_ts
 from research.hype_local_only.model import LocalOnlyModel,Candidate,STAGES
 from research.hype_local_only.live_features import live_to_archive_features
 from research.hype_false_local_entry.dual_scope_teacher import (
-    INTERNAL, STRICT, finalized_terminal_label, teacher_contract,
+    INTERNAL, STRICT, collapsed_pivots, finalized_terminal_label, teacher_contract,
 )
 
 H=3_600_000
@@ -49,25 +49,34 @@ def completed_h1(state,ts_ms):
     return out
 
 def strict_pivots(state,ts_ms):
-    rows=completed_h1(state,ts_ms);raw=[]
-    for i in range(6,len(rows)-2):
-        row=rows[i];past=rows[i-6:i];future=rows[i+1:i+3];win=rows[i-6:i+3]
-        if any(b["start_ms"]!=a["start_ms"]+H for a,b in zip(win,win[1:])):continue
-        hi=row["high"]>max(z["high"] for z in past) and row["high"]>=max(z["high"] for z in future)
-        lo=row["low"]<min(z["low"] for z in past) and row["low"]<=min(z["low"] for z in future)
-        if hi==lo:continue
-        side="HIGH" if hi else "LOW";price=row["high"] if hi else row["low"]
-        item={"side":side,"price":price,"hour_ms":row["start_ms"],"available_ms":row["start_ms"]+3*H}
-        if raw and raw[-1]["side"]==side:
-            better=price>raw[-1]["price"] if side=="HIGH" else price<raw[-1]["price"]
-            if better:raw[-1]=item
-        else:raw.append(item)
-    return raw
+    """Return only causally TERMINAL-finalized STRICT pivots.
+
+    The last collapsed K2 pivot is still provisional.  A pivot becomes a
+    terminal Local only when the next opposite K2 pivot has itself matured.
+    Therefore each returned Local's available_ms is the next pivot's
+    availability time, not its own K2 time.
+    """
+    raw=collapsed_pivots(completed_h1(state,ts_ms),STRICT,now_ms=ts_ms)
+    out=[]
+    for cur,nxt in zip(raw,raw[1:]):
+        if cur["side"]==nxt["side"]:
+            continue
+        out.append({
+            "side":cur["side"],
+            "price":cur["price"],
+            "hour_ms":cur["hour_ms"],
+            "pivot_available_ms":cur["available_ms"],
+            "available_ms":nxt["available_ms"],
+            "finalized_by_opposite_hour_ms":nxt["hour_ms"],
+            "terminal_finalized":True,
+        })
+    return out
 
 def structural_replay_48h(state,ts_ms):
     """Recover the confirmed H1 Local sequence for the last 48h.
 
-    Uses only pivots whose K2 confirmation was already available at ts_ms.
+    Uses only terminal-finalized STRICT pivots.  The latest provisional K2
+    pivot is deliberately excluded until a later opposite K2 pivot matures.
     This is causal structural memory, not a future-looking label feed.
     """
     cutoff=int(ts_ms)-48*H
@@ -254,8 +263,10 @@ def main():
             if ts<next_sample:continue
             next_sample=ts+5000
 
-            # H1 baseline learns every matured Local in the backfill/live history.
-            model.train_h1_history(state,ts)
+            # H1 prior is scored with frozen clean finalized-history weights.
+            # Online K2-pivot learning is disabled because the latest pivot is
+            # provisional until an opposite terminal pivot matures.
+            model.update_h1_shadow_only(state,ts)
 
             # Rebuild the last 48h structural memory from the REST/WS H1 backfill.
             # This makes workflow restarts remember the prior LOW/HIGH sequence.
