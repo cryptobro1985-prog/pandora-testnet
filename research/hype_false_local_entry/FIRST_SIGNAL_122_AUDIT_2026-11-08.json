@@ -1,0 +1,93 @@
+{
+  "title": "HYPE INTERNAL 122 First-Signal / Dual-Scope Audit",
+  "date": "2026-11-08",
+  "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+  "mode": "RESEARCH_PAPER_ONLY",
+  "real_orders": false,
+  "source_artifacts": {
+    "local116_HYPE": 13435356156,
+    "historical_gaps": 13533587104,
+    "window": ["2026-10-04", "2026-11-03"]
+  },
+  "teacher_scopes": {
+    "internal": {"contract": "H1 L3/K1", "finalized": 122, "low": 61, "high": 61, "complete_swings": 121, "role": "TACTICAL"},
+    "strict": {"contract": "H1 L6/K2", "finalized": 76, "low": 38, "high": 38, "complete_swings": 75, "role": "CORE"}
+  },
+  "candidate_generation": {
+    "label_blind": true,
+    "future_bars_used": false,
+    "exact_internal_coverage": "122/122",
+    "exact_strict_coverage": "76/76",
+    "coverage_tolerance_ms": 0,
+    "candidate_events_after_lookback_dedupe": 22264,
+    "note": "100% candidate coverage is reachability, not detector precision."
+  },
+  "broad_internal_first_survivor_baseline": {
+    "5m": {"precision": 0.107},
+    "10m": {"precision": 0.124},
+    "15m": {"precision": 0.190},
+    "20m": {"precision": 0.248},
+    "30m": {"precision": 0.314},
+    "45m": {"precision": 0.364},
+    "60m": {"precision": 0.455}
+  },
+  "true_internal_local_tradeoff": {
+    "sample_with_next_target": 120,
+    "median_full_swing_pct": 2.509,
+    "5m": {"median_entry_distance_pct": 0.274, "median_remaining_swing_fraction": 0.883},
+    "10m": {"median_entry_distance_pct": 0.387, "median_remaining_swing_fraction": 0.826},
+    "15m": {"median_entry_distance_pct": 0.451, "median_remaining_swing_fraction": 0.807},
+    "20m": {"median_entry_distance_pct": 0.456, "median_remaining_swing_fraction": 0.805},
+    "30m": {"median_entry_distance_pct": 0.564, "median_remaining_swing_fraction": 0.754},
+    "45m": {"median_entry_distance_pct": 0.721, "median_remaining_swing_fraction": 0.668},
+    "60m": {"median_entry_distance_pct": 0.767, "median_remaining_swing_fraction": 0.638}
+  },
+  "false_10m_probe_to_invalidation": {
+    "first_false_per_episode_n": 104,
+    "median_adverse_bps": 29.45,
+    "p90_adverse_bps": 65.18,
+    "p95_adverse_bps": 90.20,
+    "interpretation": "EARLY probe must remain small and immediately invalidate on a new same-side extreme."
+  },
+  "expanding_walk_forward": {
+    "episodes_evaluated": 66,
+    "30m": {"accepted_first": 35, "true_first": 17, "false_first": 18, "precision": 0.4857, "recall": 0.2576},
+    "45m": {"accepted_first": 42, "true_first": 21, "false_first": 21, "precision": 0.5000, "recall": 0.3182},
+    "60m": {"accepted_first": 55, "true_first": 31, "false_first": 24, "precision": 0.5636, "recall": 0.4697},
+    "conclusion": "The attractive single 45m holdout did not remain stable across expanding chronological folds."
+  },
+  "single_holdout_research_only": {
+    "45m_side_specific_hgb": {"accepted_first": 15, "true_first": 12, "false_first": 3, "precision": 0.80, "recall": 0.4615},
+    "post_inspection_edge_filter": {"accepted_first": 11, "true_first": 10, "false_first": 1, "precision": 0.9091},
+    "post_inspection_candidate_ordinal_filter": {"accepted_first": 11, "true_first": 11, "false_first": 0, "precision": 1.0},
+    "warning": "The latter filters were observed after inspecting the holdout and are not valid untouched OOS evidence. They are not promotion rules."
+  },
+  "old_static_rules_on_broad_121": {
+    "confirmed_30m": {"accepted_first": 26, "true_first": 17, "false_first": 9, "precision": 0.6538, "recall": 0.1405},
+    "hard_60m": {"accepted_first": 18, "true_first": 8, "false_first": 10, "precision": 0.4444, "recall": 0.0661},
+    "ultra_60m": {"accepted_first": 9, "true_first": 7, "false_first": 2, "precision": 0.7778, "recall": 0.0579},
+    "conclusion": "Strict-tuned thresholds cannot be promoted as broad INTERNAL rules."
+  },
+  "architecture_decision": {
+    "internal_teacher": "INTERNAL_L3_K1 terminal-finalized only",
+    "strict_teacher": "STRICT_L6_K2 terminal-finalized only",
+    "internal_role": "TACTICAL_ONLY; no full core flip",
+    "strict_role": "CORE structure; direction change still requires separate forward evidence",
+    "first_signal_objective": "A later true local never erases an earlier false accepted signal.",
+    "same_side_rule": "New/better same-side pivot supersedes the old provisional pivot; old provisional is false.",
+    "future_guard": "Teacher lookahead is label-only and every H1 row is filtered by completion time."
+  },
+  "historical_data_limit": {
+    "missing_full_micro_for_newly_reached_internal_locals": true,
+    "note": "The old compact candidate artifact did not retain full raw L50/liquidation state for the 27 INTERNAL locals absent from the old candidate space. Missing historical inputs are not synthesized."
+  },
+  "forward_promotion_gate": {
+    "metric": "FIRST_ACCEPTED_SIGNAL_PER_COMPLETED_INTERNAL_SWING",
+    "min_episodes": 20,
+    "min_true_first": 10,
+    "min_precision": 0.80,
+    "min_recall": 0.40,
+    "authorization_if_passed": "PAPER_FORWARD_ONLY"
+  },
+  "bottom_line": "Candidate reachability is solved on the 30D artifact. Historical data do not prove an ideal first-signal detector. The correct finished research architecture is dual-scope terminal teachers plus automatic forward first-signal scoring; live promotion remains blocked until forward evidence passes the declared gate."
+}
