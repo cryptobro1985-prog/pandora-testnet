@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#05070b">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<title>HYPE Local Monitor</title>
+<style>
+:root{--bg:#05070b;--card:#0c121a;--line:#1c2a3b;--text:#eef7ff;--muted:#7f91aa;--cyan:#55efff;--green:#57f59b;--red:#ff6677;--amber:#ffc857}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% -10%,#0d2936 0,#05070b 42%);color:var(--text);font-family:Inter,system-ui,-apple-system,sans-serif;min-height:100vh}
+.wrap{max-width:860px;margin:auto;padding:16px 12px 34px}.hero{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:12px}.eyebrow{font-size:10px;letter-spacing:.17em;color:var(--cyan);font-weight:900}.title{font-size:24px;font-weight:950;margin:5px 0}.sub{font-size:11px;color:var(--muted)}
+.live{font-size:11px;font-weight:900;color:var(--green);display:flex;gap:7px;align-items:center}.dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 14px var(--green)}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}.card{background:linear-gradient(145deg,rgba(15,23,34,.97),rgba(7,11,17,.97));border:1px solid var(--line);border-radius:15px;padding:12px}.wide{grid-column:1/-1}.k{font-size:9px;text-transform:uppercase;letter-spacing:.11em;color:var(--muted);font-weight:900}.v{font-size:22px;font-weight:950;margin-top:5px}.small{font-size:10px;color:var(--muted);line-height:1.45;margin-top:5px}.row{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:12px}.row:last-child{border:0}.row span:first-child{color:var(--muted)}.row b{text-align:right;overflow-wrap:anywhere}.good{color:var(--green)}.bad{color:var(--red)}.amber{color:var(--amber)}.cyan{color:var(--cyan)}
+.pills{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}.pill{padding:4px 7px;border-radius:8px;background:#0b2831;color:var(--cyan);font-size:9px;font-weight:800}.off{background:#2b1218;color:#ff8a96}.bar{height:7px;background:#08101a;border-radius:7px;overflow:hidden;margin-top:5px}.fill{height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));transition:width .35s}.metric{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:7px;font-size:11px}
+.footer{text-align:center;color:#52637a;font-size:9px;margin-top:15px}@media(min-width:700px){.grid{grid-template-columns:repeat(4,1fr)}.wide{grid-column:span 2}.full{grid-column:1/-1}}
+</style></head>
+<body><div class="wrap">
+<div class="hero"><div><div class="eyebrow">PANDORA · HYPE · LOCAL ONLY</div><div class="title">Local Engine</div><div class="sub" id="updated">Подключение к GitHub live status…</div></div><div class="live"><i class="dot"></i><span id="live">LIVE</span></div></div>
+<div class="grid">
+<div class="card"><div class="k">Статус</div><div class="v cyan" id="status">—</div><div class="small" id="fresh">—</div></div>
+<div class="card"><div class="k">Следующий Local</div><div class="v amber" id="expected">—</div><div class="small">terminal structure</div></div>
+<div class="card"><div class="k">Strict live labels</div><div class="v" id="strictlabels">—</div><div class="small">clean terminal teacher</div></div>
+<div class="card"><div class="k">Internal labels</div><div class="v" id="internallabels">—</div><div class="small">tactical L3/K1</div></div>
+<div class="card wide">
+<div class="k">Текущий кандидат</div><div class="v" id="candidate">WAIT</div>
+<div class="row"><span>Stage</span><b id="stage">—</b></div><div class="row"><span>Age</span><b id="age">—</b></div>
+<div class="row"><span>H1 prior</span><b id="h1prior">—</b></div><div class="row"><span>Windows</span><b id="windows">—</b></div>
+</div>
+<div class="card wide">
+<div class="k">Terminal structure</div><div class="row"><span>Last Local</span><b id="teacher">—</b></div>
+<div class="row"><span>48h leg</span><b id="leg">—</b></div><div class="row"><span>Regime</span><b id="regime">—</b></div>
+</div>
+<div class="card wide">
+<div class="k">HARD120 primary</div><div class="row"><span>LOW</span><b id="hardlow">—</b></div><div class="row"><span>HIGH</span><b id="hardhigh">—</b></div>
+<div class="metric"><span>Forward precision</span><b id="hardp">—</b></div><div class="bar"><div class="fill" id="hardbar"></div></div>
+<div class="small">Primary contract frozen · 6h origin · 120m survival · one-shot checkpoint.</div>
+</div>
+<div class="card wide">
+<div class="k">HIGH flow shadow</div><div class="row"><span>Candidate</span><b id="shadow">—</b></div>
+<div class="metric"><span>Forward precision</span><b id="shadowp">—</b></div><div class="bar"><div class="fill" id="shadowbar"></div></div>
+<div class="small">Shadow challenger only. Не меняет primary HARD120.</div>
+</div>
+<div class="card wide">
+<div class="k">Forward first-signal gate</div>
+<div class="row"><span>Episodes</span><b id="episodes">—</b></div><div class="row"><span>True / False first</span><b id="tf">—</b></div>
+<div class="row"><span>Precision / Recall</span><b id="pr">—</b></div><div class="row"><span>Gate</span><b id="gate">—</b></div>
+</div>
+<div class="card wide">
+<div class="k">Cortex / Data</div><div class="row"><span>Cortex</span><b id="cortex">—</b></div>
+<div class="row"><span>Inputs</span><b id="inputs">—</b></div><div class="row"><span>Pending labels</span><b id="pending">—</b></div>
+</div>
+<div class="card wide">
+<div class="k">Архитектура</div><div class="pills"><span class="pill">QUANTUM ON</span><span class="pill">CORTEX ON</span><span class="pill">TERMINAL TEACHER</span><span class="pill">HARD120 ON</span><span class="pill off">REAL ORDERS OFF</span></div>
+<div class="small">GitHub-direct fallback monitor. Не зависит от Render web service и продолжает работать при его suspension.</div>
+</div>
+</div><div class="footer">HYPE Local-Only · GitHub Issue #24 fallback · refresh 10s</div></div>
+<script>
+const $=id=>document.getElementById(id), pct=v=>v==null?"—":(Number(v)*100).toFixed(1)+"%", num=(v,d=2)=>v==null?"—":Number(v).toLocaleString("ru-RU",{maximumFractionDigits:d});
+const API="https://api.github.com/repos/cryptobro1985-prog/pandora-testnet/issues/24";
+function parse(body){const a=(body||"").indexOf("~~~json"),s=a>=0?(body||"").indexOf("{",a):(body||"").indexOf("{"),e=(body||"").lastIndexOf("}");if(s<0||e<=s)throw Error("status JSON not found");return JSON.parse(body.slice(s,e+1))}
+function fwd(s,key){return (((s[key]||{}).metrics)||{})}
+function hardText(z){if(!z)return "—";return (z.side||"")+" @ "+num(z.extreme_price,4)+" · "+(z.ready?"READY":z.emitted?"EMITTED":"WATCH")}
+function render(s){
+ const now=Date.now(), age=Math.max(0,(now-Number(s.updated_ts_ms||now))/1000);
+ $("status").textContent=s.status||"—";$("fresh").textContent="GitHub status age "+num(age,0)+"s";$("live").textContent=age<180?"LIVE":"STALE";
+ $("expected").textContent=s.expected_side||"UNKNOWN";$("strictlabels").textContent=num(s.live_labels,0);$("internallabels").textContent=num(s.internal_live_labels,0);
+ const c=s.candidate||{};$("candidate").textContent=c.side?c.side+" @ "+num(c.extreme_price,4):"WAIT";$("candidate").className="v "+(c.side==="LOW"?"good":c.side==="HIGH"?"bad":"amber");
+ $("stage").textContent=c.stage||"WATCH";$("age").textContent=c.age_s==null?"—":num(c.age_s,0)+"s";$("h1prior").textContent=pct(c.h1_prior);$("windows").textContent=((c.evidence||{}).windows||[]).join(" / ")||"—";
+ const t=s.last_teacher_local||{},st=s.structure_48h||{};$("teacher").textContent=t.side?t.side+" @ "+num(t.price,4):"—";$("leg").textContent=st.active_leg||"—";$("regime").textContent=st.regime||"—";
+ const h=s.hard120||{};$("hardlow").textContent=hardText(h.LOW);$("hardhigh").textContent=hardText(h.HIGH);
+ const hm=fwd(s,"hard120_forward"),hp=hm.precision;$("hardp").textContent=pct(hp);$("hardbar").style.width=Math.max(0,Math.min(100,Number(hp||0)*100))+"%";
+ const sh=(s.high_flow_shadow||{}).HIGH;$("shadow").textContent=sh?(sh.candidate_id+" · "+(sh.emitted?"EMITTED":"WATCH")):"—";
+ const sm=fwd(s,"high_flow_shadow_forward"),sp=sm.precision;$("shadowp").textContent=pct(sp);$("shadowbar").style.width=Math.max(0,Math.min(100,Number(sp||0)*100))+"%";
+ const fm=fwd(s,"forward_first_signal"),fg=(s.forward_first_signal||{}).promotion_gate||{};$("episodes").textContent=num(fm.episodes,0);$("tf").textContent=num(fm.true_first,0)+" / "+num(fm.false_first,0);$("pr").textContent=pct(fm.precision)+" / "+pct(fm.recall);$("gate").textContent=fg.passed?"PASS":"ACCUMULATING";$("gate").className=fg.passed?"good":"amber";
+ $("cortex").textContent=s.cortex_state||((s.cortex||{}).state)||"—";$("inputs").textContent=num(s.seen_input_count,0)+" / 86";$("pending").textContent=num(s.pending_labels,0);
+ $("updated").textContent="данные "+new Date(Number(s.updated_ts_ms||now)).toLocaleString("ru-RU")+" · direct GitHub fallback";
+}
+async function tick(){try{const r=await fetch(API+"?t="+Date.now(),{cache:"no-store",headers:{"Accept":"application/vnd.github+json"}});if(!r.ok)throw Error("GitHub HTTP "+r.status);const j=await r.json();render(parse(j.body))}catch(e){$("live").textContent="RECONNECT";$("updated").textContent=e.message}}
+if(window.Telegram&&Telegram.WebApp){Telegram.WebApp.ready();Telegram.WebApp.expand();Telegram.WebApp.setHeaderColor("#05070b");Telegram.WebApp.setBackgroundColor("#05070b")}
+tick();setInterval(tick,10000);
+</script></body></html>
