@@ -1,0 +1,35 @@
+{
+  "status": "RESEARCH_SEED_NOT_PRODUCTION",
+  "real_orders": false,
+  "artifacts": {
+    "base": 13435356156,
+    "historical_gap_enrichment": 13533587104
+  },
+  "reference_finalized_locals": 76,
+  "complete_target_swings": 75,
+  "true_local_entry_tradeoff": {
+    "10m": {"median_distance_pct": 0.3839, "median_swing_capture_fraction": 0.8487},
+    "15m": {"median_distance_pct": 0.5155, "median_swing_capture_fraction": 0.8259},
+    "20m": {"median_distance_pct": 0.5138, "median_swing_capture_fraction": 0.8205},
+    "30m": {"median_distance_pct": 0.6138, "median_swing_capture_fraction": 0.7961}
+  },
+  "survival": {
+    "false_candidates_total_in_complete_swings": 1646,
+    "10m": {"false_alive": 307, "true_alive": 75},
+    "15m": {"false_alive": 253, "true_alive": 75},
+    "20m": {"false_alive": 219, "true_alive": 75},
+    "30m": {"false_alive": 156, "true_alive": 75}
+  },
+  "stable_10m_relations": {
+    "retrace_fraction_true_median": 0.136,
+    "retrace_fraction_false_median": 0.093,
+    "retrace_fraction_quarter_auc_min": 0.672,
+    "reversal_return_true_median": 0.00385,
+    "reversal_return_false_median": 0.00258,
+    "flow3m_rev_true_median": 0.201,
+    "flow3m_rev_false_median": 0.103,
+    "macd_hist_rev_true_median_bps": 3.16,
+    "macd_hist_rev_false_median_bps": 2.14
+  },
+  "warning": "No single static trigger passed a production-quality chronological first-signal gate. Use sequential confidence states and immediate same-side-extreme invalidation."
+}
