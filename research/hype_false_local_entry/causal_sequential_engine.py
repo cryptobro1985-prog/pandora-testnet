@@ -37,10 +37,12 @@ class CausalReversalMachine:
         end = int(bar.get("bar_end_ms") or ts + int(bar.get("interval_ms", 60000)))
         if self.last_ts is not None and end <= self.last_ts:
             raise ValueError("bar must be completed and strictly chronological")
-        self.last_ts = end
+        if end <= ts or (self.last_ts is not None and ts < self.last_ts):
+            raise ValueError("overlapping or incomplete M1 bar")
         high, low, close = (float(bar[k]) for k in ("high", "low", "close"))
         if not all(isfinite(v) for v in (high, low, close)) or not 0 < low <= close <= high:
             raise ValueError("invalid OHLC")
+        self.last_ts = end
         self.bars.append({"end": end, "high": high, "low": low, "close": close,
                           "buy": max(0., float(bar.get("buy_notional", 0))),
                           "sell": max(0., float(bar.get("sell_notional", 0)))})
@@ -48,6 +50,7 @@ class CausalReversalMachine:
             return []
         arr = list(self.bars)
         out = []
+        flipped_this_bar = False
         for side in ("LOW", "HIGH"):
             sgn = 1 if side == "LOW" else -1
             # Keep the candidate extreme until a genuinely more extreme
@@ -87,9 +90,12 @@ class CausalReversalMachine:
             else:
                 stage = "WATCH"
             if RANK[stage] > RANK[self.active[side]]:
-                flip = stage in ("HARD_CONFIRMED", "ULTRA_CONFIRMED") and self.core_side != side
+                flip = (not flipped_this_bar and
+                        stage in ("HARD_CONFIRMED", "ULTRA_CONFIRMED") and
+                        self.core_side != side)
                 if flip:
                     self.core_side = side
+                    flipped_this_bar = True
                 ev = Signal(end, side, stage, score, anchor, close, flip)
                 self.events.append(ev)
                 out.append(ev)
