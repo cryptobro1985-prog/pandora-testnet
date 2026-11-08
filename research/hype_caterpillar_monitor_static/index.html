@@ -114,8 +114,13 @@ function render(s){
  const hm=fwd(s,"hard120_forward"),hp=hm.precision;$("hardp").textContent=pct(hp);$("hardbar").style.width=Math.max(0,Math.min(100,Number(hp||0)*100))+"%";
  const hv=(s.high60_veto||{}).HIGH;$("high60state").textContent=hv?(hv.candidate_id+" · "+(hv.confirmed_for_veto_stack?"CONFIRMED":"VETO/WATCH")):"—";
  const hvm=fwd(s,"high60_veto_forward"),hvp=hvm.precision;$("high60pr").textContent=pct(hvp)+" / "+pct(hvm.recall);$("high60bar").style.width=Math.max(0,Math.min(100,Number(hvp||0)*100))+"%";
- const v2=(s.high_flow_v2||{}).HIGH;$("v2state").textContent=v2?(v2.candidate_id+" · "+(v2.emitted?"EMITTED":"WATCH")):"—";
- const v2m=fwd(s,"hard120_plus_high_flow_v2_forward"),v2p=v2m.precision,v2g=(s.hard120_plus_high_flow_v2_forward||{}).promotion_gate||{};$("v2pr").textContent=pct(v2p)+" / "+pct(v2m.recall);$("v2bar").style.width=Math.max(0,Math.min(100,Number(v2p||0)*100))+"%";$("v2gate").textContent=v2g.passed?"PASS":"ACCUMULATING";$("v2gate").className=v2g.passed?"good":"amber";
+ const v2=(s.high_flow_v2||{}).HIGH, hasV2=!!s.high_flow_v2_contract;
+ $("v2state").textContent=hasV2?(v2?(v2.candidate_id+" · "+(v2.emitted?"EMITTED":"WATCH")):"WAIT"):"WAITING CANONICAL ROLLOVER";
+ const v2m=fwd(s,"hard120_plus_high_flow_v2_forward"),v2p=v2m.precision,v2g=(s.hard120_plus_high_flow_v2_forward||{}).promotion_gate||{};
+ $("v2pr").textContent=hasV2?(pct(v2p)+" / "+pct(v2m.recall)):"forward data starts on next canonical cycle";
+ $("v2bar").style.width=Math.max(0,Math.min(100,Number(v2p||0)*100))+"%";
+ $("v2gate").textContent=hasV2?(v2g.passed?"PASS":"ACCUMULATING"):"ROLLOVER";
+ $("v2gate").className=v2g.passed?"good":"amber";
  const sh=(s.high_flow_shadow||{}).HIGH;$("shadow").textContent=sh?(sh.candidate_id+" · "+(sh.emitted?"EMITTED":"WATCH")):"—";
  const sm=fwd(s,"high_flow_shadow_forward"),sp=sm.precision;$("shadowp").textContent=pct(sp);$("shadowbar").style.width=Math.max(0,Math.min(100,Number(sp||0)*100))+"%";
  const ps=s.hard120_persistence||{};$("persistlow").textContent=hardText(ps.LOW);$("persisthigh").textContent=hardText(ps.HIGH);
