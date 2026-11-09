@@ -1,0 +1,69 @@
+{
+  "repo": "cryptobro1985-prog/pandora-testnet",
+  "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+  "canonical_contract": "research/hype_quant/feature_contract.py",
+  "strict_teacher": "research/hype_local_v5/labels.py",
+  "live_status": {
+    "github_issue": 24,
+    "title": "HYPE Caterpillar Quant — LIVE"
+  },
+  "historical_master": {
+    "artifact_id": 13650399622,
+    "artifact_name": "HYPE-HISTORY-20260712-20261103-MASTER",
+    "sha256": "c9d588b5c78d0e72a3073ceb62c7fa100381ebf69df911b22a170171a2653975",
+    "build_run_id": 42564417286,
+    "source_head_sha": "1c10615a4135fe0a2f236e2d6d2454a9906f5642",
+    "coverage": [
+      "2026-07-12T17:00 -> 2026-08-07",
+      "2026-08-08 -> 2026-09-01",
+      "2026-09-01 -> 2026-10-01",
+      "2026-10-04 -> 2026-11-03"
+    ],
+    "known_gaps": [
+      "2026-08-07 -> 2026-08-08",
+      "2026-10-01 -> 2026-10-04"
+    ]
+  },
+  "source_artifacts": {
+    "jul_aug_full_micro": 13585701406,
+    "late_aug": 13638795292,
+    "september": 13637558401,
+    "oct_nov": 13435356156
+  },
+  "sealed_periods": {
+    "may_2026": {
+      "build_run_id": 42569087931,
+      "artifact_id": 13652089234,
+      "artifact_name": "HYPE-MAY-SEALED-TAPE-42569087931",
+      "sha256": "b9c56c3b93852f8df9602e09daaa1e37893be9b36d1823eff0d5e00dc3658380",
+      "frozen_ultra_v2_score": "research/hype_local_only/results/MAY_ULTRA_SURVIVAL_V2_SCORE_2026-11-09.json"
+    },
+    "june_2026": {
+      "build_run_id": 42534251346,
+      "artifact_id": 13639545105,
+      "artifact_name": "HYPE-JUNE-SEALED-TAPE-42534251346",
+      "sha256": "dcc187d916938a4381002cb9597b2259ab454d43e4a60a521c40b2abe5cd4dbb"
+    }
+  },
+  "full116_live_capture_runs": [
+    41972340463,
+    41972154657
+  ],
+  "full116_live_coverage_note": "Combined Nov-05 captures overlap about 18h11m, not a clean 24h continuous block.",
+  "strict_counts": {
+    "LOW": 132,
+    "HIGH": 132,
+    "TOTAL": 264,
+    "early_evaluable_LOW": 131,
+    "early_evaluable_HIGH": 131
+  },
+  "important_repo_data": [
+    "research/hype_full_micro_202607/results/",
+    "research/hype_true_local_relation/",
+    "research/hype_local_only/results/",
+    "research/hype_false_local_entry/",
+    "research/hype_strict_h1_guard/",
+    "research/hype_local_v5/results/"
+  ],
+  "warning": "Artifact IDs reference GitHub Actions artifacts and may expire. Preserve or re-materialize them before expiry if needed."
+}
