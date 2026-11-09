@@ -57,6 +57,10 @@ def main():
             )
         if len(rows) - 1 != swings:
             raise ValueError(f"{scope} swing denominator mismatch")
+        if any(a["side"] == b["side"] or
+               int(a["extreme_interval_start_ms"]) >= int(b["extreme_interval_start_ms"])
+               for a, b in zip(rows, rows[1:])):
+            raise ValueError(f"{scope} teacher turns are not strictly alternating")
     # Generate one shared causal stream; NEVER select signals using labels.
     machine = CausalReversalMachine()
     emitted = []
