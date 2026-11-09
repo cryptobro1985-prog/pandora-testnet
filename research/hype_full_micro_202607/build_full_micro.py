@@ -21,6 +21,7 @@ START=datetime(2026,7,12,17,tzinfo=timezone.utc)
 END=datetime(2026,8,7,0,tzinfo=timezone.utc)
 DELAYS=(0,30,60,180,300)
 WINDOWS=(5,15,30,60,180,300)
+MICRO_QUALITY_CONTRACT="decoded-liquidations-continuous-book-v1"
 H=3_600_000
 
 def finite(x):return isinstance(x,(int,float,np.number)) and math.isfinite(float(x))
@@ -46,6 +47,7 @@ def to_ms(v):
     if isinstance(v,datetime):return int(v.timestamp()*1000)
     try:x=float(v)
     except Exception:return None
+    if not math.isfinite(x):return None
     a=abs(x)
     if a>1e17:return int(x/1e6)
     if a>1e14:return int(x/1e3)
@@ -313,7 +315,7 @@ def scalar_snapshots(df,targets,carry=None):
     state=dict(carry or {});snaps={};rows=[];cs=[]
     if df is not None and df.height:
         cs=df.columns
-        tc=first_col(cs,"timestamp","event_time","received_time","time")
+        tc=first_col(cs,"received_time","timestamp","event_time","time")
         if tc:
             for r in df.iter_rows(named=True):
                 tt=to_ms(r.get(tc))
@@ -321,6 +323,8 @@ def scalar_snapshots(df,targets,carry=None):
             rows.sort(key=lambda z:z[0])
     idx=0
     def apply(tt,r):
+        if tt<state.get("_last_ts_ms",tt):
+            return
         state["_last_ts_ms"]=tt
         for k,v in r.items():
             if k in ("timestamp","event_time","received_time","time"):continue
@@ -329,30 +333,46 @@ def scalar_snapshots(df,targets,carry=None):
     for t in sorted(targets):
         while idx<len(rows) and rows[idx][0]<=t:
             apply(*rows[idx]);idx+=1
-        snap={k:v for k,v in state.items() if k!="_last_ts_ms"}
-        snap["_ts_ms"]=state.get("_last_ts_ms")
-        snaps[t]=snap
+        stamp=state.get("_last_ts_ms")
+        if stamp is not None and stamp<=t:
+            snap={k:v for k,v in state.items() if k!="_last_ts_ms"}
+            snap["_ts_ms"]=stamp
+            snaps[t]=snap
+        else:
+            snaps[t]={"_ts_ms":None}
     while idx<len(rows):
         apply(*rows[idx]);idx+=1
     return snaps,state,cs
 
 def liquidation_events(df):
-    if df is None or df.height==0:return [],[]
-    cs=df.columns
-    tc=first_col(cs,"trade_time","event_time","timestamp","received_time","time")
-    pc=first_col(cs,"price","average_price");qc=first_col(cs,"quantity","qty","size");sc=first_col(cs,"side")
-    if not tc:return [],cs
-    out=[]
-    for r in df.iter_rows(named=True):
-        tt=to_ms(r.get(tc));p=num(r.get(pc)) if pc else None;q=num(r.get(qc)) if qc else None
-        if tt is None or p is None or q is None:continue
-        s=str(r.get(sc,"")).strip().lower() if sc else ""
+    """Return empty columns for an unavailable or unusable liquidation partition."""
+    if df is None:
+        return [], []
+    columns = df.columns
+    time_col = first_col(columns, "received_time", "trade_time", "event_time", "timestamp", "time")
+    price_col = first_col(columns, "price", "average_price")
+    quantity_col = first_col(columns, "quantity", "qty", "size")
+    side_col = first_col(columns, "side")
+    if not all((time_col, price_col, quantity_col, side_col)):
+        return [], []
+    events = []
+    for row in df.iter_rows(named=True):
+        stamp = to_ms(row[time_col])
+        price, quantity = num(row[price_col]), num(row[quantity_col])
+        side = str(row[side_col]).strip().lower()
+        if stamp is None or stamp<=0 or price is None or quantity is None:
+            return [], []
+        if price<=0 or quantity<=0 or side not in ("sell", "buy"):
+            return [], []
+        notional = price * quantity
+        if not math.isfinite(notional):
+            return [], []
         # CryptoHFTData publishes the liquidation ORDER side:
         # SELL = a long position was liquidated; BUY = a short was liquidated.
-        position="LONG" if s=="sell" else "SHORT" if s=="buy" else "UNKNOWN"
-        out.append((tt,p*q,position))
-    out.sort(key=lambda z:z[0])
-    return out,cs
+        position = "LONG" if side=="sell" else "SHORT"
+        events.append((stamp, notional, position))
+    events.sort(key=lambda event: event[0])
+    return events, columns
 
 def liq_features(events,t,available_hours=None):
     """Causal liquidation features with an explicit source-availability mask.
@@ -381,19 +401,24 @@ def liq_features(events,t,available_hours=None):
         if den:out[f"fullmicro_liq_imbalance_{sec}s"]=(sht-lng)/den
     return out
 
+def invalidate_book(state):
+    state["valid"]=False
+    state["valid_since_ms"]=None
+    state["events"].clear()
+    state["gap_count"]=int(state.get("gap_count",0))+1
+
 def book_replay(path,target_times,carry=None):
     state=carry or {"bids":{},"asks":{},"last_u":None,"valid":False,"gap_count":0,"events":[]}
     state.setdefault("events",[])
     snaps={};df=read_parquet(path)
     if df is None or df.height==0:
-        state["valid"]=False
+        invalidate_book(state)
         return {t:book_features(state,t) for t in target_times},state,[]
     cs=df.columns
     tc=first_col(cs,"received_time","event_time","transaction_time","timestamp","time")
     pc=first_col(cs,"price");qc=first_col(cs,"quantity","qty","size");sc=first_col(cs,"side")
     typ=first_col(cs,"event_type","update_type","type","action")
     uc=first_col(cs,"final_update_id","update_id")
-    firstc=first_col(cs,"first_update_id")
     seqc=first_col(cs,"last_update_id")
     if not all((tc,pc,qc,sc)):raise RuntimeError(f"orderbook schema unsupported {cs}")
 
@@ -416,41 +441,41 @@ def book_replay(path,target_times,carry=None):
     targets=sorted(target_times);ti=0
     for g in groups:
         r0=g[0];tt=to_ms(r0.get(tc))
-        if tt is None:continue
+        last_received=state.get("last_received_ms")
+        if tt is None or (last_received is not None and tt<last_received):
+            invalidate_book(state)
+            continue
         while ti<len(targets) and targets[ti]<tt:
             snaps[targets[ti]]=book_features(state,targets[ti]);ti+=1
+        state["last_received_ms"]=tt
         et=str(r0.get(typ,"")).lower() if typ else ""
         u=num(r0.get(uc)) if uc else None
         u=int(u) if u is not None else None
-        first_u=num(r0.get(firstc)) if firstc else None
+        is_snapshot="snapshot" in et
         non_noop=[r for r in g if str(r.get(sc,"")).lower() in ("bid","ask","buy","sell")]
 
-        if "snapshot" in et:
+        if is_snapshot:
             # July/Aug 2026 archives can contain old REST depth snapshots from Bybit's
             # 1000-level stream. They are NOT valid resets for orderbook.50.
             # Native WS/checkpoint snapshots contain at most 50 bid + 50 ask rows.
             # Ignore larger REST snapshots completely; keep current 50-level chain.
             if len(non_noop)>100:
                 continue
-            state["bids"].clear();state["asks"].clear();state["valid"]=True
-            if u is not None:state["last_u"]=u
+            state["bids"].clear();state["asks"].clear();state["events"].clear()
+            state.update(valid=u is not None,valid_since_ms=None,last_u=u)
         else:
             prev=state.get("last_u")
-            if u==1:
-                # Bybit service reset: wait for the corresponding WS snapshot.
-                state["valid"]=False;state["last_u"]=u
-            elif prev is not None and u is not None and u!=int(prev)+1:
-                state["valid"]=False;state["gap_count"]=int(state.get("gap_count",0))+1
-                state["last_u"]=u
-            elif u is not None:
-                state["last_u"]=u
+            if u is None or u==1 or prev is None or u!=int(prev)+1:
+                invalidate_book(state)
+            state["last_u"]=u
 
         dyn={"ts_ms":tt,"bid_add":0.0,"ask_add":0.0,"bid_replenish":0.0,"ask_replenish":0.0,
              "bid_insert":0.0,"ask_insert":0.0,"bid_remove":0.0,"ask_remove":0.0,"updates":0.0}
-        is_snapshot="snapshot" in et
         for r in non_noop:
             p=num(r.get(pc));q=num(r.get(qc))
-            if p is None or q is None:continue
+            if p is None or q is None or p<=0 or q<0:
+                invalidate_book(state)
+                break
             side=str(r.get(sc,"")).lower()
             is_bid=side.startswith("b") or side=="buy"
             book=state["bids"] if is_bid else state["asks"]
@@ -467,8 +492,16 @@ def book_replay(path,target_times,carry=None):
                 dyn["updates"]+=1.0
             if new<=0:book.pop(p,None)
             else:book[p]=new
-        if not is_snapshot and dyn["updates"]>0:
-            state["events"].append(dyn)
+        if state["valid"]:
+            bids,asks=state["bids"],state["asks"]
+            if not bids or not asks or max(bids)>=min(asks):
+                state["valid_since_ms"]=None
+                state["events"].clear()
+            elif state.get("valid_since_ms") is None:
+                # A fresh valid point cannot attest to the earlier part of a window.
+                state["valid_since_ms"]=tt
+            elif not is_snapshot and dyn["updates"]>0:
+                state["events"].append(dyn)
         cutoff=tt-300_000
         if state["events"]:
             state["events"]=[e for e in state["events"] if int(e["ts_ms"])>=cutoff]
@@ -478,25 +511,26 @@ def book_replay(path,target_times,carry=None):
     return snaps,state,cs
 
 def book_features(state,t=None):
+    out={"fullmicro_book_valid":0.0,"fullmicro_book_gap_count":float((state or {}).get("gap_count",0))}
+    if t is not None:
+        out.update({f"fullmicro_book_window_valid_{sec}s":0.0 for sec in WINDOWS})
     if not state or not state.get("valid"):
-        return {"fullmicro_book_valid":0.0,"fullmicro_book_gap_count":float((state or {}).get("gap_count",0))}
+        return out
+    if t is not None and state.get("last_received_ms",t)>t:
+        return out
     b=sorted(state["bids"].items(),reverse=True)[:50];a=sorted(state["asks"].items())[:50]
-    if not b or not a:return {"fullmicro_book_valid":0.0,"fullmicro_book_gap_count":float(state.get("gap_count",0))}
+    if not b or not a:return out
     bb=b[0][0];aa=a[0][0]
     # A crossed/locked L2 state is not a valid orderbook snapshot.  Older
     # historical replays could keep state["valid"] true across a sequence
     # anomaly and silently emit a negative spread.  Mask the entire book
     # feature family instead of training on that transport artifact.
     if bb>=aa:
-        return {
-            "fullmicro_book_valid":0.0,
-            "fullmicro_book_crossed":1.0,
-            "fullmicro_book_gap_count":float(state.get("gap_count",0)),
-        }
+        out["fullmicro_book_crossed"]=1.0
+        return out
     mid=(bb+aa)/2
-    out={"fullmicro_book_valid":1.0,"fullmicro_book_crossed":0.0,
-         "fullmicro_book_gap_count":float(state.get("gap_count",0)),
-         "fullmicro_spread_bps":(aa-bb)/mid*10000}
+    out.update(fullmicro_book_valid=1.0,fullmicro_book_crossed=0.0,
+               fullmicro_spread_bps=(aa-bb)/mid*10000)
     for n in (5,10,25,50):
         bn=sum(p*q for p,q in b[:n]);an=sum(p*q for p,q in a[:n]);den=bn+an
         if den:out[f"fullmicro_book_imbalance_{n}"]=(bn-an)/den
@@ -508,7 +542,11 @@ def book_features(state,t=None):
         out[f"fullmicro_ask_{i:02d}_log_qty"]=math.log1p(max(q,0))
     if t is not None:
         ev=state.get("events",[])
+        valid_since=state.get("valid_since_ms")
         for sec in WINDOWS:
+            if valid_since is None or valid_since>int(t)-sec*1000:
+                continue
+            out[f"fullmicro_book_window_valid_{sec}s"]=1.0
             qev=[e for e in ev if int(t)-sec*1000<=int(e["ts_ms"])<=int(t)]
             for key in ("bid_add","ask_add","bid_replenish","ask_replenish","bid_insert","ask_insert","bid_remove","ask_remove","updates"):
                 out[f"fullmicro_{key}_notional_{sec}s" if key!="updates" else f"fullmicro_book_update_count_{sec}s"]=float(sum(e.get(key,0.0) for e in qev))
@@ -543,17 +581,21 @@ def enrich(src,records,schemas):
             schemas.setdefault("orderbook",cs);bp.unlink(missing_ok=True)
         else:
             if book_state is None:book_state={"bids":{},"asks":{},"last_u":None,"valid":False,"gap_count":0,"events":[]}
-            book_state.setdefault("events",[])
-            book_state["valid"]=False;book_state["gap_count"]=int(book_state.get("gap_count",0))+1
+            invalidate_book(book_state)
             bsn={t:book_features(book_state,t) for t in targets}
 
         scalar_snaps={k:{} for k in ("open_interest","mark_price","ticker")}
         if dt in needed_aux:
             lp=src.get(dt,"liquidations")
             if lp:
-                ldf=read_parquet(lp);ev,cs=liquidation_events(ldf);liq_recent.extend(ev)
-                liq_available_hours.add(ms(dt))
-                schemas.setdefault("liquidations",cs);lp.unlink(missing_ok=True)
+                ev,cs=liquidation_events(read_parquet(lp))
+                if cs:
+                    liq_recent.extend(ev)
+                    liq_available_hours.add(ms(dt))
+                    schemas.setdefault("liquidations",cs)
+                else:
+                    src.missing.append(src.path(dt,"liquidations"))
+                lp.unlink(missing_ok=True)
             for kind in ("open_interest","mark_price","ticker"):
                 p=src.get(dt,kind)
                 df=read_parquet(p) if p else None
@@ -567,7 +609,7 @@ def enrich(src,records,schemas):
 
         for r in sorted(byhour.get(dt,[]),key=lambda z:z["snapshot_ts_ms"]):
             t=r["snapshot_ts_ms"];f=r["features"]
-            f.update(bsn.get(t,{"fullmicro_book_valid":0.0}))
+            f.update(bsn[t] if t in bsn else book_features(None,t))
             # Replenishment/disappearance combined with executed flow gives explicit
             # bid/ask absorption evidence rather than a static depth-only proxy.
             for sec in WINDOWS:
@@ -689,7 +731,7 @@ def main():
         observed|={2,3,62,114}
     if src.counts.get("ticker",0):
         observed|={63,64}
-    if src.counts.get("liquidations",0):
+    if any(r["features"].get("fullmicro_liq_stream_valid_5s")==1.0 for r in records):
         observed|=set(range(65,77))
     if ratio_rows:
         observed|={113}
@@ -707,6 +749,7 @@ def main():
               "candidates":len(cands),"snapshots":len(records),"source":"CryptoHFTData Bybit hourly Parquet/Zstd",
               "downloaded_files":src.downloads,"downloaded_bytes":src.bytes,"source_file_counts":dict(src.counts),"account_ratio_rows":len(ratio_rows),"missing_files":src.missing,
               "schemas":schemas,"raw_files_retained":False,"compression":"gzip-9 compact outputs",
+              "microstructure_quality_contract":MICRO_QUALITY_CONTRACT,
               "future_leakage_guard":"strict labels and target/eval points never enter causal features"}
     (args.output/"manifest.json").write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+"\n")
     am={}

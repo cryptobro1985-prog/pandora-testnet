@@ -2,9 +2,9 @@
   "schema_version": 1,
   "objective": "Earlier causal terminal H1 L6/K2 LOW/HIGH recognition with actionable first-signal precision, useful recall, and distance around 30–70 bps.",
   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
-  "head_sha": "94d1f6765ba8e4b813edd73c7b85c3dd5ad4164a",
+  "head_sha": "08c7d0cf9926ed15a1b2cec2dadbfc751faeba6a",
   "head_sha_basis": "Parent/input revision of this checkpoint. The checkpoint revision is resolved by git log -1 -- this file.",
-  "stage": "cycle_complete_current_hypotheses_rejected",
+  "stage": "micro_quality_contract_verified_cache_pending",
   "completed_experiments": [
     {
       "id": "reuse-handoff-20261109",
@@ -45,6 +45,14 @@
     {
       "id": "strict-m1-trajectory-v1-dev-high-old_side_absorption",
       "verdict": "Only one TP. Precision and recall both declined versus the matched control."
+    },
+    {
+      "id": "clean-micro-build-in-progress-42619539996",
+      "verdict": "The corrected rebuild had reached its Jul-Aug dataset build step. GitHub listed zero artifacts at the final pre-commit check. The triggering source predates the stricter producer contract."
+    },
+    {
+      "id": "decoded-liq-continuous-book-quality-contract-v1",
+      "verdict": "Unreadable or schema-invalid liquidation hours remain unavailable. Liquidation and scalar receipt timestamps are causal, including across hourly carry. Rolling book windows are masked through gaps, receive-time regression, crossed books, and after resnapshots until the entire lookback is observed. This is fixture verification, with no new trading-rule or sealed replay."
     }
   ],
   "rejected_hypotheses": [
@@ -90,7 +98,12 @@
     "sha256sum hype-work-cache/master.zip",
     "unzip -l hype-work-cache/master.zip",
     "python -m unittest research.hype_false_local_entry.test_early_trajectory",
-    "python -W error -m research.hype_false_local_entry.replay_early_trajectory --master ../hype-work-cache/master.zip --rules research/hype_work_handoff_2026-11-09/EARLY_TRAJECTORY_RULES_V1.json --period 01_JUL12_AUG07_FULL_MICRO --output research/hype_work_handoff_2026-11-09/EARLY_TRAJECTORY_DEV_V1.json"
+    "python -W error -m research.hype_false_local_entry.replay_early_trajectory --master ../hype-work-cache/master.zip --rules research/hype_work_handoff_2026-11-09/EARLY_TRAJECTORY_RULES_V1.json --period 01_JUL12_AUG07_FULL_MICRO --output research/hype_work_handoff_2026-11-09/EARLY_TRAJECTORY_DEV_V1.json",
+    "git fetch --depth=12 origin research/hype-h1-local-v5-oi-microstructure-20261104",
+    "python -m pip install --disable-pip-version-check --no-input --timeout 8 --retries 0 --target ../hype-work-cache/test-deps polars requests",
+    "PYTHONPATH=../hype-work-cache/test-deps:. python -W error -m unittest research.hype_full_micro_202607.test_data_quality research.hype_false_local_entry.test_early_trajectory",
+    "python -m py_compile research/hype_full_micro_202607/build_full_micro.py research/hype_full_micro_202607/test_data_quality.py",
+    "git diff --check"
   ],
   "artifact_result_paths": {
     "master_artifact_id": 13650399622,
@@ -105,7 +118,12 @@
     "development_result": "research/hype_work_handoff_2026-11-09/EARLY_TRAJECTORY_DEV_V1.json",
     "development_result_sha256": "a7b511be9be849080e40ebd6ec6bca6d8d6cc36cf9f3d34b493cd2f2b4c3af78",
     "report": "research/hype_work_handoff_2026-11-09/EARLY_TRAJECTORY_REPORT_2026-11-09.md",
-    "source_freeze_commit": "94d1f6765ba8e4b813edd73c7b85c3dd5ad4164a"
+    "source_freeze_commit": "94d1f6765ba8e4b813edd73c7b85c3dd5ad4164a",
+    "clean_micro_workflow_run": 42619539996,
+    "clean_micro_contract": "decoded-liquidations-continuous-book-v1",
+    "clean_micro_producer": "research/hype_full_micro_202607/build_full_micro.py",
+    "clean_micro_tests": "research/hype_full_micro_202607/test_data_quality.py",
+    "clean_micro_producer_sha256": "fba6b56c5fd89f0e3703f39a335fce2e6eab8b080024615086e728785ff5280c"
   },
   "frozen_thresholds_model_hashes": {
     "LOW": {
@@ -119,17 +137,20 @@
       "old_side_absorption": "2078bd6c54b7e6939f6d84ab1f599c42052c157b1c8963043f65374187ce7432"
     }
   },
-  "next_cheapest_useful_action": "Locate an existing corrected full-micro artifact or archived 5 s tape. Verify chronological book sequencing, positive spread, and explicit liquidation/OI availability before a new paired trajectory experiment. Reuse the M1 layer and the strict first-signal contract. Reopen a rejected rule only after new data or a concrete contract defect.",
+  "next_cheapest_useful_action": "Check run 42619539996 for HYPE-FULL-MICRO-CLEAN-CACHE-202607-*. Reuse any published bytes after archive and member checksum verification. Review CLEAN_MICRO_AUDIT.json, the producer revision, and the decoded-liquidations-continuous-book-v1 manifest marker and per-window book/liquidation masks. This run predates the new marker. Without independent raw-source proof, its affected streams cannot certify the strict trajectory experiments. If needed, validate the patched producer on a bounded candidate-hour slice using retained input data before deciding on another Jul-Aug rebuild. When data passes, join snapshots by side, exact extreme timestamp and price to surviving causal M1 candidates. Use only snapshots available at the decision bar close and compare first signals on identical availability cohorts with the existing L6/K2 scorer.",
   "expensive_actions_not_yet_justified": [
     "Chronological replay of the rejected rules or threshold retuning",
     "Sealed May/June scoring or forward deployment of the rejected rules",
     "Broader parameter/model sweep",
-    "Blind rerun of the cancelled full-micro rebuild"
+    "Blind rerun of the cancelled full-micro rebuild",
+    "Duplicate full-micro workflow, full master redownload, or microstructure candidate scoring before cache and producer validation"
   ],
   "known_blockers": [
     "Jul-Aug archived rich snapshots: 822/6260 crossed books passed the old valid flag, and 0/6260 have per-window liquidation availability masks. Corrected rebuild run 42569690392 has failed status and no artifact.",
     "Only July and October have saved subminute snapshots, with different candidate lifetimes; 90 s is absent from both. Middle regimes and the master-wide comparison are limited to M1 prices and executed flow.",
-    "HARD120 four-regime baseline and May Ultra Survival V2 use internal L3/K1 swings. The new score uses strict terminal L6/K2, so these are context, not matched controls."
+    "HARD120 four-regime baseline and May Ultra Survival V2 use internal L3/K1 swings. The new score uses strict terminal L6/K2, so these are context, not matched controls.",
+    "Run 42619539996 has no published cache yet and uses source fa89f176e1, before the new decoded liquidation and continuous book window guarantees.",
+    "The existing workflow audit checks point spread and some liquidation mask fields. It cannot prove raw decode validity, receipt-time causality, or uninterrupted rolling book windows for an older producer revision."
   ],
   "real_orders": false,
   "validation_stages": {
@@ -137,11 +158,53 @@
     "chronological_transfer": "gate closed",
     "sealed_may": "unscored",
     "sealed_june": "unscored",
-    "forward": "unscored"
+    "forward": "unscored",
+    "strict_microstructure": "producer fixture tests pass; empirical cache gate pending"
   },
   "test_status": {
     "new_trajectory_tests_passed": 7,
     "existing_scoring_timestamp_k2_checks_passed": 12,
-    "existing_full_micro_suite": "unavailable locally: Polars dependency missing"
+    "existing_full_micro_suite": "passed using local Polars 2.1.0 and Requests 2.34.2",
+    "full_micro_quality_and_early_trajectory_tests_passed": 17
+  },
+  "queued_hypotheses": {
+    "LOW": [
+      {
+        "rank": 1,
+        "family": "liquidation_exhaustion"
+      },
+      {
+        "rank": 2,
+        "family": "book_transfer"
+      },
+      {
+        "rank": 3,
+        "family": "impact_efficiency_transfer"
+      }
+    ],
+    "HIGH": [
+      {
+        "rank": 1,
+        "family": "liquidation_exhaustion"
+      },
+      {
+        "rank": 2,
+        "family": "book_transfer"
+      },
+      {
+        "rank": 3,
+        "family": "impact_efficiency_transfer"
+      }
+    ]
+  },
+  "clean_cache_gate": {
+    "run_id": 42619539996,
+    "run_head_sha": "fa89f176e155a1887a386b5df6d9239bc1758813",
+    "job_id": 129167821388,
+    "observed_step": "Build complete causal Jul-Aug HYPE dataset",
+    "observed_artifacts": [],
+    "artifact_name_prefix": "HYPE-FULL-MICRO-CLEAN-CACHE-202607-",
+    "expected_producer_contract": "decoded-liquidations-continuous-book-v1",
+    "status": "blocked_pending_cache_and_input_certification"
   }
 }
