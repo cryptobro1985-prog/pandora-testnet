@@ -4,7 +4,7 @@
   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
   "head_sha": "3a6b9342f11bec93fc43af11b0f871d658ecf70b",
   "head_sha_basis": "Parent/input revision of this checkpoint. The checkpoint revision is resolved by git log -1 -- this file.",
-  "stage": "time_to_confirmation_engine_active",
+  "stage": "ttc_live_shadow_and_clean_micro_rebuild_active",
   "completed_experiments": [
     {
       "id": "reuse-handoff-20261109",
@@ -93,6 +93,14 @@
     {
       "id": "time-to-confirmation-engine-v1-scaffold-20261109",
       "verdict": "Added causal LOW/HIGH time-to-confirmation state machine with 30/60/90/180/300s checkpoints, immediate same-side-extreme invalidation, confirmation_delay_s and missed_move_bps metrics. Research/paper only; thresholds are not yet sealed/OOS validated."
+    },
+    {
+      "id": "ttc-live-shadow-strict-smoke-20261109",
+      "verdict": "TIME_TO_CONFIRMATION_V1 wired into live Local-only as research-only shadow at 30/60/90/180/300s. Same-side extensions invalidate the old candidate. Forward scoring uses migrated STRICT_L6_K2 terminal labels, not INTERNAL tactical labels. Dedicated HYPE TTC Smoke run 42646267783 passed syntax and unit tests."
+    },
+    {
+      "id": "clean-micro-rebuild-latest-contract-42646145054",
+      "verdict": "Superseded stale run 42619539996 (old producer) and started run 42646145054 from current branch with cancel-in-progress=true. Install/data-quality test stage passed and corrected Jul-Aug full-micro dataset build is in progress."
     }
   ],
   "rejected_hypotheses": [
@@ -229,7 +237,7 @@
       }
     }
   },
-  "next_cheapest_useful_action": "Verify a clean-cache artifact from the upgraded producer against its digest and measured book/liq/OI windows. Run the clean cohort adapter on a bounded development slice. Separately, replay a trade-extreme shadow proposal against the saved 72.391 case before any change to live routing.",
+  "next_cheapest_useful_action": "Keep TTC strict-forward shadow running. When run 42646145054 publishes HYPE-FULL-MICRO-CLEAN-CACHE-202607-*, verify digest/quality contract, then fit LOW and HIGH sequential/hazard TTC challengers on rich microstructure and freeze before chronological/OOS scoring.",
   "expensive_actions_not_yet_justified": [
     "Chronological replay of the rejected rules or threshold retuning",
     "Sealed May/June scoring or forward deployment of the rejected rules",
@@ -256,14 +264,18 @@
     "full116_common_development": "Completed two expanding folds on Jul-Aug. Selected transfer-only weights and thresholds.",
     "full116_common_transfer": "Completed late-Aug, Sep, Oct-Nov. Both sides rejected.",
     "full116_live_diagnostic": "Both case archives verified against raw trades and event logs.",
-    "full116_clean_micro": "Input gate and feature assembler tested. Certified empirical cache pending."
+    "full116_clean_micro": "corrected producer rebuild active in run 42646145054",
+    "ttc_smoke": "passed run 42646267783",
+    "ttc_forward_strict": "active; checkpoints 30/60/90/180/300s accumulate against STRICT_L6_K2 terminal-finalized labels"
   },
   "test_status": {
     "new_trajectory_tests_passed": 7,
     "existing_scoring_timestamp_k2_checks_passed": 12,
     "existing_full_micro_suite": "passed using local Polars 2.1.0 and Requests 2.34.2",
     "full_micro_quality_and_early_trajectory_tests_passed": 17,
-    "full116_cycle_passed": 38
+    "full116_cycle_passed": 38,
+    "ttc_smoke_run": 42646267783,
+    "ttc_smoke": "passed"
   },
   "queued_hypotheses": {
     "LOW": [
@@ -296,14 +308,13 @@
     ]
   },
   "clean_cache_gate": {
-    "run_id": 42619539996,
-    "run_head_sha": "fa89f176e155a1887a386b5df6d9239bc1758813",
-    "job_id": 129167821388,
-    "observed_step": "Build complete causal Jul-Aug HYPE dataset",
-    "observed_artifacts": [],
-    "artifact_name_prefix": "HYPE-FULL-MICRO-CLEAN-CACHE-202607-",
+    "previous_run_id": 42619539996,
+    "previous_status": "cancelled_as_stale_old_producer",
+    "run_id": 42646145054,
+    "run_head_sha": "e44a17c967f1095fe558408a8fe3b62693043dca",
     "expected_producer_contract": "decoded-liquidations-continuous-book-v1",
-    "status": "no_certified_archive_at_full116_checkpoint"
+    "status": "building_corrected_cache",
+    "next_required_gate": "audit book/liquidation/OI availability masks and digest before any TTC rich-micro fit"
   },
   "latest_live_diagnostic": {
     "id": "live-42616792697-strict-terminal-replay-20261109",
