@@ -1,0 +1,54 @@
+{
+  "teacher": "STRICT_L6_K2_REFERENCE_FINALIZED_ONLY",
+  "dense_definition": "every new target-side running extreme between consecutive finalized teacher locals",
+  "legacy_definition": "new 6h rolling extreme",
+  "labels": 76,
+  "dense": {
+    "LOW": {
+      "candidates": 1721,
+      "true_candidates": 37,
+      "false_candidates": 1684,
+      "false_per_true": 45.513513513513516,
+      "episodes": 37,
+      "median_candidates_per_episode": 44,
+      "p90_candidates_per_episode": 70,
+      "max_candidates_per_episode": 123
+    },
+    "HIGH": {
+      "candidates": 1682,
+      "true_candidates": 36,
+      "false_candidates": 1646,
+      "false_per_true": 45.72222222222222,
+      "episodes": 38,
+      "median_candidates_per_episode": 39,
+      "p90_candidates_per_episode": 71,
+      "max_candidates_per_episode": 113
+    }
+  },
+  "legacy": {
+    "LOW": {
+      "candidates": 942,
+      "true_candidates": 38,
+      "false_candidates": 904,
+      "false_per_true": 23.789473684210527,
+      "episodes": 0,
+      "median_candidates_per_episode": null
+    },
+    "HIGH": {
+      "candidates": 855,
+      "true_candidates": 38,
+      "false_candidates": 817,
+      "false_per_true": 21.5,
+      "episodes": 0,
+      "median_candidates_per_episode": null
+    }
+  },
+  "overlap": {
+    "dense_candidates_also_legacy": 1656,
+    "dense_candidates_missing_from_legacy": 1747,
+    "legacy_candidates_outside_dense_swing_space": 141,
+    "dense_coverage_by_legacy": 0.4866294446076991
+  },
+  "conclusion": "Training on legacy 6h candidates is distribution-mismatched if dense coverage is low.",
+  "real_orders": false
+}
