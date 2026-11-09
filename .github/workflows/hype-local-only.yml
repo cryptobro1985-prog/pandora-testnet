@@ -18,8 +18,9 @@ permissions:
 
 concurrency:
   group: hype-local-only
-  # Prefer the newest Local Signature code; stale live cycles must not block it.
-  cancel-in-progress: true
+  # Never cancel an active collection/checkpoint upload when the next hourly run starts.
+  # Serialize runs instead; preserve previous checkpoint and raw evidence.
+  cancel-in-progress: false
 
 env:
   HYPE_REST_RELAY_URL: ""
