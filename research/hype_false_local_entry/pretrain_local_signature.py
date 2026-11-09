@@ -47,36 +47,61 @@ def causal_signature_features(raw: dict) -> dict[str,float]:
     return out
 
 
-def metrics(rows, probs, th):
-    tp=fp=fn=tn=0
-    for r,p in zip(rows,probs):
-        y=bool(r["strict_true"]); pred=float(p)>=float(th)
-        if pred and y: tp+=1
-        elif pred: fp+=1
-        elif y: fn+=1
-        else: tn+=1
+def first_signal_metrics(rows, model, side, th):
+    grouped={}
+    true_candidates=set()
+    for r in rows:
+        if r["side"]!=side:
+            continue
+        grouped.setdefault(r["candidate_id"],[]).append(r)
+        if r["strict_true"]:
+            true_candidates.add(r["candidate_id"])
+
+    accepted=[]
+    for cid,rr in grouped.items():
+        rr.sort(key=lambda z:int(z.get("snapshot_ts_ms",z["candidate_ts_ms"])))
+        for r in rr:
+            p=model.probability(side,causal_signature_features(r["features"]))
+            if p>=th:
+                accepted.append((r,p))
+                break
+
+    tp=sum(bool(r["strict_true"]) for r,_ in accepted)
+    fp=len(accepted)-tp
+    delays=[
+        max(0.0,(int(r.get("snapshot_ts_ms",r["candidate_ts_ms"]))-int(r["candidate_ts_ms"]))/1000.0)
+        for r,_ in accepted if r["strict_true"]
+    ]
+    delays.sort()
+    med=None if not delays else delays[len(delays)//2]
     return {
-        "n":len(rows),"tp":tp,"fp":fp,"fn":fn,"tn":tn,
-        "precision":tp/(tp+fp) if tp+fp else None,
-        "recall":tp/(tp+fn) if tp+fn else None,
-        "coverage":(tp+fp)/len(rows) if rows else 0.0,
+        "candidates":len(grouped),
+        "reference_true_candidates":len(true_candidates),
+        "accepted_first":len(accepted),
+        "true_first":tp,
+        "false_first":fp,
+        "precision":tp/len(accepted) if accepted else None,
+        "recall":tp/len(true_candidates) if true_candidates else None,
+        "coverage":len(accepted)/len(grouped) if grouped else 0.0,
+        "median_delay_s":med,
     }
 
 
-def choose_threshold(rows, probs):
-    # Precision first. Require enough examples and non-trivial recall so a
-    # degenerate near-1.0 threshold cannot "win" by never firing.
-    best=(None,0.985,None)
-    for i in range(50,1000):
+def choose_threshold(rows, model, side):
+    best=None
+    for i in range(500,1000):
         th=i/1000.0
-        m=metrics(rows,probs,th)
-        p=m["precision"] or 0.0; r=m["recall"] or 0.0
-        viable=(m["tp"]>=2 and (m["tp"]+m["fp"])>=3 and r>=0.20)
-        key=(1 if viable else 0,p,r,-m["fp"],th)
-        if best[0] is None or key>best[0]:
+        m=first_signal_metrics(rows,model,side,th)
+        p=m["precision"] or 0.0
+        r=m["recall"] or 0.0
+        viable=(m["true_first"]>=2 and m["accepted_first"]>=3 and r>=0.20)
+        # First-signal precision dominates; recall breaks ties. Delay is only a
+        # tertiary metric and never an eligibility clock.
+        delay=m["median_delay_s"] if m["median_delay_s"] is not None else 1e9
+        key=(1 if viable else 0,p,r,-m["false_first"],-delay,th)
+        if best is None or key>best[0]:
             best=(key,th,m)
-    return best[1],best[2]
-
+    return (best[1],best[2]) if best else (0.985,None)
 
 def fit(rows, side):
     rr=[r for r in rows if r["side"]==side]
@@ -93,11 +118,9 @@ def fit(rows, side):
         for _ in range(repeat if r["strict_true"] else 1):
             model.learn(side,x,bool(r["strict_true"]),live=False)
 
-    vp=[model.probability(side,causal_signature_features(r["features"])) for r in valid]
-    th,vm=choose_threshold(valid,vp)
-    op=[model.probability(side,causal_signature_features(r["features"])) for r in oos]
-    om=metrics(oos,op,th)
-    tm=metrics(train,[model.probability(side,causal_signature_features(r["features"])) for r in train],th)
+    th,vm=choose_threshold(valid,model,side)
+    om=first_signal_metrics(oos,model,side,th)
+    tm=first_signal_metrics(train,model,side,th)
     return {
         "threshold":th,"repeat":repeat,
         "train":tm,"validation":vm,"oos":om,
