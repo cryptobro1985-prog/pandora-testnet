@@ -1,0 +1,88 @@
+name: HYPE HIGH EARLY60 Persistence Four Period
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/hype_false_local_entry/replay_high_early60_persistence_grid.py"
+      - ".github/workflows/hype-high-early60-persistence-four-period.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore four historical regimes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p julaug lateaug sep octnov
+
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13585701406/zip" > jul.zip
+          unzip -q jul.zip -d julaug
+
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13638795292/zip" > late.zip
+          unzip -q late.zip -d lateaug
+
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13637558401/zip" > sep.zip
+          unzip -q sep.zip -d sep
+
+          OCT_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=local116-HYPE" --jq '.artifacts | map(select((.expired|not) and .name=="local116-HYPE")) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          test -n "$OCT_ID"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${OCT_ID}/zip" > oct.zip
+          unzip -q oct.zip -d octnov
+
+          echo "JUL_COMPACT=$(find julaug -name compact_1m.jsonl.gz -print -quit)" >> "$GITHUB_ENV"
+          echo "JUL_LABELS=$(find julaug -name labels.json.gz -print -quit)" >> "$GITHUB_ENV"
+          echo "LATE_COMPACT=$(find lateaug -name compact_1m.jsonl.gz -print -quit)" >> "$GITHUB_ENV"
+          echo "LATE_LABELS=$(find lateaug -name labels.json.gz -print -quit)" >> "$GITHUB_ENV"
+          echo "SEP_COMPACT=$(find sep -name compact_1m.jsonl.gz -print -quit)" >> "$GITHUB_ENV"
+          echo "SEP_LABELS=$(find sep -name labels.json.gz -print -quit)" >> "$GITHUB_ENV"
+          echo "OCT_COMPACT=$(find octnov -name compact_1m.jsonl.gz -print -quit)" >> "$GITHUB_ENV"
+          echo "OCT_LABELS=$(find octnov -name labels.json.gz -print -quit)" >> "$GITHUB_ENV"
+
+      - name: Run HIGH-only EARLY60 persistence grid
+        run: |
+          python -m research.hype_false_local_entry.replay_high_early60_persistence_grid \
+            --period jul_aug "$JUL_COMPACT" "$JUL_LABELS" true \
+            --period late_aug "$LATE_COMPACT" "$LATE_LABELS" false \
+            --period september "$SEP_COMPACT" "$SEP_LABELS" false \
+            --period oct_nov "$OCT_COMPACT" "$OCT_LABELS" false \
+            --output HIGH_EARLY60_PERSISTENCE_FOUR_PERIOD.json
+
+          python - <<'PY'
+          import json
+          x=json.load(open("HIGH_EARLY60_PERSISTENCE_FOUR_PERIOD.json"))
+          print(json.dumps({
+            "preferred":x["preferred"],
+            "eligible_count":sum(
+              1 for r in x["grid"]
+              if r["min_period_precision"]>=.80
+              and r["min_period_recall"]>=.40
+              and r["early_true"]>0
+            ),
+          },indent=2))
+          assert x["low_logic_changed"] is False
+          assert x["hard120_primary_changed"] is False
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-HIGH-EARLY60-PERSISTENCE-${{ github.run_id }}
+          path: HIGH_EARLY60_PERSISTENCE_FOUR_PERIOD.json
+          retention-days: 14
