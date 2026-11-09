@@ -12,6 +12,10 @@ permissions:
   contents: write
   actions: read
 
+concurrency:
+  group: hype-retrace-anchor-sweep
+  cancel-in-progress: true
+
 jobs:
   sweep:
     runs-on: ubuntu-latest
