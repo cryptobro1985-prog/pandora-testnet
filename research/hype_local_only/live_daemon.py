@@ -443,6 +443,17 @@ def main():
                 if sigdec.enter and expected_side_ok and signature_emitted.get(sig_side)!=sc.candidate_id:
                     signature_emitted[sig_side]=sc.candidate_id
                     signature_expected="HIGH" if sig_side=="LOW" else "LOW"
+                    # Start the next swing from this confirmed reversal, never
+                    # reuse a pre-reversal candidate from the previous leg.
+                    signature_candidates[signature_expected]=Candidate(
+                        signature_expected,float(price),int(ts),
+                        f"SIG-{signature_expected[0]}-{ts}",
+                        evidence={"proposal":"NEW_SWING_AFTER_SIGNATURE"}
+                    )
+                    signature_emitted[signature_expected]=None
+                    signature_latest_by_hour[
+                        f"{signature_expected}:{(int(ts)//H)*H}"
+                    ]=signature_candidates[signature_expected].candidate_id
                     append_jsonl(evlog,{
                         "event":"LOCAL_SIGNATURE_SIGNAL",
                         "ts_ms":int(ts),"signal_ts_ms":int(ts),
@@ -490,7 +501,12 @@ def main():
                 if recovered and (last_teacher is None or int(recovered["hour_ms"])>=int(last_teacher.get("hour_ms",0))):
                     last_teacher=recovered
                     expected="HIGH" if recovered["side"]=="LOW" else "LOW"
-                    signature_expected=expected
+                    if signature_expected!=expected:
+                        signature_expected=expected
+                        signature_candidates[signature_expected]=None
+                        signature_emitted[signature_expected]=None
+                    else:
+                        signature_expected=expected
 
             piv=strict_pivots(state,ts)
             if piv:
@@ -500,7 +516,12 @@ def main():
                     # Teacher Local is authoritative for the active structural leg:
                     # after LOW we search HIGH; after HIGH we search LOW.
                     expected="LOW" if latest["side"]=="HIGH" else "HIGH"
-                    signature_expected=expected
+                    if signature_expected!=expected:
+                        signature_expected=expected
+                        signature_candidates[signature_expected]=None
+                        signature_emitted[signature_expected]=None
+                    else:
+                        signature_expected=expected
 
             # Dense causal proposals: 5m / 15m / 60m / 6h. These only propose;
             # strict H1 L6/K2 remains the teacher.
