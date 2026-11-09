@@ -45,6 +45,13 @@ from research.hype_false_local_entry.high60_retrace_veto import (
     sample_retrace60 as high60_sample_retrace,
     high_primary_confirmed as high60_primary_confirmed,
 )
+from research.hype_false_local_entry.time_to_confirmation_engine import (
+    CHECKPOINTS_S as TTC_CHECKPOINTS_S,
+    TimeToConfirmationEngine,
+)
+from research.hype_false_local_entry.time_to_confirmation_live import (
+    build_confirmation_evidence,
+)
 
 H=3_600_000
 
@@ -290,6 +297,9 @@ def main():
     expected=rt.get("expected_side");last_teacher=rt.get("last_teacher_local")
     latest_by_hour=rt.get("latest_by_hour") or {}
     structure_48h=rt.get("structure_48h") or {}
+    # Early time-to-confirmation is a shadow research layer. It never changes
+    # expected/core direction and never places real orders.
+    ttc_engine=TimeToConfirmationEngine()
 
     tail=Tailer();stop=False
     def stopfn(*_):
@@ -376,6 +386,20 @@ def main():
                     evidence={"proposal":"MULTIWINDOW_CAUSAL","windows":windows}
                     c=Candidate(side,float(price),int(ts),f"{side[0]}-{ts}",evidence=evidence)
                     candidates[side]=c
+                    if old is not None and extends:
+                        append_jsonl(evlog,{
+                            "event":"TTC_INVALIDATED","ts_ms":int(ts),
+                            "signal_ts_ms":int(ts),
+                            "candidate_ts_ms":int(old.extreme_ts_ms),
+                            "candidate_id":old.candidate_id,"side":side,
+                            "price":float(old.extreme_price),
+                            "replacement_price":float(price),
+                            "reason":"new_same_side_extreme",
+                            "research_only":True,"real_orders":False,
+                        })
+                    if stale and not extends:
+                        ttc_engine.active[side]=None
+                    ttc_engine.start_or_extend(side,int(ts),float(price))
                     # HARD120 keeps an independent lineage.  Hourly stale
                     # refreshes never reset it; only a genuinely more-extreme
                     # 6h candidate can replace the lineage.
@@ -403,6 +427,69 @@ def main():
                 c=candidates.get(side)
                 if c is None or c.invalidated:continue
                 age=max(0.0,(ts-c.extreme_ts_ms)/1000.0)
+
+                # Earliest causal confirmation shadow. Only on-time checkpoints
+                # are scored; a restart that arrives too late must not
+                # retroactively manufacture a 30/60/90/180/300s signal.
+                if ttc_engine.active.get(side) is None:
+                    ttc_engine.start_or_extend(side,int(c.extreme_ts_ms),float(c.extreme_price))
+                ttc_done={int(v) for v in c.evidence.get("ttc_done",[]) if str(v).isdigit()}
+                for checkpoint_s in TTC_CHECKPOINTS_S:
+                    if checkpoint_s in ttc_done or age<checkpoint_s:
+                        continue
+                    if age>checkpoint_s+20:
+                        append_jsonl(evlog,{
+                            "event":"TTC_CHECKPOINT_MISSED","ts_ms":int(ts),
+                            "candidate_ts_ms":int(c.extreme_ts_ms),
+                            "candidate_id":c.candidate_id,"side":side,
+                            "stage":int(checkpoint_s),
+                            "age_s":float(age),
+                            "reason":"observation_arrived_after_checkpoint_grace",
+                            "research_only":True,"real_orders":False,
+                        })
+                        ttc_done.add(int(checkpoint_s))
+                        continue
+                    ttc_ev,ttc_diag=build_confirmation_evidence(
+                        side=side,candidate=c,checkpoint_s=int(checkpoint_s),
+                        ts_ms=int(ts),price=float(price),x=x,state=state,
+                    )
+                    ttc_decision=ttc_engine.evaluate(ttc_ev)
+                    append_jsonl(evlog,{
+                        "event":"TTC_CHECKPOINT","ts_ms":int(ts),
+                        "signal_ts_ms":int(ts),
+                        "candidate_ts_ms":int(c.extreme_ts_ms),
+                        "candidate_id":c.candidate_id,"side":side,
+                        "price":float(c.extreme_price),"mark_price":float(price),
+                        "stage":int(checkpoint_s),
+                        "ttc_state":ttc_decision.state.value,
+                        "evidence_score":float(ttc_decision.score),
+                        "threshold":float(ttc_engine.checkpoint_thresholds[int(checkpoint_s)]),
+                        "enter":bool(ttc_decision.enter),
+                        "target_side":ttc_decision.target_side,
+                        "invalidation_price":float(ttc_decision.invalidation_price),
+                        "diagnostics":ttc_diag,
+                        "research_only":True,"real_orders":False,
+                    })
+                    if ttc_decision.enter and (expected is None or side==expected):
+                        append_jsonl(evlog,{
+                            "event":"TTC_SHADOW_SIGNAL","ts_ms":int(ts),
+                            "signal_ts_ms":int(ts),
+                            "candidate_ts_ms":int(c.extreme_ts_ms),
+                            "candidate_id":c.candidate_id,"side":side,
+                            "price":float(c.extreme_price),"mark_price":float(price),
+                            "stage":int(checkpoint_s),
+                            "probability":float(ttc_decision.score),
+                            "evidence_score":float(ttc_decision.score),
+                            "target_side":ttc_decision.target_side,
+                            "teacher":INTERNAL.name,
+                            "shadow_contract":"TIME_TO_CONFIRMATION_V1",
+                            "core_flip_authorized":False,
+                            "research_only":True,"real_orders":False,
+                            "diagnostics":ttc_diag,
+                        })
+                    ttc_done.add(int(checkpoint_s))
+                c.evidence["ttc_done"]=sorted(ttc_done)
+
                 for stage in STAGES:
                     if age<stage or stage in c.stages_done:continue
                     fx=live_to_archive_features(side,age,c.extreme_price,price,x,state)
