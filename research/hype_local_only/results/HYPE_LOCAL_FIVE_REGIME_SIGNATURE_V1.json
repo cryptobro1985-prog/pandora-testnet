@@ -1,0 +1,123 @@
+{
+  "version": "HYPE_LOCAL_FIVE_REGIME_SIGNATURE_V1",
+  "frozen_before_next_sealed_period": true,
+  "development_periods": [
+    "2026-06-01..2026-07-01",
+    "2026-07-12..2026-08-07",
+    "2026-08-08..2026-09-01",
+    "2026-09-01..2026-10-01",
+    "2026-10-04..2026-11-03"
+  ],
+  "research_only": true,
+  "real_orders": false,
+  "objective": "Post-HARD120 causal confirmation; OR of zero-development-FP signatures, side-specific.",
+  "development_counts": {
+    "LOW": {
+      "true": 123,
+      "false": 12,
+      "covered_true": 123,
+      "covered_false": 0
+    },
+    "HIGH": {
+      "true": 120,
+      "false": 18,
+      "covered_true": 120,
+      "covered_false": 0
+    }
+  },
+  "warning": "100% development separation is not evidence of 99.9% future accuracy. Thresholds are frozen here before scoring the next sealed period.",
+  "LOW": [
+    [
+      "m1__ret_120",
+      ">",
+      0.01459776238678745
+    ],
+    [
+      "h4__upper_wick_pct",
+      "<",
+      0.35953686776356086
+    ],
+    [
+      "m1__efficiency_ratio_20",
+      ">",
+      0.2605042016806871
+    ],
+    [
+      "m5__max_trade_notional_30m",
+      "<",
+      112600
+    ],
+    [
+      "m15__ret_3",
+      "<",
+      0.00022646352050115226
+    ],
+    [
+      "m1__adx_14",
+      ">",
+      26.42087357229826
+    ]
+  ],
+  "HIGH": [
+    [
+      "m15__stoch_d_14",
+      "<",
+      26.78906320120574
+    ],
+    [
+      "m1__ret_3",
+      "<",
+      -0.0014923516975499096
+    ],
+    [
+      "h4__flow_imbalance_15m",
+      "<",
+      -0.027571292942604908
+    ],
+    [
+      "m1__ret_5",
+      ">",
+      0.0016845924582091776
+    ],
+    [
+      "m3__adx_14",
+      "<",
+      13.133974161661017
+    ],
+    [
+      "m1__distance_low_360_bps",
+      "<",
+      53.40431012277769
+    ],
+    [
+      "m5__ret_autocorr1_60",
+      ">",
+      0.09359398218045323
+    ],
+    [
+      "h4__plus_di_14",
+      "<",
+      10.374011352745494
+    ],
+    [
+      "m3__max_trade_notional_180m",
+      ">",
+      975447.6597000001
+    ],
+    [
+      "m5__plus_di_14",
+      "<",
+      12.61559496287918
+    ],
+    [
+      "m1__ret_10",
+      ">",
+      0.0029842999870248743
+    ],
+    [
+      "m1__range_position_1440",
+      ">",
+      0.8276810265811186
+    ]
+  ]
+}
