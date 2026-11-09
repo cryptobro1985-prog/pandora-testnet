@@ -1,0 +1,79 @@
+name: HYPE HIGH Flow V3 Four Regime Audit
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/hype_false_local_entry/high_flow_regime_gate_v3.py"
+      - "research/hype_false_local_entry/replay_high_flow_v3_four_regime.py"
+      - ".github/workflows/hype-high-flow-v3-four-regime.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Restore four regimes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p jul late sep oct
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13585701406/zip" > jul.zip
+          unzip -q jul.zip -d jul
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13638795292/zip" > late.zip
+          unzip -q late.zip -d late
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13637558401/zip" > sep.zip
+          unzip -q sep.zip -d sep
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13435356156/zip" > oct.zip
+          unzip -q oct.zip -d oct
+          echo "JUL_C=$(find jul -name compact_1m.jsonl.gz -print -quit)" >> "$GITHUB_ENV"
+          echo "JUL_L=$(find jul -name labels.json.gz -print -quit)" >> "$GITHUB_ENV"
+          echo "LATE_C=$(find late -name compact_1m.jsonl.gz -print -quit)" >> "$GITHUB_ENV"
+          echo "LATE_L=$(find late -name labels.json.gz -print -quit)" >> "$GITHUB_ENV"
+          echo "SEP_C=$(find sep -name compact_1m.jsonl.gz -print -quit)" >> "$GITHUB_ENV"
+          echo "SEP_L=$(find sep -name labels.json.gz -print -quit)" >> "$GITHUB_ENV"
+          echo "OCT_C=$(find oct -name compact_1m.jsonl.gz -print -quit)" >> "$GITHUB_ENV"
+          echo "OCT_L=$(find oct -name labels.json.gz -print -quit)" >> "$GITHUB_ENV"
+      - name: Replay V3
+        run: |
+          python -m research.hype_false_local_entry.replay_high_flow_v3_four_regime --compact-1m "$JUL_C" --labels-gz "$JUL_L" --derive-internal --output JULAUG_HIGH_V3.json
+          python -m research.hype_false_local_entry.replay_high_flow_v3_four_regime --compact-1m "$LATE_C" --labels-gz "$LATE_L" --output LATEAUG_HIGH_V3.json
+          python -m research.hype_false_local_entry.replay_high_flow_v3_four_regime --compact-1m "$SEP_C" --labels-gz "$SEP_L" --output SEPTEMBER_HIGH_V3.json
+          python -m research.hype_false_local_entry.replay_high_flow_v3_four_regime --compact-1m "$OCT_C" --labels-gz "$OCT_L" --output OCTNOV_HIGH_V3.json
+          python - <<'PY'
+          import json
+          names=("JULAUG_HIGH_V3.json","LATEAUG_HIGH_V3.json","SEPTEMBER_HIGH_V3.json","OCTNOV_HIGH_V3.json")
+          out={}
+          for n in names:
+              x=json.load(open(n));m=x["evaluation"];out[n]=m
+              assert m["precision"]>=.80,(n,m)
+              assert m["recall"]>=.40,(n,m)
+              assert x["low_logic_changed"] is False
+              assert x["real_orders"] is False
+          print(json.dumps(out,indent=2))
+          open("HIGH_V3_FOUR_REGIME_SUMMARY.json","w").write(json.dumps(out,indent=2)+"\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-HIGH-FLOW-V3-${{ github.run_id }}
+          path: |
+            JULAUG_HIGH_V3.json
+            LATEAUG_HIGH_V3.json
+            SEPTEMBER_HIGH_V3.json
+            OCTNOV_HIGH_V3.json
+            HIGH_V3_FOUR_REGIME_SUMMARY.json
+          retention-days: 14
