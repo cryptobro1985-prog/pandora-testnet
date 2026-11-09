@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "objective": "Earlier causal terminal H1 L6/K2 LOW/HIGH recognition with actionable first-signal precision, useful recall, and distance around 30–70 bps.",
+  "objective": "Causally confirm already-formed terminal Local LOW/HIGH for event-driven paper reversal, optimizing confirmation precision, remaining swing, capture fraction and regime stability; no fixed-time entry gates.",
   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
   "head_sha": "3a6b9342f11bec93fc43af11b0f871d658ecf70b",
   "head_sha_basis": "Parent/input revision of this checkpoint. The checkpoint revision is resolved by git log -1 -- this file.",
@@ -137,6 +137,10 @@
     {
       "id": "strict-local-oracle-all-data-v1-20261109",
       "verdict": "Deduplicated master oracle over four historical periods: 260 finalized STRICT L6/K2 locals (131 LOW, 129 HIGH), 256 ideal LOW↔HIGH legs. Median captured move 3.515%; LOW→HIGH median 3.326%, HIGH→LOW median 3.649%. Best LOW entry 58.03→75.19 = +29.571%; best HIGH entry 68.98→58.445 = +15.273%. This is future-confirmed teacher/oracle only, never a live input."
+    },
+    {
+      "id": "confirmed-bounce-cv-oos-audit-20261110",
+      "verdict": "Confirmed-local bounce CV workflow 42714406452 passed, but frozen leave-one-period-out OOS is LOW 1/1 confirmations, recall 1/121=0.83%; HIGH 3/4 confirmations, recall 3/123=2.44%. True entries occurred far after extremes (LOW median 239.72 bps, HIGH 116.49 bps); only 5 confirmations across 244 episodes. Do not promote. Code chooses thresholds on in-sample predictions of training rows; threshold-selection optimism must be fixed with inner temporal OOF calibration. No fixed-time gate in source, but observed age_s=3600 in records merits audit for upstream feature/replay cap."
     }
   ],
   "rejected_hypotheses": [
