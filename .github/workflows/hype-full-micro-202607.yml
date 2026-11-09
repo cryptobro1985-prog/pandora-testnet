@@ -6,8 +6,6 @@ on:
     branches:
       - research/hype-h1-local-v5-oi-microstructure-20261104
     paths:
-      - "research/hype_full_micro_202607/**"
-      - "!research/hype_full_micro_202607/results/**"
       - ".github/workflows/hype-full-micro-202607.yml"
 
 permissions:
@@ -16,7 +14,7 @@ permissions:
 
 concurrency:
   group: hype-full-micro-202607
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build-train:
@@ -73,7 +71,6 @@ jobs:
           test -s full_micro_out/labels.json.gz
           test -s full_micro_out/manifest.json
           rm -rf full_micro_cache
-          gzip -9 -f full_micro_build.log
 
       - name: Audit causal coverage
         run: |
@@ -90,6 +87,76 @@ jobs:
           assert a["points_total"] == 116
           assert a["causal_input_points"] == 86
           PY
+
+      - name: Validate clean microstructure cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import gzip,json,math
+          path="full_micro_out/candidate_snapshots_full_micro.jsonl.gz"
+          rows=0
+          book_valid=0
+          book_crossed_masked=0
+          liq_valid={5:0,15:0,60:0,180:0,300:0}
+          liq_invalid={5:0,15:0,60:0,180:0,300:0}
+          bad=[]
+          with gzip.open(path,"rt",encoding="utf-8") as fh:
+              for line in fh:
+                  if not line.strip():
+                      continue
+                  r=json.loads(line); rows+=1
+                  f=r.get("features") or {}
+                  bv=float(f.get("fullmicro_book_valid",0) or 0)
+                  crossed=float(f.get("fullmicro_book_crossed",0) or 0)
+                  if bv==1.0:
+                      book_valid+=1
+                      spread=f.get("fullmicro_spread_bps")
+                      if spread is None or not math.isfinite(float(spread)) or float(spread)<=0 or crossed==1.0:
+                          bad.append(("book",rows,spread,crossed))
+                  elif crossed==1.0:
+                      book_crossed_masked+=1
+                  for sec in (5,15,60,180,300):
+                      vk=f"fullmicro_liq_stream_valid_{sec}s"
+                      ck=f"fullmicro_liq_count_{sec}s"
+                      v=float(f.get(vk,0) or 0)
+                      if v==1.0:
+                          liq_valid[sec]+=1
+                          if ck not in f:
+                              bad.append(("liq_valid_missing_count",rows,sec))
+                      else:
+                          liq_invalid[sec]+=1
+                          if ck in f:
+                              bad.append(("liq_invalid_encoded_as_zero",rows,sec,f.get(ck)))
+          assert rows>0
+          assert book_valid>0, "no valid L50 snapshots"
+          assert not bad, bad[:20]
+          summary={
+              "rows":rows,
+              "book_valid_rows":book_valid,
+              "book_crossed_rows_masked":book_crossed_masked,
+              "liq_valid_rows":liq_valid,
+              "liq_invalid_rows":liq_invalid,
+              "contract":"crossed/locked book masked; missing liquidation source never encoded as real zero"
+          }
+          print("CLEAN_MICRO_AUDIT="+json.dumps(summary,separators=(",",":")))
+          with open("full_micro_out/CLEAN_MICRO_AUDIT.json","w") as out:
+              json.dump(summary,out,indent=2)
+          PY
+
+      - name: Upload clean full-micro cache before modeling
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-FULL-MICRO-CLEAN-CACHE-202607-${{ github.run_id }}
+          path: |
+            full_micro_out/**
+            full_micro_build.log
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+
+      - name: Compress build log after clean-cache upload
+        run: gzip -9 -f full_micro_build.log
 
       - name: Find exact-time LOW and HIGH relations
         run: |
