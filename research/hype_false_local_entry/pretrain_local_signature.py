@@ -148,6 +148,15 @@ def main():
             for _ in range(repeat if r["strict_true"] else 1):
                 final.learn(side,r["features"],bool(r["strict_true"]),live=False)
 
+    final.history_bootstrap={
+        "version":"HYPE-LOCAL-SIGNATURE-HISTORY-BOOTSTRAP-v1",
+        "teacher":"STRICT_L6_K2_REFERENCE_FINALIZED_ONLY",
+        "rows":len(rows),
+        "finalized_strict_label_ids":len(finalized_ids),
+        "thresholds":{"LOW":selected["LOW"]["threshold"],"HIGH":selected["HIGH"]["threshold"]},
+        "candidate_age_removed_from_predictors":True,
+    }
+
     report={
         "version":"HYPE-LOCAL-SIGNATURE-HISTORY-BOOTSTRAP-v1",
         "teacher":"STRICT_L6_K2_REFERENCE_FINALIZED_ONLY",
