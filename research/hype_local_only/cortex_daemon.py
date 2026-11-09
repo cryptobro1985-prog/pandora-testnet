@@ -95,7 +95,15 @@ def call_cortex(url,model,payload,timeout):
                 continue
             raise RuntimeError("local_cortex_request_failed: "+" | ".join(errors))
         obj=r.json();msg=((obj.get("choices") or [{}])[0].get("message") or {})
-        parsed=json_object(msg.get("content") or msg.get("reasoning_content") or "")
+        try:
+            parsed=json_object(msg.get("content") or msg.get("reasoning_content") or "")
+        except (ValueError, json.JSONDecodeError) as exc:
+            # Some local reasoning models return empty content in JSON mode.
+            # Try the plain completion before marking Cortex degraded.
+            errors.append(f"invalid_json json_mode={with_json_mode} error={exc}")
+            if with_json_mode:
+                continue
+            raise RuntimeError("local_cortex_invalid_response: "+" | ".join(errors)) from exc
         parsed["_model_id"]=actual_model
         return parsed
     raise RuntimeError("local_cortex_request_failed: "+" | ".join(errors))
