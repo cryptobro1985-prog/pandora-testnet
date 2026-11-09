@@ -4,7 +4,7 @@
   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
   "head_sha": "3a6b9342f11bec93fc43af11b0f871d658ecf70b",
   "head_sha_basis": "Parent/input revision of this checkpoint. The checkpoint revision is resolved by git log -1 -- this file.",
-  "stage": "event_driven_local_signature_active",
+  "stage": "dense_event_driven_signature_rebuild_active",
   "completed_experiments": [
     {
       "id": "reuse-handoff-20261109",
@@ -105,6 +105,30 @@
     {
       "id": "event-driven-local-signature-v1-20261109",
       "verdict": "Replaced fixed-time decision gating with an event-driven Local Signature head. Every fresh running extreme is a candidate; each current causal state is rescored immediately. The 116-point contract remains canonical, but only the 86 INPUT_* causal/quality IDs are legal predictors. TARGET_EVAL/METADATA remain teacher/evaluation-only. Main live event is LOCAL_SIGNATURE_SIGNAL; fixed 30/60/90/180/300 checkpoints are legacy/evaluation-only."
+    },
+    {
+      "id": "local-signature-linear-bootstrap-20261109",
+      "verdict": "Strict-finalized 30D bootstrap was rejected as primary champion. OOS first-signal precision: LOW 3/19=15.79% with recall 33.33%; HIGH 8/51=15.69% with recall 80%. Candidate age was removed from predictors."
+    },
+    {
+      "id": "local-signature-nonlinear-v1-20261109",
+      "verdict": "Nonlinear validation overfit. LOW validation 2/2 true-first but OOS 0 true / 2 false. HIGH OOS 1 true / 0 false, but only 1/9 recall. Not promoted."
+    },
+    {
+      "id": "local-signature-rolling-cv-v2-20261109",
+      "verdict": "Three expanding chronological folds did not solve transfer. LOW OOS 0 true / 3 false. HIGH OOS 1 true / 2 false (33.33% precision). Not promoted."
+    },
+    {
+      "id": "local-continuation-risk-v1-20261109",
+      "verdict": "Continuation-risk target improved transfer versus direct terminal classifier. LOW OOS 1 true / 2 false = 33.33% precision, 11.11% recall. HIGH OOS 2 true / 0 false = 100% precision, 22.22% recall; median true delay 320.37s. HIGH kept as conservative challenger only; LOW still insufficient."
+    },
+    {
+      "id": "dense-candidate-distribution-audit-20261109",
+      "verdict": "Legacy 6h history covered only 48.66% of dense swing running-extreme candidates. Dense completed swings contain LOW 1721 candidates (1684 false, 37 true; 45.51 false/true) and HIGH 1682 (1646 false, 36 true; 45.72 false/true). This confirms severe historical/live candidate-space mismatch and explains optimistic transfer from legacy training."
+    },
+    {
+      "id": "dense-full-micro-dual-head-rebuild-42653578719",
+      "verdict": "Started corrected Jul12-Aug06 dense full-micro rebuild using every new target-side running extreme, immediate same-side invalidation, L50/liquidations/OI/full causal enrichment, and dual-head terminal-probability + continuation-risk training. Run 42653578719 active."
     }
   ],
   "rejected_hypotheses": [
@@ -147,16 +171,30 @@
     {
       "family": "common M1 flow/structure trajectory",
       "why": "LOW 19/60 and HIGH 24/93 true-first across three untouched-for-this-fit chronological blocks. All six precision gates failed."
+    },
+    {
+      "family": "event-driven linear terminal classifier on legacy 6h candidate space",
+      "why": "LOW/HIGH OOS first-signal precision ~15.7%; false-first dominated."
+    },
+    {
+      "family": "nonlinear terminal classifier on legacy 6h candidate space",
+      "why": "LOW failed untouched OOS; HIGH had 100% precision on only one accepted true signal and inadequate support."
+    },
+    {
+      "family": "rolling-CV terminal classifier on legacy 6h candidate space",
+      "why": "LOW OOS 0/3; HIGH 1/3. Candidate-space mismatch remained."
     }
   ],
   "active_hypotheses": {
     "LOW": [
-      "TRUE terminal LOW is characterized by a joint causal state transition: old sell-side efficiency/price impact decays, buy-side efficiency and upward price response rise, bid-side L50 absorption/replenishment/transfer improves, liquidation pressure exhausts/capitulates, OI-price-flow relation changes, and the running low survives without extension.",
-      "The best signal should trigger when the multivariate signature appears, not after a preset elapsed time."
+      "Dense live-matched candidate space is required: every new running LOW in the active swing, with immediate invalidation on a lower LOW.",
+      "LOW terminality likely needs rich microstructure unavailable on the legacy archive plane: sell-impact exhaustion, bid L50 replenishment/absorption/transfer, long-liquidation exhaustion/capitulation, and OI-price-flow state.",
+      "A dual-head decision (high terminal probability AND low continuation risk) should suppress the ~45 false running lows per true strict LOW better than a direct classifier alone."
     ],
     "HIGH": [
-      "TRUE terminal HIGH is characterized by the symmetric joint causal transition: old buy-side efficiency/price impact decays, sell-side efficiency and downward price response rise, ask-side L50 absorption/replenishment/transfer improves, liquidation pressure exhausts/capitulates, OI-price-flow relation changes, and the running high survives without extension.",
-      "The best signal should trigger when the multivariate signature appears, not after a preset elapsed time."
+      "Continuation-risk is already promising: legacy-plane OOS produced 2/2 true first signals (100% precision, 22.22% recall), but support is too small for promotion.",
+      "Dense candidate matching plus L50/liquidations/OI should test whether HIGH precision can retain while recall improves.",
+      "Use dual-head terminal score + continuation-risk, never fixed elapsed-time eligibility."
     ]
   },
   "exact_commands": [
@@ -215,7 +253,14 @@
     "time_to_confirmation_engine": "research/hype_false_local_entry/time_to_confirmation_engine.py",
     "time_to_confirmation_tests": "research/hype_false_local_entry/test_time_to_confirmation_engine.py",
     "local_signature_model": "research/hype_false_local_entry/local_signature_model.py",
-    "local_signature_live": "research/hype_false_local_entry/local_signature_live.py"
+    "local_signature_live": "research/hype_false_local_entry/local_signature_live.py",
+    "local_signature_bootstrap": "research/hype_false_local_entry/results/LOCAL_SIGNATURE_BOOTSTRAP_LATEST.json",
+    "local_signature_challenger": "research/hype_false_local_entry/results/LOCAL_SIGNATURE_CHALLENGER_LATEST.json",
+    "local_signature_cv": "research/hype_false_local_entry/results/LOCAL_SIGNATURE_CV_LATEST.json",
+    "local_continuation_risk": "research/hype_false_local_entry/results/LOCAL_CONTINUATION_RISK_LATEST.json",
+    "dense_candidate_audit": "research/hype_false_local_entry/results/DENSE_CANDIDATE_AUDIT_LATEST.json",
+    "dense_full_micro_builder": "research/hype_full_micro_202607/build_dense_full_micro.py",
+    "dense_full_micro_trainer": "research/hype_full_micro_202607/train_dense_signature.py"
   },
   "frozen_thresholds_model_hashes": {
     "LOW": {
@@ -243,7 +288,7 @@
       }
     }
   },
-  "next_cheapest_useful_action": "Validate event-driven Local Signature smoke/live integration, then use the corrected rich-micro cache to pretrain LOW/HIGH signature heads on all causally available INPUT_* evidence; freeze before chronological/OOS. Treat delay only as an evaluation metric.",
+  "next_cheapest_useful_action": "Watch run 42653578719. If it fails, repair the failing producer step and restart. If it succeeds, inspect HYPE_DENSE_FULL_MICRO_DUAL_HEAD_REPORT.json: LOW/HIGH OOS first-signal precision/recall, false continuation, missed move and delay. Do not promote unless OOS support is adequate. If LOW still fails, mine rich-micro false-first vs true-first feature differences and add an explicit LOW-only veto.",
   "expensive_actions_not_yet_justified": [
     "Chronological replay of the rejected rules or threshold retuning",
     "Sealed May/June scoring or forward deployment of the rejected rules",
@@ -272,7 +317,8 @@
     "full116_live_diagnostic": "Both case archives verified against raw trades and event logs.",
     "full116_clean_micro": "corrected producer rebuild active in run 42646145054",
     "ttc_smoke": "passed run 42646267783",
-    "ttc_forward_strict": "active; checkpoints 30/60/90/180/300s accumulate against STRICT_L6_K2 terminal-finalized labels"
+    "ttc_forward_strict": "active; checkpoints 30/60/90/180/300s accumulate against STRICT_L6_K2 terminal-finalized labels",
+    "dense_full_micro": "run 42653578719 active; must pass book/liquidation/OI quality masks before model result is trusted"
   },
   "test_status": {
     "new_trajectory_tests_passed": 7,
