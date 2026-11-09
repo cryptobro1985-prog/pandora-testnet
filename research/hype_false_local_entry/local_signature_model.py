@@ -65,6 +65,7 @@ class LocalSignatureModel:
         self.positive={"LOW":0,"HIGH":0}
         self.live_labels={"LOW":0,"HIGH":0}
         self.last_decision={"LOW":None,"HIGH":None}
+        self.history_bootstrap={}
 
     def learn(self, side: str, features: dict[str,float], y: bool, *, live: bool=True):
         side=str(side).upper()
@@ -134,5 +135,6 @@ class LocalSignatureModel:
             "input_contract_count":len(INPUT_IDS),
             "time_gated":False,
             "decision_contract":"CURRENT_CAUSAL_SIGNATURE_ONLY",
+            "history_bootstrap":dict(getattr(self,"history_bootstrap",{}) or {}),
             "real_orders":False,
         }
