@@ -52,6 +52,8 @@ from research.hype_false_local_entry.time_to_confirmation_engine import (
 from research.hype_false_local_entry.time_to_confirmation_live import (
     build_confirmation_evidence,
 )
+from research.hype_false_local_entry.local_signature_model import LocalSignatureModel
+from research.hype_false_local_entry.local_signature_live import build_signature_state
 
 H=3_600_000
 
@@ -65,6 +67,15 @@ class Pending:
     x:dict[str,float]
     mature_ms:int
     teacher_scope:str="STRICT_L6_K2"
+
+@dataclass
+class SignaturePending:
+    candidate_id:str
+    side:str
+    extreme_price:float
+    extreme_ts_ms:int
+    x:dict[str,float]
+    mature_ms:int
 
 def load_pickle(path,default):
     try:
@@ -269,6 +280,8 @@ def main():
     mp=args.checkpoint_dir/"local_only_model.pkl"
     if not mp.exists():raise SystemExit("local_only_model.pkl missing")
     model=LocalOnlyModel.load(mp)
+    sigmp=args.checkpoint_dir/"local_signature_model.pkl"
+    signature_model=load_pickle(sigmp,LocalSignatureModel())
     # Old v1 checkpoints do not contain the tactical INTERNAL learner.
     model._ensure_internal_scope()
     fp=args.checkpoint_dir/"feature_state.pkl";state=load_pickle(fp,FeatureState())
@@ -277,7 +290,12 @@ def main():
                        "hard_high_flow_shadow":{"LOW":None,"HIGH":None},
                        "hard_high_flow_v2_emitted":{"LOW":None,"HIGH":None},
                        "hard_early60_shadow":{"LOW":None,"HIGH":None},
-                       "pending":[],"expected_side":None,
+                       "pending":[],"signature_pending":[],
+                       "signature_candidates":{"LOW":None,"HIGH":None},
+                       "signature_emitted":{"LOW":None,"HIGH":None},
+                       "signature_latest_by_hour":{},
+                       "signature_expected":None,
+                       "expected_side":None,
                        "last_teacher_local":None,"latest_by_hour":{},"structure_48h":{}})
     candidates=rt.get("candidates") or {"LOW":None,"HIGH":None}
     hard_candidates={}
@@ -294,7 +312,12 @@ def main():
         _z=(rt.get("hard_early60_shadow") or {}).get(_side)
         hard_early60_shadow[_side]=Early60State(**_z) if isinstance(_z,dict) else _z
     pending=[Pending(**z) if isinstance(z,dict) else z for z in rt.get("pending",[])]
+    signature_pending=[SignaturePending(**z) if isinstance(z,dict) else z for z in rt.get("signature_pending",[])]
+    signature_candidates=rt.get("signature_candidates") or {"LOW":None,"HIGH":None}
+    signature_emitted=rt.get("signature_emitted") or {"LOW":None,"HIGH":None}
+    signature_latest_by_hour=rt.get("signature_latest_by_hour") or {}
     expected=rt.get("expected_side");last_teacher=rt.get("last_teacher_local")
+    signature_expected=rt.get("signature_expected") or expected
     latest_by_hour=rt.get("latest_by_hour") or {}
     structure_48h=rt.get("structure_48h") or {}
     # Early time-to-confirmation is a shadow research layer. It never changes
@@ -335,6 +358,109 @@ def main():
             except Exception:continue
             if ts<next_sample:continue
             next_sample=ts+5000
+
+            # EVENT-DRIVEN LOCAL SIGNATURE.
+            # No elapsed-time checkpoint authorizes entry. Every fresh running
+            # extreme is tracked immediately and the full current causal state
+            # is rescored on every observation sample.
+            signature_live={}
+            for sig_side in ("LOW","HIGH"):
+                sc=signature_candidates.get(sig_side)
+                extends=(sc is None or
+                         (sig_side=="LOW" and float(price)<float(sc.extreme_price)) or
+                         (sig_side=="HIGH" and float(price)>float(sc.extreme_price)))
+                if extends:
+                    if sc is not None:
+                        append_jsonl(evlog,{
+                            "event":"LOCAL_SIGNATURE_INVALIDATED",
+                            "ts_ms":int(ts),"candidate_ts_ms":int(sc.extreme_ts_ms),
+                            "candidate_id":sc.candidate_id,"side":sig_side,
+                            "price":float(sc.extreme_price),"replacement_price":float(price),
+                            "reason":"fresh_same_side_extreme",
+                            "research_only":True,"real_orders":False,
+                        })
+                    sc=Candidate(
+                        sig_side,float(price),int(ts),f"SIG-{sig_side[0]}-{ts}",
+                        evidence={"proposal":"EVERY_RUNNING_EXTREME"}
+                    )
+                    signature_candidates[sig_side]=sc
+                    signature_emitted[sig_side]=None
+                    signature_latest_by_hour[
+                        f"{sig_side}:{(int(ts)//H)*H}"
+                    ]=sc.candidate_id
+
+                if sc is None:
+                    signature_live[sig_side]=None
+                    continue
+
+                sigx,sigmeta=build_signature_state(
+                    side=sig_side,candidate=sc,ts_ms=int(ts),
+                    price=float(price),x=x,state=state
+                )
+                sigdec=signature_model.decide(
+                    side=sig_side,ts_ms=int(ts),candidate_id=sc.candidate_id,
+                    extreme_price=float(sc.extreme_price),mark_price=float(price),
+                    features=sigx,
+                    seen_input_ids=set(sigmeta["seen_input_ids"]),
+                    quality_ok=bool(sigmeta["quality_ok"]),
+                    decisive_evidence=sigmeta["evidence"],
+                )
+                signature_pending.append(SignaturePending(
+                    candidate_id=sc.candidate_id,side=sig_side,
+                    extreme_price=float(sc.extreme_price),
+                    extreme_ts_ms=int(sc.extreme_ts_ms),x=sigx,
+                    mature_ms=((int(sc.extreme_ts_ms)//H)*H)+3*H,
+                ))
+                append_jsonl(evlog,{
+                    "event":"LOCAL_SIGNATURE_STATE",
+                    "ts_ms":int(ts),"signal_ts_ms":int(ts),
+                    "candidate_ts_ms":int(sc.extreme_ts_ms),
+                    "candidate_id":sc.candidate_id,"side":sig_side,
+                    "price":float(sc.extreme_price),"mark_price":float(price),
+                    "score":float(sigdec.score),"threshold":float(sigdec.threshold),
+                    "state":sigdec.state,
+                    "input_coverage":float(sigdec.input_coverage),
+                    "seen_input_count":int(sigdec.seen_input_count),
+                    "quality_ok":bool(sigdec.quality_ok),
+                    "evidence":sigdec.decisive_evidence,
+                    "age_s_metric_only":sigmeta["age_s_metric_only"],
+                    "time_gate":False,
+                    "research_only":True,"real_orders":False,
+                })
+                if sigdec.enter and signature_emitted.get(sig_side)!=sc.candidate_id:
+                    signature_emitted[sig_side]=sc.candidate_id
+                    signature_expected="HIGH" if sig_side=="LOW" else "LOW"
+                    append_jsonl(evlog,{
+                        "event":"LOCAL_SIGNATURE_SIGNAL",
+                        "ts_ms":int(ts),"signal_ts_ms":int(ts),
+                        "candidate_ts_ms":int(sc.extreme_ts_ms),
+                        "candidate_id":sc.candidate_id,"side":sig_side,
+                        "price":float(sc.extreme_price),"mark_price":float(price),
+                        "score":float(sigdec.score),"threshold":float(sigdec.threshold),
+                        "target_side":sigdec.target_side,
+                        "teacher":STRICT.name,
+                        "signature_contract":signature_model.VERSION,
+                        "input_coverage":float(sigdec.input_coverage),
+                        "seen_input_count":int(sigdec.seen_input_count),
+                        "evidence":sigdec.decisive_evidence,
+                        "age_s_metric_only":sigmeta["age_s_metric_only"],
+                        "time_gate":False,
+                        "core_flip_authorized":False,
+                        "research_only":True,"real_orders":False,
+                    })
+                signature_live[sig_side]={
+                    "candidate_id":sc.candidate_id,
+                    "extreme_price":float(sc.extreme_price),
+                    "extreme_ts_ms":int(sc.extreme_ts_ms),
+                    "score":float(sigdec.score),"threshold":float(sigdec.threshold),
+                    "state":sigdec.state,"target_side":sigdec.target_side,
+                    "seen_input_count":int(sigdec.seen_input_count),
+                    "input_coverage":float(sigdec.input_coverage),
+                    "quality_ok":bool(sigdec.quality_ok),
+                    "evidence":sigdec.decisive_evidence,
+                    "age_s_metric_only":sigmeta["age_s_metric_only"],
+                    "time_gate":False,
+                }
 
             # H1 prior is scored with frozen clean finalized-history weights.
             # Online K2-pivot learning is disabled because the latest pivot is
@@ -889,6 +1015,33 @@ def main():
                     "features":item.x})
             pending=keep
 
+            sig_keep=[]
+            for item in signature_pending:
+                if ts<int(item.mature_ms):
+                    sig_keep.append(item);continue
+                y=finalized_terminal_label(
+                    completed_h1(state,ts),item.extreme_ts_ms,item.side,STRICT.name,ts
+                )
+                if y is None:
+                    sig_keep.append(item);continue
+                hour=(int(item.extreme_ts_ms)//H)*H
+                is_latest=(signature_latest_by_hour.get(f"{item.side}:{hour}")==item.candidate_id)
+                y=bool(y and is_latest)
+                signature_model.learn(item.side,item.x,y,live=True)
+                append_jsonl(lablog,{
+                    "ts_ms":int(ts),"candidate_id":item.candidate_id,
+                    "side":item.side,"stage":-1,"label":bool(y),
+                    "is_latest_extreme_in_hour":is_latest,
+                    "extreme_ts_ms":int(item.extreme_ts_ms),
+                    "extreme_price":float(item.extreme_price),
+                    "teacher_finalized_ts_ms":int(ts),
+                    "teacher":STRICT.name,
+                    "teacher_role":"LOCAL_SIGNATURE_EVENT_DRIVEN",
+                    "feature_count":len(item.x),
+                    "features":item.x,
+                })
+            signature_pending=sig_keep
+
             c=candidates.get(expected) if expected else None
             if c is None:
                 opts=[z for z in candidates.values() if z is not None]
@@ -1022,6 +1175,14 @@ def main():
                 "early60_plus_hard120_high_flow_forward":full_shadow_stack_forward,
                 "early60_plus_persistence_hard120_high_flow_forward":persistence_full_stack_forward,
                 "forward_first_signal":forward_first_signal,
+                "local_signature":{
+                    "expected_side":signature_expected,
+                    "live":signature_live,
+                    "model":signature_model.report(),
+                    "pending_labels":len(signature_pending),
+                    "time_gated":False,
+                    "decision":"CURRENT_CAUSAL_SIGNATURE",
+                },
                 "model_report":model.report(),
                 "h1_baseline":model.h1_shadow,
                 "h1_training":{"labels":model.h1_labels,"positive":model.h1_positive},
@@ -1044,13 +1205,18 @@ def main():
 
         now=time.time()
         if now>=next_save:
-            model.save(mp);save_pickle(fp,state)
+            model.save(mp);save_pickle(sigmp,signature_model);save_pickle(fp,state)
             save_pickle(rp,{"candidates":candidates,
                 "hard_candidates":{k:(None if v is None else v.to_dict()) for k,v in hard_candidates.items()},
                 "hard_high_flow_shadow":{k:(None if v is None else v.to_dict()) for k,v in hard_high_flow_shadow.items()},
                 "hard_high_flow_v2_emitted":hard_high_flow_v2_emitted,
                 "hard_early60_shadow":{k:(None if v is None else v.to_dict()) for k,v in hard_early60_shadow.items()},
                 "pending":[asdict(z) for z in pending],
+                "signature_pending":[asdict(z) for z in signature_pending],
+                "signature_candidates":signature_candidates,
+                "signature_emitted":signature_emitted,
+                "signature_latest_by_hour":signature_latest_by_hour,
+                "signature_expected":signature_expected,
                 "expected_side":expected,"last_teacher_local":last_teacher,
                 "latest_by_hour":latest_by_hour,"structure_48h":structure_48h})
             if status:status_path.write_text(json.dumps(status,indent=2)+"\n")
@@ -1061,13 +1227,18 @@ def main():
             publish_issue(status);next_issue=now+30
         if not events:time.sleep(.5)
 
-    model.save(mp);save_pickle(fp,state)
+    model.save(mp);save_pickle(sigmp,signature_model);save_pickle(fp,state)
     save_pickle(rp,{"candidates":candidates,
         "hard_candidates":{k:(None if v is None else v.to_dict()) for k,v in hard_candidates.items()},
         "hard_high_flow_shadow":{k:(None if v is None else v.to_dict()) for k,v in hard_high_flow_shadow.items()},
         "hard_high_flow_v2_emitted":hard_high_flow_v2_emitted,
         "hard_early60_shadow":{k:(None if v is None else v.to_dict()) for k,v in hard_early60_shadow.items()},
         "pending":[asdict(z) for z in pending],
+        "signature_pending":[asdict(z) for z in signature_pending],
+        "signature_candidates":signature_candidates,
+        "signature_emitted":signature_emitted,
+        "signature_latest_by_hour":signature_latest_by_hour,
+        "signature_expected":signature_expected,
         "expected_side":expected,"last_teacher_local":last_teacher,
         "latest_by_hour":latest_by_hour,"structure_48h":structure_48h})
     if status:
