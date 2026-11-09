@@ -1,0 +1,144 @@
+name: Preserve HYPE Jul-Nov Historical Master
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-preserve-jul-nov-master.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-master:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble every preserved Jul-Nov HYPE block
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="HYPE_HISTORY_20260712_20261103_MASTER"
+          mkdir -p "$ROOT"/{01_JUL12_AUG07_FULL_MICRO,02_AUG08_SEP01,03_SEP01_OCT01,04_OCT04_NOV03,_source_artifacts}
+
+          fetch() {
+            id="$1"; out="$2"; dest="$3"
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" > "$ROOT/_source_artifacts/$out"
+            unzip -q "$ROOT/_source_artifacts/$out" -d "$dest"
+          }
+
+          fetch 13585701406 jul12_aug07_full_micro.zip /tmp/julaug
+          cp -a /tmp/julaug/full_micro_out/. "$ROOT/01_JUL12_AUG07_FULL_MICRO/"
+
+          fetch 13638795292 aug08_sep01.zip /tmp/lateaug
+          cp -a /tmp/lateaug/. "$ROOT/02_AUG08_SEP01/"
+
+          fetch 13637558401 sep01_oct01.zip /tmp/sep
+          cp -a /tmp/sep/_temp/hype-sep-out/. "$ROOT/03_SEP01_OCT01/"
+          cp -a /tmp/sep/pandora-testnet/pandora-testnet/SEPTEMBER_UNTOUCHED_RESULT.json "$ROOT/03_SEP01_OCT01/" || true
+          cp -a /tmp/sep/pandora-testnet/pandora-testnet/SEPTEMBER_HARD120_ONLY.json "$ROOT/03_SEP01_OCT01/" || true
+          cp -a /tmp/sep/pandora-testnet/pandora-testnet/SEPTEMBER_FULL_STACK.json "$ROOT/03_SEP01_OCT01/" || true
+
+          fetch 13435356156 oct04_nov03.zip /tmp/octnov
+          cp -a /tmp/octnov/. "$ROOT/04_OCT04_NOV03/"
+
+          python - <<'PY'
+          import json,hashlib
+          from pathlib import Path
+          root=Path("HYPE_HISTORY_20260712_20261103_MASTER")
+          files=[]
+          for p in sorted(root.rglob("*")):
+              if p.is_file():
+                  h=hashlib.sha256()
+                  with p.open("rb") as f:
+                      for b in iter(lambda:f.read(1024*1024),b""):
+                          h.update(b)
+                  files.append({"path":str(p.relative_to(root)),"bytes":p.stat().st_size,"sha256":h.hexdigest()})
+
+          periods=[
+            {
+              "folder":"01_JUL12_AUG07_FULL_MICRO",
+              "start":"2026-07-12T17:00:00Z","end":"2026-08-07T00:00:00Z",
+              "class":"full_micro_historical",
+              "known_causal_inputs":83,
+              "missing_input_ids":[111,112,113],
+              "notes":"Trades + historical L50 orderbook + liquidations + OI + mark/ticker. Some liquidation hours are absent and explicitly listed in the source manifest."
+            },
+            {
+              "folder":"02_AUG08_SEP01",
+              "start":"2026-08-08T00:00:00Z","end":"2026-09-01T00:00:00Z",
+              "class":"compact_trade_structural",
+              "notes":"Bybit executed-trade history compacted into causal structure/flow; unavailable historical streams are not fabricated."
+            },
+            {
+              "folder":"03_SEP01_OCT01",
+              "start":"2026-09-01T00:00:00Z","end":"2026-10-01T00:00:00Z",
+              "class":"compact_trade_structural_plus_audits",
+              "notes":"Compact causal replay, labels and frozen September audit outputs."
+            },
+            {
+              "folder":"04_OCT04_NOV03",
+              "start":"2026-10-04T00:00:00Z","end":"2026-11-03T00:00:00Z",
+              "class":"compact_trade_structural_plus_snapshots",
+              "notes":"Compact causal replay, candidate snapshots, labels and availability metadata."
+            },
+          ]
+          index={
+            "dataset":"HYPE_HISTORY_20260712_20261103_MASTER",
+            "symbol":"HYPEUSDT",
+            "coverage":{
+              "start":"2026-07-12T17:00:00Z",
+              "end":"2026-11-03T00:00:00Z",
+              "known_calendar_gaps":[
+                "2026-08-07T00:00:00Z..2026-08-08T00:00:00Z",
+                "2026-10-01T00:00:00Z..2026-10-04T00:00:00Z"
+              ]
+            },
+            "feature_contract":{
+              "points_total":116,
+              "causal_or_quality_inputs":86,
+              "metadata":2,
+              "target_eval":28,
+              "anti_leakage":"83..110 are teacher/eval only, never predictors"
+            },
+            "principle":"Preserve everything that exists; keep missing streams missing; never impute unavailable history.",
+            "periods":periods,
+            "files":files,
+          }
+          (root/"MASTER_INDEX.json").write_text(json.dumps(index,indent=2,ensure_ascii=False)+"\n")
+          (root/"README.md").write_text("""# HYPE historical master — Jul 12 to Nov 3, 2026
+
+This artifact preserves every currently available HYPE historical block used by the Local research, regardless of feature completeness.
+
+Periods:
+- Jul 12 17:00 UTC → Aug 7 00:00 UTC: richest full-micro history.
+- Aug 8 00:00 UTC → Sep 1 00:00 UTC.
+- Sep 1 00:00 UTC → Oct 1 00:00 UTC.
+- Oct 4 00:00 UTC → Nov 3 00:00 UTC.
+
+Known calendar gaps: Aug 7→8 and Oct 1→4. Missing internal streams remain explicitly missing; nothing is fabricated.
+
+The 116-point research contract contains 86 causal/quality inputs, 2 metadata points and 28 teacher/evaluation points. Teacher/eval IDs 83–110 must never enter the predictive feature set.
+
+For Local detection, market structure is part of the causal context: previous confirmed H1 High/Low, active swing, same-side extreme replacement, rolling 60m/6h/24h position, maturity and retracement are evaluated before/alongside flow, price response, book, OI and liquidations where available.
+""")
+          print(json.dumps({"files":len(files),"bytes":sum(x["bytes"] for x in files)},indent=2))
+          PY
+
+          du -sh "$ROOT"
+          test -s "$ROOT/MASTER_INDEX.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-HISTORY-20260712-20261103-MASTER
+          path: HYPE_HISTORY_20260712_20261103_MASTER/**
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
