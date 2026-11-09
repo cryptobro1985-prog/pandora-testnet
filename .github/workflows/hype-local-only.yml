@@ -65,7 +65,8 @@ jobs:
             research/hype_false_local_entry/time_to_confirmation_engine.py \
             research/hype_false_local_entry/time_to_confirmation_live.py \
             research/hype_false_local_entry/local_signature_model.py \
-            research/hype_false_local_entry/local_signature_live.py
+            research/hype_false_local_entry/local_signature_live.py \
+            research/hype_false_local_entry/pretrain_local_signature.py
           python -m unittest \
             research.hype_false_local_entry.test_time_to_confirmation_engine \
             research.hype_false_local_entry.test_time_to_confirmation_live \
@@ -171,6 +172,48 @@ jobs:
           else
             echo "found=0" >> "${GITHUB_OUTPUT}"
           fi
+
+      - name: Bootstrap event-driven Local Signature from finalized STRICT history
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          NEED="$(python - <<'PY'
+          import pickle
+          from pathlib import Path
+          p=Path("local_cp/local_signature_model.pkl")
+          if not p.exists():
+              print("1")
+          else:
+              try:
+                  q=pickle.load(p.open("rb"))
+                  meta=getattr(q,"history_bootstrap",{}) or {}
+                  print("0" if meta.get("version")=="HYPE-LOCAL-SIGNATURE-HISTORY-BOOTSTRAP-v1" else "1")
+              except Exception:
+                  print("1")
+          PY
+          )"
+          if [ "$NEED" = "1" ]; then
+            echo "bootstrapping Local Signature from finalized STRICT history"
+            rm -rf signature_history signature_history.zip
+            mkdir -p signature_history
+            ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=local116-HYPE" \
+              --jq '.artifacts | map(select((.expired|not) and .name=="local116-HYPE")) | sort_by(.created_at) | reverse | .[0].id // empty')"
+            test -n "$ID"
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$ID/zip" > signature_history.zip
+            unzip -q signature_history.zip -d signature_history
+            test -s signature_history/candidate_snapshots.jsonl.gz
+            test -s signature_history/labels.json.gz
+            python -m research.hype_false_local_entry.pretrain_local_signature \
+              --snapshots signature_history/candidate_snapshots.jsonl.gz \
+              --labels-gz signature_history/labels.json.gz \
+              --model-out local_cp/local_signature_model.pkl \
+              --report-out local_cp/LOCAL_SIGNATURE_BOOTSTRAP_REPORT.json
+          else
+            echo "Local Signature historical bootstrap already present"
+          fi
+          test -s local_cp/local_signature_model.pkl
 
       - name: Detect legacy provisional-pivot checkpoint
         id: terminal_migration
@@ -596,6 +639,7 @@ jobs:
             local_cp/FIRST_SIGNAL_FORWARD_STATUS.json
             local_cp/LOCAL_SIGNATURE_FORWARD_STATUS.json
             local_cp/local_signature_model.pkl
+            local_cp/LOCAL_SIGNATURE_BOOTSTRAP_REPORT.json
             local_cp/TACTICAL_60S_FORWARD_STATUS.json
             local_cp/TACTICAL_180S_FORWARD_STATUS.json
             local_cp/TACTICAL_300S_FORWARD_STATUS.json
@@ -635,6 +679,7 @@ jobs:
             local_cp/FIRST_SIGNAL_FORWARD_STATUS.json
             local_cp/LOCAL_SIGNATURE_FORWARD_STATUS.json
             local_cp/local_signature_model.pkl
+            local_cp/LOCAL_SIGNATURE_BOOTSTRAP_REPORT.json
             local_cp/TACTICAL_60S_FORWARD_STATUS.json
             local_cp/TACTICAL_180S_FORWARD_STATUS.json
             local_cp/TACTICAL_300S_FORWARD_STATUS.json
