@@ -59,6 +59,7 @@ jobs:
             research/hype_full_micro_202607/build_dense_full_micro.py \
             research/hype_full_micro_202607/train_full_micro.py \
             research/hype_full_micro_202607/train_dense_signature.py \
+            research/hype_full_micro_202607/train_retrace_anchor_signature.py \
             research/hype_full_micro_202607/find_low_high_relations.py \
             research/hype_full_micro_202607/test_data_quality.py
           python -m unittest research.hype_full_micro_202607.test_data_quality
@@ -201,6 +202,15 @@ jobs:
           test -s full_micro_model/HYPE_DENSE_FULL_MICRO_DUAL_HEAD_REPORT.json
           gzip -9 -f full_micro_train.log
 
+      - name: Rework the historical 0.33-0.35pct retrace Local regime
+        run: |
+          python -m research.hype_full_micro_202607.train_retrace_anchor_signature \
+            --snapshots full_micro_out/candidate_snapshots_full_micro.jsonl.gz \
+            --labels-gz full_micro_out/labels.json.gz \
+            --output full_micro_retrace | tee full_micro_retrace.log
+          test -s full_micro_retrace/HYPE_RETRACE_ANCHORED_RICH_SIGNATURE_REPORT.json
+          gzip -9 -f full_micro_retrace.log
+
       - name: Publish latest report to research branch
         shell: bash
         run: |
@@ -209,6 +219,7 @@ jobs:
           cp full_micro_out/manifest.json research/hype_full_micro_202607/results/LATEST_MANIFEST.json
           cp full_micro_out/feature_availability.json research/hype_full_micro_202607/results/LATEST_FEATURE_AVAILABILITY.json
           cp full_micro_model/HYPE_DENSE_FULL_MICRO_DUAL_HEAD_REPORT.json research/hype_full_micro_202607/results/LATEST_REPORT.json
+          cp full_micro_retrace/HYPE_RETRACE_ANCHORED_RICH_SIGNATURE_REPORT.json research/hype_full_micro_202607/results/RETRACE_ANCHORED_RICH_SIGNATURE_LATEST.json
           cp full_micro_relations/LOW_HIGH_RELATIONS_LATEST.json research/hype_full_micro_202607/results/LOW_HIGH_RELATIONS_LATEST.json
           git config user.name "pandora-research-bot"
           git config user.email "actions@users.noreply.github.com"
@@ -236,7 +247,9 @@ jobs:
           name: HYPE-FULL-MICRO-202607-MODEL-${{ github.run_id }}
           path: |
             full_micro_model/**
+            full_micro_retrace/**
             full_micro_train.log.gz
+            full_micro_retrace.log.gz
           if-no-files-found: error
           retention-days: 60
           compression-level: 9
