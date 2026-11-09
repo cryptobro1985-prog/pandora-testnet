@@ -354,10 +354,25 @@ def liquidation_events(df):
     out.sort(key=lambda z:z[0])
     return out,cs
 
-def liq_features(events,t):
+def liq_features(events,t,available_hours=None):
+    """Causal liquidation features with an explicit source-availability mask.
+
+    Missing hourly liquidation files must never be encoded as a real zero.
+    Each window is valid only when every UTC hour touched by [t-sec,t] was
+    actually downloaded.
+    """
     out={}
+    available_hours=set(available_hours or ())
     for sec in (5,15,60,180,300):
-        q=[z for z in events if t-sec*1000<=z[0]<=t]
+        start=int(t)-sec*1000
+        first=(start//HOUR)*HOUR
+        last=(int(t)//HOUR)*HOUR
+        required=range(first,last+HOUR,HOUR)
+        valid=bool(available_hours) and all(h in available_hours for h in required)
+        out[f"fullmicro_liq_stream_valid_{sec}s"]=1.0 if valid else 0.0
+        if not valid:
+            continue
+        q=[z for z in events if start<=z[0]<=t]
         lng=sum(n for _,n,pos in q if pos=="LONG");sht=sum(n for _,n,pos in q if pos=="SHORT")
         out[f"fullmicro_liq_count_{sec}s"]=float(len(q))
         out[f"fullmicro_long_liq_notional_{sec}s"]=lng
@@ -467,8 +482,20 @@ def book_features(state,t=None):
         return {"fullmicro_book_valid":0.0,"fullmicro_book_gap_count":float((state or {}).get("gap_count",0))}
     b=sorted(state["bids"].items(),reverse=True)[:50];a=sorted(state["asks"].items())[:50]
     if not b or not a:return {"fullmicro_book_valid":0.0,"fullmicro_book_gap_count":float(state.get("gap_count",0))}
-    bb=b[0][0];aa=a[0][0];mid=(bb+aa)/2
-    out={"fullmicro_book_valid":1.0,"fullmicro_book_gap_count":float(state.get("gap_count",0)),
+    bb=b[0][0];aa=a[0][0]
+    # A crossed/locked L2 state is not a valid orderbook snapshot.  Older
+    # historical replays could keep state["valid"] true across a sequence
+    # anomaly and silently emit a negative spread.  Mask the entire book
+    # feature family instead of training on that transport artifact.
+    if bb>=aa:
+        return {
+            "fullmicro_book_valid":0.0,
+            "fullmicro_book_crossed":1.0,
+            "fullmicro_book_gap_count":float(state.get("gap_count",0)),
+        }
+    mid=(bb+aa)/2
+    out={"fullmicro_book_valid":1.0,"fullmicro_book_crossed":0.0,
+         "fullmicro_book_gap_count":float(state.get("gap_count",0)),
          "fullmicro_spread_bps":(aa-bb)/mid*10000}
     for n in (5,10,25,50):
         bn=sum(p*q for p,q in b[:n]);an=sum(p*q for p,q in a[:n]);den=bn+an
@@ -504,6 +531,7 @@ def enrich(src,records,schemas):
     book_state=None
     scalar_state={k:{} for k in ("open_interest","mark_price","ticker")}
     liq_recent=[]
+    liq_available_hours=set()
     dt=START-timedelta(hours=24)
     while dt<END:
         targets=sorted(r["snapshot_ts_ms"] for r in byhour.get(dt,[]))
@@ -524,6 +552,7 @@ def enrich(src,records,schemas):
             lp=src.get(dt,"liquidations")
             if lp:
                 ldf=read_parquet(lp);ev,cs=liquidation_events(ldf);liq_recent.extend(ev)
+                liq_available_hours.add(ms(dt))
                 schemas.setdefault("liquidations",cs);lp.unlink(missing_ok=True)
             for kind in ("open_interest","mark_price","ticker"):
                 p=src.get(dt,kind)
@@ -548,7 +577,7 @@ def enrich(src,records,schemas):
                 askrep=f.get(f"fullmicro_ask_replenish_notional_{sec}s")
                 if finite(bidrep):f[f"fullmicro_bid_absorption_proxy_{sec}s"]=float(bidrep)/(sell+1e-12)
                 if finite(askrep):f[f"fullmicro_ask_absorption_proxy_{sec}s"]=float(askrep)/(buy+1e-12)
-            f.update(liq_features(liq_recent,t))
+            f.update(liq_features(liq_recent,t,liq_available_hours))
             for kind in ("open_interest","mark_price","ticker"):
                 z=scalar_snaps[kind].get(t,{})
                 stamp=z.get("_ts_ms")
