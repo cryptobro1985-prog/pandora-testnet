@@ -58,6 +58,7 @@ jobs:
             research/hype_full_micro_202607/build_full_micro.py \
             research/hype_full_micro_202607/build_dense_full_micro.py \
             research/hype_full_micro_202607/train_full_micro.py \
+            research/hype_full_micro_202607/train_dense_signature.py \
             research/hype_full_micro_202607/find_low_high_relations.py \
             research/hype_full_micro_202607/test_data_quality.py
           python -m unittest research.hype_full_micro_202607.test_data_quality
@@ -190,11 +191,14 @@ jobs:
           PY
           gzip -9 -f full_micro_relation.log
 
-      - name: Train full-micro Local models
+      - name: Train dense dual-head Local Signature models
         run: |
-          python -m research.hype_full_micro_202607.train_full_micro             --snapshots full_micro_out/candidate_snapshots_full_micro.jsonl.gz             --output full_micro_model | tee full_micro_train.log
-          test -s full_micro_model/HYPE_FULL_MICRO_202607.pkl
-          test -s full_micro_model/HYPE_FULL_MICRO_202607_REPORT.json
+          python -m research.hype_full_micro_202607.train_dense_signature \
+            --snapshots full_micro_out/candidate_snapshots_full_micro.jsonl.gz \
+            --labels-gz full_micro_out/labels.json.gz \
+            --output full_micro_model | tee full_micro_train.log
+          test -s full_micro_model/HYPE_DENSE_FULL_MICRO_DUAL_HEAD.pkl
+          test -s full_micro_model/HYPE_DENSE_FULL_MICRO_DUAL_HEAD_REPORT.json
           gzip -9 -f full_micro_train.log
 
       - name: Publish latest report to research branch
@@ -204,7 +208,7 @@ jobs:
           mkdir -p research/hype_full_micro_202607/results
           cp full_micro_out/manifest.json research/hype_full_micro_202607/results/LATEST_MANIFEST.json
           cp full_micro_out/feature_availability.json research/hype_full_micro_202607/results/LATEST_FEATURE_AVAILABILITY.json
-          cp full_micro_model/HYPE_FULL_MICRO_202607_REPORT.json research/hype_full_micro_202607/results/LATEST_REPORT.json
+          cp full_micro_model/HYPE_DENSE_FULL_MICRO_DUAL_HEAD_REPORT.json research/hype_full_micro_202607/results/LATEST_REPORT.json
           cp full_micro_relations/LOW_HIGH_RELATIONS_LATEST.json research/hype_full_micro_202607/results/LOW_HIGH_RELATIONS_LATEST.json
           git config user.name "pandora-research-bot"
           git config user.email "actions@users.noreply.github.com"
@@ -245,7 +249,7 @@ jobs:
           mkdir -p research/hype_full_micro_202607/results
           python - <<'PY'
           import json,os,time,pathlib
-          ok=pathlib.Path("full_micro_model/HYPE_FULL_MICRO_202607_REPORT.json").exists()
+          ok=pathlib.Path("full_micro_model/HYPE_DENSE_FULL_MICRO_DUAL_HEAD_REPORT.json").exists()
           p=pathlib.Path("research/hype_full_micro_202607/results/RUN_STATUS.json")
           json.dump({"status":"SUCCESS" if ok else "FAILED","run_id":os.getenv("GITHUB_RUN_ID"),"sha":os.getenv("GITHUB_SHA"),"finished_ts_ms":int(time.time()*1000)},p.open("w"),indent=2)
           PY
