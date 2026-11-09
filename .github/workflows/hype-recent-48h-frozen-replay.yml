@@ -1,0 +1,111 @@
+name: HYPE Recent 48h Frozen Jul-Aug Causal Replay
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-recent-48h-frozen-replay.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: hype-recent-48h-frozen-replay
+  cancel-in-progress: true
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PYTHONUNBUFFERED: "1"
+      CRYPTOHFTDATA_API_KEY: ${{ secrets.CRYPTOHFTDATA_API_KEY }}
+      MODEL_ARTIFACT_ID: "13578389090"
+      REPLAY_START: "2026-11-07T23:00:00+00:00"
+      REPLAY_END: "2026-11-09T23:00:00+00:00"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install replay stack
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy polars pyarrow requests scikit-learn==1.9.1 zstandard
+          python -m py_compile research/hype_full_micro_202607/recent_48h_frozen_replay.py
+
+      - name: Restore frozen Jul-Aug model
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf frozen_model model.zip
+          mkdir -p frozen_model
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${MODEL_ARTIFACT_ID}/zip" > model.zip
+          unzip -q model.zip -d frozen_model
+          test -s frozen_model/full_micro_model/HYPE_FULL_MICRO_202607.pkl
+          test -s frozen_model/full_micro_model/HYPE_FULL_MICRO_202607_REPORT.json
+          cat frozen_model/full_micro_model/HYPE_FULL_MICRO_202607_REPORT.json
+
+      - name: Build fresh 48h rich microstructure and run frozen causal replay
+        run: |
+          set -euo pipefail
+          rm -rf recent48_out recent48_cache
+          mkdir -p recent48_out recent48_cache
+          python -m research.hype_full_micro_202607.recent_48h_frozen_replay             --start "${REPLAY_START}"             --end "${REPLAY_END}"             --output recent48_out             --cache recent48_cache             --model frozen_model/full_micro_model/HYPE_FULL_MICRO_202607.pkl             | tee recent48_replay.log
+          test -s recent48_out/RECENT_48H_FROZEN_REPLAY.json
+          test -s recent48_out/RECENT_48H_CAUSAL_SCORED.jsonl.gz
+          test -s recent48_out/RECENT_48H_COMPACT_1M.jsonl.gz
+          rm -rf recent48_cache
+
+      - name: Audit no-lookahead contract
+        run: |
+          python - <<'PY'
+          import json
+          r=json.load(open("recent48_out/RECENT_48H_FROZEN_REPLAY.json"))
+          c=r["leakage_contract"]
+          assert c["model_refit_on_recent_48h"] is False
+          assert c["threshold_retuned_on_recent_48h"] is False
+          assert "no strict labels" in c["candidate_generation"]
+          assert c["teacher_use"]=="after-the-fact scoring only"
+          assert r["research_only"] is True and r["real_orders"] is False
+          print(json.dumps({
+            "window":r["window_utc"],
+            "data":r["data"],
+            "teacher":r["strict_teacher_after_fact"],
+            "candidate_replay":r["candidate_replay"],
+            "largest_high_to_low_leg":r["largest_high_to_low_leg"],
+            "paper_trade_path":r["paper_trade_path"],
+          },indent=2,ensure_ascii=False))
+          PY
+
+      - name: Publish latest replay report
+        run: |
+          set -euo pipefail
+          mkdir -p research/hype_full_micro_202607/results
+          cp recent48_out/RECENT_48H_FROZEN_REPLAY.json             research/hype_full_micro_202607/results/RECENT_48H_FROZEN_REPLAY_LATEST.json
+          git config user.name "pandora-research-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add research/hype_full_micro_202607/results/RECENT_48H_FROZEN_REPLAY_LATEST.json
+          git commit -m "research(hype): publish recent 48h frozen causal replay [skip ci]" || true
+          git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104 || true
+          git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104 || true
+
+      - name: Upload replay evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-RECENT-48H-FROZEN-REPLAY-${{ github.run_id }}
+          path: |
+            recent48_out/**
+            recent48_replay.log
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
