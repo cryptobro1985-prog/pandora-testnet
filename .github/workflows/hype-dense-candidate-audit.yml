@@ -1,0 +1,49 @@
+name: HYPE Dense Candidate Audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-dense-candidate-audit.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download 30D artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dense_history dense_out
+          ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=local116-HYPE"             --jq '.artifacts | map(select((.expired|not) and .name=="local116-HYPE")) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          test -n "$ID"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$ID/zip" > history.zip
+          unzip -q history.zip -d dense_history
+      - name: Compare dense swing candidates to legacy 6h candidates
+        run: |
+          python -m research.hype_false_local_entry.dense_candidate_audit             --compact dense_history/compact_1m.jsonl.gz             --labels dense_history/labels.json.gz             --output dense_out/DENSE_CANDIDATE_AUDIT.json
+          cat dense_out/DENSE_CANDIDATE_AUDIT.json
+      - name: Publish report
+        run: |
+          mkdir -p research/hype_false_local_entry/results
+          cp dense_out/DENSE_CANDIDATE_AUDIT.json              research/hype_false_local_entry/results/DENSE_CANDIDATE_AUDIT_LATEST.json
+          git config user.name "pandora-research-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add research/hype_false_local_entry/results/DENSE_CANDIDATE_AUDIT_LATEST.json
+          git commit -m "research: publish dense candidate audit [skip ci]" || true
+          git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104 || true
+          git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104 || true
