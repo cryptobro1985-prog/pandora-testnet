@@ -1,0 +1,129 @@
+{
+  "version": "HYPE-LOCAL-SIGNATURE-HISTORY-BOOTSTRAP-v1",
+  "teacher": "STRICT_L6_K2_REFERENCE_FINALIZED_ONLY",
+  "decision_time_gated": false,
+  "candidate_age_removed_from_predictors": true,
+  "rolling_market_windows_are_causal_inputs": true,
+  "rows": 2361,
+  "finalized_strict_label_ids": 76,
+  "by_side": {
+    "LOW": {
+      "threshold": 0.854,
+      "repeat": 11,
+      "train": {
+        "candidates": 418,
+        "reference_true_candidates": 24,
+        "accepted_first": 72,
+        "true_first": 10,
+        "false_first": 62,
+        "precision": 0.1388888888888889,
+        "recall": 0.4166666666666667,
+        "coverage": 0.1722488038277512,
+        "median_delay_s": 60.0
+      },
+      "validation": {
+        "candidates": 70,
+        "reference_true_candidates": 5,
+        "accepted_first": 13,
+        "true_first": 4,
+        "false_first": 9,
+        "precision": 0.3076923076923077,
+        "recall": 0.8,
+        "coverage": 0.18571428571428572,
+        "median_delay_s": 180.0
+      },
+      "oos": {
+        "candidates": 126,
+        "reference_true_candidates": 9,
+        "accepted_first": 19,
+        "true_first": 3,
+        "false_first": 16,
+        "precision": 0.15789473684210525,
+        "recall": 0.3333333333333333,
+        "coverage": 0.15079365079365079,
+        "median_delay_s": 60.0
+      },
+      "train_rows": 897,
+      "validation_rows": 153,
+      "oos_rows": 255,
+      "train_positive": 72
+    },
+    "HIGH": {
+      "threshold": 0.91,
+      "repeat": 9,
+      "train": {
+        "candidates": 315,
+        "reference_true_candidates": 23,
+        "accepted_first": 27,
+        "true_first": 9,
+        "false_first": 18,
+        "precision": 0.3333333333333333,
+        "recall": 0.391304347826087,
+        "coverage": 0.08571428571428572,
+        "median_delay_s": 60.0
+      },
+      "validation": {
+        "candidates": 73,
+        "reference_true_candidates": 5,
+        "accepted_first": 6,
+        "true_first": 2,
+        "false_first": 4,
+        "precision": 0.3333333333333333,
+        "recall": 0.4,
+        "coverage": 0.0821917808219178,
+        "median_delay_s": 60.0
+      },
+      "oos": {
+        "candidates": 127,
+        "reference_true_candidates": 10,
+        "accepted_first": 51,
+        "true_first": 8,
+        "false_first": 43,
+        "precision": 0.1568627450980392,
+        "recall": 0.8,
+        "coverage": 0.4015748031496063,
+        "median_delay_s": 60.0
+      },
+      "train_rows": 663,
+      "validation_rows": 149,
+      "oos_rows": 244,
+      "train_positive": 69
+    }
+  },
+  "model_report": {
+    "version": "HYPE-LOCAL-SIGNATURE-v1-EVENT-DRIVEN",
+    "thresholds": {
+      "LOW": 0.854,
+      "HIGH": 0.91
+    },
+    "labels": {
+      "LOW": 2331,
+      "HIGH": 1854
+    },
+    "positive": {
+      "LOW": 1140,
+      "HIGH": 912
+    },
+    "live_labels": {
+      "LOW": 0,
+      "HIGH": 0
+    },
+    "input_contract_count": 86,
+    "time_gated": false,
+    "decision_contract": "CURRENT_CAUSAL_SIGNATURE_ONLY",
+    "history_bootstrap": {
+      "version": "HYPE-LOCAL-SIGNATURE-HISTORY-BOOTSTRAP-v1",
+      "teacher": "STRICT_L6_K2_REFERENCE_FINALIZED_ONLY",
+      "rows": 2361,
+      "finalized_strict_label_ids": 76,
+      "thresholds": {
+        "LOW": 0.854,
+        "HIGH": 0.91
+      },
+      "candidate_age_removed_from_predictors": true
+    },
+    "real_orders": false
+  },
+  "warning": "Historical stage snapshots bootstrap the signature only; event-driven live/OOS first-signal evidence remains required.",
+  "real_orders": false
+}
