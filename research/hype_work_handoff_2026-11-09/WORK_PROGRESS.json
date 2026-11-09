@@ -2,7 +2,7 @@
   "schema_version": 1,
   "objective": "Earlier causal terminal H1 L6/K2 LOW/HIGH recognition with actionable first-signal precision, useful recall, and distance around 30–70 bps.",
   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
-  "head_sha": "6a6cdd0814a78cb75552e3b86ecac7aa3b7edba6",
+  "head_sha": "08ba11e2ab41597a1b866fc2f0b922828b2f8fe9",
   "head_sha_basis": "Parent/input revision of this checkpoint. The checkpoint revision is resolved by git log -1 -- this file.",
   "stage": "micro_quality_contract_verified_cache_pending",
   "completed_experiments": [
@@ -57,6 +57,10 @@
     {
       "id": "live-42616792697-strict-terminal-replay-20261109",
       "verdict": "Recovered the provisional 72.391 LOW from the saved H1 book, separate from the 73.4635 live WATCH and 74.2445 earlier FORMING candidate. The latter was followed by a 2.50% lower strict K2 pivot. The newer WATCH equals the sampled book mid; raw Bybit trades subsequently printed 73.424 without a lower NEW_CANDIDATE before the status snapshot. This is one observed discrepancy, not a forward precision estimate. The historical clean-cache gate remains pending."
+    },
+    {
+      "id": "live-20261109-1202-low-timely-detection-audit",
+      "verdict": "The live model was running. At 12:02:30 Samara it rejected the old 72.4165 LOW candidate from 11:57:29. The log has no new or accepted LOW in the first ten minutes from the 72.391 candle. This is a missed early LOW, distinct from later K2 reconstruction."
     }
   ],
   "rejected_hypotheses": [
@@ -242,6 +246,51 @@
       "price": 73.424,
       "exchange_ts_ms": 1794229912237,
       "unique_trades_in_capture": 18740
+    },
+    "timely_detection_audit": {
+      "id": "live-20261109-1202-low-timely-detection-audit",
+      "kind": "observational_live_event_audit",
+      "status": "verified_event_log",
+      "archive_id": 13677747365,
+      "archive_sha256": "56f9a66f921c9daa0b530c8fb2b7069a5778af17ceb0e2cda30d5890f2fca0c4",
+      "member": "LOCAL_EVENTS.recent.jsonl.gz",
+      "extreme_m1_start_ms": 1794211320000,
+      "extreme_price": 72.391,
+      "stale_candidate": {
+        "id": "L-1794211049000",
+        "ts_ms": 1794211049000,
+        "price": 72.4165
+      },
+      "stale_candidate_stages": [
+        {
+          "ts_ms": 1794211110000,
+          "stage": 60,
+          "probability": 0.02004826257132813,
+          "threshold": 0.64,
+          "accepted": false,
+          "internal_accepted": false
+        },
+        {
+          "ts_ms": 1794211233020,
+          "stage": 180,
+          "probability": 1.2450331104990128e-05,
+          "threshold": 0.66,
+          "accepted": false,
+          "internal_accepted": false
+        },
+        {
+          "ts_ms": 1794211350000,
+          "stage": 300,
+          "probability": 4.746598203146477e-10,
+          "threshold": 0.57,
+          "accepted": false,
+          "internal_accepted": false
+        }
+      ],
+      "new_low_candidate_count_next_10m": 0,
+      "accepted_low_signal_count_next_10m": 0,
+      "limitation": "The raw trades for the noon interval have not been verified. Do not assign a tick-level cause solely from a separate 17:11 observation.",
+      "verdict": "The live model was running. At 12:02:30 Samara it rejected the old 72.4165 LOW candidate from 11:57:29. The log has no new or accepted LOW in the first ten minutes from the 72.391 candle. This is a missed early LOW, distinct from later K2 reconstruction."
     }
   }
 }
