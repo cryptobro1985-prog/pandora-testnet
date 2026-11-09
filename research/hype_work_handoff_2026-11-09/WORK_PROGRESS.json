@@ -2,9 +2,9 @@
   "schema_version": 1,
   "objective": "Earlier causal terminal H1 L6/K2 LOW/HIGH recognition with actionable first-signal precision, useful recall, and distance around 30–70 bps.",
   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
-  "head_sha": "08ba11e2ab41597a1b866fc2f0b922828b2f8fe9",
+  "head_sha": "3a6b9342f11bec93fc43af11b0f871d658ecf70b",
   "head_sha_basis": "Parent/input revision of this checkpoint. The checkpoint revision is resolved by git log -1 -- this file.",
-  "stage": "micro_quality_contract_verified_cache_pending",
+  "stage": "full116_common_transfer_closed_clean_cache_blocked",
   "completed_experiments": [
     {
       "id": "reuse-handoff-20261109",
@@ -61,6 +61,34 @@
     {
       "id": "live-20261109-1202-low-timely-detection-audit",
       "verdict": "The live model was running. At 12:02:30 Samara it rejected the old 72.4165 LOW candidate from 11:57:29. The log has no new or accepted LOW in the first ten minutes from the 72.391 candle. This is a missed early LOW, distinct from later K2 reconstruction."
+    },
+    {
+      "id": "full116-common-m1-coverage-v1",
+      "verdict": "All four master blocks verified. 157375 M1 bars, 10991 early decisions. 43 available/derived causal IDs and 40 fitted IDs. Live 86/86 is since-start coverage."
+    },
+    {
+      "id": "full116-strict-structure-ablation-v1",
+      "verdict": "No supported structure-only point cleared the preregistered development gates."
+    },
+    {
+      "id": "full116-strict-comparator-rescope-v1",
+      "verdict": "Common L6/K2 candidate/episode plane for +90m, +120m HIGH, HARD120 and Ultra V2. LOW +120 extractor unavailable. L3/K1 results and old candidate lineages remain separate."
+    },
+    {
+      "id": "full116-live-742445-72391-raw-diagnostic-v1",
+      "verdict": "72.391 traded four times but the sampled mid reached only 72.439, above the existing 72.4165 LOW. At 74.2445 buy flow stayed positive while realized price response reversed between +60s and +180s."
+    },
+    {
+      "id": "full116-clean-cache-intake-v1",
+      "verdict": "Source adapter validates outer/member SHA, audit totals, window masks and timestamps. No certified archive published by run 42619539996 at the checkpoint."
+    },
+    {
+      "id": "full116-strict-common-trajectory-v1-low",
+      "verdict": "Precision below the fixed 55% gate in all three transfer periods. Closed without sealed or forward scoring."
+    },
+    {
+      "id": "full116-strict-common-trajectory-v1-high",
+      "verdict": "Precision below the fixed 55% gate in all three transfer periods. Closed without sealed or forward scoring."
     }
   ],
   "rejected_hypotheses": [
@@ -95,6 +123,14 @@
       "side": "HIGH",
       "family": "old_side_absorption",
       "why": "Only one TP. Precision and recall both declined versus the matched control."
+    },
+    {
+      "family": "structure only, weighted terminal score",
+      "why": "No supported development frontier."
+    },
+    {
+      "family": "common M1 flow/structure trajectory",
+      "why": "LOW 19/60 and HIGH 24/93 true-first across three untouched-for-this-fit chronological blocks. All six precision gates failed."
     }
   ],
   "active_hypotheses": {
@@ -111,7 +147,10 @@
     "python -m pip install --disable-pip-version-check --no-input --timeout 8 --retries 0 --target ../hype-work-cache/test-deps polars requests",
     "PYTHONPATH=../hype-work-cache/test-deps:. python -W error -m unittest research.hype_full_micro_202607.test_data_quality research.hype_false_local_entry.test_early_trajectory",
     "python -m py_compile research/hype_full_micro_202607/build_full_micro.py research/hype_full_micro_202607/test_data_quality.py",
-    "git diff --check"
+    "git diff --check",
+    "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python -W error -m research.hype_false_local_entry.full116_terminal_replay --master ../inputs/history-master.zip --live-checkpoint /workspace/scratch/d11d13449269/hype-work-cache/hype-live-42616792697-checkpoint.zip --output research/hype_work_handoff_2026-11-09",
+    "python -W error -m research.hype_false_local_entry.full116_live_diagnostic --forming ../inputs/forming-raw.zip --noon ../inputs/noon-raw.zip --evidence /workspace/scratch/d11d13449269/hype-work-cache/hype-live-42616792697-evidence.zip --output research/hype_work_handoff_2026-11-09/FULL_116_LIVE_CONTROL_CASES.json",
+    "python -W error -m unittest research.hype_false_local_entry.test_full116_terminal_replay research.hype_false_local_entry.test_early_trajectory research.hype_false_local_entry.test_completed_swing_denominators research.hype_full_micro_202607.test_data_quality"
   ],
   "artifact_result_paths": {
     "master_artifact_id": 13650399622,
@@ -131,7 +170,26 @@
     "clean_micro_contract": "decoded-liquidations-continuous-book-v1",
     "clean_micro_producer": "research/hype_full_micro_202607/build_full_micro.py",
     "clean_micro_tests": "research/hype_full_micro_202607/test_data_quality.py",
-    "clean_micro_producer_sha256": "fba6b56c5fd89f0e3703f39a335fce2e6eab8b080024615086e728785ff5280c"
+    "clean_micro_producer_sha256": "fba6b56c5fd89f0e3703f39a335fce2e6eab8b080024615086e728785ff5280c",
+    "full116_cycle": {
+      "sha256": {
+        "research/hype_work_handoff_2026-11-09/FULL_116_DATA_COVERAGE_MATRIX.json": "7ef42fea17003a0e3fb14cc720ffc3fd39503f5f3fccbc52dc453280834c71e9",
+        "research/hype_work_handoff_2026-11-09/FULL_116_DATA_COVERAGE_MATRIX.md": "02f6f2759cbf2b140ba92e8353fc347dc152cfd6edfca0ff240334c84c5b1870",
+        "research/hype_work_handoff_2026-11-09/FULL_116_DEVELOPMENT_MODELS.json": "e54f8b8b816e4b6bfbb7d319e94ae44c445042b31b1ccab10a9db4cdd46d2c14",
+        "research/hype_work_handoff_2026-11-09/FULL_116_FIRST_SIGNAL_REPLAY.json": "beb8eb185005d3f5e1d641497fb35670a02a57d04579cc99e1fbf5b01f9d4455",
+        "research/hype_work_handoff_2026-11-09/FULL_116_LIVE_CONTROL_CASES.json": "05f9998f3cb33e26fa50d0cb38d1c7e9a8fabd67c8fd8544bed98e36e6420563",
+        "research/hype_work_handoff_2026-11-09/FALSE_LOCAL_SIGNATURES_LOW.json.gz": "28c6c177752f90735ecb609353d25f520ac0b6c0846dfef57160297d85c818af",
+        "research/hype_work_handoff_2026-11-09/FALSE_LOCAL_SIGNATURES_HIGH.json.gz": "2a319c46d55fcc1ff3bafcfd3e283b25dfec72e90d504eaaa58e4f5a2b039d49",
+        "research/hype_work_handoff_2026-11-09/FULL_116_RESEARCH_CHECKPOINT_2026-11-09.md": "449bcb2680d19256b39df2cadfc75c0ac17f4c2796214e5a8f1a2bd9e4d3a8f7"
+      },
+      "model_source_hashes": {
+        "early_trajectory_features.py": "a7e2cc92bbf0a41cd4395bc76e4731686dcb36c90e3894f005ec5b2b256a3266",
+        "full116_candidate_features.py": "5a67de03e42e4b6a612bf495dfdca6635193e1fa8f46a4787bb6d1b9bb973355",
+        "full116_sources.py": "63d2f0d00c2bee62d5d0f4fa88664c85f2a5282c6ee962935d15da0cfff15a53",
+        "replay_early_trajectory.py": "19746187cc5bedac1b0cc73d5a085824d1384ea184c3232d4f0d30a3c76ec348",
+        "first_signal_objective.py": "f10e3bb0d3aa8167ee8726cf3062460109a376b8acf9840efb957586817e919c"
+      }
+    }
   },
   "frozen_thresholds_model_hashes": {
     "LOW": {
@@ -143,9 +201,23 @@
       "retrace_band_only": "6223cc3e6a8c080c52c929272f35c1b12a9b9370a9e5349cb375c9ac90716d8e",
       "efficiency_handoff": "71cd8e60be51ea5ab123dc0d348c87aaf3c3f1cb17cd35d67757b53068ff7d85",
       "old_side_absorption": "2078bd6c54b7e6939f6d84ab1f599c42052c157b1c8963043f65374187ce7432"
+    },
+    "full116_common_for_transfer": {
+      "bundle_sha256": "e54f8b8b816e4b6bfbb7d319e94ae44c445042b31b1ccab10a9db4cdd46d2c14",
+      "status": "rejected_after_transfer",
+      "by_side": {
+        "LOW": {
+          "score": 0.35,
+          "distance_cap_bps": 70
+        },
+        "HIGH": {
+          "score": 0.35,
+          "distance_cap_bps": 100
+        }
+      }
     }
   },
-  "next_cheapest_useful_action": "Check run 42619539996 for HYPE-FULL-MICRO-CLEAN-CACHE-202607-*. Reuse any published bytes after archive and member checksum verification. Review CLEAN_MICRO_AUDIT.json, the producer revision, and the decoded-liquidations-continuous-book-v1 manifest marker and per-window book/liquidation masks. This run predates the new marker. Without independent raw-source proof, its affected streams cannot certify the strict trajectory experiments. If needed, validate the patched producer on a bounded candidate-hour slice using retained input data before deciding on another Jul-Aug rebuild. When data passes, join snapshots by side, exact extreme timestamp and price to surviving causal M1 candidates. Use only snapshots available at the decision bar close and compare first signals on identical availability cohorts with the existing L6/K2 scorer.",
+  "next_cheapest_useful_action": "Verify a clean-cache artifact from the upgraded producer against its digest and measured book/liq/OI windows. Run the clean cohort adapter on a bounded development slice. Separately, replay a trade-extreme shadow proposal against the saved 72.391 case before any change to live routing.",
   "expensive_actions_not_yet_justified": [
     "Chronological replay of the rejected rules or threshold retuning",
     "Sealed May/June scoring or forward deployment of the rejected rules",
@@ -158,7 +230,8 @@
     "Only July and October have saved subminute snapshots, with different candidate lifetimes; 90 s is absent from both. Middle regimes and the master-wide comparison are limited to M1 prices and executed flow.",
     "HARD120 four-regime baseline and May Ultra Survival V2 use internal L3/K1 swings. The new score uses strict terminal L6/K2, so these are context, not matched controls.",
     "Run 42619539996 has no published cache yet and uses source fa89f176e1, before the new decoded liquidation and continuous book window guarantees.",
-    "The existing workflow audit checks point spread and some liquidation mask fields. It cannot prove raw decode validity, receipt-time causality, or uninterrupted rolling book windows for an older producer revision."
+    "The existing workflow audit checks point spread and some liquidation mask fields. It cannot prove raw decode validity, receipt-time causality, or uninterrupted rolling book windows for an older producer revision.",
+    "At this checkpoint run 42619539996 still lists no archive. Its source predates the decoded-liquidations-continuous-book-v1 contract. An independent receipt/window audit or a cache built from the upgraded producer is required."
   ],
   "real_orders": false,
   "validation_stages": {
@@ -167,13 +240,18 @@
     "sealed_may": "unscored",
     "sealed_june": "unscored",
     "forward": "unscored",
-    "strict_microstructure": "producer fixture tests pass; empirical cache gate pending"
+    "strict_microstructure": "producer fixture tests pass; empirical cache gate pending",
+    "full116_common_development": "Completed two expanding folds on Jul-Aug. Selected transfer-only weights and thresholds.",
+    "full116_common_transfer": "Completed late-Aug, Sep, Oct-Nov. Both sides rejected.",
+    "full116_live_diagnostic": "Both case archives verified against raw trades and event logs.",
+    "full116_clean_micro": "Input gate and feature assembler tested. Certified empirical cache pending."
   },
   "test_status": {
     "new_trajectory_tests_passed": 7,
     "existing_scoring_timestamp_k2_checks_passed": 12,
     "existing_full_micro_suite": "passed using local Polars 2.1.0 and Requests 2.34.2",
-    "full_micro_quality_and_early_trajectory_tests_passed": 17
+    "full_micro_quality_and_early_trajectory_tests_passed": 17,
+    "full116_cycle_passed": 38
   },
   "queued_hypotheses": {
     "LOW": [
@@ -213,7 +291,7 @@
     "observed_artifacts": [],
     "artifact_name_prefix": "HYPE-FULL-MICRO-CLEAN-CACHE-202607-",
     "expected_producer_contract": "decoded-liquidations-continuous-book-v1",
-    "status": "blocked_pending_cache_and_input_certification"
+    "status": "no_certified_archive_at_full116_checkpoint"
   },
   "latest_live_diagnostic": {
     "id": "live-42616792697-strict-terminal-replay-20261109",
@@ -291,6 +369,17 @@
       "accepted_low_signal_count_next_10m": 0,
       "limitation": "The raw trades for the noon interval have not been verified. Do not assign a tick-level cause solely from a separate 17:11 observation.",
       "verdict": "The live model was running. At 12:02:30 Samara it rejected the old 72.4165 LOW candidate from 11:57:29. The log has no new or accepted LOW in the first ten minutes from the 72.391 candle. This is a missed early LOW, distinct from later K2 reconstruction."
+    },
+    "raw_tape_verification": {
+      "noon_artifact_id": 13660165739,
+      "noon_run_id": 42581260027,
+      "trade_prints_at_72_391": 4,
+      "first_exchange_ts_ms": 1794211321403,
+      "first_receive_ts_ms": 1794211321718,
+      "min_sampled_mid_in_extreme_minute": 72.439,
+      "previous_candidate": 72.4165,
+      "forming_artifact_id": 13641587046,
+      "result": "research/hype_work_handoff_2026-11-09/FULL_116_LIVE_CONTROL_CASES.json"
     }
   }
 }
