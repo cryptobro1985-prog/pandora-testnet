@@ -129,6 +129,10 @@
     {
       "id": "dense-full-micro-dual-head-rebuild-42653578719",
       "verdict": "Started corrected Jul12-Aug06 dense full-micro rebuild using every new target-side running extreme, immediate same-side invalidation, L50/liquidations/OI/full causal enrichment, and dual-head terminal-probability + continuation-risk training. Run 42653578719 active."
+    },
+    {
+      "id": "dense-retrace-anchor-sweep-20261109",
+      "verdict": "Recovered the historical ~0.33-0.35% hypothesis and retested it on the live-matched dense running-extreme candidate plane. Standalone 33/35 bps is not sufficient: LOW 2 true /35 false at both 33 and 35; HIGH 0 true /37 false at both 33 and 35. Best standalone 20-60 bps remained weak (LOW 58 bps: 5/37; HIGH 57 bps: 5/37). Therefore the old edge must have come from the causal state around the retrace, not the retrace threshold itself."
     }
   ],
   "rejected_hypotheses": [
@@ -189,12 +193,14 @@
     "LOW": [
       "Dense live-matched candidate space is required: every new running LOW in the active swing, with immediate invalidation on a lower LOW.",
       "LOW terminality likely needs rich microstructure unavailable on the legacy archive plane: sell-impact exhaustion, bid L50 replenishment/absorption/transfer, long-liquidation exhaustion/capitulation, and OI-price-flow state.",
-      "A dual-head decision (high terminal probability AND low continuation risk) should suppress the ~45 false running lows per true strict LOW better than a direct classifier alone."
+      "A dual-head decision (high terminal probability AND low continuation risk) should suppress the ~45 false running lows per true strict LOW better than a direct classifier alone.",
+      "Around the first 0.33-0.35% retrace, true LOW vs false bounce may separate through sell-impact exhaustion, bid L50 absorption/replenishment/cancel transfer, long-liquidation exhaustion/capitulation, OI-price-flow state and survival/no-extension."
     ],
     "HIGH": [
       "Continuation-risk is already promising: legacy-plane OOS produced 2/2 true first signals (100% precision, 22.22% recall), but support is too small for promotion.",
       "Dense candidate matching plus L50/liquidations/OI should test whether HIGH precision can retain while recall improves.",
-      "Use dual-head terminal score + continuation-risk, never fixed elapsed-time eligibility."
+      "Use dual-head terminal score + continuation-risk, never fixed elapsed-time eligibility.",
+      "Around the first 0.33-0.35% retrace, true HIGH vs false bounce may separate through buy-impact exhaustion, ask L50 absorption/replenishment/cancel transfer, short-liquidation exhaustion/capitulation, OI-price-flow state and survival/no-extension."
     ]
   },
   "exact_commands": [
@@ -260,7 +266,9 @@
     "local_continuation_risk": "research/hype_false_local_entry/results/LOCAL_CONTINUATION_RISK_LATEST.json",
     "dense_candidate_audit": "research/hype_false_local_entry/results/DENSE_CANDIDATE_AUDIT_LATEST.json",
     "dense_full_micro_builder": "research/hype_full_micro_202607/build_dense_full_micro.py",
-    "dense_full_micro_trainer": "research/hype_full_micro_202607/train_dense_signature.py"
+    "dense_full_micro_trainer": "research/hype_full_micro_202607/train_dense_signature.py",
+    "retrace_anchor_sweep": "research/hype_false_local_entry/results/RETRACE_ANCHOR_SWEEP_LATEST.json",
+    "retrace_anchor_rich_trainer": "research/hype_full_micro_202607/train_retrace_anchor_signature.py"
   },
   "frozen_thresholds_model_hashes": {
     "LOW": {
@@ -288,7 +296,7 @@
       }
     }
   },
-  "next_cheapest_useful_action": "Watch run 42653578719. If it fails, repair the failing producer step and restart. If it succeeds, inspect HYPE_DENSE_FULL_MICRO_DUAL_HEAD_REPORT.json: LOW/HIGH OOS first-signal precision/recall, false continuation, missed move and delay. Do not promote unless OOS support is adequate. If LOW still fails, mine rich-micro false-first vs true-first feature differences and add an explicit LOW-only veto.",
+  "next_cheapest_useful_action": "Complete latest dense full-micro run, then inspect RETRACE_ANCHORED_RICH_SIGNATURE_LATEST.json and compare 33 vs 35 bps separately for LOW/HIGH using first-signal precision/recall and continuation-risk. Treat retrace as event anchor only.",
   "expensive_actions_not_yet_justified": [
     "Chronological replay of the rejected rules or threshold retuning",
     "Sealed May/June scoring or forward deployment of the rejected rules",
