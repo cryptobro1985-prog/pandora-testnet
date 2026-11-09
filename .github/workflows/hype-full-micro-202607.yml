@@ -58,7 +58,9 @@ jobs:
           python -m py_compile \
             research/hype_full_micro_202607/build_full_micro.py \
             research/hype_full_micro_202607/train_full_micro.py \
-            research/hype_full_micro_202607/find_low_high_relations.py
+            research/hype_full_micro_202607/find_low_high_relations.py \
+            research/hype_full_micro_202607/test_data_quality.py
+          python -m unittest research.hype_full_micro_202607.test_data_quality
 
       - name: Build complete causal Jul-Aug HYPE dataset
         run: |
