@@ -13,7 +13,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: hype-full-micro-202607
+  group: hype-full-micro-dense-rich-v2
   # Always prefer the newest corrected producer contract over stale rebuilds.
   cancel-in-progress: true
 
