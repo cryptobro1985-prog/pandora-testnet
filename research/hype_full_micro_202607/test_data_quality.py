@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from research.hype_full_micro_202607.build_full_micro import (
-    HOUR,
+    H,
     book_features,
     liq_features,
 )
@@ -41,17 +41,17 @@ class FullMicroDataQualityTests(unittest.TestCase):
 
     def test_missing_liquidation_hour_is_not_zero(self):
         # 00:02 UTC, 300s window crosses the previous hour.
-        t=HOUR+120_000
+        t=H+120_000
         events=[(t-30_000,1000.0,"LONG")]
-        f=liq_features(events,t,{HOUR})
+        f=liq_features(events,t,{H})
         self.assertEqual(f["fullmicro_liq_stream_valid_60s"],1.0)
         self.assertEqual(f["fullmicro_liq_count_60s"],1.0)
         self.assertEqual(f["fullmicro_liq_stream_valid_300s"],0.0)
         self.assertNotIn("fullmicro_liq_count_300s",f)
 
     def test_complete_liquidation_window_can_encode_true_zero(self):
-        t=HOUR+120_000
-        f=liq_features([],t,{0,HOUR})
+        t=H+120_000
+        f=liq_features([],t,{0,H})
         self.assertEqual(f["fullmicro_liq_stream_valid_300s"],1.0)
         self.assertEqual(f["fullmicro_liq_count_300s"],0.0)
         self.assertEqual(f["fullmicro_long_liq_notional_300s"],0)
