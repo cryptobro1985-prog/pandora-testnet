@@ -72,22 +72,19 @@ jobs:
       - name: Report fallback result
         if: always()
         env:
-          JOB_STATUS: ${{ job.status }}
           GH_TOKEN: ${{ github.token }}
+          REPORT_BODY: "MONITOR_FALLBACK_RUN status=${{ job.status }} sha=${{ github.sha }} run=${{ github.run_id }}"
         shell: bash
         run: |
           set -euo pipefail
-          body="MONITOR_FALLBACK_RUN status=${JOB_STATUS} sha=${GITHUB_SHA} run=${GITHUB_RUN_ID}"
+          payload="$(python - <<'PY'
+          import json,os
+          print(json.dumps({"body": os.environ["REPORT_BODY"]}, separators=(",",":")))
+          PY
+          )"
           curl -sS --fail-with-body -X POST \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
             https://api.github.com/repos/${GITHUB_REPOSITORY}/issues/24/comments \
-            -d "$(python - <<'PY'
-          import json,os
-          print(json.dumps({"body": os.environ.get("REPORT_BODY","")}))
-          PY
-          )"
-        env:
-          JOB_STATUS: ${{ job.status }}
-          GH_TOKEN: ${{ github.token }}
-          REPORT_BODY: "MONITOR_FALLBACK_RUN status=${{ job.status }} sha=${{ github.sha }} run=${{ github.run_id }}"
+            --data "$payload"
