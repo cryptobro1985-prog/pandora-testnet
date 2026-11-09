@@ -4,7 +4,7 @@
   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
   "head_sha": "3a6b9342f11bec93fc43af11b0f871d658ecf70b",
   "head_sha_basis": "Parent/input revision of this checkpoint. The checkpoint revision is resolved by git log -1 -- this file.",
-  "stage": "ttc_live_shadow_and_clean_micro_rebuild_active",
+  "stage": "event_driven_local_signature_active",
   "completed_experiments": [
     {
       "id": "reuse-handoff-20261109",
@@ -101,6 +101,10 @@
     {
       "id": "clean-micro-rebuild-latest-contract-42646145054",
       "verdict": "Superseded stale run 42619539996 (old producer) and started run 42646145054 from current branch with cancel-in-progress=true. Install/data-quality test stage passed and corrected Jul-Aug full-micro dataset build is in progress."
+    },
+    {
+      "id": "event-driven-local-signature-v1-20261109",
+      "verdict": "Replaced fixed-time decision gating with an event-driven Local Signature head. Every fresh running extreme is a candidate; each current causal state is rescored immediately. The 116-point contract remains canonical, but only the 86 INPUT_* causal/quality IDs are legal predictors. TARGET_EVAL/METADATA remain teacher/evaluation-only. Main live event is LOCAL_SIGNATURE_SIGNAL; fixed 30/60/90/180/300 checkpoints are legacy/evaluation-only."
     }
   ],
   "rejected_hypotheses": [
@@ -147,12 +151,12 @@
   ],
   "active_hypotheses": {
     "LOW": [
-      "Earliest terminal-LOW confirmation can be improved by sequential state transitions combining price response, new-side flow efficiency, old-side impact failure, same-side liquidation exhaustion, book recovery/transfer, and OI+price agreement.",
-      "A false-first invalidation layer can permit earlier entry without weakening the later Ultra/HARD terminal confirmation layers."
+      "TRUE terminal LOW is characterized by a joint causal state transition: old sell-side efficiency/price impact decays, buy-side efficiency and upward price response rise, bid-side L50 absorption/replenishment/transfer improves, liquidation pressure exhausts/capitulates, OI-price-flow relation changes, and the running low survives without extension.",
+      "The best signal should trigger when the multivariate signature appears, not after a preset elapsed time."
     ],
     "HIGH": [
-      "Earliest terminal-HIGH confirmation can be improved by a separately calibrated sequential state-transition model rather than sharing LOW thresholds.",
-      "A false-first invalidation layer can permit earlier entry without weakening the later Ultra/HARD terminal confirmation layers."
+      "TRUE terminal HIGH is characterized by the symmetric joint causal transition: old buy-side efficiency/price impact decays, sell-side efficiency and downward price response rise, ask-side L50 absorption/replenishment/transfer improves, liquidation pressure exhausts/capitulates, OI-price-flow relation changes, and the running high survives without extension.",
+      "The best signal should trigger when the multivariate signature appears, not after a preset elapsed time."
     ]
   },
   "exact_commands": [
@@ -209,7 +213,9 @@
       }
     },
     "time_to_confirmation_engine": "research/hype_false_local_entry/time_to_confirmation_engine.py",
-    "time_to_confirmation_tests": "research/hype_false_local_entry/test_time_to_confirmation_engine.py"
+    "time_to_confirmation_tests": "research/hype_false_local_entry/test_time_to_confirmation_engine.py",
+    "local_signature_model": "research/hype_false_local_entry/local_signature_model.py",
+    "local_signature_live": "research/hype_false_local_entry/local_signature_live.py"
   },
   "frozen_thresholds_model_hashes": {
     "LOW": {
@@ -237,7 +243,7 @@
       }
     }
   },
-  "next_cheapest_useful_action": "Keep TTC strict-forward shadow running. When run 42646145054 publishes HYPE-FULL-MICRO-CLEAN-CACHE-202607-*, verify digest/quality contract, then fit LOW and HIGH sequential/hazard TTC challengers on rich microstructure and freeze before chronological/OOS scoring.",
+  "next_cheapest_useful_action": "Validate event-driven Local Signature smoke/live integration, then use the corrected rich-micro cache to pretrain LOW/HIGH signature heads on all causally available INPUT_* evidence; freeze before chronological/OOS. Treat delay only as an evaluation metric.",
   "expensive_actions_not_yet_justified": [
     "Chronological replay of the rejected rules or threshold retuning",
     "Sealed May/June scoring or forward deployment of the rejected rules",
