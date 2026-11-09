@@ -1,0 +1,56 @@
+name: HYPE Local Continuation Risk
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-local-continuation-risk.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  risk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install numpy scikit-learn
+      - name: Download 30D artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p signature_history risk_out
+          ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=local116-HYPE"             --jq '.artifacts | map(select((.expired|not) and .name=="local116-HYPE")) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          test -n "$ID"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$ID/zip" > history.zip
+          unzip -q history.zip -d signature_history
+      - name: Train continuation-risk heads
+        run: |
+          python -m research.hype_false_local_entry.train_local_continuation_veto             --snapshots signature_history/candidate_snapshots.jsonl.gz             --labels-gz signature_history/labels.json.gz             --model-out risk_out/local_continuation_risk.pkl             --report-out risk_out/LOCAL_CONTINUATION_RISK_REPORT.json
+          cat risk_out/LOCAL_CONTINUATION_RISK_REPORT.json
+      - name: Publish report
+        run: |
+          mkdir -p research/hype_false_local_entry/results
+          cp risk_out/LOCAL_CONTINUATION_RISK_REPORT.json              research/hype_false_local_entry/results/LOCAL_CONTINUATION_RISK_LATEST.json
+          git config user.name "pandora-research-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add research/hype_false_local_entry/results/LOCAL_CONTINUATION_RISK_LATEST.json
+          git commit -m "research: publish Local continuation-risk result [skip ci]" || true
+          git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104 || true
+          git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104 || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-LOCAL-CONTINUATION-RISK-${{ github.run_id }}
+          path: risk_out/**
+          retention-days: 30
+          compression-level: 9
