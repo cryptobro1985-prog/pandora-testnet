@@ -365,9 +365,9 @@ def liq_features(events,t,available_hours=None):
     available_hours=set(available_hours or ())
     for sec in (5,15,60,180,300):
         start=int(t)-sec*1000
-        first=(start//HOUR)*HOUR
-        last=(int(t)//HOUR)*HOUR
-        required=range(first,last+HOUR,HOUR)
+        first=(start//H)*H
+        last=(int(t)//H)*H
+        required=range(first,last+H,H)
         valid=bool(available_hours) and all(h in available_hours for h in required)
         out[f"fullmicro_liq_stream_valid_{sec}s"]=1.0 if valid else 0.0
         if not valid:
