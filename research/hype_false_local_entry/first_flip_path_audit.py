@@ -70,12 +70,26 @@ def score_first_flips(bars, labels, flips, max_lag_ms=3600000):
     wrong=[r for r in results if r["first_signal_wrong_side"]]
     hits=[r for r in results if r["detected"]]
     total=len(flips)
+    # The terminal finalized local has no completed opposite swing.
+    # Preserve local-level diagnostics, but expose the exact 121/75
+    # completed-swing denominators separately. Never silently count the
+    # terminal local as a completed swing.
+    completed_rows = results[:-1]
+    completed_hits = sum(bool(r["detected"]) for r in completed_rows)
+    completed_swings = len(completed_rows)
+    completed_false_first = sum(bool(r["first_signal_wrong_side"]) for r in completed_rows)
+    completed_missed = completed_swings - completed_hits
     def med(key):
         vals=[r[key] for r in hits if r.get(key) is not None]
         return median(vals) if vals else None
     return {
         "finalized_locals":len(labels),"complete_swings":max(0,len(labels)-1),
         "detected_locals":len(hits),"missed_locals":len(labels)-len(hits),
+        "completed_swing_true_first":completed_hits,
+        "completed_swing_missed":completed_missed,
+        "completed_swing_missed_rate":completed_missed/completed_swings if completed_swings else None,
+        "completed_swing_recall":completed_hits/completed_swings if completed_swings else None,
+        "completed_swing_wrong_first":completed_false_first,
         "missed_local_rate":(len(labels)-len(hits))/len(labels) if labels else None,
         "total_core_flips":total,"false_first":len(false)+len(wrong),
         "first_signal_precision":len(hits)/total if total else None,
