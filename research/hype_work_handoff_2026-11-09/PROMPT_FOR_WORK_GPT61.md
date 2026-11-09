@@ -144,6 +144,37 @@ If the allowance becomes tight, prioritize in this exact order:
 
 A partial but reproducible result is better than exhausting the allowance on unfinished brute force.
 
+## Mandatory data-coverage accounting
+
+Before reporting any new model/rule result, produce a data coverage matrix showing, for each experiment:
+- exact GitHub artifact/run/file used;
+- exact date range;
+- strict-label count LOW/HIGH;
+- row/candidate count;
+- which causal feature groups were actually present;
+- whether L50 was validated;
+- whether liquidation stream validity masks were present;
+- whether OI was present;
+- whether canonical 116 fields were available;
+- which periods were NOT used and why.
+
+A development-screen on one period MUST be labeled PARTIAL DEVELOPMENT SCREEN.
+Never summarize a one-period or M1-only experiment as a result "on all saved data".
+
+The historical master has four preserved periods. If an experiment intentionally stops after the first development block under the anti-stall gate, explicitly state that the later periods were NOT evaluated. Do not let the user infer otherwise.
+
+For the next microstructure cycle, read:
+research/hype_work_handoff_2026-11-09/DATA_USAGE_AUDIT_2026-11-09.md
+
+Use comparable cohorts rather than pretending every period has identical microstructure availability:
+1. all-period M1 cohort;
+2. validated clean historical full-micro cohort(s);
+3. canonical full116/live cohort;
+4. sealed cohort;
+5. forward cohort.
+
+Do not impute unavailable microstructure as zero and do not merge incomparable availability regimes into one headline precision number.
+
 ## Mission
 Find a causal early signature that distinguishes FALSE H1 Local candidates from TRUE terminal H1 Locals
 as close as possible to the extremum, ideally 0.3%-0.7%, with materially better first-signal precision and useful recall than the current early layer.
