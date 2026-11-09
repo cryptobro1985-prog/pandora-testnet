@@ -26,6 +26,10 @@ from research.hype_false_local_entry.high_flow_shadow_v2 import (
     contract as high_flow_v2_contract,
     qualifies as qualifies_high_flow_v2,
 )
+from research.hype_false_local_entry.high_flow_regime_gate_v3 import (
+    contract as high_flow_v3_contract,
+    metrics as high_flow_v3_metrics,
+)
 from research.hype_false_local_entry.early60_strong_reversal_shadow import (
     Early60State, capture_flow15 as capture_early60_flow15,
     checkpoint_sample as early60_checkpoint_sample,
@@ -444,6 +448,7 @@ def main():
             hard120_live={}
             high_flow_shadow_live={}
             high_flow_v2_live={}
+            high_flow_v3_live={}
             early60_shadow_live={}
             high60_veto_live={}
             hard120_persistence_live={}
@@ -453,6 +458,7 @@ def main():
                     hard120_live[side]=None
                     high_flow_shadow_live[side]=None
                     high_flow_v2_live[side]=None
+                    high_flow_v3_live[side]=None
                     early60_shadow_live[side]=None
                     high60_veto_live[side]=None
                     hard120_persistence_live[side]=None
@@ -604,6 +610,11 @@ def main():
                     "ready":False,
                     "reason":"HIGH_ONLY" if side!="HIGH" else "WAITING_CHECKPOINT",
                 }
+                v3_ready=False
+                v3_metrics={
+                    "ready":False,
+                    "reason":"HIGH_ONLY" if side!="HIGH" else "V2_NOT_READY",
+                }
                 if side=="HIGH" and shadow_state is not None and sample is not None:
                     v2_ready,v2_metrics=qualifies_high_flow_v2(
                         side=side,
@@ -634,12 +645,43 @@ def main():
                             "core_flip_authorized":False,
                             "metrics":v2_metrics,
                         })
+                        v3_metrics=high_flow_v3_metrics(
+                            side="HIGH",
+                            candidate_bar_start_ms=(int(hc.extreme_ts_ms)//60_000)*60_000,
+                            extreme_price=float(hc.extreme_price),
+                            sample_ts_ms=int(sample.get("sample_ts_ms") or ts),
+                            completed_m1_rows=completed_m1(state,ts),
+                        )
+                        v3_ready=bool(v3_metrics.get("ready"))
+                        if v3_ready:
+                            append_jsonl(evlog,{
+                                "event":"INTERNAL_HARD120_HIGH_FLOW_V3_SHADOW",
+                                "ts_ms":int(ts),
+                                "signal_ts_ms":int(sample.get("sample_ts_ms") or ts),
+                                "candidate_ts_ms":int(hc.extreme_ts_ms),
+                                "candidate_id":hc.candidate_id,
+                                "side":"HIGH",
+                                "price":float(hc.extreme_price),
+                                "mark_price":float(sample.get("mark_price") or price),
+                                "teacher":INTERNAL.name,
+                                "shadow_contract":"HARD120_HIGH_FLOW_REGIME_GATE_V3",
+                                "parent_shadow_contract":"HARD120_HIGH_FLOW_SHADOW_V2",
+                                "primary_contract":"INTERNAL_HARD120_CHECKPOINT_V2",
+                                "core_flip_authorized":False,
+                                "metrics":v3_metrics,
+                            })
                 high_flow_v2_live[side]=None if side!="HIGH" else {
                     "candidate_id":hc.candidate_id,
                     "flow_15":None if shadow_state is None else shadow_state.flow_15,
                     "flow_15_trade_count":0 if shadow_state is None else shadow_state.flow_15_trade_count,
                     "emitted":hard_high_flow_v2_emitted.get(side)==hc.candidate_id,
                     "checkpoint":v2_metrics,
+                }
+                high_flow_v3_live[side]=None if side!="HIGH" else {
+                    "candidate_id":hc.candidate_id,
+                    "v2_ready":bool(v2_ready),
+                    "ready":bool(v3_ready),
+                    "checkpoint":v3_metrics,
                 }
 
                 high60_sample=None
@@ -790,6 +832,16 @@ def main():
             if v2cfp.exists():
                 try:hard120_plus_v2_forward=json.loads(v2cfp.read_text(encoding="utf-8"))
                 except Exception:hard120_plus_v2_forward={}
+            high_flow_v3_forward={}
+            v3fp=args.checkpoint_dir/"HARD120_HIGH_FLOW_V3_FORWARD_STATUS.json"
+            if v3fp.exists():
+                try:high_flow_v3_forward=json.loads(v3fp.read_text(encoding="utf-8"))
+                except Exception:high_flow_v3_forward={}
+            hard120_plus_v3_forward={}
+            v3cfp=args.checkpoint_dir/"HARD120_PLUS_HIGH_FLOW_V3_FORWARD_STATUS.json"
+            if v3cfp.exists():
+                try:hard120_plus_v3_forward=json.loads(v3cfp.read_text(encoding="utf-8"))
+                except Exception:hard120_plus_v3_forward={}
             hard120_plus_shadow_forward={}
             cfp=args.checkpoint_dir/"HARD120_PLUS_HIGH_FLOW_FORWARD_STATUS.json"
             if cfp.exists():
@@ -867,11 +919,15 @@ def main():
                 "early60_shadow_contract":early60_shadow_contract(),
                 "early60_shadow":early60_shadow_live,
                 "early60_shadow_forward":early60_shadow_forward,
-                "preferred_high_forward_candidate":"HARD120_PLUS_HIGH_FLOW_V2",
+                "preferred_high_forward_candidate":"HARD120_PLUS_HIGH_FLOW_V3_SHADOW_FORWARD_ONLY",
                 "high_flow_v2_contract":high_flow_v2_contract(),
                 "high_flow_v2":high_flow_v2_live,
                 "high_flow_v2_forward":high_flow_v2_forward,
                 "hard120_plus_high_flow_v2_forward":hard120_plus_v2_forward,
+                "high_flow_v3_contract":high_flow_v3_contract(),
+                "high_flow_v3":high_flow_v3_live,
+                "high_flow_v3_forward":high_flow_v3_forward,
+                "hard120_plus_high_flow_v3_forward":hard120_plus_v3_forward,
                 "high_flow_shadow_contract":high_flow_shadow_contract(),
                 "high_flow_shadow":high_flow_shadow_live,
                 "high_flow_shadow_forward":high_flow_shadow_forward,
