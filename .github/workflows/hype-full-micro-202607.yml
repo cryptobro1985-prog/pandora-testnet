@@ -1,4 +1,4 @@
-name: HYPE Full Microstructure Teacher — Jul12-Aug06
+name: HYPE Dense Full Microstructure Teacher — Jul12-Aug06
 
 on:
   workflow_dispatch:
@@ -56,6 +56,7 @@ jobs:
           python -m pip install numpy polars pyarrow requests scikit-learn zstandard
           python -m py_compile \
             research/hype_full_micro_202607/build_full_micro.py \
+            research/hype_full_micro_202607/build_dense_full_micro.py \
             research/hype_full_micro_202607/train_full_micro.py \
             research/hype_full_micro_202607/find_low_high_relations.py \
             research/hype_full_micro_202607/test_data_quality.py
@@ -66,7 +67,7 @@ jobs:
           set -euo pipefail
           rm -rf full_micro_out full_micro_cache
           mkdir -p full_micro_out full_micro_cache
-          python -m research.hype_full_micro_202607.build_full_micro             --output full_micro_out             --cache full_micro_cache | tee full_micro_build.log
+          python -m research.hype_full_micro_202607.build_dense_full_micro             --output full_micro_out             --cache full_micro_cache | tee full_micro_build.log
           test -s full_micro_out/candidate_snapshots_full_micro.jsonl.gz
           test -s full_micro_out/compact_1m.jsonl.gz
           test -s full_micro_out/labels.json.gz
@@ -138,7 +139,7 @@ jobs:
               "book_crossed_rows_masked":book_crossed_masked,
               "liq_valid_rows":liq_valid,
               "liq_invalid_rows":liq_invalid,
-              "contract":"crossed/locked book masked; missing liquidation source never encoded as real zero"
+              "contract":"crossed/locked book masked; missing liquidation source never encoded as real zero; dense swing running-extreme candidates"
           }
           print("CLEAN_MICRO_AUDIT="+json.dumps(summary,separators=(",",":")))
           with open("full_micro_out/CLEAN_MICRO_AUDIT.json","w") as out:
