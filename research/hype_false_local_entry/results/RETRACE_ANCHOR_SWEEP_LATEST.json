@@ -1,0 +1,3959 @@
+{
+  "version": "HYPE-DENSE-RETRACE-ANCHOR-SWEEP-v1",
+  "teacher": "STRICT_L6_K2_REFERENCE_FINALIZED_ONLY",
+  "candidate_contract": "EVERY_NEW_RUNNING_EXTREME_WITH_IMMEDIATE_INVALIDATION",
+  "crossing": "first completed-M1 close reaching retracement threshold",
+  "note": "Price retracement is an anchor only, not sufficient Local confirmation. Next stage overlays causal 116-input signature at/around the crossing.",
+  "dense_candidates": 3403,
+  "by_side": {
+    "LOW": {
+      "best_20_60bps": {
+        "threshold_bps": 58.0,
+        "threshold_pct": 0.58,
+        "episodes": 37,
+        "accepted_first": 37,
+        "true_first": 5,
+        "false_first": 32,
+        "precision": 0.13513513513513514,
+        "recall": 0.13513513513513514,
+        "coverage": 1.0,
+        "median_latency_s": 1389.9,
+        "median_true_distance_bps": 62.13406619667738,
+        "median_false_continuation_bps": 177.6656521971276,
+        "first_signals": [
+          {
+            "episode": 2,
+            "candidate_ts_ms": 1791162350100,
+            "candidate_price": 89.95,
+            "signal_ts_ms": 1791163740000,
+            "signal_price": 90.55,
+            "retrace_bps": 66.70372429127269,
+            "true_first": true
+          },
+          {
+            "episode": 4,
+            "candidate_ts_ms": 1791190107033,
+            "candidate_price": 92.74,
+            "signal_ts_ms": 1791190560000,
+            "signal_price": 93.38,
+            "retrace_bps": 69.01013586370519,
+            "true_first": false
+          },
+          {
+            "episode": 6,
+            "candidate_ts_ms": 1791243955360,
+            "candidate_price": 93.76,
+            "signal_ts_ms": 1791245280000,
+            "signal_price": 94.33,
+            "retrace_bps": 60.79351535836164,
+            "true_first": false
+          },
+          {
+            "episode": 8,
+            "candidate_ts_ms": 1791292251939,
+            "candidate_price": 92.56,
+            "signal_ts_ms": 1791292980000,
+            "signal_price": 93.1,
+            "retrace_bps": 58.340535868623974,
+            "true_first": false
+          },
+          {
+            "episode": 10,
+            "candidate_ts_ms": 1791433244366,
+            "candidate_price": 86.56,
+            "signal_ts_ms": 1791433440000,
+            "signal_price": 87.07,
+            "retrace_bps": 58.91866913123822,
+            "true_first": false
+          },
+          {
+            "episode": 12,
+            "candidate_ts_ms": 1791550446272,
+            "candidate_price": 85.23,
+            "signal_ts_ms": 1791551220000,
+            "signal_price": 85.73,
+            "retrace_bps": 58.664789393405584,
+            "true_first": false
+          },
+          {
+            "episode": 14,
+            "candidate_ts_ms": 1791606725168,
+            "candidate_price": 83.72,
+            "signal_ts_ms": 1791609240000,
+            "signal_price": 84.24,
+            "retrace_bps": 62.11180124223503,
+            "true_first": true
+          },
+          {
+            "episode": 16,
+            "candidate_ts_ms": 1791630824389,
+            "candidate_price": 83.69,
+            "signal_ts_ms": 1791633000000,
+            "signal_price": 84.21,
+            "retrace_bps": 62.13406619667738,
+            "true_first": true
+          },
+          {
+            "episode": 18,
+            "candidate_ts_ms": 1791643373549,
+            "candidate_price": 85.72,
+            "signal_ts_ms": 1791644040000,
+            "signal_price": 86.26,
+            "retrace_bps": 62.99580027998131,
+            "true_first": false
+          },
+          {
+            "episode": 20,
+            "candidate_ts_ms": 1791738130199,
+            "candidate_price": 86.29,
+            "signal_ts_ms": 1791739980000,
+            "signal_price": 86.81,
+            "retrace_bps": 60.26190752114857,
+            "true_first": false
+          },
+          {
+            "episode": 22,
+            "candidate_ts_ms": 1791786590829,
+            "candidate_price": 87.35,
+            "signal_ts_ms": 1791787260000,
+            "signal_price": 87.88,
+            "retrace_bps": 60.67544361763044,
+            "true_first": false
+          },
+          {
+            "episode": 24,
+            "candidate_ts_ms": 1791876577769,
+            "candidate_price": 82.506,
+            "signal_ts_ms": 1791877020000,
+            "signal_price": 83.121,
+            "retrace_bps": 74.54003345211291,
+            "true_first": false
+          },
+          {
+            "episode": 26,
+            "candidate_ts_ms": 1791957180039,
+            "candidate_price": 81.415,
+            "signal_ts_ms": 1791958500000,
+            "signal_price": 81.888,
+            "retrace_bps": 58.09740219861137,
+            "true_first": false
+          },
+          {
+            "episode": 28,
+            "candidate_ts_ms": 1792012223843,
+            "candidate_price": 80.68,
+            "signal_ts_ms": 1792013640000,
+            "signal_price": 81.221,
+            "retrace_bps": 67.05503222607767,
+            "true_first": false
+          },
+          {
+            "episode": 30,
+            "candidate_ts_ms": 1792106791836,
+            "candidate_price": 81.559,
+            "signal_ts_ms": 1792109460000,
+            "signal_price": 82.107,
+            "retrace_bps": 67.19062273936593,
+            "true_first": false
+          },
+          {
+            "episode": 32,
+            "candidate_ts_ms": 1792152961527,
+            "candidate_price": 81.415,
+            "signal_ts_ms": 1792153440000,
+            "signal_price": 81.923,
+            "retrace_bps": 62.39636430633189,
+            "true_first": false
+          },
+          {
+            "episode": 34,
+            "candidate_ts_ms": 1792204649198,
+            "candidate_price": 79.54,
+            "signal_ts_ms": 1792207260000,
+            "signal_price": 80.004,
+            "retrace_bps": 58.33542871511277,
+            "true_first": false
+          },
+          {
+            "episode": 36,
+            "candidate_ts_ms": 1792304465578,
+            "candidate_price": 78.334,
+            "signal_ts_ms": 1792305180000,
+            "signal_price": 78.845,
+            "retrace_bps": 65.23348737457412,
+            "true_first": false
+          },
+          {
+            "episode": 38,
+            "candidate_ts_ms": 1792332895712,
+            "candidate_price": 77.713,
+            "signal_ts_ms": 1792333380000,
+            "signal_price": 78.176,
+            "retrace_bps": 59.57819155096411,
+            "true_first": false
+          },
+          {
+            "episode": 40,
+            "candidate_ts_ms": 1792406076160,
+            "candidate_price": 78.952,
+            "signal_ts_ms": 1792406340000,
+            "signal_price": 79.424,
+            "retrace_bps": 59.783159387982735,
+            "true_first": false
+          },
+          {
+            "episode": 42,
+            "candidate_ts_ms": 1792476836973,
+            "candidate_price": 78.513,
+            "signal_ts_ms": 1792477860000,
+            "signal_price": 78.997,
+            "retrace_bps": 61.64584208984358,
+            "true_first": false
+          },
+          {
+            "episode": 44,
+            "candidate_ts_ms": 1792549823900,
+            "candidate_price": 81.391,
+            "signal_ts_ms": 1792551480000,
+            "signal_price": 81.871,
+            "retrace_bps": 58.97457949896045,
+            "true_first": false
+          },
+          {
+            "episode": 46,
+            "candidate_ts_ms": 1792596003888,
+            "candidate_price": 81.696,
+            "signal_ts_ms": 1792596360000,
+            "signal_price": 82.237,
+            "retrace_bps": 66.22111241676443,
+            "true_first": false
+          },
+          {
+            "episode": 48,
+            "candidate_ts_ms": 1792753286032,
+            "candidate_price": 77.296,
+            "signal_ts_ms": 1792754340000,
+            "signal_price": 77.759,
+            "retrace_bps": 59.89960670668593,
+            "true_first": false
+          },
+          {
+            "episode": 50,
+            "candidate_ts_ms": 1792785118118,
+            "candidate_price": 77.056,
+            "signal_ts_ms": 1792788480000,
+            "signal_price": 77.808,
+            "retrace_bps": 97.59136212624809,
+            "true_first": false
+          },
+          {
+            "episode": 52,
+            "candidate_ts_ms": 1792911211555,
+            "candidate_price": 75.703,
+            "signal_ts_ms": 1792912260000,
+            "signal_price": 76.187,
+            "retrace_bps": 63.93405809545172,
+            "true_first": false
+          },
+          {
+            "episode": 54,
+            "candidate_ts_ms": 1792964789218,
+            "candidate_price": 76.247,
+            "signal_ts_ms": 1792965780000,
+            "signal_price": 77.02,
+            "retrace_bps": 101.38103794247621,
+            "true_first": false
+          },
+          {
+            "episode": 56,
+            "candidate_ts_ms": 1793036875167,
+            "candidate_price": 79.213,
+            "signal_ts_ms": 1793037240000,
+            "signal_price": 79.677,
+            "retrace_bps": 58.57624379836723,
+            "true_first": false
+          },
+          {
+            "episode": 58,
+            "candidate_ts_ms": 1793096713699,
+            "candidate_price": 77.116,
+            "signal_ts_ms": 1793097600000,
+            "signal_price": 77.636,
+            "retrace_bps": 67.43088334457026,
+            "true_first": true
+          },
+          {
+            "episode": 60,
+            "candidate_ts_ms": 1793157003656,
+            "candidate_price": 81.166,
+            "signal_ts_ms": 1793159160000,
+            "signal_price": 81.689,
+            "retrace_bps": 64.43584752236164,
+            "true_first": false
+          },
+          {
+            "episode": 62,
+            "candidate_ts_ms": 1793195314809,
+            "candidate_price": 79.473,
+            "signal_ts_ms": 1793195940000,
+            "signal_price": 79.947,
+            "retrace_bps": 59.64289758786157,
+            "true_first": true
+          },
+          {
+            "episode": 64,
+            "candidate_ts_ms": 1793220433068,
+            "candidate_price": 80.483,
+            "signal_ts_ms": 1793221020000,
+            "signal_price": 81.033,
+            "retrace_bps": 68.33741286979888,
+            "true_first": false
+          },
+          {
+            "episode": 66,
+            "candidate_ts_ms": 1793291628487,
+            "candidate_price": 95.576,
+            "signal_ts_ms": 1793291760000,
+            "signal_price": 96.137,
+            "retrace_bps": 58.69674395245772,
+            "true_first": false
+          },
+          {
+            "episode": 68,
+            "candidate_ts_ms": 1793346161034,
+            "candidate_price": 91.17,
+            "signal_ts_ms": 1793346360000,
+            "signal_price": 91.718,
+            "retrace_bps": 60.10749149939709,
+            "true_first": false
+          },
+          {
+            "episode": 70,
+            "candidate_ts_ms": 1793375275724,
+            "candidate_price": 91.609,
+            "signal_ts_ms": 1793375880000,
+            "signal_price": 92.268,
+            "retrace_bps": 71.93616347738852,
+            "true_first": false
+          },
+          {
+            "episode": 72,
+            "candidate_ts_ms": 1793505903794,
+            "candidate_price": 87.443,
+            "signal_ts_ms": 1793506980000,
+            "signal_price": 87.978,
+            "retrace_bps": 61.18271331038372,
+            "true_first": false
+          },
+          {
+            "episode": 74,
+            "candidate_ts_ms": 1793548675684,
+            "candidate_price": 87.486,
+            "signal_ts_ms": 1793549160000,
+            "signal_price": 88.006,
+            "retrace_bps": 59.43808152161445,
+            "true_first": false
+          }
+        ]
+      },
+      "best_30_38bps": {
+        "threshold_bps": 30.0,
+        "threshold_pct": 0.3,
+        "episodes": 37,
+        "accepted_first": 37,
+        "true_first": 2,
+        "false_first": 35,
+        "precision": 0.05405405405405406,
+        "recall": 0.05405405405405406,
+        "coverage": 1.0,
+        "median_latency_s": 1254.832,
+        "median_true_distance_bps": 40.62612020552025,
+        "median_false_continuation_bps": 275.74769196749395,
+        "first_signals": [
+          {
+            "episode": 2,
+            "candidate_ts_ms": 1791153681929,
+            "candidate_price": 90.22,
+            "signal_ts_ms": 1791153780000,
+            "signal_price": 90.51,
+            "retrace_bps": 32.143648858347085,
+            "true_first": false
+          },
+          {
+            "episode": 4,
+            "candidate_ts_ms": 1791190107033,
+            "candidate_price": 92.74,
+            "signal_ts_ms": 1791190320000,
+            "signal_price": 93.06,
+            "retrace_bps": 34.5050679318537,
+            "true_first": false
+          },
+          {
+            "episode": 6,
+            "candidate_ts_ms": 1791243955360,
+            "candidate_price": 93.76,
+            "signal_ts_ms": 1791244500000,
+            "signal_price": 94.05,
+            "retrace_bps": 30.93003412969253,
+            "true_first": false
+          },
+          {
+            "episode": 8,
+            "candidate_ts_ms": 1791290999915,
+            "candidate_price": 93.02,
+            "signal_ts_ms": 1791291120000,
+            "signal_price": 93.32,
+            "retrace_bps": 32.251128789506645,
+            "true_first": false
+          },
+          {
+            "episode": 10,
+            "candidate_ts_ms": 1791423134969,
+            "candidate_price": 88.34,
+            "signal_ts_ms": 1791423360000,
+            "signal_price": 88.61,
+            "retrace_bps": 30.563731039165987,
+            "true_first": false
+          },
+          {
+            "episode": 12,
+            "candidate_ts_ms": 1791547233035,
+            "candidate_price": 86.03,
+            "signal_ts_ms": 1791547740000,
+            "signal_price": 86.3,
+            "retrace_bps": 31.384400790421818,
+            "true_first": false
+          },
+          {
+            "episode": 14,
+            "candidate_ts_ms": 1791606725168,
+            "candidate_price": 83.72,
+            "signal_ts_ms": 1791607980000,
+            "signal_price": 84.0,
+            "retrace_bps": 33.44481605351169,
+            "true_first": true
+          },
+          {
+            "episode": 16,
+            "candidate_ts_ms": 1791630824389,
+            "candidate_price": 83.69,
+            "signal_ts_ms": 1791631980000,
+            "signal_price": 84.03,
+            "retrace_bps": 40.62612020552025,
+            "true_first": true
+          },
+          {
+            "episode": 18,
+            "candidate_ts_ms": 1791643373549,
+            "candidate_price": 85.72,
+            "signal_ts_ms": 1791643740000,
+            "signal_price": 86.03,
+            "retrace_bps": 36.164255716286675,
+            "true_first": false
+          },
+          {
+            "episode": 20,
+            "candidate_ts_ms": 1791738130199,
+            "candidate_price": 86.29,
+            "signal_ts_ms": 1791738540000,
+            "signal_price": 86.58,
+            "retrace_bps": 33.607602271410464,
+            "true_first": false
+          },
+          {
+            "episode": 22,
+            "candidate_ts_ms": 1791783216720,
+            "candidate_price": 87.46,
+            "signal_ts_ms": 1791784380000,
+            "signal_price": 87.77,
+            "retrace_bps": 35.444774754174176,
+            "true_first": false
+          },
+          {
+            "episode": 24,
+            "candidate_ts_ms": 1791875237222,
+            "candidate_price": 82.75,
+            "signal_ts_ms": 1791875640000,
+            "signal_price": 83.053,
+            "retrace_bps": 36.616314199395816,
+            "true_first": false
+          },
+          {
+            "episode": 26,
+            "candidate_ts_ms": 1791951542234,
+            "candidate_price": 81.961,
+            "signal_ts_ms": 1791952320000,
+            "signal_price": 82.282,
+            "retrace_bps": 39.164968704628045,
+            "true_first": false
+          },
+          {
+            "episode": 28,
+            "candidate_ts_ms": 1792008912801,
+            "candidate_price": 81.31,
+            "signal_ts_ms": 1792008960000,
+            "signal_price": 81.584,
+            "retrace_bps": 33.69819210429226,
+            "true_first": false
+          },
+          {
+            "episode": 30,
+            "candidate_ts_ms": 1792106791836,
+            "candidate_price": 81.559,
+            "signal_ts_ms": 1792108920000,
+            "signal_price": 81.844,
+            "retrace_bps": 34.94402824948839,
+            "true_first": false
+          },
+          {
+            "episode": 32,
+            "candidate_ts_ms": 1792152961527,
+            "candidate_price": 81.415,
+            "signal_ts_ms": 1792153140000,
+            "signal_price": 81.667,
+            "retrace_bps": 30.952527175580613,
+            "true_first": false
+          },
+          {
+            "episode": 34,
+            "candidate_ts_ms": 1792187983834,
+            "candidate_price": 80.043,
+            "signal_ts_ms": 1792188180000,
+            "signal_price": 80.317,
+            "retrace_bps": 34.231600514722516,
+            "true_first": false
+          },
+          {
+            "episode": 36,
+            "candidate_ts_ms": 1792302455787,
+            "candidate_price": 78.363,
+            "signal_ts_ms": 1792303320000,
+            "signal_price": 78.66,
+            "retrace_bps": 37.90053979556562,
+            "true_first": false
+          },
+          {
+            "episode": 38,
+            "candidate_ts_ms": 1792330434718,
+            "candidate_price": 77.874,
+            "signal_ts_ms": 1792330680000,
+            "signal_price": 78.137,
+            "retrace_bps": 33.7725043018211,
+            "true_first": false
+          },
+          {
+            "episode": 40,
+            "candidate_ts_ms": 1792398629569,
+            "candidate_price": 79.752,
+            "signal_ts_ms": 1792399140000,
+            "signal_price": 80.023,
+            "retrace_bps": 33.980339051058465,
+            "true_first": false
+          },
+          {
+            "episode": 42,
+            "candidate_ts_ms": 1792474621209,
+            "candidate_price": 78.863,
+            "signal_ts_ms": 1792475040000,
+            "signal_price": 79.109,
+            "retrace_bps": 31.193335277632794,
+            "true_first": false
+          },
+          {
+            "episode": 44,
+            "candidate_ts_ms": 1792549823900,
+            "candidate_price": 81.391,
+            "signal_ts_ms": 1792550220000,
+            "signal_price": 81.658,
+            "retrace_bps": 32.80460984629752,
+            "true_first": false
+          },
+          {
+            "episode": 46,
+            "candidate_ts_ms": 1792595998638,
+            "candidate_price": 81.716,
+            "signal_ts_ms": 1792596060000,
+            "signal_price": 82.095,
+            "retrace_bps": 46.38014587106554,
+            "true_first": false
+          },
+          {
+            "episode": 48,
+            "candidate_ts_ms": 1792747882238,
+            "candidate_price": 77.846,
+            "signal_ts_ms": 1792748040000,
+            "signal_price": 78.107,
+            "retrace_bps": 33.527734244533924,
+            "true_first": false
+          },
+          {
+            "episode": 50,
+            "candidate_ts_ms": 1792778967362,
+            "candidate_price": 78.023,
+            "signal_ts_ms": 1792779360000,
+            "signal_price": 78.27,
+            "retrace_bps": 31.65733181241359,
+            "true_first": false
+          },
+          {
+            "episode": 52,
+            "candidate_ts_ms": 1792897230319,
+            "candidate_price": 76.432,
+            "signal_ts_ms": 1792898460000,
+            "signal_price": 76.671,
+            "retrace_bps": 31.2696252878375,
+            "true_first": false
+          },
+          {
+            "episode": 54,
+            "candidate_ts_ms": 1792948520711,
+            "candidate_price": 77.115,
+            "signal_ts_ms": 1792948920000,
+            "signal_price": 77.426,
+            "retrace_bps": 40.329378201389154,
+            "true_first": false
+          },
+          {
+            "episode": 56,
+            "candidate_ts_ms": 1793036697600,
+            "candidate_price": 79.356,
+            "signal_ts_ms": 1793036760000,
+            "signal_price": 79.686,
+            "retrace_bps": 41.584757296235786,
+            "true_first": false
+          },
+          {
+            "episode": 58,
+            "candidate_ts_ms": 1793090621106,
+            "candidate_price": 77.724,
+            "signal_ts_ms": 1793091600000,
+            "signal_price": 77.974,
+            "retrace_bps": 32.16509700993298,
+            "true_first": false
+          },
+          {
+            "episode": 60,
+            "candidate_ts_ms": 1793154115158,
+            "candidate_price": 81.188,
+            "signal_ts_ms": 1793154360000,
+            "signal_price": 81.445,
+            "retrace_bps": 31.654924373059057,
+            "true_first": false
+          },
+          {
+            "episode": 62,
+            "candidate_ts_ms": 1793184058560,
+            "candidate_price": 82.009,
+            "signal_ts_ms": 1793184300000,
+            "signal_price": 82.283,
+            "retrace_bps": 33.41096708897817,
+            "true_first": false
+          },
+          {
+            "episode": 64,
+            "candidate_ts_ms": 1793220433068,
+            "candidate_price": 80.483,
+            "signal_ts_ms": 1793220780000,
+            "signal_price": 80.773,
+            "retrace_bps": 36.032454058620985,
+            "true_first": false
+          },
+          {
+            "episode": 66,
+            "candidate_ts_ms": 1793291628487,
+            "candidate_price": 95.576,
+            "signal_ts_ms": 1793291760000,
+            "signal_price": 96.137,
+            "retrace_bps": 58.69674395245772,
+            "true_first": false
+          },
+          {
+            "episode": 68,
+            "candidate_ts_ms": 1793344436307,
+            "candidate_price": 92.939,
+            "signal_ts_ms": 1793344560000,
+            "signal_price": 93.225,
+            "retrace_bps": 30.772872529294393,
+            "true_first": false
+          },
+          {
+            "episode": 70,
+            "candidate_ts_ms": 1793373782678,
+            "candidate_price": 93.48,
+            "signal_ts_ms": 1793373840000,
+            "signal_price": 93.872,
+            "retrace_bps": 41.934103551561904,
+            "true_first": false
+          },
+          {
+            "episode": 72,
+            "candidate_ts_ms": 1793501006878,
+            "candidate_price": 87.732,
+            "signal_ts_ms": 1793501280000,
+            "signal_price": 88.038,
+            "retrace_bps": 34.87894952810766,
+            "true_first": false
+          },
+          {
+            "episode": 74,
+            "candidate_ts_ms": 1793537896688,
+            "candidate_price": 87.966,
+            "signal_ts_ms": 1793538480000,
+            "signal_price": 88.236,
+            "retrace_bps": 30.693677102517913,
+            "true_first": false
+          }
+        ]
+      },
+      "at_33bps": {
+        "threshold_bps": 33.0,
+        "threshold_pct": 0.33,
+        "episodes": 37,
+        "accepted_first": 37,
+        "true_first": 2,
+        "false_first": 35,
+        "precision": 0.05405405405405406,
+        "recall": 0.05405405405405406,
+        "coverage": 1.0,
+        "median_latency_s": 1254.832,
+        "median_true_distance_bps": 40.62612020552025,
+        "median_false_continuation_bps": 271.4356791420225,
+        "first_signals": [
+          {
+            "episode": 2,
+            "candidate_ts_ms": 1791153681929,
+            "candidate_price": 90.22,
+            "signal_ts_ms": 1791155460000,
+            "signal_price": 90.53,
+            "retrace_bps": 34.360452227888416,
+            "true_first": false
+          },
+          {
+            "episode": 4,
+            "candidate_ts_ms": 1791190107033,
+            "candidate_price": 92.74,
+            "signal_ts_ms": 1791190320000,
+            "signal_price": 93.06,
+            "retrace_bps": 34.5050679318537,
+            "true_first": false
+          },
+          {
+            "episode": 6,
+            "candidate_ts_ms": 1791243955360,
+            "candidate_price": 93.76,
+            "signal_ts_ms": 1791244560000,
+            "signal_price": 94.14,
+            "retrace_bps": 40.52901023890776,
+            "true_first": false
+          },
+          {
+            "episode": 8,
+            "candidate_ts_ms": 1791292251939,
+            "candidate_price": 92.56,
+            "signal_ts_ms": 1791292560000,
+            "signal_price": 92.9,
+            "retrace_bps": 36.73292999135658,
+            "true_first": false
+          },
+          {
+            "episode": 10,
+            "candidate_ts_ms": 1791424853220,
+            "candidate_price": 87.95,
+            "signal_ts_ms": 1791425820000,
+            "signal_price": 88.27,
+            "retrace_bps": 36.38430926662828,
+            "true_first": false
+          },
+          {
+            "episode": 12,
+            "candidate_ts_ms": 1791547233035,
+            "candidate_price": 86.03,
+            "signal_ts_ms": 1791548160000,
+            "signal_price": 86.34,
+            "retrace_bps": 36.033941648263564,
+            "true_first": false
+          },
+          {
+            "episode": 14,
+            "candidate_ts_ms": 1791606725168,
+            "candidate_price": 83.72,
+            "signal_ts_ms": 1791607980000,
+            "signal_price": 84.0,
+            "retrace_bps": 33.44481605351169,
+            "true_first": true
+          },
+          {
+            "episode": 16,
+            "candidate_ts_ms": 1791630824389,
+            "candidate_price": 83.69,
+            "signal_ts_ms": 1791631980000,
+            "signal_price": 84.03,
+            "retrace_bps": 40.62612020552025,
+            "true_first": true
+          },
+          {
+            "episode": 18,
+            "candidate_ts_ms": 1791643373549,
+            "candidate_price": 85.72,
+            "signal_ts_ms": 1791643740000,
+            "signal_price": 86.03,
+            "retrace_bps": 36.164255716286675,
+            "true_first": false
+          },
+          {
+            "episode": 20,
+            "candidate_ts_ms": 1791738130199,
+            "candidate_price": 86.29,
+            "signal_ts_ms": 1791738540000,
+            "signal_price": 86.58,
+            "retrace_bps": 33.607602271410464,
+            "true_first": false
+          },
+          {
+            "episode": 22,
+            "candidate_ts_ms": 1791783216720,
+            "candidate_price": 87.46,
+            "signal_ts_ms": 1791784380000,
+            "signal_price": 87.77,
+            "retrace_bps": 35.444774754174176,
+            "true_first": false
+          },
+          {
+            "episode": 24,
+            "candidate_ts_ms": 1791875237222,
+            "candidate_price": 82.75,
+            "signal_ts_ms": 1791875640000,
+            "signal_price": 83.053,
+            "retrace_bps": 36.616314199395816,
+            "true_first": false
+          },
+          {
+            "episode": 26,
+            "candidate_ts_ms": 1791951542234,
+            "candidate_price": 81.961,
+            "signal_ts_ms": 1791952320000,
+            "signal_price": 82.282,
+            "retrace_bps": 39.164968704628045,
+            "true_first": false
+          },
+          {
+            "episode": 28,
+            "candidate_ts_ms": 1792008912801,
+            "candidate_price": 81.31,
+            "signal_ts_ms": 1792008960000,
+            "signal_price": 81.584,
+            "retrace_bps": 33.69819210429226,
+            "true_first": false
+          },
+          {
+            "episode": 30,
+            "candidate_ts_ms": 1792106791836,
+            "candidate_price": 81.559,
+            "signal_ts_ms": 1792108920000,
+            "signal_price": 81.844,
+            "retrace_bps": 34.94402824948839,
+            "true_first": false
+          },
+          {
+            "episode": 32,
+            "candidate_ts_ms": 1792152961527,
+            "candidate_price": 81.415,
+            "signal_ts_ms": 1792153260000,
+            "signal_price": 81.78,
+            "retrace_bps": 44.83203340907682,
+            "true_first": false
+          },
+          {
+            "episode": 34,
+            "candidate_ts_ms": 1792187983834,
+            "candidate_price": 80.043,
+            "signal_ts_ms": 1792188180000,
+            "signal_price": 80.317,
+            "retrace_bps": 34.231600514722516,
+            "true_first": false
+          },
+          {
+            "episode": 36,
+            "candidate_ts_ms": 1792302455787,
+            "candidate_price": 78.363,
+            "signal_ts_ms": 1792303320000,
+            "signal_price": 78.66,
+            "retrace_bps": 37.90053979556562,
+            "true_first": false
+          },
+          {
+            "episode": 38,
+            "candidate_ts_ms": 1792330434718,
+            "candidate_price": 77.874,
+            "signal_ts_ms": 1792330680000,
+            "signal_price": 78.137,
+            "retrace_bps": 33.7725043018211,
+            "true_first": false
+          },
+          {
+            "episode": 40,
+            "candidate_ts_ms": 1792398629569,
+            "candidate_price": 79.752,
+            "signal_ts_ms": 1792399140000,
+            "signal_price": 80.023,
+            "retrace_bps": 33.980339051058465,
+            "true_first": false
+          },
+          {
+            "episode": 42,
+            "candidate_ts_ms": 1792474621209,
+            "candidate_price": 78.863,
+            "signal_ts_ms": 1792475160000,
+            "signal_price": 79.185,
+            "retrace_bps": 40.83030064796045,
+            "true_first": false
+          },
+          {
+            "episode": 44,
+            "candidate_ts_ms": 1792549823900,
+            "candidate_price": 81.391,
+            "signal_ts_ms": 1792550820000,
+            "signal_price": 81.685,
+            "retrace_bps": 36.1219299431137,
+            "true_first": false
+          },
+          {
+            "episode": 46,
+            "candidate_ts_ms": 1792595998638,
+            "candidate_price": 81.716,
+            "signal_ts_ms": 1792596060000,
+            "signal_price": 82.095,
+            "retrace_bps": 46.38014587106554,
+            "true_first": false
+          },
+          {
+            "episode": 48,
+            "candidate_ts_ms": 1792747882238,
+            "candidate_price": 77.846,
+            "signal_ts_ms": 1792748040000,
+            "signal_price": 78.107,
+            "retrace_bps": 33.527734244533924,
+            "true_first": false
+          },
+          {
+            "episode": 50,
+            "candidate_ts_ms": 1792778967362,
+            "candidate_price": 78.023,
+            "signal_ts_ms": 1792779480000,
+            "signal_price": 78.309,
+            "retrace_bps": 36.65585788805936,
+            "true_first": false
+          },
+          {
+            "episode": 52,
+            "candidate_ts_ms": 1792897230319,
+            "candidate_price": 76.432,
+            "signal_ts_ms": 1792901940000,
+            "signal_price": 76.705,
+            "retrace_bps": 35.71802386434841,
+            "true_first": false
+          },
+          {
+            "episode": 54,
+            "candidate_ts_ms": 1792948520711,
+            "candidate_price": 77.115,
+            "signal_ts_ms": 1792948920000,
+            "signal_price": 77.426,
+            "retrace_bps": 40.329378201389154,
+            "true_first": false
+          },
+          {
+            "episode": 56,
+            "candidate_ts_ms": 1793036697600,
+            "candidate_price": 79.356,
+            "signal_ts_ms": 1793036760000,
+            "signal_price": 79.686,
+            "retrace_bps": 41.584757296235786,
+            "true_first": false
+          },
+          {
+            "episode": 58,
+            "candidate_ts_ms": 1793090621106,
+            "candidate_price": 77.724,
+            "signal_ts_ms": 1793091960000,
+            "signal_price": 77.989,
+            "retrace_bps": 34.09500283052758,
+            "true_first": false
+          },
+          {
+            "episode": 60,
+            "candidate_ts_ms": 1793154115158,
+            "candidate_price": 81.188,
+            "signal_ts_ms": 1793154420000,
+            "signal_price": 81.519,
+            "retrace_bps": 40.769571857910414,
+            "true_first": false
+          },
+          {
+            "episode": 62,
+            "candidate_ts_ms": 1793184058560,
+            "candidate_price": 82.009,
+            "signal_ts_ms": 1793184300000,
+            "signal_price": 82.283,
+            "retrace_bps": 33.41096708897817,
+            "true_first": false
+          },
+          {
+            "episode": 64,
+            "candidate_ts_ms": 1793220433068,
+            "candidate_price": 80.483,
+            "signal_ts_ms": 1793220780000,
+            "signal_price": 80.773,
+            "retrace_bps": 36.032454058620985,
+            "true_first": false
+          },
+          {
+            "episode": 66,
+            "candidate_ts_ms": 1793291628487,
+            "candidate_price": 95.576,
+            "signal_ts_ms": 1793291760000,
+            "signal_price": 96.137,
+            "retrace_bps": 58.69674395245772,
+            "true_first": false
+          },
+          {
+            "episode": 68,
+            "candidate_ts_ms": 1793344722040,
+            "candidate_price": 92.9,
+            "signal_ts_ms": 1793345100000,
+            "signal_price": 93.207,
+            "retrace_bps": 33.046286329385666,
+            "true_first": false
+          },
+          {
+            "episode": 70,
+            "candidate_ts_ms": 1793373782678,
+            "candidate_price": 93.48,
+            "signal_ts_ms": 1793373840000,
+            "signal_price": 93.872,
+            "retrace_bps": 41.934103551561904,
+            "true_first": false
+          },
+          {
+            "episode": 72,
+            "candidate_ts_ms": 1793501006878,
+            "candidate_price": 87.732,
+            "signal_ts_ms": 1793501280000,
+            "signal_price": 88.038,
+            "retrace_bps": 34.87894952810766,
+            "true_first": false
+          },
+          {
+            "episode": 74,
+            "candidate_ts_ms": 1793537896688,
+            "candidate_price": 87.966,
+            "signal_ts_ms": 1793538600000,
+            "signal_price": 88.359,
+            "retrace_bps": 44.67635222699773,
+            "true_first": false
+          }
+        ]
+      },
+      "at_35bps": {
+        "threshold_bps": 35.0,
+        "threshold_pct": 0.35,
+        "episodes": 37,
+        "accepted_first": 37,
+        "true_first": 2,
+        "false_first": 35,
+        "precision": 0.05405405405405406,
+        "recall": 0.05405405405405406,
+        "coverage": 1.0,
+        "median_latency_s": 1314.832,
+        "median_true_distance_bps": 40.62612020552025,
+        "median_false_continuation_bps": 226.2987552928819,
+        "first_signals": [
+          {
+            "episode": 2,
+            "candidate_ts_ms": 1791153681929,
+            "candidate_price": 90.22,
+            "signal_ts_ms": 1791155580000,
+            "signal_price": 90.55,
+            "retrace_bps": 36.57725559742752,
+            "true_first": false
+          },
+          {
+            "episode": 4,
+            "candidate_ts_ms": 1791190107033,
+            "candidate_price": 92.74,
+            "signal_ts_ms": 1791190440000,
+            "signal_price": 93.07,
+            "retrace_bps": 35.58335130472212,
+            "true_first": false
+          },
+          {
+            "episode": 6,
+            "candidate_ts_ms": 1791243955360,
+            "candidate_price": 93.76,
+            "signal_ts_ms": 1791244560000,
+            "signal_price": 94.14,
+            "retrace_bps": 40.52901023890776,
+            "true_first": false
+          },
+          {
+            "episode": 8,
+            "candidate_ts_ms": 1791292251939,
+            "candidate_price": 92.56,
+            "signal_ts_ms": 1791292560000,
+            "signal_price": 92.9,
+            "retrace_bps": 36.73292999135658,
+            "true_first": false
+          },
+          {
+            "episode": 10,
+            "candidate_ts_ms": 1791424853220,
+            "candidate_price": 87.95,
+            "signal_ts_ms": 1791425820000,
+            "signal_price": 88.27,
+            "retrace_bps": 36.38430926662828,
+            "true_first": false
+          },
+          {
+            "episode": 12,
+            "candidate_ts_ms": 1791547233035,
+            "candidate_price": 86.03,
+            "signal_ts_ms": 1791548160000,
+            "signal_price": 86.34,
+            "retrace_bps": 36.033941648263564,
+            "true_first": false
+          },
+          {
+            "episode": 14,
+            "candidate_ts_ms": 1791606725168,
+            "candidate_price": 83.72,
+            "signal_ts_ms": 1791608040000,
+            "signal_price": 84.06,
+            "retrace_bps": 40.611562350694186,
+            "true_first": true
+          },
+          {
+            "episode": 16,
+            "candidate_ts_ms": 1791630824389,
+            "candidate_price": 83.69,
+            "signal_ts_ms": 1791631980000,
+            "signal_price": 84.03,
+            "retrace_bps": 40.62612020552025,
+            "true_first": true
+          },
+          {
+            "episode": 18,
+            "candidate_ts_ms": 1791643373549,
+            "candidate_price": 85.72,
+            "signal_ts_ms": 1791643740000,
+            "signal_price": 86.03,
+            "retrace_bps": 36.164255716286675,
+            "true_first": false
+          },
+          {
+            "episode": 20,
+            "candidate_ts_ms": 1791738130199,
+            "candidate_price": 86.29,
+            "signal_ts_ms": 1791738660000,
+            "signal_price": 86.61,
+            "retrace_bps": 37.084250782244425,
+            "true_first": false
+          },
+          {
+            "episode": 22,
+            "candidate_ts_ms": 1791783216720,
+            "candidate_price": 87.46,
+            "signal_ts_ms": 1791784380000,
+            "signal_price": 87.77,
+            "retrace_bps": 35.444774754174176,
+            "true_first": false
+          },
+          {
+            "episode": 24,
+            "candidate_ts_ms": 1791875237222,
+            "candidate_price": 82.75,
+            "signal_ts_ms": 1791875640000,
+            "signal_price": 83.053,
+            "retrace_bps": 36.616314199395816,
+            "true_first": false
+          },
+          {
+            "episode": 26,
+            "candidate_ts_ms": 1791951542234,
+            "candidate_price": 81.961,
+            "signal_ts_ms": 1791952320000,
+            "signal_price": 82.282,
+            "retrace_bps": 39.164968704628045,
+            "true_first": false
+          },
+          {
+            "episode": 28,
+            "candidate_ts_ms": 1792011814499,
+            "candidate_price": 80.754,
+            "signal_ts_ms": 1792012080000,
+            "signal_price": 81.041,
+            "retrace_bps": 35.540035168535326,
+            "true_first": false
+          },
+          {
+            "episode": 30,
+            "candidate_ts_ms": 1792106791836,
+            "candidate_price": 81.559,
+            "signal_ts_ms": 1792108980000,
+            "signal_price": 81.866,
+            "retrace_bps": 37.64146200909701,
+            "true_first": false
+          },
+          {
+            "episode": 32,
+            "candidate_ts_ms": 1792152961527,
+            "candidate_price": 81.415,
+            "signal_ts_ms": 1792153260000,
+            "signal_price": 81.78,
+            "retrace_bps": 44.83203340907682,
+            "true_first": false
+          },
+          {
+            "episode": 34,
+            "candidate_ts_ms": 1792188936169,
+            "candidate_price": 79.94,
+            "signal_ts_ms": 1792191840000,
+            "signal_price": 80.28,
+            "retrace_bps": 42.53189892419407,
+            "true_first": false
+          },
+          {
+            "episode": 36,
+            "candidate_ts_ms": 1792302455787,
+            "candidate_price": 78.363,
+            "signal_ts_ms": 1792303320000,
+            "signal_price": 78.66,
+            "retrace_bps": 37.90053979556562,
+            "true_first": false
+          },
+          {
+            "episode": 38,
+            "candidate_ts_ms": 1792330434718,
+            "candidate_price": 77.874,
+            "signal_ts_ms": 1792330740000,
+            "signal_price": 78.199,
+            "retrace_bps": 41.73408326270778,
+            "true_first": false
+          },
+          {
+            "episode": 40,
+            "candidate_ts_ms": 1792398629569,
+            "candidate_price": 79.752,
+            "signal_ts_ms": 1792399320000,
+            "signal_price": 80.058,
+            "retrace_bps": 38.36894372555078,
+            "true_first": false
+          },
+          {
+            "episode": 42,
+            "candidate_ts_ms": 1792474621209,
+            "candidate_price": 78.863,
+            "signal_ts_ms": 1792475160000,
+            "signal_price": 79.185,
+            "retrace_bps": 40.83030064796045,
+            "true_first": false
+          },
+          {
+            "episode": 44,
+            "candidate_ts_ms": 1792549823900,
+            "candidate_price": 81.391,
+            "signal_ts_ms": 1792550820000,
+            "signal_price": 81.685,
+            "retrace_bps": 36.1219299431137,
+            "true_first": false
+          },
+          {
+            "episode": 46,
+            "candidate_ts_ms": 1792595998638,
+            "candidate_price": 81.716,
+            "signal_ts_ms": 1792596060000,
+            "signal_price": 82.095,
+            "retrace_bps": 46.38014587106554,
+            "true_first": false
+          },
+          {
+            "episode": 48,
+            "candidate_ts_ms": 1792747882238,
+            "candidate_price": 77.846,
+            "signal_ts_ms": 1792748220000,
+            "signal_price": 78.143,
+            "retrace_bps": 38.15224931274619,
+            "true_first": false
+          },
+          {
+            "episode": 50,
+            "candidate_ts_ms": 1792778967362,
+            "candidate_price": 78.023,
+            "signal_ts_ms": 1792779480000,
+            "signal_price": 78.309,
+            "retrace_bps": 36.65585788805936,
+            "true_first": false
+          },
+          {
+            "episode": 52,
+            "candidate_ts_ms": 1792897230319,
+            "candidate_price": 76.432,
+            "signal_ts_ms": 1792901940000,
+            "signal_price": 76.705,
+            "retrace_bps": 35.71802386434841,
+            "true_first": false
+          },
+          {
+            "episode": 54,
+            "candidate_ts_ms": 1792948520711,
+            "candidate_price": 77.115,
+            "signal_ts_ms": 1792948920000,
+            "signal_price": 77.426,
+            "retrace_bps": 40.329378201389154,
+            "true_first": false
+          },
+          {
+            "episode": 56,
+            "candidate_ts_ms": 1793036697600,
+            "candidate_price": 79.356,
+            "signal_ts_ms": 1793036760000,
+            "signal_price": 79.686,
+            "retrace_bps": 41.584757296235786,
+            "true_first": false
+          },
+          {
+            "episode": 58,
+            "candidate_ts_ms": 1793090621106,
+            "candidate_price": 77.724,
+            "signal_ts_ms": 1793092020000,
+            "signal_price": 78.02,
+            "retrace_bps": 38.08347485976027,
+            "true_first": false
+          },
+          {
+            "episode": 60,
+            "candidate_ts_ms": 1793154115158,
+            "candidate_price": 81.188,
+            "signal_ts_ms": 1793154420000,
+            "signal_price": 81.519,
+            "retrace_bps": 40.769571857910414,
+            "true_first": false
+          },
+          {
+            "episode": 62,
+            "candidate_ts_ms": 1793189705798,
+            "candidate_price": 80.82,
+            "signal_ts_ms": 1793189760000,
+            "signal_price": 81.114,
+            "retrace_bps": 36.377134372680416,
+            "true_first": false
+          },
+          {
+            "episode": 64,
+            "candidate_ts_ms": 1793220433068,
+            "candidate_price": 80.483,
+            "signal_ts_ms": 1793220780000,
+            "signal_price": 80.773,
+            "retrace_bps": 36.032454058620985,
+            "true_first": false
+          },
+          {
+            "episode": 66,
+            "candidate_ts_ms": 1793291628487,
+            "candidate_price": 95.576,
+            "signal_ts_ms": 1793291760000,
+            "signal_price": 96.137,
+            "retrace_bps": 58.69674395245772,
+            "true_first": false
+          },
+          {
+            "episode": 68,
+            "candidate_ts_ms": 1793346161034,
+            "candidate_price": 91.17,
+            "signal_ts_ms": 1793346240000,
+            "signal_price": 91.524,
+            "retrace_bps": 38.82856202698237,
+            "true_first": false
+          },
+          {
+            "episode": 70,
+            "candidate_ts_ms": 1793373782678,
+            "candidate_price": 93.48,
+            "signal_ts_ms": 1793373840000,
+            "signal_price": 93.872,
+            "retrace_bps": 41.934103551561904,
+            "true_first": false
+          },
+          {
+            "episode": 72,
+            "candidate_ts_ms": 1793501006878,
+            "candidate_price": 87.732,
+            "signal_ts_ms": 1793501400000,
+            "signal_price": 88.077,
+            "retrace_bps": 39.324305840513496,
+            "true_first": false
+          },
+          {
+            "episode": 74,
+            "candidate_ts_ms": 1793537896688,
+            "candidate_price": 87.966,
+            "signal_ts_ms": 1793538600000,
+            "signal_price": 88.359,
+            "retrace_bps": 44.67635222699773,
+            "true_first": false
+          }
+        ]
+      },
+      "grid": [
+        {
+          "threshold_bps": 20.0,
+          "threshold_pct": 0.2,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 1,
+          "false_first": 36,
+          "precision": 0.02702702702702703,
+          "recall": 0.02702702702702703,
+          "coverage": 1.0,
+          "median_latency_s": 414.832,
+          "median_true_distance_bps": 20.305781175347093,
+          "median_false_continuation_bps": 282.94833453645475
+        },
+        {
+          "threshold_bps": 21.0,
+          "threshold_pct": 0.21,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 1,
+          "false_first": 36,
+          "precision": 0.02702702702702703,
+          "recall": 0.02702702702702703,
+          "coverage": 1.0,
+          "median_latency_s": 474.832,
+          "median_true_distance_bps": 21.500238891543066,
+          "median_false_continuation_bps": 282.94833453645475
+        },
+        {
+          "threshold_bps": 22.0,
+          "threshold_pct": 0.22,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 1,
+          "false_first": 36,
+          "precision": 0.02702702702702703,
+          "recall": 0.02702702702702703,
+          "coverage": 1.0,
+          "median_latency_s": 534.832,
+          "median_true_distance_bps": 25.083612040135428,
+          "median_false_continuation_bps": 282.94833453645475
+        },
+        {
+          "threshold_bps": 23.0,
+          "threshold_pct": 0.23,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 2,
+          "false_first": 35,
+          "precision": 0.05405405405405406,
+          "recall": 0.05405405405405406,
+          "coverage": 1.0,
+          "median_latency_s": 555.611,
+          "median_true_distance_bps": 25.083612040135428,
+          "median_false_continuation_bps": 278.4757661321646
+        },
+        {
+          "threshold_bps": 24.0,
+          "threshold_pct": 0.24,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 2,
+          "false_first": 35,
+          "precision": 0.05405405405405406,
+          "recall": 0.05405405405405406,
+          "coverage": 1.0,
+          "median_latency_s": 1035.611,
+          "median_true_distance_bps": 25.092603656351464,
+          "median_false_continuation_bps": 278.4757661321646
+        },
+        {
+          "threshold_bps": 25.0,
+          "threshold_pct": 0.25,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 2,
+          "false_first": 35,
+          "precision": 0.05405405405405406,
+          "recall": 0.05405405405405406,
+          "coverage": 1.0,
+          "median_latency_s": 1035.611,
+          "median_true_distance_bps": 25.092603656351464,
+          "median_false_continuation_bps": 278.4757661321646
+        },
+        {
+          "threshold_bps": 26.0,
+          "threshold_pct": 0.26,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 2,
+          "false_first": 35,
+          "precision": 0.05405405405405406,
+          "recall": 0.05405405405405406,
+          "coverage": 1.0,
+          "median_latency_s": 1095.611,
+          "median_true_distance_bps": 29.87214720994169,
+          "median_false_continuation_bps": 278.4757661321646
+        },
+        {
+          "threshold_bps": 27.0,
+          "threshold_pct": 0.27,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 2,
+          "false_first": 35,
+          "precision": 0.05405405405405406,
+          "recall": 0.05405405405405406,
+          "coverage": 1.0,
+          "median_latency_s": 1095.611,
+          "median_true_distance_bps": 29.87214720994169,
+          "median_false_continuation_bps": 276.9498261301551
+        },
+        {
+          "threshold_bps": 28.0,
+          "threshold_pct": 0.28,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 2,
+          "false_first": 35,
+          "precision": 0.05405405405405406,
+          "recall": 0.05405405405405406,
+          "coverage": 1.0,
+          "median_latency_s": 1095.611,
+          "median_true_distance_bps": 29.87214720994169,
+          "median_false_continuation_bps": 276.9498261301551
+        },
+        {
+          "threshold_bps": 29.0,
+          "threshold_pct": 0.29,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 2,
+          "false_first": 35,
+          "precision": 0.05405405405405406,
+          "recall": 0.05405405405405406,
+          "coverage": 1.0,
+          "median_latency_s": 1095.611,
+          "median_true_distance_bps": 29.87214720994169,
+          "median_false_continuation_bps": 275.74769196749395
+        },
+        {
+          "threshold_bps": 30.0,
+          "threshold_pct": 0.3,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 2,
+          "false_first": 35,
+          "precision": 0.05405405405405406,
+          "recall": 0.05405405405405406,
+          "coverage": 1.0,
+          "median_latency_s": 1254.832,
+          "median_true_distance_bps": 40.62612020552025,
+          "median_false_continuation_bps": 275.74769196749395
+        },
+        {
+          "threshold_bps": 31.0,
+          "threshold_pct": 0.31,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 2,
+          "false_first": 35,
+          "precision": 0.05405405405405406,
+          "recall": 0.05405405405405406,
+          "coverage": 1.0,
+          "median_latency_s": 1254.832,
+          "median_true_distance_bps": 40.62612020552025,
+          "median_false_continuation_bps": 271.4356791420225
+        },
+        {
+          "threshold_bps": 32.0,
+          "threshold_pct": 0.32,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 2,
+          "false_first": 35,
+          "precision": 0.05405405405405406,
+          "recall": 0.05405405405405406,
+          "coverage": 1.0,
+          "median_latency_s": 1254.832,
+          "median_true_distance_bps": 40.62612020552025,
+          "median_false_continuation_bps": 271.4356791420225
+        },
+        {
+          "threshold_bps": 33.0,
+          "threshold_pct": 0.33,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 2,
+          "false_first": 35,
+          "precision": 0.05405405405405406,
+          "recall": 0.05405405405405406,
+          "coverage": 1.0,
+          "median_latency_s": 1254.832,
+          "median_true_distance_bps": 40.62612020552025,
+          "median_false_continuation_bps": 271.4356791420225
+        },
+        {
+          "threshold_bps": 34.0,
+          "threshold_pct": 0.34,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 2,
+          "false_first": 35,
+          "precision": 0.05405405405405406,
+          "recall": 0.05405405405405406,
+          "coverage": 1.0,
+          "median_latency_s": 1314.832,
+          "median_true_distance_bps": 40.62612020552025,
+          "median_false_continuation_bps": 271.4356791420225
+        },
+        {
+          "threshold_bps": 35.0,
+          "threshold_pct": 0.35,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 2,
+          "false_first": 35,
+          "precision": 0.05405405405405406,
+          "recall": 0.05405405405405406,
+          "coverage": 1.0,
+          "median_latency_s": 1314.832,
+          "median_true_distance_bps": 40.62612020552025,
+          "median_false_continuation_bps": 226.2987552928819
+        },
+        {
+          "threshold_bps": 36.0,
+          "threshold_pct": 0.36,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 2,
+          "false_first": 35,
+          "precision": 0.05405405405405406,
+          "recall": 0.05405405405405406,
+          "coverage": 1.0,
+          "median_latency_s": 1314.832,
+          "median_true_distance_bps": 40.62612020552025,
+          "median_false_continuation_bps": 226.2987552928819
+        },
+        {
+          "threshold_bps": 37.0,
+          "threshold_pct": 0.37,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 2,
+          "false_first": 35,
+          "precision": 0.05405405405405406,
+          "recall": 0.05405405405405406,
+          "coverage": 1.0,
+          "median_latency_s": 1314.832,
+          "median_true_distance_bps": 40.62612020552025,
+          "median_false_continuation_bps": 224.32821497121003
+        },
+        {
+          "threshold_bps": 38.0,
+          "threshold_pct": 0.38,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 2,
+          "false_first": 35,
+          "precision": 0.05405405405405406,
+          "recall": 0.05405405405405406,
+          "coverage": 1.0,
+          "median_latency_s": 1314.832,
+          "median_true_distance_bps": 40.62612020552025,
+          "median_false_continuation_bps": 224.32821497121003
+        },
+        {
+          "threshold_bps": 39.0,
+          "threshold_pct": 0.39,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 3,
+          "false_first": 34,
+          "precision": 0.08108108108108109,
+          "recall": 0.08108108108108109,
+          "coverage": 1.0,
+          "median_latency_s": 1155.611,
+          "median_true_distance_bps": 40.62612020552025,
+          "median_false_continuation_bps": 226.2987552928819
+        },
+        {
+          "threshold_bps": 40.0,
+          "threshold_pct": 0.4,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 3,
+          "false_first": 34,
+          "precision": 0.08108108108108109,
+          "recall": 0.08108108108108109,
+          "coverage": 1.0,
+          "median_latency_s": 1155.611,
+          "median_true_distance_bps": 40.62612020552025,
+          "median_false_continuation_bps": 226.2987552928819
+        },
+        {
+          "threshold_bps": 41.0,
+          "threshold_pct": 0.41,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 3,
+          "false_first": 34,
+          "precision": 0.08108108108108109,
+          "recall": 0.08108108108108109,
+          "coverage": 1.0,
+          "median_latency_s": 1215.611,
+          "median_true_distance_bps": 45.40566375911048,
+          "median_false_continuation_bps": 226.2987552928819
+        },
+        {
+          "threshold_bps": 42.0,
+          "threshold_pct": 0.42,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 3,
+          "false_first": 34,
+          "precision": 0.08108108108108109,
+          "recall": 0.08108108108108109,
+          "coverage": 1.0,
+          "median_latency_s": 1215.611,
+          "median_true_distance_bps": 45.40566375911048,
+          "median_false_continuation_bps": 224.32821497121003
+        },
+        {
+          "threshold_bps": 43.0,
+          "threshold_pct": 0.43,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 3,
+          "false_first": 34,
+          "precision": 0.08108108108108109,
+          "recall": 0.08108108108108109,
+          "coverage": 1.0,
+          "median_latency_s": 1215.611,
+          "median_true_distance_bps": 47.77830864787447,
+          "median_false_continuation_bps": 224.32821497121003
+        },
+        {
+          "threshold_bps": 44.0,
+          "threshold_pct": 0.44,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 3,
+          "false_first": 34,
+          "precision": 0.08108108108108109,
+          "recall": 0.08108108108108109,
+          "coverage": 1.0,
+          "median_latency_s": 1215.611,
+          "median_true_distance_bps": 47.77830864787447,
+          "median_false_continuation_bps": 224.32821497121003
+        },
+        {
+          "threshold_bps": 45.0,
+          "threshold_pct": 0.45,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 3,
+          "false_first": 34,
+          "precision": 0.08108108108108109,
+          "recall": 0.08108108108108109,
+          "coverage": 1.0,
+          "median_latency_s": 1215.611,
+          "median_true_distance_bps": 47.77830864787447,
+          "median_false_continuation_bps": 224.32821497121003
+        },
+        {
+          "threshold_bps": 46.0,
+          "threshold_pct": 0.46,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 4,
+          "false_first": 33,
+          "precision": 0.10810810810810811,
+          "recall": 0.10810810810810811,
+          "coverage": 1.0,
+          "median_latency_s": 1395.611,
+          "median_true_distance_bps": 52.47065040957288,
+          "median_false_continuation_bps": 217.86578310718286
+        },
+        {
+          "threshold_bps": 47.0,
+          "threshold_pct": 0.47,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 4,
+          "false_first": 33,
+          "precision": 0.10810810810810811,
+          "recall": 0.10810810810810811,
+          "coverage": 1.0,
+          "median_latency_s": 1455.611,
+          "median_true_distance_bps": 52.47065040957288,
+          "median_false_continuation_bps": 217.86578310718286
+        },
+        {
+          "threshold_bps": 48.0,
+          "threshold_pct": 0.48,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 4,
+          "false_first": 33,
+          "precision": 0.10810810810810811,
+          "recall": 0.10810810810810811,
+          "coverage": 1.0,
+          "median_latency_s": 1455.611,
+          "median_true_distance_bps": 52.47065040957288,
+          "median_false_continuation_bps": 217.86578310718286
+        },
+        {
+          "threshold_bps": 49.0,
+          "threshold_pct": 0.49,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 4,
+          "false_first": 33,
+          "precision": 0.10810810810810811,
+          "recall": 0.10810810810810811,
+          "coverage": 1.0,
+          "median_latency_s": 1815.611,
+          "median_true_distance_bps": 52.47065040957288,
+          "median_false_continuation_bps": 217.86578310718286
+        },
+        {
+          "threshold_bps": 50.0,
+          "threshold_pct": 0.5,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 4,
+          "false_first": 33,
+          "precision": 0.10810810810810811,
+          "recall": 0.10810810810810811,
+          "coverage": 1.0,
+          "median_latency_s": 1815.611,
+          "median_true_distance_bps": 52.47065040957288,
+          "median_false_continuation_bps": 217.86578310718286
+        },
+        {
+          "threshold_bps": 51.0,
+          "threshold_pct": 0.51,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 4,
+          "false_first": 33,
+          "precision": 0.10810810810810811,
+          "recall": 0.10810810810810811,
+          "coverage": 1.0,
+          "median_latency_s": 1815.611,
+          "median_true_distance_bps": 62.11180124223503,
+          "median_false_continuation_bps": 177.6656521971276
+        },
+        {
+          "threshold_bps": 52.0,
+          "threshold_pct": 0.52,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 4,
+          "false_first": 33,
+          "precision": 0.10810810810810811,
+          "recall": 0.10810810810810811,
+          "coverage": 1.0,
+          "median_latency_s": 1935.611,
+          "median_true_distance_bps": 62.11180124223503,
+          "median_false_continuation_bps": 177.37444570485872
+        },
+        {
+          "threshold_bps": 53.0,
+          "threshold_pct": 0.53,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 4,
+          "false_first": 33,
+          "precision": 0.10810810810810811,
+          "recall": 0.10810810810810811,
+          "coverage": 1.0,
+          "median_latency_s": 2115.611,
+          "median_true_distance_bps": 62.11180124223503,
+          "median_false_continuation_bps": 177.37444570485872
+        },
+        {
+          "threshold_bps": 54.0,
+          "threshold_pct": 0.54,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 4,
+          "false_first": 33,
+          "precision": 0.10810810810810811,
+          "recall": 0.10810810810810811,
+          "coverage": 1.0,
+          "median_latency_s": 2175.611,
+          "median_true_distance_bps": 62.13406619667738,
+          "median_false_continuation_bps": 177.37444570485872
+        },
+        {
+          "threshold_bps": 55.0,
+          "threshold_pct": 0.55,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 4,
+          "false_first": 33,
+          "precision": 0.10810810810810811,
+          "recall": 0.10810810810810811,
+          "coverage": 1.0,
+          "median_latency_s": 2175.611,
+          "median_true_distance_bps": 62.13406619667738,
+          "median_false_continuation_bps": 177.37444570485872
+        },
+        {
+          "threshold_bps": 56.0,
+          "threshold_pct": 0.56,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 4,
+          "false_first": 33,
+          "precision": 0.10810810810810811,
+          "recall": 0.10810810810810811,
+          "coverage": 1.0,
+          "median_latency_s": 2175.611,
+          "median_true_distance_bps": 62.13406619667738,
+          "median_false_continuation_bps": 177.37444570485872
+        },
+        {
+          "threshold_bps": 57.0,
+          "threshold_pct": 0.57,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 4,
+          "false_first": 33,
+          "precision": 0.10810810810810811,
+          "recall": 0.10810810810810811,
+          "coverage": 1.0,
+          "median_latency_s": 2175.611,
+          "median_true_distance_bps": 62.13406619667738,
+          "median_false_continuation_bps": 177.37444570485872
+        },
+        {
+          "threshold_bps": 58.0,
+          "threshold_pct": 0.58,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 5,
+          "false_first": 32,
+          "precision": 0.13513513513513514,
+          "recall": 0.13513513513513514,
+          "coverage": 1.0,
+          "median_latency_s": 1389.9,
+          "median_true_distance_bps": 62.13406619667738,
+          "median_false_continuation_bps": 177.6656521971276
+        },
+        {
+          "threshold_bps": 59.0,
+          "threshold_pct": 0.59,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 5,
+          "false_first": 32,
+          "precision": 0.13513513513513514,
+          "recall": 0.13513513513513514,
+          "coverage": 1.0,
+          "median_latency_s": 1389.9,
+          "median_true_distance_bps": 62.13406619667738,
+          "median_false_continuation_bps": 177.37444570485872
+        },
+        {
+          "threshold_bps": 60.0,
+          "threshold_pct": 0.6,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 5,
+          "false_first": 32,
+          "precision": 0.13513513513513514,
+          "recall": 0.13513513513513514,
+          "coverage": 1.0,
+          "median_latency_s": 1389.9,
+          "median_true_distance_bps": 66.70372429127269,
+          "median_false_continuation_bps": 171.54510556621983
+        }
+      ]
+    },
+    "HIGH": {
+      "best_20_60bps": {
+        "threshold_bps": 57.0,
+        "threshold_pct": 0.57,
+        "episodes": 37,
+        "accepted_first": 37,
+        "true_first": 5,
+        "false_first": 32,
+        "precision": 0.13513513513513514,
+        "recall": 0.13513513513513514,
+        "coverage": 1.0,
+        "median_latency_s": 756.321,
+        "median_true_distance_bps": 59.46717411988489,
+        "median_false_continuation_bps": 162.37126102596866,
+        "first_signals": [
+          {
+            "episode": 1,
+            "candidate_ts_ms": 1791152183679,
+            "candidate_price": 91.26,
+            "signal_ts_ms": 1791152940000,
+            "signal_price": 90.65,
+            "retrace_bps": 67.2917815774965,
+            "true_first": true
+          },
+          {
+            "episode": 3,
+            "candidate_ts_ms": 1791163750080,
+            "candidate_price": 90.56,
+            "signal_ts_ms": 1791164040000,
+            "signal_price": 90.04,
+            "retrace_bps": 57.75211017325699,
+            "true_first": false
+          },
+          {
+            "episode": 5,
+            "candidate_ts_ms": 1791212246600,
+            "candidate_price": 93.28,
+            "signal_ts_ms": 1791212520000,
+            "signal_price": 92.61,
+            "retrace_bps": 72.34639887701233,
+            "true_first": false
+          },
+          {
+            "episode": 7,
+            "candidate_ts_ms": 1791277106854,
+            "candidate_price": 93.5,
+            "signal_ts_ms": 1791278880000,
+            "signal_price": 92.89,
+            "retrace_bps": 65.66907094412767,
+            "true_first": false
+          },
+          {
+            "episode": 9,
+            "candidate_ts_ms": 1791396335038,
+            "candidate_price": 87.76,
+            "signal_ts_ms": 1791397320000,
+            "signal_price": 87.26,
+            "retrace_bps": 57.300022920008246,
+            "true_first": false
+          },
+          {
+            "episode": 11,
+            "candidate_ts_ms": 1791484821271,
+            "candidate_price": 84.13,
+            "signal_ts_ms": 1791485340000,
+            "signal_price": 83.64,
+            "retrace_bps": 58.58440937350551,
+            "true_first": false
+          },
+          {
+            "episode": 13,
+            "candidate_ts_ms": 1791597309809,
+            "candidate_price": 84.56,
+            "signal_ts_ms": 1791600780000,
+            "signal_price": 84.08,
+            "retrace_bps": 57.08848715509029,
+            "true_first": true
+          },
+          {
+            "episode": 15,
+            "candidate_ts_ms": 1791623492539,
+            "candidate_price": 84.58,
+            "signal_ts_ms": 1791626520000,
+            "signal_price": 84.08,
+            "retrace_bps": 59.46717411988489,
+            "true_first": true
+          },
+          {
+            "episode": 17,
+            "candidate_ts_ms": 1791641762309,
+            "candidate_price": 85.64,
+            "signal_ts_ms": 1791641880000,
+            "signal_price": 85.03,
+            "retrace_bps": 71.73938609902342,
+            "true_first": false
+          },
+          {
+            "episode": 19,
+            "candidate_ts_ms": 1791736966605,
+            "candidate_price": 87.28,
+            "signal_ts_ms": 1791737460000,
+            "signal_price": 86.76,
+            "retrace_bps": 59.93545412632528,
+            "true_first": true
+          },
+          {
+            "episode": 21,
+            "candidate_ts_ms": 1791766096038,
+            "candidate_price": 87.2,
+            "signal_ts_ms": 1791767400000,
+            "signal_price": 86.64,
+            "retrace_bps": 64.63527239150446,
+            "true_first": false
+          },
+          {
+            "episode": 23,
+            "candidate_ts_ms": 1791852866734,
+            "candidate_price": 80.5,
+            "signal_ts_ms": 1791853020000,
+            "signal_price": 80.0,
+            "retrace_bps": 62.50000000000089,
+            "true_first": false
+          },
+          {
+            "episode": 25,
+            "candidate_ts_ms": 1791907413641,
+            "candidate_price": 81.264,
+            "signal_ts_ms": 1791908040000,
+            "signal_price": 80.791,
+            "retrace_bps": 58.54612518721103,
+            "true_first": false
+          },
+          {
+            "episode": 27,
+            "candidate_ts_ms": 1792004478047,
+            "candidate_price": 80.484,
+            "signal_ts_ms": 1792004580000,
+            "signal_price": 80.024,
+            "retrace_bps": 57.48275517344803,
+            "true_first": false
+          },
+          {
+            "episode": 29,
+            "candidate_ts_ms": 1792072624516,
+            "candidate_price": 78.192,
+            "signal_ts_ms": 1792072860000,
+            "signal_price": 77.651,
+            "retrace_bps": 69.67070610809812,
+            "true_first": false
+          },
+          {
+            "episode": 31,
+            "candidate_ts_ms": 1792122712245,
+            "candidate_price": 81.172,
+            "signal_ts_ms": 1792123380000,
+            "signal_price": 80.637,
+            "retrace_bps": 66.3467142874863,
+            "true_first": false
+          },
+          {
+            "episode": 33,
+            "candidate_ts_ms": 1792172518126,
+            "candidate_price": 79.63,
+            "signal_ts_ms": 1792173240000,
+            "signal_price": 79.173,
+            "retrace_bps": 57.721698053627705,
+            "true_first": false
+          },
+          {
+            "episode": 35,
+            "candidate_ts_ms": 1792271100412,
+            "candidate_price": 79.356,
+            "signal_ts_ms": 1792272240000,
+            "signal_price": 78.835,
+            "retrace_bps": 66.08739772943517,
+            "true_first": false
+          },
+          {
+            "episode": 37,
+            "candidate_ts_ms": 1792316476223,
+            "candidate_price": 79.302,
+            "signal_ts_ms": 1792321320000,
+            "signal_price": 78.818,
+            "retrace_bps": 61.407292750388365,
+            "true_first": false
+          },
+          {
+            "episode": 39,
+            "candidate_ts_ms": 1792368499983,
+            "candidate_price": 79.186,
+            "signal_ts_ms": 1792369140000,
+            "signal_price": 78.655,
+            "retrace_bps": 67.51001207806252,
+            "true_first": false
+          },
+          {
+            "episode": 41,
+            "candidate_ts_ms": 1792453158888,
+            "candidate_price": 79.433,
+            "signal_ts_ms": 1792455000000,
+            "signal_price": 78.958,
+            "retrace_bps": 60.1585653132064,
+            "true_first": false
+          },
+          {
+            "episode": 43,
+            "candidate_ts_ms": 1792500329402,
+            "candidate_price": 78.7,
+            "signal_ts_ms": 1792501320000,
+            "signal_price": 78.207,
+            "retrace_bps": 63.037835487873565,
+            "true_first": false
+          },
+          {
+            "episode": 45,
+            "candidate_ts_ms": 1792590485426,
+            "candidate_price": 80.879,
+            "signal_ts_ms": 1792591560000,
+            "signal_price": 80.382,
+            "retrace_bps": 61.82976288223729,
+            "true_first": false
+          },
+          {
+            "episode": 47,
+            "candidate_ts_ms": 1792688336410,
+            "candidate_price": 77.166,
+            "signal_ts_ms": 1792688700000,
+            "signal_price": 76.697,
+            "retrace_bps": 61.14971902421162,
+            "true_first": false
+          },
+          {
+            "episode": 49,
+            "candidate_ts_ms": 1792767200647,
+            "candidate_price": 78.58,
+            "signal_ts_ms": 1792767780000,
+            "signal_price": 78.118,
+            "retrace_bps": 59.141299060396776,
+            "true_first": false
+          },
+          {
+            "episode": 51,
+            "candidate_ts_ms": 1792858614854,
+            "candidate_price": 75.663,
+            "signal_ts_ms": 1792858800000,
+            "signal_price": 75.233,
+            "retrace_bps": 57.15576940970024,
+            "true_first": false
+          },
+          {
+            "episode": 53,
+            "candidate_ts_ms": 1792934119912,
+            "candidate_price": 76.765,
+            "signal_ts_ms": 1792935000000,
+            "signal_price": 76.22,
+            "retrace_bps": 71.50354237732914,
+            "true_first": false
+          },
+          {
+            "episode": 55,
+            "candidate_ts_ms": 1792988259119,
+            "candidate_price": 75.841,
+            "signal_ts_ms": 1792988760000,
+            "signal_price": 75.391,
+            "retrace_bps": 59.68882227321393,
+            "true_first": false
+          },
+          {
+            "episode": 57,
+            "candidate_ts_ms": 1793055101072,
+            "candidate_price": 78.011,
+            "signal_ts_ms": 1793055840000,
+            "signal_price": 77.537,
+            "retrace_bps": 61.13210467260765,
+            "true_first": false
+          },
+          {
+            "episode": 59,
+            "candidate_ts_ms": 1793105694488,
+            "candidate_price": 78.997,
+            "signal_ts_ms": 1793106300000,
+            "signal_price": 78.528,
+            "retrace_bps": 59.72392013039895,
+            "true_first": false
+          },
+          {
+            "episode": 61,
+            "candidate_ts_ms": 1793181861539,
+            "candidate_price": 82.585,
+            "signal_ts_ms": 1793182440000,
+            "signal_price": 82.108,
+            "retrace_bps": 58.094217372239854,
+            "true_first": true
+          },
+          {
+            "episode": 63,
+            "candidate_ts_ms": 1793196355888,
+            "candidate_price": 80.256,
+            "signal_ts_ms": 1793196540000,
+            "signal_price": 79.795,
+            "retrace_bps": 57.77304342377221,
+            "true_first": false
+          },
+          {
+            "episode": 65,
+            "candidate_ts_ms": 1793251190109,
+            "candidate_price": 79.54,
+            "signal_ts_ms": 1793254980000,
+            "signal_price": 79.029,
+            "retrace_bps": 64.65980842475628,
+            "true_first": false
+          },
+          {
+            "episode": 67,
+            "candidate_ts_ms": 1793319876387,
+            "candidate_price": 89.784,
+            "signal_ts_ms": 1793319960000,
+            "signal_price": 89.172,
+            "retrace_bps": 68.63140896245623,
+            "true_first": false
+          },
+          {
+            "episode": 69,
+            "candidate_ts_ms": 1793371572124,
+            "candidate_price": 92.671,
+            "signal_ts_ms": 1793371860000,
+            "signal_price": 92.08,
+            "retrace_bps": 64.18331885317264,
+            "true_first": false
+          },
+          {
+            "episode": 71,
+            "candidate_ts_ms": 1793461221349,
+            "candidate_price": 87.988,
+            "signal_ts_ms": 1793462280000,
+            "signal_price": 87.452,
+            "retrace_bps": 61.290765219776944,
+            "true_first": false
+          },
+          {
+            "episode": 73,
+            "candidate_ts_ms": 1793523055314,
+            "candidate_price": 88.338,
+            "signal_ts_ms": 1793524560000,
+            "signal_price": 87.748,
+            "retrace_bps": 67.23799972648825,
+            "true_first": false
+          }
+        ]
+      },
+      "best_30_38bps": {
+        "threshold_bps": 37.0,
+        "threshold_pct": 0.37,
+        "episodes": 37,
+        "accepted_first": 37,
+        "true_first": 1,
+        "false_first": 36,
+        "precision": 0.02702702702702703,
+        "recall": 0.02702702702702703,
+        "coverage": 1.0,
+        "median_latency_s": 2030.191,
+        "median_true_distance_bps": 45.14136374435651,
+        "median_false_continuation_bps": 216.8500098807713,
+        "first_signals": [
+          {
+            "episode": 1,
+            "candidate_ts_ms": 1791133474249,
+            "candidate_price": 90.15,
+            "signal_ts_ms": 1791134220000,
+            "signal_price": 89.81,
+            "retrace_bps": 37.85769958801977,
+            "true_first": false
+          },
+          {
+            "episode": 3,
+            "candidate_ts_ms": 1791163750080,
+            "candidate_price": 90.56,
+            "signal_ts_ms": 1791163920000,
+            "signal_price": 90.2,
+            "retrace_bps": 39.91130820399036,
+            "true_first": false
+          },
+          {
+            "episode": 5,
+            "candidate_ts_ms": 1791211058256,
+            "candidate_price": 92.55,
+            "signal_ts_ms": 1791211200000,
+            "signal_price": 92.19,
+            "retrace_bps": 39.049788480312046,
+            "true_first": false
+          },
+          {
+            "episode": 7,
+            "candidate_ts_ms": 1791269999560,
+            "candidate_price": 93.24,
+            "signal_ts_ms": 1791271200000,
+            "signal_price": 92.89,
+            "retrace_bps": 37.678975131876236,
+            "true_first": false
+          },
+          {
+            "episode": 9,
+            "candidate_ts_ms": 1791396335038,
+            "candidate_price": 87.76,
+            "signal_ts_ms": 1791396780000,
+            "signal_price": 87.43,
+            "retrace_bps": 37.74448129932439,
+            "true_first": false
+          },
+          {
+            "episode": 11,
+            "candidate_ts_ms": 1791484821271,
+            "candidate_price": 84.13,
+            "signal_ts_ms": 1791485160000,
+            "signal_price": 83.81,
+            "retrace_bps": 38.18160124090086,
+            "true_first": false
+          },
+          {
+            "episode": 13,
+            "candidate_ts_ms": 1791597309809,
+            "candidate_price": 84.56,
+            "signal_ts_ms": 1791599340000,
+            "signal_price": 84.18,
+            "retrace_bps": 45.14136374435651,
+            "true_first": true
+          },
+          {
+            "episode": 15,
+            "candidate_ts_ms": 1791610890185,
+            "candidate_price": 84.46,
+            "signal_ts_ms": 1791612840000,
+            "signal_price": 84.12,
+            "retrace_bps": 40.418449833570236,
+            "true_first": false
+          },
+          {
+            "episode": 17,
+            "candidate_ts_ms": 1791641762309,
+            "candidate_price": 85.64,
+            "signal_ts_ms": 1791641820000,
+            "signal_price": 85.3,
+            "retrace_bps": 39.8593200468933,
+            "true_first": false
+          },
+          {
+            "episode": 19,
+            "candidate_ts_ms": 1791701469998,
+            "candidate_price": 85.15,
+            "signal_ts_ms": 1791703260000,
+            "signal_price": 84.8,
+            "retrace_bps": 41.27358490566113,
+            "true_first": false
+          },
+          {
+            "episode": 21,
+            "candidate_ts_ms": 1791766096038,
+            "candidate_price": 87.2,
+            "signal_ts_ms": 1791766380000,
+            "signal_price": 86.85,
+            "retrace_bps": 40.299366724239064,
+            "true_first": false
+          },
+          {
+            "episode": 23,
+            "candidate_ts_ms": 1791852866734,
+            "candidate_price": 80.5,
+            "signal_ts_ms": 1791853020000,
+            "signal_price": 80.0,
+            "retrace_bps": 62.50000000000089,
+            "true_first": false
+          },
+          {
+            "episode": 25,
+            "candidate_ts_ms": 1791907413641,
+            "candidate_price": 81.264,
+            "signal_ts_ms": 1791907680000,
+            "signal_price": 80.804,
+            "retrace_bps": 56.92787485767958,
+            "true_first": false
+          },
+          {
+            "episode": 27,
+            "candidate_ts_ms": 1792001102583,
+            "candidate_price": 79.741,
+            "signal_ts_ms": 1792001160000,
+            "signal_price": 79.312,
+            "retrace_bps": 54.09017550938033,
+            "true_first": false
+          },
+          {
+            "episode": 29,
+            "candidate_ts_ms": 1792072617064,
+            "candidate_price": 78.18,
+            "signal_ts_ms": 1792072680000,
+            "signal_price": 77.861,
+            "retrace_bps": 40.970447335637594,
+            "true_first": false
+          },
+          {
+            "episode": 31,
+            "candidate_ts_ms": 1792122712245,
+            "candidate_price": 81.172,
+            "signal_ts_ms": 1792123260000,
+            "signal_price": 80.787,
+            "retrace_bps": 47.6561823065591,
+            "true_first": false
+          },
+          {
+            "episode": 33,
+            "candidate_ts_ms": 1792171310926,
+            "candidate_price": 78.825,
+            "signal_ts_ms": 1792171500000,
+            "signal_price": 78.483,
+            "retrace_bps": 43.57631589006594,
+            "true_first": false
+          },
+          {
+            "episode": 35,
+            "candidate_ts_ms": 1792256604835,
+            "candidate_price": 78.49,
+            "signal_ts_ms": 1792256640000,
+            "signal_price": 78.177,
+            "retrace_bps": 40.03735113907947,
+            "true_first": false
+          },
+          {
+            "episode": 37,
+            "candidate_ts_ms": 1792314539661,
+            "candidate_price": 79.147,
+            "signal_ts_ms": 1792315320000,
+            "signal_price": 78.81,
+            "retrace_bps": 42.7610709300863,
+            "true_first": false
+          },
+          {
+            "episode": 39,
+            "candidate_ts_ms": 1792355493807,
+            "candidate_price": 76.744,
+            "signal_ts_ms": 1792355760000,
+            "signal_price": 76.405,
+            "retrace_bps": 44.368824029841214,
+            "true_first": false
+          },
+          {
+            "episode": 41,
+            "candidate_ts_ms": 1792441241828,
+            "candidate_price": 78.42,
+            "signal_ts_ms": 1792441920000,
+            "signal_price": 78.115,
+            "retrace_bps": 39.044997759714036,
+            "true_first": false
+          },
+          {
+            "episode": 43,
+            "candidate_ts_ms": 1792500329402,
+            "candidate_price": 78.7,
+            "signal_ts_ms": 1792501260000,
+            "signal_price": 78.315,
+            "retrace_bps": 49.160441805529146,
+            "true_first": false
+          },
+          {
+            "episode": 45,
+            "candidate_ts_ms": 1792590125713,
+            "candidate_price": 80.584,
+            "signal_ts_ms": 1792590180000,
+            "signal_price": 80.22,
+            "retrace_bps": 45.37521815008772,
+            "true_first": false
+          },
+          {
+            "episode": 47,
+            "candidate_ts_ms": 1792688336410,
+            "candidate_price": 77.166,
+            "signal_ts_ms": 1792688700000,
+            "signal_price": 76.697,
+            "retrace_bps": 61.14971902421162,
+            "true_first": false
+          },
+          {
+            "episode": 49,
+            "candidate_ts_ms": 1792765554948,
+            "candidate_price": 77.999,
+            "signal_ts_ms": 1792765680000,
+            "signal_price": 77.659,
+            "retrace_bps": 43.78114577833658,
+            "true_first": false
+          },
+          {
+            "episode": 51,
+            "candidate_ts_ms": 1792856117757,
+            "candidate_price": 75.155,
+            "signal_ts_ms": 1792856220000,
+            "signal_price": 74.866,
+            "retrace_bps": 38.602302780967875,
+            "true_first": false
+          },
+          {
+            "episode": 53,
+            "candidate_ts_ms": 1792923177718,
+            "candidate_price": 75.905,
+            "signal_ts_ms": 1792924020000,
+            "signal_price": 75.608,
+            "retrace_bps": 39.28155750714257,
+            "true_first": false
+          },
+          {
+            "episode": 55,
+            "candidate_ts_ms": 1792988259119,
+            "candidate_price": 75.841,
+            "signal_ts_ms": 1792988460000,
+            "signal_price": 75.524,
+            "retrace_bps": 41.97341242518915,
+            "true_first": false
+          },
+          {
+            "episode": 57,
+            "candidate_ts_ms": 1793050505089,
+            "candidate_price": 77.735,
+            "signal_ts_ms": 1793051040000,
+            "signal_price": 77.444,
+            "retrace_bps": 37.575538453591406,
+            "true_first": false
+          },
+          {
+            "episode": 59,
+            "candidate_ts_ms": 1793099143508,
+            "candidate_price": 78.123,
+            "signal_ts_ms": 1793099760000,
+            "signal_price": 77.801,
+            "retrace_bps": 41.38764283235563,
+            "true_first": false
+          },
+          {
+            "episode": 61,
+            "candidate_ts_ms": 1793171171410,
+            "candidate_price": 81.346,
+            "signal_ts_ms": 1793173440000,
+            "signal_price": 81.046,
+            "retrace_bps": 37.016015596080805,
+            "true_first": false
+          },
+          {
+            "episode": 63,
+            "candidate_ts_ms": 1793196355888,
+            "candidate_price": 80.256,
+            "signal_ts_ms": 1793196540000,
+            "signal_price": 79.795,
+            "retrace_bps": 57.77304342377221,
+            "true_first": false
+          },
+          {
+            "episode": 65,
+            "candidate_ts_ms": 1793251190109,
+            "candidate_price": 79.54,
+            "signal_ts_ms": 1793254320000,
+            "signal_price": 79.229,
+            "retrace_bps": 39.253303714550384,
+            "true_first": false
+          },
+          {
+            "episode": 67,
+            "candidate_ts_ms": 1793319876387,
+            "candidate_price": 89.784,
+            "signal_ts_ms": 1793319900000,
+            "signal_price": 89.31,
+            "retrace_bps": 53.07356399059549,
+            "true_first": false
+          },
+          {
+            "episode": 69,
+            "candidate_ts_ms": 1793369483389,
+            "candidate_price": 90.927,
+            "signal_ts_ms": 1793369700000,
+            "signal_price": 90.527,
+            "retrace_bps": 44.185712549846826,
+            "true_first": false
+          },
+          {
+            "episode": 71,
+            "candidate_ts_ms": 1793457359655,
+            "candidate_price": 86.98,
+            "signal_ts_ms": 1793458500000,
+            "signal_price": 86.557,
+            "retrace_bps": 48.8695310604581,
+            "true_first": false
+          },
+          {
+            "episode": 73,
+            "candidate_ts_ms": 1793523055314,
+            "candidate_price": 88.338,
+            "signal_ts_ms": 1793524440000,
+            "signal_price": 88.004,
+            "retrace_bps": 37.95282032634795,
+            "true_first": false
+          }
+        ]
+      },
+      "at_33bps": {
+        "threshold_bps": 33.0,
+        "threshold_pct": 0.33,
+        "episodes": 37,
+        "accepted_first": 37,
+        "true_first": 0,
+        "false_first": 37,
+        "precision": 0.0,
+        "recall": 0.0,
+        "coverage": 1.0,
+        "median_latency_s": null,
+        "median_true_distance_bps": null,
+        "median_false_continuation_bps": 212.49603552172536,
+        "first_signals": [
+          {
+            "episode": 1,
+            "candidate_ts_ms": 1791133474249,
+            "candidate_price": 90.15,
+            "signal_ts_ms": 1791134100000,
+            "signal_price": 89.83,
+            "retrace_bps": 35.622843148168656,
+            "true_first": false
+          },
+          {
+            "episode": 3,
+            "candidate_ts_ms": 1791163750080,
+            "candidate_price": 90.56,
+            "signal_ts_ms": 1791163920000,
+            "signal_price": 90.2,
+            "retrace_bps": 39.91130820399036,
+            "true_first": false
+          },
+          {
+            "episode": 5,
+            "candidate_ts_ms": 1791211058256,
+            "candidate_price": 92.55,
+            "signal_ts_ms": 1791211200000,
+            "signal_price": 92.19,
+            "retrace_bps": 39.049788480312046,
+            "true_first": false
+          },
+          {
+            "episode": 7,
+            "candidate_ts_ms": 1791269999560,
+            "candidate_price": 93.24,
+            "signal_ts_ms": 1791271140000,
+            "signal_price": 92.91,
+            "retrace_bps": 35.5182434614143,
+            "true_first": false
+          },
+          {
+            "episode": 9,
+            "candidate_ts_ms": 1791396335038,
+            "candidate_price": 87.76,
+            "signal_ts_ms": 1791396660000,
+            "signal_price": 87.46,
+            "retrace_bps": 34.30139492339501,
+            "true_first": false
+          },
+          {
+            "episode": 11,
+            "candidate_ts_ms": 1791484821271,
+            "candidate_price": 84.13,
+            "signal_ts_ms": 1791485160000,
+            "signal_price": 83.81,
+            "retrace_bps": 38.18160124090086,
+            "true_first": false
+          },
+          {
+            "episode": 13,
+            "candidate_ts_ms": 1791582054479,
+            "candidate_price": 84.14,
+            "signal_ts_ms": 1791583500000,
+            "signal_price": 83.86,
+            "retrace_bps": 33.38898163605997,
+            "true_first": false
+          },
+          {
+            "episode": 15,
+            "candidate_ts_ms": 1791610890185,
+            "candidate_price": 84.46,
+            "signal_ts_ms": 1791612360000,
+            "signal_price": 84.16,
+            "retrace_bps": 35.646387832699574,
+            "true_first": false
+          },
+          {
+            "episode": 17,
+            "candidate_ts_ms": 1791641762309,
+            "candidate_price": 85.64,
+            "signal_ts_ms": 1791641820000,
+            "signal_price": 85.3,
+            "retrace_bps": 39.8593200468933,
+            "true_first": false
+          },
+          {
+            "episode": 19,
+            "candidate_ts_ms": 1791701469998,
+            "candidate_price": 85.15,
+            "signal_ts_ms": 1791703140000,
+            "signal_price": 84.85,
+            "retrace_bps": 35.35651149086716,
+            "true_first": false
+          },
+          {
+            "episode": 21,
+            "candidate_ts_ms": 1791766096038,
+            "candidate_price": 87.2,
+            "signal_ts_ms": 1791766320000,
+            "signal_price": 86.91,
+            "retrace_bps": 33.36785180071411,
+            "true_first": false
+          },
+          {
+            "episode": 23,
+            "candidate_ts_ms": 1791852866734,
+            "candidate_price": 80.5,
+            "signal_ts_ms": 1791853020000,
+            "signal_price": 80.0,
+            "retrace_bps": 62.50000000000089,
+            "true_first": false
+          },
+          {
+            "episode": 25,
+            "candidate_ts_ms": 1791907413641,
+            "candidate_price": 81.264,
+            "signal_ts_ms": 1791907500000,
+            "signal_price": 80.989,
+            "retrace_bps": 33.95522848781862,
+            "true_first": false
+          },
+          {
+            "episode": 27,
+            "candidate_ts_ms": 1792001102583,
+            "candidate_price": 79.741,
+            "signal_ts_ms": 1792001160000,
+            "signal_price": 79.312,
+            "retrace_bps": 54.09017550938033,
+            "true_first": false
+          },
+          {
+            "episode": 29,
+            "candidate_ts_ms": 1792072617064,
+            "candidate_price": 78.18,
+            "signal_ts_ms": 1792072680000,
+            "signal_price": 77.861,
+            "retrace_bps": 40.970447335637594,
+            "true_first": false
+          },
+          {
+            "episode": 31,
+            "candidate_ts_ms": 1792122712245,
+            "candidate_price": 81.172,
+            "signal_ts_ms": 1792122900000,
+            "signal_price": 80.902,
+            "retrace_bps": 33.373711403921206,
+            "true_first": false
+          },
+          {
+            "episode": 33,
+            "candidate_ts_ms": 1792171310926,
+            "candidate_price": 78.825,
+            "signal_ts_ms": 1792171380000,
+            "signal_price": 78.546,
+            "retrace_bps": 35.52058666259184,
+            "true_first": false
+          },
+          {
+            "episode": 35,
+            "candidate_ts_ms": 1792256604835,
+            "candidate_price": 78.49,
+            "signal_ts_ms": 1792256640000,
+            "signal_price": 78.177,
+            "retrace_bps": 40.03735113907947,
+            "true_first": false
+          },
+          {
+            "episode": 37,
+            "candidate_ts_ms": 1792310995936,
+            "candidate_price": 78.834,
+            "signal_ts_ms": 1792311360000,
+            "signal_price": 78.572,
+            "retrace_bps": 33.34521203482099,
+            "true_first": false
+          },
+          {
+            "episode": 39,
+            "candidate_ts_ms": 1792355493807,
+            "candidate_price": 76.744,
+            "signal_ts_ms": 1792355760000,
+            "signal_price": 76.405,
+            "retrace_bps": 44.368824029841214,
+            "true_first": false
+          },
+          {
+            "episode": 41,
+            "candidate_ts_ms": 1792441241828,
+            "candidate_price": 78.42,
+            "signal_ts_ms": 1792441740000,
+            "signal_price": 78.157,
+            "retrace_bps": 33.650216871170535,
+            "true_first": false
+          },
+          {
+            "episode": 43,
+            "candidate_ts_ms": 1792499119048,
+            "candidate_price": 78.528,
+            "signal_ts_ms": 1792499700000,
+            "signal_price": 78.244,
+            "retrace_bps": 36.29671284699265,
+            "true_first": false
+          },
+          {
+            "episode": 45,
+            "candidate_ts_ms": 1792590125713,
+            "candidate_price": 80.584,
+            "signal_ts_ms": 1792590180000,
+            "signal_price": 80.22,
+            "retrace_bps": 45.37521815008772,
+            "true_first": false
+          },
+          {
+            "episode": 47,
+            "candidate_ts_ms": 1792688336410,
+            "candidate_price": 77.166,
+            "signal_ts_ms": 1792688520000,
+            "signal_price": 76.896,
+            "retrace_bps": 35.11235955056202,
+            "true_first": false
+          },
+          {
+            "episode": 49,
+            "candidate_ts_ms": 1792765554948,
+            "candidate_price": 77.999,
+            "signal_ts_ms": 1792765680000,
+            "signal_price": 77.659,
+            "retrace_bps": 43.78114577833658,
+            "true_first": false
+          },
+          {
+            "episode": 51,
+            "candidate_ts_ms": 1792856117757,
+            "candidate_price": 75.155,
+            "signal_ts_ms": 1792856220000,
+            "signal_price": 74.866,
+            "retrace_bps": 38.602302780967875,
+            "true_first": false
+          },
+          {
+            "episode": 53,
+            "candidate_ts_ms": 1792923177718,
+            "candidate_price": 75.905,
+            "signal_ts_ms": 1792924020000,
+            "signal_price": 75.608,
+            "retrace_bps": 39.28155750714257,
+            "true_first": false
+          },
+          {
+            "episode": 55,
+            "candidate_ts_ms": 1792988259119,
+            "candidate_price": 75.841,
+            "signal_ts_ms": 1792988460000,
+            "signal_price": 75.524,
+            "retrace_bps": 41.97341242518915,
+            "true_first": false
+          },
+          {
+            "episode": 57,
+            "candidate_ts_ms": 1793050505089,
+            "candidate_price": 77.735,
+            "signal_ts_ms": 1793050980000,
+            "signal_price": 77.456,
+            "retrace_bps": 36.02045032018219,
+            "true_first": false
+          },
+          {
+            "episode": 59,
+            "candidate_ts_ms": 1793099143508,
+            "candidate_price": 78.123,
+            "signal_ts_ms": 1793099760000,
+            "signal_price": 77.801,
+            "retrace_bps": 41.38764283235563,
+            "true_first": false
+          },
+          {
+            "episode": 61,
+            "candidate_ts_ms": 1793171171410,
+            "candidate_price": 81.346,
+            "signal_ts_ms": 1793172960000,
+            "signal_price": 81.049,
+            "retrace_bps": 36.64449900677269,
+            "true_first": false
+          },
+          {
+            "episode": 63,
+            "candidate_ts_ms": 1793196355888,
+            "candidate_price": 80.256,
+            "signal_ts_ms": 1793196540000,
+            "signal_price": 79.795,
+            "retrace_bps": 57.77304342377221,
+            "true_first": false
+          },
+          {
+            "episode": 65,
+            "candidate_ts_ms": 1793251190109,
+            "candidate_price": 79.54,
+            "signal_ts_ms": 1793253600000,
+            "signal_price": 79.266,
+            "retrace_bps": 34.56715363459706,
+            "true_first": false
+          },
+          {
+            "episode": 67,
+            "candidate_ts_ms": 1793319876387,
+            "candidate_price": 89.784,
+            "signal_ts_ms": 1793319900000,
+            "signal_price": 89.31,
+            "retrace_bps": 53.07356399059549,
+            "true_first": false
+          },
+          {
+            "episode": 69,
+            "candidate_ts_ms": 1793369483389,
+            "candidate_price": 90.927,
+            "signal_ts_ms": 1793369700000,
+            "signal_price": 90.527,
+            "retrace_bps": 44.185712549846826,
+            "true_first": false
+          },
+          {
+            "episode": 71,
+            "candidate_ts_ms": 1793457359655,
+            "candidate_price": 86.98,
+            "signal_ts_ms": 1793457660000,
+            "signal_price": 86.677,
+            "retrace_bps": 34.957370467367795,
+            "true_first": false
+          },
+          {
+            "episode": 73,
+            "candidate_ts_ms": 1793523055314,
+            "candidate_price": 88.338,
+            "signal_ts_ms": 1793524320000,
+            "signal_price": 88.017,
+            "retrace_bps": 36.47022734244443,
+            "true_first": false
+          }
+        ]
+      },
+      "at_35bps": {
+        "threshold_bps": 35.0,
+        "threshold_pct": 0.35,
+        "episodes": 37,
+        "accepted_first": 37,
+        "true_first": 0,
+        "false_first": 37,
+        "precision": 0.0,
+        "recall": 0.0,
+        "coverage": 1.0,
+        "median_latency_s": null,
+        "median_true_distance_bps": null,
+        "median_false_continuation_bps": 212.49603552172536,
+        "first_signals": [
+          {
+            "episode": 1,
+            "candidate_ts_ms": 1791133474249,
+            "candidate_price": 90.15,
+            "signal_ts_ms": 1791134100000,
+            "signal_price": 89.83,
+            "retrace_bps": 35.622843148168656,
+            "true_first": false
+          },
+          {
+            "episode": 3,
+            "candidate_ts_ms": 1791163750080,
+            "candidate_price": 90.56,
+            "signal_ts_ms": 1791163920000,
+            "signal_price": 90.2,
+            "retrace_bps": 39.91130820399036,
+            "true_first": false
+          },
+          {
+            "episode": 5,
+            "candidate_ts_ms": 1791211058256,
+            "candidate_price": 92.55,
+            "signal_ts_ms": 1791211200000,
+            "signal_price": 92.19,
+            "retrace_bps": 39.049788480312046,
+            "true_first": false
+          },
+          {
+            "episode": 7,
+            "candidate_ts_ms": 1791269999560,
+            "candidate_price": 93.24,
+            "signal_ts_ms": 1791271140000,
+            "signal_price": 92.91,
+            "retrace_bps": 35.5182434614143,
+            "true_first": false
+          },
+          {
+            "episode": 9,
+            "candidate_ts_ms": 1791396335038,
+            "candidate_price": 87.76,
+            "signal_ts_ms": 1791396780000,
+            "signal_price": 87.43,
+            "retrace_bps": 37.74448129932439,
+            "true_first": false
+          },
+          {
+            "episode": 11,
+            "candidate_ts_ms": 1791484821271,
+            "candidate_price": 84.13,
+            "signal_ts_ms": 1791485160000,
+            "signal_price": 83.81,
+            "retrace_bps": 38.18160124090086,
+            "true_first": false
+          },
+          {
+            "episode": 13,
+            "candidate_ts_ms": 1791589540992,
+            "candidate_price": 84.38,
+            "signal_ts_ms": 1791590580000,
+            "signal_price": 84.07,
+            "retrace_bps": 36.874033543476955,
+            "true_first": false
+          },
+          {
+            "episode": 15,
+            "candidate_ts_ms": 1791610890185,
+            "candidate_price": 84.46,
+            "signal_ts_ms": 1791612360000,
+            "signal_price": 84.16,
+            "retrace_bps": 35.646387832699574,
+            "true_first": false
+          },
+          {
+            "episode": 17,
+            "candidate_ts_ms": 1791641762309,
+            "candidate_price": 85.64,
+            "signal_ts_ms": 1791641820000,
+            "signal_price": 85.3,
+            "retrace_bps": 39.8593200468933,
+            "true_first": false
+          },
+          {
+            "episode": 19,
+            "candidate_ts_ms": 1791701469998,
+            "candidate_price": 85.15,
+            "signal_ts_ms": 1791703140000,
+            "signal_price": 84.85,
+            "retrace_bps": 35.35651149086716,
+            "true_first": false
+          },
+          {
+            "episode": 21,
+            "candidate_ts_ms": 1791766096038,
+            "candidate_price": 87.2,
+            "signal_ts_ms": 1791766380000,
+            "signal_price": 86.85,
+            "retrace_bps": 40.299366724239064,
+            "true_first": false
+          },
+          {
+            "episode": 23,
+            "candidate_ts_ms": 1791852866734,
+            "candidate_price": 80.5,
+            "signal_ts_ms": 1791853020000,
+            "signal_price": 80.0,
+            "retrace_bps": 62.50000000000089,
+            "true_first": false
+          },
+          {
+            "episode": 25,
+            "candidate_ts_ms": 1791907413641,
+            "candidate_price": 81.264,
+            "signal_ts_ms": 1791907680000,
+            "signal_price": 80.804,
+            "retrace_bps": 56.92787485767958,
+            "true_first": false
+          },
+          {
+            "episode": 27,
+            "candidate_ts_ms": 1792001102583,
+            "candidate_price": 79.741,
+            "signal_ts_ms": 1792001160000,
+            "signal_price": 79.312,
+            "retrace_bps": 54.09017550938033,
+            "true_first": false
+          },
+          {
+            "episode": 29,
+            "candidate_ts_ms": 1792072617064,
+            "candidate_price": 78.18,
+            "signal_ts_ms": 1792072680000,
+            "signal_price": 77.861,
+            "retrace_bps": 40.970447335637594,
+            "true_first": false
+          },
+          {
+            "episode": 31,
+            "candidate_ts_ms": 1792122712245,
+            "candidate_price": 81.172,
+            "signal_ts_ms": 1792123260000,
+            "signal_price": 80.787,
+            "retrace_bps": 47.6561823065591,
+            "true_first": false
+          },
+          {
+            "episode": 33,
+            "candidate_ts_ms": 1792171310926,
+            "candidate_price": 78.825,
+            "signal_ts_ms": 1792171380000,
+            "signal_price": 78.546,
+            "retrace_bps": 35.52058666259184,
+            "true_first": false
+          },
+          {
+            "episode": 35,
+            "candidate_ts_ms": 1792256604835,
+            "candidate_price": 78.49,
+            "signal_ts_ms": 1792256640000,
+            "signal_price": 78.177,
+            "retrace_bps": 40.03735113907947,
+            "true_first": false
+          },
+          {
+            "episode": 37,
+            "candidate_ts_ms": 1792310995936,
+            "candidate_price": 78.834,
+            "signal_ts_ms": 1792312620000,
+            "signal_price": 78.554,
+            "retrace_bps": 35.64427018356797,
+            "true_first": false
+          },
+          {
+            "episode": 39,
+            "candidate_ts_ms": 1792355493807,
+            "candidate_price": 76.744,
+            "signal_ts_ms": 1792355760000,
+            "signal_price": 76.405,
+            "retrace_bps": 44.368824029841214,
+            "true_first": false
+          },
+          {
+            "episode": 41,
+            "candidate_ts_ms": 1792441241828,
+            "candidate_price": 78.42,
+            "signal_ts_ms": 1792441920000,
+            "signal_price": 78.115,
+            "retrace_bps": 39.044997759714036,
+            "true_first": false
+          },
+          {
+            "episode": 43,
+            "candidate_ts_ms": 1792499119048,
+            "candidate_price": 78.528,
+            "signal_ts_ms": 1792499700000,
+            "signal_price": 78.244,
+            "retrace_bps": 36.29671284699265,
+            "true_first": false
+          },
+          {
+            "episode": 45,
+            "candidate_ts_ms": 1792590125713,
+            "candidate_price": 80.584,
+            "signal_ts_ms": 1792590180000,
+            "signal_price": 80.22,
+            "retrace_bps": 45.37521815008772,
+            "true_first": false
+          },
+          {
+            "episode": 47,
+            "candidate_ts_ms": 1792688336410,
+            "candidate_price": 77.166,
+            "signal_ts_ms": 1792688520000,
+            "signal_price": 76.896,
+            "retrace_bps": 35.11235955056202,
+            "true_first": false
+          },
+          {
+            "episode": 49,
+            "candidate_ts_ms": 1792765554948,
+            "candidate_price": 77.999,
+            "signal_ts_ms": 1792765680000,
+            "signal_price": 77.659,
+            "retrace_bps": 43.78114577833658,
+            "true_first": false
+          },
+          {
+            "episode": 51,
+            "candidate_ts_ms": 1792856117757,
+            "candidate_price": 75.155,
+            "signal_ts_ms": 1792856220000,
+            "signal_price": 74.866,
+            "retrace_bps": 38.602302780967875,
+            "true_first": false
+          },
+          {
+            "episode": 53,
+            "candidate_ts_ms": 1792923177718,
+            "candidate_price": 75.905,
+            "signal_ts_ms": 1792924020000,
+            "signal_price": 75.608,
+            "retrace_bps": 39.28155750714257,
+            "true_first": false
+          },
+          {
+            "episode": 55,
+            "candidate_ts_ms": 1792988259119,
+            "candidate_price": 75.841,
+            "signal_ts_ms": 1792988460000,
+            "signal_price": 75.524,
+            "retrace_bps": 41.97341242518915,
+            "true_first": false
+          },
+          {
+            "episode": 57,
+            "candidate_ts_ms": 1793050505089,
+            "candidate_price": 77.735,
+            "signal_ts_ms": 1793050980000,
+            "signal_price": 77.456,
+            "retrace_bps": 36.02045032018219,
+            "true_first": false
+          },
+          {
+            "episode": 59,
+            "candidate_ts_ms": 1793099143508,
+            "candidate_price": 78.123,
+            "signal_ts_ms": 1793099760000,
+            "signal_price": 77.801,
+            "retrace_bps": 41.38764283235563,
+            "true_first": false
+          },
+          {
+            "episode": 61,
+            "candidate_ts_ms": 1793171171410,
+            "candidate_price": 81.346,
+            "signal_ts_ms": 1793172960000,
+            "signal_price": 81.049,
+            "retrace_bps": 36.64449900677269,
+            "true_first": false
+          },
+          {
+            "episode": 63,
+            "candidate_ts_ms": 1793196355888,
+            "candidate_price": 80.256,
+            "signal_ts_ms": 1793196540000,
+            "signal_price": 79.795,
+            "retrace_bps": 57.77304342377221,
+            "true_first": false
+          },
+          {
+            "episode": 65,
+            "candidate_ts_ms": 1793251190109,
+            "candidate_price": 79.54,
+            "signal_ts_ms": 1793254260000,
+            "signal_price": 79.255,
+            "retrace_bps": 35.959876348496955,
+            "true_first": false
+          },
+          {
+            "episode": 67,
+            "candidate_ts_ms": 1793319876387,
+            "candidate_price": 89.784,
+            "signal_ts_ms": 1793319900000,
+            "signal_price": 89.31,
+            "retrace_bps": 53.07356399059549,
+            "true_first": false
+          },
+          {
+            "episode": 69,
+            "candidate_ts_ms": 1793369483389,
+            "candidate_price": 90.927,
+            "signal_ts_ms": 1793369700000,
+            "signal_price": 90.527,
+            "retrace_bps": 44.185712549846826,
+            "true_first": false
+          },
+          {
+            "episode": 71,
+            "candidate_ts_ms": 1793457359655,
+            "candidate_price": 86.98,
+            "signal_ts_ms": 1793458140000,
+            "signal_price": 86.676,
+            "retrace_bps": 35.07314596889577,
+            "true_first": false
+          },
+          {
+            "episode": 73,
+            "candidate_ts_ms": 1793523055314,
+            "candidate_price": 88.338,
+            "signal_ts_ms": 1793524320000,
+            "signal_price": 88.017,
+            "retrace_bps": 36.47022734244443,
+            "true_first": false
+          }
+        ]
+      },
+      "grid": [
+        {
+          "threshold_bps": 20.0,
+          "threshold_pct": 0.2,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 0,
+          "false_first": 37,
+          "precision": 0.0,
+          "recall": 0.0,
+          "coverage": 1.0,
+          "median_latency_s": null,
+          "median_true_distance_bps": null,
+          "median_false_continuation_bps": 246.01631854594297
+        },
+        {
+          "threshold_bps": 21.0,
+          "threshold_pct": 0.21,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 0,
+          "false_first": 37,
+          "precision": 0.0,
+          "recall": 0.0,
+          "coverage": 1.0,
+          "median_latency_s": null,
+          "median_true_distance_bps": null,
+          "median_false_continuation_bps": 242.231708527747
+        },
+        {
+          "threshold_bps": 22.0,
+          "threshold_pct": 0.22,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 0,
+          "false_first": 37,
+          "precision": 0.0,
+          "recall": 0.0,
+          "coverage": 1.0,
+          "median_latency_s": null,
+          "median_true_distance_bps": null,
+          "median_false_continuation_bps": 216.8500098807713
+        },
+        {
+          "threshold_bps": 23.0,
+          "threshold_pct": 0.23,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 0,
+          "false_first": 37,
+          "precision": 0.0,
+          "recall": 0.0,
+          "coverage": 1.0,
+          "median_latency_s": null,
+          "median_true_distance_bps": null,
+          "median_false_continuation_bps": 216.8500098807713
+        },
+        {
+          "threshold_bps": 24.0,
+          "threshold_pct": 0.24,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 0,
+          "false_first": 37,
+          "precision": 0.0,
+          "recall": 0.0,
+          "coverage": 1.0,
+          "median_latency_s": null,
+          "median_true_distance_bps": null,
+          "median_false_continuation_bps": 212.49603552172536
+        },
+        {
+          "threshold_bps": 25.0,
+          "threshold_pct": 0.25,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 0,
+          "false_first": 37,
+          "precision": 0.0,
+          "recall": 0.0,
+          "coverage": 1.0,
+          "median_latency_s": null,
+          "median_true_distance_bps": null,
+          "median_false_continuation_bps": 212.49603552172536
+        },
+        {
+          "threshold_bps": 26.0,
+          "threshold_pct": 0.26,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 0,
+          "false_first": 37,
+          "precision": 0.0,
+          "recall": 0.0,
+          "coverage": 1.0,
+          "median_latency_s": null,
+          "median_true_distance_bps": null,
+          "median_false_continuation_bps": 212.49603552172536
+        },
+        {
+          "threshold_bps": 27.0,
+          "threshold_pct": 0.27,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 0,
+          "false_first": 37,
+          "precision": 0.0,
+          "recall": 0.0,
+          "coverage": 1.0,
+          "median_latency_s": null,
+          "median_true_distance_bps": null,
+          "median_false_continuation_bps": 212.49603552172536
+        },
+        {
+          "threshold_bps": 28.0,
+          "threshold_pct": 0.28,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 0,
+          "false_first": 37,
+          "precision": 0.0,
+          "recall": 0.0,
+          "coverage": 1.0,
+          "median_latency_s": null,
+          "median_true_distance_bps": null,
+          "median_false_continuation_bps": 212.49603552172536
+        },
+        {
+          "threshold_bps": 29.0,
+          "threshold_pct": 0.29,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 0,
+          "false_first": 37,
+          "precision": 0.0,
+          "recall": 0.0,
+          "coverage": 1.0,
+          "median_latency_s": null,
+          "median_true_distance_bps": null,
+          "median_false_continuation_bps": 212.49603552172536
+        },
+        {
+          "threshold_bps": 30.0,
+          "threshold_pct": 0.3,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 0,
+          "false_first": 37,
+          "precision": 0.0,
+          "recall": 0.0,
+          "coverage": 1.0,
+          "median_latency_s": null,
+          "median_true_distance_bps": null,
+          "median_false_continuation_bps": 212.49603552172536
+        },
+        {
+          "threshold_bps": 31.0,
+          "threshold_pct": 0.31,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 0,
+          "false_first": 37,
+          "precision": 0.0,
+          "recall": 0.0,
+          "coverage": 1.0,
+          "median_latency_s": null,
+          "median_true_distance_bps": null,
+          "median_false_continuation_bps": 212.49603552172536
+        },
+        {
+          "threshold_bps": 32.0,
+          "threshold_pct": 0.32,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 0,
+          "false_first": 37,
+          "precision": 0.0,
+          "recall": 0.0,
+          "coverage": 1.0,
+          "median_latency_s": null,
+          "median_true_distance_bps": null,
+          "median_false_continuation_bps": 212.49603552172536
+        },
+        {
+          "threshold_bps": 33.0,
+          "threshold_pct": 0.33,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 0,
+          "false_first": 37,
+          "precision": 0.0,
+          "recall": 0.0,
+          "coverage": 1.0,
+          "median_latency_s": null,
+          "median_true_distance_bps": null,
+          "median_false_continuation_bps": 212.49603552172536
+        },
+        {
+          "threshold_bps": 34.0,
+          "threshold_pct": 0.34,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 0,
+          "false_first": 37,
+          "precision": 0.0,
+          "recall": 0.0,
+          "coverage": 1.0,
+          "median_latency_s": null,
+          "median_true_distance_bps": null,
+          "median_false_continuation_bps": 212.49603552172536
+        },
+        {
+          "threshold_bps": 35.0,
+          "threshold_pct": 0.35,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 0,
+          "false_first": 37,
+          "precision": 0.0,
+          "recall": 0.0,
+          "coverage": 1.0,
+          "median_latency_s": null,
+          "median_true_distance_bps": null,
+          "median_false_continuation_bps": 212.49603552172536
+        },
+        {
+          "threshold_bps": 36.0,
+          "threshold_pct": 0.36,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 0,
+          "false_first": 37,
+          "precision": 0.0,
+          "recall": 0.0,
+          "coverage": 1.0,
+          "median_latency_s": null,
+          "median_true_distance_bps": null,
+          "median_false_continuation_bps": 212.49603552172536
+        },
+        {
+          "threshold_bps": 37.0,
+          "threshold_pct": 0.37,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 1,
+          "false_first": 36,
+          "precision": 0.02702702702702703,
+          "recall": 0.02702702702702703,
+          "coverage": 1.0,
+          "median_latency_s": 2030.191,
+          "median_true_distance_bps": 45.14136374435651,
+          "median_false_continuation_bps": 216.8500098807713
+        },
+        {
+          "threshold_bps": 38.0,
+          "threshold_pct": 0.38,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 1,
+          "false_first": 36,
+          "precision": 0.02702702702702703,
+          "recall": 0.02702702702702703,
+          "coverage": 1.0,
+          "median_latency_s": 2030.191,
+          "median_true_distance_bps": 45.14136374435651,
+          "median_false_continuation_bps": 216.8500098807713
+        },
+        {
+          "threshold_bps": 39.0,
+          "threshold_pct": 0.39,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 1,
+          "false_first": 36,
+          "precision": 0.02702702702702703,
+          "recall": 0.02702702702702703,
+          "coverage": 1.0,
+          "median_latency_s": 2030.191,
+          "median_true_distance_bps": 45.14136374435651,
+          "median_false_continuation_bps": 216.8500098807713
+        },
+        {
+          "threshold_bps": 40.0,
+          "threshold_pct": 0.4,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 1,
+          "false_first": 36,
+          "precision": 0.02702702702702703,
+          "recall": 0.02702702702702703,
+          "coverage": 1.0,
+          "median_latency_s": 2030.191,
+          "median_true_distance_bps": 45.14136374435651,
+          "median_false_continuation_bps": 216.8500098807713
+        },
+        {
+          "threshold_bps": 41.0,
+          "threshold_pct": 0.41,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 1,
+          "false_first": 36,
+          "precision": 0.02702702702702703,
+          "recall": 0.02702702702702703,
+          "coverage": 1.0,
+          "median_latency_s": 2030.191,
+          "median_true_distance_bps": 45.14136374435651,
+          "median_false_continuation_bps": 216.8500098807713
+        },
+        {
+          "threshold_bps": 42.0,
+          "threshold_pct": 0.42,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 1,
+          "false_first": 36,
+          "precision": 0.02702702702702703,
+          "recall": 0.02702702702702703,
+          "coverage": 1.0,
+          "median_latency_s": 2030.191,
+          "median_true_distance_bps": 45.14136374435651,
+          "median_false_continuation_bps": 212.49603552172536
+        },
+        {
+          "threshold_bps": 43.0,
+          "threshold_pct": 0.43,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 1,
+          "false_first": 36,
+          "precision": 0.02702702702702703,
+          "recall": 0.02702702702702703,
+          "coverage": 1.0,
+          "median_latency_s": 2030.191,
+          "median_true_distance_bps": 45.14136374435651,
+          "median_false_continuation_bps": 212.49603552172536
+        },
+        {
+          "threshold_bps": 44.0,
+          "threshold_pct": 0.44,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 1,
+          "false_first": 36,
+          "precision": 0.02702702702702703,
+          "recall": 0.02702702702702703,
+          "coverage": 1.0,
+          "median_latency_s": 2030.191,
+          "median_true_distance_bps": 45.14136374435651,
+          "median_false_continuation_bps": 212.49603552172536
+        },
+        {
+          "threshold_bps": 45.0,
+          "threshold_pct": 0.45,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 2,
+          "false_first": 35,
+          "precision": 0.05405405405405406,
+          "recall": 0.05405405405405406,
+          "coverage": 1.0,
+          "median_latency_s": 2030.191,
+          "median_true_distance_bps": 67.2917815774965,
+          "median_false_continuation_bps": 212.49603552172536
+        },
+        {
+          "threshold_bps": 46.0,
+          "threshold_pct": 0.46,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 4,
+          "false_first": 33,
+          "precision": 0.10810810810810811,
+          "recall": 0.10810810810810811,
+          "coverage": 1.0,
+          "median_latency_s": 2390.191,
+          "median_true_distance_bps": 49.90494296577941,
+          "median_false_continuation_bps": 212.49603552172536
+        },
+        {
+          "threshold_bps": 47.0,
+          "threshold_pct": 0.47,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 4,
+          "false_first": 33,
+          "precision": 0.10810810810810811,
+          "recall": 0.10810810810810811,
+          "coverage": 1.0,
+          "median_latency_s": 2390.191,
+          "median_true_distance_bps": 52.340088856428494,
+          "median_false_continuation_bps": 212.49603552172536
+        },
+        {
+          "threshold_bps": 48.0,
+          "threshold_pct": 0.48,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 4,
+          "false_first": 33,
+          "precision": 0.10810810810810811,
+          "recall": 0.10810810810810811,
+          "coverage": 1.0,
+          "median_latency_s": 2847.461,
+          "median_true_distance_bps": 52.340088856428494,
+          "median_false_continuation_bps": 212.49603552172536
+        },
+        {
+          "threshold_bps": 49.0,
+          "threshold_pct": 0.49,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 4,
+          "false_first": 33,
+          "precision": 0.10810810810810811,
+          "recall": 0.10810810810810811,
+          "coverage": 1.0,
+          "median_latency_s": 2847.461,
+          "median_true_distance_bps": 52.340088856428494,
+          "median_false_continuation_bps": 205.8413078149912
+        },
+        {
+          "threshold_bps": 50.0,
+          "threshold_pct": 0.5,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 4,
+          "false_first": 33,
+          "precision": 0.10810810810810811,
+          "recall": 0.10810810810810811,
+          "coverage": 1.0,
+          "median_latency_s": 3027.461,
+          "median_true_distance_bps": 59.46717411988489,
+          "median_false_continuation_bps": 205.8413078149912
+        },
+        {
+          "threshold_bps": 51.0,
+          "threshold_pct": 0.51,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 4,
+          "false_first": 33,
+          "precision": 0.10810810810810811,
+          "recall": 0.10810810810810811,
+          "coverage": 1.0,
+          "median_latency_s": 3027.461,
+          "median_true_distance_bps": 59.46717411988489,
+          "median_false_continuation_bps": 205.8413078149912
+        },
+        {
+          "threshold_bps": 52.0,
+          "threshold_pct": 0.52,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 4,
+          "false_first": 33,
+          "precision": 0.10810810810810811,
+          "recall": 0.10810810810810811,
+          "coverage": 1.0,
+          "median_latency_s": 3027.461,
+          "median_true_distance_bps": 59.46717411988489,
+          "median_false_continuation_bps": 205.8413078149912
+        },
+        {
+          "threshold_bps": 53.0,
+          "threshold_pct": 0.53,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 4,
+          "false_first": 33,
+          "precision": 0.10810810810810811,
+          "recall": 0.10810810810810811,
+          "coverage": 1.0,
+          "median_latency_s": 3027.461,
+          "median_true_distance_bps": 59.46717411988489,
+          "median_false_continuation_bps": 204.8739475018224
+        },
+        {
+          "threshold_bps": 54.0,
+          "threshold_pct": 0.54,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 4,
+          "false_first": 33,
+          "precision": 0.10810810810810811,
+          "recall": 0.10810810810810811,
+          "coverage": 1.0,
+          "median_latency_s": 3027.461,
+          "median_true_distance_bps": 59.46717411988489,
+          "median_false_continuation_bps": 183.35302224847584
+        },
+        {
+          "threshold_bps": 55.0,
+          "threshold_pct": 0.55,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 4,
+          "false_first": 33,
+          "precision": 0.10810810810810811,
+          "recall": 0.10810810810810811,
+          "coverage": 1.0,
+          "median_latency_s": 3027.461,
+          "median_true_distance_bps": 59.46717411988489,
+          "median_false_continuation_bps": 162.37126102596866
+        },
+        {
+          "threshold_bps": 56.0,
+          "threshold_pct": 0.56,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 4,
+          "false_first": 33,
+          "precision": 0.10810810810810811,
+          "recall": 0.10810810810810811,
+          "coverage": 1.0,
+          "median_latency_s": 3027.461,
+          "median_true_distance_bps": 59.46717411988489,
+          "median_false_continuation_bps": 162.37126102596866
+        },
+        {
+          "threshold_bps": 57.0,
+          "threshold_pct": 0.57,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 5,
+          "false_first": 32,
+          "precision": 0.13513513513513514,
+          "recall": 0.13513513513513514,
+          "coverage": 1.0,
+          "median_latency_s": 756.321,
+          "median_true_distance_bps": 59.46717411988489,
+          "median_false_continuation_bps": 162.37126102596866
+        },
+        {
+          "threshold_bps": 58.0,
+          "threshold_pct": 0.58,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 5,
+          "false_first": 32,
+          "precision": 0.13513513513513514,
+          "recall": 0.13513513513513514,
+          "coverage": 1.0,
+          "median_latency_s": 756.321,
+          "median_true_distance_bps": 59.46717411988489,
+          "median_false_continuation_bps": 162.37126102596866
+        },
+        {
+          "threshold_bps": 59.0,
+          "threshold_pct": 0.59,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 5,
+          "false_first": 32,
+          "precision": 0.13513513513513514,
+          "recall": 0.13513513513513514,
+          "coverage": 1.0,
+          "median_latency_s": 2198.461,
+          "median_true_distance_bps": 66.66666666666599,
+          "median_false_continuation_bps": 159.7874786883957
+        },
+        {
+          "threshold_bps": 60.0,
+          "threshold_pct": 0.6,
+          "episodes": 37,
+          "accepted_first": 37,
+          "true_first": 5,
+          "false_first": 32,
+          "precision": 0.13513513513513514,
+          "recall": 0.13513513513513514,
+          "coverage": 1.0,
+          "median_latency_s": 2198.461,
+          "median_true_distance_bps": 66.89734717416407,
+          "median_false_continuation_bps": 159.7874786883957
+        }
+      ]
+    }
+  },
+  "real_orders": false
+}
