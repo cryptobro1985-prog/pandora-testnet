@@ -2,7 +2,7 @@
   "schema_version": 1,
   "objective": "Earlier causal terminal H1 L6/K2 LOW/HIGH recognition with actionable first-signal precision, useful recall, and distance around 30–70 bps.",
   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
-  "head_sha": "08c7d0cf9926ed15a1b2cec2dadbfc751faeba6a",
+  "head_sha": "6a6cdd0814a78cb75552e3b86ecac7aa3b7edba6",
   "head_sha_basis": "Parent/input revision of this checkpoint. The checkpoint revision is resolved by git log -1 -- this file.",
   "stage": "micro_quality_contract_verified_cache_pending",
   "completed_experiments": [
@@ -53,6 +53,10 @@
     {
       "id": "decoded-liq-continuous-book-quality-contract-v1",
       "verdict": "Unreadable or schema-invalid liquidation hours remain unavailable. Liquidation and scalar receipt timestamps are causal, including across hourly carry. Rolling book windows are masked through gaps, receive-time regression, crossed books, and after resnapshots until the entire lookback is observed. This is fixture verification, with no new trading-rule or sealed replay."
+    },
+    {
+      "id": "live-42616792697-strict-terminal-replay-20261109",
+      "verdict": "Recovered the provisional 72.391 LOW from the saved H1 book, separate from the 73.4635 live WATCH and 74.2445 earlier FORMING candidate. The latter was followed by a 2.50% lower strict K2 pivot. The newer WATCH equals the sampled book mid; raw Bybit trades subsequently printed 73.424 without a lower NEW_CANDIDATE before the status snapshot. This is one observed discrepancy, not a forward precision estimate. The historical clean-cache gate remains pending."
     }
   ],
   "rejected_hypotheses": [
@@ -206,5 +210,38 @@
     "artifact_name_prefix": "HYPE-FULL-MICRO-CLEAN-CACHE-202607-",
     "expected_producer_contract": "decoded-liquidations-continuous-book-v1",
     "status": "blocked_pending_cache_and_input_certification"
+  },
+  "latest_live_diagnostic": {
+    "id": "live-42616792697-strict-terminal-replay-20261109",
+    "run_id": 42616792697,
+    "checkpoint_ts_ms": 1794230111017,
+    "terminal": {
+      "side": "HIGH",
+      "price": 78.133,
+      "hour_ms": 1794142800000,
+      "available_ms": 1794222000000
+    },
+    "provisional_k2": {
+      "side": "LOW",
+      "price": 72.391,
+      "hour_ms": 1794211200000,
+      "available_ms": 1794222000000
+    },
+    "earlier_forming": {
+      "price": 74.2445,
+      "ts_ms": 1794182374014,
+      "score": 0.9254626037266288,
+      "later_move_pct": -2.4964812208311704
+    },
+    "watch": {
+      "price": 73.4635,
+      "candidate_ts_ms": 1794229905005,
+      "price_source": "sampled order-book mid"
+    },
+    "later_tape_low": {
+      "price": 73.424,
+      "exchange_ts_ms": 1794229912237,
+      "unique_trades_in_capture": 18740
+    }
   }
 }
