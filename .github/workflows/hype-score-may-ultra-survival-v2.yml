@@ -1,0 +1,60 @@
+name: Score May Sealed — HYPE Ultra Survival V2
+
+on:
+  workflow_run:
+    workflows: ["HYPE May Sealed Tape Build"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "May sealed build run id"
+        required: true
+        default: "42569087931"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  score:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+      - name: Download sealed May artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.source_run_id || github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p may
+          ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN}/artifacts" --jq '.artifacts | map(select(.name|startswith("HYPE-MAY-SEALED-TAPE-"))) | .[0].id // empty')"
+          test -n "$ID"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ID}/zip" > may.zip
+          unzip -q may.zip -d may
+          find may -type f -maxdepth 2 -print
+          test -s may/compact_1m.jsonl.gz
+          test -s may/labels.json.gz
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Score frozen V2 unchanged
+        run: |
+          python -m research.hype_local_only.replay_ultra_survival_v2 \
+            --compact-1m may/compact_1m.jsonl.gz \
+            --labels-gz may/labels.json.gz \
+            --output MAY_ULTRA_SURVIVAL_V2_SCORE.json
+          python - <<'PY'
+          import json
+          d=json.load(open("MAY_ULTRA_SURVIVAL_V2_SCORE.json"))
+          print("MAY_FROZEN_V2",json.dumps({"evaluation":d["evaluation"],"by_side":d["by_side"]},separators=(",",":")))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-MAY-ULTRA-SURVIVAL-V2-SCORE-${{ github.run_id }}
+          path: MAY_ULTRA_SURVIVAL_V2_SCORE.json
+          retention-days: 90
