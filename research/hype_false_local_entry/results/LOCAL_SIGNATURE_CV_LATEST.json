@@ -1,0 +1,2764 @@
+{
+  "version": "HYPE-LOCAL-SIGNATURE-FROZEN-CHAMPION-v2-CV",
+  "rows": 2361,
+  "candidate_survival_is_feature_not_gate": true,
+  "by_side": {
+    "LOW": {
+      "name": "extra_(6,8,'sqrt')",
+      "spec": [
+        "extra",
+        [
+          6,
+          8,
+          "sqrt"
+        ]
+      ],
+      "threshold": 0.567,
+      "cv": {
+        "episodes": 16,
+        "accepted_first": 7,
+        "true_first": 4,
+        "false_first": 3,
+        "precision": 0.5714285714285714,
+        "recall": 0.25,
+        "coverage": 0.4375,
+        "median_delay_s": 327.63,
+        "first_signals": [
+          {
+            "candidate_id": "L-1791968503239",
+            "side": "LOW",
+            "candidate_ts_ms": 1791968503239,
+            "signal_ts_ms": 1791968803239,
+            "strict_label_id": null,
+            "strict_true": false,
+            "probability": 0.5767035020376434,
+            "target_label_id": 27,
+            "true_first": false
+          },
+          {
+            "candidate_id": "L-1792256630118",
+            "side": "LOW",
+            "candidate_ts_ms": 1792256630118,
+            "signal_ts_ms": 1792256930118,
+            "strict_label_id": 35,
+            "strict_true": true,
+            "probability": 0.5765860902713285,
+            "target_label_id": 35,
+            "true_first": true
+          },
+          {
+            "candidate_id": "L-1792498310400",
+            "side": "LOW",
+            "candidate_ts_ms": 1792498310400,
+            "signal_ts_ms": 1792498610400,
+            "strict_label_id": 43,
+            "strict_true": true,
+            "probability": 0.573273522846896,
+            "target_label_id": 43,
+            "true_first": true
+          },
+          {
+            "candidate_id": "L-1792765209379",
+            "side": "LOW",
+            "candidate_ts_ms": 1792765209379,
+            "signal_ts_ms": 1792765389379,
+            "strict_label_id": 49,
+            "strict_true": true,
+            "probability": 0.5671484317026931,
+            "target_label_id": 49,
+            "true_first": true
+          },
+          {
+            "candidate_id": "L-1792851485869",
+            "side": "LOW",
+            "candidate_ts_ms": 1792851485869,
+            "signal_ts_ms": 1792851785869,
+            "strict_label_id": null,
+            "strict_true": false,
+            "probability": 0.5883467959288172,
+            "target_label_id": 51,
+            "true_first": false
+          },
+          {
+            "candidate_id": "L-1792919945142",
+            "side": "LOW",
+            "candidate_ts_ms": 1792919945142,
+            "signal_ts_ms": 1792920245142,
+            "strict_label_id": 53,
+            "strict_true": true,
+            "probability": 0.5737365293551314,
+            "target_label_id": 53,
+            "true_first": true
+          },
+          {
+            "candidate_id": "L-1792964789218",
+            "side": "LOW",
+            "candidate_ts_ms": 1792964789218,
+            "signal_ts_ms": 1792965089218,
+            "strict_label_id": null,
+            "strict_true": false,
+            "probability": 0.5903536663048811,
+            "target_label_id": 55,
+            "true_first": false
+          }
+        ]
+      },
+      "oos": {
+        "episodes": 9,
+        "accepted_first": 3,
+        "true_first": 0,
+        "false_first": 3,
+        "precision": 0.0,
+        "recall": 0.0,
+        "coverage": 0.3333333333333333,
+        "median_delay_s": null,
+        "first_signals": [
+          {
+            "candidate_id": "L-1793318405255",
+            "side": "LOW",
+            "candidate_ts_ms": 1793318405255,
+            "signal_ts_ms": 1793318705255,
+            "strict_label_id": null,
+            "strict_true": false,
+            "probability": 0.5917767009834047,
+            "target_label_id": 67,
+            "true_first": false
+          },
+          {
+            "candidate_id": "L-1793383395218",
+            "side": "LOW",
+            "candidate_ts_ms": 1793383395218,
+            "signal_ts_ms": 1793383695218,
+            "strict_label_id": null,
+            "strict_true": false,
+            "probability": 0.62131873801548,
+            "target_label_id": 71,
+            "true_first": false
+          },
+          {
+            "candidate_id": "L-1793548675684",
+            "side": "LOW",
+            "candidate_ts_ms": 1793548675684,
+            "signal_ts_ms": 1793548855684,
+            "strict_label_id": null,
+            "strict_true": false,
+            "probability": 0.6308172069641386,
+            "target_label_id": 75,
+            "true_first": false
+          }
+        ]
+      },
+      "trials": [
+        {
+          "name": "logit_0.05",
+          "spec": [
+            "logit",
+            0.05
+          ],
+          "threshold": 0.899,
+          "cv": {
+            "episodes": 16,
+            "accepted_first": 5,
+            "true_first": 2,
+            "false_first": 3,
+            "precision": 0.4,
+            "recall": 0.125,
+            "coverage": 0.3125,
+            "median_delay_s": 307.2605,
+            "first_signals": [
+              {
+                "candidate_id": "L-1792117859070",
+                "side": "LOW",
+                "candidate_ts_ms": 1792117859070,
+                "signal_ts_ms": 1792118159070,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.9501907554926864,
+                "target_label_id": 31,
+                "true_first": false
+              },
+              {
+                "candidate_id": "L-1792434537308",
+                "side": "LOW",
+                "candidate_ts_ms": 1792434537308,
+                "signal_ts_ms": 1792434837308,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.899251676299511,
+                "target_label_id": 41,
+                "true_first": false
+              },
+              {
+                "candidate_id": "L-1792765209379",
+                "side": "LOW",
+                "candidate_ts_ms": 1792765209379,
+                "signal_ts_ms": 1792765509379,
+                "strict_label_id": 49,
+                "strict_true": true,
+                "probability": 0.8992054738033354,
+                "target_label_id": 49,
+                "true_first": true
+              },
+              {
+                "candidate_id": "L-1792919945142",
+                "side": "LOW",
+                "candidate_ts_ms": 1792919945142,
+                "signal_ts_ms": 1792920245142,
+                "strict_label_id": 53,
+                "strict_true": true,
+                "probability": 0.9092395719167924,
+                "target_label_id": 53,
+                "true_first": true
+              },
+              {
+                "candidate_id": "L-1792971047291",
+                "side": "LOW",
+                "candidate_ts_ms": 1792971047291,
+                "signal_ts_ms": 1792971347291,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.9345072815288525,
+                "target_label_id": 55,
+                "true_first": false
+              }
+            ]
+          },
+          "folds": [
+            {
+              "train": [
+                1791072000000,
+                1791936000000
+              ],
+              "valid": [
+                1791936000000,
+                1792281600000
+              ],
+              "train_rows": 461,
+              "valid_rows": 232
+            },
+            {
+              "train": [
+                1791072000000,
+                1792281600000
+              ],
+              "valid": [
+                1792281600000,
+                1792627200000
+              ],
+              "train_rows": 693,
+              "valid_rows": 137
+            },
+            {
+              "train": [
+                1791072000000,
+                1792627200000
+              ],
+              "valid": [
+                1792627200000,
+                1793059200000
+              ],
+              "train_rows": 830,
+              "valid_rows": 220
+            }
+          ],
+          "selection_key": [
+            0,
+            0.4,
+            0.125,
+            -3
+          ]
+        },
+        {
+          "name": "logit_0.2",
+          "spec": [
+            "logit",
+            0.2
+          ],
+          "threshold": 0.903,
+          "cv": {
+            "episodes": 16,
+            "accepted_first": 6,
+            "true_first": 2,
+            "false_first": 4,
+            "precision": 0.3333333333333333,
+            "recall": 0.125,
+            "coverage": 0.375,
+            "median_delay_s": 307.2605,
+            "first_signals": [
+              {
+                "candidate_id": "L-1792117859070",
+                "side": "LOW",
+                "candidate_ts_ms": 1792117859070,
+                "signal_ts_ms": 1792118159070,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.9818046401554096,
+                "target_label_id": 31,
+                "true_first": false
+              },
+              {
+                "candidate_id": "L-1792159861666",
+                "side": "LOW",
+                "candidate_ts_ms": 1792159861666,
+                "signal_ts_ms": 1792160161666,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.908271607124448,
+                "target_label_id": 33,
+                "true_first": false
+              },
+              {
+                "candidate_id": "L-1792408588190",
+                "side": "LOW",
+                "candidate_ts_ms": 1792408588190,
+                "signal_ts_ms": 1792408888190,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.9336318605986593,
+                "target_label_id": 41,
+                "true_first": false
+              },
+              {
+                "candidate_id": "L-1792765209379",
+                "side": "LOW",
+                "candidate_ts_ms": 1792765209379,
+                "signal_ts_ms": 1792765509379,
+                "strict_label_id": 49,
+                "strict_true": true,
+                "probability": 0.9030360561376186,
+                "target_label_id": 49,
+                "true_first": true
+              },
+              {
+                "candidate_id": "L-1792919945142",
+                "side": "LOW",
+                "candidate_ts_ms": 1792919945142,
+                "signal_ts_ms": 1792920245142,
+                "strict_label_id": 53,
+                "strict_true": true,
+                "probability": 0.92501201021482,
+                "target_label_id": 53,
+                "true_first": true
+              },
+              {
+                "candidate_id": "L-1792971047291",
+                "side": "LOW",
+                "candidate_ts_ms": 1792971047291,
+                "signal_ts_ms": 1792971347291,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.9039194844038603,
+                "target_label_id": 55,
+                "true_first": false
+              }
+            ]
+          },
+          "folds": [
+            {
+              "train": [
+                1791072000000,
+                1791936000000
+              ],
+              "valid": [
+                1791936000000,
+                1792281600000
+              ],
+              "train_rows": 461,
+              "valid_rows": 232
+            },
+            {
+              "train": [
+                1791072000000,
+                1792281600000
+              ],
+              "valid": [
+                1792281600000,
+                1792627200000
+              ],
+              "train_rows": 693,
+              "valid_rows": 137
+            },
+            {
+              "train": [
+                1791072000000,
+                1792627200000
+              ],
+              "valid": [
+                1792627200000,
+                1793059200000
+              ],
+              "train_rows": 830,
+              "valid_rows": 220
+            }
+          ],
+          "selection_key": [
+            0,
+            0.3333333333333333,
+            0.125,
+            -4
+          ]
+        },
+        {
+          "name": "logit_1.0",
+          "spec": [
+            "logit",
+            1.0
+          ],
+          "threshold": 0.907,
+          "cv": {
+            "episodes": 16,
+            "accepted_first": 10,
+            "true_first": 2,
+            "false_first": 8,
+            "precision": 0.2,
+            "recall": 0.125,
+            "coverage": 0.625,
+            "median_delay_s": 307.2605,
+            "first_signals": [
+              {
+                "candidate_id": "L-1791968503239",
+                "side": "LOW",
+                "candidate_ts_ms": 1791968503239,
+                "signal_ts_ms": 1791968683239,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.95336530219969,
+                "target_label_id": 27,
+                "true_first": false
+              },
+              {
+                "candidate_id": "L-1792027733348",
+                "side": "LOW",
+                "candidate_ts_ms": 1792027733348,
+                "signal_ts_ms": 1792027913348,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.9161738677083173,
+                "target_label_id": 29,
+                "true_first": false
+              },
+              {
+                "candidate_id": "L-1792117859070",
+                "side": "LOW",
+                "candidate_ts_ms": 1792117859070,
+                "signal_ts_ms": 1792118159070,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.9939831715016032,
+                "target_label_id": 31,
+                "true_first": false
+              },
+              {
+                "candidate_id": "L-1792159629738",
+                "side": "LOW",
+                "candidate_ts_ms": 1792159629738,
+                "signal_ts_ms": 1792159809738,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.952991065080147,
+                "target_label_id": 33,
+                "true_first": false
+              },
+              {
+                "candidate_id": "L-1792204649198",
+                "side": "LOW",
+                "candidate_ts_ms": 1792204649198,
+                "signal_ts_ms": 1792204829198,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.9313582715305871,
+                "target_label_id": 35,
+                "true_first": false
+              },
+              {
+                "candidate_id": "L-1792308412004",
+                "side": "LOW",
+                "candidate_ts_ms": 1792308412004,
+                "signal_ts_ms": 1792308712004,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.9240703225733055,
+                "target_label_id": 37,
+                "true_first": false
+              },
+              {
+                "candidate_id": "L-1792334158952",
+                "side": "LOW",
+                "candidate_ts_ms": 1792334158952,
+                "signal_ts_ms": 1792334458952,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.9297403201305913,
+                "target_label_id": 39,
+                "true_first": false
+              },
+              {
+                "candidate_id": "L-1792408588190",
+                "side": "LOW",
+                "candidate_ts_ms": 1792408588190,
+                "signal_ts_ms": 1792408888190,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.9608064202231469,
+                "target_label_id": 41,
+                "true_first": false
+              },
+              {
+                "candidate_id": "L-1792765209379",
+                "side": "LOW",
+                "candidate_ts_ms": 1792765209379,
+                "signal_ts_ms": 1792765509379,
+                "strict_label_id": 49,
+                "strict_true": true,
+                "probability": 0.9078973334981018,
+                "target_label_id": 49,
+                "true_first": true
+              },
+              {
+                "candidate_id": "L-1792919945142",
+                "side": "LOW",
+                "candidate_ts_ms": 1792919945142,
+                "signal_ts_ms": 1792920245142,
+                "strict_label_id": 53,
+                "strict_true": true,
+                "probability": 0.9294300739946947,
+                "target_label_id": 53,
+                "true_first": true
+              }
+            ]
+          },
+          "folds": [
+            {
+              "train": [
+                1791072000000,
+                1791936000000
+              ],
+              "valid": [
+                1791936000000,
+                1792281600000
+              ],
+              "train_rows": 461,
+              "valid_rows": 232
+            },
+            {
+              "train": [
+                1791072000000,
+                1792281600000
+              ],
+              "valid": [
+                1792281600000,
+                1792627200000
+              ],
+              "train_rows": 693,
+              "valid_rows": 137
+            },
+            {
+              "train": [
+                1791072000000,
+                1792627200000
+              ],
+              "valid": [
+                1792627200000,
+                1793059200000
+              ],
+              "train_rows": 830,
+              "valid_rows": 220
+            }
+          ],
+          "selection_key": [
+            0,
+            0.2,
+            0.125,
+            -8
+          ]
+        },
+        {
+          "name": "extra_(4,5,'sqrt')",
+          "spec": [
+            "extra",
+            [
+              4,
+              5,
+              "sqrt"
+            ]
+          ],
+          "threshold": 0.595,
+          "cv": {
+            "episodes": 16,
+            "accepted_first": 1,
+            "true_first": 1,
+            "false_first": 0,
+            "precision": 1.0,
+            "recall": 0.0625,
+            "coverage": 0.0625,
+            "median_delay_s": 309.379,
+            "first_signals": [
+              {
+                "candidate_id": "L-1792765209379",
+                "side": "LOW",
+                "candidate_ts_ms": 1792765209379,
+                "signal_ts_ms": 1792765509379,
+                "strict_label_id": 49,
+                "strict_true": true,
+                "probability": 0.5957230173273791,
+                "target_label_id": 49,
+                "true_first": true
+              }
+            ]
+          },
+          "folds": [
+            {
+              "train": [
+                1791072000000,
+                1791936000000
+              ],
+              "valid": [
+                1791936000000,
+                1792281600000
+              ],
+              "train_rows": 461,
+              "valid_rows": 232
+            },
+            {
+              "train": [
+                1791072000000,
+                1792281600000
+              ],
+              "valid": [
+                1792281600000,
+                1792627200000
+              ],
+              "train_rows": 693,
+              "valid_rows": 137
+            },
+            {
+              "train": [
+                1791072000000,
+                1792627200000
+              ],
+              "valid": [
+                1792627200000,
+                1793059200000
+              ],
+              "train_rows": 830,
+              "valid_rows": 220
+            }
+          ],
+          "selection_key": [
+            0,
+            1.0,
+            0.0625,
+            0
+          ]
+        },
+        {
+          "name": "extra_(6,8,'sqrt')",
+          "spec": [
+            "extra",
+            [
+              6,
+              8,
+              "sqrt"
+            ]
+          ],
+          "threshold": 0.567,
+          "cv": {
+            "episodes": 16,
+            "accepted_first": 7,
+            "true_first": 4,
+            "false_first": 3,
+            "precision": 0.5714285714285714,
+            "recall": 0.25,
+            "coverage": 0.4375,
+            "median_delay_s": 327.63,
+            "first_signals": [
+              {
+                "candidate_id": "L-1791968503239",
+                "side": "LOW",
+                "candidate_ts_ms": 1791968503239,
+                "signal_ts_ms": 1791968803239,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.5767035020376434,
+                "target_label_id": 27,
+                "true_first": false
+              },
+              {
+                "candidate_id": "L-1792256630118",
+                "side": "LOW",
+                "candidate_ts_ms": 1792256630118,
+                "signal_ts_ms": 1792256930118,
+                "strict_label_id": 35,
+                "strict_true": true,
+                "probability": 0.5765860902713285,
+                "target_label_id": 35,
+                "true_first": true
+              },
+              {
+                "candidate_id": "L-1792498310400",
+                "side": "LOW",
+                "candidate_ts_ms": 1792498310400,
+                "signal_ts_ms": 1792498610400,
+                "strict_label_id": 43,
+                "strict_true": true,
+                "probability": 0.573273522846896,
+                "target_label_id": 43,
+                "true_first": true
+              },
+              {
+                "candidate_id": "L-1792765209379",
+                "side": "LOW",
+                "candidate_ts_ms": 1792765209379,
+                "signal_ts_ms": 1792765389379,
+                "strict_label_id": 49,
+                "strict_true": true,
+                "probability": 0.5671484317026931,
+                "target_label_id": 49,
+                "true_first": true
+              },
+              {
+                "candidate_id": "L-1792851485869",
+                "side": "LOW",
+                "candidate_ts_ms": 1792851485869,
+                "signal_ts_ms": 1792851785869,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.5883467959288172,
+                "target_label_id": 51,
+                "true_first": false
+              },
+              {
+                "candidate_id": "L-1792919945142",
+                "side": "LOW",
+                "candidate_ts_ms": 1792919945142,
+                "signal_ts_ms": 1792920245142,
+                "strict_label_id": 53,
+                "strict_true": true,
+                "probability": 0.5737365293551314,
+                "target_label_id": 53,
+                "true_first": true
+              },
+              {
+                "candidate_id": "L-1792964789218",
+                "side": "LOW",
+                "candidate_ts_ms": 1792964789218,
+                "signal_ts_ms": 1792965089218,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.5903536663048811,
+                "target_label_id": 55,
+                "true_first": false
+              }
+            ]
+          },
+          "folds": [
+            {
+              "train": [
+                1791072000000,
+                1791936000000
+              ],
+              "valid": [
+                1791936000000,
+                1792281600000
+              ],
+              "train_rows": 461,
+              "valid_rows": 232
+            },
+            {
+              "train": [
+                1791072000000,
+                1792281600000
+              ],
+              "valid": [
+                1792281600000,
+                1792627200000
+              ],
+              "train_rows": 693,
+              "valid_rows": 137
+            },
+            {
+              "train": [
+                1791072000000,
+                1792627200000
+              ],
+              "valid": [
+                1792627200000,
+                1793059200000
+              ],
+              "train_rows": 830,
+              "valid_rows": 220
+            }
+          ],
+          "selection_key": [
+            1,
+            0.5714285714285714,
+            0.25,
+            -3
+          ]
+        },
+        {
+          "name": "extra_(8,10,0.5)",
+          "spec": [
+            "extra",
+            [
+              8,
+              10,
+              0.5
+            ]
+          ],
+          "threshold": 0.655,
+          "cv": {
+            "episodes": 16,
+            "accepted_first": 1,
+            "true_first": 1,
+            "false_first": 0,
+            "precision": 1.0,
+            "recall": 0.0625,
+            "coverage": 0.0625,
+            "median_delay_s": 350.118,
+            "first_signals": [
+              {
+                "candidate_id": "L-1792256630118",
+                "side": "LOW",
+                "candidate_ts_ms": 1792256630118,
+                "signal_ts_ms": 1792256930118,
+                "strict_label_id": 35,
+                "strict_true": true,
+                "probability": 0.6559734918912102,
+                "target_label_id": 35,
+                "true_first": true
+              }
+            ]
+          },
+          "folds": [
+            {
+              "train": [
+                1791072000000,
+                1791936000000
+              ],
+              "valid": [
+                1791936000000,
+                1792281600000
+              ],
+              "train_rows": 461,
+              "valid_rows": 232
+            },
+            {
+              "train": [
+                1791072000000,
+                1792281600000
+              ],
+              "valid": [
+                1792281600000,
+                1792627200000
+              ],
+              "train_rows": 693,
+              "valid_rows": 137
+            },
+            {
+              "train": [
+                1791072000000,
+                1792627200000
+              ],
+              "valid": [
+                1792627200000,
+                1793059200000
+              ],
+              "train_rows": 830,
+              "valid_rows": 220
+            }
+          ],
+          "selection_key": [
+            0,
+            1.0,
+            0.0625,
+            0
+          ]
+        },
+        {
+          "name": "hist_(7,12,2.0,0.05)",
+          "spec": [
+            "hist",
+            [
+              7,
+              12,
+              2.0,
+              0.05
+            ]
+          ],
+          "threshold": 0.831,
+          "cv": {
+            "episodes": 16,
+            "accepted_first": 2,
+            "true_first": 2,
+            "false_first": 0,
+            "precision": 1.0,
+            "recall": 0.125,
+            "coverage": 0.125,
+            "median_delay_s": 350.259,
+            "first_signals": [
+              {
+                "candidate_id": "L-1792256630118",
+                "side": "LOW",
+                "candidate_ts_ms": 1792256630118,
+                "signal_ts_ms": 1792256930118,
+                "strict_label_id": 35,
+                "strict_true": true,
+                "probability": 0.8314442963782553,
+                "target_label_id": 35,
+                "true_first": true
+              },
+              {
+                "candidate_id": "L-1792498310400",
+                "side": "LOW",
+                "candidate_ts_ms": 1792498310400,
+                "signal_ts_ms": 1792498610400,
+                "strict_label_id": 43,
+                "strict_true": true,
+                "probability": 0.8498113991859831,
+                "target_label_id": 43,
+                "true_first": true
+              }
+            ]
+          },
+          "folds": [
+            {
+              "train": [
+                1791072000000,
+                1791936000000
+              ],
+              "valid": [
+                1791936000000,
+                1792281600000
+              ],
+              "train_rows": 461,
+              "valid_rows": 232
+            },
+            {
+              "train": [
+                1791072000000,
+                1792281600000
+              ],
+              "valid": [
+                1792281600000,
+                1792627200000
+              ],
+              "train_rows": 693,
+              "valid_rows": 137
+            },
+            {
+              "train": [
+                1791072000000,
+                1792627200000
+              ],
+              "valid": [
+                1792627200000,
+                1793059200000
+              ],
+              "train_rows": 830,
+              "valid_rows": 220
+            }
+          ],
+          "selection_key": [
+            0,
+            1.0,
+            0.125,
+            0
+          ]
+        },
+        {
+          "name": "hist_(15,12,5.0,0.05)",
+          "spec": [
+            "hist",
+            [
+              15,
+              12,
+              5.0,
+              0.05
+            ]
+          ],
+          "threshold": 0.878,
+          "cv": {
+            "episodes": 16,
+            "accepted_first": 1,
+            "true_first": 1,
+            "false_first": 0,
+            "precision": 1.0,
+            "recall": 0.0625,
+            "coverage": 0.0625,
+            "median_delay_s": 350.118,
+            "first_signals": [
+              {
+                "candidate_id": "L-1792256630118",
+                "side": "LOW",
+                "candidate_ts_ms": 1792256630118,
+                "signal_ts_ms": 1792256930118,
+                "strict_label_id": 35,
+                "strict_true": true,
+                "probability": 0.8781563040816441,
+                "target_label_id": 35,
+                "true_first": true
+              }
+            ]
+          },
+          "folds": [
+            {
+              "train": [
+                1791072000000,
+                1791936000000
+              ],
+              "valid": [
+                1791936000000,
+                1792281600000
+              ],
+              "train_rows": 461,
+              "valid_rows": 232
+            },
+            {
+              "train": [
+                1791072000000,
+                1792281600000
+              ],
+              "valid": [
+                1792281600000,
+                1792627200000
+              ],
+              "train_rows": 693,
+              "valid_rows": 137
+            },
+            {
+              "train": [
+                1791072000000,
+                1792627200000
+              ],
+              "valid": [
+                1792627200000,
+                1793059200000
+              ],
+              "train_rows": 830,
+              "valid_rows": 220
+            }
+          ],
+          "selection_key": [
+            0,
+            1.0,
+            0.0625,
+            0
+          ]
+        },
+        {
+          "name": "hist_(15,8,2.0,0.03)",
+          "spec": [
+            "hist",
+            [
+              15,
+              8,
+              2.0,
+              0.03
+            ]
+          ],
+          "threshold": 0.772,
+          "cv": {
+            "episodes": 16,
+            "accepted_first": 2,
+            "true_first": 2,
+            "false_first": 0,
+            "precision": 1.0,
+            "recall": 0.125,
+            "coverage": 0.125,
+            "median_delay_s": 329.74850000000004,
+            "first_signals": [
+              {
+                "candidate_id": "L-1792256630118",
+                "side": "LOW",
+                "candidate_ts_ms": 1792256630118,
+                "signal_ts_ms": 1792256930118,
+                "strict_label_id": 35,
+                "strict_true": true,
+                "probability": 0.8576458797154903,
+                "target_label_id": 35,
+                "true_first": true
+              },
+              {
+                "candidate_id": "L-1792765209379",
+                "side": "LOW",
+                "candidate_ts_ms": 1792765209379,
+                "signal_ts_ms": 1792765509379,
+                "strict_label_id": 49,
+                "strict_true": true,
+                "probability": 0.7720235496167915,
+                "target_label_id": 49,
+                "true_first": true
+              }
+            ]
+          },
+          "folds": [
+            {
+              "train": [
+                1791072000000,
+                1791936000000
+              ],
+              "valid": [
+                1791936000000,
+                1792281600000
+              ],
+              "train_rows": 461,
+              "valid_rows": 232
+            },
+            {
+              "train": [
+                1791072000000,
+                1792281600000
+              ],
+              "valid": [
+                1792281600000,
+                1792627200000
+              ],
+              "train_rows": 693,
+              "valid_rows": 137
+            },
+            {
+              "train": [
+                1791072000000,
+                1792627200000
+              ],
+              "valid": [
+                1792627200000,
+                1793059200000
+              ],
+              "train_rows": 830,
+              "valid_rows": 220
+            }
+          ],
+          "selection_key": [
+            0,
+            1.0,
+            0.125,
+            0
+          ]
+        }
+      ],
+      "rows": {
+        "pre_oos": 1050,
+        "oos": 255
+      },
+      "feature_count": 85
+    },
+    "HIGH": {
+      "name": "hist_(15,8,2.0,0.03)",
+      "spec": [
+        "hist",
+        [
+          15,
+          8,
+          2.0,
+          0.03
+        ]
+      ],
+      "threshold": 0.673,
+      "cv": {
+        "episodes": 16,
+        "accepted_first": 9,
+        "true_first": 3,
+        "false_first": 6,
+        "precision": 0.3333333333333333,
+        "recall": 0.1875,
+        "coverage": 0.5625,
+        "median_delay_s": 220.028,
+        "first_signals": [
+          {
+            "candidate_id": "H-1792077293528",
+            "side": "HIGH",
+            "candidate_ts_ms": 1792077293528,
+            "signal_ts_ms": 1792077353528,
+            "strict_label_id": null,
+            "strict_true": false,
+            "probability": 0.7096979386870881,
+            "target_label_id": 30,
+            "true_first": false
+          },
+          {
+            "candidate_id": "H-1792364241478",
+            "side": "HIGH",
+            "candidate_ts_ms": 1792364241478,
+            "signal_ts_ms": 1792364541478,
+            "strict_label_id": null,
+            "strict_true": false,
+            "probability": 0.730789110763834,
+            "target_label_id": 40,
+            "true_first": false
+          },
+          {
+            "candidate_id": "H-1792505882242",
+            "side": "HIGH",
+            "candidate_ts_ms": 1792505882242,
+            "signal_ts_ms": 1792506062242,
+            "strict_label_id": null,
+            "strict_true": false,
+            "probability": 0.8325596470370537,
+            "target_label_id": 44,
+            "true_first": false
+          },
+          {
+            "candidate_id": "H-1792595620028",
+            "side": "HIGH",
+            "candidate_ts_ms": 1792595620028,
+            "signal_ts_ms": 1792595800028,
+            "strict_label_id": 46,
+            "strict_true": true,
+            "probability": 0.7620958361017811,
+            "target_label_id": 46,
+            "true_first": true
+          },
+          {
+            "candidate_id": "H-1792745543972",
+            "side": "HIGH",
+            "candidate_ts_ms": 1792745543972,
+            "signal_ts_ms": 1792745723972,
+            "strict_label_id": 48,
+            "strict_true": true,
+            "probability": 0.6738968257690178,
+            "target_label_id": 48,
+            "true_first": true
+          },
+          {
+            "candidate_id": "H-1792771622398",
+            "side": "HIGH",
+            "candidate_ts_ms": 1792771622398,
+            "signal_ts_ms": 1792771922398,
+            "strict_label_id": null,
+            "strict_true": false,
+            "probability": 0.8097080975432768,
+            "target_label_id": 50,
+            "true_first": false
+          },
+          {
+            "candidate_id": "H-1792894050778",
+            "side": "HIGH",
+            "candidate_ts_ms": 1792894050778,
+            "signal_ts_ms": 1792894350778,
+            "strict_label_id": 52,
+            "strict_true": true,
+            "probability": 0.6999377322199287,
+            "target_label_id": 52,
+            "true_first": true
+          },
+          {
+            "candidate_id": "H-1792934119912",
+            "side": "HIGH",
+            "candidate_ts_ms": 1792934119912,
+            "signal_ts_ms": 1792934299912,
+            "strict_label_id": null,
+            "strict_true": false,
+            "probability": 0.7908732899305928,
+            "target_label_id": 54,
+            "true_first": false
+          },
+          {
+            "candidate_id": "H-1793004490288",
+            "side": "HIGH",
+            "candidate_ts_ms": 1793004490288,
+            "signal_ts_ms": 1793004670288,
+            "strict_label_id": null,
+            "strict_true": false,
+            "probability": 0.7012492616713116,
+            "target_label_id": 56,
+            "true_first": false
+          }
+        ]
+      },
+      "oos": {
+        "episodes": 9,
+        "accepted_first": 3,
+        "true_first": 1,
+        "false_first": 2,
+        "precision": 0.3333333333333333,
+        "recall": 0.1111111111111111,
+        "coverage": 0.3333333333333333,
+        "median_delay_s": 81.539,
+        "first_signals": [
+          {
+            "candidate_id": "H-1793107466417",
+            "side": "HIGH",
+            "candidate_ts_ms": 1793107466417,
+            "signal_ts_ms": 1793107646417,
+            "strict_label_id": null,
+            "strict_true": false,
+            "probability": 0.793914724968947,
+            "target_label_id": 60,
+            "true_first": false
+          },
+          {
+            "candidate_id": "H-1793181861539",
+            "side": "HIGH",
+            "candidate_ts_ms": 1793181861539,
+            "signal_ts_ms": 1793181921539,
+            "strict_label_id": 62,
+            "strict_true": true,
+            "probability": 0.7959558019536679,
+            "target_label_id": 62,
+            "true_first": true
+          },
+          {
+            "candidate_id": "H-1793270091942",
+            "side": "HIGH",
+            "candidate_ts_ms": 1793270091942,
+            "signal_ts_ms": 1793270151942,
+            "strict_label_id": null,
+            "strict_true": false,
+            "probability": 0.7536328930590569,
+            "target_label_id": 66,
+            "true_first": false
+          }
+        ]
+      },
+      "trials": [
+        {
+          "name": "logit_0.05",
+          "spec": [
+            "logit",
+            0.05
+          ],
+          "threshold": 0.999,
+          "cv": {
+            "episodes": 16,
+            "accepted_first": 2,
+            "true_first": 1,
+            "false_first": 1,
+            "precision": 0.5,
+            "recall": 0.0625,
+            "coverage": 0.125,
+            "median_delay_s": 340.028,
+            "first_signals": [
+              {
+                "candidate_id": "H-1792595620028",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792595620028,
+                "signal_ts_ms": 1792595920028,
+                "strict_label_id": 46,
+                "strict_true": true,
+                "probability": 0.9993848519734578,
+                "target_label_id": 46,
+                "true_first": true
+              },
+              {
+                "candidate_id": "H-1793036219003",
+                "side": "HIGH",
+                "candidate_ts_ms": 1793036219003,
+                "signal_ts_ms": 1793036279003,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.9993595988636202,
+                "target_label_id": 56,
+                "true_first": false
+              }
+            ]
+          },
+          "folds": [
+            {
+              "train": [
+                1791072000000,
+                1791936000000
+              ],
+              "valid": [
+                1791936000000,
+                1792281600000
+              ],
+              "train_rows": 378,
+              "valid_rows": 142
+            },
+            {
+              "train": [
+                1791072000000,
+                1792281600000
+              ],
+              "valid": [
+                1792281600000,
+                1792627200000
+              ],
+              "train_rows": 520,
+              "valid_rows": 143
+            },
+            {
+              "train": [
+                1791072000000,
+                1792627200000
+              ],
+              "valid": [
+                1792627200000,
+                1793059200000
+              ],
+              "train_rows": 663,
+              "valid_rows": 149
+            }
+          ],
+          "selection_key": [
+            0,
+            0.5,
+            0.0625,
+            -1
+          ]
+        },
+        {
+          "name": "logit_0.2",
+          "spec": [
+            "logit",
+            0.2
+          ],
+          "threshold": 0.973,
+          "cv": {
+            "episodes": 16,
+            "accepted_first": 6,
+            "true_first": 2,
+            "false_first": 4,
+            "precision": 0.3333333333333333,
+            "recall": 0.125,
+            "coverage": 0.375,
+            "median_delay_s": 280.838,
+            "first_signals": [
+              {
+                "candidate_id": "H-1792008101648",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792008101648,
+                "signal_ts_ms": 1792008281648,
+                "strict_label_id": 28,
+                "strict_true": true,
+                "probability": 0.9734310635907184,
+                "target_label_id": 28,
+                "true_first": true
+              },
+              {
+                "candidate_id": "H-1792084637660",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792084637660,
+                "signal_ts_ms": 1792084817660,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.9951869697996453,
+                "target_label_id": 30,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792295284458",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792295284458,
+                "signal_ts_ms": 1792295584458,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.9753418893813711,
+                "target_label_id": 36,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792505470793",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792505470793,
+                "signal_ts_ms": 1792505530793,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.9880541382156232,
+                "target_label_id": 44,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792595620028",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792595620028,
+                "signal_ts_ms": 1792595920028,
+                "strict_label_id": 46,
+                "strict_true": true,
+                "probability": 0.9997908872685795,
+                "target_label_id": 46,
+                "true_first": true
+              },
+              {
+                "candidate_id": "H-1793021953547",
+                "side": "HIGH",
+                "candidate_ts_ms": 1793021953547,
+                "signal_ts_ms": 1793022253547,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.9961915305288657,
+                "target_label_id": 56,
+                "true_first": false
+              }
+            ]
+          },
+          "folds": [
+            {
+              "train": [
+                1791072000000,
+                1791936000000
+              ],
+              "valid": [
+                1791936000000,
+                1792281600000
+              ],
+              "train_rows": 378,
+              "valid_rows": 142
+            },
+            {
+              "train": [
+                1791072000000,
+                1792281600000
+              ],
+              "valid": [
+                1792281600000,
+                1792627200000
+              ],
+              "train_rows": 520,
+              "valid_rows": 143
+            },
+            {
+              "train": [
+                1791072000000,
+                1792627200000
+              ],
+              "valid": [
+                1792627200000,
+                1793059200000
+              ],
+              "train_rows": 663,
+              "valid_rows": 149
+            }
+          ],
+          "selection_key": [
+            0,
+            0.3333333333333333,
+            0.125,
+            -4
+          ]
+        },
+        {
+          "name": "logit_1.0",
+          "spec": [
+            "logit",
+            1.0
+          ],
+          "threshold": 0.992,
+          "cv": {
+            "episodes": 16,
+            "accepted_first": 5,
+            "true_first": 2,
+            "false_first": 3,
+            "precision": 0.4,
+            "recall": 0.125,
+            "coverage": 0.3125,
+            "median_delay_s": 280.838,
+            "first_signals": [
+              {
+                "candidate_id": "H-1792008101648",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792008101648,
+                "signal_ts_ms": 1792008281648,
+                "strict_label_id": 28,
+                "strict_true": true,
+                "probability": 0.992193170859805,
+                "target_label_id": 28,
+                "true_first": true
+              },
+              {
+                "candidate_id": "H-1792084637660",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792084637660,
+                "signal_ts_ms": 1792084817660,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.998566069669375,
+                "target_label_id": 30,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792505470793",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792505470793,
+                "signal_ts_ms": 1792505530793,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.9994745043503179,
+                "target_label_id": 44,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792595620028",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792595620028,
+                "signal_ts_ms": 1792595920028,
+                "strict_label_id": 46,
+                "strict_true": true,
+                "probability": 0.999939823146272,
+                "target_label_id": 46,
+                "true_first": true
+              },
+              {
+                "candidate_id": "H-1793021953547",
+                "side": "HIGH",
+                "candidate_ts_ms": 1793021953547,
+                "signal_ts_ms": 1793022253547,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.9983640133860615,
+                "target_label_id": 56,
+                "true_first": false
+              }
+            ]
+          },
+          "folds": [
+            {
+              "train": [
+                1791072000000,
+                1791936000000
+              ],
+              "valid": [
+                1791936000000,
+                1792281600000
+              ],
+              "train_rows": 378,
+              "valid_rows": 142
+            },
+            {
+              "train": [
+                1791072000000,
+                1792281600000
+              ],
+              "valid": [
+                1792281600000,
+                1792627200000
+              ],
+              "train_rows": 520,
+              "valid_rows": 143
+            },
+            {
+              "train": [
+                1791072000000,
+                1792627200000
+              ],
+              "valid": [
+                1792627200000,
+                1793059200000
+              ],
+              "train_rows": 663,
+              "valid_rows": 149
+            }
+          ],
+          "selection_key": [
+            0,
+            0.4,
+            0.125,
+            -3
+          ]
+        },
+        {
+          "name": "extra_(4,5,'sqrt')",
+          "spec": [
+            "extra",
+            [
+              4,
+              5,
+              "sqrt"
+            ]
+          ],
+          "threshold": 0.57,
+          "cv": {
+            "episodes": 16,
+            "accepted_first": 13,
+            "true_first": 4,
+            "false_first": 9,
+            "precision": 0.3076923076923077,
+            "recall": 0.25,
+            "coverage": 0.8125,
+            "median_delay_s": 277.8195,
+            "first_signals": [
+              {
+                "candidate_id": "H-1792008101648",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792008101648,
+                "signal_ts_ms": 1792008281648,
+                "strict_label_id": 28,
+                "strict_true": true,
+                "probability": 0.5781046404828734,
+                "target_label_id": 28,
+                "true_first": true
+              },
+              {
+                "candidate_id": "H-1792075377419",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792075377419,
+                "signal_ts_ms": 1792075557419,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.6141255880650233,
+                "target_label_id": 30,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792150053991",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792150053991,
+                "signal_ts_ms": 1792150353991,
+                "strict_label_id": 32,
+                "strict_true": true,
+                "probability": 0.5702124838907426,
+                "target_label_id": 32,
+                "true_first": true
+              },
+              {
+                "candidate_id": "H-1792325277340",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792325277340,
+                "signal_ts_ms": 1792325577340,
+                "strict_label_id": 38,
+                "strict_true": true,
+                "probability": 0.5942281092561796,
+                "target_label_id": 38,
+                "true_first": true
+              },
+              {
+                "candidate_id": "H-1792360983869",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792360983869,
+                "signal_ts_ms": 1792361163869,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.669349834081642,
+                "target_label_id": 40,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792448366310",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792448366310,
+                "signal_ts_ms": 1792448666310,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.5815136590710118,
+                "target_label_id": 42,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792503515424",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792503515424,
+                "signal_ts_ms": 1792503695424,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.626437414399965,
+                "target_label_id": 44,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792595620028",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792595620028,
+                "signal_ts_ms": 1792595800028,
+                "strict_label_id": 46,
+                "strict_true": true,
+                "probability": 0.637499817987633,
+                "target_label_id": 46,
+                "true_first": true
+              },
+              {
+                "candidate_id": "H-1792720047797",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792720047797,
+                "signal_ts_ms": 1792720347797,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.6442348144357286,
+                "target_label_id": 48,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792771622398",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792771622398,
+                "signal_ts_ms": 1792771922398,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.756894612530287,
+                "target_label_id": 50,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792872100249",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792872100249,
+                "signal_ts_ms": 1792872400249,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.5906913823327536,
+                "target_label_id": 52,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792929415749",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792929415749,
+                "signal_ts_ms": 1792929715749,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.6284934287146555,
+                "target_label_id": 54,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792994409139",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792994409139,
+                "signal_ts_ms": 1792994589139,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.6424022665917553,
+                "target_label_id": 56,
+                "true_first": false
+              }
+            ]
+          },
+          "folds": [
+            {
+              "train": [
+                1791072000000,
+                1791936000000
+              ],
+              "valid": [
+                1791936000000,
+                1792281600000
+              ],
+              "train_rows": 378,
+              "valid_rows": 142
+            },
+            {
+              "train": [
+                1791072000000,
+                1792281600000
+              ],
+              "valid": [
+                1792281600000,
+                1792627200000
+              ],
+              "train_rows": 520,
+              "valid_rows": 143
+            },
+            {
+              "train": [
+                1791072000000,
+                1792627200000
+              ],
+              "valid": [
+                1792627200000,
+                1793059200000
+              ],
+              "train_rows": 663,
+              "valid_rows": 149
+            }
+          ],
+          "selection_key": [
+            1,
+            0.3076923076923077,
+            0.25,
+            -9
+          ]
+        },
+        {
+          "name": "extra_(6,8,'sqrt')",
+          "spec": [
+            "extra",
+            [
+              6,
+              8,
+              "sqrt"
+            ]
+          ],
+          "threshold": 0.542,
+          "cv": {
+            "episodes": 16,
+            "accepted_first": 15,
+            "true_first": 4,
+            "false_first": 11,
+            "precision": 0.26666666666666666,
+            "recall": 0.25,
+            "coverage": 0.9375,
+            "median_delay_s": 277.8195,
+            "first_signals": [
+              {
+                "candidate_id": "H-1792008101648",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792008101648,
+                "signal_ts_ms": 1792008281648,
+                "strict_label_id": 28,
+                "strict_true": true,
+                "probability": 0.5424388823414089,
+                "target_label_id": 28,
+                "true_first": true
+              },
+              {
+                "candidate_id": "H-1792075377419",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792075377419,
+                "signal_ts_ms": 1792075437419,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.5607172247777288,
+                "target_label_id": 30,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792150053991",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792150053991,
+                "signal_ts_ms": 1792150353991,
+                "strict_label_id": 32,
+                "strict_true": true,
+                "probability": 0.5580719882704972,
+                "target_label_id": 32,
+                "true_first": true
+              },
+              {
+                "candidate_id": "H-1792222980122",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792222980122,
+                "signal_ts_ms": 1792223280122,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.55434029357375,
+                "target_label_id": 34,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792295284458",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792295284458,
+                "signal_ts_ms": 1792295584458,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.58451825646946,
+                "target_label_id": 36,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792325277340",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792325277340,
+                "signal_ts_ms": 1792325577340,
+                "strict_label_id": 38,
+                "strict_true": true,
+                "probability": 0.5771450590486115,
+                "target_label_id": 38,
+                "true_first": true
+              },
+              {
+                "candidate_id": "H-1792360983869",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792360983869,
+                "signal_ts_ms": 1792361163869,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.6834956843863756,
+                "target_label_id": 40,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792448366310",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792448366310,
+                "signal_ts_ms": 1792448666310,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.5629952327506588,
+                "target_label_id": 42,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792503515424",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792503515424,
+                "signal_ts_ms": 1792503695424,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.6459104160747169,
+                "target_label_id": 44,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792595620028",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792595620028,
+                "signal_ts_ms": 1792595800028,
+                "strict_label_id": 46,
+                "strict_true": true,
+                "probability": 0.6368177986271157,
+                "target_label_id": 46,
+                "true_first": true
+              },
+              {
+                "candidate_id": "H-1792720047797",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792720047797,
+                "signal_ts_ms": 1792720347797,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.5967878271532258,
+                "target_label_id": 48,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792771622398",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792771622398,
+                "signal_ts_ms": 1792771802398,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.5645869077237495,
+                "target_label_id": 50,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792872100249",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792872100249,
+                "signal_ts_ms": 1792872400249,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.5639233074472063,
+                "target_label_id": 52,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792929415749",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792929415749,
+                "signal_ts_ms": 1792929715749,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.6255444145314143,
+                "target_label_id": 54,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792994409139",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792994409139,
+                "signal_ts_ms": 1792994589139,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.6634188172664746,
+                "target_label_id": 56,
+                "true_first": false
+              }
+            ]
+          },
+          "folds": [
+            {
+              "train": [
+                1791072000000,
+                1791936000000
+              ],
+              "valid": [
+                1791936000000,
+                1792281600000
+              ],
+              "train_rows": 378,
+              "valid_rows": 142
+            },
+            {
+              "train": [
+                1791072000000,
+                1792281600000
+              ],
+              "valid": [
+                1792281600000,
+                1792627200000
+              ],
+              "train_rows": 520,
+              "valid_rows": 143
+            },
+            {
+              "train": [
+                1791072000000,
+                1792627200000
+              ],
+              "valid": [
+                1792627200000,
+                1793059200000
+              ],
+              "train_rows": 663,
+              "valid_rows": 149
+            }
+          ],
+          "selection_key": [
+            1,
+            0.26666666666666666,
+            0.25,
+            -11
+          ]
+        },
+        {
+          "name": "extra_(8,10,0.5)",
+          "spec": [
+            "extra",
+            [
+              8,
+              10,
+              0.5
+            ]
+          ],
+          "threshold": 0.527,
+          "cv": {
+            "episodes": 16,
+            "accepted_first": 15,
+            "true_first": 4,
+            "false_first": 11,
+            "precision": 0.26666666666666666,
+            "recall": 0.25,
+            "coverage": 0.9375,
+            "median_delay_s": 277.0095,
+            "first_signals": [
+              {
+                "candidate_id": "H-1792008101648",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792008101648,
+                "signal_ts_ms": 1792008161648,
+                "strict_label_id": 28,
+                "strict_true": true,
+                "probability": 0.5554628669242974,
+                "target_label_id": 28,
+                "true_first": true
+              },
+              {
+                "candidate_id": "H-1792075377419",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792075377419,
+                "signal_ts_ms": 1792075437419,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.6453775434743363,
+                "target_label_id": 30,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792150053991",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792150053991,
+                "signal_ts_ms": 1792150353991,
+                "strict_label_id": 32,
+                "strict_true": true,
+                "probability": 0.527253082887675,
+                "target_label_id": 32,
+                "true_first": true
+              },
+              {
+                "candidate_id": "H-1792222980122",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792222980122,
+                "signal_ts_ms": 1792223280122,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.600850160405152,
+                "target_label_id": 34,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792295284458",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792295284458,
+                "signal_ts_ms": 1792295584458,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.5301748428451389,
+                "target_label_id": 36,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792325277340",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792325277340,
+                "signal_ts_ms": 1792325577340,
+                "strict_label_id": 38,
+                "strict_true": true,
+                "probability": 0.585342361593591,
+                "target_label_id": 38,
+                "true_first": true
+              },
+              {
+                "candidate_id": "H-1792360983869",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792360983869,
+                "signal_ts_ms": 1792361163869,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.7714022526031481,
+                "target_label_id": 40,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792448366310",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792448366310,
+                "signal_ts_ms": 1792448666310,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.5519176528325167,
+                "target_label_id": 42,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792503515424",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792503515424,
+                "signal_ts_ms": 1792503695424,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.651659133466668,
+                "target_label_id": 44,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792595620028",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792595620028,
+                "signal_ts_ms": 1792595800028,
+                "strict_label_id": 46,
+                "strict_true": true,
+                "probability": 0.736439104110582,
+                "target_label_id": 46,
+                "true_first": true
+              },
+              {
+                "candidate_id": "H-1792720047797",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792720047797,
+                "signal_ts_ms": 1792720347797,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.6362558802462377,
+                "target_label_id": 48,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792771622398",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792771622398,
+                "signal_ts_ms": 1792771802398,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.5338643346254429,
+                "target_label_id": 50,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792872100249",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792872100249,
+                "signal_ts_ms": 1792872280249,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.5348409665834915,
+                "target_label_id": 52,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792929415749",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792929415749,
+                "signal_ts_ms": 1792929715749,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.6180271790536225,
+                "target_label_id": 54,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792994409139",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792994409139,
+                "signal_ts_ms": 1792994589139,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.7185809134275414,
+                "target_label_id": 56,
+                "true_first": false
+              }
+            ]
+          },
+          "folds": [
+            {
+              "train": [
+                1791072000000,
+                1791936000000
+              ],
+              "valid": [
+                1791936000000,
+                1792281600000
+              ],
+              "train_rows": 378,
+              "valid_rows": 142
+            },
+            {
+              "train": [
+                1791072000000,
+                1792281600000
+              ],
+              "valid": [
+                1792281600000,
+                1792627200000
+              ],
+              "train_rows": 520,
+              "valid_rows": 143
+            },
+            {
+              "train": [
+                1791072000000,
+                1792627200000
+              ],
+              "valid": [
+                1792627200000,
+                1793059200000
+              ],
+              "train_rows": 663,
+              "valid_rows": 149
+            }
+          ],
+          "selection_key": [
+            1,
+            0.26666666666666666,
+            0.25,
+            -11
+          ]
+        },
+        {
+          "name": "hist_(7,12,2.0,0.05)",
+          "spec": [
+            "hist",
+            [
+              7,
+              12,
+              2.0,
+              0.05
+            ]
+          ],
+          "threshold": 0.9,
+          "cv": {
+            "episodes": 16,
+            "accepted_first": 4,
+            "true_first": 2,
+            "false_first": 2,
+            "precision": 0.5,
+            "recall": 0.125,
+            "coverage": 0.25,
+            "median_delay_s": 152.5235,
+            "first_signals": [
+              {
+                "candidate_id": "H-1792080132204",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792080132204,
+                "signal_ts_ms": 1792080192204,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.9328299982126167,
+                "target_label_id": 30,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792505882242",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792505882242,
+                "signal_ts_ms": 1792506062242,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.9270430872466161,
+                "target_label_id": 44,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792595620028",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792595620028,
+                "signal_ts_ms": 1792595800028,
+                "strict_label_id": 46,
+                "strict_true": true,
+                "probability": 0.9004200729859312,
+                "target_label_id": 46,
+                "true_first": true
+              },
+              {
+                "candidate_id": "H-1793036365019",
+                "side": "HIGH",
+                "candidate_ts_ms": 1793036365019,
+                "signal_ts_ms": 1793036425019,
+                "strict_label_id": 56,
+                "strict_true": true,
+                "probability": 0.9245433242135382,
+                "target_label_id": 56,
+                "true_first": true
+              }
+            ]
+          },
+          "folds": [
+            {
+              "train": [
+                1791072000000,
+                1791936000000
+              ],
+              "valid": [
+                1791936000000,
+                1792281600000
+              ],
+              "train_rows": 378,
+              "valid_rows": 142
+            },
+            {
+              "train": [
+                1791072000000,
+                1792281600000
+              ],
+              "valid": [
+                1792281600000,
+                1792627200000
+              ],
+              "train_rows": 520,
+              "valid_rows": 143
+            },
+            {
+              "train": [
+                1791072000000,
+                1792627200000
+              ],
+              "valid": [
+                1792627200000,
+                1793059200000
+              ],
+              "train_rows": 663,
+              "valid_rows": 149
+            }
+          ],
+          "selection_key": [
+            0,
+            0.5,
+            0.125,
+            -2
+          ]
+        },
+        {
+          "name": "hist_(15,12,5.0,0.05)",
+          "spec": [
+            "hist",
+            [
+              15,
+              12,
+              5.0,
+              0.05
+            ]
+          ],
+          "threshold": 0.769,
+          "cv": {
+            "episodes": 16,
+            "accepted_first": 7,
+            "true_first": 2,
+            "false_first": 5,
+            "precision": 0.2857142857142857,
+            "recall": 0.125,
+            "coverage": 0.4375,
+            "median_delay_s": 272.0,
+            "first_signals": [
+              {
+                "candidate_id": "H-1792077293528",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792077293528,
+                "signal_ts_ms": 1792077353528,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.8181774123668927,
+                "target_label_id": 30,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792366176286",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792366176286,
+                "signal_ts_ms": 1792366356286,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.7896198600135875,
+                "target_label_id": 40,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792505882242",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792505882242,
+                "signal_ts_ms": 1792506062242,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.871832868763695,
+                "target_label_id": 44,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792595620028",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792595620028,
+                "signal_ts_ms": 1792595800028,
+                "strict_label_id": 46,
+                "strict_true": true,
+                "probability": 0.7970373583824372,
+                "target_label_id": 46,
+                "true_first": true
+              },
+              {
+                "candidate_id": "H-1792745543972",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792745543972,
+                "signal_ts_ms": 1792745843972,
+                "strict_label_id": 48,
+                "strict_true": true,
+                "probability": 0.7697943347432298,
+                "target_label_id": 48,
+                "true_first": true
+              },
+              {
+                "candidate_id": "H-1792934119912",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792934119912,
+                "signal_ts_ms": 1792934299912,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.8389132267678552,
+                "target_label_id": 54,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1793004490288",
+                "side": "HIGH",
+                "candidate_ts_ms": 1793004490288,
+                "signal_ts_ms": 1793004670288,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.8099357279212112,
+                "target_label_id": 56,
+                "true_first": false
+              }
+            ]
+          },
+          "folds": [
+            {
+              "train": [
+                1791072000000,
+                1791936000000
+              ],
+              "valid": [
+                1791936000000,
+                1792281600000
+              ],
+              "train_rows": 378,
+              "valid_rows": 142
+            },
+            {
+              "train": [
+                1791072000000,
+                1792281600000
+              ],
+              "valid": [
+                1792281600000,
+                1792627200000
+              ],
+              "train_rows": 520,
+              "valid_rows": 143
+            },
+            {
+              "train": [
+                1791072000000,
+                1792627200000
+              ],
+              "valid": [
+                1792627200000,
+                1793059200000
+              ],
+              "train_rows": 663,
+              "valid_rows": 149
+            }
+          ],
+          "selection_key": [
+            0,
+            0.2857142857142857,
+            0.125,
+            -5
+          ]
+        },
+        {
+          "name": "hist_(15,8,2.0,0.03)",
+          "spec": [
+            "hist",
+            [
+              15,
+              8,
+              2.0,
+              0.03
+            ]
+          ],
+          "threshold": 0.673,
+          "cv": {
+            "episodes": 16,
+            "accepted_first": 9,
+            "true_first": 3,
+            "false_first": 6,
+            "precision": 0.3333333333333333,
+            "recall": 0.1875,
+            "coverage": 0.5625,
+            "median_delay_s": 220.028,
+            "first_signals": [
+              {
+                "candidate_id": "H-1792077293528",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792077293528,
+                "signal_ts_ms": 1792077353528,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.7096979386870881,
+                "target_label_id": 30,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792364241478",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792364241478,
+                "signal_ts_ms": 1792364541478,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.730789110763834,
+                "target_label_id": 40,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792505882242",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792505882242,
+                "signal_ts_ms": 1792506062242,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.8325596470370537,
+                "target_label_id": 44,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792595620028",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792595620028,
+                "signal_ts_ms": 1792595800028,
+                "strict_label_id": 46,
+                "strict_true": true,
+                "probability": 0.7620958361017811,
+                "target_label_id": 46,
+                "true_first": true
+              },
+              {
+                "candidate_id": "H-1792745543972",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792745543972,
+                "signal_ts_ms": 1792745723972,
+                "strict_label_id": 48,
+                "strict_true": true,
+                "probability": 0.6738968257690178,
+                "target_label_id": 48,
+                "true_first": true
+              },
+              {
+                "candidate_id": "H-1792771622398",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792771622398,
+                "signal_ts_ms": 1792771922398,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.8097080975432768,
+                "target_label_id": 50,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1792894050778",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792894050778,
+                "signal_ts_ms": 1792894350778,
+                "strict_label_id": 52,
+                "strict_true": true,
+                "probability": 0.6999377322199287,
+                "target_label_id": 52,
+                "true_first": true
+              },
+              {
+                "candidate_id": "H-1792934119912",
+                "side": "HIGH",
+                "candidate_ts_ms": 1792934119912,
+                "signal_ts_ms": 1792934299912,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.7908732899305928,
+                "target_label_id": 54,
+                "true_first": false
+              },
+              {
+                "candidate_id": "H-1793004490288",
+                "side": "HIGH",
+                "candidate_ts_ms": 1793004490288,
+                "signal_ts_ms": 1793004670288,
+                "strict_label_id": null,
+                "strict_true": false,
+                "probability": 0.7012492616713116,
+                "target_label_id": 56,
+                "true_first": false
+              }
+            ]
+          },
+          "folds": [
+            {
+              "train": [
+                1791072000000,
+                1791936000000
+              ],
+              "valid": [
+                1791936000000,
+                1792281600000
+              ],
+              "train_rows": 378,
+              "valid_rows": 142
+            },
+            {
+              "train": [
+                1791072000000,
+                1792281600000
+              ],
+              "valid": [
+                1792281600000,
+                1792627200000
+              ],
+              "train_rows": 520,
+              "valid_rows": 143
+            },
+            {
+              "train": [
+                1791072000000,
+                1792627200000
+              ],
+              "valid": [
+                1792627200000,
+                1793059200000
+              ],
+              "train_rows": 663,
+              "valid_rows": 149
+            }
+          ],
+          "selection_key": [
+            1,
+            0.3333333333333333,
+            0.1875,
+            -6
+          ]
+        }
+      ],
+      "rows": {
+        "pre_oos": 812,
+        "oos": 244
+      },
+      "feature_count": 85
+    }
+  },
+  "real_orders": false
+}
