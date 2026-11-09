@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import argparse,gzip,json,math
+import argparse,bisect,gzip,json,math
 from collections import defaultdict
 from pathlib import Path
 
@@ -74,33 +74,46 @@ def dense_episode_candidates(mins,labels):
     return out
 
 
-def first_retrace_cross(mins,c,threshold_bps):
-    side=c["side"];cp=float(c["candidate_price"])
-    start=int(c["candidate_ts_ms"])
-    stop=int(c["invalidated_at_ms"] or c["deadline_ms"])
-    for r in mins:
-        st=int(r["start_ms"]);end=int(r.get("bar_end_ms",r.get("ts_ms",st+60_000)))
-        if end<=start: continue
-        if st>=stop: break
-        # Use completed M1 close as causal crossing evidence. Intrabar high/low
-        # is deliberately not used because the exact crossing time is unknown.
-        px=float(r["close"])
-        retr=(px/cp-1.0)*10000.0 if side=="LOW" else (cp/px-1.0)*10000.0
-        if retr>=threshold_bps:
-            return {
-                "signal_ts_ms":end,
-                "signal_price":px,
-                "retrace_bps":retr,
-                "latency_s":max(0.0,(end-start)/1000.0),
-            }
-    return None
+def precompute_crossings(mins,cands):
+    """One causal scan per candidate lifetime; record first crossing for 20..60 bps."""
+    starts=[int(r["start_ms"]) for r in mins]
+    out={}
+    for c in cands:
+        side=c["side"];cp=float(c["candidate_price"])
+        start=int(c["candidate_ts_ms"])
+        stop=int(c["invalidated_at_ms"] or c["deadline_ms"])
+        j=max(0,bisect.bisect_left(starts,start-60_000))
+        k=min(len(mins),bisect.bisect_left(starts,stop))
+        pending=set(range(20,61))
+        hits={}
+        for r in mins[j:k]:
+            end=int(r.get("bar_end_ms",r.get("ts_ms",int(r["start_ms"])+60_000)))
+            if end<=start: continue
+            px=float(r["close"])
+            retr=(px/cp-1.0)*10000.0 if side=="LOW" else (cp/px-1.0)*10000.0
+            if retr<20: continue
+            reached=[t for t in pending if retr>=t]
+            if reached:
+                sig={
+                    "signal_ts_ms":end,
+                    "signal_price":px,
+                    "retrace_bps":retr,
+                    "latency_s":max(0.0,(end-start)/1000.0),
+                }
+                for t in reached:
+                    hits[t]=sig
+                    pending.remove(t)
+            if not pending: break
+        out[(c["episode"],c["candidate_ts_ms"],c["side"])]=hits
+    return out
 
 
-def score_threshold(mins,cands,labels,threshold_bps,side):
+def score_threshold(crossings,cands,labels,threshold_bps,side):
     byep=defaultdict(list)
+    tkey=int(round(threshold_bps))
     for c in cands:
         if c["side"]!=side: continue
-        sig=first_retrace_cross(mins,c,threshold_bps)
+        sig=crossings.get((c["episode"],c["candidate_ts_ms"],c["side"]),{}).get(tkey)
         if sig is not None:
             byep[int(c["episode"])].append((sig["signal_ts_ms"],c,sig))
 
@@ -161,12 +174,13 @@ def main():
     mins=list(load_jsonl_gz(args.compact))
     labs=finalized(load_json_gz(args.labels).get("strict") or [])
     cands=dense_episode_candidates(mins,labs)
+    crossings=precompute_crossings(mins,cands)
 
     sweep={}
     for side in ("LOW","HIGH"):
         rows=[]
         for bps in range(20,61):
-            rows.append(score_threshold(mins,cands,labs,float(bps),side))
+            rows.append(score_threshold(crossings,cands,labs,float(bps),side))
         # Rank precision first, then recall, then smaller distance.
         def key(m):
             return (
