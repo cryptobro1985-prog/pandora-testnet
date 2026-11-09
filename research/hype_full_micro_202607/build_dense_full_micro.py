@@ -11,6 +11,7 @@ from research.hype_quant.feature_contract import INPUT_IDS, TARGET_IDS, METADATA
 # Sampling timestamps are observation points for historical reconstruction only.
 # They NEVER gate live entry eligibility.
 OBSERVATION_DELAYS=(0,5,15,30,60,120,180,300,600)
+RETRACE_ANCHORS_BPS=(25,30,33,35,38,45,60)
 
 
 def dense_swing_candidates(mins, labels):
@@ -65,13 +66,16 @@ def dense_swing_candidates(mins, labels):
 def target_records(cands,sec5,mins):
     out=[]
     end_ms=base.ms(base.END)
+    starts=[int(x["start_ms"]) for x in sec5]
+
     for c in cands:
         invalidated=c.get("invalidated_at_ms")
+        stop=min(end_ms,int(invalidated) if invalidated is not None else end_ms)
+
+        # Generic observation snapshots remain for trajectory learning.
         for d in OBSERVATION_DELAYS:
             t=int(c["extreme_ts_ms"])+int(d)*1000
-            if t>=end_ms: break
-            if invalidated is not None and t>=int(invalidated):
-                break
+            if t>=stop: break
             out.append({
                 "symbol":"HYPE","candidate_id":c["candidate_id"],"side":c["side"],
                 "candidate_ts_ms":int(c["extreme_ts_ms"]),"snapshot_ts_ms":t,
@@ -81,8 +85,47 @@ def target_records(cands,sec5,mins):
                 "target_label_id":int(c["target_label_id"]),
                 "episode":int(c["episode"]),
                 "invalidated_at_ms":c.get("invalidated_at_ms"),
+                "observation_kind":"TIME_SAMPLE",
+                "retrace_anchor_bps":None,
                 "features":base.base_features(c,t,sec5,mins),
             })
+
+        # Adaptive event snapshots: capture the *first causal state* at which
+        # price has retraced 0.25/0.30/0.33/0.35/... from the running extreme.
+        # These anchors are NOT Local confirmation rules. They are observation
+        # events where the complete causal signature is sampled and compared.
+        cp=float(c["extreme_price"])
+        rev=1.0 if c["side"]=="LOW" else -1.0
+        lo=bisect.bisect_left(starts,int(c["extreme_ts_ms"])-5000)
+        hi=bisect.bisect_left(starts,stop)
+        pending=set(RETRACE_ANCHORS_BPS)
+        for bar in sec5[max(0,lo):hi]:
+            t=int(bar.get("bar_end_ms",bar.get("ts_ms",int(bar["start_ms"])+5000)))
+            if t<=int(c["extreme_ts_ms"]):
+                continue
+            px=float(bar["close"])
+            retr=(px/cp-1.0)*rev*10000.0
+            if retr<min(pending or {10**9}):
+                continue
+            reached=sorted(a for a in pending if retr>=a)
+            for anchor in reached:
+                out.append({
+                    "symbol":"HYPE","candidate_id":c["candidate_id"],"side":c["side"],
+                    "candidate_ts_ms":int(c["extreme_ts_ms"]),"snapshot_ts_ms":t,
+                    "delay_s":max(0.0,(t-int(c["extreme_ts_ms"]))/1000.0),
+                    "extreme_price":cp,
+                    "strict_true":bool(c["strict_label_id"]),
+                    "strict_label_id":c["strict_label_id"],
+                    "target_label_id":int(c["target_label_id"]),
+                    "episode":int(c["episode"]),
+                    "invalidated_at_ms":c.get("invalidated_at_ms"),
+                    "observation_kind":"RETRACE_CROSS",
+                    "retrace_anchor_bps":int(anchor),
+                    "features":base.base_features(c,t,sec5,mins),
+                })
+                pending.remove(anchor)
+            if not pending:
+                break
     return out
 
 
@@ -154,6 +197,10 @@ def main():
         "source_file_counts":dict(src.counts),
         "candidate_contract":"DENSE_STRICT_SWING_RUNNING_EXTREME_V1",
         "observation_delays_metric_only":list(OBSERVATION_DELAYS),
+        "retrace_anchors_bps":list(RETRACE_ANCHORS_BPS),
+        "retrace_anchor_role":"event snapshot only; never sufficient Local confirmation",
+        "retrace_anchors_bps":list(RETRACE_ANCHORS_BPS),
+        "retrace_anchor_role":"event snapshot only; never sufficient Local confirmation",
         "note":"Teacher defines offline swing/target only; target/eval values never enter X. Same-side replacement truncates old candidate states.",
     }
     base.write_jsonl_gz(args.output/"candidate_snapshots_full_micro.jsonl.gz",records)
