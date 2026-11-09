@@ -86,7 +86,14 @@ def main():
                 "missed_locals", "missed_local_rate", "total_core_flips",
                 "false_first", "first_signal_precision", "median_lag_ms",
                 "median_entry_distance_bps", "median_adverse_extension_bps",
-                "median_remaining_swing_fraction", "completed_swing_true_first",\n                "completed_swing_missed", "completed_swing_missed_rate",\n                "completed_swing_recall", "completed_swing_wrong_first",\n                "completed_swing_false_first", "completed_swing_first_signal_precision",\n                "completed_swing_median_lag_ms",\n                "completed_swing_median_entry_distance_bps",\n                "completed_swing_median_adverse_extension_bps",\n                "completed_swing_median_remaining_swing_fraction")}
+                "median_remaining_swing_fraction", "completed_swing_true_first",
+                "completed_swing_missed", "completed_swing_missed_rate",
+                "completed_swing_recall", "completed_swing_wrong_first",
+                "completed_swing_false_first", "completed_swing_first_signal_precision",
+                "completed_swing_median_lag_ms",
+                "completed_swing_median_entry_distance_bps",
+                "completed_swing_median_adverse_extension_bps",
+                "completed_swing_median_remaining_swing_fraction")}
             for k, v in result["first_signal"].items()
         },
     }
