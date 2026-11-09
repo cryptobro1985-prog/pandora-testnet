@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="900" viewBox="0 0 420 900">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#07131b"/><stop offset="1" stop-color="#030609"/></linearGradient>
+  <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#55efff"/><stop offset="1" stop-color="#57f59b"/></linearGradient>
+  <filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  <style>
+    text{font-family:Inter,Arial,sans-serif;fill:#eef7ff} .muted{fill:#8294aa}.cyan{fill:#55efff}.green{fill:#57f59b}.red{fill:#ff6677}.amber{fill:#ffc857}
+    .k{font-size:10px;font-weight:800;letter-spacing:1.2px}.v{font-size:24px;font-weight:900}.s{font-size:12px}.xs{font-size:10px}
+    .card{fill:#0b1119;stroke:#1d2b3c;stroke-width:1}.line{stroke:#182534;stroke-width:1}
+  </style>
+</defs>
+<rect width="420" height="900" fill="url(#bg)"/>
+<circle cx="360" cy="60" r="110" fill="#0b3344" opacity=".22"/>
+<text x="20" y="32" class="k cyan">PANDORA · HYPE · LOCAL ONLY</text>
+<text x="20" y="62" class="v">Local Engine</text>
+<circle id="liveDot" cx="382" cy="31" r="5" fill="#57f59b" filter="url(#glow)"/>
+<text id="live" x="367" y="51" class="xs green">LIVE</text>
+<text id="updated" x="20" y="82" class="xs muted">09.11.2026, 00:21:19</text>
+
+<rect x="14" y="100" width="190" height="108" rx="16" class="card"/>
+<text x="28" y="122" class="k muted">СТАТУС</text><text id="status" x="28" y="154" class="v cyan">LEARNING_LIVE</text>
+<text id="fresh" x="28" y="179" class="xs muted">live GitHub status</text>
+
+<rect x="216" y="100" width="190" height="108" rx="16" class="card"/>
+<text x="230" y="122" class="k muted">СЛЕДУЮЩИЙ LOCAL</text><text id="expected" x="230" y="154" class="v amber">LOW</text>
+<text x="230" y="179" class="xs muted">terminal structure</text>
+
+<rect x="14" y="220" width="392" height="154" rx="16" class="card"/>
+<text x="28" y="244" class="k muted">ТЕКУЩИЙ КАНДИДАТ</text>
+<text id="candidate" x="28" y="276" class="v green">LOW @ 74.2445</text>
+<line x1="28" y1="294" x2="392" y2="294" class="line"/>
+<text x="28" y="316" class="s muted">Stage</text><text id="stage" x="392" y="316" text-anchor="end" class="s">FORMING</text>
+<text x="28" y="340" class="s muted">Age</text><text id="age" x="392" y="340" text-anchor="end" class="s">1365s</text>
+<text x="28" y="362" class="s muted">P60 / P180 / P300</text><text id="probs" x="392" y="362" text-anchor="end" class="s cyan">92.5% / 1.1% / 0.0%</text>
+
+<rect x="14" y="386" width="190" height="150" rx="16" class="card"/>
+<text x="28" y="410" class="k muted">ОБУЧЕНИЕ</text>
+<text x="28" y="438" class="s muted">Strict labels</text><text id="strict" x="190" y="438" text-anchor="end" class="s">205</text>
+<text x="28" y="462" class="s muted">Internal labels</text><text id="internal" x="190" y="462" text-anchor="end" class="s">177</text>
+<text x="28" y="486" class="s muted">Pending</text><text id="pending" x="190" y="486" text-anchor="end" class="s">68</text>
+<text x="28" y="510" class="s muted">Inputs</text><text id="inputs" x="190" y="510" text-anchor="end" class="s green">86/86</text>
+
+<rect x="216" y="386" width="190" height="150" rx="16" class="card"/>
+<text x="230" y="410" class="k muted">CORTEX</text>
+<text id="cortex" x="230" y="440" class="v amber">DEGRADED</text>
+<text x="230" y="470" class="s muted">Errors</text><text id="errors" x="392" y="470" text-anchor="end" class="s red">15</text>
+<text x="230" y="496" class="s muted">Calls</text><text id="calls" x="392" y="496" text-anchor="end" class="s">0</text>
+<text x="230" y="520" class="xs muted">JEPA: research/offline</text>
+
+<rect x="14" y="548" width="392" height="142" rx="16" class="card"/>
+<text x="28" y="572" class="k muted">СВЯЗИ / FLOW</text>
+<text x="28" y="600" class="s muted">Поддерживают Local</text><text id="supports" x="392" y="600" text-anchor="end" class="s green">8</text>
+<text x="28" y="624" class="s muted">Противоречат</text><text id="contradicts" x="392" y="624" text-anchor="end" class="s red">8</text>
+<text x="28" y="648" class="s muted">Парные связи</text><text id="pairs" x="392" y="648" text-anchor="end" class="s cyan">8</text>
+<text id="toprel" x="28" y="674" class="xs muted">trade_count_5s</text>
+
+<rect x="14" y="702" width="392" height="126" rx="16" class="card"/>
+<text x="28" y="726" class="k muted">СТРУКТУРА H1</text>
+<text x="28" y="754" class="s muted">Последний Local</text><text id="lastlocal" x="392" y="754" text-anchor="end" class="s">HIGH @ 78.133</text>
+<text x="28" y="778" class="s muted">Активная нога</text><text id="leg" x="392" y="778" text-anchor="end" class="s">DOWN_TO_NEXT_LOW</text>
+<text x="28" y="802" class="s muted">Regime</text><text id="regime" x="392" y="802" text-anchor="end" class="s">MIXED_STRUCTURE</text>
+
+<rect x="14" y="842" width="392" height="42" rx="14" fill="#10151c" stroke="#35222a"/>
+<text x="28" y="868" class="k red">REAL ORDERS OFF</text><text x="392" y="868" text-anchor="end" class="xs muted">refresh 10s</text>
+
+<script><![CDATA[
+const API="https://api.github.com/repos/cryptobro1985-prog/pandora-testnet/issues/24";
+const q=id=>document.getElementById(id);
+const pct=v=>v==null?"—":(Number(v)*100).toFixed(1)+"%";
+function parse(body){const a=(body||"").indexOf("~~~json"),s=(body||"").indexOf("{",a>=0?a:0),e=(body||"").lastIndexOf("}");return JSON.parse((body||"").slice(s,e+1))}
+function set(id,v){const e=q(id);if(e)e.textContent=v==null?"—":String(v)}
+async function tick(){
+ try{
+  const r=await fetch(API+"?t="+Date.now(),{cache:"no-store",headers:{Accept:"application/vnd.github+json"}});
+  if(!r.ok)throw Error("HTTP "+r.status);
+  const j=await r.json(),x=parse(j.body),c=x.candidate||{},rel=c.relationship_evidence||{},co=x.cortex||{},last=x.last_teacher_local||{},st=x.structure_48h||{};
+  const age=Math.max(0,(Date.now()-Number(x.updated_ts_ms||Date.now()))/1000);
+  set("live",age<180?"LIVE":"STALE"); q("live").setAttribute("class",age<180?"xs green":"xs amber"); q("liveDot").setAttribute("fill",age<180?"#57f59b":"#ffc857");
+  set("updated",new Date(Number(x.updated_ts_ms||Date.now())).toLocaleString("ru-RU")+" · age "+Math.round(age)+"s");
+  set("status",x.status); set("expected",x.expected_side);
+  set("candidate",(c.side||"WAIT")+" @ "+(c.extreme_price??"—")); set("stage",c.stage); set("age",Math.round(c.age_s||0)+"s");
+  set("probs",[c.probabilities?.["60"],c.probabilities?.["180"],c.probabilities?.["300"]].map(pct).join(" / "));
+  set("strict",x.live_labels);set("internal",x.internal_live_labels);set("pending",x.pending_labels);set("inputs",(x.seen_input_count??0)+"/86");
+  set("cortex",x.cortex_state||co.state);set("errors",co.errors??0);set("calls",co.calls??0);
+  set("supports",(rel.supports||[]).length);set("contradicts",(rel.contradicts||[]).length);set("pairs",(rel.pairs||[]).length);set("toprel",(rel.supports||[])[0]?.feature||"—");
+  set("lastlocal",(last.side||"—")+" @ "+(last.price??"—"));set("leg",st.active_leg);set("regime",st.regime);
+ }catch(e){set("live","RECONNECT");q("live").setAttribute("class","xs red");}
+}
+tick(); setInterval(tick,10000);
+]]></script>
+</svg>
