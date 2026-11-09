@@ -1,0 +1,153 @@
+{
+  "status": "FROZEN_FINAL_RESEARCH_PORTFOLIO_2026-11-09",
+  "target": "STRICT_H1_L6_K2_TERMINAL_LOCALS",
+  "reference": {
+    "total": 264,
+    "low": 132,
+    "high": 132,
+    "early_evaluable_low": 131,
+    "early_evaluable_high": 131
+  },
+  "ultra_early_sensor": {
+    "5m": {
+      "LOW": {
+        "true_local_median_distance_pct": 0.4143883902472556,
+        "p90_distance_pct": 0.9492847854356112,
+        "raw_first_signal_precision": 0.203125,
+        "raw_first_signal_tp": 26,
+        "raw_first_signal_fp": 102
+      },
+      "HIGH": {
+        "true_local_median_distance_pct": 0.2895193977996424,
+        "p90_distance_pct": 0.7807807807807876,
+        "raw_first_signal_precision": 0.18110236220472442,
+        "raw_first_signal_tp": 23,
+        "raw_first_signal_fp": 104
+      }
+    },
+    "10m": {
+      "LOW": {
+        "true_local_median_distance_pct": 0.5964289758786157,
+        "p90_distance_pct": 1.1577181208053622,
+        "raw_first_signal_precision": 0.25,
+        "raw_first_signal_tp": 32,
+        "raw_first_signal_fp": 96
+      },
+      "HIGH": {
+        "true_local_median_distance_pct": 0.4107272287992237,
+        "p90_distance_pct": 1.0339734121122657,
+        "raw_first_signal_precision": 0.23622047244094488,
+        "raw_first_signal_tp": 30,
+        "raw_first_signal_fp": 97
+      }
+    },
+    "15m": {
+      "LOW": {
+        "true_local_median_distance_pct": 0.6522641215830793,
+        "p90_distance_pct": 1.3315579227696441,
+        "raw_first_signal_precision": 0.2890625,
+        "raw_first_signal_tp": 37,
+        "raw_first_signal_fp": 91
+      },
+      "HIGH": {
+        "true_local_median_distance_pct": 0.49808872929457676,
+        "p90_distance_pct": 1.0716365754222412,
+        "raw_first_signal_precision": 0.2440944881889764,
+        "raw_first_signal_tp": 31,
+        "raw_first_signal_fp": 96
+      }
+    },
+    "role": "SENSOR_PROBE_ONLY",
+    "core_flip_authorized": false
+  },
+  "balanced": {
+    "LOW": {
+      "age_min": 90,
+      "rule": [
+        {"feature": "retrace_bps", "op": ">=", "threshold": 157.4381307894379},
+        {"feature": "ret_180", "op": ">=", "threshold": 0.0030567247945481046}
+      ],
+      "first_signal": {
+        "episodes": 128,
+        "accepted": 26,
+        "tp": 25,
+        "fp": 1,
+        "precision": 0.9615384615384616,
+        "recall": 0.1953125,
+        "median_distance_pct": 2.3551586575412564,
+        "p90_distance_pct": 3.6675817918409415,
+        "worst_distance_pct": 6.184957426679283
+      }
+    },
+    "HIGH": {
+      "age_min": 90,
+      "rule": [
+        {"feature": "pos_1440", "op": "<=", "threshold": 0.30008171843412257}
+      ],
+      "first_signal": {
+        "episodes": 128,
+        "accepted": 20,
+        "tp": 19,
+        "fp": 1,
+        "precision": 0.95,
+        "recall": 0.1484375,
+        "median_distance_pct": 1.7027314650585268,
+        "p90_distance_pct": 2.9432922593322264,
+        "worst_distance_pct": 5.0950927447757755
+      }
+    },
+    "role": "BEST_BALANCED_HISTORICAL_TRANSFER_CANDIDATE",
+    "core_flip_authorized": false
+  },
+  "max_precision": {
+    "LOW": {
+      "age_min": 120,
+      "rule": [
+        {"feature": "eff_120", "op": ">=", "threshold": 0.27229547311228147}
+      ],
+      "first_signal": {
+        "episodes": 128,
+        "accepted": 12,
+        "tp": 12,
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 0.09375,
+        "median_distance_pct": 2.6996584812979285,
+        "p90_distance_pct": 5.317100693165997,
+        "worst_distance_pct": 6.6461684011352995
+      }
+    },
+    "HIGH": {
+      "age_min": 120,
+      "rule": [
+        {"feature": "pos_1440", "op": "<=", "threshold": 0.262798227529951}
+      ],
+      "first_signal": {
+        "episodes": 128,
+        "accepted": 17,
+        "tp": 17,
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 0.1328125,
+        "median_distance_pct": 1.7843081108168124,
+        "p90_distance_pct": 3.416811475749289,
+        "worst_distance_pct": 4.195214504058187
+      }
+    },
+    "role": "MAX_PRECISION_DEVELOPMENT_TRANSFER_OBSERVED",
+    "core_flip_authorized": false,
+    "warning": "Zero historical first-signal errors does not guarantee future 100% precision; these candidates were inspected after chronological validation."
+  },
+  "terminal_state_machine": {
+    "states": [
+      "WATCH",
+      "PROBE_SENSOR",
+      "PROBABLE_SHADOW",
+      "K2_PIVOT_PROVISIONAL",
+      "PIVOT_REPLACED",
+      "TERMINAL_FINAL_AND_FLIP"
+    ],
+    "terminal_final_rule": "pending K2 pivot becomes terminal final only after opposite K2 pivot confirms"
+  },
+  "verdict": "No 0.3-0.7% early rule with high cross-regime first-signal precision was found. Best current architecture is ultra-early sensor plus abstention, balanced/high-precision shadows, then structural provisional/final confirmation."
+}
