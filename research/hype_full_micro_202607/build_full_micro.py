@@ -17,8 +17,17 @@ API="https://api.cryptohftdata.com/v1/download"
 BYBIT_RATIO="https://api.bybit.com/v5/market/account-ratio"
 SYMBOL="HYPEUSDT"
 EXCHANGE="bybit"
-START=datetime(2026,7,12,17,tzinfo=timezone.utc)
-END=datetime(2026,8,7,0,tzinfo=timezone.utc)
+def _env_dt(name, fallback):
+    raw=(os.getenv(name) or "").strip()
+    if not raw:
+        return fallback
+    value=datetime.fromisoformat(raw.replace("Z","+00:00"))
+    if value.tzinfo is None:
+        value=value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+START=_env_dt("HYPE_FULL_MICRO_START_UTC",datetime(2026,7,12,17,tzinfo=timezone.utc))
+END=_env_dt("HYPE_FULL_MICRO_END_UTC",datetime(2026,8,7,0,tzinfo=timezone.utc))
 DELAYS=(0,30,60,180,300)
 WINDOWS=(5,15,30,60,180,300)
 MICRO_QUALITY_CONTRACT="decoded-liquidations-continuous-book-v1"
