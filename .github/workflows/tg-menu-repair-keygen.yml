@@ -1,0 +1,30 @@
+name: TG Menu Repair Keygen
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/tg-menu-repair-keygen.yml"
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  keygen:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate one-time RSA key
+        shell: bash
+        run: |
+          set -euo pipefail
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out private.pem >/dev/null 2>&1
+          openssl pkey -in private.pem -pubout -out public.pem >/dev/null 2>&1
+          echo "PUBKEY_B64=$(base64 -w0 public.pem)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TG-MENU-REPAIR-KEY
+          path: private.pem
+          retention-days: 1
+          if-no-files-found: error
