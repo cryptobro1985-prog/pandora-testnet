@@ -7,6 +7,7 @@ on:
       - research/hype-h1-local-v5-oi-microstructure-20261104
     paths:
       - "research/hype_full_micro_202607/**"
+      - "!research/hype_full_micro_202607/results/**"
       - ".github/workflows/hype-full-micro-202607.yml"
 
 permissions:
@@ -27,7 +28,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: research/hype-h1-local-v5-oi-microstructure-20261104
           fetch-depth: 1
 
       - name: Publish RUNNING marker
