@@ -2,9 +2,9 @@
   "schema_version": 1,
   "objective": "Earlier causal terminal H1 L6/K2 LOW/HIGH recognition with actionable first-signal precision, useful recall, and distance around 30–70 bps.",
   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
-  "head_sha": "6771d5a4232e413c464212e3d5f4070fa9d289d3",
+  "head_sha": "94d1f6765ba8e4b813edd73c7b85c3dd5ad4164a",
   "head_sha_basis": "Parent/input revision of this checkpoint. The checkpoint revision is resolved by git log -1 -- this file.",
-  "stage": "frozen_sanity_passed",
+  "stage": "cycle_complete_current_hypotheses_rejected",
   "completed_experiments": [
     {
       "id": "reuse-handoff-20261109",
@@ -21,6 +21,30 @@
     {
       "id": "strict-m1-trajectory-v1-sanity",
       "verdict": "Frozen two ordered, disjoint-window trajectory families per side. Seven new tests and six existing first-signal checks passed. First 4,320 Jul M1 bars exposed both sides with 0–59.999 s rounding after the requested ages. No labels were loaded for the sanity slice."
+    },
+    {
+      "id": "strict-m1-trajectory-v1-dev-low-retrace_band_only",
+      "verdict": "Matched 30–70 bps control under the new strict, quality-scoped actionable first-signal contract."
+    },
+    {
+      "id": "strict-m1-trajectory-v1-dev-low-efficiency_handoff",
+      "verdict": "Precision and recall both declined versus the matched control, with greater median true-entry distance and latency."
+    },
+    {
+      "id": "strict-m1-trajectory-v1-dev-low-old_side_absorption",
+      "verdict": "Only one TP, and precision and recall both declined versus the matched control."
+    },
+    {
+      "id": "strict-m1-trajectory-v1-dev-high-retrace_band_only",
+      "verdict": "Matched 30–70 bps control under the new strict, quality-scoped actionable first-signal contract."
+    },
+    {
+      "id": "strict-m1-trajectory-v1-dev-high-efficiency_handoff",
+      "verdict": "Precision improved by 3.53 percentage points with equal TP count, below the 12-point gain and 35% absolute gates. Median true-entry latency increased by 285 s."
+    },
+    {
+      "id": "strict-m1-trajectory-v1-dev-high-old_side_absorption",
+      "verdict": "Only one TP. Precision and recall both declined versus the matched control."
     }
   ],
   "rejected_hypotheses": [
@@ -35,35 +59,38 @@
     {
       "family": "HIGH Flow V2 resurrection",
       "why": "Previously failed sealed late August"
+    },
+    {
+      "side": "LOW",
+      "family": "efficiency_handoff",
+      "why": "Precision and recall both declined versus the matched control, with greater median true-entry distance and latency."
+    },
+    {
+      "side": "LOW",
+      "family": "old_side_absorption",
+      "why": "Only one TP, and precision and recall both declined versus the matched control."
+    },
+    {
+      "side": "HIGH",
+      "family": "efficiency_handoff",
+      "why": "Precision improved by 3.53 percentage points with equal TP count, below the 12-point gain and 35% absolute gates. Median true-entry latency increased by 285 s."
+    },
+    {
+      "side": "HIGH",
+      "family": "old_side_absorption",
+      "why": "Only one TP. Precision and recall both declined versus the matched control."
     }
   ],
   "active_hypotheses": {
-    "LOW": [
-      {
-        "rank": 1,
-        "family": "efficiency_handoff"
-      },
-      {
-        "rank": 2,
-        "family": "old_side_absorption"
-      }
-    ],
-    "HIGH": [
-      {
-        "rank": 1,
-        "family": "efficiency_handoff"
-      },
-      {
-        "rank": 2,
-        "family": "old_side_absorption"
-      }
-    ]
+    "LOW": [],
+    "HIGH": []
   },
   "exact_commands": [
     "git clone --single-branch --depth=1 --branch research/hype-h1-local-v5-oi-microstructure-20261104 https://github.com/cryptobro1985-prog/pandora-testnet.git pandora-testnet",
     "sha256sum hype-work-cache/master.zip",
     "unzip -l hype-work-cache/master.zip",
-    "python -m unittest research.hype_false_local_entry.test_early_trajectory"
+    "python -m unittest research.hype_false_local_entry.test_early_trajectory",
+    "python -W error -m research.hype_false_local_entry.replay_early_trajectory --master ../hype-work-cache/master.zip --rules research/hype_work_handoff_2026-11-09/EARLY_TRAJECTORY_RULES_V1.json --period 01_JUL12_AUG07_FULL_MICRO --output research/hype_work_handoff_2026-11-09/EARLY_TRAJECTORY_DEV_V1.json"
   ],
   "artifact_result_paths": {
     "master_artifact_id": 13650399622,
@@ -74,7 +101,11 @@
       "replay_early_trajectory.py": "19746187cc5bedac1b0cc73d5a085824d1384ea184c3232d4f0d30a3c76ec348",
       "early_trajectory_features.py": "a7e2cc92bbf0a41cd4395bc76e4731686dcb36c90e3894f005ec5b2b256a3266",
       "first_signal_objective.py": "f10e3bb0d3aa8167ee8726cf3062460109a376b8acf9840efb957586817e919c"
-    }
+    },
+    "development_result": "research/hype_work_handoff_2026-11-09/EARLY_TRAJECTORY_DEV_V1.json",
+    "development_result_sha256": "a7b511be9be849080e40ebd6ec6bca6d8d6cc36cf9f3d34b493cd2f2b4c3af78",
+    "report": "research/hype_work_handoff_2026-11-09/EARLY_TRAJECTORY_REPORT_2026-11-09.md",
+    "source_freeze_commit": "94d1f6765ba8e4b813edd73c7b85c3dd5ad4164a"
   },
   "frozen_thresholds_model_hashes": {
     "LOW": {
@@ -88,17 +119,29 @@
       "old_side_absorption": "2078bd6c54b7e6939f6d84ab1f599c42052c157b1c8963043f65374187ce7432"
     }
   },
-  "next_cheapest_useful_action": "python -W error -m research.hype_false_local_entry.replay_early_trajectory --master ../hype-work-cache/master.zip --rules research/hype_work_handoff_2026-11-09/EARLY_TRAJECTORY_RULES_V1.json --period 01_JUL12_AUG07_FULL_MICRO --output research/hype_work_handoff_2026-11-09/EARLY_TRAJECTORY_DEV_V1.json",
+  "next_cheapest_useful_action": "Locate an existing corrected full-micro artifact or archived 5 s tape. Verify chronological book sequencing, positive spread, and explicit liquidation/OI availability before a new paired trajectory experiment. Reuse the M1 layer and the strict first-signal contract. Reopen a rejected rule only after new data or a concrete contract defect.",
   "expensive_actions_not_yet_justified": [
-    "Rebuild/redownload archives",
-    "model sweep",
-    "sealed May/June replay",
-    "live changes"
+    "Chronological replay of the rejected rules or threshold retuning",
+    "Sealed May/June scoring or forward deployment of the rejected rules",
+    "Broader parameter/model sweep",
+    "Blind rerun of the cancelled full-micro rebuild"
   ],
   "known_blockers": [
     "Jul-Aug archived rich snapshots: 822/6260 crossed books passed the old valid flag, and 0/6260 have per-window liquidation availability masks. Corrected rebuild run 42569690392 has failed status and no artifact.",
     "Only July and October have saved subminute snapshots, with different candidate lifetimes; 90 s is absent from both. Middle regimes and the master-wide comparison are limited to M1 prices and executed flow.",
     "HARD120 four-regime baseline and May Ultra Survival V2 use internal L3/K1 swings. The new score uses strict terminal L6/K2, so these are context, not matched controls."
   ],
-  "real_orders": false
+  "real_orders": false,
+  "validation_stages": {
+    "development": "completed, no survivors",
+    "chronological_transfer": "gate closed",
+    "sealed_may": "unscored",
+    "sealed_june": "unscored",
+    "forward": "unscored"
+  },
+  "test_status": {
+    "new_trajectory_tests_passed": 7,
+    "existing_scoring_timestamp_k2_checks_passed": 12,
+    "existing_full_micro_suite": "unavailable locally: Polars dependency missing"
+  }
 }
