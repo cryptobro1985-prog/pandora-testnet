@@ -1,0 +1,74 @@
+{
+  "status": "FROZEN_RESEARCH_ONLY",
+  "date": "2026-11-09",
+  "strict_reference": "H1 L6/K2 terminal-local state machine",
+  "development_zero_false": {
+    "LOW": {
+      "precision_history": 1.0,
+      "true": 78,
+      "false": 0,
+      "coverage": 0.5954198473,
+      "median_latency_min": 90,
+      "median_distance_pct": 1.709,
+      "p90_distance_pct": 2.791,
+      "worst_distance_pct": 10.225
+    },
+    "HIGH": {
+      "precision_history": 1.0,
+      "true": 75,
+      "false": 0,
+      "coverage": 0.5725190840,
+      "median_latency_min": 120,
+      "median_distance_pct": 1.500,
+      "p90_distance_pct": 2.761,
+      "worst_distance_pct": 5.095
+    },
+    "warning": "Selected using all four stored historical regimes. Development-fit only; not OOS and not a future guarantee."
+  },
+  "honest_chronological_plus90": {
+    "LOW": {
+      "rule": [
+        {"feature":"retrace_bps","op":">=","threshold":157.4381307894379},
+        {"feature":"ret_180","op":">=","threshold":0.0030567247945481046}
+      ],
+      "validation_true": 19,
+      "validation_false": 1,
+      "validation_precision": 0.95,
+      "validation_recall_vs_true_candidates": 0.1759259259,
+      "median_distance_pct": 2.6653128570,
+      "p90_distance_pct": 3.8156512961,
+      "worst_distance_pct": 6.1849574267,
+      "median_latency_min": 90,
+      "per_period": {
+        "lateaug":{"true":5,"false":0,"precision":1.0},
+        "september":{"true":8,"false":1,"precision":0.8888888889},
+        "octnov":{"true":6,"false":0,"precision":1.0}
+      }
+    },
+    "HIGH": {
+      "rule": [
+        {"feature":"pos_1440","op":"<=","threshold":0.30008171843412257}
+      ],
+      "validation_true": 13,
+      "validation_false": 1,
+      "validation_precision": 0.9285714286,
+      "validation_recall_vs_true_candidates": 0.1203703704,
+      "median_distance_pct": 1.7027314651,
+      "p90_distance_pct": 3.1233006658,
+      "worst_distance_pct": 5.0950927448,
+      "median_latency_min": 90,
+      "per_period": {
+        "lateaug":{"true":2,"false":1,"precision":0.6666666667},
+        "september":{"true":8,"false":0,"precision":1.0},
+        "octnov":{"true":3,"false":0,"precision":1.0}
+      }
+    },
+    "selection_protocol": "Thresholds selected on Jul/Aug only. Late-Aug, September and Oct/Nov scored without retuning.",
+    "warning": "Retrospective pseudo-OOS because later periods have been inspected elsewhere in the project."
+  },
+  "forward_policy": {
+    "retune": false,
+    "real_orders": false,
+    "states": ["WATCH","PROBABLE_SHADOW","UNCERTAIN","K2_PIVOT_PROVISIONAL","PIVOT_REPLACED","TERMINAL_FINAL_AND_FLIP"]
+  }
+}
