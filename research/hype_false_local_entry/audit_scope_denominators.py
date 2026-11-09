@@ -31,13 +31,20 @@ def audit():
         assert octnov[side]["true_first"] + octnov[side]["false_first"] >= 0
     assert sum(octnov[s]["true_first"] for s in ("LOW", "HIGH")) == octnov["true_first"]
     assert sum(octnov[s]["false_first"] for s in ("LOW", "HIGH")) == octnov["false_first"]
+    # A 120-row next-target sample is independently reported. It does not
+    # establish which swing was omitted or why; require per-swing IDs.
+    next_target_n = first["true_internal_local_tradeoff"]["sample_with_next_target"]
+    reported_n = octnov["episodes"]
+    discrepancy = swings["internal"] - reported_n
     out = {
-        "status": "UNRECONCILED" if octnov["episodes"] != swings["internal"] else "MATCH",
+        "status": "UNRECONCILED" if discrepancy else "MATCH",
         "expected_completed_internal_swings": swings["internal"],
         "reported_octnov_episodes": octnov["episodes"],
-        "unaccounted_completed_swings": swings["internal"] - octnov["episodes"],
+        "unaccounted_completed_swings": discrepancy,
+        "next_target_sample_matches_reported_episodes": next_target_n == reported_n,
+        "reconciliation_required": "Compare per-swing IDs and exclusion reasons, including next-target availability and +60m checkpoint; matching counts alone do not prove matching cohorts.",
         "first_signal_report_tradeoff_sample": first["true_internal_local_tradeoff"]["sample_with_next_target"],
-        "warning": "Aggregate counts cannot identify missing swing IDs. Do not relabel 120/121 as complete recall.",
+        "warning": "Both reports contain 120-row samples, but aggregate counts cannot identify omitted swing IDs or justify the exclusion. Do not relabel 120/121 as complete recall.",
         "candidate_reachability": "122/122 internal; 76/76 strict (separate from signal recall)",
         "real_orders": "OFF",
     }
