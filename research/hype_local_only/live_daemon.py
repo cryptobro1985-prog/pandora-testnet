@@ -481,7 +481,7 @@ def main():
                             "probability":float(ttc_decision.score),
                             "evidence_score":float(ttc_decision.score),
                             "target_side":ttc_decision.target_side,
-                            "teacher":INTERNAL.name,
+                            "teacher":STRICT.name,
                             "shadow_contract":"TIME_TO_CONFIRMATION_V1",
                             "core_flip_authorized":False,
                             "research_only":True,"real_orders":False,
