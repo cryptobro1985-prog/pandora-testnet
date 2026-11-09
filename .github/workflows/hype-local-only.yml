@@ -65,7 +65,8 @@ jobs:
             research/hype_false_local_entry/time_to_confirmation_live.py
           python -m unittest \
             research.hype_false_local_entry.test_time_to_confirmation_engine \
-            research.hype_false_local_entry.test_time_to_confirmation_live
+            research.hype_false_local_entry.test_time_to_confirmation_live \
+            research.hype_local_only.test_forward_first_signal_scope
 
       - name: Cancel deprecated Caterpillar / Direct-Policy live runs
         env:
@@ -322,6 +323,7 @@ jobs:
             --labels local_cp/LOCAL_LIVE_LABELS.jsonl \
             --events local_cp/LOCAL_EVENTS.jsonl \
             --event-name TTC_SHADOW_SIGNAL \
+            --teacher-scope STRICT \
             --actionable \
             --output local_cp/TTC_FORWARD_STATUS.json
           for STAGE in 30 60 90 180 300; do
@@ -329,6 +331,7 @@ jobs:
               --labels local_cp/LOCAL_LIVE_LABELS.jsonl \
               --events local_cp/LOCAL_EVENTS.jsonl \
               --event-name TTC_SHADOW_SIGNAL \
+              --teacher-scope STRICT \
               --stage "$STAGE" \
               --actionable \
               --output "local_cp/TTC_${STAGE}S_FORWARD_STATUS.json"
