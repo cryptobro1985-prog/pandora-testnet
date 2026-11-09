@@ -1,0 +1,67 @@
+name: HYPE Local Signature Bootstrap
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-local-signature-bootstrap.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install learner
+        run: python -m pip install river
+      - name: Download finalized 30D Local artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p signature_history signature_out
+          ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=local116-HYPE" \
+            --jq '.artifacts | map(select((.expired|not) and .name=="local116-HYPE")) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          test -n "$ID"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$ID/zip" > history.zip
+          unzip -q history.zip -d signature_history
+          test -s signature_history/candidate_snapshots.jsonl.gz
+          test -s signature_history/labels.json.gz
+      - name: Train event-driven signature bootstrap
+        run: |
+          python -m research.hype_false_local_entry.pretrain_local_signature \
+            --snapshots signature_history/candidate_snapshots.jsonl.gz \
+            --labels-gz signature_history/labels.json.gz \
+            --model-out signature_out/local_signature_model.pkl \
+            --report-out signature_out/LOCAL_SIGNATURE_BOOTSTRAP_REPORT.json
+          cat signature_out/LOCAL_SIGNATURE_BOOTSTRAP_REPORT.json
+      - name: Publish latest bootstrap report
+        run: |
+          set -euo pipefail
+          mkdir -p research/hype_false_local_entry/results
+          cp signature_out/LOCAL_SIGNATURE_BOOTSTRAP_REPORT.json \
+             research/hype_false_local_entry/results/LOCAL_SIGNATURE_BOOTSTRAP_LATEST.json
+          git config user.name "pandora-research-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add research/hype_false_local_entry/results/LOCAL_SIGNATURE_BOOTSTRAP_LATEST.json
+          git commit -m "research: publish Local Signature bootstrap result [skip ci]" || true
+          git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104 || true
+          git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104 || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-LOCAL-SIGNATURE-BOOTSTRAP-${{ github.run_id }}
+          path: signature_out/**
+          retention-days: 30
+          compression-level: 9
