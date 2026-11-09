@@ -405,12 +405,23 @@ def main():
                     quality_ok=bool(sigmeta["quality_ok"]),
                     decisive_evidence=sigmeta["evidence"],
                 )
-                signature_pending.append(SignaturePending(
-                    candidate_id=sc.candidate_id,side=sig_side,
-                    extreme_price=float(sc.extreme_price),
-                    extreme_ts_ms=int(sc.extreme_ts_ms),x=sigx,
-                    mature_ms=((int(sc.extreme_ts_ms)//H)*H)+3*H,
-                ))
+                # Keep only materially distinct signature states for later
+                # teacher learning. Decision scoring still runs every sample.
+                # This prevents one long-lived candidate from contributing
+                # hundreds of near-duplicate labels.
+                training_key=(
+                    sigdec.state,
+                    int(max(0.0,min(0.999999,float(sigdec.score)))*20),
+                    bool(sigdec.quality_ok),
+                )
+                if sc.evidence.get("signature_training_key")!=training_key:
+                    sc.evidence["signature_training_key"]=training_key
+                    signature_pending.append(SignaturePending(
+                        candidate_id=sc.candidate_id,side=sig_side,
+                        extreme_price=float(sc.extreme_price),
+                        extreme_ts_ms=int(sc.extreme_ts_ms),x=sigx,
+                        mature_ms=((int(sc.extreme_ts_ms)//H)*H)+3*H,
+                    ))
                 append_jsonl(evlog,{
                     "event":"LOCAL_SIGNATURE_STATE",
                     "ts_ms":int(ts),"signal_ts_ms":int(ts),
@@ -422,12 +433,14 @@ def main():
                     "input_coverage":float(sigdec.input_coverage),
                     "seen_input_count":int(sigdec.seen_input_count),
                     "quality_ok":bool(sigdec.quality_ok),
+                    "expected_side_ok":bool(expected_side_ok),
                     "evidence":sigdec.decisive_evidence,
                     "age_s_metric_only":sigmeta["age_s_metric_only"],
                     "time_gate":False,
                     "research_only":True,"real_orders":False,
                 })
-                if sigdec.enter and signature_emitted.get(sig_side)!=sc.candidate_id:
+                expected_side_ok=(signature_expected is None or sig_side==signature_expected)
+                if sigdec.enter and expected_side_ok and signature_emitted.get(sig_side)!=sc.candidate_id:
                     signature_emitted[sig_side]=sc.candidate_id
                     signature_expected="HIGH" if sig_side=="LOW" else "LOW"
                     append_jsonl(evlog,{
@@ -457,6 +470,7 @@ def main():
                     "seen_input_count":int(sigdec.seen_input_count),
                     "input_coverage":float(sigdec.input_coverage),
                     "quality_ok":bool(sigdec.quality_ok),
+                    "expected_side_ok":bool(expected_side_ok),
                     "evidence":sigdec.decisive_evidence,
                     "age_s_metric_only":sigmeta["age_s_metric_only"],
                     "time_gate":False,
@@ -476,6 +490,7 @@ def main():
                 if recovered and (last_teacher is None or int(recovered["hour_ms"])>=int(last_teacher.get("hour_ms",0))):
                     last_teacher=recovered
                     expected="HIGH" if recovered["side"]=="LOW" else "LOW"
+                    signature_expected=expected
 
             piv=strict_pivots(state,ts)
             if piv:
@@ -485,6 +500,7 @@ def main():
                     # Teacher Local is authoritative for the active structural leg:
                     # after LOW we search HIGH; after HIGH we search LOW.
                     expected="LOW" if latest["side"]=="HIGH" else "HIGH"
+                    signature_expected=expected
 
             # Dense causal proposals: 5m / 15m / 60m / 6h. These only propose;
             # strict H1 L6/K2 remains the teacher.
