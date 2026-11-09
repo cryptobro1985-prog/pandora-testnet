@@ -18,7 +18,8 @@ permissions:
 
 concurrency:
   group: hype-local-only
-  cancel-in-progress: false
+  # Prefer the newest Local Signature code; stale live cycles must not block it.
+  cancel-in-progress: true
 
 env:
   HYPE_REST_RELAY_URL: ""
