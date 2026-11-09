@@ -77,7 +77,8 @@ def terminal_internal_labels(rows: list[dict]) -> list[dict]:
 
 
 def internal_signal_records(events: list[dict], labels: list[dict],
-                            event_names="INTERNAL_TACTICAL_SIGNAL") -> list[dict]:
+                            event_names="INTERNAL_TACTICAL_SIGNAL",
+                            stages: set[int] | None=None) -> list[dict]:
     if isinstance(event_names,str):
         names={event_names}
     else:
@@ -88,12 +89,15 @@ def internal_signal_records(events: list[dict], labels: list[dict],
     for r in events:
         if r.get("event") not in names:
             continue
+        stage=int(r.get("stage") or 0)
+        if stages is not None and stage not in stages:
+            continue
         if r.get("candidate_ts_ms") is None:
             continue
         cid=str(r.get("candidate_id") or "")
         # One candidate can be accepted at several stages.  Keep each stage;
         # summarize_first_signals will choose the earliest signal in the swing.
-        key=(cid,int(r.get("stage") or 0),int(r.get("signal_ts_ms") or r.get("ts_ms") or 0))
+        key=(cid,stage,int(r.get("signal_ts_ms") or r.get("ts_ms") or 0))
         if key in seen:
             continue
         seen.add(key)
@@ -106,7 +110,7 @@ def internal_signal_records(events: list[dict], labels: list[dict],
             "accepted":True,
             "internal_true":lid is not None,
             "internal_label_id":lid,
-            "stage":int(r.get("stage") or 0),
+            "stage":stage,
             "probability":r.get("probability"),
         })
     return out
@@ -114,12 +118,14 @@ def internal_signal_records(events: list[dict], labels: list[dict],
 
 def audit(labels_path: Path, events_path: Path, *,
           event_names="INTERNAL_TACTICAL_SIGNAL",
-          actionable: bool=False) -> dict:
+          actionable: bool=False,
+          stages: list[int] | set[int] | None=None) -> dict:
     label_rows=read_jsonl(labels_path)
     event_rows=read_jsonl(events_path)
     labels=terminal_internal_labels(label_rows)
     names=[event_names] if isinstance(event_names,str) else list(event_names)
-    signals=internal_signal_records(event_rows,labels,event_names=names)
+    stage_set=None if stages is None else {int(x) for x in stages}
+    signals=internal_signal_records(event_rows,labels,event_names=names,stages=stage_set)
 
     if len(labels)<2:
         metrics={
@@ -145,6 +151,7 @@ def audit(labels_path: Path, events_path: Path, *,
                      if actionable else "FIRST_ACCEPTED_SIGNAL_PER_COMPLETED_INTERNAL_SWING"),
         "signal_events":names,
         "signal_event":names[0] if len(names)==1 else "+".join(names),
+        "signal_stages":None if stage_set is None else sorted(stage_set),
         "actionable_deadline_enabled":bool(actionable),
         "terminal_labels":len(labels),
         "tactical_signal_rows":len(signals),
@@ -160,16 +167,19 @@ def main():
     ap.add_argument("--events",type=Path,required=True)
     ap.add_argument("--output",type=Path,required=True)
     ap.add_argument("--event-name",action="append",default=None)
+    ap.add_argument("--stage",action="append",type=int,default=None,
+                    help="Only score signals emitted at this causal stage in seconds; repeatable.")
     ap.add_argument("--actionable",action="store_true")
     args=ap.parse_args()
     names=args.event_name or ["INTERNAL_TACTICAL_SIGNAL"]
-    out=audit(args.labels,args.events,event_names=names,actionable=args.actionable)
+    out=audit(args.labels,args.events,event_names=names,actionable=args.actionable,stages=args.stage)
     args.output.write_text(json.dumps(out,indent=2,ensure_ascii=False)+"\n",encoding="utf-8")
     print("FIRST_SIGNAL_FORWARD="+json.dumps({
         "status":out["status"],
         "terminal_labels":out["terminal_labels"],
         "signals":out["tactical_signal_rows"],
         "signal_event":out["signal_event"],
+        "signal_stages":out["signal_stages"],
         "actionable":out["actionable_deadline_enabled"],
         "metrics":{k:out["metrics"].get(k) for k in ("episodes","accepted_first","true_first","false_first","precision","recall")},
         "gate":out["promotion_gate"]["passed"],
