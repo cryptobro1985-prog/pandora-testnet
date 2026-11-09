@@ -66,3 +66,4 @@ jobs:
           assert got==os.environ["MINIAPP_URL"],(got,os.environ["MINIAPP_URL"])
           print("TELEGRAM_MENU_VERIFIED")
           PY
+# retrigger fallback 2026-11-09
