@@ -2,9 +2,9 @@
   "schema_version": 1,
   "objective": "Earlier causal terminal H1 L6/K2 LOW/HIGH recognition with actionable first-signal precision, useful recall, and distance around 30–70 bps.",
   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
-  "head_sha": "34de9c3fde6f66e0e87c96923d87925416ec1899",
+  "head_sha": "6771d5a4232e413c464212e3d5f4070fa9d289d3",
   "head_sha_basis": "Parent/input revision of this checkpoint. The checkpoint revision is resolved by git log -1 -- this file.",
-  "stage": "reuse_checkpoint",
+  "stage": "frozen_sanity_passed",
   "completed_experiments": [
     {
       "id": "reuse-handoff-20261109",
@@ -17,6 +17,10 @@
     {
       "id": "reuse-frozen-comparators-20261109",
       "verdict": "Keep HARD120 and Ultra Survival V2 frozen. HARD120 internal-swing results and strict terminal label results have different denominators. No comparator replay yet."
+    },
+    {
+      "id": "strict-m1-trajectory-v1-sanity",
+      "verdict": "Frozen two ordered, disjoint-window trajectory families per side. Seven new tests and six existing first-signal checks passed. First 4,320 Jul M1 bars exposed both sides with 0–59.999 s rounding after the requested ages. No labels were loaded for the sanity slice."
     }
   ],
   "rejected_hypotheses": [
@@ -37,30 +41,54 @@
     "LOW": [
       {
         "rank": 1,
-        "family": "Post-extreme price response persistence and side-normalized flow efficiency transition",
-        "stage": "novelty and data audit"
+        "family": "efficiency_handoff"
+      },
+      {
+        "rank": 2,
+        "family": "old_side_absorption"
       }
     ],
     "HIGH": [
       {
         "rank": 1,
-        "family": "Post-extreme downside persistence and squeeze-side efficiency failure",
-        "stage": "novelty and data audit"
+        "family": "efficiency_handoff"
+      },
+      {
+        "rank": 2,
+        "family": "old_side_absorption"
       }
     ]
   },
   "exact_commands": [
     "git clone --single-branch --depth=1 --branch research/hype-h1-local-v5-oi-microstructure-20261104 https://github.com/cryptobro1985-prog/pandora-testnet.git pandora-testnet",
     "sha256sum hype-work-cache/master.zip",
-    "unzip -l hype-work-cache/master.zip"
+    "unzip -l hype-work-cache/master.zip",
+    "python -m unittest research.hype_false_local_entry.test_early_trajectory"
   ],
   "artifact_result_paths": {
     "master_artifact_id": 13650399622,
     "master_archive_local": "hype-work-cache/master.zip",
-    "manifest_in_archive": "MASTER_INDEX.json"
+    "manifest_in_archive": "MASTER_INDEX.json",
+    "frozen_rules": "research/hype_work_handoff_2026-11-09/EARLY_TRAJECTORY_RULES_V1.json",
+    "source_sha256": {
+      "replay_early_trajectory.py": "19746187cc5bedac1b0cc73d5a085824d1384ea184c3232d4f0d30a3c76ec348",
+      "early_trajectory_features.py": "a7e2cc92bbf0a41cd4395bc76e4731686dcb36c90e3894f005ec5b2b256a3266",
+      "first_signal_objective.py": "f10e3bb0d3aa8167ee8726cf3062460109a376b8acf9840efb957586817e919c"
+    }
   },
-  "frozen_thresholds_model_hashes": {},
-  "next_cheapest_useful_action": "Check prior M1 walkforward/cross-period implementation and per-period causal availability before a small novel trajectory experiment or documented blocker.",
+  "frozen_thresholds_model_hashes": {
+    "LOW": {
+      "retrace_band_only": "c51510e31c6345afb9b53fc7f5266d97564b8503de087272685ea1620786e6fd",
+      "efficiency_handoff": "179b3068d7577121347193db71f60374968c56cb6b0733d1344b326e57f48c8b",
+      "old_side_absorption": "3d905246176ab82b0e331ee7e30afd1e208c6099bb4b268fc44381075806656e"
+    },
+    "HIGH": {
+      "retrace_band_only": "6223cc3e6a8c080c52c929272f35c1b12a9b9370a9e5349cb375c9ac90716d8e",
+      "efficiency_handoff": "71cd8e60be51ea5ab123dc0d348c87aaf3c3f1cb17cd35d67757b53068ff7d85",
+      "old_side_absorption": "2078bd6c54b7e6939f6d84ab1f599c42052c157b1c8963043f65374187ce7432"
+    }
+  },
+  "next_cheapest_useful_action": "python -W error -m research.hype_false_local_entry.replay_early_trajectory --master ../hype-work-cache/master.zip --rules research/hype_work_handoff_2026-11-09/EARLY_TRAJECTORY_RULES_V1.json --period 01_JUL12_AUG07_FULL_MICRO --output research/hype_work_handoff_2026-11-09/EARLY_TRAJECTORY_DEV_V1.json",
   "expensive_actions_not_yet_justified": [
     "Rebuild/redownload archives",
     "model sweep",
@@ -68,7 +96,9 @@
     "live changes"
   ],
   "known_blockers": [
-    "Subminute market features are not present in both trade-only historical regimes. L50 crossed books and missing-vs-zero liquidation hours are known risks in the rich snapshot archive; check source validity before modeling."
+    "Jul-Aug archived rich snapshots: 822/6260 crossed books passed the old valid flag, and 0/6260 have per-window liquidation availability masks. Corrected rebuild run 42569690392 has failed status and no artifact.",
+    "Only July and October have saved subminute snapshots, with different candidate lifetimes; 90 s is absent from both. Middle regimes and the master-wide comparison are limited to M1 prices and executed flow.",
+    "HARD120 four-regime baseline and May Ultra Survival V2 use internal L3/K1 swings. The new score uses strict terminal L6/K2, so these are context, not matched controls."
   ],
   "real_orders": false
 }

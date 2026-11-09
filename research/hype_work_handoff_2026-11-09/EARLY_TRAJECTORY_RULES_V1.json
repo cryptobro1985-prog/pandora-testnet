@@ -1,0 +1,33 @@
+{
+  "id": "HYPE_STRICT_EARLY_M1_TRAJECTORY_V1",
+  "distance_band_bps": [30, 70],
+  "by_side": {
+    "LOW": {
+      "ages_s": [180, 300, 600],
+      "min_range_recovery": 0.20,
+      "min_positive_bar_share": 0.55,
+      "min_retained_close_retrace": 0.70
+    },
+    "HIGH": {
+      "ages_s": [300, 600, 900],
+      "min_range_recovery": 0.20,
+      "min_positive_bar_share": 0.60,
+      "min_retained_close_retrace": 0.75
+    }
+  },
+  "families_in_order": ["efficiency_handoff", "old_side_absorption"],
+  "development_gate": {
+    "episodes": 20,
+    "true_first": 4,
+    "precision": 0.35,
+    "recall": 0.15,
+    "precision_gain": 0.12
+  },
+  "transfer_gate": {
+    "episodes": 20,
+    "true_first": 5,
+    "precision": 0.55,
+    "recall": 0.20,
+    "precision_gain": 0.12
+  }
+}
