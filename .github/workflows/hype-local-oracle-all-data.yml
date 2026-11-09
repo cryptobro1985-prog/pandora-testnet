@@ -1,0 +1,57 @@
+name: HYPE Strict Local Oracle All Data
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-local-oracle-all-data.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  oracle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download master history artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p oracle_in oracle_out
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13650399622/zip" > oracle_in/master_artifact.zip
+          test -s oracle_in/master_artifact.zip
+          unzip -l oracle_in/master_artifact.zip | head -80 || true
+      - name: Compute ideal Local-to-Local oracle across all data
+        run: |
+          python -m research.hype_false_local_entry.oracle_all_data \
+            --artifact oracle_in/master_artifact.zip \
+            --output oracle_out/HYPE_STRICT_LOCAL_ORACLE_ALL_DATA.json
+          cat oracle_out/HYPE_STRICT_LOCAL_ORACLE_ALL_DATA.json
+      - name: Publish oracle report
+        run: |
+          mkdir -p research/hype_false_local_entry/results
+          cp oracle_out/HYPE_STRICT_LOCAL_ORACLE_ALL_DATA.json \
+             research/hype_false_local_entry/results/HYPE_STRICT_LOCAL_ORACLE_ALL_DATA.json
+          git config user.name "pandora-research-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add research/hype_false_local_entry/results/HYPE_STRICT_LOCAL_ORACLE_ALL_DATA.json
+          git commit -m "research: publish all-data strict Local oracle [skip ci]" || true
+          git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104 || true
+          git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104 || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-STRICT-LOCAL-ORACLE-${{ github.run_id }}
+          path: oracle_out/**
+          retention-days: 30
