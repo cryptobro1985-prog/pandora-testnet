@@ -1,0 +1,61 @@
+name: HYPE Pre-May Sealed Tape Matrix
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/hype_sealed_period/build_base_period.py"
+      - ".github/workflows/hype-pre-may-sealed-matrix.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: "2026-01"
+            start: "2026-01-01"
+            end: "2026-02-01"
+          - label: "2026-02"
+            start: "2026-02-01"
+            end: "2026-03-01"
+          - label: "2026-03"
+            start: "2026-03-01"
+            end: "2026-04-01"
+          - label: "2026-04"
+            start: "2026-04-01"
+            end: "2026-05-01"
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build sealed tape only
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          OUT="$RUNNER_TEMP/hype-sealed-${{ matrix.label }}"
+          CACHE="$RUNNER_TEMP/hype-cache-${{ matrix.label }}"
+          mkdir -p "$OUT" "$CACHE"
+          python -m research.hype_sealed_period.build_base_period --start "${{ matrix.start }}" --end "${{ matrix.end }}" --cache "$CACHE" --output "$OUT"
+          test -s "$OUT/compact_1m.jsonl.gz"
+          test -s "$OUT/labels.json.gz"
+          echo "SEALED: no detector or stack replay executed"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-${{ matrix.label }}-SEALED-TAPE-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/hype-sealed-${{ matrix.label }}/compact_1m.jsonl.gz
+            ${{ runner.temp }}/hype-sealed-${{ matrix.label }}/labels.json.gz
+            ${{ runner.temp }}/hype-sealed-${{ matrix.label }}/manifest.json
+          retention-days: 14
+          compression-level: 1
