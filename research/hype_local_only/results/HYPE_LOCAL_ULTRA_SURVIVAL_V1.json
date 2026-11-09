@@ -1,0 +1,87 @@
+{
+  "version": "HYPE_LOCAL_ULTRA_SURVIVAL_V1",
+  "frozen_before_may_sealed_score": true,
+  "research_only": true,
+  "real_orders": false,
+  "teacher": "INTERNAL_L3_K1 terminal-finalized",
+  "candidate_origin": "6h trailing extreme",
+  "same_side_invalidation": "any more-extreme same-side 6h candidate resets lineage",
+  "checkpoint_semantics": "first completed M1 close at/after side-specific age; one-shot; no late recovery crossing",
+  "LOW": {
+    "age_minutes": 210,
+    "min_retrace_bps": 150,
+    "min_retrace_fraction_pre_180": 0.55,
+    "development": {
+      "episodes": 286,
+      "true_first": 73,
+      "false_first": 0,
+      "precision_observed": 1,
+      "recall_of_all_episodes": 0.25524475524475526,
+      "by_period": {
+        "JUL12_AUG07": {
+          "tp": 12,
+          "fp": 0
+        },
+        "AUG08_SEP01": {
+          "tp": 10,
+          "fp": 0
+        },
+        "SEP01_OCT01": {
+          "tp": 15,
+          "fp": 0
+        },
+        "OCT04_NOV03": {
+          "tp": 12,
+          "fp": 0
+        },
+        "JUNE_SEALED": {
+          "tp": 24,
+          "fp": 0
+        }
+      }
+    }
+  },
+  "HIGH": {
+    "age_minutes": 300,
+    "min_retrace_bps": 100,
+    "min_retrace_fraction_pre_180": 0.55,
+    "development": {
+      "episodes": 285,
+      "true_first": 75,
+      "false_first": 0,
+      "precision_observed": 1,
+      "recall_of_all_episodes": 0.2631578947368421,
+      "by_period": {
+        "JUL12_AUG07": {
+          "tp": 11,
+          "fp": 0
+        },
+        "AUG08_SEP01": {
+          "tp": 11,
+          "fp": 0
+        },
+        "SEP01_OCT01": {
+          "tp": 14,
+          "fp": 0
+        },
+        "OCT04_NOV03": {
+          "tp": 17,
+          "fp": 0
+        },
+        "JUNE_SEALED": {
+          "tp": 22,
+          "fp": 0
+        }
+      }
+    }
+  },
+  "combined_development": {
+    "episodes": 571,
+    "true_first": 148,
+    "false_first": 0,
+    "precision_observed": 1,
+    "recall_of_all_episodes": 0.2591943957968476
+  },
+  "warning": "Zero development false positives do not establish 99.9% future precision. Thresholds were selected after inspecting five regimes and are frozen before May 2026 sealed scoring.",
+  "next_gate": "Score unchanged on May 2026 sealed tape; reject or demote if any false first signal appears."
+}
