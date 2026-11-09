@@ -1,0 +1,51 @@
+name: HYPE Retrace Anchor Sweep
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-retrace-anchor-sweep.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download 30D strict artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p anchor_history anchor_out
+          ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=local116-HYPE"             --jq '.artifacts | map(select((.expired|not) and .name=="local116-HYPE")) | sort_by(.created_at) | reverse | .[0].id // empty')"
+          test -n "$ID"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$ID/zip" > history.zip
+          unzip -q history.zip -d anchor_history
+          test -s anchor_history/compact_1m.jsonl.gz
+          test -s anchor_history/labels.json.gz
+      - name: Sweep 0.20-0.60 percent retrace anchors
+        run: |
+          python -m research.hype_false_local_entry.retrace_anchor_sweep             --compact anchor_history/compact_1m.jsonl.gz             --labels anchor_history/labels.json.gz             --output anchor_out/RETRACE_ANCHOR_SWEEP.json
+          cat anchor_out/RETRACE_ANCHOR_SWEEP.json
+      - name: Publish report
+        run: |
+          mkdir -p research/hype_false_local_entry/results
+          cp anchor_out/RETRACE_ANCHOR_SWEEP.json              research/hype_false_local_entry/results/RETRACE_ANCHOR_SWEEP_LATEST.json
+          git config user.name "pandora-research-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add research/hype_false_local_entry/results/RETRACE_ANCHOR_SWEEP_LATEST.json
+          git commit -m "research: publish retrace anchor sweep [skip ci]" || true
+          git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104 || true
+          git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104 || true
