@@ -1,0 +1,30 @@
+{
+  "version": "HYPE_LOCAL_ULTRA_SURVIVAL_V2_MAY_SEALED_SCORE_2026-11-09",
+  "research_only": true,
+  "real_orders": false,
+  "source": {
+    "build_run_id": 42569087931,
+    "artifact_id": 13652089234,
+    "artifact_name": "HYPE-MAY-SEALED-TAPE-42569087931",
+    "artifact_sha256": "b9c56c3b93852f8df9602e09daaa1e37893be9b36d1823eff0d5e00dc3658380",
+    "period": "2026-05"
+  },
+  "freeze_contract": "HYPE_LOCAL_ULTRA_SURVIVAL_V2",
+  "rules_unchanged": {
+    "LOW": {"age_minutes": 215, "min_retrace_bps": 130.0, "min_retrace_fraction_pre_180": 0.52},
+    "HIGH": {"age_minutes": 250, "min_retrace_bps": 65.0, "min_retrace_fraction_pre_180": 0.50}
+  },
+  "evaluation": {
+    "episodes": 118,
+    "accepted": 31,
+    "true_first": 31,
+    "false_first": 0,
+    "precision_observed": 1.0,
+    "recall": 0.2627118644067797
+  },
+  "by_side": {
+    "LOW": {"episodes": 59, "accepted": 17, "true_first": 17, "false_first": 0, "precision_observed": 1.0, "recall": 0.288135593220339},
+    "HIGH": {"episodes": 59, "accepted": 14, "true_first": 14, "false_first": 0, "precision_observed": 1.0, "recall": 0.23728813559322035}
+  },
+  "interpretation": "Untouched May sealed tape passed the frozen Ultra Survival V2 first-signal test with zero false signals. This materially strengthens transfer evidence but still does not prove a 100% future guarantee."
+}
