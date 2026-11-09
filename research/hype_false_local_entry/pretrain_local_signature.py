@@ -19,6 +19,15 @@ def load(path: Path):
                 yield json.loads(line)
 
 
+def finalized_strict_label_ids(path: Path) -> set[int]:
+    with gzip.open(path,"rt",encoding="utf-8") as fh:
+        doc=json.load(fh)
+    return {
+        int(r["label_id"]) for r in (doc.get("strict") or [])
+        if bool(r.get("reference_finalized",True))
+    }
+
+
 def causal_signature_features(raw: dict) -> dict[str,float]:
     """Historical bootstrap features with explicit elapsed-time fields removed.
 
@@ -100,22 +109,24 @@ def fit(rows, side):
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--snapshots",type=Path,required=True)
+    ap.add_argument("--labels-gz",type=Path,required=True)
     ap.add_argument("--model-out",type=Path,required=True)
     ap.add_argument("--report-out",type=Path,required=True)
     args=ap.parse_args()
 
+    finalized_ids=finalized_strict_label_ids(args.labels_gz)
     rows=[]
     for r in load(args.snapshots):
         if r.get("side") not in ("LOW","HIGH"):
             continue
         if int(r.get("delay_s",-1)) not in STAGES:
             continue
-        if "strict_true" not in r:
-            continue
+        label_id=r.get("strict_label_id")
+        y=bool(label_id is not None and int(label_id) in finalized_ids)
         x=causal_signature_features(r.get("features") or {})
         if not x:
             continue
-        rows.append({**r,"features":x})
+        rows.append({**r,"features":x,"strict_true":y})
 
     if not rows:
         raise SystemExit("no strict historical signature rows")
@@ -139,11 +150,12 @@ def main():
 
     report={
         "version":"HYPE-LOCAL-SIGNATURE-HISTORY-BOOTSTRAP-v1",
-        "teacher":"strict_true",
+        "teacher":"STRICT_L6_K2_REFERENCE_FINALIZED_ONLY",
         "decision_time_gated":False,
         "candidate_age_removed_from_predictors":True,
         "rolling_market_windows_are_causal_inputs":True,
         "rows":len(rows),
+        "finalized_strict_label_ids":len(finalized_ids),
         "by_side":selected,
         "model_report":final.report(),
         "warning":"Historical stage snapshots bootstrap the signature only; event-driven live/OOS first-signal evidence remains required.",
