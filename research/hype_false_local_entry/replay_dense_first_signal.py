@@ -43,6 +43,20 @@ def main():
                       key=lambda x: int(x["extreme_interval_start_ms"]))
         for scope in ("internal", "strict")
     }
+    # Fail closed on truncated or mismatched teacher exports. A complete
+    # historical replay must retain every finalized turn, not just strict.
+    expected = {"internal": (122, 61, 61, 121), "strict": (76, 38, 38, 75)}
+    for scope, (total, lows, highs, swings) in expected.items():
+        rows = scopes[scope]
+        side_counts = {side: sum(x.get("side", x.get("type")) == side for x in rows)
+                       for side in ("LOW", "HIGH")}
+        if len(rows) != total or side_counts != {"LOW": lows, "HIGH": highs}:
+            raise ValueError(
+                f"{scope} incomplete teacher scope: finalized={len(rows)}, "
+                f"sides={side_counts}; expected {total}, LOW={lows}, HIGH={highs}"
+            )
+        if len(rows) - 1 != swings:
+            raise ValueError(f"{scope} swing denominator mismatch")
     # Generate one shared causal stream; NEVER select signals using labels.
     machine = CausalReversalMachine()
     emitted = []
