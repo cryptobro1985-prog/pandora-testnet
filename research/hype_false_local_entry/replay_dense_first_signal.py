@@ -61,6 +61,16 @@ def main():
                int(a["extreme_interval_start_ms"]) >= int(b["extreme_interval_start_ms"])
                for a, b in zip(rows, rows[1:])):
             raise ValueError(f"{scope} teacher turns are not strictly alternating")
+    # Require full causal candidate reachability before reporting full-scope metrics.
+    # This is NOT a claim that the detector recognizes every local.
+    coverage = {scope: evaluate(candidates, rows) for scope, rows in scopes.items()}
+    for scope, report in coverage.items():
+        if report['covered'] != report['finalized'] or report['missed']:
+            raise ValueError(
+                f"{scope} incomplete candidate reachability: "
+                f"{report['covered']}/{report['finalized']}; "
+                f"missing={report['missing_label_ids']}"
+            )
     # Generate one shared causal stream; NEVER select signals using labels.
     machine = CausalReversalMachine()
     emitted = []
@@ -72,10 +82,7 @@ def main():
         "status": "offline_historical_diagnostic_not_untouched_oos",
         "orders": "OFF",
         "core_flip_policy": "HARD_CONFIRMED_OR_ULTRA_CONFIRMED_ONLY",
-        "candidate_generation": {
-            scope: evaluate(candidates, scope_labels)
-            for scope, scope_labels in scopes.items()
-        },
+        "candidate_generation": coverage,
         "first_signal": {
             scope: score_first_flips(bars, scope_labels, flips,
                                      max_lag_ms=args.max_lag_ms)
