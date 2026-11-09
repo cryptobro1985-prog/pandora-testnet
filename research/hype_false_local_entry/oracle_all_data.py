@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import argparse, gzip, io, json, math, statistics, zipfile
+import argparse, gzip, hashlib, io, json, math, statistics, zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -69,7 +69,7 @@ def nested_labels_from_zip(path: Path) -> list[Local]:
                 if lower.endswith("labels.json.gz"):
                     blob=z.read(name)
                     period=Path(name).parent.name or prefix or "root"
-                    key=(period,hash(blob))
+                    key=hashlib.sha256(blob).hexdigest()
                     if key not in seen:
                         seen.add(key)
                         result.extend(read_labels_gz_bytes(blob,period))
@@ -86,7 +86,7 @@ def nested_labels_from_zip(path: Path) -> list[Local]:
             if p.is_file() and p.name.lower()=="labels.json.gz":
                 period=p.parent.name
                 blob=p.read_bytes()
-                key=(period,hash(blob))
+                key=hashlib.sha256(blob).hexdigest()
                 if key not in seen:
                     seen.add(key)
                     result.extend(read_labels_gz_bytes(blob,period))
