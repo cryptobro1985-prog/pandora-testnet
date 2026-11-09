@@ -1,0 +1,40 @@
+name: HYPE Local Signature Cutover
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-local-signature-cutover.yml"
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  cutover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Cancel stale Local-only runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/hype-local-only.yml/runs?per_page=30" \
+            --jq '.workflow_runs[] | select(.status=="in_progress" or .status=="queued" or .status=="pending") | .id' |
+          while read -r ID; do
+            [ -z "${ID}" ] && continue
+            echo "cancel stale local-only run ${ID}"
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/${ID}/cancel" >/dev/null || true
+          done
+
+      - name: Start newest Local Signature live loop
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run hype-local-only.yml \
+            --repo "${GITHUB_REPOSITORY}" \
+            --ref "research/hype-h1-local-v5-oi-microstructure-20261104"
