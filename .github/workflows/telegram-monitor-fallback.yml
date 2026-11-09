@@ -31,6 +31,17 @@ jobs:
           grep -qi '^content-type: text/html' "$headers"
           grep -q "HYPE Local Monitor" /tmp/monitor.html
           echo "FALLBACK_PAGE_OK_HTML"
+      - name: Inspect fallback body
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          b=Path("/tmp/monitor.html").read_bytes()
+          print("html_sha256="+hashlib.sha256(b).hexdigest())
+          print("html_len="+str(len(b)))
+          print("html_head="+repr(b[:700].decode("utf-8","replace")))
+          PY
       - name: Switch Telegram menu button
         shell: bash
         run: |
