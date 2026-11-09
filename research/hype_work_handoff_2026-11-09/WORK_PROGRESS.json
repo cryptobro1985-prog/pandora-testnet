@@ -4,7 +4,7 @@
   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
   "head_sha": "3a6b9342f11bec93fc43af11b0f871d658ecf70b",
   "head_sha_basis": "Parent/input revision of this checkpoint. The checkpoint revision is resolved by git log -1 -- this file.",
-  "stage": "full116_common_transfer_closed_clean_cache_blocked",
+  "stage": "time_to_confirmation_engine_active",
   "completed_experiments": [
     {
       "id": "reuse-handoff-20261109",
@@ -89,6 +89,10 @@
     {
       "id": "full116-strict-common-trajectory-v1-high",
       "verdict": "Precision below the fixed 55% gate in all three transfer periods. Closed without sealed or forward scoring."
+    },
+    {
+      "id": "time-to-confirmation-engine-v1-scaffold-20261109",
+      "verdict": "Added causal LOW/HIGH time-to-confirmation state machine with 30/60/90/180/300s checkpoints, immediate same-side-extreme invalidation, confirmation_delay_s and missed_move_bps metrics. Research/paper only; thresholds are not yet sealed/OOS validated."
     }
   ],
   "rejected_hypotheses": [
@@ -134,8 +138,14 @@
     }
   ],
   "active_hypotheses": {
-    "LOW": [],
-    "HIGH": []
+    "LOW": [
+      "Earliest terminal-LOW confirmation can be improved by sequential state transitions combining price response, new-side flow efficiency, old-side impact failure, same-side liquidation exhaustion, book recovery/transfer, and OI+price agreement.",
+      "A false-first invalidation layer can permit earlier entry without weakening the later Ultra/HARD terminal confirmation layers."
+    ],
+    "HIGH": [
+      "Earliest terminal-HIGH confirmation can be improved by a separately calibrated sequential state-transition model rather than sharing LOW thresholds.",
+      "A false-first invalidation layer can permit earlier entry without weakening the later Ultra/HARD terminal confirmation layers."
+    ]
   },
   "exact_commands": [
     "git clone --single-branch --depth=1 --branch research/hype-h1-local-v5-oi-microstructure-20261104 https://github.com/cryptobro1985-prog/pandora-testnet.git pandora-testnet",
@@ -189,7 +199,9 @@
         "replay_early_trajectory.py": "19746187cc5bedac1b0cc73d5a085824d1384ea184c3232d4f0d30a3c76ec348",
         "first_signal_objective.py": "f10e3bb0d3aa8167ee8726cf3062460109a376b8acf9840efb957586817e919c"
       }
-    }
+    },
+    "time_to_confirmation_engine": "research/hype_false_local_entry/time_to_confirmation_engine.py",
+    "time_to_confirmation_tests": "research/hype_false_local_entry/test_time_to_confirmation_engine.py"
   },
   "frozen_thresholds_model_hashes": {
     "LOW": {
@@ -351,7 +363,7 @@
         {
           "ts_ms": 1794211233020,
           "stage": 180,
-          "probability": 1.2450331104990128e-05,
+          "probability": 0.000012450331104990128,
           "threshold": 0.66,
           "accepted": false,
           "internal_accepted": false
