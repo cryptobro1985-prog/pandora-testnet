@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "objective": "Earlier causal terminal H1 L6/K2 LOW/HIGH recognition with actionable first-signal precision, useful recall, and distance around 30–70 bps.",
+  "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+  "head_sha": "34de9c3fde6f66e0e87c96923d87925416ec1899",
+  "head_sha_basis": "Parent/input revision of this checkpoint. The checkpoint revision is resolved by git log -1 -- this file.",
+  "stage": "reuse_checkpoint",
+  "completed_experiments": [
+    {
+      "id": "reuse-handoff-20261109",
+      "verdict": "Reused archived Jul-Nov master and compared outer checksum to the handoff and GitHub artifact metadata. No data rebuilt and no experiment rerun."
+    },
+    {
+      "id": "reuse-early-static-failures-20261109",
+      "verdict": "Raw flow, static 5–15m feature models, broad OR and naive checkpoint consensus are already audited. Simple rules and trees/logit did not transfer chronologically."
+    },
+    {
+      "id": "reuse-frozen-comparators-20261109",
+      "verdict": "Keep HARD120 and Ultra Survival V2 frozen. HARD120 internal-swing results and strict terminal label results have different denominators. No comparator replay yet."
+    }
+  ],
+  "rejected_hypotheses": [
+    {
+      "family": "raw executed flow or absolute retrace alone",
+      "why": "Previously failed transfer"
+    },
+    {
+      "family": "static 5–15m models, broad OR, naive 5/10/15m consensus",
+      "why": "Previously failed chronological first-signal precision or coverage"
+    },
+    {
+      "family": "HIGH Flow V2 resurrection",
+      "why": "Previously failed sealed late August"
+    }
+  ],
+  "active_hypotheses": {
+    "LOW": [
+      {
+        "rank": 1,
+        "family": "Post-extreme price response persistence and side-normalized flow efficiency transition",
+        "stage": "novelty and data audit"
+      }
+    ],
+    "HIGH": [
+      {
+        "rank": 1,
+        "family": "Post-extreme downside persistence and squeeze-side efficiency failure",
+        "stage": "novelty and data audit"
+      }
+    ]
+  },
+  "exact_commands": [
+    "git clone --single-branch --depth=1 --branch research/hype-h1-local-v5-oi-microstructure-20261104 https://github.com/cryptobro1985-prog/pandora-testnet.git pandora-testnet",
+    "sha256sum hype-work-cache/master.zip",
+    "unzip -l hype-work-cache/master.zip"
+  ],
+  "artifact_result_paths": {
+    "master_artifact_id": 13650399622,
+    "master_archive_local": "hype-work-cache/master.zip",
+    "manifest_in_archive": "MASTER_INDEX.json"
+  },
+  "frozen_thresholds_model_hashes": {},
+  "next_cheapest_useful_action": "Check prior M1 walkforward/cross-period implementation and per-period causal availability before a small novel trajectory experiment or documented blocker.",
+  "expensive_actions_not_yet_justified": [
+    "Rebuild/redownload archives",
+    "model sweep",
+    "sealed May/June replay",
+    "live changes"
+  ],
+  "known_blockers": [
+    "Subminute market features are not present in both trade-only historical regimes. L50 crossed books and missing-vs-zero liquidation hours are known risks in the rich snapshot archive; check source validity before modeling."
+  ],
+  "real_orders": false
+}
