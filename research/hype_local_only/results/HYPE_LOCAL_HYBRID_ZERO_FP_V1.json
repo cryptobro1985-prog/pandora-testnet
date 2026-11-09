@@ -1,0 +1,82 @@
+{
+  "version": "HYPE_LOCAL_HYBRID_ZERO_FP_V1",
+  "frozen_before_may_sealed_score": true,
+  "research_only": true,
+  "real_orders": false,
+  "purpose": "Causal terminal-local confirmation with two independent acceptance paths",
+  "path_A_model_vote": {
+    "base_checkpoint": "HARD120 exact one-shot +120m signal",
+    "model_bundle": "HYPE_LOCAL_ULTRA_CONSENSUS_V1",
+    "model_bundle_sha256": "fdbeafbcfc7ceaab8bef4c996aeae3d4d427be85f9f64d489dc34666561db8ec",
+    "contract_sha256": "46200fecf3c82fd4458e9c80454abf0079371fd3aa216645976df38351415928",
+    "voters": "5 ExtraTrees fold-calibrated + 5 Logistic fold-calibrated models",
+    "accept_if_votes_at_least": 5,
+    "development": {
+      "LOW": {
+        "tp": 95,
+        "fp": 0
+      },
+      "HIGH": {
+        "tp": 61,
+        "fp": 0
+      },
+      "combined": {
+        "tp": 156,
+        "fp": 0
+      }
+    }
+  },
+  "path_B_ultra_survival": {
+    "contract": "HYPE_LOCAL_ULTRA_SURVIVAL_V2",
+    "LOW": {
+      "age_minutes": 215,
+      "min_retrace_bps": 130,
+      "min_fraction_pre_180": 0.52
+    },
+    "HIGH": {
+      "age_minutes": 250,
+      "min_retrace_bps": 65,
+      "min_fraction_pre_180": 0.5
+    },
+    "development": {
+      "LOW": {
+        "tp": 79,
+        "fp": 0
+      },
+      "HIGH": {
+        "tp": 88,
+        "fp": 0
+      },
+      "combined": {
+        "tp": 167,
+        "fp": 0
+      }
+    }
+  },
+  "combination": "ACCEPT if path_A OR path_B",
+  "development_union": {
+    "periods": [
+      "2026-06",
+      "2026-07-12..08-07",
+      "2026-08-08..09-01",
+      "2026-09",
+      "2026-10-04..11-03"
+    ],
+    "completed_episodes": 571,
+    "tp": 249,
+    "fp": 0,
+    "precision_observed": 1,
+    "coverage_of_all_completed_episodes": 0.436077057793345,
+    "LOW": {
+      "tp": 125,
+      "fp": 0
+    },
+    "HIGH": {
+      "tp": 124,
+      "fp": 0
+    }
+  },
+  "anti_leakage": "All path_A features are causal at the +120m signal. Path_B uses only information available at its 215/250m checkpoint. Teacher labels are scoring-only.",
+  "warning": "249/249 on development does NOT prove 99.9% future precision. May 2026 is untouched at freeze time and is the mandatory next score.",
+  "rejection_rule": "Any false first signal on sealed May rejects a 99.9% claim for V1; no threshold may be altered before May score is recorded."
+}
