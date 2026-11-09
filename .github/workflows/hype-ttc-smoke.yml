@@ -7,6 +7,7 @@ on:
       - research/hype-h1-local-v5-oi-microstructure-20261104
     paths:
       - "research/hype_false_local_entry/time_to_confirmation_*.py"
+      - "research/hype_false_local_entry/local_signature_*.py"
       - "research/hype_local_only/forward_first_signal_audit.py"
       - "research/hype_local_only/test_forward_first_signal_scope.py"
       - ".github/workflows/hype-ttc-smoke.yml"
@@ -31,8 +32,12 @@ jobs:
           python -m py_compile \
             research/hype_false_local_entry/time_to_confirmation_engine.py \
             research/hype_false_local_entry/time_to_confirmation_live.py \
-            research/hype_local_only/forward_first_signal_audit.py
+            research/hype_false_local_entry/local_signature_model.py \
+            research/hype_false_local_entry/local_signature_live.py \
+            research/hype_local_only/forward_first_signal_audit.py \
+            research/hype_local_only/live_daemon.py
           python -m unittest \
             research.hype_false_local_entry.test_time_to_confirmation_engine \
             research.hype_false_local_entry.test_time_to_confirmation_live \
+            research.hype_false_local_entry.test_local_signature_model \
             research.hype_local_only.test_forward_first_signal_scope
