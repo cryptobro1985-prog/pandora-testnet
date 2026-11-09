@@ -133,6 +133,10 @@
     {
       "id": "dense-retrace-anchor-sweep-20261109",
       "verdict": "Recovered the historical ~0.33-0.35% hypothesis and retested it on the live-matched dense running-extreme candidate plane. Standalone 33/35 bps is not sufficient: LOW 2 true /35 false at both 33 and 35; HIGH 0 true /37 false at both 33 and 35. Best standalone 20-60 bps remained weak (LOW 58 bps: 5/37; HIGH 57 bps: 5/37). Therefore the old edge must have come from the causal state around the retrace, not the retrace threshold itself."
+    },
+    {
+      "id": "strict-local-oracle-all-data-v1-20261109",
+      "verdict": "Deduplicated master oracle over four historical periods: 260 finalized STRICT L6/K2 locals (131 LOW, 129 HIGH), 256 ideal LOW↔HIGH legs. Median captured move 3.515%; LOW→HIGH median 3.326%, HIGH→LOW median 3.649%. Best LOW entry 58.03→75.19 = +29.571%; best HIGH entry 68.98→58.445 = +15.273%. This is future-confirmed teacher/oracle only, never a live input."
     }
   ],
   "rejected_hypotheses": [
@@ -268,7 +272,8 @@
     "dense_full_micro_builder": "research/hype_full_micro_202607/build_dense_full_micro.py",
     "dense_full_micro_trainer": "research/hype_full_micro_202607/train_dense_signature.py",
     "retrace_anchor_sweep": "research/hype_false_local_entry/results/RETRACE_ANCHOR_SWEEP_LATEST.json",
-    "retrace_anchor_rich_trainer": "research/hype_full_micro_202607/train_retrace_anchor_signature.py"
+    "retrace_anchor_rich_trainer": "research/hype_full_micro_202607/train_retrace_anchor_signature.py",
+    "strict_local_oracle_all_data": "research/hype_false_local_entry/results/HYPE_STRICT_LOCAL_ORACLE_ALL_DATA.json"
   },
   "frozen_thresholds_model_hashes": {
     "LOW": {
@@ -296,7 +301,7 @@
       }
     }
   },
-  "next_cheapest_useful_action": "Complete latest dense full-micro run, then inspect RETRACE_ANCHORED_RICH_SIGNATURE_LATEST.json and compare 33 vs 35 bps separately for LOW/HIGH using first-signal precision/recall and continuation-risk. Treat retrace as event anchor only.",
+  "next_cheapest_useful_action": "Use the all-data strict oracle as the universal target. Score every challenger by how many of the 256 ideal LOW↔HIGH legs it captures causally, first-signal precision, recall, missed_move_bps and false-first severity. Keep LOW/HIGH separate and never feed oracle labels into live predictors.",
   "expensive_actions_not_yet_justified": [
     "Chronological replay of the rejected rules or threshold retuning",
     "Sealed May/June scoring or forward deployment of the rejected rules",
@@ -464,5 +469,27 @@
       "forming_artifact_id": 13641587046,
       "result": "research/hype_work_handoff_2026-11-09/FULL_116_LIVE_CONTROL_CASES.json"
     }
+  },
+  "oracle_target": {
+    "finalized_locals": 260,
+    "low": 131,
+    "high": 129,
+    "ideal_legs": 256,
+    "median_move_pct": 3.5150602814876226,
+    "low_to_high_median_pct": 3.326010903819654,
+    "high_to_low_median_pct": 3.6485999968157037,
+    "low_move_p10_bps": 173.11738116137198,
+    "high_move_p10_bps": 162.83541504810825,
+    "best_low": {
+      "price": 58.03,
+      "next_high": 75.19,
+      "move_pct": 29.57091159744958
+    },
+    "best_high": {
+      "price": 68.98,
+      "next_low": 58.445,
+      "move_pct": 15.27254276601914
+    },
+    "use": "offline teacher/benchmark only; causal detector must approximate without future data"
   }
 }
