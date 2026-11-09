@@ -85,8 +85,8 @@ def score_first_flips(bars, labels, flips, max_lag_ms=3600000):
     completed_true_first = completed_hits
     completed_false_first = total - completed_true_first
     completed_precision = completed_true_first / total if total else None
-    def med(key):
-        vals=[r[key] for r in hits if r.get(key) is not None]
+    def med(key, rows):
+        vals=[r[key] for r in rows if r.get("detected") and r.get(key) is not None]
         return median(vals) if vals else None
     return {
         "finalized_locals":len(labels),"complete_swings":max(0,len(labels)-1),
@@ -102,10 +102,14 @@ def score_first_flips(bars, labels, flips, max_lag_ms=3600000):
         "missed_local_rate":(len(labels)-len(hits))/len(labels) if labels else None,
         "total_core_flips":total,"false_first":len(false)+len(wrong),
         "first_signal_precision":len(hits)/total if total else None,
-        "median_lag_ms":med("lag_ms"),
-        "median_entry_distance_bps":med("entry_distance_bps"),
-        "median_adverse_extension_bps":med("adverse_extension_bps"),
-        "median_remaining_swing_fraction":med("remaining_swing_fraction"),
+        "median_lag_ms":med("lag_ms", results),
+        "median_entry_distance_bps":med("entry_distance_bps", results),
+        "median_adverse_extension_bps":med("adverse_extension_bps", results),
+        "median_remaining_swing_fraction":med("remaining_swing_fraction", results),
+        "completed_swing_median_lag_ms":med("lag_ms", completed_rows),
+        "completed_swing_median_entry_distance_bps":med("entry_distance_bps", completed_rows),
+        "completed_swing_median_adverse_extension_bps":med("adverse_extension_bps", completed_rows),
+        "completed_swing_median_remaining_swing_fraction":med("remaining_swing_fraction", completed_rows),
         "matched":results,"unassigned_false_flips":false,
         "caveats":["Teacher intervals are used only after causal signal generation.",
                    "Last local has no known opposite target.",
