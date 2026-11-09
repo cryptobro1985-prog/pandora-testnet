@@ -31,6 +31,31 @@ def verify(payload):
         ids = [r["label_id"] for r in rows]
         if any(x is None for x in ids) or len(set(ids)) != len(ids):
             raise ValueError(f"{scope}: missing or duplicate label IDs")
+        # Reconcile reported metrics with raw per-local evidence, not just
+        # trusted summary counters. Prevent a truncated/edited report from
+        # passing solely because its headline denominators look correct.
+        if any(r.get("side") not in ("LOW", "HIGH") for r in rows):
+            raise ValueError(f"{scope}: invalid local side")
+        if any(a["side"] == b["side"] for a, b in zip(rows, rows[1:])):
+            raise ValueError(f"{scope}: local sides do not alternate")
+        expected_side_n = nlocals // 2
+        if sum(r["side"] == "LOW" for r in rows) != expected_side_n:
+            raise ValueError(f"{scope}: wrong LOW/HIGH distribution")
+        for row in rows:
+            if bool(row["detected"]) and (not row["first_signal_present"] or
+                                         row["first_signal_wrong_side"]):
+                raise ValueError(f"{scope}: inconsistent first-signal row")
+            if row["first_signal_wrong_side"] and not row["first_signal_present"]:
+                raise ValueError(f"{scope}: wrong-side without a signal")
+        if coverage.get("recall") != 1.0:
+            raise ValueError(f"{scope}: candidate recall summary inconsistent")
+        if len(coverage.get("per_label", [])) != nlocals:
+            raise ValueError(f"{scope}: missing candidate per-label evidence")
+        coverage_ids = [r["label_id"] for r in coverage["per_label"]]
+        if set(coverage_ids) != set(ids) or len(set(coverage_ids)) != nlocals:
+            raise ValueError(f"{scope}: candidate IDs do not match teacher IDs")
+        if not all(r.get("matched") for r in coverage["per_label"]):
+            raise ValueError(f"{scope}: unmatched candidate in coverage ledger")
         completed = rows[:-1]
         hits = sum(bool(r["detected"]) for r in completed)
         wrong = sum(bool(r["first_signal_wrong_side"]) for r in completed)
@@ -40,6 +65,17 @@ def verify(payload):
             raise ValueError(f"{scope}: missed swing count disagrees")
         if scores["total_core_flips"] - hits != scores["completed_swing_false_first"]:
             raise ValueError(f"{scope}: false flip count disagrees")
+        total_flips = scores["total_core_flips"]
+        expected_precision = hits / total_flips if total_flips else None
+        if scores["completed_swing_first_signal_precision"] != expected_precision:
+            raise ValueError(f"{scope}: completed precision arithmetic mismatch")
+        expected_recall = hits / nswings
+        if scores["completed_swing_recall"] != expected_recall:
+            raise ValueError(f"{scope}: completed recall arithmetic mismatch")
+        if scores["completed_swing_missed_rate"] != (nswings - hits) / nswings:
+            raise ValueError(f"{scope}: missed-rate arithmetic mismatch")
+        if scores["completed_swing_false_first"] < wrong:
+            raise ValueError(f"{scope}: false-first undercounts wrong-side signals")
         if any(r.get("stage") not in ("HARD_CONFIRMED", "ULTRA_CONFIRMED")
                for r in rows if r["first_signal_present"]):
             raise ValueError(f"{scope}: forbidden core flip stage")
