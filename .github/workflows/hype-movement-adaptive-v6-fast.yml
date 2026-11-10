@@ -1,0 +1,30 @@
+name: HYPE Movement Adaptive Rank V6 Fast
+on:
+  push:
+    branches: [research/hype-h1-local-v5-oi-microstructure-20261104]
+    paths: ['research/hype_movement_signature/replay_adaptive_rank_v6_fast.py','.github/workflows/hype-movement-adaptive-v6-fast.yml']
+  workflow_dispatch:
+permissions: {contents: write, actions: read}
+concurrency: {group: hype-movement-adaptive-v6-fast, cancel-in-progress: true}
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: research/hype-h1-local-v5-oi-microstructure-20261104, fetch-depth: 0}
+      - run: python -m pip install numpy pandas scikit-learn
+      - uses: actions/download-artifact@v4
+        with: {name: HYPE-HISTORY-20260712-20261103-MASTER, path: /tmp/hype_master, run-id: 42564417286, github-token: ${{ github.token }}}
+      - run: python -m research.hype_movement_signature.replay_adaptive_rank_v6_fast --master-root /tmp/hype_master --out /tmp/v6fast
+      - run: |
+          set -euo pipefail
+          git fetch origin research/hype-h1-local-v5-oi-microstructure-20261104
+          git reset --hard origin/research/hype-h1-local-v5-oi-microstructure-20261104
+          rm -rf research/hype_movement_signature/results_adaptive_v6_fast
+          mkdir -p research/hype_movement_signature/results_adaptive_v6_fast
+          cp /tmp/v6fast/* research/hype_movement_signature/results_adaptive_v6_fast/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add research/hype_movement_signature/results_adaptive_v6_fast
+          if ! git diff --cached --quiet; then git commit -m "Add adaptive-rank V6 fast results"; git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104; fi
