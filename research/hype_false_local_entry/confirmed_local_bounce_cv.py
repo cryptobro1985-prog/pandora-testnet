@@ -188,10 +188,21 @@ def run_side(periods, rows, side):
         model = fit(train, names)
         test_pred = {hold: model.predict_proba(X(test, names))[:, 1]}
         test_metrics, _, records = evaluate(periods, rows, test_pred, side, th, [hold])
+        # Report which legal predictors actually reach the fitted model.
+        # Availability in the 116-point contract is not evidence of model use.
+        selected_points = sorted({feat.point_id(k) for k in names})
+        selected_coverage = {
+            k: round(sum(k in r["features"] for r in train) / len(train), 6)
+            for k in names
+        } if train else {}
         folds.append({"holdout": hold, "threshold": th,
                       "calibration": calibration_metrics, "inner_oof_folds": inner_folds,
                       "test": test_metrics, "test_records": records,
-                      "feature_count": len(names), "threshold_frontier": frontier})
+                      "feature_count": len(names),
+                      "selected_feature_names": names,
+                      "selected_point_ids": selected_points,
+                      "selected_feature_train_coverage": selected_coverage,
+                      "threshold_frontier": frontier})
     agg = dict(episodes=0, confirmations=0, true_confirmations=0, false_confirmations=0)
     rem, dist, cap, false_adverse, false_continuation = [], [], [], [], []
     for f in folds:
