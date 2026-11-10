@@ -121,8 +121,16 @@ def m1_states(rows, ages=AGES, decision_sampling="legacy_age_grid"):
                 # A prior attempt is an observed extension, not a teacher label.
                 recent = [entry for entry in prior if entry[0] >= i - 360]
                 prior = [*recent, (i, price, end)]
-                pre_hi, pre_lo = tape.high[i-180:i].max(), tape.low[i-180:i].min()
-                pre_move = (pre_hi / price - 1 if sign == 1 else price / pre_lo - 1) * 10_000
+                # Restrict the pre-candidate context to the current contiguous segment.
+                # At a segment start, do not borrow tail bars from the previous
+                # segment (or wrap around the tape via negative NumPy indices).
+                history_start = max(start, i - 180)
+                if history_start < i:
+                    pre_hi = float(tape.high[history_start:i].max())
+                    pre_lo = float(tape.low[history_start:i].min())
+                    pre_move = (pre_hi / price - 1 if sign == 1 else price / pre_lo - 1) * 10_000
+                else:
+                    pre_move = float("nan")
                 if decision_sampling == "completed_m1_events":
                     decision_indices = causal_decision_bars(tape, ts, end, start_bar=i)
                 else:
