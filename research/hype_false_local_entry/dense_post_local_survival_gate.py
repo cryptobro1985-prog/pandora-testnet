@@ -10,7 +10,6 @@ import argparse,gzip,json
 from dataclasses import dataclass
 from pathlib import Path
 from statistics import median
-import numpy as np
 
 from .audit_dense_coverage import read_jsonl
 from .causal_sequential_engine import CausalReversalMachine
