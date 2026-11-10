@@ -31,7 +31,7 @@ jobs:
           github-token: ${{ github.token }}
       - run: |
           rm -rf /tmp/focused
-          python research/hype_movement_signature/replay_focused_v22.py --master-root /tmp/hype_master --out /tmp/focused
+          python -m research.hype_movement_signature.replay_focused_v22 --master-root /tmp/hype_master --out /tmp/focused
       - run: |
           set -euo pipefail
           git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104
