@@ -41,7 +41,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check pytest
-          python -m pytest -q research/hype_false_local_entry/test_prefix_causality.py research/hype_false_local_entry/test_first_flip_accounting.py research/hype_false_local_entry/test_dense_causal_reachability.py 2>&1 | tee results/CAUSAL_TESTS.log
+          python -m pytest --import-mode=importlib -q research/hype_false_local_entry/test_prefix_causality.py research/hype_false_local_entry/test_first_flip_accounting.py research/hype_false_local_entry/test_dense_causal_reachability.py 2>&1 | tee results/CAUSAL_TESTS.log
       - name: Run complete label-blind replay then offline dual-scope scoring
         run: |
           set -euo pipefail
