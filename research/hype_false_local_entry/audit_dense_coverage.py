@@ -28,6 +28,8 @@ def evaluate(events, labels, tolerance_ms=60000, price_tolerance_bps=1.0):
         by_side[event["side"]].append(event)
     for side in by_side:
         by_side[side].sort(key=lambda e: e["extreme_ts_ms"])
+    if tolerance_ms < 0 or price_tolerance_bps < 0:
+        raise ValueError("matching tolerances must be nonnegative")
     results = []
     for label in labels:
         side = label["side"]
@@ -39,6 +41,10 @@ def evaluate(events, labels, tolerance_ms=60000, price_tolerance_bps=1.0):
             if start - tolerance_ms <= e["extreme_ts_ms"] <= end + tolerance_ms
             and abs(e["extreme_price"] / price - 1) * 10000 <= price_tolerance_bps
             and e["signal_ts_ms"] >= e["extreme_ts_ms"]
+            # Exact-minute mode must identify the SAME completed candle, not
+            # a neighboring candle at the inclusive teacher interval end.
+            and (tolerance_ms != 0 or
+                 e["signal_ts_ms"] - 60000 == start)
         ]
         earliest = min(matches, key=lambda e: e["signal_ts_ms"]) if matches else None
         results.append({
