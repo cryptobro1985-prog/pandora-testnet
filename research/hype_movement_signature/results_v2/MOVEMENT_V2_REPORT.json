@@ -1,0 +1,297 @@
+{
+  "version": "HYPE-MOVEMENT-SIGNATURE-NORMALIZED-V2",
+  "research_only": true,
+  "real_orders": false,
+  "train_periods": [
+    "Jul12-Aug07",
+    "Aug08-Sep01"
+  ],
+  "validation": "Sep01-Oct01",
+  "untouched_holdout": "Oct04-Nov03",
+  "feature_count": 76,
+  "params": {
+    "entry": 0.0015,
+    "edge": 0.0005,
+    "gba": 0.0015,
+    "gbf": 0.25,
+    "min_hold": 2,
+    "confirm": 1
+  },
+  "validation_metrics": {
+    "equity": 1.0453605103536647,
+    "total_return": 0.04536051035366473,
+    "max_drawdown": 0.027425710084156507,
+    "trades": 15,
+    "trades_per_day": 0.5000115743419987,
+    "win_rate": 0.7333333333333333,
+    "profit_factor": 3.581069264319577,
+    "median_mfe_capture": 0.3541666666666766,
+    "median_mfe_giveback": 0.0036385688295937912,
+    "mean_net_trade": 0.0029850452986698913
+  },
+  "period_metrics": {
+    "TRAIN_JUL12_AUG07": {
+      "equity": 1.0171255113411775,
+      "total_return": 0.017125511341177457,
+      "max_drawdown": 0.0022419582594629395,
+      "trades": 2,
+      "trades_per_day": 0.07907960130701007,
+      "win_rate": 1.0,
+      "profit_factor": 99,
+      "median_mfe_capture": 0.43874002580781,
+      "median_mfe_giveback": 0.0073696467663113,
+      "mean_net_trade": 0.008560137668966107
+    },
+    "TRAIN_AUG08_SEP01": {
+      "equity": 1.384245214519205,
+      "total_return": 0.384245214519205,
+      "max_drawdown": 0.07587075821506184,
+      "trades": 46,
+      "trades_per_day": 1.9167221273763708,
+      "win_rate": 0.6086956521739131,
+      "profit_factor": 3.9442393702688436,
+      "median_mfe_capture": 0.4897959183673582,
+      "median_mfe_giveback": 0.006057059103322826,
+      "mean_net_trade": 0.007305552269013504
+    },
+    "VALIDATE_SEP01_OCT01": {
+      "equity": 1.0453605103536647,
+      "total_return": 0.04536051035366473,
+      "max_drawdown": 0.027425710084156507,
+      "trades": 15,
+      "trades_per_day": 0.5000115743419987,
+      "win_rate": 0.7333333333333333,
+      "profit_factor": 3.581069264319577,
+      "median_mfe_capture": 0.3541666666666766,
+      "median_mfe_giveback": 0.0036385688295937912,
+      "mean_net_trade": 0.0029850452986698913
+    },
+    "HOLDOUT_OCT04_NOV03": {
+      "equity": 1.0904881063960092,
+      "total_return": 0.09048810639600924,
+      "max_drawdown": 0.03932666877039259,
+      "trades": 25,
+      "trades_per_day": 0.8333526239033311,
+      "win_rate": 0.6,
+      "profit_factor": 2.288873645431841,
+      "median_mfe_capture": 0.3571428571428239,
+      "median_mfe_giveback": 0.0034897580516337623,
+      "mean_net_trade": 0.003597547745450954
+    }
+  },
+  "holdout_leverage": [
+    {
+      "leverage": 1,
+      "exposure_x_equity": 0.2,
+      "equity_multiple": 1.018012322185944,
+      "total_return": 0.018012322185944063,
+      "max_drawdown": 0.007890212298322541,
+      "approx_liquidations": 0
+    },
+    {
+      "leverage": 5,
+      "exposure_x_equity": 1.0,
+      "equity_multiple": 1.0904881063960092,
+      "total_return": 0.09048810639600924,
+      "max_drawdown": 0.03932666877039259,
+      "approx_liquidations": 0
+    },
+    {
+      "leverage": 10,
+      "exposure_x_equity": 2.0,
+      "equity_multiple": 1.1817412854403848,
+      "total_return": 0.18174128544038481,
+      "max_drawdown": 0.07830800385744019,
+      "approx_liquidations": 0
+    },
+    {
+      "leverage": 25,
+      "exposure_x_equity": 5.0,
+      "equity_multiple": 1.4547936946113718,
+      "total_return": 0.45479369461137176,
+      "max_drawdown": 0.19263309548033092,
+      "approx_liquidations": 0
+    }
+  ],
+  "holdout_daily": {
+    "1": {
+      "days": 6,
+      "positive_days": 4,
+      "positive_day_rate": 0.6666666666666666,
+      "mean_daily": 0.002990764391127221,
+      "median_daily": 0.0005657693612098891,
+      "best_daily": 0.012933268626051708,
+      "worst_daily": -0.00041544958957329126
+    },
+    "5": {
+      "days": 6,
+      "positive_days": 4,
+      "positive_day_rate": 0.6666666666666666,
+      "mean_daily": 0.014802990380651396,
+      "median_daily": 0.0028203889099092105,
+      "best_daily": 0.06385090737882626,
+      "worst_daily": -0.0020772479478664563
+    },
+    "10": {
+      "days": 6,
+      "positive_days": 4,
+      "positive_day_rate": 0.6666666666666666,
+      "mean_daily": 0.029197730179941244,
+      "median_daily": 0.005619664847531736,
+      "best_daily": 0.12547811469241843,
+      "worst_daily": -0.0041544958957329126
+    },
+    "25": {
+      "days": 6,
+      "positive_days": 4,
+      "positive_day_rate": 0.6666666666666666,
+      "mean_daily": 0.06942771325178221,
+      "median_daily": 0.013891344294400088,
+      "best_daily": 0.29402113642525585,
+      "worst_daily": -0.010386239739332392
+    }
+  },
+  "top_features": [
+    {
+      "feature": "vol_ratio_60",
+      "importance": 0.12720429177433032
+    },
+    {
+      "feature": "vol_ratio_60_240",
+      "importance": 0.12356067741245658
+    },
+    {
+      "feature": "vol_ratio_240",
+      "importance": 0.0493835714558058
+    },
+    {
+      "feature": "trades_z_240",
+      "importance": 0.04227794136627279
+    },
+    {
+      "feature": "range_norm",
+      "importance": 0.03594204503869342
+    },
+    {
+      "feature": "ret_norm_240",
+      "importance": 0.03501728149590449
+    },
+    {
+      "feature": "persist_240",
+      "importance": 0.03117089659459027
+    },
+    {
+      "feature": "eff_norm_240",
+      "importance": 0.02762207503608129
+    },
+    {
+      "feature": "from_high_frac_240",
+      "importance": 0.025514177274701365
+    },
+    {
+      "feature": "from_low_frac_240",
+      "importance": 0.025505567480243563
+    },
+    {
+      "feature": "flow_240",
+      "importance": 0.025055656158799552
+    },
+    {
+      "feature": "align_240",
+      "importance": 0.02491756208669898
+    },
+    {
+      "feature": "vol_ratio_120",
+      "importance": 0.022430051604624444
+    },
+    {
+      "feature": "persist_120",
+      "importance": 0.02239726623370083
+    },
+    {
+      "feature": "vol_ratio_30",
+      "importance": 0.021806111363211835
+    },
+    {
+      "feature": "range_pos_240",
+      "importance": 0.021542472067543582
+    },
+    {
+      "feature": "flow_120",
+      "importance": 0.018836756384132843
+    },
+    {
+      "feature": "flow_60",
+      "importance": 0.01568536369431739
+    },
+    {
+      "feature": "eff_norm_120",
+      "importance": 0.015287266016760196
+    },
+    {
+      "feature": "ret_norm_120",
+      "importance": 0.014363273806616218
+    },
+    {
+      "feature": "turnover_z_240",
+      "importance": 0.013253904921516556
+    },
+    {
+      "feature": "vol_ratio_15",
+      "importance": 0.012563107832344008
+    },
+    {
+      "feature": "align_120",
+      "importance": 0.011097355680436773
+    },
+    {
+      "feature": "range_pos_120",
+      "importance": 0.01083967624878606
+    },
+    {
+      "feature": "from_low_frac_60",
+      "importance": 0.010404043561946607
+    },
+    {
+      "feature": "align_60",
+      "importance": 0.010369085858852208
+    },
+    {
+      "feature": "persist_60",
+      "importance": 0.010319052602384355
+    },
+    {
+      "feature": "vol_ratio_10",
+      "importance": 0.009816604334941212
+    },
+    {
+      "feature": "ret_norm_60",
+      "importance": 0.009445624596532679
+    },
+    {
+      "feature": "flow_30",
+      "importance": 0.009278824090492483
+    },
+    {
+      "feature": "ret_norm_15",
+      "importance": 0.008941281358539206
+    },
+    {
+      "feature": "flow_consensus",
+      "importance": 0.008807365149976609
+    },
+    {
+      "feature": "range_pos_60",
+      "importance": 0.008675557675884245
+    },
+    {
+      "feature": "from_high_frac_60",
+      "importance": 0.008623642444112165
+    },
+    {
+      "feature": "ret_norm_30",
+      "importance": 0.008090628494563684
+    }
+  ],
+  "warning": "Historical research only. 25x is an isolated-margin approximation, not an exact Bybit liquidation engine."
+}
