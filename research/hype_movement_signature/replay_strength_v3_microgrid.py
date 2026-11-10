@@ -212,10 +212,10 @@ def simulate(d,x,pred,y,p:P,record=False):
                 trades_rows=tr if record else None)
 
 def obj(m):
-    if m["trades"]<20:return -999
+    if m["trades"]<12 or m["equity"]<=1.0 or m["profit_factor"]<1.10:return -999
     activity=min(1.0,m["trades_per_day"]/1.5)
     capture=max(-1,min(1,m["median_mfe_capture"]))
-    return math.log(max(m["equity"],1e-9))-2.75*m["max_drawdown"]+0.12*capture+0.06*activity-0.00005*m["trades"]
+    return math.log(max(m["equity"],1e-9))-2.75*m["max_drawdown"]+0.12*capture+0.03*activity-0.00005*m["trades"]
 
 def tune(d,x,pred,y):
     best=None
