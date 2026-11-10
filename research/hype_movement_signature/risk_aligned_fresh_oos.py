@@ -12,6 +12,8 @@ LONG_TRADES15_LOG_MIN=9.366420603073673
 LONG_RET240_MAX=-0.0223654803306015
 SHORT_TRADES120_LOG_MIN=11.347329448638876
 SHORT_EFF120_MAX=-0.1057408448492819
+LONG_RET60_MAX=-0.024604170297572357
+SHORT_EFF5_MIN=0.006498103118136646
 
 def dt(s):
     x=datetime.fromisoformat(s.replace("Z","+00:00"))
@@ -54,16 +56,21 @@ def main():
     d["gap"]=d.get("gap",False).fillna(False).astype(bool)
 
     c=d.close;b=d.buy_notional.clip(lower=0);s=d.sell_notional.clip(lower=0)
-    ret120=c/c.shift(120)-1;ret240=c/c.shift(240)-1
+    ret5=c/c.shift(5)-1;ret60=c/c.shift(60)-1;ret120=c/c.shift(120)-1;ret240=c/c.shift(240)-1
     bb=b.rolling(120,min_periods=40).sum();ss=s.rolling(120,min_periods=40).sum()
     flow120=(bb-ss)/(bb+ss).replace(0,np.nan)
     eff120=(ret120/(flow120.abs()+.08)).clip(-.25,.25)
+    bb5=b.rolling(5,min_periods=2).sum();ss5=s.rolling(5,min_periods=2).sum()
+    flow5=(bb5-ss5)/(bb5+ss5).replace(0,np.nan)
+    eff5=(ret5/(flow5.abs()+.08)).clip(-.25,.25)
     trades15=np.log1p(d.trade_count.rolling(15,min_periods=5).sum())
     trades120=np.log1p(d.trade_count.rolling(120,min_periods=40).sum())
     good=d.gap.astype(float).rolling(15,min_periods=1).max().eq(0)
 
     L=good&(trades15>=LONG_TRADES15_LOG_MIN)&(ret240<=LONG_RET240_MAX)
     S=good&(trades120>=SHORT_TRADES120_LOG_MIN)&(eff120<=SHORT_EFF120_MAX)
+    L_trigger=L&(ret60<=LONG_RET60_MAX)
+    S_trigger=S&(eff5>=SHORT_EFF5_MIN)
 
     up=future(d.high,60,"max")/c-1
     dn=1-future(d.low,60,"min")/c
@@ -96,17 +103,19 @@ def main():
          "target":{"horizon_minutes":60,"mfe_min":MOVE,"mae_max":ADV},
          "frozen_rules":{
            "LONG":{"trades15_log_ge":LONG_TRADES15_LOG_MIN,"ret240_le":LONG_RET240_MAX},
-           "SHORT":{"trades120_log_ge":SHORT_TRADES120_LOG_MIN,"eff120_le":SHORT_EFF120_MAX}},
-         "minute_quality":{"LONG":stat(L,yL),"SHORT":stat(S,yS)},
-         "episodes":{"LONG":le,"SHORT":se},
-         "episode_quality":{
-           "LONG":{"n":len(le),"good":sum(x["any_valid_move"] for x in le),"precision":sum(x["any_valid_move"] for x in le)/len(le) if le else 0.0},
-           "SHORT":{"n":len(se),"good":sum(x["any_valid_move"] for x in se),"precision":sum(x["any_valid_move"] for x in se)/len(se) if se else 0.0}},
+           "SHORT":{"trades120_log_ge":SHORT_TRADES120_LOG_MIN,"eff120_le":SHORT_EFF120_MAX},
+           "LONG_TRIGGER":{"ret60_le":LONG_RET60_MAX},
+           "SHORT_TRIGGER":{"eff5_ge":SHORT_EFF5_MIN}},
+         "setup_quality":{"LONG":stat(L,yL),"SHORT":stat(S,yS)},
+         "trigger_quality":{"LONG":stat(L_trigger,yL),"SHORT":stat(S_trigger,yS)},
+         "episodes":{"LONG":episodes(L_trigger,yL,"LONG"),"SHORT":episodes(S_trigger,yS,"SHORT")},
+         "episode_quality":{},
+
          "downloads":src.downloads,"bytes":src.bytes,
          "note":"Rules mined from Jul/Aug, validated Sep, Oct holdout remained positive-lift; no Local labels and no fresh-window tuning."}
     (a.out/"RISK_ALIGNED_FRESH_OOS_REPORT.json").write_text(json.dumps(rep,indent=2)+"\n")
-    pd.DataFrame({"ts_ms":d.ts_ms,"long":L,"short":S,"up60":up,"dn60":dn,
+    pd.DataFrame({"ts_ms":d.ts_ms,"long_setup":L,"short_setup":S,"long_trigger":L_trigger,"short_trigger":S_trigger,"up60":up,"dn60":dn,
                   "long_true":yL,"short_true":yS,"trades15_log":trades15,
-                  "trades120_log":trades120,"ret240":ret240,"eff120":eff120}).to_csv(a.out/"RISK_ALIGNED_FRESH_OOS_ROWS.csv",index=False)
+                  "trades120_log":trades120,"ret60":ret60,"ret240":ret240,"eff5":eff5,"eff120":eff120}).to_csv(a.out/"RISK_ALIGNED_FRESH_OOS_ROWS.csv",index=False)
     print(json.dumps(rep,indent=2))
 if __name__=="__main__":main()
