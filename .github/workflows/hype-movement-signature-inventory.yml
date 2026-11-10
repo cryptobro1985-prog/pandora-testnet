@@ -6,7 +6,6 @@ on:
       - research/hype-h1-local-v5-oi-microstructure-20261104
     paths:
       - '.github/workflows/hype-movement-signature-inventory.yml'
-      - 'research/hype_movement_signature/**'
   workflow_dispatch:
 
 permissions:
