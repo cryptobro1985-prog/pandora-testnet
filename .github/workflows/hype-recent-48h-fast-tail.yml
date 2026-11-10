@@ -1,0 +1,91 @@
+name: HYPE Recent 48h Frozen Fast Tail
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-recent-48h-fast-tail.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  replay:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: c1
+            start: "2026-11-09T07:50:00+00:00"
+            end: "2026-11-09T16:05:00+00:00"
+          - shard: c2
+            start: "2026-11-09T15:55:00+00:00"
+            end: "2026-11-10T00:00:00+00:00"
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PYTHONUNBUFFERED: "1"
+      HYPE_DOWNLOAD_WORKERS: "32"
+      CRYPTOHFTDATA_API_KEY: ${{ secrets.CRYPTOHFTDATA_API_KEY }}
+      MODEL_ARTIFACT_ID: "13578389090"
+      RAW_ARTIFACT_ID: "13723739486"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install replay stack
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy polars pyarrow requests scikit-learn==1.9.1 zstandard
+      - name: Restore frozen model and raw cache
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p frozen_model recent48_cache raw_bundle
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${MODEL_ARTIFACT_ID}/zip" > model.zip
+          unzip -q model.zip -d frozen_model
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${RAW_ARTIFACT_ID}/zip" > raw.zip
+          unzip -q raw.zip -d raw_bundle
+          cp -a raw_bundle/cache/. recent48_cache/
+      - name: Replay tail shard
+        run: |
+          set -euo pipefail
+          mkdir -p shard_out
+          python -m research.hype_full_micro_202607.recent_48h_frozen_replay \
+            --start "${{ matrix.start }}" --end "${{ matrix.end }}" \
+            --output shard_out --cache recent48_cache \
+            --model frozen_model/full_micro_model/HYPE_FULL_MICRO_202607.pkl | tee replay.log
+      - name: Build compact signal summary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.load(open("shard_out/RECENT_48H_FROZEN_REPLAY.json"))
+          out=[]
+          for s in r["candidate_replay"]["signals"]:
+              ep=float(s["extreme_price"]);sp=float(s["signal_price"]);side=s["side"]
+              missed=((sp/ep)-1)*100 if side=="LOW" else ((ep/sp)-1)*100
+              out.append({**s,"missed_move_pct":max(0.0,missed),
+                          "target_side":"LONG" if side=="LOW" else "SHORT"})
+          Path("signal_summary.json").write_text(json.dumps({
+              "shard":"${{ matrix.shard }}","window":r["window_utc"],
+              "signals":out,"by_side":r["candidate_replay"]["by_side"],
+              "largest_high_to_low_leg":r.get("largest_high_to_low_leg")
+          },indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-FAST48-TAIL-${{ matrix.shard }}
+          path: |
+            signal_summary.json
+            shard_out/RECENT_48H_FROZEN_REPLAY.json
+          retention-days: 3
+          compression-level: 9
