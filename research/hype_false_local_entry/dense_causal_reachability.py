@@ -36,7 +36,7 @@ def dense_completed_m1_candidates(rows):
             if not start <= extreme_ts < end:
                 raise ValueError("intrabar extreme timestamp outside completed minute")
             yield dict(side=side, extreme_ts_ms=extreme_ts,
-                       signal_ts_ms=end, extreme_price=price,
+                       signal_ts_ms=end, interval_ms=interval, extreme_price=price,
                        source="dense_completed_m1", entry_signal=False)
 
 
