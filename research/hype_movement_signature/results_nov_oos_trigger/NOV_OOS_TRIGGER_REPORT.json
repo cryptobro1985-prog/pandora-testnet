@@ -1,0 +1,78 @@
+{
+  "version": "HYPE-UNIVERSAL-TRIGGER-NOV-OOS-V1",
+  "frozen_before_nov": true,
+  "window": [
+    1794096060000,
+    1794268800000
+  ],
+  "target": {
+    "horizon_minutes": 60,
+    "favorable_move": 0.008,
+    "max_adverse": 0.0035
+  },
+  "rules": {
+    "LONG": {
+      "ret240_le": -1.0632321402270533,
+      "eff5_ge": 0.008174651851675081
+    },
+    "SHORT": {
+      "eff5_ge": 0.008174651851675081,
+      "eff120_le": -0.03765468290410372
+    }
+  },
+  "event_quality": {
+    "LONG": {
+      "signals": 39,
+      "true": 13,
+      "precision": 0.3333333333333333,
+      "base_rate": 0.14893617021276595,
+      "lift": 2.238095238095238
+    },
+    "SHORT": {
+      "signals": 67,
+      "true": 14,
+      "precision": 0.208955223880597,
+      "base_rate": 0.18262411347517732,
+      "lift": 1.1441820026083176
+    }
+  },
+  "simulation": {
+    "equity": 1.0116348358430536,
+    "return": 0.011634835843053581,
+    "trades": 12,
+    "trades_per_day": 6.002084056964224,
+    "win_rate": 0.75,
+    "profit_factor": 1.6478438407217264,
+    "max_drawdown": 0.013362143981487828,
+    "median_mfe": 0.0060756212018667766,
+    "median_mae": -0.002978495246884205,
+    "median_mfe_capture": 0.5589679255701347
+  },
+  "leverage": [
+    {
+      "leverage": 1,
+      "equity_multiple": 1.0023415878835689,
+      "return": 0.002341587883568863,
+      "approx_liquidations": 0
+    },
+    {
+      "leverage": 5,
+      "equity_multiple": 1.0116348358430536,
+      "return": 0.011634835843053581,
+      "approx_liquidations": 0
+    },
+    {
+      "leverage": 10,
+      "equity_multiple": 1.0230787544452156,
+      "return": 0.023078754445215566,
+      "approx_liquidations": 0
+    },
+    {
+      "leverage": 25,
+      "equity_multiple": 1.0561250017046837,
+      "return": 0.05612500170468371,
+      "approx_liquidations": 0
+    }
+  ],
+  "note": "No Local High/Low labels or local detector used in decisions. Nov thresholds frozen before scoring."
+}
