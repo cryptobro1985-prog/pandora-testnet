@@ -176,7 +176,7 @@ def simulate(d,x,pred,y,p:P,record=False):
             mfe=max(mfe,fav);mae=min(mae,adv);recoil=max(0,mfe-cur)
             cap=max(p.gba,p.gbf*max(mfe,0))
             age=i-ei
-            reverse=age>=p.min_hold and opp>=p.entry and opp-own>=p.edge
+            reverse=age>=p.min_hold and opp>=p.entry and opp-own>=p.edge and align_score>=p.align
             stop=age>=1 and cur<=-p.stop_abs
             protect=age>=p.min_hold and mfe>=p.entry and recoil>=cap
             weaken=age>=p.min_hold and own<0 and recoil>=p.gba*0.6
