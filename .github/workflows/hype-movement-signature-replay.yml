@@ -29,13 +29,12 @@ jobs:
           python -m pip install numpy pandas scikit-learn
 
       - name: Download historical master
-        env:
-          GH_TOKEN: \${{ github.token }}
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/hype_master/unpacked
-          gh api repos/\${GITHUB_REPOSITORY}/actions/artifacts/13650399622/zip > /tmp/hype_master/master.zip
-          unzip -q /tmp/hype_master/master.zip -d /tmp/hype_master/unpacked
+        uses: actions/download-artifact@v4
+        with:
+          name: HYPE-HISTORY-20260712-20261103-MASTER
+          path: /tmp/hype_master/unpacked
+          run-id: 42564417286
+          github-token: ${{ github.token }}
 
       - name: Run movement replay
         run: |
@@ -48,6 +47,7 @@ jobs:
       - name: Commit replay outputs
         run: |
           set -euo pipefail
+          git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add research/hype_movement_signature/results_common
