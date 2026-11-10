@@ -1,0 +1,138 @@
+{
+  "version": "HYPE-DIRECT-MOVEMENT-STRENGTH-V5",
+  "research_only": true,
+  "real_orders": false,
+  "inputs": "causal current-state momentum+flow+persistence+efficiency+acceleration; no Local teacher, no future predictor",
+  "selection": "thresholds tuned on Sep01-Oct01 only; Oct04-Nov03 diagnostic because prior variants already inspected",
+  "params": {
+    "entry": 0.12,
+    "exit": -0.04,
+    "trail_abs": 0.0015,
+    "trail_frac": 0.2,
+    "stop_abs": 0.004,
+    "confirm": 1,
+    "cooldown": 2
+  },
+  "validation_metrics": {
+    "equity": 0.012125663057408658,
+    "total_return": -0.9878743369425913,
+    "max_drawdown": 0.9878796791934303,
+    "trades": 3384,
+    "trades_per_day": 112.8026111715549,
+    "win_rate": 0.18085106382978725,
+    "profit_factor": 0.29424620748392627,
+    "median_mfe_capture": -0.3499999999999522,
+    "median_mfe_giveback": 0.002255415988041354,
+    "mean_net_trade": -0.0012991447965052434,
+    "score_stats": {
+      "p50_abs": 0.15842023864782087,
+      "p90_abs": 0.3777927096595239,
+      "max_abs": 0.7658473231538254
+    }
+  },
+  "period_metrics": {
+    "TRAIN_JUL12_AUG07": {
+      "equity": 0.02293821508031265,
+      "total_return": -0.9770617849196873,
+      "max_drawdown": 0.9771330111370878,
+      "trades": 2881,
+      "trades_per_day": 113.914165682748,
+      "win_rate": 0.18049288441513364,
+      "profit_factor": 0.2708569645537038,
+      "median_mfe_capture": -0.40816326530614777,
+      "median_mfe_giveback": 0.002145487718349659,
+      "mean_net_trade": -0.0013059795998379936,
+      "score_stats": {
+        "p50_abs": 0.15534241717534536,
+        "p90_abs": 0.3672808676848468,
+        "max_abs": 0.7250307431792926
+      }
+    },
+    "TRAIN_AUG08_SEP01": {
+      "equity": 0.040454982347523545,
+      "total_return": -0.9595450176524765,
+      "max_drawdown": 0.9596474397055638,
+      "trades": 2688,
+      "trades_per_day": 112.00324083451488,
+      "win_rate": 0.19196428571428573,
+      "profit_factor": 0.36100590893586104,
+      "median_mfe_capture": -0.25,
+      "median_mfe_giveback": 0.0022613351075442822,
+      "mean_net_trade": -0.0011857154686438652,
+      "score_stats": {
+        "p50_abs": 0.15482445206065878,
+        "p90_abs": 0.3735531025792228,
+        "max_abs": 0.719676351758313
+      }
+    },
+    "VALIDATE_SEP01_OCT01": {
+      "equity": 0.012125663057408658,
+      "total_return": -0.9878743369425913,
+      "max_drawdown": 0.9878796791934303,
+      "trades": 3384,
+      "trades_per_day": 112.8026111715549,
+      "win_rate": 0.18085106382978725,
+      "profit_factor": 0.29424620748392627,
+      "median_mfe_capture": -0.3499999999999522,
+      "median_mfe_giveback": 0.002255415988041354,
+      "mean_net_trade": -0.0012991447965052434,
+      "score_stats": {
+        "p50_abs": 0.15842023864782087,
+        "p90_abs": 0.3777927096595239,
+        "max_abs": 0.7658473231538254
+      }
+    },
+    "HOLDOUT_OCT04_NOV03": {
+      "equity": 0.012068711821804972,
+      "total_return": -0.987931288178195,
+      "max_drawdown": 0.9879157806958138,
+      "trades": 3321,
+      "trades_per_day": 110.70256255931851,
+      "win_rate": 0.18127070159590486,
+      "profit_factor": 0.28223226574643573,
+      "median_mfe_capture": -0.41350812197196196,
+      "median_mfe_giveback": 0.0020962935264190463,
+      "mean_net_trade": -0.0013244342556774358,
+      "score_stats": {
+        "p50_abs": 0.1588401423367158,
+        "p90_abs": 0.3737542706918124,
+        "max_abs": 0.766857285122621
+      }
+    }
+  },
+  "oct_leverage": [
+    {
+      "leverage": 1,
+      "exposure_x_equity": 0.2,
+      "equity_multiple": 0.41459894197968805,
+      "total_return": -0.585401058020312,
+      "max_drawdown": 0.585401058020312,
+      "approx_liquidations": 0
+    },
+    {
+      "leverage": 5,
+      "exposure_x_equity": 1.0,
+      "equity_multiple": 0.012068711821804972,
+      "total_return": -0.987931288178195,
+      "max_drawdown": 0.987931288178195,
+      "approx_liquidations": 0
+    },
+    {
+      "leverage": 10,
+      "exposure_x_equity": 2.0,
+      "equity_multiple": 0.00014041564670316242,
+      "total_return": -0.9998595843532968,
+      "max_drawdown": 0.9998595843532968,
+      "approx_liquidations": 0
+    },
+    {
+      "leverage": 25,
+      "exposure_x_equity": 5.0,
+      "equity_multiple": 1.791118142003e-10,
+      "total_return": -0.9999999998208882,
+      "max_drawdown": 0.9999999998208882,
+      "approx_liquidations": 0
+    }
+  ],
+  "warning": "Historical research only. Direct-state V5 is a development candidate, not proven future edge."
+}
