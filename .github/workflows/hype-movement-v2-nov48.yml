@@ -6,7 +6,7 @@ on:
       - research/hype-h1-local-v5-oi-microstructure-20261104
     paths:
       - ".github/workflows/hype-movement-v2-nov48.yml"
-      - "research/hype_movement_signature/forward_nov48_v2.py"
+      - "research/hype_movement_signature/forward_nov48_v2.py"\n      - "research/hype_movement_signature/build_recent_compact_from_cache.py"
   workflow_dispatch:
 
 permissions:
@@ -60,14 +60,15 @@ jobs:
           gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${LOCAL_MODEL_ARTIFACT_ID}/zip" > /tmp/local_model.zip
           unzip -q /tmp/local_model.zip -d /tmp/frozen_local
           test -s /tmp/frozen_local/full_micro_model/HYPE_FULL_MICRO_202607.pkl
-      - name: Rebuild fixed Nov8-10 compact causal tape
+      - name: Build fixed Nov8-10 compact causal tape fast
         run: |
           set -euo pipefail
           mkdir -p /tmp/recent48_out
-          python -m research.hype_full_micro_202607.recent_48h_frozen_replay \
+          python research/hype_movement_signature/build_recent_compact_from_cache.py \
             --start "${REPLAY_START}" --end "${REPLAY_END}" \
-            --output /tmp/recent48_out --cache /tmp/recent48_cache \
-            --model /tmp/frozen_local/full_micro_model/HYPE_FULL_MICRO_202607.pkl
+            --cache /tmp/recent48_cache \
+            --output /tmp/recent48_out/RECENT_48H_COMPACT_1M.jsonl.gz \
+            --workers 32
           test -s /tmp/recent48_out/RECENT_48H_COMPACT_1M.jsonl.gz
       - name: Score frozen V2 movement policy
         run: |
@@ -96,4 +97,3 @@ jobs:
           path: /tmp/movement_nov48/**
           if-no-files-found: warn
           retention-days: 30
-\n# stable rerun\n
