@@ -1,0 +1,83 @@
+{
+  "version": "HYPE-RISK-ALIGNED-TRIGGERS-FRESH-OOS-V1",
+  "window": [
+    "2026-11-10T00:00:00+00:00",
+    "2026-11-10T18:30:00+00:00"
+  ],
+  "target": {
+    "horizon_minutes": 60,
+    "mfe_min": 0.008,
+    "mae_max": 0.015
+  },
+  "frozen_rules": {
+    "LONG": {
+      "trades15_log_ge": 9.366420603073673,
+      "ret240_le": -0.0223654803306015
+    },
+    "SHORT": {
+      "trades120_log_ge": 11.347329448638876,
+      "eff120_le": -0.1057408448492819
+    }
+  },
+  "minute_quality": {
+    "LONG": {
+      "signal_minutes": 60,
+      "true_minutes": 19,
+      "precision": 0.31666666666666665,
+      "base_rate": 0.1734848484848485,
+      "lift": 1.8253275109170304
+    },
+    "SHORT": {
+      "signal_minutes": 57,
+      "true_minutes": 51,
+      "precision": 0.8947368421052632,
+      "base_rate": 0.328030303030303,
+      "lift": 2.7276042299744745
+    }
+  },
+  "episodes": {
+    "LONG": [
+      {
+        "start_ts_ms": 1794321120000,
+        "end_ts_ms": 1794321120000,
+        "signal_minutes": 1,
+        "any_valid_move": true,
+        "best_mfe": 0.028242880469377063,
+        "worst_mae": 0.00020756649046582698
+      },
+      {
+        "start_ts_ms": 1794325140000,
+        "end_ts_ms": 1794329520000,
+        "signal_minutes": 59,
+        "any_valid_move": true,
+        "best_mfe": 0.012933025404157084,
+        "worst_mae": 0.017945647936737807
+      }
+    ],
+    "SHORT": [
+      {
+        "start_ts_ms": 1794325440000,
+        "end_ts_ms": 1794329940000,
+        "signal_minutes": 57,
+        "any_valid_move": true,
+        "best_mfe": 0.018663037742661093,
+        "worst_mae": 0.012933025404157084
+      }
+    ]
+  },
+  "episode_quality": {
+    "LONG": {
+      "n": 2,
+      "good": 2,
+      "precision": 1.0
+    },
+    "SHORT": {
+      "n": 1,
+      "good": 1,
+      "precision": 1.0
+    }
+  },
+  "downloads": 23,
+  "bytes": 11194666,
+  "note": "Rules mined from Jul/Aug, validated Sep, Oct holdout remained positive-lift; no Local labels and no fresh-window tuning."
+}
