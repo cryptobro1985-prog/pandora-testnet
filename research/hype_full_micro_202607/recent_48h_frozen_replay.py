@@ -352,7 +352,7 @@ def main():
     base.END = end
     src = base.Source(args.cache, None if not __import__("os").getenv("CRYPTOHFTDATA_API_KEY") else __import__("os").getenv("CRYPTOHFTDATA_API_KEY"))
 
-    base.prefetch_hours(src, start - timedelta(hours=24), end, ("trades",))
+    # Fast path: trades need 24h warm-up for the 24h causal state.\n    workers=max(8, int(__import__("os").getenv("HYPE_DOWNLOAD_WORKERS", "32")))\n    base.prefetch_hours(src, start - timedelta(hours=24), end, ("trades",), workers=workers)
     sec5, mins, schemas = base.load_trades(src)
     if not mins:
         raise RuntimeError("no HYPE trade history downloaded")
@@ -364,22 +364,16 @@ def main():
     if not records:
         raise RuntimeError("no causal candidate snapshots in replay window")
 
-    # Rich causal state. L50 is replayed continuously; missing aux sources remain masked.
-    base.prefetch_hours(src, start - timedelta(hours=24), end, ("orderbook",))
-    candidate_hours = sorted({
-        datetime.fromtimestamp(r["snapshot_ts_ms"] / 1000, tz=timezone.utc).replace(minute=0, second=0, microsecond=0)
-        for r in records
-    })
-    aux_hours = sorted(set(candidate_hours) | {h - timedelta(hours=1) for h in candidate_hours})
-    if aux_hours:
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        with ThreadPoolExecutor(max_workers=(8 if src.api_key else 2)) as ex:
-            futs = []
-            for hour in aux_hours:
-                for kind in ("liquidations", "open_interest", "mark_price", "ticker"):
-                    futs.append(ex.submit(src.get, hour, kind, False))
-            for fut in as_completed(futs):
-                fut.result()
+    # Rich causal state. Prefetch all non-trade streams in one concurrent batch.
+    # Only one hour of pre-window state is required for book/scalar carry; the
+    # 24h structural warm-up is already supplied by trades above.
+    base.prefetch_hours(
+        src,
+        start - timedelta(hours=1),
+        end,
+        ("orderbook", "liquidations", "open_interest", "mark_price", "ticker"),
+        workers=workers,
+    )
 
     ratio_rows = base.fetch_account_ratio()
     records = base.attach_account_ratio(records, ratio_rows)
