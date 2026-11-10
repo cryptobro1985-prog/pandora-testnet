@@ -9,6 +9,7 @@ This tool measures signal noise, not profitability or OOS precision.
 import argparse
 import json
 from collections import Counter
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from statistics import median
 
@@ -20,16 +21,27 @@ def audit(bars):
     machine = CausalReversalMachine()
     flips = []
     n_bars = 0
+    first_ts = last_ts = None
     for bar in bars:
         n_bars += 1
+        ts = int(bar.get('bar_end_ms', bar['ts_ms']))
+        first_ts = ts if first_ts is None else min(first_ts, ts)
+        last_ts = ts if last_ts is None else max(last_ts, ts)
         flips.extend(s for s in machine.on_bar(bar)
                      if s.core_flip and s.stage in ("HARD_CONFIRMED", "ULTRA_CONFIRMED"))
     gaps = [(b.ts_ms - a.ts_ms) / 60000 for a, b in zip(flips, flips[1:])]
-    by_day = Counter(str(s.ts_ms // 86400000) for s in flips)
+    by_day = Counter(datetime.fromtimestamp(s.ts_ms / 1000, tz=timezone.utc).date().isoformat() for s in flips)
+    if first_ts is not None:
+        day = datetime.fromtimestamp(first_ts / 1000, tz=timezone.utc).date()
+        last_day = datetime.fromtimestamp(last_ts / 1000, tz=timezone.utc).date()
+        while day <= last_day:
+            by_day.setdefault(day.isoformat(), 0)
+            day += timedelta(days=1)
     return {
         "orders": "OFF",
         "signal_generation": "completed_M1_label_blind",
         "bars": n_bars,
+        "observed_utc_days": len(by_day),
         "total_core_flips": len(flips),
         "core_flips_by_stage": dict(Counter(s.stage for s in flips)),
         "median_minutes_between_flips": median(gaps) if gaps else None,
