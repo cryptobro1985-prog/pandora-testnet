@@ -44,7 +44,7 @@ def evaluate(events, labels, tolerance_ms=60000, price_tolerance_bps=1.0):
             # Exact-minute mode must identify the SAME completed candle, not
             # a neighboring candle at the inclusive teacher interval end.
             and (tolerance_ms != 0 or
-                 e["signal_ts_ms"] - 60000 == start)
+                 e["signal_ts_ms"] - int(e.get("interval_ms", 60000)) == start)
         ]
         earliest = min(matches, key=lambda e: e["signal_ts_ms"]) if matches else None
         results.append({
