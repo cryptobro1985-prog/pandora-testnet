@@ -92,8 +92,14 @@ def causal_decision_bars(tape, candidate_ts_ms, end_bar, start_bar=0):
             yield k
 
 
-def m1_states(rows, ages=AGES):
-    """Return chronological decision rows and outcome-free candidate identities."""
+def m1_states(rows, ages=AGES, decision_sampling="legacy_age_grid"):
+    """Return causal decision rows; event mode evaluates every completed M1 bar.
+
+    Legacy sampling remains the default until the downstream CV and rich-micro
+    alignment are validated together. Neither mode uses oracle labels in X.
+    """
+    if decision_sampling not in ("legacy_age_grid", "completed_m1_events"):
+        raise ValueError(f"Unsupported decision_sampling: {decision_sampling}")
     tape = m1.tape_from_rows(rows)
     opens = np.asarray([r["open"] for r in rows], dtype=float)
     volume, turnover, trade_count = [
@@ -117,11 +123,19 @@ def m1_states(rows, ages=AGES):
                 prior = [*recent, (i, price, end)]
                 pre_hi, pre_lo = tape.high[i-180:i].max(), tape.low[i-180:i].min()
                 pre_move = (pre_hi / price - 1 if sign == 1 else price / pre_lo - 1) * 10_000
-                for age in ages:
-                    k = int(np.searchsorted(tape.end, ts + age * 1000))
+                if decision_sampling == "completed_m1_events":
+                    decision_indices = causal_decision_bars(tape, ts, end, start_bar=i)
+                else:
+                    decision_indices = (int(np.searchsorted(tape.end, ts + age * 1000)) for age in ages)
+                seen_indices = set()
+                for k in decision_indices:
                     if k >= end:
                         break
+                    if k in seen_indices:
+                        continue
+                    seen_indices.add(k)
                     now = int(tape.end[k])
+                    age = (now - ts) / 1000
                     mark = float(tape.close[k])
                     retrace = sign * (mark / price - 1) * 10_000
                     values = {}
@@ -163,7 +177,7 @@ def m1_states(rows, ages=AGES):
                     put(values, 43, price_vs_last_replaced=sign*(price/replaced[-1][1]-1) if replaced else None)
                     put(values, 79, decision_segment_gap=0)
                     put(values, 80, consecutive_completed_minutes=k+1-start)
-                    if age in EARLY_AGES:
+                    if decision_sampling == "completed_m1_events" or age in EARLY_AGES:
                         trade_trajectories(values, tape, i, k, start, sign, new, old,
                                            logret, opens, volume, trade_count)
                     states.append(dict(candidate, age_s=age, signal_ts_ms=now,
