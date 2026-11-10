@@ -152,7 +152,7 @@ def main():
     long_sig=f.long_base&(lv>=2)
     short_sig=f.short_base&(sv>=2)
 
-    up=future_roll(d.high,HORIZON,"max")/c-1;dn=1-future_roll(d.low,HORIZON,"min")
+    up=future_roll(d.high,HORIZON,"max")/c-1;dn=1-future_roll(d.low,HORIZON,"min")/c
     valid=up.notna()&dn.notna();yl=(up>=MOVE)&(dn<=ADV)&valid;ys=(dn>=MOVE)&(up<=ADV)&valid
     def stat(mask,y):
         m=mask&valid;n=int(m.sum());tp=int((m&y).sum());base=float(y[valid].mean())
