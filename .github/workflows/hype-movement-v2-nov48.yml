@@ -1,0 +1,98 @@
+name: HYPE Movement V2 Frozen Nov8-10
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-movement-v2-nov48.yml"
+      - "research/hype_movement_signature/forward_nov48_v2.py"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: hype-movement-v2-nov48
+  cancel-in-progress: true
+
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PYTHONUNBUFFERED: "1"
+      HYPE_DOWNLOAD_WORKERS: "32"
+      CRYPTOHFTDATA_API_KEY: ${{ secrets.CRYPTOHFTDATA_API_KEY }}
+      RAW_ARTIFACT_ID: "13723739486"
+      LOCAL_MODEL_ARTIFACT_ID: "13578389090"
+      REPLAY_START: "2026-11-08T00:00:00+00:00"
+      REPLAY_END: "2026-11-10T00:00:00+00:00"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install stack
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy pandas scikit-learn==1.9.1 polars pyarrow requests zstandard
+      - name: Restore historical master
+        uses: actions/download-artifact@v4
+        with:
+          name: HYPE-HISTORY-20260712-20261103-MASTER
+          path: /tmp/hype_master
+          run-id: 42564417286
+          github-token: ${{ github.token }}
+      - name: Restore preserved Nov8-10 raw cache and preprocessing model
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/recent48_cache /tmp/raw_bundle /tmp/frozen_local
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${RAW_ARTIFACT_ID}/zip" > /tmp/raw.zip
+          unzip -q /tmp/raw.zip -d /tmp/raw_bundle
+          cp -a /tmp/raw_bundle/cache/. /tmp/recent48_cache/
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${LOCAL_MODEL_ARTIFACT_ID}/zip" > /tmp/local_model.zip
+          unzip -q /tmp/local_model.zip -d /tmp/frozen_local
+          test -s /tmp/frozen_local/full_micro_model/HYPE_FULL_MICRO_202607.pkl
+      - name: Rebuild fixed Nov8-10 compact causal tape
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/recent48_out
+          python -m research.hype_full_micro_202607.recent_48h_frozen_replay \
+            --start "${REPLAY_START}" --end "${REPLAY_END}" \
+            --output /tmp/recent48_out --cache /tmp/recent48_cache \
+            --model /tmp/frozen_local/full_micro_model/HYPE_FULL_MICRO_202607.pkl
+          test -s /tmp/recent48_out/RECENT_48H_COMPACT_1M.jsonl.gz
+      - name: Score frozen V2 movement policy
+        run: |
+          set -euo pipefail
+          python research/hype_movement_signature/forward_nov48_v2.py \
+            --master-root /tmp/hype_master \
+            --recent-compact /tmp/recent48_out/RECENT_48H_COMPACT_1M.jsonl.gz \
+            --out /tmp/movement_nov48
+          cat /tmp/movement_nov48/MOVEMENT_V2_NOV48_REPORT.json
+      - name: Commit forward result
+        run: |
+          set -euo pipefail
+          mkdir -p research/hype_movement_signature/results_forward_nov48_v2
+          cp /tmp/movement_nov48/* research/hype_movement_signature/results_forward_nov48_v2/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add research/hype_movement_signature/results_forward_nov48_v2
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Score frozen movement V2 on Nov8-10 forward control"
+          git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104
+          git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: HYPE-MOVEMENT-V2-NOV48
+          path: /tmp/movement_nov48/**
+          if-no-files-found: warn
+          retention-days: 30
