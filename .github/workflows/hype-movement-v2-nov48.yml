@@ -15,7 +15,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: hype-movement-v2-nov48
+  group: hype-movement-v2-nov48-fast
   cancel-in-progress: false
 
 jobs:
