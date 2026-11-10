@@ -7,6 +7,7 @@ on:
       - research/hype-h1-local-v5-oi-microstructure-20261104
     paths:
       - ".github/workflows/hype-confirmed-local-bounce-cv.yml"
+      - "research/hype_false_local_entry/confirmed_local_bounce_cv.py"
 
 permissions:
   contents: write
