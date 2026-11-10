@@ -53,3 +53,5 @@ jobs:
             git commit -m "Add movement-strength V3 replay results"
             git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104
           fi
+
+# rerun: 2026-11-10 movement-strength-v3
