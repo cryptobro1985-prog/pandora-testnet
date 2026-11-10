@@ -1,0 +1,59 @@
+{
+  "version": "HYPE-FRESH-ADAPTIVE-MICRO-OOS-V1",
+  "window": [
+    "2026-11-10T00:00:00+00:00",
+    "2026-11-10T18:30:00+00:00"
+  ],
+  "local_dependency": false,
+  "threshold_retuned_on_window": false,
+  "target": {
+    "horizon_min": 60,
+    "favorable": 0.008,
+    "max_adverse": 0.0035
+  },
+  "base": {
+    "LONG": {
+      "signals": 2,
+      "true": 0,
+      "precision": 0.0,
+      "base_rate": 0.06764705882352941,
+      "lift": 0.0
+    },
+    "SHORT": {
+      "signals": 25,
+      "true": 14,
+      "precision": 0.56,
+      "base_rate": 0.23627450980392156,
+      "lift": 2.3701244813278013
+    }
+  },
+  "adaptive_micro": {
+    "LONG": {
+      "signals": 1,
+      "true": 0,
+      "precision": 0.0,
+      "base_rate": 0.06764705882352941,
+      "lift": 0.0
+    },
+    "SHORT": {
+      "signals": 22,
+      "true": 12,
+      "precision": 0.5454545454545454,
+      "base_rate": 0.23627450980392156,
+      "lift": 2.3085628064881174
+    }
+  },
+  "vote_counts": {
+    "long_signal_minutes": 9,
+    "short_signal_minutes": 26,
+    "mean_long_votes_on_base": 2.9285714285714284,
+    "mean_short_votes_on_base": 2.902439024390244
+  },
+  "sources": {
+    "book_valid_minutes": 1080,
+    "oi_valid_minutes": 1080,
+    "downloaded_files": 138,
+    "downloaded_bytes": 175163270
+  },
+  "note": "Causal rolling-rank microstructure vote; no Local labels and no target information enters decisions."
+}
