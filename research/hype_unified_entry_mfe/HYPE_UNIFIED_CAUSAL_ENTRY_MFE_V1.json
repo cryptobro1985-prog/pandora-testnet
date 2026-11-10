@@ -1,0 +1,148 @@
+{
+  "version": "HYPE_UNIFIED_CAUSAL_ENTRY_MFE_V1",
+  "date": "2026-11-10",
+  "research_only": true,
+  "real_orders": false,
+  "objectives": [
+    "minimize_false_first",
+    "maximize_coverage_after_precision",
+    "minimize_entry_latency_distance",
+    "maximize_mfe_capture"
+  ],
+  "data_contract": {
+    "canonical_points": 116,
+    "legal_causal_or_quality": 86,
+    "missing_is_never_zero": true
+  },
+  "invariant": [
+    "strong_structural_extreme",
+    "same_side_extension_stops",
+    "price_displacement_away",
+    "new_side_price_impact_efficiency",
+    "new_direction_persistence",
+    "relative_to_previous_failed_same_leg_attempts",
+    "optional_liquidation_exhaustion",
+    "optional_book_transfer_recovery",
+    "confirmed"
+  ],
+  "direction": {
+    "LOW": "LONG",
+    "HIGH": "SHORT"
+  },
+  "high_confidence_paths": {
+    "LOW": [
+      {
+        "id": "L90_REL",
+        "age_min": 90,
+        "candidate_ord_gte": 20,
+        "retrace_bps_gte": 70,
+        "rel_eff_gte": 0.5,
+        "persistence_gte": 0.6
+      },
+      {
+        "id": "L120_EFF_REL",
+        "age_min": 120,
+        "eff_gte": 12.5594,
+        "leg_age_h_gte": 11.9795,
+        "rel_eff_gte": 1
+      },
+      {
+        "id": "L240_EFF_PERSIST",
+        "age_min": 240,
+        "eff_gte": 18.23735278,
+        "persistence_gte": 0.48
+      },
+      {
+        "id": "L300_EFF_PERSIST",
+        "age_min": 300,
+        "eff_gte": 24.13994198,
+        "persistence_gte": 0.44333333
+      }
+    ],
+    "HIGH": [
+      {
+        "id": "H60_REL",
+        "age_min": 60,
+        "retrace_bps_gte": 200,
+        "rel_eff_gte": 0.9,
+        "persistence_gte": 0.6
+      },
+      {
+        "id": "H90_RETRACE",
+        "age_min": 90,
+        "retrace_bps_gte": 350
+      },
+      {
+        "id": "H120_REL",
+        "age_min": 120,
+        "candidate_ord_gte": 5,
+        "retrace_bps_gte": 225,
+        "rel_eff_gte": 1.1,
+        "persistence_gte": 0.5
+      },
+      {
+        "id": "H180_EFF_PERSIST",
+        "age_min": 180,
+        "eff_gte": 16.9135327,
+        "persistence_gte": 0.51666667
+      },
+      {
+        "id": "H240_EFF_PERSIST",
+        "age_min": 240,
+        "eff_gte": 16.67592198,
+        "persistence_gte": 0.51666667
+      },
+      {
+        "id": "H300_EFF_PERSIST",
+        "age_min": 300,
+        "eff_gte": 17.0954571,
+        "persistence_gte": 0.50666667
+      }
+    ]
+  },
+  "mfe_exit": {
+    "tick_by_tick": true,
+    "hard_exit": [
+      "anchor_or_local_invalidated",
+      "confirmed_opposite_local"
+    ],
+    "transfer_exit": [
+      "sustained_opposite_control AND own_side_weakening",
+      "sustained_opposite_control AND mfe_recoil_at_least_current_price_scale"
+    ],
+    "do_not_exit_on": [
+      "single_counterflow_burst",
+      "raw_opposite_notional",
+      "small_pullback_with_own_control_intact"
+    ]
+  },
+  "reentry": [
+    "original_anchor_intact",
+    "correction_seen",
+    "same_direction_control_returns",
+    "no_newer_opposite_local"
+  ],
+  "evidence": {
+    "strong_cascade": {
+      "matched": 253,
+      "tp": 118,
+      "fp": 0,
+      "coverage": 0.4664,
+      "median_entry_distance_pct": 3.227
+    },
+    "full_historical_fitted": {
+      "validated": 256,
+      "confirmed": 256,
+      "fp": 0,
+      "median_entry_distance_pct": 2.409,
+      "median_remaining_move_pct": 3.206
+    },
+    "sealed_may_ultra_survival": {
+      "accepted": 31,
+      "tp": 31,
+      "fp": 0,
+      "recall": 0.2627
+    }
+  },
+  "warning": "Historical zero-FP results do not guarantee future precision or profit. Freeze before forward scoring."
+}
