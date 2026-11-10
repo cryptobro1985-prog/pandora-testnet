@@ -34,6 +34,32 @@ def main():
     model=v2.train([p1,p2])
     d,x,y=recent
     pred=model.predict(x)
+    L,S=v2.scores(pred,y)
+    ts_arr=d.ts_ms.to_numpy(dtype=np.int64)
+    leg_mask=(ts_arr>=HIGH_TS)&(ts_arr<LOW_TS)
+    best=np.maximum(L,S); edge=np.abs(L-S)
+    cand=np.where(L>S,1,-1)
+    def qstats(a):
+        a=np.asarray(a,dtype=float)
+        a=a[np.isfinite(a)]
+        if not len(a): return {"n":0}
+        return {
+            "n":int(len(a)),"min":float(np.min(a)),"p50":float(np.quantile(a,.50)),
+            "p90":float(np.quantile(a,.90)),"p95":float(np.quantile(a,.95)),
+            "p99":float(np.quantile(a,.99)),"max":float(np.max(a))
+        }
+    score_diag={
+        "all":{"long":qstats(L),"short":qstats(S),"best":qstats(best),"edge":qstats(edge)},
+        "control_leg":{
+            "long":qstats(L[leg_mask]),"short":qstats(S[leg_mask]),
+            "best":qstats(best[leg_mask]),"edge":qstats(edge[leg_mask]),
+            "short_candidate_minutes":int(np.sum(leg_mask&(cand<0))),
+            "entry_gate_minutes":int(np.sum(leg_mask&(best>=FROZEN_PARAMS.entry))),
+            "edge_gate_minutes":int(np.sum(leg_mask&(edge>=FROZEN_PARAMS.edge))),
+            "both_frozen_gates_minutes":int(np.sum(leg_mask&(best>=FROZEN_PARAMS.entry)&(edge>=FROZEN_PARAMS.edge))),
+            "short_both_frozen_gates_minutes":int(np.sum(leg_mask&(cand<0)&(best>=FROZEN_PARAMS.entry)&(edge>=FROZEN_PARAMS.edge))),
+        }
+    }
     m=v2.simulate(d,pred,y,FROZEN_PARAMS,True)
     trades=v2.enrich(d,m["trades_rows"],"NOV08_NOV10_FROZEN_FORWARD")
 
@@ -94,6 +120,7 @@ def main():
             pd.to_datetime(int(d.ts_ms.iloc[-1]),unit="ms",utc=True).isoformat(),
         ],
         "frozen_params":FROZEN_PARAMS.__dict__,
+        "score_diagnostics":score_diag,
         "metrics":mm,
         "leverage_approx":lev,
         "daily_exit_day_stats":daily,
