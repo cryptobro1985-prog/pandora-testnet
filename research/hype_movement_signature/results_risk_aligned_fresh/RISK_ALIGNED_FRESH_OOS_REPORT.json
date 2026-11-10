@@ -17,9 +17,15 @@
     "SHORT": {
       "trades120_log_ge": 11.347329448638876,
       "eff120_le": -0.1057408448492819
+    },
+    "LONG_TRIGGER": {
+      "ret60_le": -0.024604170297572357
+    },
+    "SHORT_TRIGGER": {
+      "eff5_ge": 0.006498103118136646
     }
   },
-  "minute_quality": {
+  "setup_quality": {
     "LONG": {
       "signal_minutes": 60,
       "true_minutes": 19,
@@ -35,20 +41,28 @@
       "lift": 2.7276042299744745
     }
   },
+  "trigger_quality": {
+    "LONG": {
+      "signal_minutes": 15,
+      "true_minutes": 8,
+      "precision": 0.5333333333333333,
+      "base_rate": 0.1734848484848485,
+      "lift": 3.0742358078602616
+    },
+    "SHORT": {
+      "signal_minutes": 9,
+      "true_minutes": 9,
+      "precision": 1.0,
+      "base_rate": 0.328030303030303,
+      "lift": 3.048498845265589
+    }
+  },
   "episodes": {
     "LONG": [
       {
-        "start_ts_ms": 1794321120000,
-        "end_ts_ms": 1794321120000,
-        "signal_minutes": 1,
-        "any_valid_move": true,
-        "best_mfe": 0.028242880469377063,
-        "worst_mae": 0.00020756649046582698
-      },
-      {
-        "start_ts_ms": 1794325140000,
-        "end_ts_ms": 1794329520000,
-        "signal_minutes": 59,
+        "start_ts_ms": 1794325440000,
+        "end_ts_ms": 1794327960000,
+        "signal_minutes": 15,
         "any_valid_move": true,
         "best_mfe": 0.012933025404157084,
         "worst_mae": 0.017945647936737807
@@ -56,27 +70,16 @@
     ],
     "SHORT": [
       {
-        "start_ts_ms": 1794325440000,
-        "end_ts_ms": 1794329940000,
-        "signal_minutes": 57,
+        "start_ts_ms": 1794326340000,
+        "end_ts_ms": 1794329580000,
+        "signal_minutes": 9,
         "any_valid_move": true,
         "best_mfe": 0.018663037742661093,
-        "worst_mae": 0.012933025404157084
+        "worst_mae": 0.008332056122946518
       }
     ]
   },
-  "episode_quality": {
-    "LONG": {
-      "n": 2,
-      "good": 2,
-      "precision": 1.0
-    },
-    "SHORT": {
-      "n": 1,
-      "good": 1,
-      "precision": 1.0
-    }
-  },
+  "episode_quality": {},
   "downloads": 23,
   "bytes": 11194666,
   "note": "Rules mined from Jul/Aug, validated Sep, Oct holdout remained positive-lift; no Local labels and no fresh-window tuning."
