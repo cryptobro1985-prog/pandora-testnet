@@ -1,0 +1,118 @@
+{
+  "version": "HYPE-MOVEMENT-ADAPTIVE-RANK-V6",
+  "research_only": true,
+  "real_orders": false,
+  "train": [
+    "Jul12-Aug07",
+    "Aug08-Sep01"
+  ],
+  "validation": "Sep01-Oct01",
+  "mechanism": "V2 direction/value model with strictly causal rolling rank thresholds; no Nov tuning",
+  "params": {
+    "lookback": 360,
+    "qbest": 0.8,
+    "qedge": 0.5,
+    "gba": 0.0015,
+    "gbf": 0.25,
+    "min_hold": 2,
+    "confirm": 1,
+    "cooldown": 1
+  },
+  "validation_metrics": {
+    "equity": 0.5825810705688039,
+    "total_return": -0.4174189294311961,
+    "max_drawdown": 0.420048410512326,
+    "trades": 575,
+    "trades_per_day": 19.167110349776614,
+    "win_rate": 0.31478260869565217,
+    "profit_factor": 0.4913852097497312,
+    "median_mfe_capture": -0.0,
+    "median_mfe_giveback": 0.0019855784303479673,
+    "mean_net_trade": -0.0009319067490871525
+  },
+  "period_metrics": {
+    "TRAIN_JUL12_AUG07": {
+      "equity": 0.9990881875438251,
+      "total_return": -0.0009118124561748875,
+      "max_drawdown": 0.08688546448765533,
+      "trades": 433,
+      "trades_per_day": 17.120733682967682,
+      "win_rate": 0.4110854503464203,
+      "profit_factor": 1.0037952520518876,
+      "median_mfe_capture": 0.27777777777776375,
+      "median_mfe_giveback": 0.0016367740045829526,
+      "mean_net_trade": 4.828829002568472e-06
+    },
+    "TRAIN_AUG08_SEP01": {
+      "equity": 1.5001348649304507,
+      "total_return": 0.5001348649304507,
+      "max_drawdown": 0.08478081388511627,
+      "trades": 459,
+      "trades_per_day": 19.12555340142944,
+      "win_rate": 0.4444444444444444,
+      "profit_factor": 1.6372770571011217,
+      "median_mfe_capture": 0.3235294117647059,
+      "median_mfe_giveback": 0.0019940716787927304,
+      "mean_net_trade": 0.0009128264925816294
+    },
+    "VALIDATE_SEP01_OCT01": {
+      "equity": 0.5825810705688039,
+      "total_return": -0.4174189294311961,
+      "max_drawdown": 0.420048410512326,
+      "trades": 575,
+      "trades_per_day": 19.167110349776614,
+      "win_rate": 0.31478260869565217,
+      "profit_factor": 0.4913852097497312,
+      "median_mfe_capture": -0.0,
+      "median_mfe_giveback": 0.0019855784303479673,
+      "mean_net_trade": -0.0009319067490871525
+    },
+    "HOLDOUT_OCT04_NOV03": {
+      "equity": 0.5966708880684666,
+      "total_return": -0.4033291119315334,
+      "max_drawdown": 0.4086221694311831,
+      "trades": 497,
+      "trades_per_day": 16.56705016319822,
+      "win_rate": 0.27364185110663986,
+      "profit_factor": 0.4674545922611228,
+      "median_mfe_capture": -0.18365455893251748,
+      "median_mfe_giveback": 0.0018971358176778086,
+      "mean_net_trade": -0.001028336890578296
+    }
+  },
+  "oct_leverage": [
+    {
+      "leverage": 1,
+      "exposure_x_equity": 0.2,
+      "equity_multiple": 0.9026395072502699,
+      "total_return": -0.09736049274973013,
+      "max_drawdown": 0.09898028765018196,
+      "approx_liquidations": 0
+    },
+    {
+      "leverage": 5,
+      "exposure_x_equity": 1.0,
+      "equity_multiple": 0.5966708880684666,
+      "total_return": -0.4033291119315334,
+      "max_drawdown": 0.4086221694311831,
+      "approx_liquidations": 0
+    },
+    {
+      "leverage": 10,
+      "exposure_x_equity": 2.0,
+      "equity_multiple": 0.3523824617723064,
+      "total_return": -0.6476175382276936,
+      "max_drawdown": 0.6537814215594853,
+      "approx_liquidations": 0
+    },
+    {
+      "leverage": 25,
+      "exposure_x_equity": 5.0,
+      "equity_multiple": 0.06854033809592174,
+      "total_return": -0.9314596619040783,
+      "max_drawdown": 0.9343327695130669,
+      "approx_liquidations": 0
+    }
+  ],
+  "warning": "Oct is diagnostic after V2 inspection. Nov must remain frozen forward-like evaluation."
+}
