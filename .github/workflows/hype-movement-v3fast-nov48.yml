@@ -1,0 +1,77 @@
+name: HYPE Movement V3 Fast Nov8-10
+
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - '.github/workflows/hype-movement-v3fast-nov48.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  score_v3fast_nov:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PYTHONUNBUFFERED: "1"
+      CRYPTOHFTDATA_API_KEY: ${{ secrets.CRYPTOHFTDATA_API_KEY }}
+      RAW_ARTIFACT_ID: "13723739486"
+      REPLAY_START: "2026-11-08T00:00:00+00:00"
+      REPLAY_END: "2026-11-10T00:00:00+00:00"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install numpy pandas scikit-learn polars pyarrow requests zstandard
+      - uses: actions/download-artifact@v4
+        with:
+          name: HYPE-HISTORY-20260712-20261103-MASTER
+          path: /tmp/hype_master
+          run-id: 42564417286
+          github-token: ${{ github.token }}
+      - name: Restore raw
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/cache /tmp/raw
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${RAW_ARTIFACT_ID}/zip" > /tmp/raw.zip
+          unzip -q /tmp/raw.zip -d /tmp/raw
+          cp -a /tmp/raw/cache/. /tmp/cache/
+      - name: Compact Nov tape
+        run: |
+          mkdir -p /tmp/recent
+          python -m research.hype_movement_signature.build_recent_compact_from_cache \
+            --start "${REPLAY_START}" --end "${REPLAY_END}" \
+            --cache /tmp/cache --output /tmp/recent/compact_1m.jsonl.gz --workers 32
+      - name: Frozen V3-fast score
+        run: |
+          python -m research.hype_movement_signature.forward_nov48_v3_fast \
+            --master-root /tmp/hype_master --recent-compact /tmp/recent/compact_1m.jsonl.gz \
+            --out /tmp/result
+          cat /tmp/result/MOVEMENT_V3_FAST_NOV48_REPORT.json
+      - name: Commit
+        run: |
+          mkdir -p research/hype_movement_signature/results_forward_nov48_v3_fast
+          cp /tmp/result/* research/hype_movement_signature/results_forward_nov48_v3_fast/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add research/hype_movement_signature/results_forward_nov48_v3_fast
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Score V3-fast on Nov8-10 forward control"
+          git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104
+          git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: HYPE-MOVEMENT-V3FAST-NOV48
+          path: /tmp/result/**
+          if-no-files-found: warn
+          retention-days: 30
