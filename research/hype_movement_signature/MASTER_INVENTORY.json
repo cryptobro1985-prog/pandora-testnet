@@ -1,0 +1,316 @@
+{
+  "artifact_id": 13650399622,
+  "files": [
+    {
+      "path": "01_JUL12_AUG07_FULL_MICRO/artifact_manifest.json",
+      "size_bytes": 685,
+      "suffix": ".json",
+      "json_type": "dict",
+      "keys": [
+        "candidate_snapshots_full_micro.jsonl.gz",
+        "labels.json.gz",
+        "compact_1m.jsonl.gz",
+        "manifest.json",
+        "feature_availability.json"
+      ]
+    },
+    {
+      "path": "01_JUL12_AUG07_FULL_MICRO/candidate_snapshots_full_micro.jsonl.gz",
+      "size_bytes": 17366713,
+      "suffix": ".gz"
+    },
+    {
+      "path": "01_JUL12_AUG07_FULL_MICRO/compact_1m.jsonl.gz",
+      "size_bytes": 3564978,
+      "suffix": ".gz"
+    },
+    {
+      "path": "01_JUL12_AUG07_FULL_MICRO/feature_availability.json",
+      "size_bytes": 1158,
+      "suffix": ".json",
+      "json_type": "dict",
+      "keys": [
+        "points_total",
+        "causal_input_points",
+        "target_eval_points",
+        "metadata_points",
+        "historically_observed_or_derived_input_ids",
+        "missing_input_ids",
+        "source_file_counts",
+        "note"
+      ]
+    },
+    {
+      "path": "01_JUL12_AUG07_FULL_MICRO/labels.json.gz",
+      "size_bytes": 1652,
+      "suffix": ".gz"
+    },
+    {
+      "path": "01_JUL12_AUG07_FULL_MICRO/manifest.json",
+      "size_bytes": 7013,
+      "suffix": ".json",
+      "json_type": "dict",
+      "keys": [
+        "symbol",
+        "period",
+        "strict_labels",
+        "strict_low",
+        "strict_high",
+        "candidates",
+        "snapshots",
+        "source",
+        "downloaded_files",
+        "downloaded_bytes",
+        "source_file_counts",
+        "account_ratio_rows",
+        "missing_files",
+        "schemas",
+        "raw_files_retained",
+        "compression",
+        "future_leakage_guard"
+      ]
+    },
+    {
+      "path": "02_AUG08_SEP01/compact_1m.jsonl.gz",
+      "size_bytes": 3213991,
+      "suffix": ".gz"
+    },
+    {
+      "path": "02_AUG08_SEP01/labels.json.gz",
+      "size_bytes": 3862,
+      "suffix": ".gz"
+    },
+    {
+      "path": "02_AUG08_SEP01/manifest.json",
+      "size_bytes": 10575,
+      "suffix": ".json",
+      "json_type": "dict",
+      "keys": [
+        "candidate_snapshots",
+        "candidates",
+        "compression",
+        "discovery_start",
+        "feature_contract",
+        "five_second_bars",
+        "future_leakage_guard",
+        "integrity",
+        "internal_labels",
+        "minute_bars",
+        "oos_start",
+        "period",
+        "raw_archives_retained",
+        "strict_labels",
+        "symbol",
+        "train_end"
+      ]
+    },
+    {
+      "path": "03_SEP01_OCT01/SEPTEMBER_FULL_STACK.json",
+      "size_bytes": 30578,
+      "suffix": ".json",
+      "json_type": "dict",
+      "keys": [
+        "version",
+        "research_only",
+        "real_orders",
+        "label_source",
+        "internal_labels_finalized",
+        "contracts",
+        "evaluation",
+        "by_side",
+        "episode_rows"
+      ]
+    },
+    {
+      "path": "03_SEP01_OCT01/SEPTEMBER_HARD120_ONLY.json",
+      "size_bytes": 40961,
+      "suffix": ".json",
+      "json_type": "dict",
+      "keys": [
+        "version",
+        "contract",
+        "research_only",
+        "real_orders",
+        "label_source",
+        "internal_labels_finalized",
+        "candidate_generation",
+        "evaluation",
+        "by_side",
+        "chronological_blocks",
+        "tradeoff",
+        "episode_rows"
+      ]
+    },
+    {
+      "path": "03_SEP01_OCT01/SEPTEMBER_UNTOUCHED_RESULT.json",
+      "size_bytes": 1391,
+      "suffix": ".json",
+      "json_type": "dict",
+      "keys": [
+        "period",
+        "untouched_for_frozen_stack",
+        "hard120",
+        "full_stack",
+        "by_side",
+        "gate",
+        "contracts",
+        "real_orders"
+      ]
+    },
+    {
+      "path": "03_SEP01_OCT01/compact_1m.jsonl.gz",
+      "size_bytes": 4004149,
+      "suffix": ".gz"
+    },
+    {
+      "path": "03_SEP01_OCT01/labels.json.gz",
+      "size_bytes": 5071,
+      "suffix": ".gz"
+    },
+    {
+      "path": "03_SEP01_OCT01/manifest.json",
+      "size_bytes": 13023,
+      "suffix": ".json",
+      "json_type": "dict",
+      "keys": [
+        "candidate_snapshots",
+        "candidates",
+        "compression",
+        "discovery_start",
+        "feature_contract",
+        "five_second_bars",
+        "future_leakage_guard",
+        "integrity",
+        "internal_labels",
+        "minute_bars",
+        "oos_start",
+        "period",
+        "raw_archives_retained",
+        "strict_labels",
+        "symbol",
+        "train_end"
+      ]
+    },
+    {
+      "path": "04_OCT04_NOV03/artifact_manifest.json",
+      "size_bytes": 800,
+      "suffix": ".json",
+      "json_type": "dict",
+      "keys": [
+        "candidate_snapshots.jsonl.gz",
+        "compact_1m.jsonl.gz",
+        "feature_availability.json",
+        "labels.json.gz",
+        "manifest.json",
+        "summary.json"
+      ]
+    },
+    {
+      "path": "04_OCT04_NOV03/candidate_snapshots.jsonl.gz",
+      "size_bytes": 4043926,
+      "suffix": ".gz"
+    },
+    {
+      "path": "04_OCT04_NOV03/compact_1m.jsonl.gz",
+      "size_bytes": 4192386,
+      "suffix": ".gz"
+    },
+    {
+      "path": "04_OCT04_NOV03/feature_availability.json",
+      "size_bytes": 4243,
+      "suffix": ".json",
+      "json_type": "dict",
+      "keys": [
+        "contract_points",
+        "input_ids",
+        "observed_historical_input_ids",
+        "rule",
+        "target_eval_ids",
+        "unavailable_historical_input_ids"
+      ]
+    },
+    {
+      "path": "04_OCT04_NOV03/labels.json.gz",
+      "size_bytes": 4860,
+      "suffix": ".gz"
+    },
+    {
+      "path": "04_OCT04_NOV03/manifest.json",
+      "size_bytes": 13030,
+      "suffix": ".json",
+      "json_type": "dict",
+      "keys": [
+        "candidate_snapshots",
+        "candidates",
+        "compression",
+        "discovery_start",
+        "feature_contract",
+        "five_second_bars",
+        "future_leakage_guard",
+        "integrity",
+        "internal_labels",
+        "minute_bars",
+        "oos_start",
+        "period",
+        "raw_archives_retained",
+        "strict_labels",
+        "symbol",
+        "train_end"
+      ]
+    },
+    {
+      "path": "04_OCT04_NOV03/summary.json",
+      "size_bytes": 11036,
+      "suffix": ".json",
+      "json_type": "dict",
+      "keys": [
+        "discovery",
+        "manifest",
+        "model",
+        "oos",
+        "symbol",
+        "top_features"
+      ]
+    },
+    {
+      "path": "MASTER_INDEX.json",
+      "size_bytes": 6491,
+      "suffix": ".json",
+      "json_type": "dict",
+      "keys": [
+        "dataset",
+        "symbol",
+        "coverage",
+        "feature_contract",
+        "principle",
+        "periods",
+        "files"
+      ]
+    },
+    {
+      "path": "README.md",
+      "size_bytes": 1135,
+      "suffix": ".md"
+    },
+    {
+      "path": "_source_artifacts/aug08_sep01.zip",
+      "size_bytes": 3221984,
+      "suffix": ".zip"
+    },
+    {
+      "path": "_source_artifacts/jul12_aug07_full_micro.zip",
+      "size_bytes": 20945314,
+      "suffix": ".zip"
+    },
+    {
+      "path": "_source_artifacts/oct04_nov03.zip",
+      "size_bytes": 8251701,
+      "suffix": ".zip"
+    },
+    {
+      "path": "_source_artifacts/sep01_oct01.zip",
+      "size_bytes": 4028434,
+      "suffix": ".zip"
+    }
+  ]
+}
