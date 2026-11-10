@@ -1,0 +1,80 @@
+name: HYPE Movement Adaptive V2.3 Nov Forward
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - 'research/hype_movement_signature/replay_adaptive_v23.py'
+      - '.github/workflows/hype-movement-adaptive-v23.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: hype-movement-adaptive-v23
+  cancel-in-progress: true
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      RAW_ARTIFACT_ID: "13723739486"
+      REPLAY_START: "2026-11-08T00:00:00+00:00"
+      REPLAY_END: "2026-11-10T00:00:00+00:00"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install numpy pandas scikit-learn==1.9.1 requests zstandard
+      - uses: actions/download-artifact@v4
+        with:
+          name: HYPE-HISTORY-20260712-20261103-MASTER
+          path: /tmp/hype_master
+          run-id: 42564417286
+          github-token: ${{ github.token }}
+      - name: Restore raw Nov cache
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/cache /tmp/raw
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${RAW_ARTIFACT_ID}/zip" > /tmp/raw.zip
+          unzip -q /tmp/raw.zip -d /tmp/raw
+          cp -a /tmp/raw/cache/. /tmp/cache/
+      - name: Build Nov compact
+        run: |
+          mkdir -p /tmp/recent
+          python -m research.hype_movement_signature.build_recent_compact_from_cache \
+            --start "${REPLAY_START}" --end "${REPLAY_END}" \
+            --cache /tmp/cache --output /tmp/recent/compact_1m.jsonl.gz --workers 32
+      - name: Run adaptive replay
+        run: |
+          rm -rf /tmp/v23
+          python -m research.hype_movement_signature.replay_adaptive_v23 \
+            --master-root /tmp/hype_master \
+            --recent-compact /tmp/recent/compact_1m.jsonl.gz \
+            --out /tmp/v23
+          cat /tmp/v23/MOVEMENT_V23_REPORT.json
+      - name: Commit result
+        run: |
+          set -euo pipefail
+          git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104
+          rm -rf research/hype_movement_signature/results_v23
+          mkdir -p research/hype_movement_signature/results_v23
+          cp /tmp/v23/* research/hype_movement_signature/results_v23/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add research/hype_movement_signature/results_v23
+          if ! git diff --cached --quiet; then
+            git commit -m "Add adaptive movement V2.3 Nov forward results"
+            git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104 || true
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: HYPE-MOVEMENT-V23
+          path: /tmp/v23/**
+          if-no-files-found: warn
