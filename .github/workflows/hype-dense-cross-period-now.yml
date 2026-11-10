@@ -55,9 +55,25 @@ jobs:
               sides={s:sum(x.get("side",x.get("type"))==s for x in rows) for s in ("LOW","HIGH")}
               print("julaug_legacy",scope,"finalized",len(rows),"sides",sides)
           PY
-      - name: Prepare strict Jul-Aug teacher
+      - name: Prepare strict Jul-Aug teacher with archive-edge censor
         run: |
-          cp julaug/legacy_labels.json.gz julaug/labels.json.gz
+          python - <<'PY'
+          import gzip,json
+          src="julaug/legacy_labels.json.gz"
+          dst="julaug/labels.json.gz"
+          with gzip.open(src,"rt",encoding="utf-8") as f:
+              doc=json.load(f)
+          strict=[x for x in doc.get("strict",[]) if x.get("reference_finalized")]
+          censored=[x for x in strict if int(x.get("label_id",-1))==1]
+          kept=[x for x in strict if int(x.get("label_id",-1))!=1]
+          sides={s:sum(x.get("side",x.get("type"))==s for x in kept) for s in ("LOW","HIGH")}
+          if len(censored)!=1 or len(kept)!=46 or sides!={"LOW":23,"HIGH":23}:
+              raise ValueError(f"unexpected Jul-Aug censor contract: censored={len(censored)} kept={len(kept)} sides={sides}")
+          with gzip.open(dst,"wt",encoding="utf-8") as f:
+              json.dump({"internal":[],"strict":kept},f,separators=(",",":"))
+          print("julaug_censored_label_ids",[x.get("label_id") for x in censored])
+          print("julaug_strict_evaluable",len(kept),sides)
+          PY
       - name: Replay same causal engine on both strict periods
         run: |
           python -m research.hype_false_local_entry.replay_dense_first_signal \
@@ -65,7 +81,7 @@ jobs:
             --expected-total 76 --expected-low 38 --expected-high 38 --expected-swings 75
           python -m research.hype_false_local_entry.replay_dense_first_signal \
             --base-dir julaug --out JULAUG_DENSE.json --scope strict \
-            --expected-total 47 --expected-low 24 --expected-high 23 --expected-swings 46
+            --expected-total 46 --expected-low 23 --expected-high 23 --expected-swings 45
           python - <<'PY'
           import json
           for name in ("OCTNOV_DENSE.json","JULAUG_DENSE.json"):
