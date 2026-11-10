@@ -40,7 +40,7 @@ jobs:
       - name: Run focused causal and scope tests
         run: |
           python -m pip install --disable-pip-version-check pytest
-          pytest -q research/hype_false_local_entry/test_prefix_causality.py research/hype_false_local_entry/test_first_flip_accounting.py research/hype_false_local_entry/test_dense_causal_reachability.py
+          python -m pytest -q research/hype_false_local_entry/test_prefix_causality.py research/hype_false_local_entry/test_first_flip_accounting.py research/hype_false_local_entry/test_dense_causal_reachability.py
       - name: Run complete label-blind replay then offline dual-scope scoring
         run: |
           set -euo pipefail
