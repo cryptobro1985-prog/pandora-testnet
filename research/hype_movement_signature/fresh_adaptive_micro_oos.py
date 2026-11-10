@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import argparse,json,math
+import argparse,json,math,os
 from datetime import datetime,timezone,timedelta
 from pathlib import Path
 import numpy as np,pandas as pd
@@ -73,7 +73,7 @@ def main():
     a=ap.parse_args();a.out.mkdir(parents=True,exist_ok=True)
     start,end=parse_dt(a.start),parse_dt(a.end)
     fm.START=start;fm.END=end
-    src=fm.Source(a.cache)
+    src=fm.Source(a.cache,(os.getenv("CRYPTOHFTDATA_API_KEY") or "").strip() or None)
     # Warm price/flow history plus complete current tape.
     fm.prefetch_hours(src,start-timedelta(hours=5),end,("trades",),workers=24)
     _,mins,_=fm.load_trades(src)
