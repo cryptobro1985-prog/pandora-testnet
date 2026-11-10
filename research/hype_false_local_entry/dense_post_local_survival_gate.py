@@ -28,7 +28,12 @@ def load(base,name):
     with gzip.open(base/"labels.json.gz","rt",encoding="utf-8") as f:d=json.load(f)
     labels=sorted([x for x in d.get("strict",[]) if x.get("reference_finalized")],key=ltime)
     bars=sorted(list(read_jsonl(base/"compact_1m.jsonl.gz")),key=bend)
-    return name,bars,labels
+    m=CausalReversalMachine(); flips_by_ts={}
+    for b in bars:
+        flips=flips_by_ts.get(end,[])
+        if flips:
+            flips_by_ts.setdefault(bend(b),[]).extend(flips)
+    return name,bars,labels,flips_by_ts
 
 
 @dataclass
@@ -41,8 +46,7 @@ class Entry:
     retrace_bps:float
 
 
-def generate_entries(bars,hold_min,min_retrace_bps):
-    m=CausalReversalMachine()
+def generate_entries(bars,flips_by_ts,hold_min,min_retrace_bps):
     pending=None
     entries=[]
     active_entry_side=None
@@ -120,8 +124,8 @@ def main():
     for h in holds:
         for r in retraces:
             per={}
-            for name,bars,labels in periods:
-                per[name]=score(labels,generate_entries(bars,h,r))
+            for name,bars,labels,flips_by_ts in periods:
+                per[name]=score(labels,generate_entries(bars,flips_by_ts,h,r))
             n=sum(x["swings"] for x in per.values())
             t=sum(x["true_first"] for x in per.values())
             w=sum(x["wrong_first"] for x in per.values())
