@@ -37,6 +37,22 @@ jobs:
           python -m research.hype_false_local_entry.confirmed_local_bounce_cv \
             --master in/master.zip \
             --output out/HYPE_CONFIRMED_LOCAL_BOUNCE_CV.json | tee out/run.log
+      - name: Validate causal CV output contract
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path("out/HYPE_CONFIRMED_LOCAL_BOUNCE_CV.json").read_text())
+          assert d["real_orders"] is False and d["time_gate"] is False
+          assert set(d["by_side"]) == {"LOW","HIGH"}
+          for side in ("LOW","HIGH"):
+              folds=d["by_side"][side]["folds"]
+              assert len(folds)==4 and len({f["holdout"] for f in folds})==4
+              for f in folds:
+                  assert all(f["holdout"] not in x["fit_periods"] for x in f["inner_oof_folds"])
+                  assert "false_adverse_p90_bps" in f["test"]
+          print("Confirmed bounce causal CV contract passed")
+          PY
       - name: Publish
         run: |
           mkdir -p research/hype_false_local_entry/results
@@ -46,5 +62,5 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           git add research/hype_false_local_entry/results/HYPE_CONFIRMED_LOCAL_BOUNCE_CV.json
           git commit -m "research: publish confirmed Local bounce-entry CV [skip ci]" || true
-          git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104 || true
-          git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104 || true
+          git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104
+          git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104
