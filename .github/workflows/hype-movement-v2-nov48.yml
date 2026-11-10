@@ -74,7 +74,7 @@ jobs:
       - name: Score frozen V2 movement policy
         run: |
           set -euo pipefail
-          python research/hype_movement_signature/forward_nov48_v2.py \
+          python -m research.hype_movement_signature.forward_nov48_v2 \
             --master-root /tmp/hype_master \
             --recent-compact /tmp/recent48_out/RECENT_48H_COMPACT_1M.jsonl.gz \
             --out /tmp/movement_nov48
