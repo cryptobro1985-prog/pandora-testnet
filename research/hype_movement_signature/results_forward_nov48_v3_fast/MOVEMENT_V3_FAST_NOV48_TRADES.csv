@@ -1,0 +1,2 @@
+entry_i,exit_i,side,gross,net,mfe,mae,reason,period,entry_ts_ms,exit_ts_ms,side_name,mfe_giveback,mfe_capture,entry_price,exit_price,entry_iso,exit_iso,inside_control_short_leg
+1334,1336,1,-0.000894346926516798,-0.0020943469265167977,0.0015484215444170335,-0.0023226323166255503,MFE_PROTECT,NOV08_NOV10_FORWARD,1794176100000,1794176220000,LONG,0.0024427684709338315,-0.5775862068965926,74.915,74.848,2026-11-08T22:15:00+00:00,2026-11-08T22:17:00+00:00,False
