@@ -88,6 +88,7 @@ def score_first_flips(bars, labels, flips, max_lag_ms=3600000):
     completed_hits = sum(bool(r["detected"]) for r in completed_rows)
     completed_swings = len(completed_rows)
     completed_wrong_first = sum(bool(r["first_signal_wrong_side"]) for r in completed_rows)
+    completed_no_signal = sum(not r["first_signal_present"] for r in completed_rows)
     completed_missed = completed_swings - completed_hits
     # Completed-swing precision excludes the terminal, unfinished interval.
     # Still charge all unassigned/duplicate core flips as false predictions.
@@ -106,10 +107,18 @@ def score_first_flips(bars, labels, flips, max_lag_ms=3600000):
         "completed_swing_missed_rate":completed_missed/completed_swings if completed_swings else None,
         "completed_swing_recall":completed_hits/completed_swings if completed_swings else None,
         "completed_swing_wrong_first":completed_wrong_first,
+        "completed_swing_no_signal":completed_no_signal,
+        "completed_swing_first_present":completed_hits + completed_wrong_first,
+        "completed_swing_direction_precision_given_first":(
+            completed_hits / (completed_hits + completed_wrong_first)
+            if completed_hits + completed_wrong_first else None),
         "completed_swing_first_signal_precision":completed_precision,
         "completed_swing_false_first":completed_false_predictions,
         "terminal_local_hit_excluded_from_completed_swing_precision":terminal_hit,
         "missed_local_rate":(len(labels)-len(hits))/len(labels) if labels else None,
+        "no_signal_locals":sum(not r["first_signal_present"] for r in results),
+        "wrong_first_locals":len(wrong),
+        "direction_precision_given_first":len(hits)/(len(hits)+len(wrong)) if hits or wrong else None,
         "total_core_flips":total,"false_first":len(false)+len(wrong),
         "first_signal_precision":len(hits)/total if total else None,
         "median_lag_ms":med("lag_ms", results),
