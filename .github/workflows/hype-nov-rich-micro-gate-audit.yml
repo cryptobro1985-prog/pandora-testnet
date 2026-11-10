@@ -1,0 +1,71 @@
+name: HYPE Nov Rich Micro Gate Audit
+
+on:
+  push:
+    branches: [research/hype-h1-local-v5-oi-microstructure-20261104]
+    paths:
+      - "research/hype_movement_signature/nov_rich_micro_gate_audit.py"
+      - ".github/workflows/hype-nov-rich-micro-gate-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      RAW_ARTIFACT_ID: "13723739486"
+      REPLAY_START: "2026-11-08T00:00:00+00:00"
+      REPLAY_END: "2026-11-10T00:00:00+00:00"
+      CRYPTOHFTDATA_API_KEY: ${{ secrets.CRYPTOHFTDATA_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install numpy pandas polars pyarrow requests zstandard
+      - name: Restore preserved Nov raw cache
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/raw /tmp/cache /tmp/recent
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${RAW_ARTIFACT_ID}/zip" > /tmp/raw.zip
+          unzip -q /tmp/raw.zip -d /tmp/raw
+          cp -a /tmp/raw/cache/. /tmp/cache/
+      - name: Build Nov compact
+        run: |
+          python -m research.hype_movement_signature.build_recent_compact_from_cache             --start "${REPLAY_START}" --end "${REPLAY_END}"             --cache /tmp/cache --output /tmp/recent/compact_1m.jsonl.gz --workers 32
+      - name: Audit frozen rich micro gates
+        run: |
+          rm -rf /tmp/micro_audit
+          python -m research.hype_movement_signature.nov_rich_micro_gate_audit             --compact /tmp/recent/compact_1m.jsonl.gz --cache /tmp/cache --out /tmp/micro_audit
+          cat /tmp/micro_audit/NOV_RICH_MICRO_GATE_REPORT.json
+      - name: Publish result
+        run: |
+          set -euo pipefail
+          git fetch origin research/hype-h1-local-v5-oi-microstructure-20261104
+          git reset --hard origin/research/hype-h1-local-v5-oi-microstructure-20261104
+          rm -rf research/hype_movement_signature/results_nov_micro_gate
+          mkdir -p research/hype_movement_signature/results_nov_micro_gate
+          cp /tmp/micro_audit/* research/hype_movement_signature/results_nov_micro_gate/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add research/hype_movement_signature/results_nov_micro_gate
+          if ! git diff --cached --quiet; then
+            git commit -m "research(hype): publish Nov rich-micro gate audit"
+            git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: HYPE-NOV-RICH-MICRO-GATE-${{ github.run_id }}
+          path: /tmp/micro_audit/**
+          if-no-files-found: warn
+          retention-days: 30
