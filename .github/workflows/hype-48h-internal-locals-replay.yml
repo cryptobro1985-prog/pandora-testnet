@@ -1,0 +1,191 @@
+name: HYPE 48H Internal Locals Replay
+
+on:
+  push:
+    branches: [research/hype-h1-local-v5-oi-microstructure-20261104]
+    paths: [".github/workflows/hype-48h-internal-locals-replay.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install polars pyarrow
+      - name: Restore 48h raw
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p raw out
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13723739486/zip" > raw.zip
+          unzip -q raw.zip -d raw
+      - name: Replay broad INTERNAL H1 L3/K1 locals
+        run: |
+          python - <<'PY'
+          import glob,json,math,bisect
+          from datetime import datetime,timezone
+          from pathlib import Path
+          import polars as pl
+
+          def pick(cols,*names):
+              low={c.lower():c for c in cols}
+              for n in names:
+                  if n.lower() in low:return low[n.lower()]
+              return None
+          def ms(v):
+              if v is None:return None
+              if isinstance(v,(int,float)):
+                  x=float(v)
+                  if x<1e11:x*=1000
+                  return int(x)
+              try:return int(datetime.fromisoformat(str(v).replace("Z","+00:00")).timestamp()*1000)
+              except:return None
+          def iso(t):return datetime.fromtimestamp(t/1000,timezone.utc).isoformat().replace("+00:00","Z")
+
+          # Executed trades -> causal M1 bars with flow.
+          trades=[]
+          for p in sorted(glob.glob("raw/cache/*_trades.parquet")):
+              d=pl.read_parquet(p); c=d.columns
+              tc=pick(c,"trade_time","event_time","timestamp","time","received_time","ts")
+              pc=pick(c,"price","trade_price","exec_price")
+              qc=pick(c,"size","qty","quantity","trade_qty","exec_qty")
+              sc=pick(c,"side","taker_side","direction")
+              if not tc or not pc:continue
+              sel=[tc,pc]+([qc] if qc else [])+([sc] if sc else [])
+              for r in d.select(sel).iter_rows(named=True):
+                  t=ms(r[tc])
+                  try:px=float(r[pc]); q=float(r[qc]) if qc else 0.0
+                  except:continue
+                  if not t or px<=0:continue
+                  side=str(r[sc]).lower() if sc else ""
+                  notional=px*q
+                  buy=notional if ("buy" in side or side in ("b","1")) else 0.0
+                  sell=notional if ("sell" in side or side in ("s","-1")) else 0.0
+                  trades.append((t,px,buy,sell))
+          trades.sort()
+          if not trades:raise SystemExit("no trades")
+
+          bars=[]; cur=None
+          for t,px,buy,sell in trades:
+              k=t//60000*60000
+              if cur is None or cur["start_ms"]!=k:
+                  if cur:bars.append(cur)
+                  cur={"start_ms":k,"end_ms":k+60000,"open":px,"high":px,"low":px,"close":px,
+                       "high_ts_ms":t,"low_ts_ms":t,"buy":buy,"sell":sell}
+              else:
+                  if px>cur["high"]:cur["high"]=px;cur["high_ts_ms"]=t
+                  if px<cur["low"]:cur["low"]=px;cur["low_ts_ms"]=t
+                  cur["close"]=px;cur["buy"]+=buy;cur["sell"]+=sell
+          if cur:bars.append(cur)
+          bars=[b for b in bars if b["start_ms"]>=1794096000000 and b["start_ms"]<1794268800000]
+          starts=[b["start_ms"] for b in bars]; ends=[b["end_ms"] for b in bars]
+
+          # Full H1 bars.
+          hours=[]
+          byh={}
+          for b in bars:byh.setdefault((b["start_ms"]//3600000)*3600000,[]).append(b)
+          for h in sorted(byh):
+              q=sorted(byh[h],key=lambda x:x["start_ms"])
+              if len(q)!=60 or q[0]["start_ms"]!=h or q[-1]["end_ms"]!=h+3600000:continue
+              hi=max(q,key=lambda x:x["high"]); lo=min(q,key=lambda x:x["low"])
+              hours.append({"h":h,"open":q[0]["open"],"high":hi["high"],"high_ts":hi["high_ts_ms"],
+                            "low":lo["low"],"low_ts":lo["low_ts_ms"],"close":q[-1]["close"]})
+
+          # INTERNAL L3/K1 teacher: current H1 makes a 3-hour structural extreme,
+          # one completed opposite-following hour confirms the provisional pivot.
+          piv=[]
+          for i in range(3,len(hours)-1):
+              h=hours[i]; nxt=hours[i+1]; prev=hours[i-3:i]
+              if h["low"]<min(x["low"] for x in prev) and nxt["low"]>h["low"]:
+                  piv.append({"side":"LOW","price":h["low"],"extreme_ts_ms":h["low_ts"],
+                              "h1_start_ms":h["h"],"confirmed_ts_ms":nxt["h"]+3600000})
+              if h["high"]>max(x["high"] for x in prev) and nxt["high"]<h["high"]:
+                  piv.append({"side":"HIGH","price":h["high"],"extreme_ts_ms":h["high_ts"],
+                              "h1_start_ms":h["h"],"confirmed_ts_ms":nxt["h"]+3600000})
+          piv.sort(key=lambda x:(x["confirmed_ts_ms"],x["extreme_ts_ms"]))
+
+          # Collapse consecutive same-side pivots exactly like terminal tracker.
+          terminal=[]; pending=None
+          events=[]
+          for p in piv:
+              if pending is None:
+                  pending=p;events.append({"event":"PROVISIONAL",**p});continue
+              if p["side"]==pending["side"]:
+                  better=p["price"]<pending["price"] if p["side"]=="LOW" else p["price"]>pending["price"]
+                  if better:
+                      events.append({"event":"REPLACED","old":pending,"new":p});pending=p
+                  continue
+              fin=dict(pending);fin["terminal_finalized_at_ms"]=p["confirmed_ts_ms"]
+              terminal.append(fin);events.append({"event":"TERMINAL_FINAL","terminal":fin,"next":p});pending=p
+
+          # Causal signature diagnostics at 60/180/300s from each pivot extreme.
+          def close_at(t):
+              j=bisect.bisect_left(ends,t)
+              return bars[j]["close"] if j<len(bars) else None
+          def window(a,b):
+              i=bisect.bisect_left(ends,a);j=bisect.bisect_right(ends,b)
+              return bars[i:j]
+          def diag(p,age):
+              t=p["extreme_ts_ms"]+age*1000; mark=close_at(t)
+              if mark is None:return None
+              sign=1 if p["side"]=="LOW" else -1
+              ret=sign*(mark/p["price"]-1)
+              q=window(p["extreme_ts_ms"],t)
+              buy=sum(x["buy"] for x in q);sell=sum(x["sell"] for x in q);tot=buy+sell
+              flow=(buy-sell)/tot if tot>0 else None
+              oriented_flow=sign*flow if flow is not None else None
+              # price-impact efficiency approximation from minute returns per side notional
+              new=buy if p["side"]=="LOW" else sell
+              old=sell if p["side"]=="LOW" else buy
+              eff_new=max(ret*10000,0)*100000/new if new>0 else None
+              eff_old=max(-ret*10000,0)*100000/old if old>0 else None
+              return {"age_s":age,"ts_ms":t,"ts":iso(t),"price":mark,"reversal_pct":ret*100,
+                      "oriented_flow":oriented_flow,"new_side_eff":eff_new,"old_side_eff":eff_old}
+
+          out=[]
+          for p in piv:
+              d=[diag(p,a) for a in (60,180,300)]
+              d=[x for x in d if x]
+              # Relationship confirmation: persistence + effective new side + no same-side extension
+              # before checkpoint. This is diagnostic, not a new trained model.
+              first=None
+              for x in d:
+                  extq=window(p["extreme_ts_ms"],x["ts_ms"])
+                  no_ext=(min(z["low"] for z in extq)>=p["price"] if p["side"]=="LOW" else max(z["high"] for z in extq)<=p["price"])
+                  flow_ok=x["oriented_flow"] is not None and x["oriented_flow"]>0
+                  resp_ok=x["reversal_pct"]>0
+                  eff_ok=(x["new_side_eff"] is not None and x["new_side_eff"]>0 and
+                          (x["old_side_eff"] is None or x["new_side_eff"]>=x["old_side_eff"]))
+                  x["checks"]={"no_new_same_side_extreme":no_ext,"positive_price_response":resp_ok,
+                               "new_side_flow":flow_ok,"new_side_efficiency":eff_ok}
+                  x["core_checks_passed"]=sum(x["checks"].values())
+                  if first is None and no_ext and resp_ok and flow_ok and eff_ok:first=x
+              z=dict(p);z["extreme_ts"]=iso(p["extreme_ts_ms"]);z["h1_confirmed_ts"]=iso(p["confirmed_ts_ms"])
+              z["trajectory"]=d;z["first_core_signature_confirmation"]=first
+              out.append(z)
+
+          doc={"mode":"POSTFACTUM_ALL_INTERNAL_H1_L3K1_48H","window_utc":["2026-11-08T00:00:00Z","2026-11-10T00:00:00Z"],
+               "m1_bars":len(bars),"h1_bars":len(hours),"provisional_pivots":len(piv),
+               "terminal_finalized_count":len(terminal),"pivots":out,"terminal_finalized":terminal,
+               "note":"Structural universe is broad INTERNAL L3/K1. Signature columns are causal diagnostics at 60/180/300s; no future label is used in them."}
+          Path("out/HYPE_48H_INTERNAL_LOCALS_REPLAY.json").write_text(json.dumps(doc,indent=2,ensure_ascii=False))
+          print(json.dumps({"provisional":len(piv),"terminal":len(terminal),
+            "pivots":[{"side":x["side"],"price":x["price"],"extreme_ts":x["extreme_ts"],
+                       "h1_confirmed_ts":x["h1_confirmed_ts"],
+                       "signature":x["first_core_signature_confirmation"]} for x in out]},indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-48H-INTERNAL-LOCALS-REPLAY
+          path: out/HYPE_48H_INTERNAL_LOCALS_REPLAY.json
+          retention-days: 7
