@@ -1,0 +1,40 @@
+name: HYPE Movement Signature Strength V3 Fast
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - '.github/workflows/hype-movement-signature-v3-fast.yml'
+      - 'research/hype_movement_signature/replay_strength_v3_fast.py'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  replay_v3_fast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+          fetch-depth: 0
+      - run: python -m pip install numpy pandas scikit-learn
+      - uses: actions/download-artifact@v4
+        with:
+          name: HYPE-HISTORY-20260712-20261103-MASTER
+          path: /tmp/hype_master/unpacked
+          run-id: 42564417286
+          github-token: ${{ github.token }}
+      - run: |
+          rm -rf research/hype_movement_signature/results_v3_fast
+          python research/hype_movement_signature/replay_strength_v3_fast.py --master-root /tmp/hype_master/unpacked --out research/hype_movement_signature/results_v3_fast
+      - run: |
+          git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add research/hype_movement_signature/results_v3_fast
+          if ! git diff --cached --quiet; then
+            git commit -m "Add accelerated movement-strength V3 results"
+            git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104
+          fi
