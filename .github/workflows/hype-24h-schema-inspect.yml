@@ -1,0 +1,39 @@
+name: HYPE 24H Raw Schema Inspect
+on:
+  push:
+    branches: [research/hype-h1-local-v5-oi-microstructure-20261104]
+    paths: [".github/workflows/hype-24h-schema-inspect.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python -m pip install polars pyarrow
+      - name: restore
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: |
+          mkdir -p raw
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13723739486/zip" > raw.zip
+          unzip -q raw.zip -d raw
+      - name: inspect schemas
+        run: |
+          python - <<'PY'
+          import polars as pl, json
+          for typ in ["trades","orderbook","liquidations","open_interest","mark_price","ticker"]:
+              p=f"raw/cache/20261109_08_{typ}.parquet"
+              try:
+                  d=pl.read_parquet(p)
+              except Exception as e:
+                  print("TYPE",typ,"ERR",repr(e));continue
+              print("\nTYPE",typ)
+              print("COLUMNS",d.columns)
+              print("SCHEMA",d.schema)
+              print("SAMPLE",json.dumps(d.head(3).to_dicts(),default=str)[:12000])
+          PY
