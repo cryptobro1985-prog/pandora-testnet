@@ -71,7 +71,7 @@ def main():
                 f"{report['covered']}/{report['finalized']}; "
                 f"missing={report['missing_label_ids']}"
             )
-    # Generate one shared causal stream; NEVER select signals using labels.
+    # Diagnostic exact-minute audit: the permissive +/-60s, 1bp match can\n    # overstate reachability. Report exact candle/price matching separately.\n    exact_coverage = {scope: evaluate(candidates, rows, tolerance_ms=0,\n                                      price_tolerance_bps=0.000001)\n                      for scope, rows in scopes.items()}\n    # Generate one shared causal stream; NEVER select signals using labels.
     machine = CausalReversalMachine()
     emitted = []
     for bar in bars:
@@ -82,7 +82,7 @@ def main():
         "status": "offline_historical_diagnostic_not_untouched_oos",
         "orders": "OFF",
         "core_flip_policy": "HARD_CONFIRMED_OR_ULTRA_CONFIRMED_ONLY",
-        "candidate_generation": coverage,
+        "candidate_generation": coverage,\n        "exact_minute_candidate_generation": exact_coverage,
         "first_signal": {
             scope: score_first_flips(bars, scope_labels, flips,
                                      max_lag_ms=args.max_lag_ms)
