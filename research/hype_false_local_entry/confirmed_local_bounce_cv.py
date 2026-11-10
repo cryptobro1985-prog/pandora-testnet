@@ -31,7 +31,13 @@ def build(master):
         for r,tag in zip(p["early"],tags):
             if tag is None: continue
             ep,terminal=tag
-            # Rich micro is certified by the upstream causal snapshot adapter.\n            # Merge only legal predictors; never admit target/evaluation metadata.\n            raw_features = {**r["features"], **r.get("clean_features", {})}\n            fx={k:float(v) for k,v in raw_features.items()\n                if finite(v) and feat.point_id(k) in INPUT_IDS and feat.point_id(k) not in QUALITY_ONLY}\n            rr.append(dict(r,features=fx,episode=int(ep),terminal=bool(terminal),period=name))
+            # Rich micro is certified by the upstream causal snapshot adapter.
+            # Merge only legal predictors; never admit target/evaluation metadata.
+            raw_features = {**r["features"], **r.get("clean_features", {})}
+            fx = {k: float(v) for k, v in raw_features.items()
+                  if finite(v) and feat.point_id(k) in INPUT_IDS
+                  and feat.point_id(k) not in QUALITY_ONLY}
+            rr.append(dict(r,features=fx,episode=int(ep),terminal=bool(terminal),period=name))
         rows[name]=rr
     return periods,rows
 
