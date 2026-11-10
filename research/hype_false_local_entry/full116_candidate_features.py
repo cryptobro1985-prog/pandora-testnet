@@ -282,7 +282,10 @@ def clean_micro_features(row, index):
             value = f.get(name)
             put(out, 55, **{f"l{depth}_imbalance": value})
             if prior and value is not None:
-                previous = prior[0][1]
+                # Compare with the most recent *earlier* certified frame, not
+                # the oldest frame in the 300s lookback. Using prior[0] makes
+                # this feature depend on archive sampling density.
+                previous = prior[-1][1]
                 contiguous = f.get("fullmicro_book_window_valid_300s") == 1
                 earlier = previous.get(name)
                 if contiguous and previous.get("fullmicro_book_valid") == 1 and earlier is not None:
