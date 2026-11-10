@@ -55,40 +55,33 @@ jobs:
               sides={s:sum(x.get("side",x.get("type"))==s for x in rows) for s in ("LOW","HIGH")}
               print("julaug_legacy",scope,"finalized",len(rows),"sides",sides)
           PY
-      - name: Regenerate INTERNAL L3-K1 labels for Jul-Aug
+      - name: Prepare strict Jul-Aug teacher
         run: |
-          python - <<'PY'
-          import gzip,json
-          from research.hype_local_v5.labels import structural_labels
-          bars=[]
-          with gzip.open("julaug/compact_1m.jsonl.gz","rt",encoding="utf-8") as f:
-              for line in f:
-                  if line.strip(): bars.append(json.loads(line))
-          internal,_=structural_labels(bars,lookback=3,lookahead=1)
-          doc={"internal":internal,"strict":[]}
-          with gzip.open("julaug/labels.json.gz","wt",encoding="utf-8") as f:
-              json.dump(doc,f,separators=(",",":"))
-          print("julaug_internal_finalized",sum(bool(x.get("reference_finalized")) for x in internal))
-          PY
-      - name: Replay same causal engine on both periods
+          cp julaug/legacy_labels.json.gz julaug/labels.json.gz
+      - name: Replay same causal engine on both strict periods
         run: |
-          python -m research.hype_false_local_entry.replay_dense_first_signal --base-dir octnov --out OCTNOV_DENSE.json
-          python -m research.hype_false_local_entry.replay_dense_first_signal --base-dir julaug --out JULAUG_DENSE.json
+          python -m research.hype_false_local_entry.replay_dense_first_signal \
+            --base-dir octnov --out OCTNOV_DENSE.json --scope strict \
+            --expected-total 76 --expected-low 38 --expected-high 38 --expected-swings 75
+          python -m research.hype_false_local_entry.replay_dense_first_signal \
+            --base-dir julaug --out JULAUG_DENSE.json --scope strict \
+            --expected-total 47 --expected-low 24 --expected-high 23 --expected-swings 46
           python - <<'PY'
           import json
           for name in ("OCTNOV_DENSE.json","JULAUG_DENSE.json"):
               x=json.load(open(name))
-              m=x["first_signal"]["internal"]
+              m=x["first_signal"]["strict"]
               print(name, json.dumps({
                   "locals":m["finalized_locals"],
                   "swings":m["complete_swings"],
                   "detected":m["detected_locals"],
-                  "false_first":m["false_first"],
-                  "precision":m["first_signal_precision"],
-                  "median_lag_ms":m["median_lag_ms"],
-                  "entry_bps":m["median_entry_distance_bps"],
-                  "remaining":m["median_remaining_swing_fraction"],
-                  "adverse_bps":m["median_adverse_extension_bps"],
+                  "wrong_first":m["completed_swing_wrong_first"],
+                  "true_first":m["completed_swing_true_first"],
+                  "swing_recall":m["completed_swing_recall"],
+                  "median_lag_ms":m["completed_swing_median_lag_ms"],
+                  "entry_bps":m["completed_swing_median_entry_distance_bps"],
+                  "remaining":m["completed_swing_median_remaining_swing_fraction"],
+                  "adverse_bps":m["completed_swing_median_adverse_extension_bps"],
               },separators=(",",":")))
           PY
       - uses: actions/upload-artifact@v4
