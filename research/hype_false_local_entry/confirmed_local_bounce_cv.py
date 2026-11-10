@@ -72,7 +72,7 @@ def fit(rows,names):
 
 def evaluate(periods,rows_by_period,pred_by_period,side,threshold,nameset):
     total=dict(episodes=0,confirmations=0,true_confirmations=0,false_confirmations=0)
-    remaining=[]; captured=[]; entry_distance=[]; records=[]; per={}
+    remaining=[]; captured=[]; entry_distance=[]; false_adverse=[]; false_continuation=[]; records=[]; per={}
     for name in nameset:
         p=periods[name]
         q=[r for r in rows_by_period[name] if r["side"]==side]
@@ -89,6 +89,8 @@ def evaluate(periods,rows_by_period,pred_by_period,side,threshold,nameset):
         labs=p["scope"][0][0]
         for r in first:
             if not r.get("true_first"):
+                if finite(r.get("false_signal_adverse_to_terminal_bps")): false_adverse.append(float(r["false_signal_adverse_to_terminal_bps"]))
+                if finite(r.get("false_candidate_continuation_bps")): false_continuation.append(float(r["false_candidate_continuation_bps"]))
                 records.append({"period":name,**r})
                 continue
             rem=float(r.get("remaining_swing_bps") or 0.0)
@@ -109,6 +111,9 @@ def evaluate(periods,rows_by_period,pred_by_period,side,threshold,nameset):
     total["median_remaining_swing_bps"]=float(np.median(remaining)) if remaining else None
     total["median_entry_distance_from_local_bps"]=float(np.median(entry_distance)) if entry_distance else None
     total["median_captured_fraction"]=float(np.median(captured)) if captured else None
+    total["false_adverse_median_bps"]=float(np.median(false_adverse)) if false_adverse else None
+    total["false_adverse_p90_bps"]=float(np.percentile(false_adverse,90)) if false_adverse else None
+    total["false_continuation_median_bps"]=float(np.median(false_continuation)) if false_continuation else None
     return total,per,records
 
 
@@ -165,10 +170,13 @@ def run_side(periods, rows, side):
                       "test": test_metrics, "test_records": records,
                       "feature_count": len(names), "threshold_frontier": frontier})
     agg = dict(episodes=0, confirmations=0, true_confirmations=0, false_confirmations=0)
-    rem, dist, cap = [], [], []
+    rem, dist, cap, false_adverse, false_continuation = [], [], [], [], []
     for f in folds:
         for k in agg: agg[k] += f["test"][k]
         for r in f["test_records"]:
+            if not r.get("true_first"):
+                if finite(r.get("false_signal_adverse_to_terminal_bps")): false_adverse.append(float(r["false_signal_adverse_to_terminal_bps"]))
+                if finite(r.get("false_candidate_continuation_bps")): false_continuation.append(float(r["false_candidate_continuation_bps"]))
             if r.get("true_first"):
                 rem.append(float(r.get("remaining_swing_bps") or 0.0))
                 dist.append(float(r.get("entry_distance_from_local_bps") or 0.0))
@@ -179,6 +187,10 @@ def run_side(periods, rows, side):
     agg["median_remaining_swing_bps"] = float(np.median(rem)) if rem else None
     agg["median_entry_distance_from_local_bps"] = float(np.median(dist)) if dist else None
     agg["median_captured_fraction"] = float(np.median(cap)) if cap else None
+    agg["false_adverse_median_bps"] = float(np.median(false_adverse)) if false_adverse else None
+    agg["false_adverse_p90_bps"] = float(np.percentile(false_adverse,90)) if false_adverse else None
+    agg["false_continuation_median_bps"] = float(np.median(false_continuation)) if false_continuation else None
+    agg["worst_period_precision"] = min((f["test"]["confirmation_precision"] for f in folds if f["test"]["confirmation_precision"] is not None),default=None)
     return {"side": side, "folds": folds, "aggregate_oos": agg}
 
 def main():
