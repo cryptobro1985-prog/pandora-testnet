@@ -1,0 +1,300 @@
+{
+  "version": "HYPE-MOVEMENT-SIGNATURE-PATH-AWARE-V4",
+  "research_only": true,
+  "real_orders": false,
+  "train_periods": [
+    "Jul12-Aug07",
+    "Aug08-Sep01"
+  ],
+  "validation": "Sep01-Oct01",
+  "untouched_holdout": "Oct04-Nov03",
+  "feature_count": 76,
+  "params": {
+    "entry": 0.0008,
+    "edge": 0.00025,
+    "align": 0.0,
+    "gba": 0.001,
+    "gbf": 0.15,
+    "stop_abs": 0.0045,
+    "min_hold": 2,
+    "confirm": 1,
+    "cooldown": 2
+  },
+  "validation_metrics": {
+    "equity": 0.9972200291686923,
+    "total_return": -0.0027799708313076543,
+    "max_drawdown": 0.003630724355858095,
+    "trades": 1,
+    "trades_per_day": 0.033334104956133245,
+    "win_rate": 0.0,
+    "profit_factor": 0.0,
+    "median_mfe_capture": -1.4444444444444557,
+    "median_mfe_giveback": 0.00267379679144375,
+    "mean_net_trade": -0.002779970831307675
+  },
+  "period_metrics": {
+    "TRAIN_JUL12_AUG07": {
+      "equity": 1.0,
+      "total_return": 0.0,
+      "max_drawdown": 0.0,
+      "trades": 0,
+      "trades_per_day": 0.0,
+      "win_rate": 0,
+      "profit_factor": 0,
+      "median_mfe_capture": 0,
+      "median_mfe_giveback": 0,
+      "mean_net_trade": 0
+    },
+    "TRAIN_AUG08_SEP01": {
+      "equity": 1.0126122438004235,
+      "total_return": 0.012612243800423473,
+      "max_drawdown": 0.009034584736952844,
+      "trades": 7,
+      "trades_per_day": 0.29167510633988253,
+      "win_rate": 0.42857142857142855,
+      "profit_factor": 3.1629431723207952,
+      "median_mfe_capture": 0.06250000000006825,
+      "median_mfe_giveback": 0.00209702222843533,
+      "mean_net_trade": 0.0018066632904150063
+    },
+    "VALIDATE_SEP01_OCT01": {
+      "equity": 0.9972200291686923,
+      "total_return": -0.0027799708313076543,
+      "max_drawdown": 0.003630724355858095,
+      "trades": 1,
+      "trades_per_day": 0.033334104956133245,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "median_mfe_capture": -1.4444444444444557,
+      "median_mfe_giveback": 0.00267379679144375,
+      "mean_net_trade": -0.002779970831307675
+    },
+    "HOLDOUT_OCT04_NOV03": {
+      "equity": 1.0003661417419936,
+      "total_return": 0.0003661417419935642,
+      "max_drawdown": 0.0019522413091463964,
+      "trades": 1,
+      "trades_per_day": 0.033334104956133245,
+      "win_rate": 1.0,
+      "profit_factor": 99,
+      "median_mfe_capture": 0.5226337448559744,
+      "median_mfe_giveback": 0.0014304916698524295,
+      "mean_net_trade": 0.0003661417419936542
+    }
+  },
+  "holdout_leverage": [
+    {
+      "leverage": 1,
+      "exposure_x_equity": 0.2,
+      "equity_multiple": 1.0000732283483986,
+      "total_return": 7.322834839862402e-05,
+      "max_drawdown": 0.0003904482618293237,
+      "approx_liquidations": 0
+    },
+    {
+      "leverage": 5,
+      "exposure_x_equity": 1.0,
+      "equity_multiple": 1.0003661417419936,
+      "total_return": 0.0003661417419935642,
+      "max_drawdown": 0.0019522413091463964,
+      "approx_liquidations": 0
+    },
+    {
+      "leverage": 10,
+      "exposure_x_equity": 2.0,
+      "equity_multiple": 1.0007322834839874,
+      "total_return": 0.0007322834839873504,
+      "max_drawdown": 0.0039044826182927928,
+      "approx_liquidations": 0
+    },
+    {
+      "leverage": 25,
+      "exposure_x_equity": 5.0,
+      "equity_multiple": 1.0018307087099683,
+      "total_return": 0.001830708709968265,
+      "max_drawdown": 0.009761206545732093,
+      "approx_liquidations": 0
+    }
+  ],
+  "holdout_daily": {
+    "1": {
+      "days": 1,
+      "positive_days": 1,
+      "positive_day_rate": 1.0,
+      "mean_daily": 7.322834839862402e-05,
+      "median_daily": 7.322834839862402e-05,
+      "best_daily": 7.322834839862402e-05,
+      "worst_daily": 7.322834839862402e-05
+    },
+    "5": {
+      "days": 1,
+      "positive_days": 1,
+      "positive_day_rate": 1.0,
+      "mean_daily": 0.0003661417419935642,
+      "median_daily": 0.0003661417419935642,
+      "best_daily": 0.0003661417419935642,
+      "worst_daily": 0.0003661417419935642
+    },
+    "10": {
+      "days": 1,
+      "positive_days": 1,
+      "positive_day_rate": 1.0,
+      "mean_daily": 0.0007322834839873504,
+      "median_daily": 0.0007322834839873504,
+      "best_daily": 0.0007322834839873504,
+      "worst_daily": 0.0007322834839873504
+    },
+    "25": {
+      "days": 1,
+      "positive_days": 1,
+      "positive_day_rate": 1.0,
+      "mean_daily": 0.001830708709968265,
+      "median_daily": 0.001830708709968265,
+      "best_daily": 0.001830708709968265,
+      "worst_daily": 0.001830708709968265
+    }
+  },
+  "top_features": [
+    {
+      "feature": "vol_ratio_240",
+      "importance": 0.05516348290894221
+    },
+    {
+      "feature": "persist_240",
+      "importance": 0.05168514248255619
+    },
+    {
+      "feature": "align_240",
+      "importance": 0.051151954743350096
+    },
+    {
+      "feature": "ret_norm_240",
+      "importance": 0.04088650619954025
+    },
+    {
+      "feature": "eff_norm_240",
+      "importance": 0.04004994620663232
+    },
+    {
+      "feature": "flow_240",
+      "importance": 0.03969563787824101
+    },
+    {
+      "feature": "vol_ratio_60",
+      "importance": 0.03660894970524759
+    },
+    {
+      "feature": "persist_120",
+      "importance": 0.034656536841796794
+    },
+    {
+      "feature": "vol_ratio_60_240",
+      "importance": 0.0345618498630494
+    },
+    {
+      "feature": "eff_norm_120",
+      "importance": 0.03430603652876691
+    },
+    {
+      "feature": "from_low_frac_240",
+      "importance": 0.03242082899222257
+    },
+    {
+      "feature": "flow_120",
+      "importance": 0.03088666418005975
+    },
+    {
+      "feature": "from_high_frac_240",
+      "importance": 0.028787041882367834
+    },
+    {
+      "feature": "range_pos_240",
+      "importance": 0.028660955111722217
+    },
+    {
+      "feature": "vol_ratio_30",
+      "importance": 0.027869003886060253
+    },
+    {
+      "feature": "vol_ratio_120",
+      "importance": 0.02774504771063382
+    },
+    {
+      "feature": "flow_60",
+      "importance": 0.022668942530676823
+    },
+    {
+      "feature": "ret_norm_120",
+      "importance": 0.022404211883666127
+    },
+    {
+      "feature": "align_120",
+      "importance": 0.02166930708711635
+    },
+    {
+      "feature": "align_60",
+      "importance": 0.02099939455890935
+    },
+    {
+      "feature": "persist_60",
+      "importance": 0.017796128972345074
+    },
+    {
+      "feature": "align_30",
+      "importance": 0.017596654555856413
+    },
+    {
+      "feature": "range_pos_120",
+      "importance": 0.01757399649896764
+    },
+    {
+      "feature": "persist_30",
+      "importance": 0.01439229158415754
+    },
+    {
+      "feature": "flow_30",
+      "importance": 0.011428909625450148
+    },
+    {
+      "feature": "range_pos_60",
+      "importance": 0.01139566629734713
+    },
+    {
+      "feature": "vol_ratio_15",
+      "importance": 0.011314905412518
+    },
+    {
+      "feature": "ret_norm_60",
+      "importance": 0.010612172030658258
+    },
+    {
+      "feature": "from_low_frac_60",
+      "importance": 0.010336185266161204
+    },
+    {
+      "feature": "from_high_frac_60",
+      "importance": 0.010304951552086236
+    },
+    {
+      "feature": "eff_norm_60",
+      "importance": 0.009230795214847124
+    },
+    {
+      "feature": "range_pos_30",
+      "importance": 0.009179223103346039
+    },
+    {
+      "feature": "flow_15",
+      "importance": 0.009064577906151464
+    },
+    {
+      "feature": "ret_norm_30",
+      "importance": 0.008916049492225615
+    },
+    {
+      "feature": "flow_consensus",
+      "importance": 0.008705330398853482
+    }
+  ],
+  "warning": "Historical research only. V4 predicts sustained path value rather than excursion-only value. Oct04-Nov03 is diagnostic, not pristine untouched OOS. 25x is an isolated-margin approximation, not an exact Bybit liquidation engine."
+}
