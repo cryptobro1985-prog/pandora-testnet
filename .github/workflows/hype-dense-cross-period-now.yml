@@ -10,6 +10,7 @@ on:
       - "research/hype_false_local_entry/dense_causal_reachability.py"
       - "research/hype_false_local_entry/replay_dense_first_signal.py"
       - "research/hype_false_local_entry/search_dense_post_local_gate.py"
+      - "research/hype_false_local_entry/search_dense_post_local_gate_fast.py"
   workflow_dispatch:
 
 permissions:
@@ -103,7 +104,7 @@ jobs:
           PY
       - name: Search causal post-local veto on Jul-Aug and freeze on Oct-Nov
         run: |
-          python -m research.hype_false_local_entry.search_dense_post_local_gate \
+          python -m research.hype_false_local_entry.search_dense_post_local_gate_fast \
             --dev-dir julaug --test-dir octnov --out DENSE_POST_LOCAL_GATE_SEARCH.json
       - uses: actions/upload-artifact@v4
         if: always()
