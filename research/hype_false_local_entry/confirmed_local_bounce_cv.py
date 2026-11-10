@@ -201,7 +201,9 @@ def main():
     periods,rows=build(a.master)
     out={"version":"HYPE-CONFIRMED-LOCAL-BOUNCE-ENTRY-CV-v2-inner-period-OOF",
          "objective":"CONFIRM_LOCAL_THEN_ENTER_REVERSAL_MOVE_NOT_EXTREME_GUESS",
-         "time_gate":False,"by_side":{},"real_orders":False}
+         "time_gate":False,"decision_sampling":"FIXED_CANDIDATE_AGE_GRID_NOT_EVENT_DRIVEN",
+         "event_driven":False,"sampling_warning":"No explicit entry time gate, but decision opportunities are sampled at predefined candidate ages; OOS metrics must not be represented as continuous event-driven performance.",
+         "by_side":{},"real_orders":False}
     for side in ("LOW","HIGH"):
         out["by_side"][side]=run_side(periods,rows,side)
     a.output.write_text(json.dumps(out,indent=2,ensure_ascii=False)+"\n")
