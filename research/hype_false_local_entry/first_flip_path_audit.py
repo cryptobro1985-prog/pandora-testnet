@@ -24,7 +24,17 @@ def score_first_flips(bars, labels, flips, max_lag_ms=3600000):
     This is a retrospective attribution contract, not causal ground truth.
     """
     labels = sorted(labels, key=_time)
-    bars = sorted(bars, key=lambda b: int(b.get("bar_end_ms") or int(b["ts_ms"])+60000))
+    def bar_end(b):
+        # Canonical compact_1m ts_ms is the completed bar end.
+        # Explicit boundaries take precedence; never shift a close
+        # timestamp forward another minute.
+        if b.get("bar_end_ms") is not None:
+            return int(b["bar_end_ms"])
+        if b.get("start_ms") is not None:
+            return int(b["start_ms"]) + int(b.get("interval_ms", 60000))
+        return int(b["ts_ms"])
+
+    bars = sorted(bars, key=bar_end)
     flips = sorted(flips, key=lambda s: s.ts_ms)
     used = set()
     results = []
@@ -56,7 +66,7 @@ def score_first_flips(bars, labels, flips, max_lag_ms=3600000):
                     # Entry occurs at the CLOSE of the signal minute.
                     # Its high/low preceded execution; exclude that candle
                     # from post-entry adverse excursion.
-                    path=[b for b in bars if s.ts_ms < int(b.get("bar_end_ms") or int(b["ts_ms"])+60000) <= stop]
+                    path=[b for b in bars if s.ts_ms < bar_end(b) <= stop]
                     if path:
                         worst=min(float(b["low"]) for b in path) if sign==1 else max(float(b["high"]) for b in path)
                         row["adverse_extension_bps"]=max(0.,-sign*(worst/s.close-1)*10000)
