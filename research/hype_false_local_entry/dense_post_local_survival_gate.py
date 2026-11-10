@@ -30,7 +30,8 @@ def load(base,name):
     bars=sorted(list(read_jsonl(base/"compact_1m.jsonl.gz")),key=bend)
     m=CausalReversalMachine(); flips_by_ts={}
     for b in bars:
-        flips=flips_by_ts.get(end,[])
+        ev=m.on_bar(b)
+        flips=[e for e in ev if e.core_flip and e.stage in ("HARD_CONFIRMED","ULTRA_CONFIRMED")]
         if flips:
             flips_by_ts.setdefault(bend(b),[]).extend(flips)
     return name,bars,labels,flips_by_ts
@@ -52,8 +53,7 @@ def generate_entries(bars,flips_by_ts,hold_min,min_retrace_bps):
     active_entry_side=None
     for b in bars:
         end=bend(b); low=float(b["low"]); high=float(b["high"]); close=float(b["close"])
-        ev=m.on_bar(b)
-        flips=[e for e in ev if e.core_flip and e.stage in ("HARD_CONFIRMED","ULTRA_CONFIRMED")]
+        flips=flips_by_ts.get(end,[])
         if flips:
             e=flips[-1]
             pending={"side":e.side,"since":end,
