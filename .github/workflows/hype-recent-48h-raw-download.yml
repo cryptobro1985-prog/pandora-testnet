@@ -36,7 +36,7 @@ jobs:
       - name: Install download stack
         run: |
           python -m pip install --upgrade pip
-          python -m pip install polars pyarrow requests zstandard
+          python -m pip install numpy polars pyarrow requests zstandard
           python -m py_compile research/hype_full_micro_202607/download_recent_48h_raw.py
 
       - name: Download latest 48h HYPE raw sources only
