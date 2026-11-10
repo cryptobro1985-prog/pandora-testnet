@@ -33,19 +33,31 @@ def main():
     p.add_argument("--base-dir", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--max-lag-ms", type=int, default=3600000)
+    p.add_argument("--scope", choices=("both", "internal", "strict"), default="both")
+    p.add_argument("--expected-total", type=int)
+    p.add_argument("--expected-low", type=int)
+    p.add_argument("--expected-high", type=int)
+    p.add_argument("--expected-swings", type=int)
     args = p.parse_args()
     with gzip.open(args.base_dir / "labels.json.gz", "rt") as f:
         labels = json.load(f)
     bars = list(read_jsonl(args.base_dir / "compact_1m.jsonl.gz"))
     candidates = list(dense_completed_m1_candidates(bars))
+    selected_scopes = ("internal", "strict") if args.scope == "both" else (args.scope,)
     scopes = {
-        scope: sorted((x for x in labels[scope] if x.get("reference_finalized")),
+        scope: sorted((x for x in labels.get(scope, []) if x.get("reference_finalized")),
                       key=lambda x: int(x["extreme_interval_start_ms"]))
-        for scope in ("internal", "strict")
+        for scope in selected_scopes
     }
-    # Fail closed on truncated or mismatched teacher exports. A complete
-    # historical replay must retain every finalized turn, not just strict.
+    # Fail closed on truncated or mismatched teacher exports. Defaults preserve
+    # the canonical Oct-Nov contract; cross-period callers must pass the exact
+    # expected denominator for their selected scope.
     expected = {"internal": (122, 61, 61, 121), "strict": (76, 38, 38, 75)}
+    if args.scope != "both":
+        supplied = (args.expected_total, args.expected_low, args.expected_high, args.expected_swings)
+        if any(v is None for v in supplied):
+            raise ValueError("single-scope replay requires all --expected-* counts")
+        expected = {args.scope: supplied}
     for scope, (total, lows, highs, swings) in expected.items():
         rows = scopes[scope]
         side_counts = {side: sum(x.get("side", x.get("type")) == side for x in rows)
