@@ -10,6 +10,7 @@ import json
 from bisect import bisect_left
 from pathlib import Path
 from statistics import median
+from math import isnan
 
 from .audit_dense_coverage import read_jsonl
 from .causal_sequential_engine import CausalReversalMachine
@@ -149,23 +150,71 @@ def apply_gate(flips, fmap, gate):
     return out
 
 
-def compact_score(bars, labels, flips):
-    s = score_first_flips(bars, labels, flips)
-    t = s["completed_swing_true_first"]
-    w = s["completed_swing_wrong_first"]
-    accepted = t + w
+
+def prepare_intervals(bars, labels, flips, fmap):
+    labels=sorted(labels,key=lambda x:int(x["extreme_interval_start_ms"]))
+    rows=[]
+    for i in range(max(0,len(labels)-1)):
+        local=labels[i]
+        start=int(local["extreme_interval_start_ms"])
+        stop=int(labels[i+1]["extreme_interval_start_ms"])
+        sigs=[]
+        for s in flips:
+            if start <= int(s.ts_ms) < stop:
+                feat=fmap.get((int(s.ts_ms),s.side))
+                if feat is not None:
+                    sigs.append((s,feat))
+        sigs.sort(key=lambda z:int(z[0].ts_ms))
+        rows.append((local,labels[i+1],sigs))
+    return rows
+
+
+def eval_gate(intervals, gate):
+    true_rows=[]
+    wrong=0
+    accepted=0
+    for local,next_local,sigs in intervals:
+        first=None
+        for s,f in sigs:
+            if all(f[name] >= thr for name,thr in gate):
+                first=(s,f)
+                break
+        if first is None:
+            continue
+        accepted += 1
+        s,f=first
+        if s.side != local["side"]:
+            wrong += 1
+            continue
+        sign=1.0 if local["side"]=="LOW" else -1.0
+        extreme=float(local["extreme_price"])
+        target=float(next_local["extreme_price"])
+        full=sign*(target-extreme)
+        remaining=sign*(target-float(s.close))
+        true_rows.append({
+            "lag_ms": int(s.ts_ms)-int(local["extreme_interval_start_ms"]),
+            "entry_bps": sign*(float(s.close)/extreme-1.0)*10000.0,
+            "remaining": remaining/full if full>0 else None,
+        })
+    def med(key):
+        vals=[x[key] for x in true_rows if x.get(key) is not None]
+        return median(vals) if vals else None
+    n=len(intervals)
+    t=len(true_rows)
     return {
-        "true_first": t,
-        "wrong_first": w,
-        "accepted_first": accepted,
-        "precision": t / accepted if accepted else None,
-        "recall": s["completed_swing_recall"],
-        "median_lag_ms": s["completed_swing_median_lag_ms"],
-        "median_entry_bps": s["completed_swing_median_entry_distance_bps"],
-        "median_remaining": s["completed_swing_median_remaining_swing_fraction"],
-        "median_adverse_bps": s["completed_swing_median_adverse_extension_bps"],
+        "true_first":t,
+        "wrong_first":wrong,
+        "accepted_first":accepted,
+        "precision":t/accepted if accepted else None,
+        "recall":t/n if n else None,
+        "median_lag_ms":med("lag_ms"),
+        "median_entry_bps":med("entry_bps"),
+        "median_remaining":med("remaining"),
     }
 
+
+def compact_score(intervals, gate=()):
+    return eval_gate(intervals, gate)
 
 def main():
     p = argparse.ArgumentParser()
@@ -177,6 +226,7 @@ def main():
     db, dl, df = load_period(args.dev_dir)
     tb, tl, tf = load_period(args.test_dir)
     dm, tm = feature_map(db, df), feature_map(tb, tf)
+    di, ti = prepare_intervals(db, dl, df, dm), prepare_intervals(tb, tl, tf, tm)
 
     names = [
         "retrace_bps", "move3_bps", "move5_bps", "move10_bps",
@@ -196,7 +246,7 @@ def main():
     for a in names:
         for ta in thresholds[a]:
             gate=((a,ta),)
-            score=compact_score(db,dl,apply_gate(df,dm,gate))
+            score=compact_score(di,gate)
             if score["wrong_first"] == 0 and score["true_first"] >= 15:
                 candidates.append((score["true_first"], -len(gate), gate, score))
     # Two-feature gates: restrict to causal core to limit meta-search.
@@ -207,7 +257,7 @@ def main():
             for ta in thresholds[a]:
                 for tbv in thresholds[b]:
                     gate=((a,ta),(b,tbv))
-                    score=compact_score(db,dl,apply_gate(df,dm,gate))
+                    score=compact_score(di,gate)
                     if score["wrong_first"] == 0 and score["true_first"] >= 15:
                         candidates.append((score["true_first"], -len(gate), gate, score))
 
@@ -219,14 +269,14 @@ def main():
         if key in seen:
             continue
         seen.add(key)
-        test_score=compact_score(tb,tl,apply_gate(tf,tm,gate))
+        test_score=compact_score(ti,gate)
         top.append({"gate":[{"feature":a,"min":v} for a,v in gate],
                     "development":dev_score,"test":test_score})
         if len(top)>=25:
             break
 
-    baseline_dev=compact_score(db,dl,df)
-    baseline_test=compact_score(tb,tl,tf)
+    baseline_dev=compact_score(di,())
+    baseline_test=compact_score(ti,())
     result={
         "status":"research_only_no_orders",
         "selection":"thresholds selected on dev only; test scored unchanged",
