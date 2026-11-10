@@ -136,12 +136,15 @@ def main():
         "first_signal": {
             k: {m: v[m] for m in (
                 "finalized_locals", "complete_swings", "detected_locals",
-                "missed_locals", "missed_local_rate", "total_core_flips",
+                "missed_locals", "missed_local_rate", "no_signal_locals",
+                "wrong_first_locals", "direction_precision_given_first", "total_core_flips",
                 "false_first", "first_signal_precision", "median_lag_ms",
                 "median_entry_distance_bps", "median_adverse_extension_bps",
                 "median_remaining_swing_fraction", "completed_swing_true_first",
                 "completed_swing_missed", "completed_swing_missed_rate",
                 "completed_swing_recall", "completed_swing_wrong_first",
+                "completed_swing_no_signal", "completed_swing_first_present",
+                "completed_swing_direction_precision_given_first",
                 "completed_swing_false_first", "completed_swing_first_signal_precision",
                 "completed_swing_median_lag_ms",
                 "completed_swing_median_entry_distance_bps",
