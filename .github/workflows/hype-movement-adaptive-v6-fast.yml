@@ -28,3 +28,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add research/hype_movement_signature/results_adaptive_v6_fast
           if ! git diff --cached --quiet; then git commit -m "Add adaptive-rank V6 fast results"; git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104; fi
+
+# rerun requested 2026-11-10 after frozen-V2 regime-shift audit
