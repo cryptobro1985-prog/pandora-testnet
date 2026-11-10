@@ -1,0 +1,48 @@
+{
+  "version": "HYPE-FRESH-SCALAR-MICRO-OOS-V1",
+  "window": [
+    "2026-11-10T00:00:00+00:00",
+    "2026-11-10T18:30:00+00:00"
+  ],
+  "local_dependency": false,
+  "threshold_retuned_on_window": false,
+  "base": {
+    "LONG": {
+      "signals": 2,
+      "true": 1,
+      "precision": 0.5,
+      "base_rate": 0.19509803921568628,
+      "lift": 2.5628140703517586
+    },
+    "SHORT": {
+      "signals": 25,
+      "true": 0,
+      "precision": 0.0,
+      "base_rate": 0.0,
+      "lift": 0.0
+    }
+  },
+  "scalar_micro": {
+    "LONG": {
+      "signals": 2,
+      "true": 1,
+      "precision": 0.5,
+      "base_rate": 0.19509803921568628,
+      "lift": 2.5628140703517586
+    },
+    "SHORT": {
+      "signals": 17,
+      "true": 0,
+      "precision": 0.0,
+      "base_rate": 0.0,
+      "lift": 0.0
+    }
+  },
+  "sources": {
+    "liquidation_events": 500,
+    "oi_points": 58186,
+    "downloads": 86,
+    "bytes": 22379401
+  },
+  "note": "Fresh OOS; causal rolling ranks only; no Local labels or window-fitted thresholds."
+}
