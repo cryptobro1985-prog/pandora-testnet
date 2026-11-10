@@ -21,11 +21,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
-      PYTHONUNBUFFERED: "1"\n      HYPE_DOWNLOAD_WORKERS: "32"
+      PYTHONUNBUFFERED: "1"
+      HYPE_DOWNLOAD_WORKERS: "32"
       CRYPTOHFTDATA_API_KEY: ${{ secrets.CRYPTOHFTDATA_API_KEY }}
       MODEL_ARTIFACT_ID: "13578389090"
-      REPLAY_START: "2026-11-07T23:00:00+00:00"
-      REPLAY_END: "2026-11-09T23:00:00+00:00"
+      RAW_ARTIFACT_ID: "13723739486"
+      REPLAY_START: "2026-11-08T00:00:00+00:00"
+      REPLAY_END: "2026-11-10T00:00:00+00:00"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -55,16 +57,35 @@ jobs:
           test -s frozen_model/full_micro_model/HYPE_FULL_MICRO_202607_REPORT.json
           cat frozen_model/full_micro_model/HYPE_FULL_MICRO_202607_REPORT.json
 
-      - name: Build fresh 48h rich microstructure and run frozen causal replay
+      - name: Restore downloaded recent 48h raw cache
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          rm -rf recent48_out recent48_cache
-          mkdir -p recent48_out recent48_cache
-          python -m research.hype_full_micro_202607.recent_48h_frozen_replay             --start "${REPLAY_START}"             --end "${REPLAY_END}"             --output recent48_out             --cache recent48_cache             --model frozen_model/full_micro_model/HYPE_FULL_MICRO_202607.pkl             | tee recent48_replay.log
+          rm -rf recent48_cache raw_bundle raw.zip
+          mkdir -p recent48_cache raw_bundle
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${RAW_ARTIFACT_ID}/zip" > raw.zip
+          unzip -q raw.zip -d raw_bundle
+          test -d raw_bundle/cache
+          cp -a raw_bundle/cache/. recent48_cache/
+          echo "restored_raw_files=$(find recent48_cache -type f | wc -l)"
+
+      - name: Build recent 48h rich microstructure and run frozen causal replay
+        run: |
+          set -euo pipefail
+          rm -rf recent48_out
+          mkdir -p recent48_out
+          python -m research.hype_full_micro_202607.recent_48h_frozen_replay \
+            --start "${REPLAY_START}" \
+            --end "${REPLAY_END}" \
+            --output recent48_out \
+            --cache recent48_cache \
+            --model frozen_model/full_micro_model/HYPE_FULL_MICRO_202607.pkl \
+            | tee recent48_replay.log
           test -s recent48_out/RECENT_48H_FROZEN_REPLAY.json
           test -s recent48_out/RECENT_48H_CAUSAL_SCORED.jsonl.gz
           test -s recent48_out/RECENT_48H_COMPACT_1M.jsonl.gz
-          rm -rf recent48_cache
+          rm -rf recent48_cache raw_bundle raw.zip
 
       - name: Audit no-lookahead contract
         run: |
