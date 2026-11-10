@@ -1,0 +1,77 @@
+name: HYPE Movement Frozen Nov8-10 Comparator
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - 'research/hype_movement_signature/results_v3_microgrid/MOVEMENT_V2_REPORT.json'
+      - 'research/hype_movement_signature/results_v4/MOVEMENT_V2_REPORT.json'
+      - 'research/hype_movement_signature/forward_nov48_compare.py'
+      - '.github/workflows/hype-movement-nov48-compare.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: hype-movement-nov48-compare
+  cancel-in-progress: true
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      RAW_ARTIFACT_ID: "13723739486"
+      LOCAL_MODEL_ARTIFACT_ID: "13578389090"
+      REPLAY_START: "2026-11-08T00:00:00+00:00"
+      REPLAY_END: "2026-11-10T00:00:00+00:00"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install numpy pandas scikit-learn==1.9.1 polars pyarrow requests zstandard
+      - uses: actions/download-artifact@v4
+        with:
+          name: HYPE-HISTORY-20260712-20261103-MASTER
+          path: /tmp/hype_master
+          run-id: 42564417286
+          github-token: ${{ github.token }}
+      - name: Restore Nov cache
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/recent48_cache /tmp/raw_bundle /tmp/frozen_local
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${RAW_ARTIFACT_ID}/zip" > /tmp/raw.zip
+          unzip -q /tmp/raw.zip -d /tmp/raw_bundle
+          cp -a /tmp/raw_bundle/cache/. /tmp/recent48_cache/
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${LOCAL_MODEL_ARTIFACT_ID}/zip" > /tmp/local_model.zip
+          unzip -q /tmp/local_model.zip -d /tmp/frozen_local
+      - name: Build Nov tape
+        run: |
+          mkdir -p /tmp/recent48_out
+          python -m research.hype_full_micro_202607.recent_48h_frozen_replay \
+            --start "${REPLAY_START}" --end "${REPLAY_END}" \
+            --output /tmp/recent48_out --cache /tmp/recent48_cache \
+            --model /tmp/frozen_local/full_micro_model/HYPE_FULL_MICRO_202607.pkl
+      - name: Compare frozen strategies
+        run: |
+          rm -rf /tmp/movement_compare
+          python research/hype_movement_signature/forward_nov48_compare.py \
+            --master-root /tmp/hype_master \
+            --recent-compact /tmp/recent48_out/RECENT_48H_COMPACT_1M.jsonl.gz \
+            --repo-root . --out /tmp/movement_compare
+          cat /tmp/movement_compare/MOVEMENT_NOV48_COMPARATOR.json
+      - name: Commit comparator
+        run: |
+          mkdir -p research/hype_movement_signature/results_forward_nov48_compare
+          cp /tmp/movement_compare/* research/hype_movement_signature/results_forward_nov48_compare/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add research/hype_movement_signature/results_forward_nov48_compare
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Compare frozen movement strategies on Nov8-10"
+          git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104
+          git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104
