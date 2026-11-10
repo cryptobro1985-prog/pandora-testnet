@@ -2,6 +2,9 @@
   "version": "HYPE-CONFIRMED-LOCAL-BOUNCE-ENTRY-CV-v2-inner-period-OOF",
   "objective": "CONFIRM_LOCAL_THEN_ENTER_REVERSAL_MOVE_NOT_EXTREME_GUESS",
   "time_gate": false,
+  "decision_sampling": "FIXED_CANDIDATE_AGE_GRID_NOT_EVENT_DRIVEN",
+  "event_driven": false,
+  "sampling_warning": "No explicit entry time gate, but decision opportunities are sampled at predefined candidate ages; OOS metrics must not be represented as continuous event-driven performance.",
   "by_side": {
     "LOW": {
       "side": "LOW",
