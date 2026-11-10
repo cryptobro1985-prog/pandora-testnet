@@ -39,7 +39,10 @@ class CausalReversalMachine:
             start = int(bar["start_ms"])
         else:
             ts = int(bar["ts_ms"])
-            start = ts - interval if explicit_end is not None and int(explicit_end) == ts else ts
+            # Canonical compact_1m.ts_ms is the completed candle END.
+            # Match dense_causal_reachability and first_flip_path_audit.
+            # Start-stamped alternative inputs must explicitly set start_ms.
+            start = int(explicit_end) - interval if explicit_end is not None else ts - interval
         end = int(explicit_end if explicit_end is not None else start + interval)
         if self.last_ts is not None and end <= self.last_ts:
             raise ValueError("bar must be completed and strictly chronological")
