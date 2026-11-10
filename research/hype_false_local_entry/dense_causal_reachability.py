@@ -20,9 +20,10 @@ def dense_completed_m1_candidates(rows):
             start = int(bar["start_ms"])
         else:
             ts = int(bar["ts_ms"])
-            # Canonical compact_1m stores ts_ms == bar_end_ms. Generic rows
-            # without start_ms still treat ts_ms as bar start.
-            start = ts - interval if explicit_end is not None and int(explicit_end) == ts else ts
+            # Canonical compact_1m stores ts_ms as the completed bar END.
+            # Never add an extra minute when bar_end_ms is omitted.
+            # Noncanonical start-stamped inputs must supply start_ms.
+            start = int(explicit_end) - interval if explicit_end is not None else ts - interval
         end = int(explicit_end if explicit_end is not None else start + interval)
         if end <= start or (last_signal is not None and start < last_signal):
             raise ValueError("overlapping, incomplete, or nonmonotonic minute bars")
