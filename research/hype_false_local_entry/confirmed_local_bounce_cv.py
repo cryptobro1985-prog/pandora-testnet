@@ -22,6 +22,17 @@ def finite(v):
     return isinstance(v,(int,float,np.number)) and math.isfinite(float(v))
 
 
+def legal_predictor(name, value):
+    """Reject non-input metadata and malformed names without aborting the CV."""
+    if not finite(value):
+        return False
+    try:
+        point = feat.point_id(name)
+    except (ValueError, TypeError, IndexError):
+        return False
+    return point in INPUT_IDS and point not in QUALITY_ONLY
+
+
 def build(master):
     periods,_=replay.inventory(master,{})
     rows={}
@@ -35,8 +46,7 @@ def build(master):
             # Merge only legal predictors; never admit target/evaluation metadata.
             raw_features = {**r["features"], **r.get("clean_features", {})}
             fx = {k: float(v) for k, v in raw_features.items()
-                  if finite(v) and feat.point_id(k) in INPUT_IDS
-                  and feat.point_id(k) not in QUALITY_ONLY}
+                  if legal_predictor(k, v)}
             rr.append(dict(r,features=fx,episode=int(ep),terminal=bool(terminal),period=name))
         rows[name]=rr
     return periods,rows
