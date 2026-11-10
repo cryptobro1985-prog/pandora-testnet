@@ -1,0 +1,80 @@
+name: HYPE Recent 48h Raw Download
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-recent-48h-raw-download.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: hype-recent-48h-raw-download
+  cancel-in-progress: true
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PYTHONUNBUFFERED: "1"
+      CRYPTOHFTDATA_API_KEY: ${{ secrets.CRYPTOHFTDATA_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install download stack
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install polars pyarrow requests zstandard
+          python -m py_compile research/hype_full_micro_202607/download_recent_48h_raw.py
+
+      - name: Download latest 48h HYPE raw sources only
+        run: |
+          set -euo pipefail
+          rm -rf recent48_raw
+          mkdir -p recent48_raw/cache recent48_raw/meta
+          python -m research.hype_full_micro_202607.download_recent_48h_raw \
+            --hours 48 \
+            --workers 32 \
+            --cache recent48_raw/cache \
+            --manifest recent48_raw/meta/RAW_48H_MANIFEST.json | tee recent48_raw/meta/download.log
+          test -s recent48_raw/meta/RAW_48H_MANIFEST.json
+
+      - name: Show coverage
+        run: |
+          python - <<'PY'
+          import json
+          m=json.load(open("recent48_raw/meta/RAW_48H_MANIFEST.json"))
+          print(json.dumps({
+            "window_utc":m["window_utc"],
+            "expected_partitions":m["expected_partitions"],
+            "downloaded_files":m["downloaded_files"],
+            "downloaded_bytes":m["downloaded_bytes"],
+            "source_file_counts":m["source_file_counts"],
+            "missing_files_count":m["missing_files_count"],
+            "cache_file_count":m["cache_file_count"],
+            "cache_bytes":m["cache_bytes"],
+          },indent=2))
+          PY
+
+      - name: Upload compressed raw 48h source bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-RECENT-48H-RAW-${{ github.run_id }}
+          path: |
+            recent48_raw/cache/**
+            recent48_raw/meta/**
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 9
