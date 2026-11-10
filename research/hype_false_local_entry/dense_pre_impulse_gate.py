@@ -18,8 +18,8 @@ def groups(rows):
     return g
 
 
-def eval_rows(rows,rule):
-    g=groups(rows); true=[];wrong=[];no=0
+def eval_grouped(g,rule):
+    true=[];wrong=[];no=0
     for _,rr in g.items():
         first=None
         for r in rr:
@@ -60,6 +60,8 @@ def main():
     test_names=("lateaug","september","octnov")
     train=[r for n in train_names for r in per[n]]
     test=[r for n in test_names for r in per[n]]
+    train_g=groups(train); test_g=groups(test)
+    per_g={n:groups(rows) for n,rows in per.items()}
 
     windows=(15,30,60)
     th=(0,5,10,15,20,25,30,40,50,75,100)
@@ -73,7 +75,7 @@ def main():
          # First search with permissive move cap to isolate impulse effect.
          rule={"LOW":{"window":lw,"min_impulse_bps":lt,"max_move30_bps":100},
                "HIGH":{"window":hw,"min_impulse_bps":ht,"max_move30_bps":100}}
-         tr=eval_rows(train,rule)
+         tr=eval_grouped(train_g,rule)
          if tr["accepted"]>=50:
              candidates.append((rule,tr))
     # Keep the strongest impulse-only rules and refine with move30 caps.
@@ -85,9 +87,9 @@ def main():
        for hm in maxmoves:
         rule={"LOW":dict(rule0["LOW"],max_move30_bps=lm),
               "HIGH":dict(rule0["HIGH"],max_move30_bps=hm)}
-        tr=eval_rows(train,rule)
+        tr=eval_grouped(train_g,rule)
         if tr["accepted"]<30:continue
-        te=eval_rows(test,rule)
+        te=eval_grouped(test_g,rule)
         refined.append({"rule":rule,"train":tr,"test":te})
 
     # Chronological frontier, selecting ONLY on train.
@@ -101,7 +103,7 @@ def main():
 
     # Per-period score for best robust retrospective candidate, clearly meta-selected.
     if best:
-        best["periods"]={n:eval_rows(per[n],best["rule"]) for n in per}
+        best["periods"]={n:eval_grouped(per_g[n],best["rule"]) for n in per}
     result={"status":"research_only_orders_off",
             "chronology":{"train":list(train_names),"test":list(test_names)},
             "selected_train_only":selected,
