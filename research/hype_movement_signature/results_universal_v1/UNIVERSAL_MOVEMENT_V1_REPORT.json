@@ -1,0 +1,341 @@
+{
+  "version": "HYPE-UNIVERSAL-MOVEMENT-SIGNATURE-V1",
+  "research_only": true,
+  "real_orders": false,
+  "local_dependency": false,
+  "teacher_local_used_for_decision": false,
+  "train_periods": [
+    "Jul12-Aug07",
+    "Aug08-Sep01"
+  ],
+  "validation": "Sep01-Oct01",
+  "untouched_holdout": "Oct04-Nov03",
+  "target": "future favorable/adverse excursion LONG/SHORT, not Local labels",
+  "params": {
+    "min_score": 0.0005,
+    "min_ratio": 1.5,
+    "min_edge": 0.0003,
+    "confirm": 1,
+    "min_hold": 3,
+    "cooldown": 2,
+    "mfe_arm": 0.0025,
+    "giveback_abs": 0.0015,
+    "giveback_frac": 0.35,
+    "reverse_score": 0.0005
+  },
+  "validation_metrics": {
+    "equity": 0.9923878929802655,
+    "total_return": -0.007612107019734471,
+    "max_drawdown": 0.013740240968929673,
+    "trades": 4,
+    "trades_per_day": 0.13333641982453298,
+    "win_rate": 0.25,
+    "profit_factor": 0.45115182040493584,
+    "mean_net_trade": -0.0018897591579825276,
+    "median_mfe": 0.005966110626764887,
+    "median_mae": -0.0068351734028609945,
+    "median_mfe_capture": -0.05194805194806876
+  },
+  "period_metrics": {
+    "TRAIN_JUL12_AUG07": {
+      "equity": 1.0710114111002875,
+      "total_return": 0.07101141110028752,
+      "max_drawdown": 0.0,
+      "trades": 4,
+      "trades_per_day": 0.15815920261402014,
+      "win_rate": 1.0,
+      "profit_factor": 99.0,
+      "mean_net_trade": 0.017306016096607015,
+      "median_mfe": 0.020715625032009966,
+      "median_mae": -0.002071957532721047,
+      "median_mfe_capture": 0.8843764311931182
+    },
+    "TRAIN_AUG08_SEP01": {
+      "equity": 1.4640204975625815,
+      "total_return": 0.46402049756258146,
+      "max_drawdown": 0.0,
+      "trades": 15,
+      "trades_per_day": 0.625018085014034,
+      "win_rate": 1.0,
+      "profit_factor": 99.0,
+      "mean_net_trade": 0.02621410010487224,
+      "median_mfe": 0.020750726936293873,
+      "median_mae": -0.003711473293529055,
+      "median_mfe_capture": 0.8407643312101911
+    },
+    "VALIDATE_SEP01_OCT01": {
+      "equity": 0.9923878929802655,
+      "total_return": -0.007612107019734471,
+      "max_drawdown": 0.013740240968929673,
+      "trades": 4,
+      "trades_per_day": 0.13333641982453298,
+      "win_rate": 0.25,
+      "profit_factor": 0.45115182040493584,
+      "mean_net_trade": -0.0018897591579825276,
+      "median_mfe": 0.005966110626764887,
+      "median_mae": -0.0068351734028609945,
+      "median_mfe_capture": -0.05194805194806876
+    },
+    "HOLDOUT_OCT04_NOV03": {
+      "equity": 0.9924954908295774,
+      "total_return": -0.0075045091704225575,
+      "max_drawdown": 0.011938431098793112,
+      "trades": 5,
+      "trades_per_day": 0.1666705247806662,
+      "win_rate": 0.4,
+      "profit_factor": 0.3975347567793377,
+      "mean_net_trade": -0.0014976274843025313,
+      "median_mfe": 0.003713233755909817,
+      "median_mae": -0.004287881786397607,
+      "median_mfe_capture": 0.2
+    }
+  },
+  "holdout_leverage": [
+    {
+      "leverage": 1,
+      "margin_fraction": 0.2,
+      "exposure_x_equity": 0.2,
+      "equity_multiple": 0.9985017144064476,
+      "total_return": -0.001498285593552362,
+      "max_drawdown": 0.0023930264619967945,
+      "approx_liquidations": 0
+    },
+    {
+      "leverage": 5,
+      "margin_fraction": 0.2,
+      "exposure_x_equity": 1.0,
+      "equity_multiple": 0.9924954908295774,
+      "total_return": -0.0075045091704225575,
+      "max_drawdown": 0.011938431098793112,
+      "approx_liquidations": 0
+    },
+    {
+      "leverage": 10,
+      "margin_fraction": 0.2,
+      "exposure_x_equity": 2.0,
+      "equity_multiple": 0.9849586442308463,
+      "total_return": -0.015041355769153664,
+      "max_drawdown": 0.02381010916960824,
+      "approx_liquidations": 0
+    },
+    {
+      "leverage": 25,
+      "margin_fraction": 0.2,
+      "exposure_x_equity": 5.0,
+      "equity_multiple": 0.9621602190159155,
+      "total_return": -0.03783978098408447,
+      "max_drawdown": 0.05902462521418639,
+      "approx_liquidations": 0
+    }
+  ],
+  "top_features": [
+    {
+      "feature": "vol_ratio_60_240",
+      "importance": 0.06660418269942041
+    },
+    {
+      "feature": "vol_ratio_60",
+      "importance": 0.06412972069886458
+    },
+    {
+      "feature": "vol_ratio_240",
+      "importance": 0.04244679325925146
+    },
+    {
+      "feature": "down_persist_240",
+      "importance": 0.03278736114046996
+    },
+    {
+      "feature": "flow_x_ret_240",
+      "importance": 0.03250856780391898
+    },
+    {
+      "feature": "px_flow_eff_240",
+      "importance": 0.029627131290447528
+    },
+    {
+      "feature": "flow_240",
+      "importance": 0.026827923699376074
+    },
+    {
+      "feature": "range_width_240",
+      "importance": 0.02440704910965962
+    },
+    {
+      "feature": "persist_240",
+      "importance": 0.022536412920385752
+    },
+    {
+      "feature": "up_persist_240",
+      "importance": 0.02144092960972256
+    },
+    {
+      "feature": "align_240",
+      "importance": 0.021275005717768324
+    },
+    {
+      "feature": "ret_norm_240",
+      "importance": 0.01916683440088631
+    },
+    {
+      "feature": "eff_norm_240",
+      "importance": 0.018822328969319613
+    },
+    {
+      "feature": "down_persist_120",
+      "importance": 0.01733790743693442
+    },
+    {
+      "feature": "flow_120",
+      "importance": 0.016785423087317536
+    },
+    {
+      "feature": "range_width_120",
+      "importance": 0.01672577075550742
+    },
+    {
+      "feature": "trade_z_240",
+      "importance": 0.015665851948326683
+    },
+    {
+      "feature": "turn_z_60",
+      "importance": 0.015257594911277712
+    },
+    {
+      "feature": "turn_z_240",
+      "importance": 0.014925877161442636
+    },
+    {
+      "feature": "trade_z_10",
+      "importance": 0.014170005216150895
+    },
+    {
+      "feature": "trade_z_60",
+      "importance": 0.0140619224995341
+    },
+    {
+      "feature": "vol_ratio_30",
+      "importance": 0.014042922830026328
+    },
+    {
+      "feature": "turn_z_120",
+      "importance": 0.013991790435122659
+    },
+    {
+      "feature": "vol_ratio_120",
+      "importance": 0.013662085925371338
+    },
+    {
+      "feature": "turn_z_30",
+      "importance": 0.013406217994147186
+    },
+    {
+      "feature": "persist_120",
+      "importance": 0.012921992416029914
+    },
+    {
+      "feature": "range_pos_240",
+      "importance": 0.012768028588926594
+    },
+    {
+      "feature": "trade_z_30",
+      "importance": 0.012760741885480502
+    },
+    {
+      "feature": "flow_sign_stability_60",
+      "importance": 0.012461609735399903
+    },
+    {
+      "feature": "flow_60",
+      "importance": 0.01243280438217137
+    },
+    {
+      "feature": "trade_z_5",
+      "importance": 0.012173259366828535
+    },
+    {
+      "feature": "trade_z_120",
+      "importance": 0.011899808533988504
+    },
+    {
+      "feature": "range_pos_raw_240",
+      "importance": 0.011826048542268949
+    },
+    {
+      "feature": "from_low_frac_240",
+      "importance": 0.011814408914212681
+    },
+    {
+      "feature": "up_persist_120",
+      "importance": 0.011407065132404822
+    },
+    {
+      "feature": "trade_z_15",
+      "importance": 0.01061484444396856
+    },
+    {
+      "feature": "eff_norm_120",
+      "importance": 0.010433023811653562
+    },
+    {
+      "feature": "align_120",
+      "importance": 0.009522854201566547
+    },
+    {
+      "feature": "from_high_frac_240",
+      "importance": 0.009352182896844663
+    },
+    {
+      "feature": "px_flow_eff_120",
+      "importance": 0.009329819542034842
+    },
+    {
+      "feature": "trade_z_3",
+      "importance": 0.009227850327473593
+    },
+    {
+      "feature": "turn_z_15",
+      "importance": 0.008737372177367418
+    },
+    {
+      "feature": "turn_z_10",
+      "importance": 0.008472779491653565
+    },
+    {
+      "feature": "range_width_60",
+      "importance": 0.0076186934452104945
+    },
+    {
+      "feature": "down_persist_60",
+      "importance": 0.007573686942997393
+    },
+    {
+      "feature": "ret_norm_120",
+      "importance": 0.0068547062124137935
+    },
+    {
+      "feature": "flow_30",
+      "importance": 0.006625274649258949
+    },
+    {
+      "feature": "vol_ratio_15",
+      "importance": 0.0063535836319823236
+    },
+    {
+      "feature": "flow_x_ret_120",
+      "importance": 0.006295210209631872
+    },
+    {
+      "feature": "range_pos_120",
+      "importance": 0.006231138704083224
+    }
+  ],
+  "anti_leakage": {
+    "uses_only_completed_historical_minutes": true,
+    "target_eval_83_110_forbidden": true,
+    "no_local_high_low_features": true,
+    "validation_used_only_for_policy_selection": true,
+    "holdout_not_used_for_tuning": true
+  },
+  "warning": "Research simulation only. 25x liquidation is approximate and not exact Bybit tier/margin math."
+}
