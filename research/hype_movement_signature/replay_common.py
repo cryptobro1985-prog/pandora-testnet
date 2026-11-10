@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Trigger v2: download-artifact cross-run path.
 from __future__ import annotations
 
 import argparse, gzip, json, math, statistics
