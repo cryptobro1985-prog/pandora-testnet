@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
-      PYTHONUNBUFFERED: "1"
+      PYTHONUNBUFFERED: "1"\n      HYPE_DOWNLOAD_WORKERS: "32"
       CRYPTOHFTDATA_API_KEY: ${{ secrets.CRYPTOHFTDATA_API_KEY }}
       MODEL_ARTIFACT_ID: "13578389090"
       REPLAY_START: "2026-11-07T23:00:00+00:00"
@@ -107,5 +107,5 @@ jobs:
             recent48_out/**
             recent48_replay.log
           if-no-files-found: error
-          retention-days: 14
-          compression-level: 0
+          retention-days: 3
+          compression-level: 9
