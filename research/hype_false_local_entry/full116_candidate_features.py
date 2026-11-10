@@ -78,6 +78,20 @@ def tape_amounts(rows, name):
     return out
 
 
+def causal_decision_bars(tape, candidate_ts_ms, end_bar, start_bar=0):
+    """Yield completed M1 bar indices strictly after a candidate, before replacement.
+
+    This is a causal event clock, not a fixed candidate-age grid. A completed
+    bar is the finest decision event available on the archived M1 plane;
+    tick/L50 events require their own timestamped adapter. No oracle labels
+    or future same-side extrema are used to select decision timestamps.
+    """
+    first = max(start_bar, int(np.searchsorted(tape.end, candidate_ts_ms, side="right")))
+    for k in range(first, end_bar):
+        if int(tape.end[k]) > candidate_ts_ms:
+            yield k
+
+
 def m1_states(rows, ages=AGES):
     """Return chronological decision rows and outcome-free candidate identities."""
     tape = m1.tape_from_rows(rows)
