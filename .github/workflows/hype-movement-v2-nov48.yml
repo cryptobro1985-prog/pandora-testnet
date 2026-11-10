@@ -65,7 +65,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/recent48_out
-          python research/hype_movement_signature/build_recent_compact_from_cache.py \
+          python -m research.hype_movement_signature.build_recent_compact_from_cache \
             --start "${REPLAY_START}" --end "${REPLAY_END}" \
             --cache /tmp/recent48_cache \
             --output /tmp/recent48_out/RECENT_48H_COMPACT_1M.jsonl.gz \
