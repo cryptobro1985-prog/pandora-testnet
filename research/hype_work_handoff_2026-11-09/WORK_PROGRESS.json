@@ -500,5 +500,14 @@
       "move_pct": 15.27254276601914
     },
     "use": "offline teacher/benchmark only; causal detector must approximate without future data"
+  },
+  "latest_guardian_audit": {
+    "timestamp_utc": "2026-11-10T04:26:00Z",
+    "confirmed_bounce_cv": "LOW 19/33 (57.58%), HIGH 18/33 (54.55%); sampled-age decisions remain non-event-driven",
+    "dense_replay_run": 42745462768,
+    "dense_replay_blocker": "Jul-Aug 103 finalized internal locals vs 122 expected (missing 19); no scope relaxation",
+    "latest_ci": "dual-scope CI 42749699318 success; PAPER 42749699297 failure; live smoke 42749699567 failure",
+    "next": "Investigate missing 19 teacher locals; event-time decision rows with causal quality/freshness; false confirmation MAE and paper economics; no champion promotion",
+    "real_orders": false
   }
 }
