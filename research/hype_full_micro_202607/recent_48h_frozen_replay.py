@@ -379,7 +379,7 @@ def main():
 
     ratio_rows = base.fetch_account_ratio()
     records = base.attach_account_ratio(records, ratio_rows)
-    records = base.enrich(src, records, schemas)
+    records = base.enrich(src, records, schemas, book_warmup_hours=1)
 
     with args.model.open("rb") as fh:
         bundle = pickle.load(fh)
