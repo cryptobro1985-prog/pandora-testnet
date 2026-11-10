@@ -1,0 +1,53 @@
+name: HYPE Inspect All Strict Artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/hype-h1-local-v5-oi-microstructure-20261104]
+    paths: [".github/workflows/hype-inspect-all-strict-artifacts.yml"]
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download source artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          for spec in \
+            "lateaug:13638795292" \
+            "september:13637558401" \
+            "may:13652089234" \
+            "june:13639545105"; do
+            name="${spec%%:*}"; id="${spec##*:}"
+            mkdir -p "artifacts/$name"
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$id/zip" > "artifacts/$name.zip"
+            unzip -q "artifacts/$name.zip" -d "artifacts/$name"
+            echo "=== $name FILES ==="
+            find "artifacts/$name" -maxdepth 4 -type f | sort
+          done
+      - name: Inspect label scopes
+        run: |
+          python - <<'PY'
+          import gzip,json,glob,os
+          for name in ("lateaug","september","may","june"):
+              print("===",name,"===")
+              roots=glob.glob(f"artifacts/{name}/**/labels.json.gz",recursive=True)
+              print("label_files",roots)
+              for p in roots:
+                  with gzip.open(p,"rt",encoding="utf-8") as f: d=json.load(f)
+                  for scope in ("internal","strict"):
+                      rows=[x for x in d.get(scope,[]) if x.get("reference_finalized")]
+                      sides={s:sum(x.get("side",x.get("type"))==s for x in rows) for s in ("LOW","HIGH")}
+                      print(p,scope,len(rows),sides)
+              comp=glob.glob(f"artifacts/{name}/**/compact_1m.jsonl.gz",recursive=True)
+              print("compact_files",comp)
+          PY
