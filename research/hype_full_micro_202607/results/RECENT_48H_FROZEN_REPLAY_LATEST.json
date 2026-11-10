@@ -1,0 +1,2277 @@
+{
+  "version": "HYPE-RECENT48-FROZEN-JULAUG-CAUSAL-REPLAY-v1",
+  "research_only": true,
+  "real_orders": false,
+  "window_utc": [
+    "2026-11-08T00:00:00+00:00",
+    "2026-11-10T00:00:00+00:00"
+  ],
+  "window_hours": 48.0,
+  "data": {
+    "source": "CryptoHFTData Bybit hourly Parquet/Zstd + Bybit account-ratio REST when available",
+    "downloaded_files": 29,
+    "downloaded_bytes": 6919876,
+    "source_file_counts": {
+      "trades": 24,
+      "orderbook": 1,
+      "liquidations": 1,
+      "mark_price": 1,
+      "open_interest": 1,
+      "ticker": 1
+    },
+    "missing_files_count": 9,
+    "account_ratio_rows": 0,
+    "minute_rows": 2880,
+    "sec5_rows": 30772
+  },
+  "leakage_contract": {
+    "candidate_generation": "causal rolling 6h fresh extreme; no strict labels",
+    "features": "only values timestamped at or before snapshot_ts_ms",
+    "frozen_model_source": "Jul12-Aug07 model artifact run 42376949791",
+    "model_refit_on_recent_48h": false,
+    "threshold_retuned_on_recent_48h": false,
+    "teacher_use": "after-the-fact scoring only",
+    "decision_delays_s": [
+      60,
+      180,
+      300
+    ]
+  },
+  "frozen_model": {
+    "version": null,
+    "model": "extra",
+    "threshold": 0.35999999999999993,
+    "feature_count": 297,
+    "historical_report": {
+      "split": {
+        "train_end_ms": 1785489650651,
+        "valid_end_ms": 1785804171989
+      },
+      "features": 297,
+      "rows": {
+        "train": 2628,
+        "valid": 564,
+        "oos": 564
+      },
+      "models": {
+        "extra": {
+          "threshold": 0.35999999999999993,
+          "validation": {
+            "candidates": 188,
+            "true": 8,
+            "accepted": 9,
+            "tp": 4,
+            "fp": 5,
+            "fn": 4,
+            "precision": 0.4444444444444444,
+            "recall": 0.5,
+            "f1": 0.47058823529411764,
+            "median_delay_s": 240.0
+          },
+          "oos": {
+            "candidates": 188,
+            "true": 8,
+            "accepted": 2,
+            "tp": 1,
+            "fp": 1,
+            "fn": 7,
+            "precision": 0.5,
+            "recall": 0.125,
+            "f1": 0.2,
+            "median_delay_s": 300.0
+          },
+          "holdout_95pct_gate": {
+            "passed": false,
+            "precision_min": 0.95,
+            "recall_min": 0.3,
+            "tp_min": 5,
+            "accepted_min": 5
+          }
+        },
+        "histgb": {
+          "threshold": 0.5,
+          "validation": {
+            "candidates": 188,
+            "true": 8,
+            "accepted": 0,
+            "tp": 0,
+            "fp": 0,
+            "fn": 8,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "median_delay_s": null
+          },
+          "oos": {
+            "candidates": 188,
+            "true": 8,
+            "accepted": 0,
+            "tp": 0,
+            "fp": 0,
+            "fn": 8,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "median_delay_s": null
+          },
+          "holdout_95pct_gate": {
+            "passed": false,
+            "precision_min": 0.95,
+            "recall_min": 0.3,
+            "tp_min": 5,
+            "accepted_min": 5
+          }
+        }
+      },
+      "relationships": {
+        "LOW": {
+          "baseline_positive_rate": 0.03327495621716287,
+          "top_features": [
+            {
+              "feature": "rev_eff_30s",
+              "effect": 7428926.4558579065,
+              "threshold": 0.0,
+              "true_median": 0.007428926455857907,
+              "false_median": 0.0,
+              "true_support": 19,
+              "false_support": 551
+            },
+            {
+              "feature": "rev_eff_60s",
+              "effect": 6602019.082585289,
+              "threshold": 0.0,
+              "true_median": 0.00660201908258529,
+              "false_median": 0.0,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "rev_eff_180s",
+              "effect": 9.00311301180138,
+              "threshold": 0.00025544987687953907,
+              "true_median": 0.0034207872468121282,
+              "false_median": 1.1038368737181925e-05,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "rev_eff_300s",
+              "effect": 4.471573791356223,
+              "threshold": 0.0007361197641627023,
+              "true_median": 0.0052869744854184475,
+              "false_median": 0.0004068277992228423,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "ret_300s",
+              "effect": 1.7575036113420428,
+              "threshold": 0.00031561782188638254,
+              "true_median": 0.004699314536075194,
+              "false_median": 0.00024945738937731665,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "rev_ret_300s",
+              "effect": 1.7575036113420428,
+              "threshold": 0.00031561782188638254,
+              "true_median": 0.004699314536075194,
+              "false_median": 0.00024945738937731665,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "imbalance_300s",
+              "effect": 1.4810381347894463,
+              "threshold": -0.04278093178433072,
+              "true_median": 0.45202775655336486,
+              "false_median": -0.05089822496874703,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "rev_flow_300s",
+              "effect": 1.4810381347894463,
+              "threshold": -0.04278093178433072,
+              "true_median": 0.45202775655336486,
+              "false_median": -0.05089822496874703,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_ask_07_log_qty",
+              "effect": -1.097703560635664,
+              "threshold": 3.3870984572826535,
+              "true_median": 1.8809906029559977,
+              "false_median": 3.41113703806662,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_ask_06_log_qty",
+              "effect": -1.010797940060962,
+              "threshold": 3.256942025674657,
+              "true_median": 1.888583653863595,
+              "false_median": 3.260013052603589,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "imbalance_180s",
+              "effect": 1.0089915698524397,
+              "threshold": 0.013221497015263078,
+              "true_median": 0.4223774173412109,
+              "false_median": -0.0009959477391706746,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "rev_flow_180s",
+              "effect": 1.0089915698524397,
+              "threshold": 0.013221497015263078,
+              "true_median": 0.4223774173412109,
+              "false_median": -0.0009959477391706746,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_ask_19_dist_bps",
+              "effect": 0.8010916199725182,
+              "threshold": 3.529644711128821,
+              "true_median": 3.85435670786638,
+              "false_median": 3.519692329657653,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_ask_20_dist_bps",
+              "effect": 0.7947988291401429,
+              "threshold": 3.7018225019158635,
+              "true_median": 4.025661450437479,
+              "false_median": 3.6911014236717943,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "distance_low_60m_bps",
+              "effect": -0.7945128223034562,
+              "threshold": 5.605975667033469,
+              "true_median": 0.0,
+              "false_median": 6.603529383316653,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "distance_low_6h_bps",
+              "effect": -0.7945128223034562,
+              "threshold": 5.605975667033469,
+              "true_median": 0.0,
+              "false_median": 6.603529383316653,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "position_6h",
+              "effect": -0.7753559191939732,
+              "threshold": 0.02201467645096811,
+              "true_median": 0.0,
+              "false_median": 0.025306810294397512,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "ret_180s",
+              "effect": 0.7616322769794717,
+              "threshold": 7.489178137576324e-05,
+              "true_median": 0.0013200075429002922,
+              "false_median": -4.7143918036063326e-07,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "rev_ret_180s",
+              "effect": 0.7616322769794717,
+              "threshold": 7.489178137576324e-05,
+              "true_median": 0.0013200075429002922,
+              "false_median": -4.7143918036063326e-07,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_ask_21_dist_bps",
+              "effect": 0.754357149042177,
+              "threshold": 3.8756017948360366,
+              "true_median": 4.196966193008578,
+              "false_median": 3.867506528626441,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "position_60m",
+              "effect": -0.753530130903051,
+              "threshold": 0.04419889502763116,
+              "true_median": 0.0,
+              "false_median": 0.0493782882685983,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_ask_22_dist_bps",
+              "effect": 0.7011561397459826,
+              "threshold": 4.048926092974359,
+              "true_median": 4.368270935581897,
+              "false_median": 4.046739354970352,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "distance_low_24h_bps",
+              "effect": -0.6939861487476463,
+              "threshold": 36.173001310615405,
+              "true_median": 0.0,
+              "false_median": 37.21854082578968,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "ret_60s",
+              "effect": 0.6914418846436622,
+              "threshold": -1.6520187669288866e-05,
+              "true_median": 0.0005824311360833612,
+              "false_median": -3.343086445850574e-05,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "rev_ret_60s",
+              "effect": 0.6914418846436622,
+              "threshold": -1.6520187669288866e-05,
+              "true_median": 0.0005824311360833612,
+              "false_median": -3.343086445850574e-05,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "position_24h",
+              "effect": -0.6861306155129145,
+              "threshold": 0.07161897991825103,
+              "true_median": 0.0,
+              "false_median": 0.07285492659951229,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_ask_23_dist_bps",
+              "effect": 0.6796033096472965,
+              "threshold": 4.223270218906006,
+              "true_median": 4.539575678152996,
+              "false_median": 4.220121112011865,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "sell_300s_log",
+              "effect": -0.679450788440618,
+              "threshold": 13.416125845864672,
+              "true_median": 12.747890695795544,
+              "false_median": 13.478096796414958,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_ask_24_dist_bps",
+              "effect": 0.6629905965568483,
+              "threshold": 4.396665431003477,
+              "true_median": 4.710880420724095,
+              "false_median": 4.391441182938216,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "imbalance_60s",
+              "effect": 0.650632022439803,
+              "threshold": 0.11013902274291315,
+              "true_median": 0.4685924954844472,
+              "false_median": 0.10148495612391259,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "rev_flow_60s",
+              "effect": 0.650632022439803,
+              "threshold": 0.11013902274291315,
+              "true_median": 0.4685924954844472,
+              "false_median": 0.10148495612391259,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_ask_25_dist_bps",
+              "effect": 0.6429301174941886,
+              "threshold": 4.564833555833481,
+              "true_median": 4.8821851632974145,
+              "false_median": 4.562872450321054,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_bid_43_log_qty",
+              "effect": 0.640675661229693,
+              "threshold": 4.457134107160687,
+              "true_median": 5.070286893660432,
+              "false_median": 4.440059554622429,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_ask_26_dist_bps",
+              "effect": 0.6327576405674565,
+              "threshold": 4.734889246635898,
+              "true_median": 5.053489905868513,
+              "false_median": 4.732311975869097,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_ask_27_dist_bps",
+              "effect": 0.630499666128497,
+              "threshold": 4.904539820405063,
+              "true_median": 5.224794648439612,
+              "false_median": 4.899762543197905,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "sell_180s_log",
+              "effect": -0.6224049920105663,
+              "threshold": 12.664861044755922,
+              "true_median": 11.920827829620888,
+              "false_median": 12.730620688964365,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_ask_16_log_qty",
+              "effect": -0.6189660503326039,
+              "threshold": 4.103304303593573,
+              "true_median": 3.541538866215227,
+              "false_median": 4.120904395831871,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_ask_28_dist_bps",
+              "effect": 0.6186194183135718,
+              "threshold": 5.081607165928759,
+              "true_median": 5.396099391010711,
+              "false_median": 5.072578842353348,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_ask_29_dist_bps",
+              "effect": 0.5897427972046679,
+              "threshold": 5.252883205668635,
+              "true_median": 5.567404133584031,
+              "false_median": 5.249413836607708,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_ask_30_dist_bps",
+              "effect": 0.5869764759567783,
+              "threshold": 5.424339655599741,
+              "true_median": 5.73870887615513,
+              "false_median": 5.418614750347661,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_ask_32_dist_bps",
+              "effect": 0.5779104772985478,
+              "threshold": 5.770638646054316,
+              "true_median": 6.088153121219797,
+              "false_median": 5.763883537674985,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_ask_31_dist_bps",
+              "effect": 0.5665584887493691,
+              "threshold": 5.597959854630741,
+              "true_median": 5.910451810440254,
+              "false_median": 5.5963420152704835,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_book_imbalance_25",
+              "effect": 0.5632388919343504,
+              "threshold": -0.07642204869788012,
+              "true_median": 0.07698629319805635,
+              "false_median": -0.07937317276039921,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_book_imbalance_10",
+              "effect": 0.5588914947111685,
+              "threshold": -0.12684089223358813,
+              "true_median": 0.13937863134664782,
+              "false_median": -0.13988128600426697,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_ask_33_dist_bps",
+              "effect": 0.5546411973234101,
+              "threshold": 5.9384497153014415,
+              "true_median": 6.254951836870415,
+              "false_median": 5.931746312121122,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_ask_11_log_qty",
+              "effect": -0.5492142972004499,
+              "threshold": 3.731938943574383,
+              "true_median": 3.1346242724206097,
+              "false_median": 3.7340916827425796,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "imbalance_30s",
+              "effect": 0.5388870966123261,
+              "threshold": 0.07175730958132631,
+              "true_median": 0.45680332245242367,
+              "false_median": 0.05723594742967284,
+              "true_support": 19,
+              "false_support": 551
+            },
+            {
+              "feature": "rev_flow_30s",
+              "effect": 0.5388870966123261,
+              "threshold": 0.07175730958132631,
+              "true_median": 0.45680332245242367,
+              "false_median": 0.05723594742967284,
+              "true_support": 19,
+              "false_support": 551
+            },
+            {
+              "feature": "fullmicro_bid_41_log_qty",
+              "effect": 0.5333759641204935,
+              "threshold": 4.39925241533895,
+              "true_median": 4.917642427247091,
+              "false_median": 4.38620537406347,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_ask_27_log_qty",
+              "effect": 0.5331655172184675,
+              "threshold": 4.414735809083586,
+              "true_median": 4.896196659690262,
+              "false_median": 4.409398551884495,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "ret_30s",
+              "effect": 0.528603077944713,
+              "threshold": -1.756583759071617e-05,
+              "true_median": 0.0003128747979350699,
+              "false_median": -3.374900862296304e-05,
+              "true_support": 19,
+              "false_support": 551
+            },
+            {
+              "feature": "rev_ret_30s",
+              "effect": 0.528603077944713,
+              "threshold": -1.756583759071617e-05,
+              "true_median": 0.0003128747979350699,
+              "false_median": -3.374900862296304e-05,
+              "true_support": 19,
+              "false_support": 551
+            },
+            {
+              "feature": "fullmicro_bid_05_log_qty",
+              "effect": 0.5266542748225489,
+              "threshold": 2.864483986944037,
+              "true_median": 3.7103962975761857,
+              "false_median": 2.8132274831895963,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_ask_34_dist_bps",
+              "effect": 0.5253703362056642,
+              "threshold": 6.115154386117094,
+              "true_median": 6.423927846441746,
+              "false_median": 6.112710786989606,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_bid_42_log_qty",
+              "effect": 0.520129290937936,
+              "threshold": 4.50236196600641,
+              "true_median": 4.986684073273742,
+              "false_median": 4.501252457063398,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_mark_price_funding_rate",
+              "effect": 0.5190590535349203,
+              "threshold": 2.484e-05,
+              "true_median": 7.515e-05,
+              "false_median": 2.252e-05,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_bid_19_log_qty",
+              "effect": 0.5085931697415771,
+              "threshold": 4.001863709427935,
+              "true_median": 4.477223171657469,
+              "false_median": 3.991942611558404,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_bid_02_dist_bps",
+              "effect": 0.5067018719160785,
+              "threshold": -0.4146040117092298,
+              "true_median": -0.29215562156070796,
+              "false_median": -0.41472438242706744,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_ask_35_dist_bps",
+              "effect": 0.5051358402900812,
+              "threshold": 6.287770286790284,
+              "true_median": 6.595232589015065,
+              "false_median": 6.286138484244974,
+              "true_support": 19,
+              "false_support": 552
+            },
+            {
+              "feature": "fullmicro_bid_06_log_qty",
+              "effect": 0.5006488112010694,
+              "threshold": 2.7421295147550726,
+              "true_median": 3.5476038667559826,
+              "false_median": 2.6734501832016404,
+              "true_support": 19,
+              "false_support": 552
+            }
+          ],
+          "top_pairs": [
+            {
+              "a": "imbalance_180s",
+              "b": "distance_low_60m_bps",
+              "support": 162,
+              "positive_rate": 0.10493827160493827,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 3.1536712150747235
+            },
+            {
+              "a": "imbalance_180s",
+              "b": "distance_low_6h_bps",
+              "support": 162,
+              "positive_rate": 0.10493827160493827,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 3.1536712150747235
+            },
+            {
+              "a": "rev_flow_180s",
+              "b": "distance_low_60m_bps",
+              "support": 162,
+              "positive_rate": 0.10493827160493827,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 3.1536712150747235
+            },
+            {
+              "a": "rev_flow_180s",
+              "b": "distance_low_6h_bps",
+              "support": 162,
+              "positive_rate": 0.10493827160493827,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 3.1536712150747235
+            },
+            {
+              "a": "imbalance_180s",
+              "b": "position_6h",
+              "support": 164,
+              "positive_rate": 0.10365853658536585,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 3.1152118100128368
+            },
+            {
+              "a": "rev_flow_180s",
+              "b": "position_6h",
+              "support": 164,
+              "positive_rate": 0.10365853658536585,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 3.1152118100128368
+            },
+            {
+              "a": "distance_low_60m_bps",
+              "b": "ret_180s",
+              "support": 168,
+              "positive_rate": 0.10119047619047619,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 3.0410401002506267
+            },
+            {
+              "a": "distance_low_6h_bps",
+              "b": "ret_180s",
+              "support": 168,
+              "positive_rate": 0.10119047619047619,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 3.0410401002506267
+            },
+            {
+              "a": "position_6h",
+              "b": "ret_180s",
+              "support": 168,
+              "positive_rate": 0.10119047619047619,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 3.0410401002506267
+            },
+            {
+              "a": "rev_eff_180s",
+              "b": "position_6h",
+              "support": 169,
+              "positive_rate": 0.10059171597633136,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 3.0230457801308
+            },
+            {
+              "a": "rev_eff_180s",
+              "b": "distance_low_60m_bps",
+              "support": 170,
+              "positive_rate": 0.1,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 3.005263157894737
+            },
+            {
+              "a": "rev_eff_180s",
+              "b": "distance_low_6h_bps",
+              "support": 170,
+              "positive_rate": 0.1,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 3.005263157894737
+            },
+            {
+              "a": "ret_300s",
+              "b": "fullmicro_ask_07_log_qty",
+              "support": 151,
+              "positive_rate": 0.09933774834437085,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.9853607528755663
+            },
+            {
+              "a": "rev_ret_300s",
+              "b": "fullmicro_ask_07_log_qty",
+              "support": 151,
+              "positive_rate": 0.09933774834437085,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.9853607528755663
+            },
+            {
+              "a": "fullmicro_ask_07_log_qty",
+              "b": "position_6h",
+              "support": 151,
+              "positive_rate": 0.09933774834437085,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.9853607528755663
+            },
+            {
+              "a": "rev_eff_300s",
+              "b": "fullmicro_ask_07_log_qty",
+              "support": 152,
+              "positive_rate": 0.09868421052631579,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.9657202216066483
+            },
+            {
+              "a": "fullmicro_ask_07_log_qty",
+              "b": "distance_low_60m_bps",
+              "support": 153,
+              "positive_rate": 0.09803921568627451,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.9463364293085657
+            },
+            {
+              "a": "fullmicro_ask_07_log_qty",
+              "b": "distance_low_6h_bps",
+              "support": 153,
+              "positive_rate": 0.09803921568627451,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.9463364293085657
+            },
+            {
+              "a": "rev_eff_180s",
+              "b": "fullmicro_ask_07_log_qty",
+              "support": 148,
+              "positive_rate": 0.0945945945945946,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.842816500711238
+            },
+            {
+              "a": "fullmicro_ask_07_log_qty",
+              "b": "ret_180s",
+              "support": 148,
+              "positive_rate": 0.0945945945945946,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.842816500711238
+            },
+            {
+              "a": "rev_eff_300s",
+              "b": "fullmicro_ask_19_dist_bps",
+              "support": 139,
+              "positive_rate": 0.09352517985611511,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.8106777735706174
+            },
+            {
+              "a": "ret_300s",
+              "b": "fullmicro_ask_19_dist_bps",
+              "support": 139,
+              "positive_rate": 0.09352517985611511,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.8106777735706174
+            },
+            {
+              "a": "rev_ret_300s",
+              "b": "fullmicro_ask_19_dist_bps",
+              "support": 139,
+              "positive_rate": 0.09352517985611511,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.8106777735706174
+            },
+            {
+              "a": "rev_eff_300s",
+              "b": "imbalance_180s",
+              "support": 183,
+              "positive_rate": 0.09289617486338798,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.7917745182628706
+            },
+            {
+              "a": "rev_eff_300s",
+              "b": "rev_flow_180s",
+              "support": 183,
+              "positive_rate": 0.09289617486338798,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.7917745182628706
+            },
+            {
+              "a": "rev_eff_300s",
+              "b": "fullmicro_ask_20_dist_bps",
+              "support": 140,
+              "positive_rate": 0.09285714285714286,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.7906015037593987
+            },
+            {
+              "a": "ret_300s",
+              "b": "fullmicro_ask_20_dist_bps",
+              "support": 140,
+              "positive_rate": 0.09285714285714286,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.7906015037593987
+            },
+            {
+              "a": "rev_ret_300s",
+              "b": "fullmicro_ask_20_dist_bps",
+              "support": 140,
+              "positive_rate": 0.09285714285714286,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.7906015037593987
+            },
+            {
+              "a": "fullmicro_ask_19_dist_bps",
+              "b": "distance_low_60m_bps",
+              "support": 140,
+              "positive_rate": 0.09285714285714286,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.7906015037593987
+            },
+            {
+              "a": "fullmicro_ask_19_dist_bps",
+              "b": "distance_low_6h_bps",
+              "support": 140,
+              "positive_rate": 0.09285714285714286,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.7906015037593987
+            },
+            {
+              "a": "fullmicro_ask_19_dist_bps",
+              "b": "position_6h",
+              "support": 140,
+              "positive_rate": 0.09285714285714286,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.7906015037593987
+            },
+            {
+              "a": "fullmicro_ask_20_dist_bps",
+              "b": "distance_low_60m_bps",
+              "support": 141,
+              "positive_rate": 0.09219858156028368,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.770810003732736
+            },
+            {
+              "a": "fullmicro_ask_20_dist_bps",
+              "b": "distance_low_6h_bps",
+              "support": 141,
+              "positive_rate": 0.09219858156028368,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.770810003732736
+            },
+            {
+              "a": "fullmicro_ask_20_dist_bps",
+              "b": "position_6h",
+              "support": 141,
+              "positive_rate": 0.09219858156028368,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.770810003732736
+            },
+            {
+              "a": "ret_300s",
+              "b": "imbalance_180s",
+              "support": 187,
+              "positive_rate": 0.09090909090909091,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.7320574162679425
+            },
+            {
+              "a": "ret_300s",
+              "b": "rev_flow_180s",
+              "support": 187,
+              "positive_rate": 0.09090909090909091,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.7320574162679425
+            },
+            {
+              "a": "rev_ret_300s",
+              "b": "imbalance_180s",
+              "support": 187,
+              "positive_rate": 0.09090909090909091,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.7320574162679425
+            },
+            {
+              "a": "rev_ret_300s",
+              "b": "rev_flow_180s",
+              "support": 187,
+              "positive_rate": 0.09090909090909091,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.7320574162679425
+            },
+            {
+              "a": "ret_300s",
+              "b": "distance_low_60m_bps",
+              "support": 215,
+              "positive_rate": 0.08837209302325581,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.655813953488372
+            },
+            {
+              "a": "ret_300s",
+              "b": "distance_low_6h_bps",
+              "support": 215,
+              "positive_rate": 0.08837209302325581,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.655813953488372
+            },
+            {
+              "a": "rev_ret_300s",
+              "b": "distance_low_60m_bps",
+              "support": 215,
+              "positive_rate": 0.08837209302325581,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.655813953488372
+            },
+            {
+              "a": "rev_ret_300s",
+              "b": "distance_low_6h_bps",
+              "support": 215,
+              "positive_rate": 0.08837209302325581,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.655813953488372
+            },
+            {
+              "a": "ret_300s",
+              "b": "position_6h",
+              "support": 216,
+              "positive_rate": 0.08796296296296297,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.6435185185185186
+            },
+            {
+              "a": "rev_ret_300s",
+              "b": "position_6h",
+              "support": 216,
+              "positive_rate": 0.08796296296296297,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.6435185185185186
+            },
+            {
+              "a": "imbalance_300s",
+              "b": "fullmicro_ask_07_log_qty",
+              "support": 148,
+              "positive_rate": 0.08783783783783784,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.6397581792318636
+            },
+            {
+              "a": "rev_flow_300s",
+              "b": "fullmicro_ask_07_log_qty",
+              "support": 148,
+              "positive_rate": 0.08783783783783784,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.6397581792318636
+            },
+            {
+              "a": "rev_eff_300s",
+              "b": "distance_low_60m_bps",
+              "support": 218,
+              "positive_rate": 0.0871559633027523,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.6192660550458715
+            },
+            {
+              "a": "rev_eff_300s",
+              "b": "distance_low_6h_bps",
+              "support": 218,
+              "positive_rate": 0.0871559633027523,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.6192660550458715
+            },
+            {
+              "a": "rev_eff_300s",
+              "b": "position_6h",
+              "support": 219,
+              "positive_rate": 0.0867579908675799,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.6073059360730593
+            },
+            {
+              "a": "fullmicro_ask_07_log_qty",
+              "b": "imbalance_180s",
+              "support": 150,
+              "positive_rate": 0.08666666666666667,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.604561403508772
+            },
+            {
+              "a": "fullmicro_ask_07_log_qty",
+              "b": "rev_flow_180s",
+              "support": 150,
+              "positive_rate": 0.08666666666666667,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.604561403508772
+            },
+            {
+              "a": "rev_eff_300s",
+              "b": "imbalance_300s",
+              "support": 199,
+              "positive_rate": 0.08542713567839195,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.5673102353874633
+            },
+            {
+              "a": "rev_eff_300s",
+              "b": "rev_flow_300s",
+              "support": 199,
+              "positive_rate": 0.08542713567839195,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.5673102353874633
+            },
+            {
+              "a": "imbalance_300s",
+              "b": "ret_180s",
+              "support": 178,
+              "positive_rate": 0.08426966292134831,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.5325251330573626
+            },
+            {
+              "a": "rev_flow_300s",
+              "b": "ret_180s",
+              "support": 178,
+              "positive_rate": 0.08426966292134831,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.5325251330573626
+            },
+            {
+              "a": "ret_300s",
+              "b": "imbalance_300s",
+              "support": 202,
+              "positive_rate": 0.08415841584158416,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.5291818655549765
+            },
+            {
+              "a": "ret_300s",
+              "b": "rev_flow_300s",
+              "support": 202,
+              "positive_rate": 0.08415841584158416,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.5291818655549765
+            },
+            {
+              "a": "rev_ret_300s",
+              "b": "imbalance_300s",
+              "support": 202,
+              "positive_rate": 0.08415841584158416,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.5291818655549765
+            },
+            {
+              "a": "rev_ret_300s",
+              "b": "rev_flow_300s",
+              "support": 202,
+              "positive_rate": 0.08415841584158416,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.5291818655549765
+            },
+            {
+              "a": "rev_eff_180s",
+              "b": "imbalance_300s",
+              "support": 179,
+              "positive_rate": 0.08379888268156424,
+              "baseline_rate": 0.03327495621716287,
+              "lift": 2.518376947956483
+            }
+          ]
+        },
+        "HIGH": {
+          "baseline_positive_rate": 0.04056795131845842,
+          "top_features": [
+            {
+              "feature": "rev_eff_30s",
+              "effect": 7693650.692193003,
+              "threshold": 0.0,
+              "true_median": 0.007693650692193004,
+              "false_median": 0.0,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "rev_eff_60s",
+              "effect": 109.05342134679371,
+              "threshold": 5.375762951737012e-05,
+              "true_median": 0.008691673443994788,
+              "false_median": 0.0,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "rev_eff_180s",
+              "effect": 3.0186780556797577,
+              "threshold": 0.0007235503040036722,
+              "true_median": 0.0038426787004600758,
+              "false_median": 0.0006044350415384695,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "rev_eff_300s",
+              "effect": 2.070816086165946,
+              "threshold": 0.0013744111559626266,
+              "true_median": 0.00542367951842755,
+              "false_median": 0.0012039734797829958,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "ret_300s",
+              "effect": -1.0085488430339116,
+              "threshold": -0.0005912081624868115,
+              "true_median": -0.0019908461365985564,
+              "false_median": -0.0004813312246441104,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "rev_ret_300s",
+              "effect": 1.0085488430339116,
+              "threshold": 0.0005912081624868115,
+              "true_median": 0.0019908461365985564,
+              "false_median": 0.0004813312246441104,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "ret_60s",
+              "effect": -0.8401482518857485,
+              "threshold": -1.4870551846235536e-05,
+              "true_median": -0.0006056547485133179,
+              "false_median": 1.538319539751143e-05,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "rev_ret_60s",
+              "effect": 0.8401482518857485,
+              "threshold": 1.4870551846235536e-05,
+              "true_median": 0.0006056547485133179,
+              "false_median": -1.538319539751143e-05,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "position_60m",
+              "effect": 0.8316059864341083,
+              "threshold": 0.9741697416974244,
+              "true_median": 1.0,
+              "false_median": 0.968152866242037,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "distance_high_60m_bps",
+              "effect": -0.822716885059713,
+              "threshold": 2.7398667739775284,
+              "true_median": 0.0,
+              "false_median": 3.3419800436029767,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "distance_high_6h_bps",
+              "effect": -0.822716885059713,
+              "threshold": 2.7398667739775284,
+              "true_median": 0.0,
+              "false_median": 3.3419800436029767,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "imbalance_300s",
+              "effect": -0.7614655708714997,
+              "threshold": -0.05129385977016436,
+              "true_median": -0.3011248877056456,
+              "false_median": -0.04442039140406731,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "rev_flow_300s",
+              "effect": 0.7614655708714997,
+              "threshold": 0.05129385977016436,
+              "true_median": 0.3011248877056456,
+              "false_median": 0.04442039140406731,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_bid_02_log_qty",
+              "effect": 0.7375491945133217,
+              "threshold": 1.6505798557652755,
+              "true_median": 3.0766147962532684,
+              "false_median": 1.623340817603092,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "position_6h",
+              "effect": 0.7288623484037055,
+              "threshold": 0.9870512065921139,
+              "true_median": 1.0,
+              "false_median": 0.9856115107913712,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_short_liq_notional_300s",
+              "effect": -0.6956603413129441,
+              "threshold": 144.54459999999997,
+              "true_median": 0.0,
+              "false_median": 149.08128000000002,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_bid_18_log_qty",
+              "effect": 0.6769635111965835,
+              "threshold": 4.074991833706286,
+              "true_median": 4.687362043340372,
+              "false_median": 4.068000586882499,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_liq_count_300s",
+              "effect": -0.6744907594765952,
+              "threshold": 1.0,
+              "true_median": 0.0,
+              "false_median": 1.0,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_ask_39_log_qty",
+              "effect": 0.6398239487667762,
+              "threshold": 4.431411859854625,
+              "true_median": 4.987499869275116,
+              "false_median": 4.417152436649256,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "position_24h",
+              "effect": 0.6325168544670432,
+              "threshold": 0.9636595473382221,
+              "true_median": 0.9972222222222221,
+              "false_median": 0.9631432545201689,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "distance_high_24h_bps",
+              "effect": -0.6312428515931722,
+              "threshold": 16.552935612459407,
+              "true_median": 1.2488136270538686,
+              "false_median": 16.74038579678294,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_ask_18_log_qty",
+              "effect": 0.5816897949487791,
+              "threshold": 4.020339148911605,
+              "true_median": 4.572386452828017,
+              "false_median": 4.008060193625088,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "ret_30s",
+              "effect": -0.5520318447077519,
+              "threshold": 0.0,
+              "true_median": -0.0002578104100335321,
+              "false_median": 1.7091387649825762e-05,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "rev_ret_30s",
+              "effect": 0.5520318447077519,
+              "threshold": 0.0,
+              "true_median": 0.0002578104100335321,
+              "false_median": -1.7091387649825762e-05,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_ask_24_log_qty",
+              "effect": 0.5466273361771182,
+              "threshold": 4.191924890560965,
+              "true_median": 4.723676632882993,
+              "false_median": 4.17315574264639,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_ask_28_log_qty",
+              "effect": 0.5254126235454505,
+              "threshold": 4.383899879055562,
+              "true_median": 4.828829106805296,
+              "false_median": 4.366786085257597,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_ticker_quote_asset_volume",
+              "effect": 0.4924671820714889,
+              "threshold": 134190533.4411,
+              "true_median": 152898850.19305,
+              "false_median": 133895093.3855,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_open_interest_age_ms",
+              "effect": 0.48864702893995887,
+              "threshold": 4657.0,
+              "true_median": 6330.5,
+              "false_median": 4628.0,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "buy_300s_log",
+              "effect": -0.48648082603386594,
+              "threshold": 12.700873761104642,
+              "true_median": 12.184097689021968,
+              "false_median": 12.704940810979531,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "ret_180s",
+              "effect": -0.47476244543595014,
+              "threshold": -0.0001508143977478893,
+              "true_median": -0.0007310942819984123,
+              "false_median": -0.00013278008298756028,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "rev_ret_180s",
+              "effect": 0.47476244543595014,
+              "threshold": 0.0001508143977478893,
+              "true_median": 0.0007310942819984123,
+              "false_median": 0.00013278008298756028,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "imbalance_180s",
+              "effect": -0.47408879884611316,
+              "threshold": -0.08749698149292051,
+              "true_median": -0.27315427381138374,
+              "false_median": -0.0777781894710929,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "rev_flow_180s",
+              "effect": 0.47408879884611316,
+              "threshold": 0.08749698149292051,
+              "true_median": 0.27315427381138374,
+              "false_median": 0.0777781894710929,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_ask_15_log_qty",
+              "effect": 0.47127776368508706,
+              "threshold": 3.7805466426397603,
+              "true_median": 4.256142533125819,
+              "false_median": 3.7556030861568446,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_bid_41_log_qty",
+              "effect": 0.4610911489040694,
+              "threshold": 4.544358046591334,
+              "true_median": 4.92695102583515,
+              "false_median": 4.527640983478854,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_bid_42_log_qty",
+              "effect": 0.45819992066344317,
+              "threshold": 4.566741159368309,
+              "true_median": 4.9094116694012016,
+              "false_median": 4.557554332046428,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_ask_02_log_qty",
+              "effect": -0.45799687322678745,
+              "threshold": 2.1815467646169897,
+              "true_median": 1.3812818192963463,
+              "false_median": 2.222459048514761,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_bid_20_log_qty",
+              "effect": -0.44766846382951914,
+              "threshold": 4.134526351854933,
+              "true_median": 3.6758069175385857,
+              "false_median": 4.145196092379535,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_bid_50_log_qty",
+              "effect": 0.4452505467099798,
+              "threshold": 4.553455750301413,
+              "true_median": 4.923772499325285,
+              "false_median": 4.526235197899949,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_ask_01_log_qty",
+              "effect": -0.4379140107487112,
+              "threshold": 2.8581928595319295,
+              "true_median": 2.2447483368609107,
+              "false_median": 2.900322088749333,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_bid_06_log_qty",
+              "effect": -0.430117741047623,
+              "threshold": 3.075005454448499,
+              "true_median": 2.544998885232464,
+              "false_median": 3.0828269804049246,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_ask_16_log_qty",
+              "effect": 0.42892510582497556,
+              "threshold": 3.878259375275337,
+              "true_median": 4.306897704453773,
+              "false_median": 3.8590440806372595,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_ask_31_log_qty",
+              "effect": 0.4162927822816339,
+              "threshold": 4.350922889622548,
+              "true_median": 4.697743218045551,
+              "false_median": 4.341855469984605,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_bid_34_log_qty",
+              "effect": -0.40514612564880387,
+              "threshold": 4.523526196947581,
+              "true_median": 4.201777499508427,
+              "false_median": 4.5380683824473556,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_bid_49_log_qty",
+              "effect": -0.40478541531283546,
+              "threshold": 4.468319003238895,
+              "true_median": 4.089543726678854,
+              "false_median": 4.475289265133571,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_ask_45_log_qty",
+              "effect": 0.39956988333281807,
+              "threshold": 4.391234115424795,
+              "true_median": 4.7742773487109815,
+              "false_median": 4.380775852772229,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_ticker_base_asset_volume",
+              "effect": 0.3901386859859459,
+              "threshold": 2393963.15,
+              "true_median": 2674604.575,
+              "false_median": 2380379.36,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_bid_24_log_qty",
+              "effect": 0.3873671044249994,
+              "threshold": 4.325985243790257,
+              "true_median": 4.677471723351257,
+              "false_median": 4.32280727501391,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_bid_14_log_qty",
+              "effect": 0.3843114465839144,
+              "threshold": 3.8701588013294472,
+              "true_median": 4.233380752342775,
+              "false_median": 3.8533340090794663,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_bid_39_log_qty",
+              "effect": 0.3736238071793635,
+              "threshold": 4.472780997942346,
+              "true_median": 4.738185806276709,
+              "false_median": 4.446526092548494,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_ask_48_log_qty",
+              "effect": -0.35378923918505023,
+              "threshold": 4.4785860338786385,
+              "true_median": 4.183830733883927,
+              "false_median": 4.484921613391916,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "trade_count_300s",
+              "effect": -0.35246548001152245,
+              "threshold": 1886.0,
+              "true_median": 1446.0,
+              "false_median": 1886.0,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_ask_20_log_qty",
+              "effect": -0.3501907205094033,
+              "threshold": 4.036891987474015,
+              "true_median": 3.7019483477810944,
+              "false_median": 4.051784947803305,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "total_300s_log",
+              "effect": -0.3465002781873642,
+              "threshold": 13.536669976285106,
+              "true_median": 13.253631417836754,
+              "false_median": 13.537444918528973,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_bid_46_log_qty",
+              "effect": 0.34546134085911145,
+              "threshold": 4.500031867864786,
+              "true_median": 4.817337012100906,
+              "false_median": 4.500031867864786,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_ask_22_log_qty",
+              "effect": 0.3441239993474673,
+              "threshold": 4.189806245700679,
+              "true_median": 4.4890021745304605,
+              "false_median": 4.175463613506893,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "total_30s_log",
+              "effect": 0.3382488371199629,
+              "threshold": 10.30728780988236,
+              "true_median": 10.743683378879544,
+              "false_median": 10.301563069410339,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_bid_45_log_qty",
+              "effect": -0.3288169627488343,
+              "threshold": 4.5342110970475975,
+              "true_median": 4.262533773570608,
+              "false_median": 4.5345331063886505,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_ask_26_dist_bps",
+              "effect": 0.3278713185508839,
+              "threshold": 4.862429930549972,
+              "true_median": 5.01910405021011,
+              "false_median": 4.853450474240351,
+              "true_support": 20,
+              "false_support": 473
+            },
+            {
+              "feature": "fullmicro_ask_49_log_qty",
+              "effect": 0.3269667636802537,
+              "threshold": 4.423888088768799,
+              "true_median": 4.716919498122264,
+              "false_median": 4.418358563921272,
+              "true_support": 20,
+              "false_support": 473
+            }
+          ],
+          "top_pairs": [
+            {
+              "a": "rev_eff_60s",
+              "b": "position_60m",
+              "support": 122,
+              "positive_rate": 0.12295081967213115,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 3.0307377049180326
+            },
+            {
+              "a": "rev_eff_60s",
+              "b": "distance_high_60m_bps",
+              "support": 122,
+              "positive_rate": 0.12295081967213115,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 3.0307377049180326
+            },
+            {
+              "a": "rev_eff_60s",
+              "b": "distance_high_6h_bps",
+              "support": 122,
+              "positive_rate": 0.12295081967213115,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 3.0307377049180326
+            },
+            {
+              "a": "rev_eff_60s",
+              "b": "position_6h",
+              "support": 122,
+              "positive_rate": 0.12295081967213115,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 3.0307377049180326
+            },
+            {
+              "a": "ret_60s",
+              "b": "position_60m",
+              "support": 122,
+              "positive_rate": 0.12295081967213115,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 3.0307377049180326
+            },
+            {
+              "a": "ret_60s",
+              "b": "distance_high_60m_bps",
+              "support": 122,
+              "positive_rate": 0.12295081967213115,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 3.0307377049180326
+            },
+            {
+              "a": "ret_60s",
+              "b": "distance_high_6h_bps",
+              "support": 122,
+              "positive_rate": 0.12295081967213115,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 3.0307377049180326
+            },
+            {
+              "a": "ret_60s",
+              "b": "position_6h",
+              "support": 122,
+              "positive_rate": 0.12295081967213115,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 3.0307377049180326
+            },
+            {
+              "a": "rev_ret_60s",
+              "b": "position_60m",
+              "support": 122,
+              "positive_rate": 0.12295081967213115,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 3.0307377049180326
+            },
+            {
+              "a": "rev_ret_60s",
+              "b": "distance_high_60m_bps",
+              "support": 122,
+              "positive_rate": 0.12295081967213115,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 3.0307377049180326
+            },
+            {
+              "a": "rev_ret_60s",
+              "b": "distance_high_6h_bps",
+              "support": 122,
+              "positive_rate": 0.12295081967213115,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 3.0307377049180326
+            },
+            {
+              "a": "rev_ret_60s",
+              "b": "position_6h",
+              "support": 122,
+              "positive_rate": 0.12295081967213115,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 3.0307377049180326
+            },
+            {
+              "a": "ret_300s",
+              "b": "position_6h",
+              "support": 176,
+              "positive_rate": 0.10795454545454546,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.6610795454545455
+            },
+            {
+              "a": "rev_ret_300s",
+              "b": "position_6h",
+              "support": 176,
+              "positive_rate": 0.10795454545454546,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.6610795454545455
+            },
+            {
+              "a": "position_6h",
+              "b": "fullmicro_bid_18_log_qty",
+              "support": 121,
+              "positive_rate": 0.10743801652892562,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.6483471074380165
+            },
+            {
+              "a": "ret_300s",
+              "b": "distance_high_60m_bps",
+              "support": 177,
+              "positive_rate": 0.10734463276836158,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.646045197740113
+            },
+            {
+              "a": "ret_300s",
+              "b": "distance_high_6h_bps",
+              "support": 177,
+              "positive_rate": 0.10734463276836158,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.646045197740113
+            },
+            {
+              "a": "rev_ret_300s",
+              "b": "distance_high_60m_bps",
+              "support": 177,
+              "positive_rate": 0.10734463276836158,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.646045197740113
+            },
+            {
+              "a": "rev_ret_300s",
+              "b": "distance_high_6h_bps",
+              "support": 177,
+              "positive_rate": 0.10734463276836158,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.646045197740113
+            },
+            {
+              "a": "position_60m",
+              "b": "fullmicro_bid_02_log_qty",
+              "support": 131,
+              "positive_rate": 0.10687022900763359,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.634351145038168
+            },
+            {
+              "a": "ret_300s",
+              "b": "position_60m",
+              "support": 178,
+              "positive_rate": 0.10674157303370786,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.631179775280899
+            },
+            {
+              "a": "rev_ret_300s",
+              "b": "position_60m",
+              "support": 178,
+              "positive_rate": 0.10674157303370786,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.631179775280899
+            },
+            {
+              "a": "distance_high_60m_bps",
+              "b": "fullmicro_bid_02_log_qty",
+              "support": 133,
+              "positive_rate": 0.10526315789473684,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.594736842105263
+            },
+            {
+              "a": "distance_high_6h_bps",
+              "b": "fullmicro_bid_02_log_qty",
+              "support": 133,
+              "positive_rate": 0.10526315789473684,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.594736842105263
+            },
+            {
+              "a": "fullmicro_bid_02_log_qty",
+              "b": "position_6h",
+              "support": 134,
+              "positive_rate": 0.1044776119402985,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.575373134328358
+            },
+            {
+              "a": "position_60m",
+              "b": "fullmicro_bid_18_log_qty",
+              "support": 125,
+              "positive_rate": 0.104,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.5636
+            },
+            {
+              "a": "distance_high_60m_bps",
+              "b": "fullmicro_bid_18_log_qty",
+              "support": 127,
+              "positive_rate": 0.10236220472440945,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.5232283464566927
+            },
+            {
+              "a": "distance_high_6h_bps",
+              "b": "fullmicro_bid_18_log_qty",
+              "support": 127,
+              "positive_rate": 0.10236220472440945,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.5232283464566927
+            },
+            {
+              "a": "rev_eff_180s",
+              "b": "position_6h",
+              "support": 137,
+              "positive_rate": 0.10218978102189781,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.5189781021897812
+            },
+            {
+              "a": "rev_eff_180s",
+              "b": "distance_high_60m_bps",
+              "support": 140,
+              "positive_rate": 0.1,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.4650000000000003
+            },
+            {
+              "a": "rev_eff_180s",
+              "b": "distance_high_6h_bps",
+              "support": 140,
+              "positive_rate": 0.1,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.4650000000000003
+            },
+            {
+              "a": "rev_eff_180s",
+              "b": "position_60m",
+              "support": 142,
+              "positive_rate": 0.09859154929577464,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.430281690140845
+            },
+            {
+              "a": "rev_eff_300s",
+              "b": "fullmicro_bid_18_log_qty",
+              "support": 122,
+              "positive_rate": 0.09836065573770492,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.4245901639344263
+            },
+            {
+              "a": "ret_300s",
+              "b": "fullmicro_bid_18_log_qty",
+              "support": 122,
+              "positive_rate": 0.09836065573770492,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.4245901639344263
+            },
+            {
+              "a": "rev_ret_300s",
+              "b": "fullmicro_bid_18_log_qty",
+              "support": 122,
+              "positive_rate": 0.09836065573770492,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.4245901639344263
+            },
+            {
+              "a": "rev_eff_300s",
+              "b": "position_60m",
+              "support": 186,
+              "positive_rate": 0.0967741935483871,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.3854838709677417
+            },
+            {
+              "a": "rev_eff_300s",
+              "b": "position_6h",
+              "support": 186,
+              "positive_rate": 0.0967741935483871,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.3854838709677417
+            },
+            {
+              "a": "rev_eff_300s",
+              "b": "distance_high_60m_bps",
+              "support": 187,
+              "positive_rate": 0.0962566844919786,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.3727272727272726
+            },
+            {
+              "a": "rev_eff_300s",
+              "b": "distance_high_6h_bps",
+              "support": 187,
+              "positive_rate": 0.0962566844919786,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.3727272727272726
+            },
+            {
+              "a": "ret_300s",
+              "b": "fullmicro_bid_02_log_qty",
+              "support": 136,
+              "positive_rate": 0.09558823529411764,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.3562499999999997
+            },
+            {
+              "a": "rev_ret_300s",
+              "b": "fullmicro_bid_02_log_qty",
+              "support": 136,
+              "positive_rate": 0.09558823529411764,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.3562499999999997
+            },
+            {
+              "a": "rev_eff_60s",
+              "b": "rev_eff_300s",
+              "support": 157,
+              "positive_rate": 0.09554140127388536,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.355095541401274
+            },
+            {
+              "a": "rev_eff_300s",
+              "b": "ret_60s",
+              "support": 157,
+              "positive_rate": 0.09554140127388536,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.355095541401274
+            },
+            {
+              "a": "rev_eff_300s",
+              "b": "rev_ret_60s",
+              "support": 157,
+              "positive_rate": 0.09554140127388536,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.355095541401274
+            },
+            {
+              "a": "rev_eff_60s",
+              "b": "ret_300s",
+              "support": 163,
+              "positive_rate": 0.09202453987730061,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.26840490797546
+            },
+            {
+              "a": "rev_eff_60s",
+              "b": "rev_ret_300s",
+              "support": 163,
+              "positive_rate": 0.09202453987730061,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.26840490797546
+            },
+            {
+              "a": "ret_300s",
+              "b": "ret_60s",
+              "support": 163,
+              "positive_rate": 0.09202453987730061,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.26840490797546
+            },
+            {
+              "a": "ret_300s",
+              "b": "rev_ret_60s",
+              "support": 163,
+              "positive_rate": 0.09202453987730061,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.26840490797546
+            },
+            {
+              "a": "rev_ret_300s",
+              "b": "ret_60s",
+              "support": 163,
+              "positive_rate": 0.09202453987730061,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.26840490797546
+            },
+            {
+              "a": "rev_ret_300s",
+              "b": "rev_ret_60s",
+              "support": 163,
+              "positive_rate": 0.09202453987730061,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.26840490797546
+            },
+            {
+              "a": "rev_eff_300s",
+              "b": "fullmicro_bid_02_log_qty",
+              "support": 133,
+              "positive_rate": 0.09022556390977443,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.22406015037594
+            },
+            {
+              "a": "ret_300s",
+              "b": "imbalance_300s",
+              "support": 158,
+              "positive_rate": 0.08860759493670886,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.1841772151898735
+            },
+            {
+              "a": "ret_300s",
+              "b": "rev_flow_300s",
+              "support": 158,
+              "positive_rate": 0.08860759493670886,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.1841772151898735
+            },
+            {
+              "a": "rev_ret_300s",
+              "b": "imbalance_300s",
+              "support": 158,
+              "positive_rate": 0.08860759493670886,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.1841772151898735
+            },
+            {
+              "a": "rev_ret_300s",
+              "b": "rev_flow_300s",
+              "support": 158,
+              "positive_rate": 0.08860759493670886,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.1841772151898735
+            },
+            {
+              "a": "imbalance_300s",
+              "b": "position_6h",
+              "support": 160,
+              "positive_rate": 0.0875,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.156875
+            },
+            {
+              "a": "rev_flow_300s",
+              "b": "position_6h",
+              "support": 160,
+              "positive_rate": 0.0875,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.156875
+            },
+            {
+              "a": "position_60m",
+              "b": "imbalance_300s",
+              "support": 161,
+              "positive_rate": 0.08695652173913043,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.143478260869565
+            },
+            {
+              "a": "position_60m",
+              "b": "rev_flow_300s",
+              "support": 161,
+              "positive_rate": 0.08695652173913043,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.143478260869565
+            },
+            {
+              "a": "fullmicro_bid_02_log_qty",
+              "b": "fullmicro_bid_18_log_qty",
+              "support": 115,
+              "positive_rate": 0.08695652173913043,
+              "baseline_rate": 0.04056795131845842,
+              "lift": 2.143478260869565
+            }
+          ]
+        }
+      },
+      "overall_95pct_gate": {
+        "passed": false,
+        "meaning": "research precision gate on frozen holdout only; not a profit guarantee or future-performance guarantee"
+      }
+    }
+  },
+  "strict_teacher_after_fact": {
+    "labels_in_window": 3,
+    "low": 2,
+    "high": 1,
+    "labels": [
+      {
+        "label_id": 1,
+        "side": "LOW",
+        "extreme_price": 76.647,
+        "extreme_interval_start_ms": 1794129720000,
+        "extreme_interval_end_ms": 1794129780000,
+        "label_available_ms": 1794139200000,
+        "hour_ms": 1794128400000,
+        "reference_finalized": true,
+        "reference_finalized_ms": 1794153600000
+      },
+      {
+        "label_id": 2,
+        "side": "HIGH",
+        "extreme_price": 78.133,
+        "extreme_interval_start_ms": 1794144000000,
+        "extreme_interval_end_ms": 1794144060000,
+        "label_available_ms": 1794153600000,
+        "hour_ms": 1794142800000,
+        "reference_finalized": true,
+        "reference_finalized_ms": 1794222000000
+      },
+      {
+        "label_id": 3,
+        "side": "LOW",
+        "extreme_price": 72.391,
+        "extreme_interval_start_ms": 1794211320000,
+        "extreme_interval_end_ms": 1794211380000,
+        "label_available_ms": 1794222000000,
+        "hour_ms": 1794211200000,
+        "reference_finalized": true,
+        "reference_finalized_ms": 1794247200000
+      }
+    ],
+    "exclusions": []
+  },
+  "candidate_replay": {
+    "candidates": 97,
+    "snapshots": 133,
+    "accepted_candidate_signals": 0,
+    "by_side": {
+      "LOW": {
+        "candidates": 61,
+        "true_candidates": 2,
+        "accepted": 0,
+        "tp": 0,
+        "fp": 0,
+        "precision": null,
+        "recall": 0.0,
+        "median_delay_s": null,
+        "median_entry_distance_bps": null
+      },
+      "HIGH": {
+        "candidates": 36,
+        "true_candidates": 1,
+        "accepted": 0,
+        "tp": 0,
+        "fp": 0,
+        "precision": null,
+        "recall": 0.0,
+        "median_delay_s": null,
+        "median_entry_distance_bps": null
+      }
+    },
+    "signals": []
+  },
+  "largest_high_to_low_leg": {
+    "high_label_id": 2,
+    "high_ts_ms": 1794144000000,
+    "high_price": 78.133,
+    "low_label_id": 3,
+    "low_ts_ms": 1794211320000,
+    "low_price": 72.391,
+    "oracle_drop_pct": 7.93192523932531
+  },
+  "paper_trade_path": {
+    "alternating_model_signals_only": true,
+    "same_side_repeat_signals_ignored_while_position_open": true,
+    "trades": [],
+    "completed_trades": 0,
+    "raw_1x_compound_return_pct": null,
+    "fees_funding_slippage": "not included",
+    "leverage": "not applied; inspect MAE before considering leveraged scenarios"
+  }
+}
