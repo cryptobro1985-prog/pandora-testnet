@@ -62,7 +62,8 @@ jobs:
             "downloaded_files":m["downloaded_files"],
             "downloaded_bytes":m["downloaded_bytes"],
             "source_file_counts":m["source_file_counts"],
-            "missing_files_count":m["missing_files_count"],\n            "missing_files":m["missing_files"],
+            "missing_files_count":m["missing_files_count"],
+            "missing_files":m["missing_files"],
             "cache_file_count":m["cache_file_count"],
             "cache_bytes":m["cache_bytes"],
           },indent=2))
