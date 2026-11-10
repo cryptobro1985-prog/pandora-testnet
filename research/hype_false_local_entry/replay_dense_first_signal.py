@@ -76,6 +76,16 @@ def main():
     exact_coverage = {scope: evaluate(candidates, rows, tolerance_ms=0,
                                       price_tolerance_bps=0.000001)
                       for scope, rows in scopes.items()}
+    # Exact-minute reachability is a mandatory gate, not a cosmetic diagnostic.
+    # A nearby candle within +/-60 seconds or 1bp must never substitute for
+    # the teacher's actual extremum when claiming full 122/76 coverage.
+    for scope, report in exact_coverage.items():
+        if report["covered"] != report["finalized"] or report["missed"]:
+            raise ValueError(
+                f"{scope} exact-minute candidate reachability incomplete: "
+                f"{report['covered']}/{report['finalized']}; "
+                f"missing={report['missing_label_ids']}"
+            )
     # Generate one shared causal stream; NEVER select signals using labels.
     machine = CausalReversalMachine()
     emitted = []
