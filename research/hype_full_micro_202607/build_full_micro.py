@@ -568,7 +568,7 @@ def book_features(state,t=None):
             out[f"fullmicro_ask_cancel_proxy_notional_{sec}s"]=ar
     return out
 
-def enrich(src,records,schemas):
+def enrich(src,records,schemas,book_warmup_hours=24):
     byhour=defaultdict(list)
     for r in records:
         dt=datetime.fromtimestamp(r["snapshot_ts_ms"]/1000,tz=timezone.utc).replace(minute=0,second=0,microsecond=0)
@@ -579,7 +579,7 @@ def enrich(src,records,schemas):
     scalar_state={k:{} for k in ("open_interest","mark_price","ticker")}
     liq_recent=[]
     liq_available_hours=set()
-    dt=START-timedelta(hours=24)
+    dt=START-timedelta(hours=max(1,int(book_warmup_hours)))
     while dt<END:
         targets=sorted(r["snapshot_ts_ms"] for r in byhour.get(dt,[]))
 
