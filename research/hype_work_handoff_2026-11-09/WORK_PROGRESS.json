@@ -141,6 +141,11 @@
     {
       "id": "confirmed-bounce-cv-oos-audit-20261110",
       "verdict": "Confirmed-local bounce CV workflow 42714406452 passed, but frozen leave-one-period-out OOS is LOW 1/1 confirmations, recall 1/121=0.83%; HIGH 3/4 confirmations, recall 3/123=2.44%. True entries occurred far after extremes (LOW median 239.72 bps, HIGH 116.49 bps); only 5 confirmations across 244 episodes. Do not promote. Code chooses thresholds on in-sample predictions of training rows; threshold-selection optimism must be fixed with inner temporal OOF calibration. No fixed-time gate in source, but observed age_s=3600 in records merits audit for upstream feature/replay cap."
+    },
+    {
+      "id": "confirmed-bounce-inner-period-oof-calibration-20261110",
+      "verdict": "Patched threshold selection to use inner leave-one-period-out predictions on the three development periods; outer holdout remains unseen. This removes in-sample threshold calibration leakage. Revalidation pending; previous CV metrics remain unpromoted.",
+      "commit": "6824b6c967870fa4f343ec03ebd0e3311b959977"
     }
   ],
   "rejected_hypotheses": [
