@@ -1,0 +1,157 @@
+name: HYPE Blind Current Local Confirmation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-blind-current-local-confirmation.yml"
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  blind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RAW_ARTIFACT_ID: "13723739486"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: python -m pip install polars pyarrow
+      - name: Restore raw 48h
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p raw
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${RAW_ARTIFACT_ID}/zip" > raw.zip
+          unzip -q raw.zip -d raw
+      - name: Blind causal replay - no labels
+        run: |
+          python - <<'PY'
+          import json, glob, math
+          from pathlib import Path
+          import polars as pl
+          from datetime import datetime, timezone
+
+          def first_col(cols,*names):
+              low={c.lower():c for c in cols}
+              for n in names:
+                  if n.lower() in low:return low[n.lower()]
+              return None
+          def to_ms(v):
+              if v is None:return None
+              if isinstance(v,(int,float)):
+                  x=float(v)
+                  if x<1e11:x*=1000
+                  return int(x)
+              s=str(v)
+              try:
+                  return int(datetime.fromisoformat(s.replace("Z","+00:00")).timestamp()*1000)
+              except Exception:return None
+
+          rows=[]
+          for p in sorted(glob.glob("raw/cache/*_trades.parquet")):
+              df=pl.read_parquet(p)
+              cs=df.columns
+              tc=first_col(cs,"trade_time","event_time","timestamp","time","received_time")
+              pc=first_col(cs,"price","trade_price")
+              if not tc or not pc:
+                  continue
+              for r in df.select([tc,pc]).iter_rows(named=True):
+                  t=to_ms(r[tc])
+                  try:px=float(r[pc])
+                  except Exception:continue
+                  if t and px>0: rows.append((t,px))
+          rows.sort()
+          if not rows: raise SystemExit("no trades")
+
+          # causal 1m OHLC
+          bars=[]
+          cur=None
+          for t,px in rows:
+              k=t//60000*60000
+              if cur is None or cur["start_ms"]!=k:
+                  if cur:bars.append(cur)
+                  cur={"start_ms":k,"end_ms":k+60000,"open":px,"high":px,"low":px,"close":px,
+                       "high_ts_ms":t,"low_ts_ms":t}
+              else:
+                  if px>cur["high"]:cur["high"]=px;cur["high_ts_ms"]=t
+                  if px<cur["low"]:cur["low"]=px;cur["low_ts_ms"]=t
+                  cur["close"]=px
+          if cur:bars.append(cur)
+
+          candidates={"LOW":[],"HIGH":[]}
+          for i,b in enumerate(bars):
+              if i<360:continue
+              prev=bars[i-360:i]
+              p180=bars[max(0,i-180):i]
+              lo_prev=min(x["low"] for x in prev)
+              hi_prev=max(x["high"] for x in prev)
+              if b["low"]<=lo_prev:
+                  opp=max(x["high"] for x in p180)
+                  pre=max(0.0,(opp/b["low"]-1)*10000)
+                  candidates["LOW"].append({"side":"LOW","ts_ms":int(b["low_ts_ms"]),"price":float(b["low"]),"pre_move_180_bps":pre})
+              if b["high"]>=hi_prev:
+                  opp=min(x["low"] for x in p180)
+                  pre=max(0.0,(b["high"]/opp-1)*10000) if opp>0 else 0
+                  candidates["HIGH"].append({"side":"HIGH","ts_ms":int(b["high_ts_ms"]),"price":float(b["high"]),"pre_move_180_bps":pre})
+
+          ends=[b["end_ms"] for b in bars]
+          closes=[b["close"] for b in bars]
+          import bisect
+
+          rules={
+             "HARD120":{"LOW":{"age_min":120,"min_retrace_bps":40.0,"min_frac":0.45},
+                        "HIGH":{"age_min":120,"min_retrace_bps":40.0,"min_frac":0.45}},
+             "ULTRA_V2":{"LOW":{"age_min":215,"min_retrace_bps":130.0,"min_frac":0.52},
+                         "HIGH":{"age_min":250,"min_retrace_bps":65.0,"min_frac":0.50}},
+          }
+
+          out={"mode":"BLIND_CAUSAL_NO_LABELS","bars":len(bars),"trade_rows":len(rows),"candidate_counts":{k:len(v) for k,v in candidates.items()},"signals":{}}
+          for rn,side_rules in rules.items():
+              sig=[]
+              for side,evs in candidates.items():
+                  evs=sorted(evs,key=lambda x:x["ts_ms"])
+                  for j,c in enumerate(evs):
+                      # candidate is invalidated by a MORE extreme same-side candidate before checkpoint
+                      nxt=None
+                      for e in evs[j+1:]:
+                          if (side=="LOW" and e["price"]<c["price"]) or (side=="HIGH" and e["price"]>c["price"]):
+                              nxt=e;break
+                      rule=side_rules[side]
+                      target=c["ts_ms"]+rule["age_min"]*60000
+                      if nxt and nxt["ts_ms"]<=target:continue
+                      ix=bisect.bisect_left(ends,target)
+                      if ix>=len(bars):continue
+                      mark=float(closes[ix]);p=float(c["price"])
+                      retr=(mark/p-1)*10000 if side=="LOW" else (p/mark-1)*10000
+                      frac=retr/max(c["pre_move_180_bps"],1e-12)
+                      if retr>=rule["min_retrace_bps"] and frac>=rule["min_frac"]:
+                          sig.append({
+                            "rule":rn,"side":side,"candidate_ts_ms":c["ts_ms"],"candidate_price":p,
+                            "signal_ts_ms":int(ends[ix]),"signal_price":mark,
+                            "age_min":rule["age_min"],"retrace_bps":retr,
+                            "retrace_pct":retr/100.0,"retrace_fraction_pre_180":frac,
+                            "pre_move_180_bps":c["pre_move_180_bps"]
+                          })
+              sig.sort(key=lambda x:x["signal_ts_ms"])
+              out["signals"][rn]=sig
+
+          Path("blind_current_local_confirmation.json").write_text(json.dumps(out,indent=2))
+          print(json.dumps(out,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-BLIND-CURRENT-LOCAL-CONFIRMATION
+          path: blind_current_local_confirmation.json
+          retention-days: 3
