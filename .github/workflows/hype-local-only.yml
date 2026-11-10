@@ -337,9 +337,13 @@ jobs:
           CAP_RC=$?
           set -e
 
+          # Preserve cleanup and checkpoint upload even if the live daemon fails.
+          set +e
           wait "${LOCAL_PID}"
           LOCAL_RC=$?
-          wait "${CORTEX_DAEMON_PID}" || true
+          wait "${CORTEX_DAEMON_PID}"
+          CORTEX_RC=$?
+          set -e
 
           if [ -f /tmp/cortex20b.pid ]; then
             kill "$(cat /tmp/cortex20b.pid)" 2>/dev/null || true
