@@ -15,7 +15,7 @@ permissions:
 
 concurrency:
   group: hype-movement-v2-nov48
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   score:
@@ -96,3 +96,4 @@ jobs:
           path: /tmp/movement_nov48/**
           if-no-files-found: warn
           retention-days: 30
+\n# stable rerun\n
