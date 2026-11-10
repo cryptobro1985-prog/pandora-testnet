@@ -232,29 +232,37 @@ def eval_seq(rows,thresholds):
 
 
 def choose_thresholds(train_rows,targets):
-    vals=np.linspace(0.40,0.98,30)
-    out={}
-    for target in targets:
-        best=None
-        for lo in vals:
-            for hi in vals:
-                m=eval_seq(train_rows,{"LOW":float(lo),"HIGH":float(hi)})
-                if m["accepted"]<20 or m["precision"] is None or m["precision"]+1e-12<target: continue
-                key=(m["recall"],m["precision"],-m["median_lag_ms"] if m["median_lag_ms"] is not None else -1e18)
-                if best is None or key>best[0]:
-                    best=(key,{"LOW":float(lo),"HIGH":float(hi)},m)
-        out[str(target)]=None if best is None else {"thresholds":best[1],"train":best[2]}
-    # Also unconstrained best precision with useful coverage >=50%.
-    best=None
+    # Build the threshold frontier once, then select all operating points from it.
+    vals=np.linspace(0.40,0.98,15)
+    frontier=[]
     for lo in vals:
         for hi in vals:
-            m=eval_seq(train_rows,{"LOW":float(lo),"HIGH":float(hi)})
-            if m["recall"]<0.50: continue
-            key=(m["precision"],m["recall"])
-            if best is None or key>best[0]: best=(key,{"LOW":float(lo),"HIGH":float(hi)},m)
-    out["best_precision_recall_ge_0.50"]=None if best is None else {"thresholds":best[1],"train":best[2]}
+            th={"LOW":float(lo),"HIGH":float(hi)}
+            m=eval_seq(train_rows,th)
+            frontier.append((th,m))
+    out={}
+    for target in targets:
+        eligible=[]
+        for th,m in frontier:
+            if m["accepted"]<20 or m["precision"] is None or m["precision"]+1e-12<target:
+                continue
+            lag=m["median_lag_ms"] if m["median_lag_ms"] is not None else 1e18
+            eligible.append(((m["recall"],m["precision"],-lag),th,m))
+        if not eligible:
+            out[str(target)]=None
+        else:
+            _,th,m=max(eligible,key=lambda x:x[0])
+            out[str(target)]={"thresholds":th,"train":m}
+    eligible=[]
+    for th,m in frontier:
+        if m["recall"]>=0.50 and m["precision"] is not None:
+            eligible.append(((m["precision"],m["recall"]),th,m))
+    if eligible:
+        _,th,m=max(eligible,key=lambda x:x[0])
+        out["best_precision_recall_ge_0.50"]={"thresholds":th,"train":m}
+    else:
+        out["best_precision_recall_ge_0.50"]=None
     return out
-
 
 def main():
     p=argparse.ArgumentParser()
