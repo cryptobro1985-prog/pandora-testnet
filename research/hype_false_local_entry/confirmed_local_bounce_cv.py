@@ -42,6 +42,25 @@ def build(master):
     return periods,rows
 
 
+def predictor_coverage(rows_by_period):
+    """Audit actual legal predictor availability without treating missing micro as zero."""
+    out = {}
+    for period, rows in rows_by_period.items():
+        counts = Counter()
+        for row in rows:
+            counts.update({feat.point_id(k) for k in row["features"]})
+        n = len(rows)
+        out[period] = {
+            "decision_rows": n,
+            "available_point_count": len(counts),
+            "point_row_coverage": {
+                f"p{point:03d}": round(counts[point] / n, 6) if n else None
+                for point in sorted(INPUT_IDS)
+            },
+        }
+    return out
+
+
 def feature_names(rows):
     c=Counter(k for r in rows for k in r["features"])
     n=max(1,len(rows))
@@ -207,7 +226,8 @@ def main():
          "objective":"CONFIRM_LOCAL_THEN_ENTER_REVERSAL_MOVE_NOT_EXTREME_GUESS",
          "time_gate":False,"decision_sampling":"FIXED_CANDIDATE_AGE_GRID_NOT_EVENT_DRIVEN",
          "event_driven":False,"sampling_warning":"No explicit entry time gate, but decision opportunities are sampled at predefined candidate ages; OOS metrics must not be represented as continuous event-driven performance.",
-         "by_side":{},"real_orders":False}
+         "by_side":{},"real_orders":False,
+         "predictor_coverage":predictor_coverage(rows)}
     for side in ("LOW","HIGH"):
         out["by_side"][side]=run_side(periods,rows,side)
     a.output.write_text(json.dumps(out,indent=2,ensure_ascii=False)+"\n")
