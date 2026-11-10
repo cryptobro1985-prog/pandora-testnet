@@ -147,7 +147,10 @@ def m1_states(rows, ages=AGES, decision_sampling="legacy_age_grid"):
                     mark = float(tape.close[k])
                     retrace = sign * (mark / price - 1) * 10_000
                     values = {}
-                    put(values, 1, last_trade_close_change=sign*(mark/tape.close[k-1]-1))
+                    # Never borrow the previous close across a segment boundary.
+                    # At the first completed bar of a segment this predictor is absent.
+                    if k > start and tape.close[k-1] > 0:
+                        put(values, 1, last_trade_close_change=sign*(mark/tape.close[k-1]-1))
                     for n, point in ((1, 4), (3, 5), (5, 6), (60, 7)):
                         # Absolute-time aligned, completed candles only.
                         j = k - (now // m1.MINUTE) % n
