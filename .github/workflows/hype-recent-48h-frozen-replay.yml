@@ -1,4 +1,5 @@
 name: HYPE Recent 48h Frozen Jul-Aug Causal Replay
+# recent48 book warmup optimized to 1h
 
 on:
   workflow_dispatch:
