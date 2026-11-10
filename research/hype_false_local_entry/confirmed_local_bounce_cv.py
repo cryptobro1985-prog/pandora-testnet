@@ -234,7 +234,20 @@ def run_side(periods, rows, side):
     agg["false_adverse_median_bps"] = float(np.median(false_adverse)) if false_adverse else None
     agg["false_adverse_p90_bps"] = float(np.percentile(false_adverse,90)) if false_adverse else None
     agg["false_continuation_median_bps"] = float(np.median(false_continuation)) if false_continuation else None
-    agg["worst_period_precision"] = min((f["test"]["confirmation_precision"] for f in folds if f["test"]["confirmation_precision"] is not None),default=None)
+    # A silent holdout is not a precision success: expose it separately rather
+    # than dropping it from the stability assessment.
+    observed = [f["test"]["confirmation_precision"] for f in folds
+                if f["test"]["confirmation_precision"] is not None]
+    agg["worst_period_precision"] = min(observed, default=None)
+    agg["periods_with_confirmations"] = len(observed)
+    agg["periods_without_confirmations"] = [
+        f["holdout"] for f in folds if f["test"]["confirmations"] == 0
+    ]
+    agg["all_periods_covered"] = len(observed) == len(folds)
+    # Abstaining on difficult periods cannot count as four-period stability.
+    agg["stability_floor_including_abstentions"] = (
+        min(observed) if len(observed) == len(folds) else 0.0
+    )
     return {"side": side, "folds": folds, "aggregate_oos": agg}
 
 def main():
