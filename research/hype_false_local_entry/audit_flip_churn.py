@@ -24,7 +24,12 @@ def audit(bars):
     first_ts = last_ts = None
     for bar in bars:
         n_bars += 1
-        ts = int(bar.get('bar_end_ms', bar['ts_ms']))
+        # dict.get evaluates its default eagerly: bar['ts_ms'] would raise
+        # even when a valid bar_end_ms is present.
+        raw_ts = bar.get('bar_end_ms')
+        if raw_ts is None:
+            raw_ts = bar['ts_ms']
+        ts = int(raw_ts)
         first_ts = ts if first_ts is None else min(first_ts, ts)
         last_ts = ts if last_ts is None else max(last_ts, ts)
         flips.extend(s for s in machine.on_bar(bar)
