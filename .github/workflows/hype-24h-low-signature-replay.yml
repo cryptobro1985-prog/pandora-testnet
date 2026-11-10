@@ -1,12 +1,15 @@
 name: HYPE 24H LOW Signature Replay
+
 on:
   push:
     branches: [research/hype-h1-local-v5-oi-microstructure-20261104]
     paths: [".github/workflows/hype-24h-low-signature-replay.yml"]
   workflow_dispatch:
+
 permissions:
   contents: read
   actions: read
+
 jobs:
   replay:
     runs-on: ubuntu-latest
@@ -15,212 +18,208 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
-      - run: python -m pip install polars pyarrow numpy
-      - name: restore raw
+      - run: python -m pip install polars pyarrow
+      - name: Restore raw
         env: {GH_TOKEN: "${{ github.token }}"}
         run: |
           mkdir -p raw out
           gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13723739486/zip" > raw.zip
           unzip -q raw.zip -d raw
-      - name: replay low candidates
+      - name: Replay all LOW candidates
         run: |
           python - <<'PY'
           import glob,json,bisect,math
           from pathlib import Path
           from datetime import datetime,timezone
           import polars as pl
-          import numpy as np
 
-          START=1794182400000  # Nov 9 00:00 UTC
-          STOP =1794268800000  # Nov10 00:00 UTC
+          START=1794182400000
+          STOP =1794268800000
           AGES=(60,180,300)
           def iso(t): return datetime.fromtimestamp(t/1000,timezone.utc).isoformat().replace("+00:00","Z")
-          def read(kind):
-              out=[]
-              for p in sorted(glob.glob(f"raw/cache/20261109_*_{kind}.parquet")):
-                  out.extend(pl.read_parquet(p).to_dicts())
-              return out
-          def f(v):
+          def fv(v):
               try:return float(v)
               except:return None
-          def tms(r,*keys):
-              for k in keys:
-                  if r.get(k) is not None:return int(r[k])
-              return None
 
-          tr=read("trades")
+          # 1) Stream trades, build full causal tape and every new running LOW.
           trades=[]
-          for r in tr:
-              t=tms(r,"trade_time","event_time")
-              px=f(r.get("price"));q=f(r.get("quantity"))
-              if t is None or px is None or q is None or not START<=t<STOP:continue
-              # Binance public trades: buyer-maker=True => taker/aggressor SELL.
-              side="SELL" if bool(r.get("is_buyer_maker")) else "BUY"
-              trades.append((t,px,q,px*q,side))
+          for p in sorted(glob.glob("raw/cache/20261109_*_trades.parquet")):
+              d=pl.read_parquet(p).select(["trade_time","price","quantity","is_buyer_maker"])
+              for t,ps,qs,bm in d.iter_rows():
+                  t=int(t); px=fv(ps); q=fv(qs)
+                  if px is None or q is None or not START<=t<STOP: continue
+                  side="SELL" if bool(bm) else "BUY"
+                  trades.append((t,px,px*q,side))
           trades.sort()
-          ts=[x[0] for x in trades]; prices=[x[1] for x in trades]
-
-          liqs=[]
-          for r in read("liquidations"):
-              t=tms(r,"trade_time","event_time")
-              px=f(r.get("average_price")) or f(r.get("price"));q=f(r.get("filled_quantity")) or f(r.get("quantity"))
-              if t and px and q and START<=t<STOP:
-                  # Force-order SELL closes a long; BUY closes a short.
-                  liqs.append((t,px*q,str(r.get("side") or "").upper()))
-          liqs.sort()
-
-          oi=[]
-          for r in read("open_interest"):
-              t=tms(r,"timestamp")
-              v=f(r.get("sum_open_interest"));val=f(r.get("sum_open_interest_value"))
-              if t and v is not None and START<=t<STOP:oi.append((t,v,val))
-          oi.sort(); oi_ts=[x[0] for x in oi]
-
-          # Reconstruct L50 order book and retain timestamped imbalance snapshots.
-          ob=read("orderbook")
-          ob.sort(key=lambda r:(int(r.get("event_time") or 0), int(r.get("received_time") or 0)))
-          bids={};asks={};samples=[]; cur_event=None; group=[]
-          def flush(group):
-              global bids,asks,samples
-              if not group:return
-              et=int(group[0].get("event_time") or 0);typ=str(group[0].get("event_type") or "")
-              if typ=="snapshot": bids={};asks={}
-              for r in group:
-                  side=str(r.get("side") or "").lower();px=f(r.get("price"));q=f(r.get("quantity"))
-                  if px is None or q is None:continue
-                  book=bids if side=="bid" else asks if side=="ask" else None
-                  if book is None:continue
-                  if q<=0:book.pop(px,None)
-                  else:book[px]=q
-              if bids and asks:
-                  bp=sorted(bids,reverse=True)[:50];ap=sorted(asks)[:50]
-                  def imb(n):
-                      bn=sum(p*bids[p] for p in bp[:n]);an=sum(p*asks[p] for p in ap[:n])
-                      return (bn-an)/(bn+an) if bn+an>0 else None
-                  samples.append((et,imb(10),imb(50),max(bp),min(ap)))
-          for r in ob:
-              et=int(r.get("event_time") or 0)
-              if et!=cur_event:
-                  flush(group);group=[r];cur_event=et
-              else:group.append(r)
-          flush(group)
-          samples=[s for s in samples if START-600000<=s[0]<STOP]
-          book_ts=[s[0] for s in samples]
-
+          tarr=[x[0] for x in trades]
           def price_at(t):
-              i=bisect.bisect_right(ts,t)-1
+              i=bisect.bisect_right(tarr,t)-1
               return trades[i][1] if i>=0 else None
-          def trade_window(a,b):
-              i=bisect.bisect_right(ts,a);j=bisect.bisect_right(ts,b)
+          def tw(a,b):
+              i=bisect.bisect_right(tarr,a);j=bisect.bisect_right(tarr,b)
               q=trades[i:j]
-              buy=sum(x[3] for x in q if x[4]=="BUY");sell=sum(x[3] for x in q if x[4]=="SELL")
-              den=buy+sell
-              p0=price_at(a);p1=price_at(b)
-              ret=(p1/p0-1) if p0 and p1 else None
-              return {"count":len(q),"buy":buy,"sell":sell,
-                      "imbalance":(buy-sell)/den if den>0 else None,
-                      "ret":ret,
-                      "buy_eff":max(ret or 0,0)/buy*1e6 if buy>0 and ret is not None else None,
-                      "sell_eff":max(-(ret or 0),0)/sell*1e6 if sell>0 and ret is not None else None}
-          def liq_window(a,b):
+              buy=sum(x[2] for x in q if x[3]=="BUY");sell=sum(x[2] for x in q if x[3]=="SELL")
+              den=buy+sell;p0=price_at(a);p1=price_at(b)
+              ret=(p1/p0-1.0) if p0 and p1 else None
+              return {"buy":buy,"sell":sell,"imb":((buy-sell)/den if den else None),"ret":ret,
+                      "buy_eff":(max(ret,0)*1e6/buy if ret is not None and buy>0 else None),
+                      "sell_eff":(max(-ret,0)*1e6/sell if ret is not None and sell>0 else None)}
+
+          candidates=[]; running=float("inf")
+          for t,px,_,_ in trades:
+              if px<running:
+                  running=px
+                  # collapse microsteps inside 15 sec; keep latest/lower print
+                  if candidates and t-candidates[-1]["ts"]<15000:
+                      candidates[-1]={"ts":t,"price":px}
+                  else:
+                      candidates.append({"ts":t,"price":px})
+
+          # focus on the actual active down-leg preceding terminal 72.391
+          # start after the 78.133 structural high and retain materially lower candidates.
+          LEG_START=1794134433000
+          candidates=[c for c in candidates if c["ts"]>=LEG_START]
+          material=[]; anchor=None
+          for c in candidates:
+              if anchor is None or (anchor/c["price"]-1)*10000>=2.0:
+                  material.append(c);anchor=c["price"]
+              elif c["price"]<anchor:
+                  # preserve the final strict minimum even when improvement is small
+                  if material and c["ts"]-material[-1]["ts"]<60000: material[-1]=c
+                  anchor=c["price"]
+          candidates=material
+
+          # 2) Liquidations/OI streamed into compact arrays.
+          liqs=[]
+          for p in sorted(glob.glob("raw/cache/20261109_*_liquidations.parquet")):
+              d=pl.read_parquet(p)
+              for r in d.iter_rows(named=True):
+                  t=int(r.get("trade_time") or r.get("event_time") or 0)
+                  px=fv(r.get("average_price")) or fv(r.get("price"))
+                  q=fv(r.get("filled_quantity")) or fv(r.get("quantity"))
+                  if t and px and q and START<=t<STOP:
+                      liqs.append((t,px*q,str(r.get("side") or "").upper()))
+          liqs.sort()
+          def lw(a,b):
               q=[x for x in liqs if a<x[0]<=b]
               return {"long":sum(x[1] for x in q if x[2]=="SELL"),
-                      "short":sum(x[1] for x in q if x[2]=="BUY"),"count":len(q)}
+                      "short":sum(x[1] for x in q if x[2]=="BUY")}
+
+          oi=[]
+          for p in sorted(glob.glob("raw/cache/20261109_*_open_interest.parquet")):
+              d=pl.read_parquet(p).select(["timestamp","sum_open_interest"])
+              for t,v in d.iter_rows():
+                  t=int(t);v=fv(v)
+                  if v is not None and START<=t<STOP:oi.append((t,v))
+          oi.sort();oi_t=[x[0] for x in oi]
           def oi_at(t):
-              i=bisect.bisect_right(oi_ts,t)-1
-              return oi[i] if i>=0 else None
-          def book_at(t):
-              i=bisect.bisect_right(book_ts,t)-1
-              return samples[i] if i>=0 else None
+              i=bisect.bisect_right(oi_t,t)-1
+              return oi[i][1] if i>=0 else None
 
-          # Every new running low in the active Nov 9 down-leg is a candidate.
-          # Deduplicate tiny same-second prints; keep stricter replacements only.
-          candidates=[];run_low=float("inf");last_t=None
-          for t,px,q,n,side in trades:
-              if px<run_low-1e-12:
-                  run_low=px
-                  if candidates and t-candidates[-1]["ts_ms"]<1000:
-                      candidates[-1]={"ts_ms":t,"price":px}
-                  else:candidates.append({"ts_ms":t,"price":px})
-          # Focus on the final downside leg around the known terminal low; retain
-          # material candidate replacements from 07:30 onward plus exact terminal.
-          candidates=[c for c in candidates if c["ts_ms"]>=1794209400000]
-          # Materialize only >=3 bps improvements to avoid micro-noise.
-          mat=[];lp=None
+          # 3) Determine only book timestamps we actually need, then stream L50.
+          targets=set()
           for c in candidates:
-              if lp is None or (lp/c["price"]-1)*10000>=3:
-                  mat.append(c);lp=c["price"]
-              elif c["price"]<lp:
-                  # always keep terminal/newest strict low, replacing last micro-step
-                  if mat and c["ts_ms"]-mat[-1]["ts_ms"]<30000:mat[-1]=c
-                  lp=c["price"]
-          candidates=mat
+              targets.add(c["ts"])
+              for a in AGES:targets.add(c["ts"]+a*1000)
+          targets=sorted(t for t in targets if START<=t<STOP)
+          book_states={}
+          bids={};asks={};ti=0
+          for p in sorted(glob.glob("raw/cache/20261109_*_orderbook.parquet")):
+              d=pl.read_parquet(p).sort(["event_time","received_time"])
+              current=None; group=[]
+              def process(gr):
+                  global ti,bids,asks
+                  if not gr:return
+                  et=int(gr[0]["event_time"])
+                  typ=str(gr[0].get("event_type") or "")
+                  if typ=="snapshot":bids.clear();asks.clear()
+                  for r in gr:
+                      px=fv(r.get("price"));q=fv(r.get("quantity"))
+                      if px is None or q is None:continue
+                      side=str(r.get("side") or "").lower()
+                      book=bids if side=="bid" else asks if side=="ask" else None
+                      if book is None:continue
+                      if q<=0:book.pop(px,None)
+                      else:book[px]=q
+                  while ti<len(targets) and targets[ti]<=et:
+                      if bids and asks:
+                          bp=sorted(bids,reverse=True)[:50];ap=sorted(asks)[:50]
+                          def imb(n):
+                              bn=sum(x*bids[x] for x in bp[:n]);an=sum(x*asks[x] for x in ap[:n])
+                              return (bn-an)/(bn+an) if bn+an else None
+                          book_states[targets[ti]]={"l10":imb(10),"l50":imb(50)}
+                      ti+=1
+              for r in d.iter_rows(named=True):
+                  et=int(r["event_time"])
+                  if current is None:current=et
+                  if et!=current:
+                      process(group);group=[r];current=et
+                  else:group.append(r)
+              process(group)
+          # fill last known book state backward-safe if exact target missed
+          known=sorted(book_states)
+          def book_at(t):
+              i=bisect.bisect_right(known,t)-1
+              return book_states[known[i]] if i>=0 else None
 
-          results=[]
+          # 4) Score each candidate with the same causal signature dimensions.
+          rows=[]
           for idx,c in enumerate(candidates):
-              next_lower=next((z for z in candidates[idx+1:] if z["price"]<c["price"]),None)
-              basebook=book_at(c["ts_ms"]);baseoi=oi_at(c["ts_ms"])
-              pre=trade_window(c["ts_ms"]-180*60*1000,c["ts_ms"])
-              checkpoints=[]
+              nextlower=next((z for z in candidates[idx+1:] if z["price"]<c["price"]),None)
+              b0=book_at(c["ts"]);o0=oi_at(c["ts"])
+              checks=[]
               for age in AGES:
-                  t=c["ts_ms"]+age*1000
-                  invalid=bool(next_lower and next_lower["ts_ms"]<=t)
-                  mark=price_at(t)
-                  if mark is None:continue
-                  w={sec:trade_window(t-sec*1000,t) for sec in (30,60,180,300)}
-                  liq0=liq_window(c["ts_ms"],min(t,c["ts_ms"]+60000))
-                  liqlast=liq_window(max(c["ts_ms"],t-60000),t)
-                  bk=book_at(t);o=oi_at(t)
-                  retr=(mark/c["price"]-1)*100
-                  b10=(bk[1]-basebook[1]) if bk and basebook and bk[1] is not None and basebook[1] is not None else None
-                  b50=(bk[2]-basebook[2]) if bk and basebook and bk[2] is not None and basebook[2] is not None else None
-                  oid=(o[1]/baseoi[1]-1) if o and baseoi and baseoi[1] else None
-                  # Core causal chain discovered historically.
-                  survival=not invalid
-                  response=(retr>0 and (w[60]["ret"] or 0)>0)
-                  trajectory=(w[60]["ret"] is not None and w[180]["ret"] is not None and
-                              w[60]["ret"]>0 and w[180]["ret"]>0)
-                  eff=(w[60]["buy_eff"] is not None and w[60]["sell_eff"] is not None and
-                       w[60]["buy_eff"]>w[60]["sell_eff"])
-                  flow=(w[60]["imbalance"] is not None and w[60]["imbalance"]>0)
-                  liq_decay=None
-                  if liq0["long"]>0:
-                      liq_decay=liqlast["long"] < liq0["long"]
-                  bookrec=(b10 is not None and b50 is not None and b10>0 and b50>0)
-                  # OI is context: supportive if price has reversed while OI is stable/rising,
-                  # or falling OI accompanies liquidation exhaustion. Do not use as mandatory gate.
-                  oi_context=("RISING" if oid is not None and oid>0 else "FALLING" if oid is not None and oid<0 else "FLAT_OR_MISSING")
+                  t=c["ts"]+age*1000
+                  if t>=STOP:continue
+                  mark=price_at(t);w60=tw(t-60000,t);w180=tw(t-180000,t);w300=tw(t-300000,t)
+                  b=book_at(t);ot=oi_at(t)
+                  firstliq=lw(c["ts"],min(c["ts"]+60000,t))
+                  lastliq=lw(max(c["ts"],t-60000),t)
+                  retr=(mark/c["price"]-1)*100 if mark else None
+                  survival=not(nextlower and nextlower["ts"]<=t)
+                  response=bool(retr is not None and retr>0 and (w60["ret"] or 0)>0)
+                  trajectory=bool(w60["ret"] is not None and w180["ret"] is not None and w60["ret"]>0 and w180["ret"]>0)
+                  eff=bool(w60["buy_eff"] is not None and w60["sell_eff"] is not None and w60["buy_eff"]>w60["sell_eff"])
+                  flow=bool(w60["imb"] is not None and w60["imb"]>0)
+                  liq=None if firstliq["long"]<=0 else bool(lastliq["long"]<firstliq["long"])
+                  b10=(b["l10"]-b0["l10"]) if b and b0 and b["l10"] is not None and b0["l10"] is not None else None
+                  b50=(b["l50"]-b0["l50"]) if b and b0 and b["l50"] is not None and b0["l50"] is not None else None
+                  book=bool(b10 is not None and b50 is not None and b10>0 and b50>0)
                   core={"survival":survival,"price_response":response,"trajectory":trajectory,
                         "efficiency_transfer":eff,"flow_transition":flow,
-                        "liquidation_exhaustion":liq_decay,"book_recovery":bookrec}
-                  available=[v for v in core.values() if v is not None]
-                  all_core=bool(available) and all(available) and len(available)>=6
-                  checkpoints.append({
-                    "age_s":age,"ts_ms":t,"ts":iso(t),"mark":mark,"retrace_pct":retr,
-                    "flow_60s":w[60]["imbalance"],"buy_eff_60s":w[60]["buy_eff"],"sell_eff_60s":w[60]["sell_eff"],
-                    "ret_60s_pct":(w[60]["ret"]*100 if w[60]["ret"] is not None else None),
-                    "ret_180s_pct":(w[180]["ret"]*100 if w[180]["ret"] is not None else None),
-                    "ret_300s_pct":(w[300]["ret"]*100 if w[300]["ret"] is not None else None),
-                    "long_liq_first60":liq0["long"],"long_liq_last60":liqlast["long"],
-                    "book_l10_delta":b10,"book_l50_delta":b50,"oi_delta":oid,"oi_context":oi_context,
-                    "pre180_ret_pct":(pre["ret"]*100 if pre["ret"] is not None else None),
-                    "core":core,"all_core_chain":all_core
-                  })
-              first=next((x for x in checkpoints if x["all_core_chain"]),None)
-              results.append({"candidate_ts_ms":c["ts_ms"],"candidate_ts":iso(c["ts_ms"]),"price":c["price"],
-                              "next_lower":next_lower,"checkpoints":checkpoints,"first_core_confirmation":first})
+                        "liquidation_exhaustion":liq,"book_recovery":book}
+                  avail=[v for v in core.values() if v is not None]
+                  passed=sum(v is True for v in avail)
+                  # Require all observed core dimensions except liquidation may be unavailable.
+                  actionable=(len(avail)>=6 and passed==len(avail))
+                  checks.append({"age_s":age,"ts":iso(t),"price":mark,"retrace_pct":retr,
+                                 "ret60_pct":(w60["ret"]*100 if w60["ret"] is not None else None),
+                                 "ret180_pct":(w180["ret"]*100 if w180["ret"] is not None else None),
+                                 "ret300_pct":(w300["ret"]*100 if w300["ret"] is not None else None),
+                                 "flow60":w60["imb"],"buy_eff60":w60["buy_eff"],"sell_eff60":w60["sell_eff"],
+                                 "book_l10_delta":b10,"book_l50_delta":b50,
+                                 "long_liq_first60":firstliq["long"],"long_liq_last60":lastliq["long"],
+                                 "oi_delta":((ot/o0-1) if ot and o0 else None),
+                                 "core":core,"actionable":actionable})
+              first=next((x for x in checks if x["actionable"]),None)
+              rows.append({"candidate_ts":iso(c["ts"]),"candidate_ts_ms":c["ts"],"price":c["price"],
+                           "invalidated_by":({"ts":iso(nextlower["ts"]),"price":nextlower["price"]} if nextlower else None),
+                           "first_actionable":first,"checks":checks})
 
           terminal=min(candidates,key=lambda x:x["price"]) if candidates else None
+          false_entries=[r for r in rows if r["first_actionable"] and terminal and abs(r["price"]-terminal["price"])>1e-9]
           doc={"window":["2026-11-09T00:00:00Z","2026-11-10T00:00:00Z"],
-               "active_side":"LOW","candidate_count":len(candidates),"terminal_low":terminal,
-               "results":results,
-               "historical_reference":{"true_low_60s_reversal_return_pct":[0.1344,0.1412],
-                 "false_low_60s_reversal_return_pct":[0.0396,0.0687],
-                 "true_low_60s_reversal_efficiency":[0.00855,0.01275],
-                 "false_low_60s_reversal_efficiency":[0.00324,0.00783]},
-               "note":"Core-chain gate uses sign/state transitions only; OI is context, not mandatory. No future terminal label is used to form checkpoint metrics."}
+               "candidate_count":len(candidates),
+               "terminal_low":({"ts":iso(terminal["ts"]),"price":terminal["price"]} if terminal else None),
+               "false_actionable_entries":false_entries,
+               "false_actionable_count":len(false_entries),
+               "results":rows,
+               "note":"Causal replay: no future label enters checkpoint features. A candidate is actionable only when every observed core signature dimension passes; liquidation may be unavailable because the raw archive has missing liquidation hours."}
           Path("out/HYPE_24H_LOW_SIGNATURE_REPLAY.json").write_text(json.dumps(doc,indent=2,ensure_ascii=False))
-          print(json.dumps(doc,indent=2,ensure_ascii=False)[:50000])
+          print(json.dumps({"candidate_count":doc["candidate_count"],"terminal_low":doc["terminal_low"],
+                            "false_actionable_count":doc["false_actionable_count"],
+                            "false_actionable_entries":[{"candidate_ts":x["candidate_ts"],"price":x["price"],"first":x["first_actionable"]} for x in false_entries],
+                            "terminal_result":next((x for x in rows if terminal and x["price"]==terminal["price"]),None)},indent=2,ensure_ascii=False))
           PY
       - uses: actions/upload-artifact@v4
         with:
