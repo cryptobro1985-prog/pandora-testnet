@@ -1,0 +1,46 @@
+name: HYPE Dense First-Signal Feature Audit
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/hype-h1-local-v5-oi-microstructure-20261104]
+    paths:
+      - ".github/workflows/hype-dense-first-signal-feature-audit.yml"
+      - "research/hype_false_local_entry/dense_first_signal_feature_audit.py"
+permissions: {contents: read, actions: read}
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: research/hype-h1-local-v5-oi-microstructure-20261104}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python -m pip install -q scikit-learn numpy
+      - name: Restore data
+        env: {GH_TOKEN: ${{ github.token }}}
+        run: |
+          set -euo pipefail
+          mkdir -p data/{may,june,julaug,lateaug,september,octnov}
+          get() { name="$1"; id="$2"; mkdir -p "_raw/$name"; gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$id/zip" > "_raw/$name.zip"; unzip -q "_raw/$name.zip" -d "_raw/$name"; }
+          get may 13652089234; get june 13639545105; get julaug 13585701406
+          get lateaug 13638795292; get september 13637558401; get octnov 13435356156
+          cp _raw/may/compact_1m.jsonl.gz data/may/; cp _raw/may/labels.json.gz data/may/
+          cp _raw/june/compact_1m.jsonl.gz data/june/; cp _raw/june/labels.json.gz data/june/
+          cp _raw/julaug/full_micro_out/compact_1m.jsonl.gz data/julaug/; cp _raw/julaug/full_micro_out/labels.json.gz data/julaug/
+          cp _raw/lateaug/compact_1m.jsonl.gz data/lateaug/; cp _raw/lateaug/labels.json.gz data/lateaug/
+          cp _raw/september/_temp/hype-sep-out/compact_1m.jsonl.gz data/september/; cp _raw/september/_temp/hype-sep-out/labels.json.gz data/september/
+          cp "$(find _raw/octnov -name compact_1m.jsonl.gz -print -quit)" data/octnov/compact_1m.jsonl.gz
+          cp "$(find _raw/octnov -name labels.json.gz -print -quit)" data/octnov/labels.json.gz
+      - name: Audit first-signal features
+        run: |
+          python -m research.hype_false_local_entry.dense_first_signal_feature_audit \
+            --period may=data/may --period june=data/june --period julaug=data/julaug \
+            --period lateaug=data/lateaug --period september=data/september --period octnov=data/octnov \
+            --out DENSE_FIRST_SIGNAL_FEATURE_AUDIT.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: HYPE-DENSE-FIRST-SIGNAL-FEATURE-AUDIT-${{ github.run_id }}
+          path: DENSE_FIRST_SIGNAL_FEATURE_AUDIT.json
+          retention-days: 14
