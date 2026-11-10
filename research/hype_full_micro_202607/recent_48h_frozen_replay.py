@@ -352,7 +352,9 @@ def main():
     base.END = end
     src = base.Source(args.cache, None if not __import__("os").getenv("CRYPTOHFTDATA_API_KEY") else __import__("os").getenv("CRYPTOHFTDATA_API_KEY"))
 
-    # Fast path: trades need 24h warm-up for the 24h causal state.\n    workers=max(8, int(__import__("os").getenv("HYPE_DOWNLOAD_WORKERS", "32")))\n    base.prefetch_hours(src, start - timedelta(hours=24), end, ("trades",), workers=workers)
+    # Fast path: trades need 24h warm-up for the 24h causal state.
+    workers=max(8, int(__import__("os").getenv("HYPE_DOWNLOAD_WORKERS", "32")))
+    base.prefetch_hours(src, start - timedelta(hours=24), end, ("trades",), workers=workers)
     sec5, mins, schemas = base.load_trades(src)
     if not mins:
         raise RuntimeError("no HYPE trade history downloaded")
