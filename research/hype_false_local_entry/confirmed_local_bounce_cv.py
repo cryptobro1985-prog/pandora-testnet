@@ -128,42 +128,58 @@ def choose(periods,rows,pred,side,train_names):
     return best[1],best[2],frontier
 
 
-def run_side(periods,rows,side):
-    folds=[]
-    names_periods=sorted(periods)
+def inner_oof_predictions(periods, rows, side, train_names):
+    """Each calibration prediction is made by a model that never saw its period."""
+    predictions = {}
+    diagnostics = []
+    for valid in train_names:
+        fit_names = [p for p in train_names if p != valid]
+        fit_rows = [r for p in fit_names for r in rows[p] if r["side"] == side]
+        valid_rows = [r for r in rows[valid] if r["side"] == side]
+        names = feature_names(fit_rows)
+        if len({bool(r["terminal"]) for r in fit_rows}) < 2:
+            raise ValueError(f"Inner OOF {side}/{valid}: single-class fit")
+        model = fit(fit_rows, names)
+        predictions[valid] = model.predict_proba(X(valid_rows, names))[:, 1]
+        diagnostics.append({"validation_period": valid, "fit_periods": fit_names,
+                            "feature_count": len(names), "rows": len(valid_rows)})
+    return predictions, diagnostics
+
+
+def run_side(periods, rows, side):
+    folds = []
+    names_periods = sorted(periods)
     for hold in names_periods:
-        train_names=[p for p in names_periods if p!=hold]
-        train=[r for p in train_names for r in rows[p] if r["side"]==side]
-        test=[r for r in rows[hold] if r["side"]==side]
-        names=feature_names(train)
-        model=fit(train,names)
-        train_pred={}
-        for p in train_names:
-            q=[r for r in rows[p] if r["side"]==side]
-            train_pred[p]=model.predict_proba(X(q,names))[:,1]
-        th,train_metrics,frontier=choose(periods,rows,train_pred,side,train_names)
-        test_pred={hold:model.predict_proba(X(test,names))[:,1]}
-        test_metrics,_,records=evaluate(periods,rows,test_pred,side,th,[hold])
-        folds.append({"holdout":hold,"threshold":th,"train":train_metrics,"test":test_metrics,
-                      "test_records":records,"feature_count":len(names),
-                      "threshold_frontier":frontier})
-    agg=dict(episodes=0,confirmations=0,true_confirmations=0,false_confirmations=0)
-    rem=[];dist=[];cap=[]
+        train_names = [p for p in names_periods if p != hold]
+        # Calibration must not use scores from a model fitted on the same rows.
+        oof_pred, inner_folds = inner_oof_predictions(periods, rows, side, train_names)
+        th, calibration_metrics, frontier = choose(periods, rows, oof_pred, side, train_names)
+        train = [r for p in train_names for r in rows[p] if r["side"] == side]
+        test = [r for r in rows[hold] if r["side"] == side]
+        names = feature_names(train)
+        model = fit(train, names)
+        test_pred = {hold: model.predict_proba(X(test, names))[:, 1]}
+        test_metrics, _, records = evaluate(periods, rows, test_pred, side, th, [hold])
+        folds.append({"holdout": hold, "threshold": th,
+                      "calibration": calibration_metrics, "inner_oof_folds": inner_folds,
+                      "test": test_metrics, "test_records": records,
+                      "feature_count": len(names), "threshold_frontier": frontier})
+    agg = dict(episodes=0, confirmations=0, true_confirmations=0, false_confirmations=0)
+    rem, dist, cap = [], [], []
     for f in folds:
-        for k in agg: agg[k]+=f["test"][k]
+        for k in agg: agg[k] += f["test"][k]
         for r in f["test_records"]:
             if r.get("true_first"):
                 rem.append(float(r.get("remaining_swing_bps") or 0.0))
                 dist.append(float(r.get("entry_distance_from_local_bps") or 0.0))
                 cap.append(float(r.get("captured_fraction_of_full_swing") or 0.0))
-    n=agg["confirmations"]
-    agg["confirmation_precision"]=agg["true_confirmations"]/n if n else None
-    agg["confirmation_recall"]=agg["true_confirmations"]/agg["episodes"] if agg["episodes"] else None
-    agg["median_remaining_swing_bps"]=float(np.median(rem)) if rem else None
-    agg["median_entry_distance_from_local_bps"]=float(np.median(dist)) if dist else None
-    agg["median_captured_fraction"]=float(np.median(cap)) if cap else None
-    return {"side":side,"folds":folds,"aggregate_oos":agg}
-
+    n = agg["confirmations"]
+    agg["confirmation_precision"] = agg["true_confirmations"]/n if n else None
+    agg["confirmation_recall"] = agg["true_confirmations"]/agg["episodes"] if agg["episodes"] else None
+    agg["median_remaining_swing_bps"] = float(np.median(rem)) if rem else None
+    agg["median_entry_distance_from_local_bps"] = float(np.median(dist)) if dist else None
+    agg["median_captured_fraction"] = float(np.median(cap)) if cap else None
+    return {"side": side, "folds": folds, "aggregate_oos": agg}
 
 def main():
     ap=argparse.ArgumentParser()
@@ -171,7 +187,7 @@ def main():
     ap.add_argument("--output",type=Path,required=True)
     a=ap.parse_args();a.output.parent.mkdir(parents=True,exist_ok=True)
     periods,rows=build(a.master)
-    out={"version":"HYPE-CONFIRMED-LOCAL-BOUNCE-ENTRY-CV-v1",
+    out={"version":"HYPE-CONFIRMED-LOCAL-BOUNCE-ENTRY-CV-v2-inner-period-OOF",
          "objective":"CONFIRM_LOCAL_THEN_ENTER_REVERSAL_MOVE_NOT_EXTREME_GUESS",
          "time_gate":False,"by_side":{},"real_orders":False}
     for side in ("LOW","HIGH"):
