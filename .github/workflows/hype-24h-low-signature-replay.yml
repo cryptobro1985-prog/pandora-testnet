@@ -81,7 +81,7 @@ jobs:
           ob.sort(key=lambda r:(int(r.get("event_time") or 0), int(r.get("received_time") or 0)))
           bids={};asks={};samples=[]; cur_event=None; group=[]
           def flush(group):
-              nonlocal bids,asks,samples
+              global bids,asks,samples
               if not group:return
               et=int(group[0].get("event_time") or 0);typ=str(group[0].get("event_type") or "")
               if typ=="snapshot": bids={};asks={}
