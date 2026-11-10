@@ -50,6 +50,26 @@ def toms(v):
     if a>1e9:return int(x*1000)
     return int(x)
 
+
+def load_minutes_fast(src,start,end):
+    begin=start-timedelta(hours=5)
+    mins=[];bar=None
+    dt=begin.replace(minute=0,second=0,microsecond=0)
+    while dt<end:
+        p=src.get(dt,"trades",required=False)
+        if p:
+            df=fm.read_parquet(p)
+            for t,px,q,side in fm.trade_rows(df):
+                if t<fm.ms(begin) or t>=fm.ms(end):continue
+                k=t//60000*60000
+                if bar is None or int(bar["start_ms"])!=int(k):
+                    if bar is not None:mins.append(fm.finish(bar,60000))
+                    bar=fm.newbar(k,px)
+                fm.addbar(bar,t,px,q,side)
+        dt+=timedelta(hours=1)
+    if bar is not None:mins.append(fm.finish(bar,60000))
+    return mins
+
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--start",required=True);ap.add_argument("--end",required=True)
@@ -60,7 +80,7 @@ def main():
     src=fm.Source(a.cache,(os.getenv("CRYPTOHFTDATA_API_KEY") or "").strip() or None)
 
     fm.prefetch_hours(src,start-timedelta(hours=5),end,("trades","liquidations","open_interest"),workers=24)
-    _,mins,_=fm.load_trades(src)
+    mins=load_minutes_fast(src,start,end)
     rows=[r for r in mins if fm.ms(start)<=int(r["start_ms"])<fm.ms(end)]
     d=pd.DataFrame(rows).sort_values("start_ms").reset_index(drop=True)
     d["ts_ms"]=d.start_ms.astype("int64")
