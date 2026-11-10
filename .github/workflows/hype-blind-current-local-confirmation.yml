@@ -117,7 +117,7 @@ jobs:
                          "HIGH":{"age_min":250,"min_retrace_bps":65.0,"min_frac":0.50}},
           }
 
-          out={"mode":"BLIND_CAUSAL_NO_LABELS","bars":len(bars),"trade_rows":len(rows),"candidate_counts":{k:len(v) for k,v in candidates.items()},"signals":{}}
+          out={"mode":"BLIND_CAUSAL_NO_LABELS","bars":len(bars),"trade_rows":len(rows),"candidate_counts":{k:len(v) for k,v in candidates.items()},"signals":{},"evaluations":{}}
           for rn,side_rules in rules.items():
               sig=[]
               for side,evs in candidates.items():
@@ -146,6 +146,37 @@ jobs:
                           })
               sig.sort(key=lambda x:x["signal_ts_ms"])
               out["signals"][rn]=sig
+
+              evals=[]
+              for side,evs in candidates.items():
+                  evs=sorted(evs,key=lambda x:x["ts_ms"])
+                  for j,cand in enumerate(evs):
+                      rule=side_rules[side]
+                      target=cand["ts_ms"]+rule["age_min"]*60000
+                      nxt=None
+                      for e in evs[j+1:]:
+                          if (side=="LOW" and e["price"]<cand["price"]) or (side=="HIGH" and e["price"]>cand["price"]):
+                              nxt=e;break
+                      if nxt and nxt["ts_ms"]<=target:
+                          evals.append({"side":side,"candidate_ts_ms":cand["ts_ms"],"candidate_price":cand["price"],
+                            "rule":rn,"status":"INVALIDATED_BY_MORE_EXTREME","invalidated_ts_ms":nxt["ts_ms"],
+                            "invalidated_price":nxt["price"],"pre_move_180_bps":cand["pre_move_180_bps"]})
+                          continue
+                      ix=bisect.bisect_left(ends,target)
+                      if ix>=len(bars):
+                          evals.append({"side":side,"candidate_ts_ms":cand["ts_ms"],"candidate_price":cand["price"],
+                            "rule":rn,"status":"NO_CHECKPOINT_IN_WINDOW","pre_move_180_bps":cand["pre_move_180_bps"]})
+                          continue
+                      mark=float(closes[ix]); p0=float(cand["price"])
+                      retr=(mark/p0-1)*10000 if side=="LOW" else (p0/mark-1)*10000
+                      frac=retr/max(cand["pre_move_180_bps"],1e-12)
+                      passed=retr>=rule["min_retrace_bps"] and frac>=rule["min_frac"]
+                      evals.append({"side":side,"candidate_ts_ms":cand["ts_ms"],"candidate_price":p0,"rule":rn,
+                        "status":"PASS" if passed else "FAIL","checkpoint_ts_ms":int(ends[ix]),"checkpoint_price":mark,
+                        "retrace_bps":retr,"retrace_pct":retr/100.0,"retrace_fraction_pre_180":frac,
+                        "min_retrace_bps":rule["min_retrace_bps"],"min_frac":rule["min_frac"],
+                        "pre_move_180_bps":cand["pre_move_180_bps"]})
+              out["evaluations"][rn]=evals
 
           Path("blind_current_local_confirmation.json").write_text(json.dumps(out,indent=2))
           print(json.dumps(out,indent=2))
