@@ -6,7 +6,8 @@ on:
       - research/hype-h1-local-v5-oi-microstructure-20261104
     paths:
       - ".github/workflows/hype-movement-v2-nov48.yml"
-      - "research/hype_movement_signature/forward_nov48_v2.py"\n      - "research/hype_movement_signature/build_recent_compact_from_cache.py"
+      - "research/hype_movement_signature/forward_nov48_v2.py"
+      - "research/hype_movement_signature/build_recent_compact_from_cache.py"
   workflow_dispatch:
 
 permissions:
