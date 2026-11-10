@@ -1,0 +1,38 @@
+{
+  "version": "HYPE-NOV-RICH-GATE-FAST-V1",
+  "base": {
+    "LONG": {
+      "signals": 39,
+      "true": 13,
+      "precision": 0.3333333333333333
+    },
+    "SHORT": {
+      "signals": 67,
+      "true": 14,
+      "precision": 0.208955223880597
+    }
+  },
+  "rich_gated": {
+    "LONG": {
+      "signals": 4,
+      "true": 0,
+      "precision": 0.0
+    },
+    "SHORT": {
+      "signals": 3,
+      "true": 0,
+      "precision": 0.0
+    }
+  },
+  "gates": {
+    "LONG": {
+      "long_liq_300s_ge": 9194.60522
+    },
+    "SHORT": {
+      "ret180_raw_le": -0.00356,
+      "sell300_log_ge": 14.67727
+    }
+  },
+  "liq_events_loaded": 863,
+  "note": "Gates frozen from early/late July movement-label mining; no Local labels and no Nov retuning."
+}
