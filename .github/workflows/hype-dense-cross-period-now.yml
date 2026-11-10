@@ -44,6 +44,17 @@ jobs:
           test -s octnov/compact_1m.jsonl.gz
           test -s octnov/labels.json.gz
           test -s julaug/compact_1m.jsonl.gz
+      - name: Inspect original Jul-Aug teacher scopes
+        run: |
+          python - <<'PY'
+          import gzip,json
+          with gzip.open("julaug/legacy_labels.json.gz","rt",encoding="utf-8") as f:
+              doc=json.load(f)
+          for scope in ("internal","strict"):
+              rows=[x for x in doc.get(scope,[]) if x.get("reference_finalized")]
+              sides={s:sum(x.get("side",x.get("type"))==s for x in rows) for s in ("LOW","HIGH")}
+              print("julaug_legacy",scope,"finalized",len(rows),"sides",sides)
+          PY
       - name: Regenerate INTERNAL L3-K1 labels for Jul-Aug
         run: |
           python - <<'PY'
@@ -81,6 +92,7 @@ jobs:
               },separators=(",",":")))
           PY
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: HYPE-DENSE-CROSS-PERIOD-${{ github.run_id }}
           path: |
