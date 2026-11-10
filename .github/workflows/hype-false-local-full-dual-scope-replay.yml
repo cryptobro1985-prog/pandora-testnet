@@ -1,0 +1,54 @@
+name: HYPE False-Local Full Dual-Scope Replay
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/hype-h1-local-v5-oi-microstructure-20261104]
+    paths:
+      - ".github/workflows/hype-false-local-full-dual-scope-replay.yml"
+      - "research/hype_false_local_entry/replay_dense_first_signal.py"
+      - "research/hype_false_local_entry/audit_dense_coverage.py"
+      - "research/hype_false_local_entry/dense_causal_reachability.py"
+      - "research/hype_false_local_entry/causal_sequential_engine.py"
+      - "research/hype_false_local_entry/first_flip_path_audit.py"
+permissions:
+  contents: read
+  actions: read
+jobs:
+  historical-dual-scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Restore preserved Oct-Nov 30D artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p _raw data/octnov results
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13435356156/zip" > /tmp/octnov.zip
+          unzip -q /tmp/octnov.zip -d _raw
+          for file in compact_1m.jsonl.gz labels.json.gz; do
+            found="$(find _raw -type f -name "$file" -print -quit)"
+            test -n "$found" || { echo "::error::Missing $file in preserved 30D artifact"; exit 1; }
+            cp "$found" "data/octnov/$file"
+          done
+      - name: Run focused causal and scope tests
+        run: |
+          python -m pip install --disable-pip-version-check pytest
+          pytest -q research/hype_false_local_entry/test_prefix_causality.py research/hype_false_local_entry/test_first_flip_path_audit.py research/hype_false_local_entry/test_dense_causal_reachability.py
+      - name: Run complete label-blind replay then offline dual-scope scoring
+        run: |
+          set -euo pipefail
+          python -m research.hype_false_local_entry.replay_dense_first_signal --base-dir data/octnov --scope both --out results/DUAL_SCOPE_30D.json | tee results/DUAL_SCOPE_SUMMARY.json
+      - name: Save diagnostics even when replay fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-FALSE-LOCAL-DUAL-SCOPE-${{ github.run_id }}
+          path: results/
+          retention-days: 14
