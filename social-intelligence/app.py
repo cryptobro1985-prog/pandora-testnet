@@ -133,8 +133,8 @@ def api_history(username:str,limit:int=200):
     return {"username":normalize_username(username),"events":history(normalize_username(username),max(1,min(limit,1000)))}
 
 @app.get("/api/smoke")
-async def smoke():
-    result=await scan(ScanRequest(query="instagram",max_posts=8))
+async def smoke(target:str="instagram"):
+    result=await scan(ScanRequest(query=target,max_posts=8))
     comments=sum(1 for e in result["events"] if e.get("kind")=="comment_in")
     likes=sum(1 for e in result["events"] if e.get("kind")=="like_in")
     mentions=sum(1 for e in result["events"] if e.get("kind")=="mention_out")
