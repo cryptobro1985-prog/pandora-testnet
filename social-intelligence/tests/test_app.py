@@ -55,3 +55,13 @@ def test_build_events_dedupes():
 def test_caption_mentions_fallback():
     e=build_events("target",[{"permalink":"x","timestamp":"2026-01-01T00:00:00Z","caption":"hello @alice and @bob.","comments_detail":[],"likers":[]}])
     assert {x["actor"] for x in e if x["kind"]=="mention_out"}=={"alice","bob"}
+
+
+def test_session_status_does_not_expose_secrets():
+    r=client.get("/api/session-status")
+    assert r.status_code==200
+    data=r.json()
+    assert "deep_scan_context_configured" in data
+    raw=str(data).lower()
+    assert "access_token" not in raw
+    assert "sessionid" not in raw.replace("ig_sessionid","")
