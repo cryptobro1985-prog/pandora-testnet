@@ -267,6 +267,58 @@ def by_regime(oos,model,threshold):
         groups["BULL" if s>.18 else "BEAR" if s<-.18 else "TRANSITION"].append(z)
     return {k:(candidate_metrics_meta(v,model,threshold) if v else None) for k,v in groups.items()}
 
+def tri_brain_ablation(samples):
+    """Refit meta per train-only expert ablation with identical grouped splits.
+
+    Experiments are diagnostic. The historical OOS has been inspected before;
+    no arm may be silently selected/published as a new untouched champion.
+    """
+    cols={
+        "JEPA":["p_fin"],
+        "QUANTUM":["p_quant","p_river","p_tree","p_timeline"],
+        "CORTEX":["p_cortex"],
+    }
+    arms={
+        "FULL_TRI_BRAIN":("JEPA","QUANTUM","CORTEX"),
+        "NO_JEPA":("QUANTUM","CORTEX"),
+        "NO_QUANTUM":("JEPA","CORTEX"),
+        "NO_CORTEX":("JEPA","QUANTUM"),
+        "JEPA_ONLY":("JEPA",),
+        "QUANTUM_ONLY":("QUANTUM",),
+        "CORTEX_ONLY":("CORTEX",),
+    }
+    # A neutral missing expert is a train-only base rate, not zero confidence.
+    ytrain=[float(z["y"]) for z in samples["train"]]
+    prior=float(sum(ytrain)/len(ytrain)) if ytrain else .05
+    out={}
+    for name,enabled in arms.items():
+        modified={}
+        for split in ("valid","oos"):
+            ss=[]
+            for r in samples[split]:
+                z=dict(r)
+                for expert,keys in cols.items():
+                    if expert not in enabled:
+                        for k in keys:z[k]=prior
+                ss.append(z)
+            modified[split]=ss
+        try:
+            model,threshold,cal,info=fit_meta(modified["valid"])
+            oos=candidate_metrics_meta(modified["oos"],model,threshold)
+            out[name]={
+                "status":"DIAGNOSTIC_ONLY" if info["calibration_support_pass"]
+                         else "INSUFFICIENT_CALIBRATION_SUPPORT",
+                "enabled_experts":list(enabled),"threshold_dev_only":threshold,
+                "meta_split":info,"calibration":cal,"historical_oos":oos,
+            }
+        except Exception as exc:
+            out[name]={"status":"ERROR_REJECT","error":str(exc)[:500],
+                       "enabled_experts":list(enabled)}
+    return {"version":"HYPE-TRI-BRAIN-ABLATION-v1",
+            "train_prior":prior,"arms":out,
+            "selection_allowed":False,
+            "warning":"Historical OOS has been inspected. New forward needed for genuine promotion."}
+
 def inventory_extra(root):
     if not root or not Path(root).exists():return {"root":None,"files":[]}
     files=[]
@@ -350,6 +402,7 @@ def main():
     meta,threshold,cal_metrics,meta_split=fit_meta(samples["valid"])
     oos_metrics=candidate_metrics_meta(samples["oos"],meta,threshold)
     regime_oos=by_regime(samples["oos"],meta,threshold)
+    ablation=tri_brain_ablation(samples)
 
     # Fit final teacher only AFTER OOS metrics are frozen.
     fin_full=copy.deepcopy(fin);quant_full=copy.deepcopy(quant)
@@ -391,6 +444,7 @@ def main():
       "calibration":cal_metrics,
       "oos":oos_metrics,
       "oos_by_market_regime":regime_oos,
+      "tri_brain_ablation_summary":{k:v.get("status") for k,v in ablation["arms"].items()},
       "gate":{"passed":gate,"requirements":{"accepted_min":5,"precision_min":.70,"recall_min":.40,"f1_min":.50}},
       "cortex_relationship_heads":cortex.report(),
       "warning":"A local detector can be useful research without being safe for trading. No live promotion unless a genuinely fresh forward window confirms the frozen model."
@@ -402,6 +456,8 @@ def main():
       "regime_features":["5m","15m","30m","60m","180m","360m","480m"],
       "research_only":True,"real_orders":False
     }
+    (args.output/"HYPE_TRI_BRAIN_ABLATION_V1.json").write_text(
+        json.dumps(ablation,indent=2,ensure_ascii=False,allow_nan=False)+"\\n")
     torch.save(bundle,args.output/"HYPE_UNIFIED_LOCAL_INTELLIGENCE_V2.pt")
     (args.output/"HYPE_UNIFIED_LOCAL_INTELLIGENCE_V2_REPORT.json").write_text(
         json.dumps(report,indent=2,ensure_ascii=False,allow_nan=False)+"\n")
