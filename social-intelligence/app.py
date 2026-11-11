@@ -5,7 +5,7 @@ from datetime import datetime,timezone
 from fastapi import FastAPI,Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel,Field
-from connectors import normalize_username,business_discovery,media_comments,public_profile,public_embedded_collect,instaloader_collect
+from connectors import normalize_username,business_discovery,media_comments,public_profile,public_embedded_collect,playwright_public_collect,instaloader_collect
 from analysis import build_events,relationship_report,audience_quality,graph_payload,timeline
 from storage import init_schema,get_last_snapshot,save_snapshot,begin_run,finish_run,save_posts,save_events,history,backend_info
 
@@ -96,6 +96,16 @@ async def _bounded(coro,source,timeout=22):
 @app.on_event("startup")
 async def startup():
     init_schema()
+    if os.getenv("IG_ENABLE_PLAYWRIGHT","1")=="1":
+        try:
+            import subprocess,sys
+            probe=subprocess.run([sys.executable,"-m","playwright","install","chromium"],capture_output=True,text=True,timeout=180)
+            if probe.returncode!=0:
+                import logging
+                logging.getLogger("uvicorn.error").warning("playwright_install_failed=%s",(probe.stderr or probe.stdout)[-500:])
+        except Exception as e:
+            import logging
+            logging.getLogger("uvicorn.error").warning("playwright_install_error=%s:%s",type(e).__name__,str(e)[:300])
     target=os.getenv("IG_STARTUP_SMOKE_TARGET","").strip()
     if target:
         import asyncio,logging
@@ -122,10 +132,10 @@ def health(): return {"ok":True,"service":"instagram-intelligence","version":"2.
 @app.get("/api/capabilities")
 def capabilities():
     return {"instagram_only":True,
-      "collectors":["2scraper_public_embedded","instaloader","meta_business_discovery","public_page_fallback"],
+      "collectors":["2scraper_playwright_public","2scraper_public_embedded","instaloader","meta_business_discovery","public_page_fallback"],
       "open_source_components":["2scraper/instagram-scraper","instaloader/instaloader","JuaniVeltri/igstalker","mohammedelahmar/InstaTrack","ignromanov/safe-unfollow"],
       "meta_configured":bool(os.getenv("META_ACCESS_TOKEN") and os.getenv("META_IG_USER_ID")),
-      "instaloader_session_configured":bool(os.getenv("IG_USERNAME") and (os.getenv("IG_SESSIONFILE") or os.getenv("IG_SESSION_B64"))),
+      "instaloader_session_configured":bool(os.getenv("IG_USERNAME") and (os.getenv("IG_SESSIONFILE") or os.getenv("IG_SESSION_B64") or os.getenv("IG_SESSION_JSON_B64") or os.getenv("IG_SESSIONID"))),
       "not_observable":["profile_viewer_identities","profiles_viewed_by_target","private_messages"]}
 
 @app.get("/api/history/{username}")
@@ -154,9 +164,10 @@ async def scan(req:ScanRequest):
     run_id=begin_run(username)
     warnings=[];sources=[]
     try:
-        public,embedded,meta,insta=await asyncio.gather(
+        public,embedded,browser,meta,insta=await asyncio.gather(
           _bounded(public_profile(username),"public_page",12),
           _bounded(public_embedded_collect(username,min(req.max_posts,12)),"public_embedded",28),
+          _bounded(playwright_public_collect(username,min(req.max_posts,12)),"playwright_public",65),
           _bounded(business_discovery(username),"meta_business_discovery",18),
           _bounded(instaloader_collect(username,req.max_posts),"instaloader",50)
         )
@@ -172,6 +183,14 @@ async def scan(req:ScanRequest):
                 if k!="recent_post_codes" and v not in (None,"",[],{}) and p.get(k) in (None,"",[],{}): p[k]=v
             embedded_posts=embedded.get("posts") or []
         sources.append({"source":"public_embedded","status":embedded.get("status"),"detail":embedded.get("detail")})
+
+        browser_posts=[]
+        if browser.get("status") in ("ok","partial"):
+            bp=browser.get("profile") or {}
+            for k,v in bp.items():
+                if k!="recent_post_codes" and v not in (None,"",[],{}) and p.get(k) in (None,"",[],{}): p[k]=v
+            browser_posts=browser.get("posts") or []
+        sources.append({"source":"playwright_public","status":browser.get("status"),"detail":browser.get("detail")})
 
         meta_posts=[]
         if meta.get("status")=="ok":
@@ -194,7 +213,7 @@ async def scan(req:ScanRequest):
             insta_posts=insta.get("posts") or []
         sources.append({"source":"instaloader","status":insta.get("status"),"detail":insta.get("detail")})
 
-        posts=_merge_posts(embedded_posts,meta_posts,insta_posts)
+        posts=_merge_posts(browser_posts,embedded_posts,meta_posts,insta_posts)
 
         # Meta comments are fetched only for Meta media IDs.
         jobs=[];targets=[]
