@@ -3,3 +3,4 @@ uvicorn[standard]>=0.54,<0.55
 pydantic>=2.14,<2.15
 httpx>=0.28,<0.29
 instaloader>=4.14.1,<5
+beautifulsoup4>=4.12,<5
