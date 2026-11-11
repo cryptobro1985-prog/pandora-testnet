@@ -29,6 +29,8 @@ def test_miniapp_has_controls_and_report_tabs():
     assert "historyView" in parser.ids
     assert 'innerHTML' not in html
     assert '/api/capabilities' in html
+    assert '"/api/search"' in html
+    assert 'await makeReport()' in html
 
 
 def test_bot_configuration_does_not_embed_secret():
