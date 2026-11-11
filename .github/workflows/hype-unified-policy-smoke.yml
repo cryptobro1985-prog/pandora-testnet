@@ -10,6 +10,8 @@ on:
       - "research/hype_unified_intelligence/test_state_machine.py"
       - "research/hype_unified_intelligence/entry_path_targets.py"
       - "research/hype_unified_intelligence/test_entry_path_targets.py"
+      - "research/hype_unified_intelligence/exposure_sizing.py"
+      - "research/hype_unified_intelligence/test_exposure_sizing.py"
       - "research/hype_unified_intelligence/causal_path_benchmark_v1.py"
       - ".github/workflows/hype-unified-policy-smoke.yml"
 
@@ -36,12 +38,13 @@ jobs:
         run: |
           python -m py_compile research/hype_unified_intelligence/state_machine.py
           python -m py_compile research/hype_unified_intelligence/entry_path_targets.py
+          python -m py_compile research/hype_unified_intelligence/exposure_sizing.py
           python -m py_compile research/hype_unified_intelligence/causal_path_benchmark_v1.py
 
       - name: Run research policy tests (no broker or data access)
         id: tests
         run: |
-          python -m unittest research.hype_unified_intelligence.test_state_machine research.hype_unified_intelligence.test_entry_path_targets -v
+          python -m unittest research.hype_unified_intelligence.test_state_machine research.hype_unified_intelligence.test_entry_path_targets research.hype_unified_intelligence.test_exposure_sizing -v
 
       - name: Publish smoke result
         if: always()
@@ -55,7 +58,7 @@ jobs:
             "status":os.getenv("TEST_OUTCOME"),
             "run_id":os.getenv("GITHUB_RUN_ID"),
             "sha":os.getenv("GITHUB_SHA"),
-            "tests":"state_machine + entry_path_targets",
+            "tests":"state_machine + entry_path_targets + exposure_sizing",
             "research_only":True,
             "real_orders":False
           },indent=2)+"\n")
