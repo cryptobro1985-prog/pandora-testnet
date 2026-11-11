@@ -57,7 +57,7 @@ jobs:
           from pathlib import Path
           d=json.loads(Path("out/HYPE_CONFIRMED_LOCAL_BOUNCE_CV.json").read_text())
           assert d["real_orders"] is False and d["time_gate"] is False
-          assert d["decision_sampling"] == "${{ inputs.decision_sampling || 'legacy_age_grid' }}"
+          assert d["decision_sampling"] == "${{ inputs.decision_sampling || 'completed_m1_events' }}"
           assert set(d["by_side"]) == {"LOW","HIGH"}
           for side in ("LOW","HIGH"):
               folds=d["by_side"][side]["folds"]
