@@ -263,7 +263,7 @@
     "ExtraTrees side-stage nonlinear",
     "Full-minute HIGH/LOW/NONE timeline teacher"
   ],
-  "fin_jepa_validation_loss": 0.3443371281027794,
+  "fin_jepa_validation_loss": 0.3443371653556824,
   "timeline_teacher": {
     "feature_count": 65,
     "validation": {

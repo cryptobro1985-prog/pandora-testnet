@@ -1,6 +1,7 @@
 {
-  "status": "RUNNING",
   "github_run_id": "42985154213",
   "github_sha": "c261d46e1d9e5ebea32f66c8464305448bc42967",
-  "started_by": "hype-local-ensemble-30d"
+  "train_outcome": "success",
+  "base_artifact_id": "13435356156",
+  "gap_artifact_id": "13533587104"
 }
