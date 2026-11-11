@@ -1,0 +1,156 @@
+name: HYPE Ultra Survival V2 — Entry Exit Stop Geometry
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/hype_strong_global_local/ultra_survival_trade_geometry_v1.py"
+      - ".github/workflows/hype-ultra-survival-trade-geometry.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: hype-ultra-survival-trade-geometry
+  cancel-in-progress: false
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Compile frozen detector and geometry audit
+        run: |
+          python -m py_compile research/hype_local_only/replay_ultra_survival_v2.py
+          python -m py_compile research/hype_strong_global_local/ultra_survival_trade_geometry_v1.py
+
+      - name: Recover sealed May and preserved Jul-Nov blocks
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p tapes/may tapes/master_raw tapes/master
+
+          # Exact sealed May tape used for the published 31/31 score.
+          MAY_RUN=42569087931
+          MAY_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${MAY_RUN}/artifacts" --jq '.artifacts | map(select(.name|startswith("HYPE-MAY-SEALED-TAPE-") and (.expired|not))) | .[0].id // empty')"
+          test -n "$MAY_ID" || { echo "sealed May artifact unavailable"; exit 2; }
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${MAY_ID}/zip" > /tmp/may.zip
+          unzip -q /tmp/may.zip -d tapes/may
+          test -s tapes/may/compact_1m.jsonl.gz
+          test -s tapes/may/labels.json.gz
+
+          # Immutable Jul-Nov historical master.
+          MASTER_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=HYPE-HISTORY-20260712-20261103-MASTER" --jq '.artifacts|map(select((.expired|not) and .name=="HYPE-HISTORY-20260712-20261103-MASTER"))|sort_by(.created_at)|reverse|.[0].id//empty')"
+          test -n "$MASTER_ID" || { echo "historical master unavailable"; exit 3; }
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${MASTER_ID}/zip" > /tmp/master_wrapper.zip
+          unzip -q /tmp/master_wrapper.zip -d tapes/master_raw
+
+          python - <<'PY'
+          import pathlib,zipfile,shutil
+          raw=pathlib.Path("tapes/master_raw")
+          target=pathlib.Path("tapes/master")
+          key="04_OCT04_NOV03/compact_1m.jsonl.gz"
+          direct=list(raw.rglob(key))
+          if direct:
+              root=direct[0].parents[1]
+              for p in root.iterdir():
+                  dst=target/p.name
+                  if p.is_dir():shutil.copytree(p,dst,dirs_exist_ok=True)
+                  else:shutil.copy2(p,dst)
+          else:
+              chosen=None
+              for p in raw.rglob("*.zip"):
+                  try:
+                      with zipfile.ZipFile(p) as z:
+                          if key in z.namelist():
+                              chosen=p;break
+                  except zipfile.BadZipFile:pass
+              if chosen is None:
+                  raise SystemExit("canonical master zip not found")
+              with zipfile.ZipFile(chosen) as z:z.extractall(target)
+          for folder in ("01_JUL12_AUG07_FULL_MICRO","02_AUG08_SEP01","03_SEP01_OCT01","04_OCT04_NOV03"):
+              for name in ("compact_1m.jsonl.gz","labels.json.gz"):
+                  p=target/folder/name
+                  if not p.is_file() or not p.stat().st_size:
+                      raise SystemExit(f"missing {p}")
+          print("may_artifact",${MAY_ID})
+          print("master_artifact",${MASTER_ID})
+          PY
+
+      - name: Replay frozen Ultra Survival V2 and measure trade geometry
+        id: score
+        run: |
+          set -euo pipefail
+          mkdir -p geometry_out
+          python -m research.hype_strong_global_local.ultra_survival_trade_geometry_v1 \
+            --block MAY tapes/may/compact_1m.jsonl.gz tapes/may/labels.json.gz \
+            --block JUL_AUG tapes/master/01_JUL12_AUG07_FULL_MICRO/compact_1m.jsonl.gz tapes/master/01_JUL12_AUG07_FULL_MICRO/labels.json.gz \
+            --block AUG_SEP tapes/master/02_AUG08_SEP01/compact_1m.jsonl.gz tapes/master/02_AUG08_SEP01/labels.json.gz \
+            --block SEP_OCT tapes/master/03_SEP01_OCT01/compact_1m.jsonl.gz tapes/master/03_SEP01_OCT01/labels.json.gz \
+            --block OCT_NOV tapes/master/04_OCT04_NOV03/compact_1m.jsonl.gz tapes/master/04_OCT04_NOV03/labels.json.gz \
+            --out geometry_out/HYPE_ULTRA_SURVIVAL_V2_TRADE_GEOMETRY_V1.json
+          python - <<'PY'
+          import json
+          p="geometry_out/HYPE_ULTRA_SURVIVAL_V2_TRADE_GEOMETRY_V1.json"
+          x=json.load(open(p))
+          assert x["detector"]=="FROZEN HYPE_LOCAL_ULTRA_SURVIVAL_V2 unchanged"
+          assert x["real_orders"] is False
+          assert x["aggregate"]["true_first"]>0
+          print(json.dumps({
+            "aggregate":x["aggregate"],
+            "paper_stop_candidates_pct":x["paper_stop_candidates_pct"],
+            "leverage":x["leverage_cushion_for_p95_stop"]
+          },separators=(",",":")))
+          PY
+
+      - name: Preserve full geometry report
+        if: steps.score.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-ULTRA-SURVIVAL-V2-TRADE-GEOMETRY-${{ github.run_id }}
+          path: geometry_out/HYPE_ULTRA_SURVIVAL_V2_TRADE_GEOMETRY_V1.json
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Publish latest research result
+        if: always()
+        env:
+          SCORE_OUTCOME: ${{ steps.score.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=research/hype_strong_global_local/ULTRA_SURVIVAL_TRADE_GEOMETRY_LATEST.json
+          if test -s geometry_out/HYPE_ULTRA_SURVIVAL_V2_TRADE_GEOMETRY_V1.json; then
+            cp geometry_out/HYPE_ULTRA_SURVIVAL_V2_TRADE_GEOMETRY_V1.json "$OUT"
+          else
+            python - <<'PY'
+          import json,os,pathlib
+          pathlib.Path("research/hype_strong_global_local/ULTRA_SURVIVAL_TRADE_GEOMETRY_LATEST.json").write_text(json.dumps({
+            "status":"FAILED_BEFORE_REPORT","score_outcome":os.getenv("SCORE_OUTCOME"),
+            "run_id":os.getenv("GITHUB_RUN_ID"),"real_orders":False
+          },indent=2)+"\n")
+          PY
+          fi
+          git config user.name pandora-research-bot
+          git config user.email actions@users.noreply.github.com
+          git add "$OUT"
+          git commit -m "research(hype): publish frozen Ultra Survival trade geometry [skip ci]" || true
+          for i in 1 2 3 4; do
+            git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104 || true
+            git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104 && exit 0
+            sleep 3
+          done
+          exit 1
