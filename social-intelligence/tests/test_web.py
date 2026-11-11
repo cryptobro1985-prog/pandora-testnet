@@ -45,3 +45,9 @@ def test_interaction_report_has_periods_and_platform_sections():
     for token in ["30 дней", "60 дней", "90 дней", "Новые подписки", "Поставленные лайки",
                   "Публичные чаты и каналы", "Публичные сообщения", "eventRail"]:
         assert token in html
+
+
+def test_event_cards_show_source_links():
+    html = (Path(__file__).resolve().parents[1] / "web" / "index.html").read_text(encoding="utf-8")
+    assert "Открыть источник" in html
+    assert "live?.events?.[section]" in html
