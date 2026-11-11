@@ -75,53 +75,21 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install numpy polars pyarrow requests scikit-learn zstandard
 
-      - name: Smoke-test positioning lifecycle
+      - name: Smoke-test missing-rich collector
         run: |
-          python -m py_compile research/hype_full_micro_202607/build_dense_full_micro.py
-          python - <<'PY'
-          from research.hype_full_micro_202607.build_dense_full_micro import attach_positioning_lifecycle
-          rows=[{
-            "candidate_id":"SMOKE","side":"LOW","snapshot_ts_ms":1,
-            "features":{
-              "fullmicro_open_interest_sum_open_interest":100.0,
-              "fullmicro_open_interest_sum_open_interest_value":1000.0,
-              "fullmicro_account_long_short_ratio":1.0,
-              "sell_eff_60s":2.0,
-              "fullmicro_long_liq_notional_60s":10.0,
-              "retrace_bps":0.0,"rev_flow_60s":0.0
-            }
-          },{
-            "candidate_id":"SMOKE","side":"LOW","snapshot_ts_ms":2,
-            "features":{
-              "fullmicro_open_interest_sum_open_interest":98.0,
-              "fullmicro_open_interest_sum_open_interest_value":990.0,
-              "fullmicro_account_long_short_ratio":0.95,
-              "sell_eff_60s":1.0,
-              "fullmicro_long_liq_notional_60s":2.0,
-              "retrace_bps":25.0,"rev_flow_60s":0.5
-            }
-          }]
-          out=attach_positioning_lifecycle(rows)
-          f=out[-1]["features"]
-          assert "positioning_oi_delta_from_candidate" in f
-          assert "positioning_old_side_closing_proxy" in f
-          assert "positioning_control_transfer_proxy" in f
-          print("POSITIONING_SMOKE_OK")
-          PY
+          python -m py_compile research/hype_full_micro_202607/collect_missing_rich_layers.py
 
-      - name: Build rich causal dataset
+      - name: Build missing rich layers only
         run: |
           set -euo pipefail
           OUT="rich_out_${{ matrix.id }}"
           CACHE="rich_cache_${{ matrix.id }}"
           mkdir -p "$OUT" "$CACHE"
-          python -m research.hype_full_micro_202607.build_dense_full_micro \
-            --output "$OUT" --cache "$CACHE" | tee "build_${{ matrix.id }}.log"
-          test -s "$OUT/candidate_snapshots_full_micro.jsonl.gz"
-          test -s "$OUT/compact_1m.jsonl.gz"
-          test -s "$OUT/labels.json.gz"
-          test -s "$OUT/manifest.json"
-          test -s "$OUT/feature_availability.json"
+          python -m research.hype_full_micro_202607.collect_missing_rich_layers \
+  --output "$OUT" --cache "$CACHE" | tee "build_${{ matrix.id }}.log"
+          test -s "$OUT/missing_rich_layers_1m.jsonl.gz"
+test -s "$OUT/manifest.json"
+test -s "$OUT/COLLECTION_AUDIT.json"
 
       - name: Verify completeness and quality
         shell: bash
@@ -129,43 +97,14 @@ jobs:
           set -euo pipefail
           OUT="rich_out_${{ matrix.id }}"
           python - <<'PY'
-          import gzip,json,math,os,pathlib
+          import json,os,pathlib,gzip
           out=pathlib.Path("rich_out_"+os.environ["MATRIX_ID"])
           m=json.load(open(out/"manifest.json"))
-          a=json.load(open(out/"feature_availability.json"))
-          rows=0; book_valid=0; crossed=0
-          liq_valid={5:0,15:0,60:0,180:0,300:0}
-          with gzip.open(out/"candidate_snapshots_full_micro.jsonl.gz","rt",encoding="utf-8") as fh:
-              for line in fh:
-                  if not line.strip(): continue
-                  r=json.loads(line); rows+=1
-                  f=r.get("features") or {}
-                  if float(f.get("fullmicro_book_valid",0) or 0)==1.0: book_valid+=1
-                  if float(f.get("fullmicro_book_crossed",0) or 0)==1.0: crossed+=1
-                  for sec in liq_valid:
-                      if float(f.get(f"fullmicro_liq_stream_valid_{sec}s",0) or 0)==1.0:
-                          liq_valid[sec]+=1
-          counts=m.get("source_file_counts",{})
-          summary={
-            "id":os.environ["MATRIX_ID"],
-            "period":m.get("period"),
-            "downloaded_files":m.get("downloaded_files"),
-            "downloaded_bytes":m.get("downloaded_bytes"),
-            "source_file_counts":counts,
-            "missing_file_count":len(m.get("missing_files") or []),
-            "missing_files":m.get("missing_files") or [],
-            "candidate_snapshots":rows,
-            "book_valid_rows":book_valid,
-            "book_crossed_rows_masked":crossed,
-            "liq_valid_rows":liq_valid,
-            "available_input_ids":a.get("historically_observed_or_derived_input_ids"),
-            "missing_input_ids":a.get("missing_input_ids"),
-            "quality_contract":m.get("microstructure_quality_contract"),
-            "status":"COMPLETE_WITH_GAPS" if m.get("missing_files") else "COMPLETE_NO_REPORTED_GAPS"
-          }
-          json.dump(summary,open(out/"COLLECTION_AUDIT.json","w"),indent=2)
-          print("COLLECTION_AUDIT="+json.dumps(summary,separators=(",",":")))
-          assert rows>0
+          a=json.load(open(out/"COLLECTION_AUDIT.json"))
+          assert m.get("explicitly_not_downloaded")==["trades"]
+          assert m.get("reuses_existing_history") is True
+          assert int(a.get("rows_1m") or 0)>0
+          print("MISSING_RICH_AUDIT="+json.dumps(a,separators=(",",":")))
           PY
         env:
           MATRIX_ID: ${{ matrix.id }}
