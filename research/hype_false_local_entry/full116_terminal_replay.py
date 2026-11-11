@@ -306,12 +306,13 @@ def false_profiles(period, side):
             "same_bar_limit": "The replacement bar's reversal amplitude is excluded if ordering is ambiguous."}
 
 
-def inventory(master, clean_index):
+def inventory(master, clean_index, decision_sampling="legacy_age_grid"):
     periods, descriptors = {}, {}
     for info, bars, labels in sources.read_master(master):
-        tape, rows, candidates = features.m1_states(bars)
+        tape, rows, candidates = features.m1_states(bars, decision_sampling=decision_sampling)
         name = info["folder"]
-        early = [row for row in rows if row["age_s"] in features.EARLY_AGES]
+        early = (rows if decision_sampling == "completed_m1_events" else
+                 [row for row in rows if row["age_s"] in features.EARLY_AGES])
         matched = 0
         if name == prior.PERIODS[0] and clean_index:
             for row in early:
