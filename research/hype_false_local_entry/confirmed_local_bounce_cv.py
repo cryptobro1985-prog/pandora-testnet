@@ -57,11 +57,22 @@ def micro_provenance(rows_by_period):
     """Make absent certified micro explicit; common M1 proxies are not L50/OI evidence."""
     result = {}
     for period, rows in rows_by_period.items():
-        certified = sum(bool(r.get("clean_features")) for r in rows)
+        # Count only finite, contract-legal predictors actually supplied by
+        # the certified cache. A nonempty cache payload can contain only
+        # quality/metadata fields, which are not model evidence.
+        valid_micro = [
+            {k for k, v in (r.get("clean_features") or {}).items()
+             if legal_predictor(k, v)}
+            for r in rows
+        ]
+        certified = sum(bool(keys) for keys in valid_micro)
+        used = sorted(set().union(*valid_micro)) if valid_micro else []
         result[period] = {
             "decision_rows": len(rows),
             "certified_micro_rows": certified,
             "certified_micro_fraction": certified / len(rows) if rows else None,
+            "certified_legal_feature_names": used,
+            "certified_legal_point_ids": sorted({feat.point_id(k) for k in used}),
             "rich_micro_validated_for_cv": certified > 0,
         }
     return result
