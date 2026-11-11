@@ -80,7 +80,7 @@ jobs:
           for r in out[-40:]: print(r.get("id"),r.get("name"),r.get("size_in_bytes"))
           PY
 
-      - name: Recover canonical 116-point Local dataset
+      - name: Recover canonical 116-point Local dataset from retained sources
         id: base
         env:
           GH_TOKEN: ${{ github.token }}
@@ -89,20 +89,65 @@ jobs:
           set -euo pipefail
           BASE_ID="$(python - <<'PY'
           import json
-          a=json.load(open("all_saved_sources/ARTIFACT_INVENTORY.json"))
-          q=[x for x in a if x.get("name")=="local116-HYPE"]
-          print(q[-1]["id"] if q else "")
+          a=json.load(open('all_saved_sources/ARTIFACT_INVENTORY.json'))
+          q=[x for x in a if x.get('name')=='local116-HYPE']
+          print(q[-1]['id'] if q else '')
           PY
           )"
-          test -n "$BASE_ID" || { echo "missing retained local116-HYPE"; exit 2; }
-          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$BASE_ID/zip" > history30.zip
-          unzip -q history30.zip -d history30
+          if [ -n "$BASE_ID" ]; then
+            echo "recovering original local116-HYPE artifact $BASE_ID"
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$BASE_ID/zip" > history30.zip
+            unzip -q history30.zip -d history30
+            SOURCE_NAME="local116-HYPE"
+          else
+            MASTER_ID="$(python - <<'PY'
+          import json
+          a=json.load(open('all_saved_sources/ARTIFACT_INVENTORY.json'))
+          q=[x for x in a if x.get('name')=='HYPE-HISTORY-20260712-20261103-MASTER']
+          print(q[-1]['id'] if q else '')
+          PY
+          )"
+            test -n "$MASTER_ID" || { echo "FAIL: local116 and retained master are both absent"; exit 2; }
+            echo "local116 expired/missing; restoring 30D October source from master $MASTER_ID"
+            mkdir -p master_stage master_unpacked
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$MASTER_ID/zip" > master_wrapper.zip
+            unzip -q master_wrapper.zip -d master_stage
+            python - <<'PY'
+          import pathlib,zipfile,shutil
+          source=pathlib.Path('master_stage')
+          hits=list(source.rglob('04_OCT04_NOV03/candidate_snapshots.jsonl.gz'))
+          if not hits:
+              for p in sorted(source.rglob('*.zip')):
+                  try:
+                      with zipfile.ZipFile(p) as z:
+                          if '04_OCT04_NOV03/candidate_snapshots.jsonl.gz' not in z.namelist():
+                              continue
+                          z.extractall('master_unpacked')
+                          hits=list(pathlib.Path('master_unpacked').rglob('04_OCT04_NOV03/candidate_snapshots.jsonl.gz'))
+                          if hits:break
+                  except zipfile.BadZipFile:
+                      continue
+          if not hits:
+              raise SystemExit('FAIL: master artifact lacks October candidate snapshots')
+          folder=hits[0].parent
+          for name in ('candidate_snapshots.jsonl.gz','compact_1m.jsonl.gz',
+                       'labels.json.gz','feature_availability.json','manifest.json'):
+              src=folder/name
+              if not src.is_file() or not src.stat().st_size:
+                  raise SystemExit('FAIL: master file missing '+str(src))
+              shutil.copy2(src,pathlib.Path('history30')/name)
+          print('restored_from_master',folder)
+          PY
+            BASE_ID="$MASTER_ID"
+            SOURCE_NAME="HYPE-HISTORY-20260712-20261103-MASTER/04_OCT04_NOV03"
+          fi
           test -s history30/candidate_snapshots.jsonl.gz
           test -s history30/compact_1m.jsonl.gz
           test -s history30/labels.json.gz
           test -s history30/feature_availability.json
+          test -s history30/manifest.json
           echo "base_id=$BASE_ID" >> "$GITHUB_OUTPUT"
-
+          echo "base_source_name=$SOURCE_NAME" >> "$GITHUB_OUTPUT"
       - name: Recover enriched causal historical gaps if retained
         id: enriched
         env:
