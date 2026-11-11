@@ -93,7 +93,8 @@ async def _startup_smoke():
     try:
         import asyncio
         result=await asyncio.wait_for(scan(ScanRequest(query=target,max_posts=8)), timeout=28)
-        print("instagram_smoke_test="+json.dumps({
+        import logging
+        logging.getLogger("uvicorn.error").warning("instagram_smoke_test=%s", json.dumps({
             "username":result.get("username"),
             "profile_keys":sorted((result.get("profile") or {}).keys()),
             "posts":len(result.get("posts") or []),
@@ -105,7 +106,8 @@ async def _startup_smoke():
             "warnings":(result.get("warnings") or [])[:8]
         },ensure_ascii=False))
     except Exception as e:
-        print("instagram_smoke_test_error="+type(e).__name__+":"+str(e)[:300])
+        import logging
+        logging.getLogger("uvicorn.error").warning("instagram_smoke_test_error=%s:%s", type(e).__name__, str(e)[:300])
 
 @app.on_event("startup")
 async def startup():
