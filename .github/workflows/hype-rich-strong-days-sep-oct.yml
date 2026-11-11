@@ -57,10 +57,11 @@ jobs:
           python-version: "3.12"
 
       - name: Install minimal stack
-        run: python -m pip install --disable-pip-version-check polars pyarrow requests zstandard
+        run: python -m pip install --disable-pip-version-check numpy polars pyarrow requests zstandard
 
       - name: Syntax check
         run: python -m py_compile research/hype_full_micro_202607/collect_missing_rich_layers.py
+          python -c 'from research.hype_full_micro_202607 import collect_missing_rich_layers; print("IMPORT_OK")'
 
       - name: Collect ONLY 7 missing layers
         run: |
