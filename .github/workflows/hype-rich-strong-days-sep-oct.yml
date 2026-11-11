@@ -75,6 +75,40 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install numpy polars pyarrow requests scikit-learn zstandard
 
+      - name: Smoke-test positioning lifecycle
+        run: |
+          python -m py_compile research/hype_full_micro_202607/build_dense_full_micro.py
+          python - <<'PY'
+          from research.hype_full_micro_202607.build_dense_full_micro import attach_positioning_lifecycle
+          rows=[{
+            "candidate_id":"SMOKE","side":"LOW","snapshot_ts_ms":1,
+            "features":{
+              "fullmicro_open_interest_sum_open_interest":100.0,
+              "fullmicro_open_interest_sum_open_interest_value":1000.0,
+              "fullmicro_account_long_short_ratio":1.0,
+              "sell_eff_60s":2.0,
+              "fullmicro_long_liq_notional_60s":10.0,
+              "retrace_bps":0.0,"rev_flow_60s":0.0
+            }
+          },{
+            "candidate_id":"SMOKE","side":"LOW","snapshot_ts_ms":2,
+            "features":{
+              "fullmicro_open_interest_sum_open_interest":98.0,
+              "fullmicro_open_interest_sum_open_interest_value":990.0,
+              "fullmicro_account_long_short_ratio":0.95,
+              "sell_eff_60s":1.0,
+              "fullmicro_long_liq_notional_60s":2.0,
+              "retrace_bps":25.0,"rev_flow_60s":0.5
+            }
+          }]
+          out=attach_positioning_lifecycle(rows)
+          f=out[-1]["features"]
+          assert "positioning_oi_delta_from_candidate" in f
+          assert "positioning_old_side_closing_proxy" in f
+          assert "positioning_control_transfer_proxy" in f
+          print("POSITIONING_SMOKE_OK")
+          PY
+
       - name: Build rich causal dataset
         run: |
           set -euo pipefail
