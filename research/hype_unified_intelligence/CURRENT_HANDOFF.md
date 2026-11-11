@@ -480,3 +480,7 @@ Permanent summary:
 REAL ORDERS OFF. Next priority: freeze the exact capture-first strategy and
 score genuinely NEW forward data; separately run the HARD120-probe -> Ultra
 scale-in economic replay without changing the frozen full-size detector.
+
+## Early-core cohort integrity checkpoint — 2026-11-11
+
+Focused one issue: original early causal replay workflow 43001455158 SUCCESS, but July internal cohort had 0 labels while July strict had 47. Earlier aggregate internal metrics were therefore partial (Aug-Nov only) despite appearing to cover Jul-Nov. Corrected early_causal_core_entry_mfe_v1.py to explicitly flag missing/insufficient labels and mark aggregate completeness PARTIAL_MISSING_LABELS; added three regression tests. No attempt to synthesize missing internal teacher labels, and no OOS tuning. Oct-Nov original early core: 111/121 correct first, 10 wrong-first, 2,507 core flips; first-swing side accuracy is NOT event-level precision or profitable execution. Correct-first median 6m; wrong-first MAE median about 2.03% across available internal cohorts. Full-size live trading remains OFF. Next: inspect source label schema and restore compatible July internal cohort only if canonical, otherwise keep it excluded; dedupe/veto must be tested on fresh chronological forward. 
