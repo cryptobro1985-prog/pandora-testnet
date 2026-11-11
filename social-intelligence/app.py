@@ -101,7 +101,7 @@ async def startup():
         import asyncio,logging
         async def runner():
             try:
-                result=await asyncio.wait_for(scan(ScanRequest(query=target,max_posts=8)),timeout=45)
+                result=await asyncio.wait_for(scan(ScanRequest(query=target,max_posts=8)),timeout=70)
                 logging.getLogger("uvicorn.error").warning("instagram_smoke_test=%s",json.dumps({
                     "username":result.get("username"),"posts":len(result.get("posts") or []),"events":len(result.get("events") or []),
                     "relationships":len(result.get("relationships") or []),"sources":result.get("sources"),"warnings":(result.get("warnings") or [])[:8]
@@ -158,7 +158,7 @@ async def scan(req:ScanRequest):
           _bounded(public_profile(username),"public_page",12),
           _bounded(public_embedded_collect(username,min(req.max_posts,12)),"public_embedded",28),
           _bounded(business_discovery(username),"meta_business_discovery",18),
-          _bounded(instaloader_collect(username,req.max_posts),"instaloader",30)
+          _bounded(instaloader_collect(username,req.max_posts),"instaloader",50)
         )
         p={"username":username}; followers=None;following=None
         if public.get("status")=="ok":
