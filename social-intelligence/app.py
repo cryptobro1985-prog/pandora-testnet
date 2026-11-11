@@ -14,6 +14,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from source_registry import capability_snapshot
+from connectors import telegram_get_chat, telegram_get_chat_member, vk_users_get, vk_wall_get, vk_wall_comments, vk_likes_get_list, instagram_business_discovery, instagram_media_comments
 
 app = FastAPI(title="Social Intelligence Mini App", version="0.1.0")
 WEB = Path(__file__).resolve().parent / "web"
@@ -35,6 +36,38 @@ class InputProfile(BaseModel):
 class AnalyzeRequest(BaseModel):
     authorized: bool = False
     profiles: list[InputProfile] = Field(default_factory=list, max_length=12)
+
+class TelegramChatRequest(BaseModel):
+    chat_id: str = Field(min_length=2, max_length=128)
+
+class TelegramMemberRequest(TelegramChatRequest):
+    user_id: int
+
+class VKUserRequest(BaseModel):
+    user_ids: str = Field(min_length=1, max_length=512)
+
+class VKWallRequest(BaseModel):
+    owner_id: str
+    count: int = 30
+
+class VKCommentsRequest(BaseModel):
+    owner_id: str
+    post_id: int
+    count: int = 100
+
+class VKLikesRequest(BaseModel):
+    owner_id: str
+    item_id: int
+    item_type: str = "post"
+    count: int = 100
+
+class IGDiscoveryRequest(BaseModel):
+    ig_user_id: str = Field(min_length=1, max_length=64)
+    username: str = Field(min_length=1, max_length=64)
+
+class IGCommentsRequest(BaseModel):
+    media_id: str = Field(min_length=1, max_length=128)
+    limit: int = 100
 
 
 def normalize_profile(platform: str, raw_url: str) -> str:
@@ -75,6 +108,39 @@ def health():
 def capabilities():
     return capability_snapshot()
 
+
+
+@app.post("/api/telegram/chat")
+async def api_telegram_chat(payload: TelegramChatRequest):
+    return await telegram_get_chat(payload.chat_id)
+
+@app.post("/api/telegram/member")
+async def api_telegram_member(payload: TelegramMemberRequest):
+    return await telegram_get_chat_member(payload.chat_id, payload.user_id)
+
+@app.post("/api/vk/user")
+async def api_vk_user(payload: VKUserRequest):
+    return await vk_users_get(payload.user_ids)
+
+@app.post("/api/vk/wall")
+async def api_vk_wall(payload: VKWallRequest):
+    return await vk_wall_get(payload.owner_id, payload.count)
+
+@app.post("/api/vk/comments")
+async def api_vk_comments(payload: VKCommentsRequest):
+    return await vk_wall_comments(payload.owner_id, payload.post_id, payload.count)
+
+@app.post("/api/vk/likes")
+async def api_vk_likes(payload: VKLikesRequest):
+    return await vk_likes_get_list(payload.owner_id, payload.item_id, payload.item_type, payload.count)
+
+@app.post("/api/instagram/business-discovery")
+async def api_ig_discovery(payload: IGDiscoveryRequest):
+    return await instagram_business_discovery(payload.ig_user_id, payload.username)
+
+@app.post("/api/instagram/comments")
+async def api_ig_comments(payload: IGCommentsRequest):
+    return await instagram_media_comments(payload.media_id, payload.limit)
 
 @app.post("/api/analyze")
 def analyze(payload: AnalyzeRequest):
