@@ -17,7 +17,7 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from source_registry import capability_snapshot
-from connectors import telegram_get_chat, telegram_get_chat_member, vk_users_get, vk_wall_get, vk_wall_comments, vk_likes_get_list, instagram_business_discovery, instagram_media_comments, public_profile_page, public_telegram_feed, public_vk_wall
+from connectors import telegram_get_chat, telegram_get_chat_member, vk_users_get, vk_wall_get, vk_wall_comments, vk_likes_get_list, instagram_business_discovery, instagram_media_comments, public_profile_page, public_telegram_feed, public_vk_wall, public_instagram_feed
 
 app = FastAPI(title="Social Intelligence Mini App", version="0.1.0")
 WEB = Path(__file__).resolve().parent / "web"
@@ -410,6 +410,8 @@ async def search(payload: SearchRequest):
             extra_task = public_telegram_feed(handle, 60)
         elif item.platform == "vk":
             extra_task = public_vk_wall(handle, 30)
+        elif item.platform == "instagram":
+            extra_task = public_instagram_feed(handle, 24)
 
         if item.platform == "telegram" and capabilities["telegram"]["configured"]:
             api_task = telegram_get_chat("@" + handle)
@@ -425,6 +427,11 @@ async def search(payload: SearchRequest):
         extra_result = await extra_task if extra_task else {"status": "not_applicable"}
         if item.platform == "instagram":
             events = await _collect_instagram_events(api_result)
+            if extra_result.get("status") == "ok":
+                existing = {x.get("url") for x in events.get("Публикации", [])}
+                for p in (extra_result.get("items") or [])[:24]:
+                    if p.get("url") not in existing:
+                        events["Публикации"].append(p)
         elif item.platform == "vk":
             events = await _collect_vk_events(api_result, extra_result)
         else:
