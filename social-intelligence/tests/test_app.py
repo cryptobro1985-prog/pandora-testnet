@@ -85,3 +85,24 @@ def test_search_rejects_bad_profile_without_network():
     item = r.json()["results"][0]
     assert item["platform"] == "instagram"
     assert item["status"] == "invalid"
+
+
+def test_search_public_collectors_shape(monkeypatch):
+    import app as appmod
+
+    async def fake_page(url):
+        return {"status":"ok","url":url,"title":"x","description":"","image":"","source":"public_profile_page"}
+    async def fake_tg(handle, limit=30):
+        return {"status":"ok","items":[{"title":"@demo","text":"hello","when":"2026-11-10T10:00:00+00:00","url":"https://t.me/demo/1"}]}
+    async def fake_vk(handle, limit=20):
+        return {"status":"ok","items":[{"title":"Публикация VK","text":"post","when":"2026-11-10T10:00:00+00:00","url":"https://vk.com/wall1_1"}]}
+
+    monkeypatch.setattr(appmod, "public_profile_page", fake_page)
+    monkeypatch.setattr(appmod, "public_telegram_feed", fake_tg)
+    monkeypatch.setattr(appmod, "public_vk_wall", fake_vk)
+
+    tg = client.post("/api/search", json={"profiles":[{"platform":"telegram","url":"https://t.me/demo"}]}).json()["results"][0]
+    assert tg["events"]["Публичные сообщения"][0]["text"].startswith("hello")
+
+    vk = client.post("/api/search", json={"profiles":[{"platform":"vk","url":"https://vk.com/demo"}]}).json()["results"][0]
+    assert vk["events"]["Стена"][0]["url"].endswith("wall1_1")
