@@ -1,0 +1,238 @@
+{
+  "version": "HYPE_FULLMICRO_ECONOMIC_SEARCH_REPLAY_V1",
+  "research_only": true,
+  "real_orders": false,
+  "archive_sha256": "c9d588b5c78d0e72a3073ceb62c7fa100381ebf69df911b22a170171a2653975",
+  "candidate_count": 1252,
+  "quality_clean_count": 1091,
+  "excluded_by_reason": {
+    "CROSSED_OR_INVALID_BOOK": 161
+  },
+  "available_feature_families": {
+    "price": 20,
+    "price_flow": 55,
+    "plus_book": 262,
+    "plus_oi_liq": 285,
+    "all_derived": 289
+  },
+  "period_counts": {
+    "train": 646,
+    "dev": 216,
+    "historical_test": 219
+  },
+  "split_ms": {
+    "train_dev": 1785237135779,
+    "dev_test": 1785756441446,
+    "purge": 7260000
+  },
+  "future_target": "60m +75bps before -40bps, STOP priority in same candle",
+  "paper_execution": "next minute open, 12bps round trip proxy, 30m cooldown; no verified bid/ask or marks",
+  "models": {
+    "ridge_price_flow": {
+      "input_family": "price_flow",
+      "method": "ridge",
+      "heads": {
+        "LONG": {
+          "train": 349,
+          "positive": 83,
+          "features": 55
+        },
+        "SHORT": {
+          "train": 297,
+          "positive": 44,
+          "features": 55
+        }
+      },
+      "dev_threshold": 0.8,
+      "dev": {
+        "trades": 6,
+        "wins": 2,
+        "underlying_pct": -0.001,
+        "max_dd_pct": 1.037,
+        "profit_factor": 1.005,
+        "take_count": 2
+      },
+      "historical_test": {
+        "trades": 7,
+        "wins": 1,
+        "underlying_pct": -2.651,
+        "max_dd_pct": 2.651,
+        "profit_factor": 0.142,
+        "take_count": 0
+      },
+      "promotion_allowed": false
+    },
+    "ridge_full_derived": {
+      "input_family": "all_derived",
+      "method": "ridge",
+      "heads": {
+        "LONG": {
+          "train": 349,
+          "positive": 83,
+          "features": 286
+        },
+        "SHORT": {
+          "train": 297,
+          "positive": 44,
+          "features": 286
+        }
+      },
+      "dev_threshold": 0.5,
+      "dev": {
+        "trades": 21,
+        "wins": 9,
+        "underlying_pct": -0.938,
+        "max_dd_pct": 2.573,
+        "profit_factor": 0.831,
+        "take_count": 6
+      },
+      "historical_test": {
+        "trades": 23,
+        "wins": 4,
+        "underlying_pct": -7.354,
+        "max_dd_pct": 7.452,
+        "profit_factor": 0.201,
+        "take_count": 3
+      },
+      "promotion_allowed": false
+    },
+    "trees_price_flow": {
+      "input_family": "price_flow",
+      "method": "trees",
+      "heads": {
+        "LONG": {
+          "train": 349,
+          "positive": 83,
+          "features": 55
+        },
+        "SHORT": {
+          "train": 297,
+          "positive": 44,
+          "features": 55
+        }
+      },
+      "dev_threshold": 0.6,
+      "dev": {
+        "trades": 7,
+        "wins": 1,
+        "underlying_pct": -2.129,
+        "max_dd_pct": 2.129,
+        "profit_factor": 0.227,
+        "take_count": 1
+      },
+      "historical_test": {
+        "trades": 8,
+        "wins": 3,
+        "underlying_pct": -0.72,
+        "max_dd_pct": 1.552,
+        "profit_factor": 0.727,
+        "take_count": 3
+      },
+      "promotion_allowed": false
+    },
+    "trees_full_derived": {
+      "input_family": "all_derived",
+      "method": "trees",
+      "heads": {
+        "LONG": {
+          "train": 349,
+          "positive": 83,
+          "features": 286
+        },
+        "SHORT": {
+          "train": 297,
+          "positive": 44,
+          "features": 286
+        }
+      },
+      "dev_threshold": 0.5,
+      "dev": {
+        "trades": 13,
+        "wins": 6,
+        "underlying_pct": -0.68,
+        "max_dd_pct": 2.409,
+        "profit_factor": 0.764,
+        "take_count": 3
+      },
+      "historical_test": {
+        "trades": 12,
+        "wins": 3,
+        "underlying_pct": -2.663,
+        "max_dd_pct": 2.663,
+        "profit_factor": 0.379,
+        "take_count": 2
+      },
+      "promotion_allowed": false
+    },
+    "hgb_price_flow": {
+      "input_family": "price_flow",
+      "method": "hgb",
+      "heads": {
+        "LONG": {
+          "train": 349,
+          "positive": 83,
+          "features": 55
+        },
+        "SHORT": {
+          "train": 297,
+          "positive": 44,
+          "features": 55
+        }
+      },
+      "dev_threshold": 0.5,
+      "dev": {
+        "trades": 5,
+        "wins": 1,
+        "underlying_pct": -1.447,
+        "max_dd_pct": 1.552,
+        "profit_factor": 0.303,
+        "take_count": 1
+      },
+      "historical_test": {
+        "trades": 10,
+        "wins": 5,
+        "underlying_pct": -0.424,
+        "max_dd_pct": 1.552,
+        "profit_factor": 0.841,
+        "take_count": 2
+      },
+      "promotion_allowed": false
+    },
+    "hgb_full_derived": {
+      "input_family": "all_derived",
+      "method": "hgb",
+      "heads": {
+        "LONG": {
+          "train": 349,
+          "positive": 83,
+          "features": 286
+        },
+        "SHORT": {
+          "train": 297,
+          "positive": 44,
+          "features": 286
+        }
+      },
+      "dev_threshold": 0.5,
+      "dev": {
+        "trades": 5,
+        "wins": 1,
+        "underlying_pct": -2.006,
+        "max_dd_pct": 2.064,
+        "profit_factor": 0.028,
+        "take_count": 0
+      },
+      "historical_test": {
+        "trades": 9,
+        "wins": 5,
+        "underlying_pct": 0.617,
+        "max_dd_pct": 1.552,
+        "profit_factor": 1.302,
+        "take_count": 3
+      },
+      "promotion_allowed": false
+    }
+  },
+  "verdict": "HISTORICAL_DIAGNOSTIC_ONLY_NO_VERIFIED_TRANSFER",
+  "warning": "Previously inspected July test, not untouched OOS. No live promotion."
+}
