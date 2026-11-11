@@ -168,6 +168,28 @@ def capabilities():
     return capability_snapshot()
 
 
+@app.get("/api/self-test")
+async def self_test():
+    """Connectivity test using only well-known public pages."""
+    import asyncio
+    checks = await asyncio.gather(
+        public_profile_page("https://instagram.com/instagram"),
+        public_profile_page("https://vk.com/vk"),
+        public_profile_page("https://t.me/telegram"),
+    )
+    telegram_api = await telegram_get_chat("@telegram") if capability_snapshot()["platforms"]["telegram"]["configured"] else {"status": "not_configured"}
+    return {
+        "ok": True,
+        "public_pages": {
+            "instagram": checks[0]["status"],
+            "vk": checks[1]["status"],
+            "telegram": checks[2]["status"],
+        },
+        "telegram_api": telegram_api.get("status"),
+    }
+
+
+
 
 @app.post("/api/telegram/chat")
 async def api_telegram_chat(payload: TelegramChatRequest):
