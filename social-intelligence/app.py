@@ -58,9 +58,9 @@ def snapshot(username,followers,following,profile):
             d["new_following"]=sorted(cur[k] for k in cur.keys()-old.keys())
             d["unfollowed"]=sorted(old[k] for k in old.keys()-cur.keys())
         d["previous_snapshot"]=prev["created_at"]
-    c.execute("insert into snapshots(username,created_at,followers_json,following_json,profile_json) values(?,?,?,?,?)",
-              (username,now,json.dumps(current_f,ensure_ascii=False),json.dumps(current_g,ensure_ascii=False),json.dumps(profile,ensure_ascii=False)))
-    c.commit();c.close();d["snapshot_at"]=now;return d
+    save_snapshot(username,now,json.dumps(current_f,ensure_ascii=False),json.dumps(current_g,ensure_ascii=False),json.dumps(profile,ensure_ascii=False))
+    d["snapshot_at"]=now
+    return d
 
 def _post_key(p):
     return str(p.get("shortcode") or p.get("permalink") or p.get("id") or "")
