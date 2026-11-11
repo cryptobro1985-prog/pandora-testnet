@@ -26,6 +26,32 @@ class LiveBookQualityTest(unittest.TestCase):
     def test_stale_last_trade_outside_book_not_crossed(self):
         f=_book_features(book({100.2:3},{100.3:2}),100.0,"LOW")
         self.assertEqual(f["book_quality_valid"],1.)
+    def test_timestamped_stale_book_is_masked(self):
+        q=book({100.0:3},{100.1:2})
+        q.book_ts_ms=q.last_ts_ms-5001
+        f=_book_features(q,100.05,"LOW")
+        self.assertEqual(f,{"book_quality_valid":0.0,"book_quality_stale":1.0})
+
+    def test_future_timestamped_book_is_masked(self):
+        q=book({100.0:3},{100.1:2})
+        q.book_ts_ms=q.last_ts_ms+1
+        f=_book_features(q,100.05,"LOW")
+        self.assertEqual(f,{"book_quality_valid":0.0,"book_quality_future":1.0})
+
+    def test_fresh_timestamped_book_keeps_features(self):
+        q=book({100.0:3},{100.1:2})
+        q.book_ts_ms=q.last_ts_ms-5000
+        f=_book_features(q,100.05,"LOW")
+        self.assertEqual(f["book_quality_valid"],1.0)
+        self.assertIn("book_spread_bps",f)
+
+    def test_malformed_timestamp_fails_closed(self):
+        q=book({100.0:3},{100.1:2})
+        q.book_ts_ms=float("nan")
+        f=_book_features(q,100.05,"LOW")
+        self.assertEqual(f["book_quality_timestamp_invalid"],1.0)
+        self.assertNotIn("book_spread_bps",f)
+
     def test_missing_is_masked_not_zero_filled(self):
         f=_book_features(book({},{}),100.0,"LOW")
         self.assertEqual(f,{"book_quality_valid":0.0})
