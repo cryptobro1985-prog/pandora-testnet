@@ -1,0 +1,69 @@
+name: HYPE Unified Intelligence — Fast Policy Tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/hype_unified_intelligence/state_machine.py"
+      - "research/hype_unified_intelligence/test_state_machine.py"
+      - "research/hype_unified_intelligence/causal_path_benchmark_v1.py"
+      - ".github/workflows/hype-unified-policy-smoke.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hype-unified-policy-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Compile paper-only policy
+        run: |
+          python -m py_compile research/hype_unified_intelligence/state_machine.py
+          python -m py_compile research/hype_unified_intelligence/causal_path_benchmark_v1.py
+
+      - name: Run research policy tests (no broker or data access)
+        id: tests
+        run: |
+          python -m unittest research.hype_unified_intelligence.test_state_machine -v
+
+      - name: Publish smoke result
+        if: always()
+        env:
+          TEST_OUTCOME: ${{ steps.tests.outcome }}
+        run: |
+          python - <<'PY'
+          import json,os,pathlib
+          p=pathlib.Path("research/hype_unified_intelligence/SMOKE_LATEST.json")
+          p.write_text(json.dumps({
+            "status":os.getenv("TEST_OUTCOME"),
+            "run_id":os.getenv("GITHUB_RUN_ID"),
+            "sha":os.getenv("GITHUB_SHA"),
+            "tests":"research.hype_unified_intelligence.test_state_machine",
+            "research_only":True,
+            "real_orders":False
+          },indent=2)+"\n")
+          PY
+          git config user.name "pandora-research-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add research/hype_unified_intelligence/SMOKE_LATEST.json
+          git commit -m "ci(hype): publish fast policy smoke [skip ci]" || true
+          for i in 1 2 3; do
+            git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104 || true
+            git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104 && exit 0
+            sleep 3
+          done
+          exit 1
