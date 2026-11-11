@@ -79,7 +79,10 @@ def audience_quality(followers,events):
     if followers is None:
         return {"status":"unknown","reason":"followers_not_observed"}
     follower_names=_usernames(followers)
-    engaged={str(e.get("actor")).lower() for e in events or [] if e.get("direction")=="inbound" and e.get("actor")}
+    inbound=[e for e in events or [] if e.get("direction")=="inbound" and e.get("actor")]
+    if not inbound and follower_names:
+        return {"status":"unknown","reason":"engagement_identities_not_observed","followers":len(follower_names)}
+    engaged={str(e.get("actor")).lower() for e in inbound}
     if not follower_names:
         return {"status":"ok","followers":0,"engaged_followers":0,"ghost_candidates":0,"ghost_percentage":0.0,"ghost_users":[]}
     engaged_followers=sorted(follower_names & engaged)
