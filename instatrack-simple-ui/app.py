@@ -24,17 +24,20 @@ button:disabled{opacity:.55;cursor:wait}.status{margin-top:18px;padding:14px 16p
 <div class="hero">
 <h1>InstaTrack</h1><p>Введи Instagram-аккаунт и запусти анализ.</p>
 <form id="f" class="form"><input id="u" autocomplete="off" placeholder="@username или ссылка Instagram" required><button id="b">Проанализировать</button></form>
+<details style="margin-top:14px"><summary style="cursor:pointer;color:#aaaabd">Если Instagram просит авторизацию — добавить sessionid</summary>
+<div style="margin-top:10px"><input id="sid" type="password" autocomplete="off" placeholder="Instagram sessionid (не пароль)" style="width:100%"><p class="muted" style="font-size:13px;margin:8px 2px 0">Используется только для текущего анализа и не сохраняется этой оболочкой.</p></div>
+</details>
 <div id="s" class="status"></div>
 </div>
 <div id="r" class="grid"></div>
 </div>
 <script>
-const f=document.getElementById('f'),u=document.getElementById('u'),b=document.getElementById('b'),s=document.getElementById('s'),r=document.getElementById('r');
+const f=document.getElementById('f'),u=document.getElementById('u'),sid=document.getElementById('sid'),b=document.getElementById('b'),s=document.getElementById('s'),r=document.getElementById('r');
 const esc=x=>String(x??'—').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 function card(t,v,cls=''){return '<div class="card '+cls+'"><h3>'+esc(t)+'</h3><div class="big">'+esc(v)+'</div></div>'}
 f.onsubmit=async(e)=>{e.preventDefault();r.innerHTML='';s.style.display='block';s.className='status';s.textContent='Анализирую…';b.disabled=true;
 try{
- const res=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u.value})});
+ const res=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u.value,session_id:sid.value})});
  const d=await res.json(); if(!res.ok||d.status!=='ok') throw new Error(d.message||'Ошибка анализа');
  s.className='status ok';s.textContent='Готово';
  const p=d.profile||{}, snap=d.snapshot||{}, rel=d.relationships||[];
@@ -74,14 +77,27 @@ def health(): return jsonify({"status":"ok","backend":BACKEND})
 def analyze():
     payload=request.get_json(silent=True) or {}
     username=normalize_username(payload.get("username",""))
+    session_id=(payload.get("session_id") or "").strip()
     if not username: return jsonify({"status":"error","message":"Введи username или ссылку Instagram."}),400
+
+    # If the user supplied their own authorized Instagram session, pass it to
+    # the original InstaTrack backend for this runtime only. Do not persist it.
+    if session_id:
+        ar,ad=backend("POST","/api/settings/session",json={"session_id":session_id,"persist":False})
+        if ar is None:
+            return jsonify({"status":"error","message":ad.get("message","Не удалось передать Instagram sessionid.")}),502
+        if ar.status_code>=400 or (isinstance(ad,dict) and ad.get("status")=="error"):
+            return jsonify({"status":"error","message":(ad.get("message") if isinstance(ad,dict) else "Instagram sessionid не принят.")}),400
 
     # 1) live profile through original InstaTrack backend
     pr,pd=backend("GET",f"/api/profile/{username}")
     if pr is None: return jsonify({"status":"error","message":pd.get("message")}),502
     if pr.status_code>=400 or pd.get("status")=="error":
         msg=pd.get("message") or "Не удалось получить профиль"
-        return jsonify({"status":"error","message":f"InstaTrack backend: {msg}"}),pr.status_code if pr.status_code>=400 else 400
+        low=str(msg).lower()
+        if "credentials are not configured" in low or "session" in low or "login" in low:
+            msg="Instagram требует авторизованную сессию. Раскрой пункт «добавить sessionid», вставь sessionid своего Instagram и нажми «Проанализировать» ещё раз."
+        return jsonify({"status":"error","message":msg}),pr.status_code if pr.status_code>=400 else 400
     profile=pd.get("profile") or {}
 
     # 2) run one snapshot for this account
