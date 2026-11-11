@@ -1,0 +1,156 @@
+name: HYPE Rich Strong-Days Collector Sep-Oct 2026
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - ".github/workflows/hype-rich-strong-days-sep-oct.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: hype-rich-strong-days-sep-oct-v1
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include:
+          - id: SEP03
+            start: "2026-09-02T12:00:00+00:00"
+            end:   "2026-09-04T12:00:00+00:00"
+          - id: SEP10
+            start: "2026-09-09T12:00:00+00:00"
+            end:   "2026-09-11T12:00:00+00:00"
+          - id: SEP17_18
+            start: "2026-09-16T12:00:00+00:00"
+            end:   "2026-09-19T12:00:00+00:00"
+          - id: SEP30
+            start: "2026-09-29T12:00:00+00:00"
+            end:   "2026-10-01T12:00:00+00:00"
+          - id: OCT05
+            start: "2026-10-04T12:00:00+00:00"
+            end:   "2026-10-06T12:00:00+00:00"
+          - id: OCT08
+            start: "2026-10-07T12:00:00+00:00"
+            end:   "2026-10-09T12:00:00+00:00"
+          - id: OCT12
+            start: "2026-10-11T12:00:00+00:00"
+            end:   "2026-10-13T12:00:00+00:00"
+          - id: OCT22
+            start: "2026-10-21T12:00:00+00:00"
+            end:   "2026-10-23T12:00:00+00:00"
+          - id: OCT26_30
+            start: "2026-10-25T12:00:00+00:00"
+            end:   "2026-10-31T12:00:00+00:00"
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      PYTHONUNBUFFERED: "1"
+      CRYPTOHFTDATA_API_KEY: ${{ secrets.CRYPTOHFTDATA_API_KEY }}
+      HYPE_FULL_MICRO_START_UTC: ${{ matrix.start }}
+      HYPE_FULL_MICRO_END_UTC: ${{ matrix.end }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install stack
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy polars pyarrow requests scikit-learn zstandard
+
+      - name: Build rich causal dataset
+        run: |
+          set -euo pipefail
+          OUT="rich_out_${{ matrix.id }}"
+          CACHE="rich_cache_${{ matrix.id }}"
+          mkdir -p "$OUT" "$CACHE"
+          python -m research.hype_full_micro_202607.build_dense_full_micro \
+            --output "$OUT" --cache "$CACHE" | tee "build_${{ matrix.id }}.log"
+          test -s "$OUT/candidate_snapshots_full_micro.jsonl.gz"
+          test -s "$OUT/compact_1m.jsonl.gz"
+          test -s "$OUT/labels.json.gz"
+          test -s "$OUT/manifest.json"
+          test -s "$OUT/feature_availability.json"
+
+      - name: Verify completeness and quality
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="rich_out_${{ matrix.id }}"
+          python - <<'PY'
+          import gzip,json,math,os,pathlib
+          out=pathlib.Path("rich_out_"+os.environ["MATRIX_ID"])
+          m=json.load(open(out/"manifest.json"))
+          a=json.load(open(out/"feature_availability.json"))
+          rows=0; book_valid=0; crossed=0
+          liq_valid={5:0,15:0,60:0,180:0,300:0}
+          with gzip.open(out/"candidate_snapshots_full_micro.jsonl.gz","rt",encoding="utf-8") as fh:
+              for line in fh:
+                  if not line.strip(): continue
+                  r=json.loads(line); rows+=1
+                  f=r.get("features") or {}
+                  if float(f.get("fullmicro_book_valid",0) or 0)==1.0: book_valid+=1
+                  if float(f.get("fullmicro_book_crossed",0) or 0)==1.0: crossed+=1
+                  for sec in liq_valid:
+                      if float(f.get(f"fullmicro_liq_stream_valid_{sec}s",0) or 0)==1.0:
+                          liq_valid[sec]+=1
+          counts=m.get("source_file_counts",{})
+          summary={
+            "id":os.environ["MATRIX_ID"],
+            "period":m.get("period"),
+            "downloaded_files":m.get("downloaded_files"),
+            "downloaded_bytes":m.get("downloaded_bytes"),
+            "source_file_counts":counts,
+            "missing_file_count":len(m.get("missing_files") or []),
+            "missing_files":m.get("missing_files") or [],
+            "candidate_snapshots":rows,
+            "book_valid_rows":book_valid,
+            "book_crossed_rows_masked":crossed,
+            "liq_valid_rows":liq_valid,
+            "available_input_ids":a.get("historically_observed_or_derived_input_ids"),
+            "missing_input_ids":a.get("missing_input_ids"),
+            "quality_contract":m.get("microstructure_quality_contract"),
+            "status":"COMPLETE_WITH_GAPS" if m.get("missing_files") else "COMPLETE_NO_REPORTED_GAPS"
+          }
+          json.dump(summary,open(out/"COLLECTION_AUDIT.json","w"),indent=2)
+          print("COLLECTION_AUDIT="+json.dumps(summary,separators=(",",":")))
+          assert rows>0
+          PY
+        env:
+          MATRIX_ID: ${{ matrix.id }}
+
+      - name: Upload rich dataset
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-RICH-STRONG-${{ matrix.id }}-${{ github.run_id }}
+          path: |
+            rich_out_${{ matrix.id }}/**
+            build_${{ matrix.id }}.log
+          retention-days: 90
+          compression-level: 0
+
+  summary:
+    if: always()
+    needs: collect
+    runs-on: ubuntu-latest
+    steps:
+      - name: Final collector status
+        run: |
+          echo "All matrix windows reached terminal state."
+          echo "Result: ${{ needs.collect.result }}"
