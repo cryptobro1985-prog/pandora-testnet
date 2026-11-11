@@ -1,3 +1,37 @@
+## AUTHORITATIVE STRATEGY OVERRIDE — 2026-11-11
+
+From this checkpoint forward there is ONE primary HYPE strategy only.
+
+**PRIMARY ENTRY CONCEPT**
+- New running extreme candidate.
+- Price retraces roughly **0.33–0.40%** from the extreme.
+- Retrace alone is NOT sufficient.
+- Confirm Local using causal evidence available at that moment: no new same-side extension, price response, reversal/impact efficiency, persistence, relative strength versus failed same-leg attempts, flow/volume context, and valid causally aligned L50/OI/liquidation evidence when available.
+- Confirmed LOW -> LONG.
+- Confirmed HIGH -> SHORT.
+
+**DO NOT replace this primary strategy** with:
+- Ultra Survival V2,
+- HARD120/EARLY60,
+- Hybrid Zero-FP 249/249,
+- Strong/global 256/256 post-factum cascade,
+- generic ensemble / unified v2 / 289-feature search.
+
+Those remain auxiliary comparators, confidence/fallback layers, or historical research only.
+
+**ONLY optimization target now**
+EARLY LOCAL ~0.33–0.40%
+-> ENTRY
+-> suppress wrong-first without delaying true signals
+-> emergency STOP sized from true/false MAE
+-> HOLD through normal corrections
+-> MFE protection
+-> early opposite Local
+-> CLOSE + FLIP.
+
+Do not broaden the research objective unless the user explicitly changes this decision.
+
+
 # HYPE UNIFIED INTELLIGENCE — CURRENT HANDOFF
 
 Date: 2026-11-11
