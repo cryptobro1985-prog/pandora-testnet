@@ -143,7 +143,8 @@ async def smoke():
       "comment_events":comments,"like_identity_events":likes,"mention_events":mentions,"tag_events":tags,
       "relationships":len(result["relationships"]),"graph_nodes":len(result["graph"]["nodes"]),"timeline_events":len(result["timeline"]),
       "followers_observed":result["changes"]["followers_observed"],"following_observed":result["changes"]["following_observed"],
-      "audience_quality_status":result["audience_quality"]["status"],"sources":result["sources"],"warnings":result["warnings"][:10],
+      "audience_quality_status":result["audience_quality"]["status"],"coverage":result["coverage"],
+      "sources":result["sources"],"warnings":result["warnings"][:10],
       "unknown_is_not_zero":result["limits"]["unknown_is_not_zero"]}
 
 @app.post("/api/scan")
@@ -214,11 +215,37 @@ async def scan(req:ScanRequest):
         graph=graph_payload(username,relationships)
         tl=timeline(events,changes)
 
+        def cov_status(kind, observed):
+            if observed: return "observed"
+            low=" ".join(warnings).lower()
+            if kind in ("comments","likes") and ("loginrequired" in low or "login_required" in low):
+                return "auth_required"
+            return "unknown"
+
+        comment_events=[e for e in events if e.get("kind")=="comment_in"]
+        like_events=[e for e in events if e.get("kind")=="like_in"]
+        outbound_events=[e for e in events if e.get("direction")=="outbound"]
+        coverage={
+          "profile":"observed" if len(p)>1 else "unknown",
+          "posts":"observed" if posts else "unknown",
+          "comments":cov_status("comments",bool(comment_events)),
+          "liker_identities":cov_status("likes",bool(like_events)),
+          "followers":"observed" if followers is not None else "auth_required",
+          "following":"observed" if following is not None else "auth_required",
+          "follow_unfollow_history":"observed" if (changes.get("previous_snapshot") and (changes.get("followers_observed") or changes.get("following_observed"))) else "needs_two_observed_snapshots",
+          "outbound_mentions_tags_coauthors":"observed" if outbound_events else "unknown",
+          "profile_viewers":"not_observable",
+          "profiles_viewed_by_target":"not_observable",
+          "private_messages":"not_observable",
+          "outgoing_global_like_history":"not_observable_from_current_public_sources",
+          "outgoing_global_comment_history":"not_observable_from_current_public_sources"
+        }
+
         save_posts(username,posts);save_events(username,tl)
         finish_run(run_id,"complete",sources,warnings)
         return {"ok":True,"username":username,"profile":p,"posts":posts,"events":events,"relationships":relationships,
           "followers":followers,"following":following,"changes":changes,"audience_quality":aq,"graph":graph,"timeline":tl,
-          "history":history(username,200),"sources":sources,"warnings":warnings,
+          "history":history(username,200),"coverage":coverage,"sources":sources,"warnings":warnings,
           "limits":{"profile_viewers":"not_observable","profiles_viewed_by_target":"not_observable","private_messages":"not_observable",
                     "outgoing_likes_comments":"only_directly_observed","unknown_is_not_zero":True}}
     except Exception as e:
