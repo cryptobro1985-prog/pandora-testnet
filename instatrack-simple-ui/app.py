@@ -1,7 +1,7 @@
-from flask import Flask, request, jsonify, Response
+from flask import Flask, request, jsonify, Response, redirect, session
 import os, re, html, requests
 
-app = Flask(__name__)
+app = Flask(__name__)\napp.secret_key = os.getenv("FLASK_SECRET_KEY","change-me-in-render")\nIG_CLIENT_ID=os.getenv("INSTAGRAM_CLIENT_ID","")\nIG_CLIENT_SECRET=os.getenv("INSTAGRAM_CLIENT_SECRET","")\nIG_REDIRECT_URI=os.getenv("INSTAGRAM_REDIRECT_URI","https://instatrack-simple-ui.onrender.com/auth/instagram/callback")\nIG_SCOPES=os.getenv("INSTAGRAM_SCOPES","instagram_business_basic").strip()
 BACKEND = os.getenv("INSTATRACK_BACKEND_URL","https://instatrack-mohammedelahmar-live-v2.onrender.com").rstrip("/")
 
 PAGE = r"""<!doctype html>
