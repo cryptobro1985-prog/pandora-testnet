@@ -230,6 +230,132 @@ async def api_ig_discovery(payload: IGDiscoveryRequest):
 async def api_ig_comments(payload: IGCommentsRequest):
     return await instagram_media_comments(payload.media_id, payload.limit)
 
+
+async def _collect_instagram_events(api_result: dict) -> dict:
+    events = {k: [] for k in [
+        "Новые подписки","Новые подписчики","Поставленные лайки","Полученные лайки",
+        "Оставленные комментарии","Полученные комментарии","Публикации"
+    ]}
+    if api_result.get("status") != "ok":
+        return events
+    bd = ((api_result.get("response") or {}).get("business_discovery") or {})
+    media = ((bd.get("media") or {}).get("data") or [])[:10]
+    import asyncio
+    comment_tasks = []
+    for m in media:
+        permalink = m.get("permalink")
+        ts = m.get("timestamp")
+        caption = (m.get("caption") or "").strip()
+        events["Публикации"].append({
+            "title": caption[:90] or "Публикация Instagram",
+            "text": "Лайков: %s · комментариев: %s" % (m.get("like_count","—"), m.get("comments_count","—")),
+            "when": ts,
+            "url": permalink,
+        })
+        if m.get("like_count") is not None:
+            events["Полученные лайки"].append({
+                "title": "Лайки на публикации",
+                "text": "%s лайков на публикации%s" % (m.get("like_count"), (": "+caption[:90]) if caption else ""),
+                "when": ts,
+                "url": permalink,
+            })
+        if m.get("id"):
+            comment_tasks.append((m, instagram_media_comments(str(m["id"]), 50)))
+    if comment_tasks:
+        results = await asyncio.gather(*(task for _,task in comment_tasks))
+        for (m,_), res in zip(comment_tasks, results):
+            if res.get("status") != "ok":
+                continue
+            data = ((res.get("response") or {}).get("data") or [])
+            for item in data[:50]:
+                username = item.get("username") or "Публичный пользователь"
+                text = item.get("text") or ""
+                events["Полученные комментарии"].append({
+                    "title": "@"+username if username else "Комментарий",
+                    "text": text[:500],
+                    "when": item.get("timestamp"),
+                    "url": m.get("permalink"),
+                })
+    return events
+
+
+async def _collect_vk_events(user_result: dict) -> dict:
+    events = {k: [] for k in [
+        "Новые подписки","Новые подписчики","Поставленные лайки","Полученные лайки",
+        "Оставленные комментарии","Полученные комментарии","Сообщества","Стена"
+    ]}
+    if user_result.get("status") != "ok":
+        return events
+    users = user_result.get("response") or []
+    if not users:
+        return events
+    uid = users[0].get("id")
+    if uid is None:
+        return events
+    wall = await vk_wall_get(str(uid), 15)
+    if wall.get("status") != "ok":
+        return events
+    payload = wall.get("response") or {}
+    posts = payload.get("items") or []
+    import asyncio
+    jobs = []
+    for p in posts[:10]:
+        pid=p.get("id")
+        owner=p.get("owner_id",uid)
+        text=(p.get("text") or "").strip()
+        url=f"https://vk.com/wall{owner}_{pid}" if pid is not None else None
+        events["Стена"].append({
+            "title": text[:90] or "Публикация VK",
+            "text": "Лайков: %s · комментариев: %s" % (((p.get("likes") or {}).get("count","—")), ((p.get("comments") or {}).get("count","—"))),
+            "when": p.get("date"),
+            "url": url,
+        })
+        if pid is not None:
+            jobs.append((p,url,vk_wall_comments(str(owner),int(pid),100),vk_likes_get_list(str(owner),int(pid),"post",100)))
+    if jobs:
+        comments_results = await asyncio.gather(*(j[2] for j in jobs))
+        likes_results = await asyncio.gather(*(j[3] for j in jobs))
+        for (p,url,_,_), cres, lres in zip(jobs, comments_results, likes_results):
+            if cres.get("status")=="ok":
+                cp=cres.get("response") or {}
+                profiles={x.get("id"):x for x in cp.get("profiles") or []}
+                for cm in (cp.get("items") or [])[:100]:
+                    author=profiles.get(cm.get("from_id"),{})
+                    name=" ".join(x for x in [author.get("first_name"),author.get("last_name")] if x).strip() or str(cm.get("from_id") or "Пользователь")
+                    events["Полученные комментарии"].append({
+                        "title": name,
+                        "text": (cm.get("text") or "")[:500],
+                        "when": cm.get("date"),
+                        "url": url,
+                    })
+            if lres.get("status")=="ok":
+                lp=lres.get("response") or {}
+                for it in (lp.get("items") or [])[:100]:
+                    if isinstance(it,dict):
+                        name=" ".join(x for x in [it.get("first_name"),it.get("last_name")] if x).strip() or str(it.get("id") or "Пользователь")
+                    else:
+                        name=str(it)
+                    events["Полученные лайки"].append({
+                        "title": name,
+                        "text": "Поставил(а) лайк доступной публикации",
+                        "when": p.get("date"),
+                        "url": url,
+                    })
+    return events
+
+
+def _telegram_events(api_result: dict) -> dict:
+    events = {k: [] for k in ["Публичные чаты и каналы","Публичные сообщения","Комментарии / обсуждения","Реакции"]}
+    if api_result.get("status")=="ok" and api_result.get("chat"):
+        chat=api_result["chat"]
+        events["Публичные чаты и каналы"].append({
+            "title": chat.get("title") or chat.get("username") or "Telegram",
+            "text": chat.get("description") or ("Доступный "+str(chat.get("type") or "чат")),
+            "when": None,
+            "url": ("https://t.me/"+chat["username"]) if chat.get("username") else None,
+        })
+    return events
+
 @app.post("/api/search")
 async def search(payload: SearchRequest):
     """Run a real best-effort public lookup for supplied social profile URLs.
@@ -262,6 +388,12 @@ async def search(payload: SearchRequest):
 
         public_result = await public_task
         api_result = await api_task if api_task else {"status": "not_configured"}
+        if item.platform == "instagram":
+            events = await _collect_instagram_events(api_result)
+        elif item.platform == "vk":
+            events = await _collect_vk_events(api_result)
+        else:
+            events = _telegram_events(api_result)
 
         return {
             "platform": item.platform,
@@ -270,6 +402,7 @@ async def search(payload: SearchRequest):
             "handle": handle,
             "public": public_result,
             "api": api_result,
+            "events": events,
             "api_configured": bool(capabilities[item.platform]["configured"]),
         }
 
