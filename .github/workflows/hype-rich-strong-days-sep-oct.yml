@@ -8,6 +8,7 @@ on:
     paths:
       - ".github/workflows/hype-rich-strong-days-sep-oct.yml"
       - "research/hype_full_micro_202607/build_dense_full_micro.py"
+      - "research/hype_full_micro_202607/collect_missing_rich_layers.py"
 
 permissions:
   contents: read
@@ -118,7 +119,7 @@ test -s "$OUT/COLLECTION_AUDIT.json"
           RAW_BYTES=$(python - <<'PY'
           import json,os,pathlib
           m=json.load(open(pathlib.Path("rich_out_"+os.environ["MATRIX_ID"])/"manifest.json"))
-          print(int(m.get("downloaded_bytes") or 0))
+          print(int(m.get("downloaded_bytes_ephemeral") or m.get("downloaded_bytes") or 0))
           PY
           )
           OUT_BYTES=$(du -sb "$OUT" | awk '{print $1}')
