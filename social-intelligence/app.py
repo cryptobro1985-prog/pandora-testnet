@@ -1,9 +1,9 @@
 from __future__ import annotations
-import os,json
+import os,json,io,zipfile
 from pathlib import Path
 from datetime import datetime,timezone
 from fastapi import FastAPI,Response,HTTPException
-from fastapi.responses import FileResponse,PlainTextResponse
+from fastapi.responses import FileResponse,PlainTextResponse,StreamingResponse
 from pydantic import BaseModel,Field
 from connectors import normalize_username,business_discovery,media_comments,public_profile,public_embedded_collect,playwright_public_collect,instaloader_collect,warm_playwright
 from analysis import build_events,relationship_report,audience_quality,graph_payload,timeline
@@ -182,6 +182,28 @@ def session_status():
       "deep_scan_context_configured":bool(browser_cookie or storage_state or cdp or instaloader_session or meta),
       "supported_authorized_inputs":["IG_SESSION_JSON_B64","IG_BROWSER_STORAGE_STATE_B64","IG_CDP_ENDPOINT","IG_SESSIONID+IG_CSRFTOKEN","IG_SESSION_B64"]
     }
+
+@app.get("/api/bridge-extension.zip")
+def bridge_extension_zip():
+    bridge_dir=Path(__file__).resolve().parent/"bridge-extension"
+    names=("manifest.json","popup.html","popup.js")
+    missing=[n for n in names if not (bridge_dir/n).exists()]
+    if missing: raise HTTPException(status_code=404,detail="bridge_extension_missing")
+    buf=io.BytesIO()
+    with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as z:
+        for name in names:
+            z.write(bridge_dir/name,arcname="instagram-intelligence-bridge/"+name)
+        readme=("1. Open chrome://extensions or edge://extensions.\n"
+                "2. Enable Developer mode.\n"
+                "3. Unpack this ZIP and choose Load unpacked.\n"
+                "4. Open instagram.com and sign into your own account.\n"
+                "5. Open the extension, enter a PUBLIC @username and press SCAN PUBLIC PROFILE.\n"
+                "6. Open Instagram Intelligence and press FULL SCAN for the same username.\n\n"
+                "Passwords and Instagram cookies are not sent to the Intelligence backend. Only the collected public-profile result is uploaded.\n"
+                "Private profiles are intentionally rejected.\n")
+        z.writestr("instagram-intelligence-bridge/README.txt",readme)
+    buf.seek(0)
+    return StreamingResponse(buf,media_type="application/zip",headers={"Content-Disposition":"attachment; filename=instagram-intelligence-bridge.zip"})
 
 @app.get("/api/history/{username}")
 def api_history(username:str,limit:int=200):
