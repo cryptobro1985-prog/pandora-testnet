@@ -27,8 +27,8 @@ input[type=text],input[type=date],input[type=tel],input[type=url]{width:100%;min
 <div class="field"><label for="vk">ВКонтакте</label><input id="vk" type="url" placeholder="https://vk.com/..." maxlength="500"></div>
 <div class="field"><label for="telegram">Telegram</label><input id="telegram" type="url" placeholder="https://t.me/..." maxlength="500"></div>
 <div class="section">Изображение · необязательно</div><div class="file"><label for="photo">Фото для собственного справочника</label><input id="photo" type="file" accept="image/png,image/jpeg,image/webp"><img id="preview" class="preview" alt="Предпросмотр загруженного фото"><p class="small">Фото остаётся только на этом устройстве. Поиск человека по лицу не выполняется.</p></div>
-<div class="check"><input id="consent" type="checkbox" required><label for="consent">Я подтверждаю, что имею право проверять указанные данные и согласен с условиями поиска. Мне понятно, что это не является согласием третьего лица на сбор его личной истории.</label></div>
-<button class="btn" type="submit" id="go" disabled>Начать поиск</button><p class="small">MVP проверяет формат переданных ссылок. История чужих лайков, скрытых подписок, переписок и перемещений недоступна.</p>
+<div class="check"><input id="consent" type="checkbox"><label for="consent">Я подтверждаю, что имею право проверять указанные данные и согласен с условиями поиска. Мне понятно, что это не является согласием третьего лица на сбор его личной истории.</label></div>
+<button class="btn" type="submit" id="go">Начать поиск</button><p class="small">MVP проверяет формат переданных ссылок. История чужих лайков, скрытых подписок, переписок и перемещений недоступна.</p>
 </form></section>
 <aside class="stack"><section class="card"><h2>Обзор источников</h2><div id="apiStatus" class="small" style="margin-bottom:12px">Проверяем подключение API…</div><div class="stats"><div class="stat"><strong id="provided">0</strong><span>Передано ссылок</span></div><div class="stat"><strong>3</strong><span>Поддерживаемых платформы</span></div><div class="stat"><strong id="checked">0</strong><span>Проверено форматов</span></div><div class="stat"><strong id="errors">0</strong><span>Ошибок проверки</span></div></div></section>
 <section class="card"><h2>Этапы анализа</h2><div class="feature"><span class="dot"></span><div>Проверка структуры ссылок<div class="small">Нормализация и исключение неподдерживаемых адресов</div></div></div><div class="feature"><span class="dot"></span><div>Распределение по платформам<div class="small">Instagram, VK, Telegram</div></div></div><div class="feature"><span class="dot"></span><div>Сборка отчёта<div class="small">Источники, ограничения и результаты без домыслов</div></div></div><div class="notice warning">Для реального сбора контента потребуются разрешённые API, аутентификация и отдельный сервер. GitHub Actions выполняет тесты, а не постоянный поиск.</div></section></aside></div></div>
@@ -62,7 +62,7 @@ $("clearHistory").addEventListener("click",()=>{localStorage.removeItem(STORAGE_
 ["lastName","firstName","middleName","birth","city","phone","instagram","vk","telegram"].forEach(k=>$(k).addEventListener("input",saveDraft));
 restoreDraft();
 renderHistory();
-$("consent").addEventListener("change",()=>{$("go").disabled=!$("consent").checked;});
+
 $("photo").addEventListener("change",()=>{
  if(previewUrl) URL.revokeObjectURL(previewUrl); previewUrl=null; $("preview").style.display="none";
  const file=$("photo").files?.[0];
@@ -121,8 +121,10 @@ function render(){
  }
 }
 $("search").addEventListener("submit",event=>{
- event.preventDefault();if(!$("consent").checked)return;
- $("go").disabled=true;$("go").textContent="Проверяем ссылки…";
+ event.preventDefault();
+ const provided = Object.values(getDraft()).some(v=>String(v||"").trim());
+ if(!provided){ alert("Добавьте хотя бы одно значение: имя, телефон или ссылку на профиль."); return; }
+ $("go").disabled=true;$("go").textContent="Проверяем доступные данные…";
  requestAnimationFrame(()=>{makeReport();$("go").disabled=false;$("go").textContent="Начать поиск";});
 });
 $("export").addEventListener("click",()=>{
