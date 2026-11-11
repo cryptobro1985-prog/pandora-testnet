@@ -366,3 +366,117 @@ has not been measured. The source adapter may not populate book_ts_ms and
 therefore suppress all live L50 predictors; inspect source mappings and
 freshness coverage before any model claims. Historical July 161/1252 crossed
 books remain excluded. No new edge, MFE or PnL measured; real orders OFF.
+
+## Frozen Ultra Survival trading-layer checkpoint — 2026-11-11
+
+**Critical course correction:** stop replacing the strong local detector with
+later generic ensembles. The current primary Local detector is the exact
+frozen `HYPE_LOCAL_ULTRA_SURVIVAL_V2`.
+
+Reproduced detector evidence:
+- development originally 167/167 true-first, 0 false-first;
+- sealed May 31/31 true-first, 0 false-first;
+- new replay over May + Jul-Aug + Aug-Sep + Sep-Oct + Oct-Nov:
+  **152 accepted / 152 true-first / 0 false-first**.
+Coverage remains only ~26–28% by block; this is a high-confidence subset, NOT
+all locals and not a future 100% guarantee.
+
+### Verified geometry
+Run `42996512191`, report
+`research/hype_strong_global_local/ULTRA_SURVIVAL_TRADE_GEOMETRY_LATEST.json`.
+- median Ultra entry distance from true Local: 1.992%;
+- median MFE after entry: 1.297%;
+- median MAE: 0.356%;
+- true-signal MAE before first +0.5% MFE: p95 1.160%, p99 1.933%;
+- 1.5% emergency stop survives 96.71% of true signals until +0.5% MFE;
+- 2.0% emergency stop survives 99.34%;
+- wait-for-next-opposite-Ultra alone is NOT a good exit (median matched return
+  ~-0.049%, positive fraction ~48.98%).
+
+### Strongest current historical trading layer
+Code:
+`research/hype_strong_global_local/ultra_survival_dynamic_mfe_exit_v1.py`
+Workflow:
+`.github/workflows/hype-ultra-survival-dynamic-mfe-exit.yml`
+Latest verified run: `42997543119` SUCCESS.
+Report:
+`research/hype_strong_global_local/ULTRA_SURVIVAL_DYNAMIC_MFE_EXIT_LATEST.json`.
+
+**MFE-capture-first variant** (parameters selected ONLY on Jul-Aug/Aug-Sep/Sep-Oct):
+- entry = frozen Ultra signal, LOW LONG / HIGH SHORT;
+- emergency stop = 1.50% underlying;
+- HOLD normally until MFE >= +0.75%;
+- after activation, close at next minute open when drawdown from current MFE
+  reaches `max(0.25%, 35% * MFE)`;
+- one completed bar confirmation;
+- opposite frozen Ultra confirmation => immediate CLOSE + FLIP;
+- modeled 12bps round-trip cost already included.
+
+Development:
+- Jul-Aug 22/26 wins, +4.272%, DD 3.214%, median MFE capture 58.79%;
+- Aug-Sep 20/27 wins, +0.375%, DD 6.628%, capture 55.95%;
+- Sep-Oct 28/34 wins, +6.152%, DD 3.617%, capture 57.41%.
+
+Later historical Oct-Nov (not used to select exit):
+- 34 trades, 30 winners = **88.24%**;
+- **+15.017% underlying compound**;
+- max DD 2.846%;
+- median MFE 0.913%, median MAE 0.397%;
+- median MFE capture **60.15%**;
+- 3 emergency stops, 30 MFE exits, 1 opposite-Ultra flip.
+
+May diagnostic (detector was sealed May; EXIT was not):
+- 27/31 winners;
+- +11.046% underlying;
+- DD 3.223%;
+- median capture 58.30%.
+
+Statistical caveat: hundreds of exit combinations were evaluated on development,
+so full entry+exit system is only **PROMISING_HISTORICAL**. Freeze it now;
+new forward must be scored with NO retuning.
+
+### Bounded paper risk reference for capture-first variant
+Stress assumptions: 12bps base modeled costs +8bps extra friction,
++0.25% adverse gap only on emergency-stop trades, approximate maintenance
+0.5%, require >=2.5x liquidation-distance cushion and <=2% equity loss for a
+stressed emergency stop.
+
+Best bounded scenario by maximum effective exposure under those gates:
+- 5x leverage;
+- 20% equity margin;
+- 1.0x total-equity notional exposure;
+- stressed Oct-Nov compound +11.090%;
+- stressed max DD 3.650%;
+- stressed one-stop equity loss 1.95%;
+- approximate liquidation distance 19.5%;
+- cushion 10x.
+
+Equivalent 10x/10% has same 1.0x exposure/PnL but much less liquidation
+cushion (~4.87x), so 5x/20% is structurally safer in this approximation.
+
+**25x/20% is rejected**:
+- 5.0x equity exposure;
+- attractive historical stress compound (~+61.68%) is NOT a safety argument;
+- stressed one-stop account loss ~9.75%;
+- approximate liquidation cushion only ~1.79x;
+- fails both selected safety gates.
+
+No stop/leverage setting guarantees no liquidation under arbitrary price gaps,
+outage, mark-price dislocation or failed stop execution.
+
+### Earlier entry
+HARD120 enters closer historically (median ~1.293% from local) than Ultra
+(~1.992%), but it has false-first signals (Oct-Nov 53 true / 4 false, ~92.98%
+precision, and weaker Jul transfer). EARLY60 failed its untouched September
+promotion check.
+
+Therefore full-size entry remains Ultra. HARD120/EARLY60 may only be studied
+as a **small early probe**, scaling to full exposure only when Ultra confirms.
+Do NOT authorize probe sizing until its two-stage economic replay is completed.
+
+Permanent summary:
+`research/hype_strong_global_local/ULTRA_SURVIVAL_TRADING_LAYER_2026-11-11.md`
+
+REAL ORDERS OFF. Next priority: freeze the exact capture-first strategy and
+score genuinely NEW forward data; separately run the HARD120-probe -> Ultra
+scale-in economic replay without changing the frozen full-size detector.
