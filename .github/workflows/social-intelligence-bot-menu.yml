@@ -1,0 +1,27 @@
+name: Social Intelligence - Configure Telegram Menu
+
+on:
+  workflow_dispatch:
+    inputs:
+      miniapp_url:
+        description: 'Deployed HTTPS Mini App URL'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Connect Mini App to Telegram menu
+        env:
+          BOT_TOKEN: ${{ secrets.SOCIAL_INTELLIGENCE_BOT_TOKEN }}
+          MINIAPP_URL: ${{ inputs.miniapp_url }}
+        run: python social-intelligence/configure_telegram_menu.py
