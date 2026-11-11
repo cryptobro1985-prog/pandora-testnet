@@ -50,3 +50,8 @@ def test_build_events_dedupes():
     e=build_events("target",posts)
     kinds={x["kind"] for x in e}
     assert {"comment_in","like_in","mention_out","tag_out","coauthor_out"} <= kinds
+
+
+def test_caption_mentions_fallback():
+    e=build_events("target",[{"permalink":"x","timestamp":"2026-01-01T00:00:00Z","caption":"hello @alice and @bob.","comments_detail":[],"likers":[]}])
+    assert {x["actor"] for x in e if x["kind"]=="mention_out"}=={"alice","bob"}
