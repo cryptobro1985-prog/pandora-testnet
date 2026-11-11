@@ -7,7 +7,7 @@ output, chosen trades or path labels into live predictive features.
 from __future__ import annotations
 import argparse, csv, json
 from datetime import datetime, timezone
-from bisect import bisect_left
+from bisect import bisect_right
 
 def parse_csv(path):
     rows=[]
@@ -66,7 +66,7 @@ def oracle(rows, min_net_return=.0025, fee_bps=6, slip_bps=2,
                 t_entry,px_entry,bid_entry,ask_entry=seg[i]
                 if t_exit-t_entry<min_hold_seconds:continue
                 # Last completed exit must precede this entry by cooldown.
-                prior_idx=bisect_left(times,t_entry-max(cooldown_seconds,1e-9),0,i)
+                prior_idx=bisect_right(times,t_entry-max(cooldown_seconds,1e-9),0,i)
                 base=best[prior_idx]
                 for side,ret in (("LONG",bid_exit/ask_entry-1-friction),
                                  ("SHORT",1-ask_exit/bid_entry-friction)):
