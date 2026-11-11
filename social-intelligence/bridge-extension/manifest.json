@@ -1,0 +1,13 @@
+{
+  "manifest_version":3,
+  "name":"Instagram Intelligence Bridge",
+  "version":"1.0.0",
+  "description":"Collects public Instagram profile data from your already logged-in tab and sends only the collected public data to Instagram Intelligence.",
+  "permissions":["activeTab","scripting"],
+  "host_permissions":[
+    "https://www.instagram.com/*",
+    "https://instagram.com/*",
+    "https://social-intelligence-live-v2.onrender.com/*"
+  ],
+  "action":{"default_popup":"popup.html","default_title":"Instagram Intelligence Bridge"}
+}
