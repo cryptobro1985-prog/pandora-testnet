@@ -98,38 +98,56 @@ def normalize_profile(platform: str, raw_url: str) -> str:
 
 
 
-def configure_telegram_menu_on_startup() -> None:
-    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-    target = os.getenv("MINIAPP_URL", "").strip()
-    if not token or not target.startswith("https://"):
-        return
-    payload = json.dumps({
-        "menu_button": {
-            "type": "web_app",
-            "text": "Открыть Social Intelligence",
-            "web_app": {"url": target},
-        }
-    }, ensure_ascii=False).encode("utf-8")
+TELEGRAM_STATUS = {"configured": False, "menu_button": False, "bot_username": None, "error": None}
+
+def _telegram_api_call(token: str, method: str, payload: dict | None = None) -> dict:
     conn = HTTPSConnection("api.telegram.org", timeout=15)
     try:
+        body = json.dumps(payload or {}, ensure_ascii=False).encode("utf-8")
         conn.request(
             "POST",
-            "/bot" + token + "/setChatMenuButton",
-            body=payload,
+            "/bot" + token + "/" + method,
+            body=body,
             headers={"Content-Type": "application/json"},
         )
         response = conn.getresponse()
-        body = response.read().decode("utf-8", "replace")
-        data = json.loads(body)
+        data = json.loads(response.read().decode("utf-8", "replace"))
         if response.status != 200 or not data.get("ok"):
-            raise RuntimeError("Telegram Bot API rejected setChatMenuButton")
+            raise RuntimeError("Telegram Bot API rejected " + method)
+        return data
     finally:
         conn.close()
 
+def configure_telegram_menu_on_startup() -> None:
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    target = os.getenv("MINIAPP_URL", "").strip()
+    TELEGRAM_STATUS.update({"configured": False, "menu_button": False, "bot_username": None, "error": None})
+    if not token or not target.startswith("https://"):
+        TELEGRAM_STATUS["error"] = "missing_token_or_url"
+        return
+    try:
+        me = _telegram_api_call(token, "getMe")
+        username = (me.get("result") or {}).get("username")
+        TELEGRAM_STATUS["configured"] = True
+        TELEGRAM_STATUS["bot_username"] = username
+        _telegram_api_call(token, "setChatMenuButton", {
+            "menu_button": {
+                "type": "web_app",
+                "text": "Открыть Social Intelligence",
+                "web_app": {"url": target},
+            }
+        })
+        TELEGRAM_STATUS["menu_button"] = True
+    except Exception:
+        TELEGRAM_STATUS["error"] = "telegram_api_error"
 
 @app.on_event("startup")
 def startup_configure_telegram_menu():
     configure_telegram_menu_on_startup()
+
+@app.get("/api/telegram/bot-status")
+def telegram_bot_status():
+    return TELEGRAM_STATUS
 
 @app.get("/")
 def index():
