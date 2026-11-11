@@ -21,7 +21,7 @@ def test_miniapp_has_controls_and_report_tabs():
     parser = Tags()
     parser.feed(html)
     assert {"search", "consent", "go", "instagram", "vk", "telegram",
-            "name", "birth", "city", "phone", "photo", "report",
+            "lastName", "firstName", "middleName", "birth", "city", "phone", "photo", "report",
             "tabs", "export", "reportContent"} <= parser.ids
     assert parser.scripts == 1
     assert "localStorage" not in html
