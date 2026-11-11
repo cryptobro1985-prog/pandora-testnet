@@ -1,0 +1,150 @@
+{
+  "version": "HYPE-ULTRA-SURVIVAL-V2-DYNAMIC-MFE-EXIT-v1",
+  "detector": "frozen Ultra Survival V2 unchanged",
+  "selection": "exit parameters selected only on JUL_AUG+AUG_SEP+SEP_OCT; robustness maximizes minimum block return first",
+  "selected": {
+    "stop_pct": 2.0,
+    "activation_mfe_pct": 0.5,
+    "recoil_floor_pct": 0.35,
+    "recoil_fraction_of_mfe": 0.45,
+    "confirmation_bars": 1,
+    "require_opposite_flow": true
+  },
+  "development": {
+    "JUL_AUG": {
+      "trades": 26,
+      "wins": 20,
+      "win_rate": 0.7692307692307693,
+      "compound_pct": 5.650878511056501,
+      "maxdd_pct": 2.1200000000000108,
+      "median_mfe_pct": 0.858352428274195,
+      "median_mae_pct": 0.40770395883042987,
+      "median_capture": 0.3237763583192286,
+      "stop_count": 1,
+      "flip_count": 0,
+      "exit_reasons": {
+        "EMERGENCY_STOP": 1,
+        "MFE_RECOIL_FLOW": 25
+      }
+    },
+    "AUG_SEP": {
+      "trades": 27,
+      "wins": 19,
+      "win_rate": 0.7037037037037037,
+      "compound_pct": 3.1010774785319217,
+      "maxdd_pct": 3.339925392647358,
+      "median_mfe_pct": 0.651162790697668,
+      "median_mae_pct": 0.40850654811965814,
+      "median_capture": 0.36842105263156016,
+      "stop_count": 2,
+      "flip_count": 1,
+      "exit_reasons": {
+        "EMERGENCY_STOP": 2,
+        "MFE_RECOIL_FLOW": 24,
+        "OPPOSITE_ULTRA_FLIP": 1
+      }
+    },
+    "SEP_OCT": {
+      "trades": 34,
+      "wins": 26,
+      "win_rate": 0.7647058823529411,
+      "compound_pct": 3.3797249105329774,
+      "maxdd_pct": 3.9074277175611183,
+      "median_mfe_pct": 0.7725967202271533,
+      "median_mae_pct": 0.352097546142055,
+      "median_capture": 0.39469416126041496,
+      "stop_count": 2,
+      "flip_count": 0,
+      "exit_reasons": {
+        "EMERGENCY_STOP": 2,
+        "MFE_RECOIL_FLOW": 32
+      }
+    }
+  },
+  "development_positive_all_blocks": true,
+  "historical_later_test_OCT_NOV": {
+    "trades": 34,
+    "wins": 26,
+    "win_rate": 0.7647058823529411,
+    "compound_pct": 4.466480556536201,
+    "maxdd_pct": 2.371231072449087,
+    "median_mfe_pct": 0.7123689289618929,
+    "median_mae_pct": 0.35112082502636865,
+    "median_capture": 0.3197968376539902,
+    "stop_count": 3,
+    "flip_count": 1,
+    "exit_reasons": {
+      "EMERGENCY_STOP": 3,
+      "MFE_RECOIL_FLOW": 30,
+      "OPPOSITE_ULTRA_FLIP": 1
+    }
+  },
+  "MAY_diagnostic_not_used_for_exit_selection": {
+    "trades": 31,
+    "wins": 28,
+    "win_rate": 0.9032258064516129,
+    "compound_pct": 22.2968253551866,
+    "maxdd_pct": 2.1199999999999997,
+    "median_mfe_pct": 0.9536026332986336,
+    "median_mae_pct": 0.429392785230831,
+    "median_capture": 0.40271493212670634,
+    "stop_count": 1,
+    "flip_count": 0,
+    "exit_reasons": {
+      "EMERGENCY_STOP": 1,
+      "MFE_RECOIL_FLOW": 30
+    }
+  },
+  "signal_scores": {
+    "MAY": {
+      "episodes": 118,
+      "accepted": 31,
+      "true_first": 31,
+      "false_first": 0,
+      "precision": 1.0,
+      "recall": 0.2627118644067797
+    },
+    "JUL_AUG": {
+      "episodes": 101,
+      "accepted": 26,
+      "true_first": 26,
+      "false_first": 0,
+      "precision": 1.0,
+      "recall": 0.25742574257425743
+    },
+    "AUG_SEP": {
+      "episodes": 94,
+      "accepted": 27,
+      "true_first": 27,
+      "false_first": 0,
+      "precision": 1.0,
+      "recall": 0.2872340425531915
+    },
+    "SEP_OCT": {
+      "episodes": 127,
+      "accepted": 34,
+      "true_first": 34,
+      "false_first": 0,
+      "precision": 1.0,
+      "recall": 0.2677165354330709
+    },
+    "OCT_NOV": {
+      "episodes": 120,
+      "accepted": 34,
+      "true_first": 34,
+      "false_first": 0,
+      "precision": 1.0,
+      "recall": 0.2833333333333333
+    }
+  },
+  "research_only": true,
+  "real_orders": false,
+  "verdict": "PROMISING_HISTORICAL_EXIT_NOT_PRODUCTION",
+  "limitations": [
+    "Oct-Nov and May have been inspected elsewhere; neither is a new untouched system OOS.",
+    "OHLC emergency-stop execution and 12bps cost are proxies.",
+    "No exact mark-price liquidation, latency, capacity or queue model.",
+    "Parameter search tests hundreds of exit combinations; multiple-testing risk remains.",
+    "New genuinely untouched forward required before any live risk."
+  ]
+}
