@@ -1,0 +1,220 @@
+name: HYPE Unified Local Intelligence v2 — Quantum + JEPA + Cortex
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/hype_local_only/train_unified_local_intelligence_v2.py"
+      - ".github/workflows/hype-unified-local-intelligence-v2.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: hype-unified-local-intelligence-v2
+  cancel-in-progress: true
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      PYTHONUNBUFFERED: "1"
+      OMP_NUM_THREADS: "4"
+      MKL_NUM_THREADS: "4"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install research stack
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy river scikit-learn
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m py_compile             research/hype_local_only/train_unified_local_intelligence_v2.py             research/hype_local_only/train_local_ensemble_30d.py             research/hype_local_only/feature_discovery.py             research/hype_local_only/h1_teacher_context.py
+
+      - name: Inventory all retained HYPE research artifacts
+        id: inventory
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf all_saved_sources history30 enriched
+          mkdir -p all_saved_sources history30 enriched
+          : > /tmp/artifacts.jsonl
+          for PAGE in $(seq 1 10); do
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&page=${PAGE}"               --jq '.artifacts[] | select(.expired|not)' >> /tmp/artifacts.jsonl || true
+          done
+          python - <<'PY'
+          import json,pathlib
+          rows=[]
+          for line in pathlib.Path("/tmp/artifacts.jsonl").read_text().splitlines():
+              try:rows.append(json.loads(line))
+              except Exception:pass
+          rows.sort(key=lambda x:x.get("created_at",""))
+          out=[{k:r.get(k) for k in ("id","name","size_in_bytes","created_at","expires_at","workflow_run")} for r in rows if "HYPE" in str(r.get("name","")).upper() or "LOCAL116" in str(r.get("name","")).upper()]
+          pathlib.Path("all_saved_sources/ARTIFACT_INVENTORY.json").write_text(json.dumps(out,indent=2))
+          print("retained_hype_artifacts",len(out))
+          for r in out[-40:]: print(r.get("id"),r.get("name"),r.get("size_in_bytes"))
+          PY
+
+      - name: Recover canonical 116-point Local dataset
+        id: base
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_ID="$(python - <<'PY'
+          import json
+          a=json.load(open("all_saved_sources/ARTIFACT_INVENTORY.json"))
+          q=[x for x in a if x.get("name")=="local116-HYPE"]
+          print(q[-1]["id"] if q else "")
+          PY
+          )"
+          test -n "$BASE_ID" || { echo "missing retained local116-HYPE"; exit 2; }
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$BASE_ID/zip" > history30.zip
+          unzip -q history30.zip -d history30
+          test -s history30/candidate_snapshots.jsonl.gz
+          test -s history30/compact_1m.jsonl.gz
+          test -s history30/labels.json.gz
+          test -s history30/feature_availability.json
+          echo "base_id=$BASE_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Recover enriched causal historical gaps if retained
+        id: enriched
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          GAP_ID="$(python - <<'PY'
+          import json
+          a=json.load(open("all_saved_sources/ARTIFACT_INVENTORY.json"))
+          q=[x for x in a if x.get("name")=="HYPE-LOCAL-HISTORICAL-GAPS"]
+          print(q[-1]["id"] if q else "")
+          PY
+          )"
+          SNAP="history30/candidate_snapshots.jsonl.gz"
+          if [ -n "$GAP_ID" ]; then
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$GAP_ID/zip" > enriched.zip
+            unzip -q enriched.zip -d enriched
+            if test -s enriched/candidate_snapshots_enriched.jsonl.gz; then
+              SNAP="enriched/candidate_snapshots_enriched.jsonl.gz"
+            fi
+          fi
+          echo "snapshots=$SNAP" >> "$GITHUB_OUTPUT"
+          echo "gap_id=$GAP_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Recover all compatible retained master/full-micro/recent evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' > /tmp/selected.tsv
+          import json,re
+          a=json.load(open("all_saved_sources/ARTIFACT_INVENTORY.json"))
+          # Exact master plus latest research artifacts likely to contain reusable
+          # causal candidate/full-micro/recent evidence. Avoid re-downloading base.
+          chosen=[]
+          for x in a:
+              n=str(x.get("name",""))
+              if n in ("local116-HYPE","HYPE-LOCAL-HISTORICAL-GAPS"): continue
+              if n=="HYPE-HISTORY-20260712-20261103-MASTER" or re.search(r"HYPE.*(FULL.?MICRO|MICRO|RECENT|FORWARD|RAW)",n,re.I):
+                  chosen.append(x)
+          # Keep newest instance per artifact name and cap total selected bytes to
+          # 6 GiB so the GitHub runner remains reproducible.
+          latest={}
+          for x in chosen: latest[x["name"]]=x
+          total=0
+          for x in sorted(latest.values(),key=lambda z:z.get("created_at",""),reverse=True):
+              size=int(x.get("size_in_bytes") or 0)
+              if total+size>6*1024**3: continue
+              total+=size
+              print(f'{x["id"]}\t{x["name"]}\t{size}')
+          PY
+          while IFS=$'\t' read -r ID NAME SIZE; do
+            [ -z "${ID:-}" ] && continue
+            SAFE="$(printf '%s' "$NAME" | tr -cs 'A-Za-z0-9._-' '_')"
+            mkdir -p "all_saved_sources/$SAFE"
+            echo "download artifact $ID $NAME bytes=$SIZE"
+            if gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$ID/zip" > "/tmp/$SAFE.zip"; then
+              unzip -q "/tmp/$SAFE.zip" -d "all_saved_sources/$SAFE" || true
+              rm -f "/tmp/$SAFE.zip"
+            fi
+          done < /tmp/selected.tsv
+          du -sh all_saved_sources || true
+
+      - name: Train unified Quantum + JEPA + Cortex intelligence
+        id: train
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf unified_out
+          mkdir -p unified_out
+          python -m research.hype_local_only.train_unified_local_intelligence_v2             --snapshots "${{ steps.enriched.outputs.snapshots }}"             --compact-1m history30/compact_1m.jsonl.gz             --labels-gz history30/labels.json.gz             --availability history30/feature_availability.json             --extra-root all_saved_sources             --output unified_out             --epochs 18             --workers 4
+          test -s unified_out/HYPE_UNIFIED_LOCAL_INTELLIGENCE_V2.pt
+          test -s unified_out/HYPE_UNIFIED_LOCAL_INTELLIGENCE_V2_REPORT.json
+
+      - name: Upload immutable unified bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-UNIFIED-LOCAL-INTELLIGENCE-V2-${{ github.run_id }}
+          path: unified_out/**
+          if-no-files-found: warn
+          retention-days: 90
+          compression-level: 0
+
+      - name: Publish auditable result to research branch
+        if: always()
+        env:
+          TRAIN_OUTCOME: ${{ steps.train.outcome }}
+          BASE_ID: ${{ steps.base.outputs.base_id }}
+          GAP_ID: ${{ steps.enriched.outputs.gap_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p research/hype_local_only/results
+          if test -s unified_out/HYPE_UNIFIED_LOCAL_INTELLIGENCE_V2_REPORT.json; then
+            cp unified_out/HYPE_UNIFIED_LOCAL_INTELLIGENCE_V2_REPORT.json               research/hype_local_only/results/HYPE_UNIFIED_LOCAL_INTELLIGENCE_V2_LATEST.json
+          else
+            python - <<'PY'
+          import json,os,pathlib
+          pathlib.Path("research/hype_local_only/results/HYPE_UNIFIED_LOCAL_INTELLIGENCE_V2_LATEST.json").write_text(json.dumps({
+            "version":"HYPE-UNIFIED-LOCAL-INTELLIGENCE-v2",
+            "status":"WORKFLOW_FAILED_BEFORE_REPORT",
+            "train_outcome":os.environ.get("TRAIN_OUTCOME"),
+            "github_run_id":os.environ.get("GITHUB_RUN_ID"),
+            "github_sha":os.environ.get("GITHUB_SHA"),
+            "base_artifact_id":os.environ.get("BASE_ID"),
+            "gap_artifact_id":os.environ.get("GAP_ID"),
+            "research_only":True,
+            "real_orders":False
+          },indent=2))
+          PY
+          fi
+          cp all_saved_sources/ARTIFACT_INVENTORY.json             research/hype_local_only/results/HYPE_UNIFIED_SOURCE_INVENTORY.json || true
+          git config user.name "pandora-research-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add research/hype_local_only/results/HYPE_UNIFIED_LOCAL_INTELLIGENCE_V2_LATEST.json                   research/hype_local_only/results/HYPE_UNIFIED_SOURCE_INVENTORY.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "research(hype): publish unified Quantum JEPA Cortex v2 result [skip ci]"
+          for i in 1 2 3 4; do
+            git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104 || true
+            git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104 && exit 0
+            sleep 4
+          done
+          exit 1
