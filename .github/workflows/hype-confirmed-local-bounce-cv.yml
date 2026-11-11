@@ -7,7 +7,7 @@ on:
         description: "Causal decision observation clock"
         type: choice
         required: true
-        default: legacy_age_grid
+        default: completed_m1_events
         options:
           - legacy_age_grid
           - completed_m1_events
@@ -48,7 +48,7 @@ jobs:
         run: |
           python -m research.hype_false_local_entry.confirmed_local_bounce_cv \
             --master in/master.zip \
-            --decision-sampling "${{ inputs.decision_sampling || 'legacy_age_grid' }}" \
+            --decision-sampling "${{ inputs.decision_sampling || 'completed_m1_events' }}" \
             --output out/HYPE_CONFIRMED_LOCAL_BOUNCE_CV.json | tee out/run.log
       - name: Validate causal CV output contract
         run: |
