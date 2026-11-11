@@ -139,7 +139,7 @@ def _book_features(state,price,side):
     changes=list(getattr(state,"book_changes",[]) or [])
     ts=int(getattr(state,"last_ts_ms",0) or 0)
     for sec in (15,60,180):
-        cs=[c for t,c in changes if int(t)>=ts-sec*1000]
+        cs=[c for t,c in changes if ts-sec*1000 <= int(t) <= ts]
         if not cs:continue
         sums={k:sum(float(c.get(k,0.0) or 0.0) for c in cs) for k in ("bid_add","bid_cancel","ask_add","ask_cancel")}
         addden=sums["bid_add"]+sums["ask_add"];canden=sums["bid_cancel"]+sums["ask_cancel"]
@@ -156,7 +156,7 @@ def _liq_features(state,x,side):
     ts=int(getattr(state,"last_ts_ms",0) or 0)
     liqs=list(getattr(state,"liqs",[]) or [])
     for sec in (15,60,180,300):
-        q=[z for z in liqs if int(z.get("ts_ms",0))>=ts-sec*1000]
+        q=[z for z in liqs if ts-sec*1000 <= int(z.get("ts_ms",0)) <= ts]
         if not q:continue
         lng=sum(float(z.get("notional",0.0) or 0.0) for z in q if z.get("side",0)>0)
         sht=sum(float(z.get("notional",0.0) or 0.0) for z in q if z.get("side",0)<0)
