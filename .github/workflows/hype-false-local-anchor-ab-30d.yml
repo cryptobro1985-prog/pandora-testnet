@@ -1,0 +1,43 @@
+name: HYPE False-Local Anchor Churn A/B 30D
+on:
+  workflow_dispatch:
+  push:
+    branches: [research/hype-h1-local-v5-oi-microstructure-20261104]
+    paths:
+      - ".github/workflows/hype-false-local-anchor-ab-30d.yml"
+      - "research/hype_false_local_entry/compare_anchor_reset_modes.py"
+      - "research/hype_false_local_entry/causal_sequential_engine.py"
+permissions:
+  contents: read
+  actions: read
+jobs:
+  anchor-ab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Restore fixed 30D source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p _raw data/octnov results
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/13435356156/zip" > /tmp/octnov.zip
+          unzip -q /tmp/octnov.zip -d _raw
+          found="$(find _raw -type f -name compact_1m.jsonl.gz -print -quit)"
+          test -n "$found" || { echo "::error::Missing compact_1m.jsonl.gz"; exit 1; }
+          cp "$found" data/octnov/compact_1m.jsonl.gz
+      - name: Compare baseline versus retained structural anchors
+        run: |
+          set -euo pipefail
+          python -m research.hype_false_local_entry.compare_anchor_reset_modes --base-dir data/octnov --out results/ANCHOR_AB_30D.json 2>&1 | tee results/ANCHOR_AB_RUN.log
+      - name: Upload A/B evidence regardless of failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-ANCHOR-AB-30D-${{ github.run_id }}
+          path: results/
+          retention-days: 14
