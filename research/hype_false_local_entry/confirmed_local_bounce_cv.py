@@ -231,7 +231,17 @@ def run_side(periods, rows, side):
             k: round(sum(k in r["features"] for r in train) / len(train), 6)
             for k in names
         } if train else {}
+        # SHA-verified availability alone does not prove model use.
+        certified_names = set().union(*(
+            {k for k, v in (r.get("clean_features") or {}).items()
+             if legal_predictor(k, v)}
+            for r in train
+        )) if train else set()
+        selected_certified = sorted(certified_names.intersection(names))
         folds.append({"holdout": hold, "threshold": th,
+                      "selected_certified_micro_feature_names": selected_certified,
+                      "selected_certified_micro_feature_count": len(selected_certified),
+                      "certified_micro_used_in_model": bool(selected_certified),
                       "calibration": calibration_metrics, "inner_oof_folds": inner_folds,
                       "test": test_metrics, "test_records": records,
                       "feature_count": len(names),
