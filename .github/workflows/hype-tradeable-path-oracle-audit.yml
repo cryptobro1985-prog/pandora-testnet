@@ -6,6 +6,8 @@ on:
     paths:
       - 'research/hype_movement_signature/tradeable_path_oracle_v2.py'
       - 'research/hype_movement_signature/test_tradeable_path_oracle_v2*.py'
+      - 'research/hype_movement_signature/strict_daily_path_audit.py'
+      - 'research/hype_movement_signature/test_strict_daily_path_audit.py'
       - '.github/workflows/hype-tradeable-path-oracle-audit.yml'
   workflow_dispatch:
 jobs:
@@ -20,4 +22,4 @@ jobs:
       - name: Run independent exhaustive audit and unit tests
         run: |
           cd research/hype_movement_signature
-          python -m unittest -v test_tradeable_path_oracle_v2.py test_tradeable_path_oracle_v2_bruteforce.py
+          python -m unittest -v test_tradeable_path_oracle_v2.py test_tradeable_path_oracle_v2_bruteforce.py test_strict_daily_path_audit.py
