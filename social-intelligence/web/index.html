@@ -8,7 +8,7 @@ main{max-width:1050px;padding:18px 15px 66px;margin:auto}button,input{font:inher
 input[type=text],input[type=date],input[type=tel],input[type=url]{width:100%;min-width:0;border-radius:11px;background:#081121;color:var(--text);border:1px solid #354760;padding:11px 12px;outline:none;transition:border-color .15s}input::placeholder{color:#647d95}input:focus{border-color:var(--mint)}
 .file{border:1px dashed #405b72;border-radius:11px;background:#111e30;padding:11px}input[type=file]{max-width:100%;font-size:11px;color:var(--muted)}.preview{display:none;width:65px;height:65px;object-fit:cover;border-radius:9px;margin-top:10px}
 .check{display:flex;gap:12px;align-items:flex-start;background:#0a1628;border:1px solid var(--border);padding:13px;border-radius:12px;margin:16px 0}.check input{accent-color:var(--mint);width:18px;height:18px;margin:1px 0 0;flex:none}.check label{font-weight:450;line-height:1.55}.btn{display:block;border:0;width:100%;background:linear-gradient(90deg,#8df5c8,#9bc0ff);color:#0b1930;font-weight:850;padding:13px;border-radius:12px}.btn:disabled{opacity:.4;cursor:not-allowed}.small{font-size:11px;color:var(--muted);line-height:1.6}.stats{display:grid;grid-template-columns:1fr 1fr;gap:9px}.stat{border:1px solid var(--border);border-radius:13px;background:#0b1628;padding:15px}.stat strong{display:block;font-size:27px;color:var(--mint);line-height:1.2}.stat span{font-size:11px;color:var(--muted)}.feature{padding:10px 0;border-bottom:1px solid #2c3c4c;display:flex;align-items:flex-start;gap:10px}.feature:last-child{border:0}.dot{width:8px;height:8px;margin-top:5px;border-radius:50%;background:var(--mint);flex:none}
-#report{display:none;margin-top:20px}.reportHead{display:flex;align-items:center;justify-content:space-between;gap:10px}.tabs{display:flex;gap:8px;overflow-x:auto;scrollbar-width:thin;padding:12px 0}.tab{border:1px solid #32445a;background:#18253a;color:#bbcce0;border-radius:10px;padding:9px 13px;white-space:nowrap}.tab.active{background:#153a31;color:var(--mint);border-color:#4b8f78}.source{padding:14px;border-radius:12px;background:#0c1829;border:1px solid var(--border);margin:10px 0;overflow-wrap:anywhere}.source h3{margin:0 0 6px;font-size:14px}.source a{color:var(--mint)}.status{font-size:11px;color:#b8d0ec;background:#24364f;border-radius:7px;padding:4px 7px}.line{display:flex;justify-content:space-between;align-items:center;gap:10px}.notice{padding:13px;border-left:3px solid #8ab9ff;background:#162439;color:#c7d8e9;border-radius:8px;margin:11px 0;font-size:12px}.warning{border-left-color:#ffca86}.loading{display:none;color:var(--mint);font-size:12px;margin:11px 0}.empty{font-size:13px;color:var(--muted);padding:22px 10px;text-align:center}
+#report{display:none;margin-top:20px}.reportHead{display:flex;align-items:center;justify-content:space-between;gap:10px}.tabs{display:flex;gap:8px;overflow-x:auto;scrollbar-width:thin;padding:12px 0}.tab{border:1px solid #32445a;background:#18253a;color:#bbcce0;border-radius:10px;padding:9px 13px;white-space:nowrap}.tab.active{background:#153a31;color:var(--mint);border-color:#4b8f78}.source{padding:14px;border-radius:12px;background:#0c1829;border:1px solid var(--border);margin:10px 0;overflow-wrap:anywhere}.source h3{margin:0 0 6px;font-size:14px}.source a{color:var(--mint)}.status{font-size:11px;color:#b8d0ec;background:#24364f;border-radius:7px;padding:4px 7px}.line{display:flex;justify-content:space-between;align-items:center;gap:10px}.notice{padding:13px;border-left:3px solid #8ab9ff;background:#162439;color:#c7d8e9;border-radius:8px;margin:11px 0;font-size:12px}.warning{border-left-color:#ffca86}.loading{display:none;color:var(--mint);font-size:12px;margin:11px 0}.empty{font-size:13px;color:var(--muted);padding:22px 10px;text-align:center}.eventRail{display:flex;gap:10px;overflow-x:auto;padding:4px 0 12px;scroll-snap-type:x proximity}.eventCard{min-width:250px;max-width:320px;scroll-snap-align:start;border:1px solid var(--border);border-radius:13px;background:#0b1628;padding:13px}.eventCard h4{margin:0 0 7px;font-size:13px}.eventCard p{margin:0;color:var(--muted);font-size:12px;line-height:1.5}.badge{display:inline-block;margin-top:8px;padding:3px 7px;border:1px solid #36506b;border-radius:999px;color:#bcd1e6;font-size:10px}
 @media(max-width:760px){.grid{grid-template-columns:1fr}.card{padding:17px}}@media(max-width:420px){.fields{grid-template-columns:1fr}.wide{grid-column:span 1}main{padding:14px 12px 50px}}
 </style></head>
 <body><main>
@@ -33,7 +33,7 @@ input[type=text],input[type=date],input[type=tel],input[type=url]{width:100%;min
 <aside class="stack"><section class="card"><h2>Обзор источников</h2><div id="apiStatus" class="small" style="margin-bottom:12px">Проверяем подключение API…</div><div class="stats"><div class="stat"><strong id="provided">0</strong><span>Передано ссылок</span></div><div class="stat"><strong>3</strong><span>Поддерживаемых платформы</span></div><div class="stat"><strong id="checked">0</strong><span>Проверено форматов</span></div><div class="stat"><strong id="errors">0</strong><span>Ошибок проверки</span></div></div></section>
 <section class="card"><h2>Этапы анализа</h2><div class="feature"><span class="dot"></span><div>Проверка структуры ссылок<div class="small">Нормализация и исключение неподдерживаемых адресов</div></div></div><div class="feature"><span class="dot"></span><div>Распределение по платформам<div class="small">Instagram, VK, Telegram</div></div></div><div class="feature"><span class="dot"></span><div>Сборка отчёта<div class="small">Источники, ограничения и результаты без домыслов</div></div></div><div class="notice warning">Для реального сбора контента потребуются разрешённые API, аутентификация и отдельный сервер. GitHub Actions выполняет тесты, а не постоянный поиск.</div></section></aside></div></div>
 <section class="card" id="historyView" style="display:none"><div class="reportHead"><h2 style="margin:0">История поисков</h2><button id="clearHistory" class="tab" type="button">Очистить историю</button></div><div id="historyList" class="empty">История пока пуста.</div></section>
-<section class="card" id="report" aria-live="polite"><div class="reportHead"><h2 style="margin:0">Отчёт по источникам</h2><span id="reportTime" class="small"></span></div><div class="loading" id="working">Проверка ссылок…</div><nav class="tabs" id="tabs" aria-label="Разделы отчёта"></nav><div id="reportContent"></div><button id="export" class="btn" type="button" style="margin-top:15px">Экспорт отчёта в JSON</button><div class="notice">Статус «ссылка проверена» означает только корректный адрес. Он не доказывает, что аккаунт принадлежит указанному человеку, или что активность была получена.</div></section>
+<section class="card" id="report" aria-live="polite"><div class="reportHead"><h2 style="margin:0">Отчёт по источникам</h2><span id="reportTime" class="small"></span></div><div class="loading" id="working">Проверка ссылок…</div><div class="section">Период анализа</div><nav class="tabs" id="periodTabs" aria-label="Период анализа"><button type="button" class="tab active" data-days="30">30 дней</button><button type="button" class="tab" data-days="60">60 дней</button><button type="button" class="tab" data-days="90">90 дней</button></nav><nav class="tabs" id="tabs" aria-label="Разделы отчёта"></nav><div id="reportContent"></div><button id="export" class="btn" type="button" style="margin-top:15px">Экспорт отчёта в JSON</button><div class="notice">Статус «ссылка проверена» означает только корректный адрес. Он не доказывает, что аккаунт принадлежит указанному человеку, или что активность была получена.</div></section>
 </main>
 <script>
 (function(){
@@ -41,11 +41,40 @@ input[type=text],input[type=date],input[type=tel],input[type=url]{width:100%;min
 const $=id=>document.getElementById(id);
 async function loadCapabilities(){try{const r=await fetch("/api/capabilities",{headers:{"Accept":"application/json"}});if(!r.ok)throw Error("HTTP "+r.status);const data=await r.json();const p=data.platforms||{};const names={instagram:"Instagram",vk:"VK",telegram:"Telegram"};const parts=Object.keys(names).map(k=>names[k]+": "+(p[k]?.configured?"API подключён":"ключ не настроен"));$("apiStatus").textContent=parts.join(" · ");}catch(e){$("apiStatus").textContent="Backend API временно недоступен";}}
 loadCapabilities();
+document.querySelectorAll("#periodTabs .tab").forEach(b=>b.addEventListener("click",()=>{periodDays=Number(b.dataset.days)||30;document.querySelectorAll("#periodTabs .tab").forEach(x=>x.classList.toggle("active",x===b));if(current)render();}));
 const platforms=["instagram","vk","telegram"];
 const labels={overview:"Обзор",instagram:"Instagram",vk:"ВКонтакте",telegram:"Telegram",other:"Дополнительно"};
-const reportSections={instagram:["Профиль","Публикации","Комментарии","Лайки и реакции","Подписки и подписчики","Источники"],vk:["Профиль","Стена","Комментарии","Лайки","Сообщества","Источники"],telegram:["Профиль / чат","Публичные сообщения","Комментарии / обсуждения","Участие в конкретных доступных чатах","Источники"]};
+const reportSections={
+ instagram:["Новые подписки","Новые подписчики","Поставленные лайки","Полученные лайки","Оставленные комментарии","Полученные комментарии","Публикации","Источники"],
+ vk:["Новые подписки","Новые подписчики","Поставленные лайки","Полученные лайки","Оставленные комментарии","Полученные комментарии","Сообщества","Стена","Источники"],
+ telegram:["Публичные чаты и каналы","Публичные сообщения","Комментарии / обсуждения","Реакции","Источники"]
+};
+const availability={
+ instagram:{
+  "Новые подписки":"Недоступно для произвольного стороннего аккаунта через официальный API.",
+  "Новые подписчики":"Недоступно для произвольного стороннего аккаунта через официальный API.",
+  "Поставленные лайки":"Полная история чужих лайков не предоставляется официальным API.",
+  "Полученные лайки":"Доступны только в рамках контента, который разрешён API/источником.",
+  "Оставленные комментарии":"Можно показать только реально найденные публичные комментарии.",
+  "Полученные комментарии":"Доступны для разрешённого контента, который вернул API/источник."
+ },
+ vk:{
+  "Новые подписки":"Исторические изменения показываются только если источник действительно отдаёт их или сервис ранее наблюдал состояние.",
+  "Новые подписчики":"Исторические изменения показываются только если источник действительно отдаёт их или сервис ранее наблюдал состояние.",
+  "Поставленные лайки":"Можно показывать только объектно-доступные реакции, которые реально вернул VK API.",
+  "Полученные лайки":"Можно показывать для доступных объектов через VK API.",
+  "Оставленные комментарии":"Можно показывать найденные публичные комментарии.",
+  "Полученные комментарии":"Можно показывать комментарии к доступным объектам."
+ },
+ telegram:{
+  "Публичные чаты и каналы":"Общий список всех чатов пользователя недоступен. Показываются только конкретные публичные чаты, доступные боту/источнику.",
+  "Публичные сообщения":"Показываются только сообщения в чатах, доступных боту/источнику.",
+  "Комментарии / обсуждения":"Только доступные публичные обсуждения.",
+  "Реакции":"Только реакции, которые реально видны в доступном чате."
+ }
+};
 const hostnames={instagram:["instagram.com","www.instagram.com"],vk:["vk.com","www.vk.com"],telegram:["t.me","telegram.me"]};
-let current=null,selected="overview",previewUrl=null;
+let current=null,selected="overview",previewUrl=null,periodDays=30;
 const STORAGE_KEY="social_intelligence_search_history_v1";
 const DRAFT_KEY="social_intelligence_draft_v1";
 function getDraft(){return {lastName:$("lastName").value,firstName:$("firstName").value,middleName:$("middleName").value,birth:$("birth").value,city:$("city").value,phone:$("phone").value,instagram:$("instagram").value,vk:$("vk").value,telegram:$("telegram").value};}
@@ -79,6 +108,17 @@ function normalize(p,value){
 }
 function clean(v){return String(v).replace(/[\u0000-\u001f<>]/g,"");}
 function el(tag,txt,cls){const node=document.createElement(tag);if(txt!==undefined)node.textContent=txt;if(cls)node.className=cls;return node;}
+function eventRail(title,items,fallback){
+ const wrap=el("section",undefined,"source");
+ wrap.append(el("h3",title));
+ const rail=el("div",undefined,"eventRail");
+ if(items&&items.length){
+   items.forEach(it=>{const card=el("article",undefined,"eventCard");card.append(el("h4",it.title||"Событие"),el("p",it.text||""));if(it.when)card.append(el("span",it.when,"badge"));rail.append(card);});
+ }else{
+   const card=el("article",undefined,"eventCard");card.append(el("h4","Нет подтверждённых событий"),el("p",fallback||"Источник не вернул данных за выбранный период."));rail.append(card);
+ }
+ wrap.append(rail);return wrap;
+}
 function block(title,description,status,url){
  const card=el("article",undefined,"source"),heading=el("div",undefined,"line");
  heading.append(el("h3",title),el("span",status,"status"));card.append(heading,el("p",description,"small"));
@@ -152,8 +192,11 @@ function render(){
  }else if(!current.backend_error){
    area.append(block("Поиск","Ожидаем ответ backend…","В процессе"));
  }
- (reportSections[selected]||[]).forEach(section=>area.append(block(section, section==="Источники" ? "Показываются только источники, реально проверенные backend." : "Раздел заполняется только тем, что вернул публичный источник или официальный API.", live?"Проверено":"Ожидает данных")));
- area.append(block("Ограничения","Полная история действий произвольного человека по одной ссылке не существует в открытых API. Если платформа не отдаёт конкретные подписки, лайки или комментарии, раздел останется помечен как недоступный.","Прозрачно"));
+ (reportSections[selected]||[]).forEach(section=>{
+   if(section==="Источники"){area.append(block("Источники","Показываются только реально проверенные backend-источники за выбранный период: "+periodDays+" дней.",live?"Проверено":"Ожидает данных"));return;}
+   area.append(eventRail(section,[],availability[selected]?.[section]||("Источник не вернул подтверждённых событий за "+periodDays+" дней.")));
+ });
+ area.append(block("Период",periodDays+" дней. Пустой раздел означает отсутствие подтверждённых данных, а не отсутствие самой активности.","Выбран"));
  }
 }
 $("search").addEventListener("submit",event=>{
