@@ -129,6 +129,22 @@ def fit(rows,names):
     return m
 
 
+
+def reversal_observed(row):
+    """A confirmation requires observed price movement away from the candidate.
+
+    This is causal, has no minimum age and never uses oracle outcomes. The
+    classifier must still provide the confirmation probability; a positive
+    retrace alone is not a trading signal.
+    """
+    side = row.get("side")
+    price = row.get("price")
+    mark = row.get("signal_price")
+    if side not in ("LOW", "HIGH") or not finite(price) or not finite(mark) or price <= 0:
+        return False
+    return mark > price if side == "LOW" else mark < price
+
+
 def evaluate(periods,rows_by_period,pred_by_period,side,threshold,nameset):
     total=dict(episodes=0,confirmations=0,true_confirmations=0,false_confirmations=0)
     remaining=[]; captured=[]; entry_distance=[]; false_adverse=[]; false_continuation=[]; records=[]; per={}
@@ -136,7 +152,7 @@ def evaluate(periods,rows_by_period,pred_by_period,side,threshold,nameset):
         p=periods[name]
         q=[r for r in rows_by_period[name] if r["side"]==side]
         probs=pred_by_period[name]
-        accepted=[r for r,pr in zip(q,probs) if pr>=threshold]
+        accepted=[r for r,pr in zip(q,probs) if pr>=threshold and reversal_observed(r)]
         m=replay.summarize(p["tape"],p["labels"],side,accepted,p["scope"][0],keep_records=True)
         first=m.get("first_signals") or []
         tr=sum(bool(r.get("true_first")) for r in first)
@@ -323,6 +339,7 @@ def main():
          "time_gate":False,"decision_sampling":a.decision_sampling,
          "event_driven":False,
          "completed_m1_event_clock":a.decision_sampling == "completed_m1_events",
+         "confirmation_rule":"Model threshold AND causally observed price reversal away from candidate (no fixed age gate).",
          "supervision_warning":"Training still uses exact-terminal candidate membership. This is a research baseline, NOT validated post-extreme confirmation supervision or tick-level event-driven trading.",
          "sampling_warning":("Completed M1 bars are causal decision events, not tick-level L50 events; rich-micro alignment still requires validation." if a.decision_sampling == "completed_m1_events" else "Legacy predefined candidate-age snapshots; not event-driven."),
          "by_side":{},"real_orders":False,
