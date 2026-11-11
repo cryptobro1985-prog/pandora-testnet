@@ -163,6 +163,26 @@ def bridge_latest(username:str):
     return {"ok":True,"username":username,"observed_at":item["observed_at"],
             "followers":len(p.get("followers") or []),"following":len(p.get("following") or []),"posts":len(p.get("posts") or [])}
 
+@app.get("/api/session-status")
+def session_status():
+    browser_cookie=bool(os.getenv("IG_SESSION_JSON_B64") or os.getenv("IG_SESSIONID"))
+    storage_state=bool(os.getenv("IG_BROWSER_STORAGE_STATE_B64"))
+    cdp=bool(os.getenv("IG_CDP_ENDPOINT"))
+    instaloader_session=bool(os.getenv("IG_USERNAME") and (
+        os.getenv("IG_SESSION_JSON_B64") or os.getenv("IG_SESSIONID") or
+        os.getenv("IG_SESSION_B64") or os.getenv("IG_SESSIONFILE")
+    ))
+    meta=bool(os.getenv("META_ACCESS_TOKEN"))
+    return {
+      "browser_cookie_session_configured":browser_cookie,
+      "browser_storage_state_configured":storage_state,
+      "remote_cdp_configured":cdp,
+      "instaloader_session_configured":instaloader_session,
+      "meta_token_configured":meta,
+      "deep_scan_context_configured":bool(browser_cookie or storage_state or cdp or instaloader_session or meta),
+      "supported_authorized_inputs":["IG_SESSION_JSON_B64","IG_BROWSER_STORAGE_STATE_B64","IG_CDP_ENDPOINT","IG_SESSIONID+IG_CSRFTOKEN","IG_SESSION_B64"]
+    }
+
 @app.get("/api/history/{username}")
 def api_history(username:str,limit:int=200):
     return {"username":normalize_username(username),"events":history(normalize_username(username),max(1,min(limit,1000)))}
