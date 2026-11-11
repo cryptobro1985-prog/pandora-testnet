@@ -96,16 +96,6 @@ async def _bounded(coro,source,timeout=22):
 @app.on_event("startup")
 async def startup():
     init_schema()
-    if os.getenv("IG_ENABLE_PLAYWRIGHT","1")=="1":
-        try:
-            import subprocess,sys
-            probe=subprocess.run([sys.executable,"-m","playwright","install","chromium"],capture_output=True,text=True,timeout=180)
-            if probe.returncode!=0:
-                import logging
-                logging.getLogger("uvicorn.error").warning("playwright_install_failed=%s",(probe.stderr or probe.stdout)[-500:])
-        except Exception as e:
-            import logging
-            logging.getLogger("uvicorn.error").warning("playwright_install_error=%s:%s",type(e).__name__,str(e)[:300])
     target=os.getenv("IG_STARTUP_SMOKE_TARGET","").strip()
     if target:
         import asyncio,logging
