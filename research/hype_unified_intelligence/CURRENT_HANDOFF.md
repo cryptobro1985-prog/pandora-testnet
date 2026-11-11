@@ -143,3 +143,42 @@ Next action: inspect outcome of GitHub Actions run 42970809302 and latest
 published report; investigate a concrete failure before changing model hyperparameters.
 If it completes, evaluate expert/LOW/HIGH metrics and ablations, then build an
 actual entry/exit OOS evaluator using matched executable quotes where available.
+
+## New checkpoint — frozen paper risk and leverage research (2026-11-11)
+
+Verified workflows:
+- Unified v2 trained successfully: `42970809302`, result OOS_GATE_REJECT;
+  only 2 TP / 7 accepted and 17 misses out of 19 true locals,
+  precision 28.57%, recall 10.53%, calibration support only 4 positives.
+  Treat as REJECT, no live promotion.
+- Risk replay: `42973182059` success, publish
+  `research/hype_unified_intelligence/PAPER_RISK_STRESS_LATEST.json`;
+  full trade-level artifact attached to that run.
+- Equity-sizing smoke tests: `42973370716` success.
+
+New reproducible modules:
+- `research/hype_unified_intelligence/paper_risk_replay_v1.py`
+- `research/hype_unified_intelligence/exposure_sizing.py`
+- `research/hype_unified_intelligence/test_paper_risk_replay_v1.py`
+- `research/hype_unified_intelligence/test_exposure_sizing.py`
+- `.github/workflows/hype-paper-risk-replay-v1.yml`
+- `research/hype_unified_intelligence/RISK_DECISION_2026-11-11.md`
+
+Principal result: October previously-inspected historical paper trend-HOLD
+(13 trades, 2 profitable) underlying +0.960%, but excluding the single biggest
+winner changes it to -3.032%; 25x/20% margin paper equity +2.697% under basic
+cost proxy, -2.516% under only +8bps extra friction, -12.793% under +25bps
+extra friction. Rejected for live and cannot be called optimal.
+
+Pure paper risk gate for a hypothetical <=0.5% equity loss under stop+cost+
+8bps extra friction+1.0% price gap: 3x/10% margin and 5x/5% margin pass a
+bounded scenario, while 25x/20% fails. This is NOT protection against
+unbounded market gaps or a validated trading edge.
+
+REAL ORDERS OFF. Do not promote local detector or risk policy without new
+untouched forward and executable orderbook/mark-price reality checks.
+
+Next most valuable work: match full-micro July source to compatible labels for
+ablation of L50/OI/liquidation contributions, train separate LONG and SHORT
+path-quality models on chrono training data, then run fresh independent
+forward with trade-level PnL, MFE capture, and risk.
