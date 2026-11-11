@@ -34,8 +34,8 @@ def legal_predictor(name, value):
     return point in INPUT_IDS and point not in QUALITY_ONLY
 
 
-def build(master, clean_index=None):
-    periods,_=replay.inventory(master,clean_index or {})
+def build(master, clean_index=None, decision_sampling="legacy_age_grid"):
+    periods,_=replay.inventory(master,clean_index or {},decision_sampling=decision_sampling)
     rows={}
     for name,p in periods.items():
         tags=replay.outcomes(p["early"],p["scope"])
@@ -311,16 +311,18 @@ def main():
     ap.add_argument("--output",type=Path,required=True)
     ap.add_argument("--clean-cache",type=Path,help="Certified rich-micro cache (optional)")
     ap.add_argument("--clean-sha256",help="Required expected SHA256 when --clean-cache is set")
+    ap.add_argument("--decision-sampling",choices=("legacy_age_grid","completed_m1_events"),default="legacy_age_grid")
     a=ap.parse_args()
     if bool(a.clean_cache) != bool(a.clean_sha256):
         ap.error("--clean-cache and --clean-sha256 must be provided together")
     clean_index = sources.read_clean_cache(a.clean_cache,a.clean_sha256) if a.clean_cache else {}
     a.output.parent.mkdir(parents=True,exist_ok=True)
-    periods,rows=build(a.master,clean_index)
+    periods,rows=build(a.master,clean_index,decision_sampling=a.decision_sampling)
     out={"version":"HYPE-CONFIRMED-LOCAL-BOUNCE-ENTRY-CV-v2-inner-period-OOF",
          "objective":"CONFIRM_LOCAL_THEN_ENTER_REVERSAL_MOVE_NOT_EXTREME_GUESS",
-         "time_gate":False,"decision_sampling":"FIXED_CANDIDATE_AGE_GRID_NOT_EVENT_DRIVEN",
-         "event_driven":False,"sampling_warning":"No explicit entry time gate, but decision opportunities are sampled at predefined candidate ages; OOS metrics must not be represented as continuous event-driven performance.",
+         "time_gate":False,"decision_sampling":a.decision_sampling,
+         "event_driven":a.decision_sampling == "completed_m1_events",
+         "sampling_warning":("Completed M1 bars are causal decision events, not tick-level L50 events; rich-micro alignment still requires validation." if a.decision_sampling == "completed_m1_events" else "Legacy predefined candidate-age snapshots; not event-driven."),
          "by_side":{},"real_orders":False,
          "predictor_coverage":predictor_coverage(rows),
          "micro_provenance":micro_provenance(rows),
