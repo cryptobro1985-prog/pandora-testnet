@@ -92,6 +92,14 @@ async def _ensure_playwright_browser():
         _PW_READY=(r.returncode==0)
         return _PW_READY
 
+async def warm_playwright()->dict[str,Any]:
+    """Install/cache Chromium before user scans so the first scan does not spend its timeout on setup."""
+    try:
+        ok=await _ensure_playwright_browser()
+        return {"ok":bool(ok),"detail":None if ok else "chromium_install_failed"}
+    except Exception as e:
+        return {"ok":False,"detail":type(e).__name__}
+
 def _playwright_cookie_list():
     cookies=[]
     sessionid=os.getenv("IG_SESSIONID","").strip()
