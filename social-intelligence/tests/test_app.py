@@ -83,3 +83,9 @@ def test_browser_bridge_ingest_and_latest():
     latest=client.get("/api/bridge/latest/demo_public")
     assert latest.status_code==200
     assert latest.json()["followers"]==2
+
+
+def test_session_status_shape():
+    d=client.get("/api/session-status").json()
+    assert isinstance(d["deep_scan_context_configured"],bool)
+    assert "supported_authorized_inputs" in d
