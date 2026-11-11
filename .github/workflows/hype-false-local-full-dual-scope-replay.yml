@@ -43,6 +43,10 @@ jobs:
           python -m pip install --disable-pip-version-check pytest
           python -m pytest --import-mode=importlib -q research/hype_false_local_entry/test_prefix_causality.py research/hype_false_local_entry/test_first_flip_accounting.py research/hype_false_local_entry/test_dense_causal_reachability.py 2>&1 | tee results/CAUSAL_TESTS.log
       - name: Run complete label-blind replay then offline dual-scope scoring
+        # Preserve replay diagnostics even if an independent unit test fails.
+        # A failing test still makes the overall workflow fail; it must not hide
+        # a second failure in historical data coverage or scoring.
+        if: success() || failure()
         run: |
           set -euo pipefail
           python -m research.hype_false_local_entry.replay_dense_first_signal --base-dir data/octnov --scope both --out results/DUAL_SCOPE_30D.json 2>&1 | tee results/DUAL_SCOPE_RUN.log
