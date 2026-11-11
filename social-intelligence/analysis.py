@@ -2,6 +2,10 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime,timezone
 from math import log1p,exp
+import re
+
+MENTION_RE=re.compile(r"(?<![\\w.])@([A-Za-z0-9._]{1,30})")
+HASHTAG_RE=re.compile(r"(?<![\\w&])#(\\w+)",re.U)
 
 WEIGHTS={"comment_in":3.0,"like_in":1.0,"mention_out":4.0,"tag_out":4.0,"coauthor_out":5.0,"follow_in":2.0,"follow_out":2.0}
 
@@ -32,7 +36,10 @@ def build_events(target,posts):
             for rep in c.get("replies") or []:
                 add("comment_in",rep.get("username"),rep.get("timestamp") or ts,url,rep.get("text"),"reply")
         for u in p.get("likers") or []: add("like_in",u,ts,url,source="visible_liker")
-        for u in p.get("mentions") or []: add("mention_out",u,ts,url,source="caption_mention")
+        mentions=p.get("mentions")
+        if mentions is None:
+            mentions=list(dict.fromkeys(x.rstrip(".") for x in MENTION_RE.findall(p.get("caption") or "")))
+        for u in mentions or []: add("mention_out",u,ts,url,source="caption_mention")
         for u in p.get("tagged_users") or []: add("tag_out",u,ts,url,source="media_tag")
         for u in p.get("coauthors") or []: add("coauthor_out",u,ts,url,source="coauthor")
     return events
