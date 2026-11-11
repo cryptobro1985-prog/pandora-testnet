@@ -12,9 +12,9 @@ input[type=text],input[type=date],input[type=tel],input[type=url]{width:100%;min
 @media(max-width:760px){.grid{grid-template-columns:1fr}.card{padding:17px}}@media(max-width:420px){.fields{grid-template-columns:1fr}.wide{grid-column:span 1}main{padding:14px 12px 50px}}
 </style></head>
 <body><main>
-<header class="head"><div class="brand"><div class="logo" aria-hidden="true">⌕</div><div>SOCIAL<br><span style="color:var(--mint)">INTELLIGENCE</span></div></div><span class="pill">MINI APP · MVP</span></header>
+<header class="head"><div class="brand"><div class="logo" aria-hidden="true">⌕</div><div>SOCIAL<br><span style="color:var(--mint)">INTELLIGENCE</span></div></div><span class="pill">MINI APP · MVP</span></header><nav class="tabs" id="topTabs"><button class="tab active" type="button" data-view="searchView">Поиск</button><button class="tab" type="button" data-view="historyView">История</button></nav>
 <div class="sub">Проверка открытых источников</div><h1>Один запрос.<br><em>Несколько платформ.</em></h1><p class="lead">Введите доступные данные, отметьте право на их проверку, получите структурированный отчёт с проверенными ссылками и прозрачным статусом источников.</p>
-<div class="grid"><section class="card" aria-label="Поисковая форма"><h2>Новая проверка</h2>
+<div id="searchView"><div class="grid"><section class="card" aria-label="Поисковая форма"><h2>Новая проверка</h2>
 <form id="search" autocomplete="off">
 <div class="section">Данные для уточнения запроса · необязательно</div><div class="fields">
 <div class="field"><label for="lastName">Фамилия</label><input id="lastName" type="text" placeholder="Фамилия" maxlength="80"></div><div class="field"><label for="firstName">Имя</label><input id="firstName" type="text" placeholder="Имя" maxlength="80"></div><div class="field wide"><label for="middleName">Отчество</label><input id="middleName" type="text" placeholder="Отчество" maxlength="80"></div>
@@ -31,7 +31,8 @@ input[type=text],input[type=date],input[type=tel],input[type=url]{width:100%;min
 <button class="btn" type="submit" id="go" disabled>Начать поиск</button><p class="small">MVP проверяет формат переданных ссылок. История чужих лайков, скрытых подписок, переписок и перемещений недоступна.</p>
 </form></section>
 <aside class="stack"><section class="card"><h2>Обзор источников</h2><div id="apiStatus" class="small" style="margin-bottom:12px">Проверяем подключение API…</div><div class="stats"><div class="stat"><strong id="provided">0</strong><span>Передано ссылок</span></div><div class="stat"><strong>3</strong><span>Поддерживаемых платформы</span></div><div class="stat"><strong id="checked">0</strong><span>Проверено форматов</span></div><div class="stat"><strong id="errors">0</strong><span>Ошибок проверки</span></div></div></section>
-<section class="card"><h2>Этапы анализа</h2><div class="feature"><span class="dot"></span><div>Проверка структуры ссылок<div class="small">Нормализация и исключение неподдерживаемых адресов</div></div></div><div class="feature"><span class="dot"></span><div>Распределение по платформам<div class="small">Instagram, VK, Telegram</div></div></div><div class="feature"><span class="dot"></span><div>Сборка отчёта<div class="small">Источники, ограничения и результаты без домыслов</div></div></div><div class="notice warning">Для реального сбора контента потребуются разрешённые API, аутентификация и отдельный сервер. GitHub Actions выполняет тесты, а не постоянный поиск.</div></section></aside></div>
+<section class="card"><h2>Этапы анализа</h2><div class="feature"><span class="dot"></span><div>Проверка структуры ссылок<div class="small">Нормализация и исключение неподдерживаемых адресов</div></div></div><div class="feature"><span class="dot"></span><div>Распределение по платформам<div class="small">Instagram, VK, Telegram</div></div></div><div class="feature"><span class="dot"></span><div>Сборка отчёта<div class="small">Источники, ограничения и результаты без домыслов</div></div></div><div class="notice warning">Для реального сбора контента потребуются разрешённые API, аутентификация и отдельный сервер. GitHub Actions выполняет тесты, а не постоянный поиск.</div></section></aside></div></div>
+<section class="card" id="historyView" style="display:none"><div class="reportHead"><h2 style="margin:0">История поисков</h2><button id="clearHistory" class="tab" type="button">Очистить историю</button></div><div id="historyList" class="empty">История пока пуста.</div></section>
 <section class="card" id="report" aria-live="polite"><div class="reportHead"><h2 style="margin:0">Отчёт по источникам</h2><span id="reportTime" class="small"></span></div><div class="loading" id="working">Проверка ссылок…</div><nav class="tabs" id="tabs" aria-label="Разделы отчёта"></nav><div id="reportContent"></div><button id="export" class="btn" type="button" style="margin-top:15px">Экспорт отчёта в JSON</button><div class="notice">Статус «ссылка проверена» означает только корректный адрес. Он не доказывает, что аккаунт принадлежит указанному человеку, или что активность была получена.</div></section>
 </main>
 <script>
@@ -45,6 +46,22 @@ const labels={overview:"Обзор",instagram:"Instagram",vk:"ВКонтакте
 const reportSections={instagram:["Профиль","Публикации","Комментарии","Лайки и реакции","Подписки и подписчики","Источники"],vk:["Профиль","Стена","Комментарии","Лайки","Сообщества","Источники"],telegram:["Профиль / чат","Публичные сообщения","Комментарии / обсуждения","Участие в конкретных доступных чатах","Источники"]};
 const hostnames={instagram:["instagram.com","www.instagram.com"],vk:["vk.com","www.vk.com"],telegram:["t.me","telegram.me"]};
 let current=null,selected="overview",previewUrl=null;
+const STORAGE_KEY="social_intelligence_search_history_v1";
+const DRAFT_KEY="social_intelligence_draft_v1";
+function getDraft(){return {lastName:$("lastName").value,firstName:$("firstName").value,middleName:$("middleName").value,birth:$("birth").value,city:$("city").value,phone:$("phone").value,instagram:$("instagram").value,vk:$("vk").value,telegram:$("telegram").value};}
+function setDraft(d){if(!d)return;["lastName","firstName","middleName","birth","city","phone","instagram","vk","telegram"].forEach(k=>{if($(k)&&d[k]!==undefined)$(k).value=d[k]||"";});}
+function loadHistory(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]")}catch(e){return[]}}
+function saveHistory(items){localStorage.setItem(STORAGE_KEY,JSON.stringify(items.slice(0,50)));}
+function saveDraft(){localStorage.setItem(DRAFT_KEY,JSON.stringify(getDraft()));}
+function restoreDraft(){try{setDraft(JSON.parse(localStorage.getItem(DRAFT_KEY)||"{}"));}catch(e){}}
+function renderHistory(){const list=$("historyList"),items=loadHistory();list.replaceChildren();if(!items.length){list.className="empty";list.textContent="История пока пуста.";return;}list.className="";items.forEach((item,idx)=>{const card=el("article",undefined,"source"),line=el("div",undefined,"line");const title=el("h3",(item.firstName||item.lastName||item.instagram||item.vk||item.telegram||"Без имени"));const open=el("button","Открыть","tab");open.type="button";open.addEventListener("click",()=>{setDraft(item);saveDraft();switchView("searchView");window.scrollTo({top:0,behavior:"smooth"});});line.append(title,open);card.append(line,el("p",new Date(item.saved_at).toLocaleString("ru-RU"),"small"));const meta=[item.instagram&&"Instagram",item.vk&&"VK",item.telegram&&"Telegram",item.phone&&"Телефон"].filter(Boolean).join(" · ");card.append(el("div",meta||"Дополнительные данные","small"));list.append(card);});}
+function pushHistory(){const item={...getDraft(),saved_at:new Date().toISOString()};const items=loadHistory();const key=[item.instagram,item.vk,item.telegram,item.phone,item.firstName,item.lastName].join("|").toLowerCase();const filtered=items.filter(x=>[x.instagram,x.vk,x.telegram,x.phone,x.firstName,x.lastName].join("|").toLowerCase()!==key);saveHistory([item,...filtered]);renderHistory();}
+function switchView(id){["searchView","historyView"].forEach(v=>$(v).style.display=v===id?"":"none");document.querySelectorAll("#topTabs .tab").forEach(b=>b.classList.toggle("active",b.dataset.view===id));if(id==="historyView")renderHistory();}
+document.querySelectorAll("#topTabs .tab").forEach(b=>b.addEventListener("click",()=>switchView(b.dataset.view)));
+$("clearHistory").addEventListener("click",()=>{localStorage.removeItem(STORAGE_KEY);renderHistory();});
+["lastName","firstName","middleName","birth","city","phone","instagram","vk","telegram"].forEach(k=>$(k).addEventListener("input",saveDraft));
+restoreDraft();
+renderHistory();
 $("consent").addEventListener("change",()=>{$("go").disabled=!$("consent").checked;});
 $("photo").addEventListener("change",()=>{
  if(previewUrl) URL.revokeObjectURL(previewUrl); previewUrl=null; $("preview").style.display="none";
@@ -77,7 +94,7 @@ function makeReport(){
  $("provided").textContent=String(profiles.length);
  $("checked").textContent=String(profiles.length-invalid);
  $("errors").textContent=String(invalid);
- current={generated_at:new Date().toISOString(),version:"0.1.0",source_checks:profiles,capabilities:"URL syntax only; no external social network lookup",limitations:["No identity matching","No tracking private individuals","No face identification","No private messages","No hidden memberships","No historical third-party follows or likes","No dating-account discovery"]};
+ pushHistory(); current={generated_at:new Date().toISOString(),version:"0.1.0",source_checks:profiles,capabilities:"URL syntax only; no external social network lookup",limitations:["No identity matching","No tracking private individuals","No face identification","No private messages","No hidden memberships","No historical third-party follows or likes","No dating-account discovery"]};
  $("report").style.display="block";$("reportTime").textContent=new Date().toLocaleString("ru-RU");selected="overview";render();
  $("report").scrollIntoView({behavior:"smooth",block:"start"});
 }
