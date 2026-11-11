@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Linear-time hindsight tradeable-path benchmark with explicit execution delay.
+"""Quadratic-time hindsight tradeable-path benchmark with explicit execution delay.
 
 Evaluation only: future prices determine the optimal sequence. NEVER feed the
 output, chosen trades or path labels into live predictive features.
@@ -7,6 +7,7 @@ output, chosen trades or path labels into live predictive features.
 from __future__ import annotations
 import argparse, csv, json
 from datetime import datetime, timezone
+from bisect import bisect_right
 
 def parse_csv(path):
     rows=[]
@@ -54,6 +55,7 @@ def oracle(rows, min_net_return=.0025, fee_bps=6, slip_bps=2,
     for seg in segments(rows,max_gap_seconds):
         n=len(seg)
         if n<2:continue
+        times=[x[0] for x in seg]
         best=[0.0]*(n+1)
         prev=[None]*(n+1)
         for j in range(n):
@@ -64,8 +66,7 @@ def oracle(rows, min_net_return=.0025, fee_bps=6, slip_bps=2,
                 t_entry,px_entry,bid_entry,ask_entry=seg[i]
                 if t_exit-t_entry<min_hold_seconds:continue
                 # Last completed exit must precede this entry by cooldown.
-                prior_candidates=[k for k in range(i) if t_entry-seg[k][0]>=cooldown_seconds]
-                prior_idx=(prior_candidates[-1]+1) if prior_candidates else 0
+                prior_idx=bisect_right(times,t_entry-cooldown_seconds,0,i)
                 base=best[prior_idx]
                 for side,ret in (("LONG",bid_exit/ask_entry-1-friction),
                                  ("SHORT",1-ask_exit/bid_entry-friction)):
