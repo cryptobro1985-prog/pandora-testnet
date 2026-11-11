@@ -21,6 +21,20 @@ def finalized(doc,key):
     rows.sort(key=lambda x:int(x["extreme_interval_start_ms"]))
     return rows
 
+def require_label_cohort(doc, key, block):
+    """Never silently score a missing teacher cohort as zero recall."""
+    labels = finalized(doc, key)
+    if len(labels) < 2:
+        return None, {
+            "status": "MISSING_OR_INSUFFICIENT_LABELS",
+            "block": block,
+            "cohort": key,
+            "available_keys": sorted(doc.keys()),
+            "label_count": len(labels),
+            "not_scored": True,
+        }
+    return labels, None
+
 def bar_end(b):
     if b.get("bar_end_ms") is not None:return int(b["bar_end_ms"])
     if b.get("start_ms") is not None:return int(b["start_ms"])+int(b.get("interval_ms",60000))
@@ -96,11 +110,17 @@ def main():
     a=ap.parse_args()
     result={"version":"HYPE-EARLY-CAUSAL-CORE-ENTRY-MFE-v1","research_only":True,"real_orders":False,"blocks":{}}
     agg={"internal":[],"strict":[]}
+    cohort_coverage={"internal":[],"strict":[]}
     for name,cp,lp in a.block:
         bars=read_jsonl_gz(Path(cp));doc=read_json_gz(Path(lp));flips=run_engine(bars)
         b={}
         for key in ("internal","strict"):
-            labs=finalized(doc,key)
+            labs,missing=require_label_cohort(doc,key,name)
+            if missing is not None:
+                b[key]=missing
+                cohort_coverage[key].append({"block":name,"status":"MISSING"})
+                continue
+            cohort_coverage[key].append({"block":name,"status":"SCORED","labels":len(labs)})
             score=score_first_flips(bars,labs,flips,max_lag_ms=24*3600*1000)
             rows=trade_path(bars,labs,score["matched"])
             b[key]={"score":{k:v for k,v in score.items() if k not in ("matched","unassigned_false_flips","caveats")},
@@ -109,8 +129,15 @@ def main():
         b["total_core_flips"]=len(flips)
         result["blocks"][name]=b
     result["aggregate"]={k:summary(v) for k,v in agg.items()}
+    result["cohort_coverage"]=cohort_coverage
+    result["aggregate_completeness"]={
+        k: "COMPLETE" if len(v)==len(a.block) and all(x["status"]=="SCORED" for x in v)
+           else "PARTIAL_MISSING_LABELS"
+        for k,v in cohort_coverage.items()
+    }
     result["limitations"]=[
       "This reproduces the checked-in CausalReversalMachine, not the later Ultra detector.",
+      "Missing label cohorts are excluded and aggregate marked PARTIAL; never infer all-block coverage.",
       "Teacher labels are used only after causal signal generation for scoring and path geometry.",
       "No execution latency/slippage/mark-price liquidation model.",
       "This baseline still includes wrong-first and duplicate core-flip behavior; veto/dedupe is the next optimization target."
