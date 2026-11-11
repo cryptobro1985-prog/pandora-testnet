@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0a1020"><title>Social Intelligence — Mini App</title>
+<style>
+:root{color-scheme:dark;--bg:#080d18;--panel:#111b2b;--border:#2d3b50;--text:#e9f2fc;--muted:#91a7bb;--mint:#8df5c8;--purple:#b9a1ff}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 15% -15%,#284b50 0,transparent 45%),radial-gradient(ellipse at 100% 0,#332344 0,transparent 42%),var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,Arial,sans-serif}
+main{max-width:1050px;padding:18px 15px 66px;margin:auto}button,input{font:inherit}button{cursor:pointer}.head{display:flex;align-items:center;justify-content:space-between;margin-bottom:32px}.brand{display:flex;align-items:center;gap:10px;font-weight:800;line-height:1.1;letter-spacing:1px}.logo{height:37px;width:37px;border-radius:11px;background:linear-gradient(130deg,var(--mint),#91b9ff);color:#0c1930;display:grid;place-items:center;font-size:24px}.pill{font-size:11px;border-radius:100px;padding:5px 10px;color:var(--mint);border:1px solid #3a7868;background:#13392c80}.sub{color:var(--mint);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:2px}h1{font-size:clamp(28px,6vw,46px);letter-spacing:-1.4px;line-height:1.1;margin:12px 0}h1 em{font-style:normal;color:var(--mint)}.lead{color:var(--muted);max-width:640px;font-size:15px;margin:0 0 25px}.grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(270px,.8fr);gap:16px;align-items:start}.stack{display:grid;gap:16px}
+.card{background:linear-gradient(155deg,#172338,#0e1727 88%);border:1px solid var(--border);border-radius:19px;padding:21px;min-width:0}.card h2{margin:0 0 16px;font-size:19px;letter-spacing:-.3px}.section{font-size:12px;font-weight:750;margin:17px 0 13px;display:flex;align-items:center;gap:10px}.section:after{content:"";height:1px;background:var(--border);flex:1}.fields{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}.field{margin-bottom:12px;display:grid;gap:6px;min-width:0}.wide{grid-column:span 2}label{font-size:12px;font-weight:650;color:#d8e4f0}
+input[type=text],input[type=date],input[type=tel],input[type=url]{width:100%;min-width:0;border-radius:11px;background:#081121;color:var(--text);border:1px solid #354760;padding:11px 12px;outline:none;transition:border-color .15s}input::placeholder{color:#647d95}input:focus{border-color:var(--mint)}
+.file{border:1px dashed #405b72;border-radius:11px;background:#111e30;padding:11px}input[type=file]{max-width:100%;font-size:11px;color:var(--muted)}.preview{display:none;width:65px;height:65px;object-fit:cover;border-radius:9px;margin-top:10px}
+.check{display:flex;gap:12px;align-items:flex-start;background:#0a1628;border:1px solid var(--border);padding:13px;border-radius:12px;margin:16px 0}.check input{accent-color:var(--mint);width:18px;height:18px;margin:1px 0 0;flex:none}.check label{font-weight:450;line-height:1.55}.btn{display:block;border:0;width:100%;background:linear-gradient(90deg,#8df5c8,#9bc0ff);color:#0b1930;font-weight:850;padding:13px;border-radius:12px}.btn:disabled{opacity:.4;cursor:not-allowed}.small{font-size:11px;color:var(--muted);line-height:1.6}.stats{display:grid;grid-template-columns:1fr 1fr;gap:9px}.stat{border:1px solid var(--border);border-radius:13px;background:#0b1628;padding:15px}.stat strong{display:block;font-size:27px;color:var(--mint);line-height:1.2}.stat span{font-size:11px;color:var(--muted)}.feature{padding:10px 0;border-bottom:1px solid #2c3c4c;display:flex;align-items:flex-start;gap:10px}.feature:last-child{border:0}.dot{width:8px;height:8px;margin-top:5px;border-radius:50%;background:var(--mint);flex:none}
+#report{display:none;margin-top:20px}.reportHead{display:flex;align-items:center;justify-content:space-between;gap:10px}.tabs{display:flex;gap:8px;overflow-x:auto;scrollbar-width:thin;padding:12px 0}.tab{border:1px solid #32445a;background:#18253a;color:#bbcce0;border-radius:10px;padding:9px 13px;white-space:nowrap}.tab.active{background:#153a31;color:var(--mint);border-color:#4b8f78}.source{padding:14px;border-radius:12px;background:#0c1829;border:1px solid var(--border);margin:10px 0;overflow-wrap:anywhere}.source h3{margin:0 0 6px;font-size:14px}.source a{color:var(--mint)}.status{font-size:11px;color:#b8d0ec;background:#24364f;border-radius:7px;padding:4px 7px}.line{display:flex;justify-content:space-between;align-items:center;gap:10px}.notice{padding:13px;border-left:3px solid #8ab9ff;background:#162439;color:#c7d8e9;border-radius:8px;margin:11px 0;font-size:12px}.warning{border-left-color:#ffca86}.loading{display:none;color:var(--mint);font-size:12px;margin:11px 0}.empty{font-size:13px;color:var(--muted);padding:22px 10px;text-align:center}
+@media(max-width:760px){.grid{grid-template-columns:1fr}.card{padding:17px}}@media(max-width:420px){.fields{grid-template-columns:1fr}.wide{grid-column:span 1}main{padding:14px 12px 50px}}
+</style></head>
+<body><main>
+<header class="head"><div class="brand"><div class="logo" aria-hidden="true">⌕</div><div>SOCIAL<br><span style="color:var(--mint)">INTELLIGENCE</span></div></div><span class="pill">MINI APP · MVP</span></header>
+<div class="sub">Проверка открытых источников</div><h1>Один запрос.<br><em>Несколько платформ.</em></h1><p class="lead">Введите доступные данные, отметьте право на их проверку, получите структурированный отчёт с проверенными ссылками и прозрачным статусом источников.</p>
+<div class="grid"><section class="card" aria-label="Поисковая форма"><h2>Новая проверка</h2>
+<form id="search" autocomplete="off">
+<div class="section">Данные для уточнения запроса · необязательно</div><div class="fields">
+<div class="field wide"><label for="name">ФИО</label><input id="name" type="text" placeholder="Фамилия, имя, отчество" maxlength="160"></div>
+<div class="field"><label for="birth">Дата рождения</label><input id="birth" type="date"></div>
+<div class="field"><label for="city">Город рождения</label><input id="city" type="text" placeholder="Город" maxlength="100"></div>
+<div class="field wide"><label for="phone">Телефон</label><input id="phone" type="tel" placeholder="+7 ..." maxlength="40"></div>
+</div>
+<div class="section">Ссылки на профили</div>
+<div class="field"><label for="instagram">Instagram</label><input id="instagram" type="url" placeholder="https://instagram.com/..." maxlength="500"></div>
+<div class="field"><label for="vk">ВКонтакте</label><input id="vk" type="url" placeholder="https://vk.com/..." maxlength="500"></div>
+<div class="field"><label for="telegram">Telegram</label><input id="telegram" type="url" placeholder="https://t.me/..." maxlength="500"></div>
+<div class="section">Изображение · необязательно</div><div class="file"><label for="photo">Фото для собственного справочника</label><input id="photo" type="file" accept="image/png,image/jpeg,image/webp"><img id="preview" class="preview" alt="Предпросмотр загруженного фото"><p class="small">Фото остаётся только на этом устройстве. Поиск человека по лицу не выполняется.</p></div>
+<div class="check"><input id="consent" type="checkbox" required><label for="consent">Я подтверждаю, что имею право проверять указанные данные и согласен с условиями поиска. Мне понятно, что это не является согласием третьего лица на сбор его личной истории.</label></div>
+<button class="btn" type="submit" id="go" disabled>Начать поиск</button><p class="small">MVP проверяет формат переданных ссылок. История чужих лайков, скрытых подписок, переписок и перемещений недоступна.</p>
+</form></section>
+<aside class="stack"><section class="card"><h2>Обзор источников</h2><div class="stats"><div class="stat"><strong id="provided">0</strong><span>Передано ссылок</span></div><div class="stat"><strong>3</strong><span>Поддерживаемых платформы</span></div><div class="stat"><strong id="checked">0</strong><span>Проверено форматов</span></div><div class="stat"><strong id="errors">0</strong><span>Ошибок проверки</span></div></div></section>
+<section class="card"><h2>Этапы анализа</h2><div class="feature"><span class="dot"></span><div>Проверка структуры ссылок<div class="small">Нормализация и исключение неподдерживаемых адресов</div></div></div><div class="feature"><span class="dot"></span><div>Распределение по платформам<div class="small">Instagram, VK, Telegram</div></div></div><div class="feature"><span class="dot"></span><div>Сборка отчёта<div class="small">Источники, ограничения и результаты без домыслов</div></div></div><div class="notice warning">Для реального сбора контента потребуются разрешённые API, аутентификация и отдельный сервер. GitHub Actions выполняет тесты, а не постоянный поиск.</div></section></aside></div>
+<section class="card" id="report" aria-live="polite"><div class="reportHead"><h2 style="margin:0">Отчёт по источникам</h2><span id="reportTime" class="small"></span></div><div class="loading" id="working">Проверка ссылок…</div><nav class="tabs" id="tabs" aria-label="Разделы отчёта"></nav><div id="reportContent"></div><button id="export" class="btn" type="button" style="margin-top:15px">Экспорт отчёта в JSON</button><div class="notice">Статус «ссылка проверена» означает только корректный адрес. Он не доказывает, что аккаунт принадлежит указанному человеку, или что активность была получена.</div></section>
+</main>
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+const platforms=["instagram","vk","telegram"];
+const labels={overview:"Обзор",instagram:"Instagram",vk:"ВКонтакте",telegram:"Telegram",other:"Дополнительно"};
+const hostnames={instagram:["instagram.com","www.instagram.com"],vk:["vk.com","www.vk.com"],telegram:["t.me","telegram.me"]};
+let current=null,selected="overview",previewUrl=null;
+$("consent").addEventListener("change",()=>{$("go").disabled=!$("consent").checked;});
+$("photo").addEventListener("change",()=>{
+ if(previewUrl) URL.revokeObjectURL(previewUrl); previewUrl=null; $("preview").style.display="none";
+ const file=$("photo").files?.[0];
+ if(file&&/^image\/(png|jpeg|webp)$/.test(file.type)&&file.size<=5_000_000){previewUrl=URL.createObjectURL(file);$("preview").src=previewUrl;$("preview").style.display="block";}
+ else if(file) alert("Допустимы PNG/JPEG/WebP размером до 5 МБ.");
+});
+function normalize(p,value){
+ const u=new URL(value.trim()); const host=u.hostname.toLowerCase().replace(/\.$/,"");
+ if(!["https:","http:"].includes(u.protocol)||!hostnames[p].includes(host)||u.username||u.password||u.port)throw Error("Неофициальная ссылка");
+ const parts=u.pathname.split("/").filter(Boolean);
+ if(parts.length!==1||parts[0].startsWith("+")||!(/^[\w.]{2,64}$/.test(parts[0])||(p==="vk"&&/^[\w.-]{2,64}$/.test(parts[0]))))throw Error("Ожидается прямая ссылка на профиль");
+ if(["p","reel","reels","stories","login","joinchat","share","settings","explore"].includes(parts[0].toLowerCase()))throw Error("Это не ссылка на профиль");
+ return "https://"+({instagram:"instagram.com",vk:"vk.com",telegram:"t.me"}[p])+"/"+parts[0];
+}
+function clean(v){return String(v).replace(/[\u0000-\u001f<>]/g,"");}
+function el(tag,txt,cls){const node=document.createElement(tag);if(txt!==undefined)node.textContent=txt;if(cls)node.className=cls;return node;}
+function block(title,description,status,url){
+ const card=el("article",undefined,"source"),heading=el("div",undefined,"line");
+ heading.append(el("h3",title),el("span",status,"status"));card.append(heading,el("p",description,"small"));
+ if(url){const a=el("a",url);a.href=url;a.target="_blank";a.rel="noopener noreferrer";card.append(a);}
+ return card;
+}
+function makeReport(){
+ const profiles=[];let invalid=0;
+ platforms.forEach(p=>{const raw=$(p).value.trim();if(!raw)return;
+ try{profiles.push({platform:p,status:"link_verified",url:normalize(p,raw),source:"user_supplied"});}
+ catch(e){profiles.push({platform:p,status:"invalid",reason:String(e.message||e)});invalid++;}
+ });
+ $("provided").textContent=String(profiles.length);
+ $("checked").textContent=String(profiles.length-invalid);
+ $("errors").textContent=String(invalid);
+ current={generated_at:new Date().toISOString(),version:"0.1.0",source_checks:profiles,capabilities:"URL syntax only; no external social network lookup",limitations:["No identity matching","No tracking private individuals","No face identification","No private messages","No hidden memberships","No historical third-party follows or likes","No dating-account discovery"]};
+ $("report").style.display="block";$("reportTime").textContent=new Date().toLocaleString("ru-RU");selected="overview";render();
+ $("report").scrollIntoView({behavior:"smooth",block:"start"});
+}
+function render(){
+ const tabs=$("tabs");tabs.replaceChildren();
+ Object.entries(labels).forEach(([id,label])=>{
+ const b=el("button",label,"tab"+(id===selected?" active":""));b.type="button";b.setAttribute("aria-pressed",String(id===selected));
+ b.addEventListener("click",()=>{selected=id;render();});tabs.append(b);
+ });
+ const area=$("reportContent");area.replaceChildren();
+ if(selected==="overview"){
+ area.append(block("Проверка завершена","Система проверила корректность введённых ссылок. Проверка принадлежности профилей, поиск публикаций, лайков или сообщений ещё не выполняется.","Проверено"));
+ current.source_checks.forEach(s=>area.append(block(labels[s.platform],s.status==="invalid"?s.reason:"Нормализованная ссылка; принадлежность не подтверждена",s.status==="invalid"?"Ошибка":"Формат OK",s.url)));
+ if(!current.source_checks.length)area.append(el("div","Укажите хотя бы одну ссылку на профиль для её проверки.","empty"));
+ }else if(selected==="other"){
+ area.append(block("Дополнительные сведения","ФИО, дата рождения, город и телефон не отправляются на сервер и не используются для идентификации другого человека.","Не обработано"));
+ area.append(block("Проверка сторонних сайтов","Поиск скрытых профилей знакомств, истории перемещений и других личных записей не выполняется.","Недоступно"));
+ }else{
+ const match=current.source_checks.filter(s=>s.platform===selected);
+ if(!match.length)area.append(el("div","Для этой платформы ссылка не была указана.","empty"));
+ match.forEach(s=>area.append(block(labels[s.platform],s.status==="invalid"?s.reason:"Исходная ссылка проверена. Данные об активности стороннего аккаунта не получены.",s.status==="invalid"?"Ошибка":"Формат OK",s.url)));
+ area.append(block("Публикации, комментарии и активность","Проверенных событий пока нет. Подключение официальных API для разрешённых аккаунтов является следующим этапом.","Нет данных"));
+ area.append(block("Подписки, реакции и история изменений","Полная история действий произвольного человека недоступна по одной ссылке.","Нет данных"));
+ }
+}
+$("search").addEventListener("submit",event=>{
+ event.preventDefault();if(!$("consent").checked)return;
+ $("go").disabled=true;$("go").textContent="Проверяем ссылки…";
+ requestAnimationFrame(()=>{makeReport();$("go").disabled=false;$("go").textContent="Начать поиск";});
+});
+$("export").addEventListener("click",()=>{
+ if(!current)return;const blob=new Blob([JSON.stringify(current,null,2)],{type:"application/json"});
+ const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="social-intelligence-report.json";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
+})();
+</script></body></html>
