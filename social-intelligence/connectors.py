@@ -3,7 +3,7 @@ import os,re,asyncio,json,base64,subprocess,sys
 from datetime import timezone
 from typing import Any
 import httpx
-from public_parser import parse_profile,parse_post
+from public_parser import parse_profile,parse_post,page_route,has_embedded_data
 
 TIMEOUT=20.0
 HANDLE=re.compile(r"^[A-Za-z0-9._]{1,30}$")
@@ -77,6 +77,16 @@ async def playwright_public_collect(username:str,max_posts:int=12)->dict[str,Any
             await page.goto("https://www.instagram.com/"+username+"/?hl=en",wait_until="domcontentloaded",timeout=45000)
             await page.wait_for_timeout(1500)
             html=await page.content()
+            route=page_route(html)
+            if route and "LoginHomepageRoute" in route:
+                await context.close(); await browser.close()
+                return {"status":"unavailable","source":"playwright_public","detail":"login_wall","route":route}
+            if route and "ErrorRoute" in route:
+                await context.close(); await browser.close()
+                return {"status":"not_found","source":"playwright_public","detail":"profile_not_found","route":route}
+            if route and "ProfileRoute" in route and not has_embedded_data(html):
+                await context.close(); await browser.close()
+                return {"status":"rate_limited","source":"playwright_public","detail":"profile_shell_without_embedded_data","route":route}
             prof=parse_profile(html,username)
             posts=[]
             if prof:
