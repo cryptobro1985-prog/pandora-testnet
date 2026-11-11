@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit, urlunsplit
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from source_registry import capability_snapshot
@@ -152,6 +152,10 @@ def startup_configure_telegram_menu():
 @app.get("/api/telegram/bot-status")
 def telegram_bot_status():
     return TELEGRAM_STATUS
+
+@app.head("/")
+def head_index():
+    return Response(status_code=200)
 
 @app.get("/")
 def index():
