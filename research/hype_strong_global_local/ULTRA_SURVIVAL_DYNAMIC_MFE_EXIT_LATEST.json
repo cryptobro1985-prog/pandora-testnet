@@ -4972,6 +4972,102 @@
     "passes_2p5x_liq_cushion": true,
     "passes_2pct_equity_stop_budget": true
   },
+  "capture_first_positive_development_variant": {
+    "selected": {
+      "stop_pct": 1.5,
+      "activation_mfe_pct": 0.75,
+      "recoil_floor_pct": 0.25,
+      "recoil_fraction_of_mfe": 0.35,
+      "confirmation_bars": 1,
+      "require_opposite_flow": false
+    },
+    "development": {
+      "JUL_AUG": {
+        "trades": 26,
+        "wins": 22,
+        "win_rate": 0.8461538461538461,
+        "compound_pct": 4.271982784479911,
+        "maxdd_pct": 3.2137559999999787,
+        "median_mfe_pct": 0.8862334382295556,
+        "median_mae_pct": 0.48691968865376967,
+        "median_capture": 0.5878585244542702,
+        "stop_count": 4,
+        "flip_count": 0,
+        "exit_reasons": {
+          "EMERGENCY_STOP": 4,
+          "MFE_RECOIL": 22
+        }
+      },
+      "AUG_SEP": {
+        "trades": 27,
+        "wins": 20,
+        "win_rate": 0.7407407407407407,
+        "compound_pct": 0.3753177357221693,
+        "maxdd_pct": 6.628298052867376,
+        "median_mfe_pct": 0.920458492532128,
+        "median_mae_pct": 0.6381934216985852,
+        "median_capture": 0.5595238095238099,
+        "stop_count": 6,
+        "flip_count": 1,
+        "exit_reasons": {
+          "EMERGENCY_STOP": 6,
+          "MFE_RECOIL": 20,
+          "OPPOSITE_ULTRA_FLIP": 1
+        }
+      },
+      "SEP_OCT": {
+        "trades": 34,
+        "wins": 28,
+        "win_rate": 0.8235294117647058,
+        "compound_pct": 6.151929556193814,
+        "maxdd_pct": 3.6170770454371115,
+        "median_mfe_pct": 1.0015339123747191,
+        "median_mae_pct": 0.48357683996675394,
+        "median_capture": 0.5741028630651654,
+        "stop_count": 5,
+        "flip_count": 1,
+        "exit_reasons": {
+          "EMERGENCY_STOP": 5,
+          "MFE_RECOIL": 28,
+          "OPPOSITE_ULTRA_FLIP": 1
+        }
+      }
+    },
+    "historical_later_test_OCT_NOV": {
+      "trades": 34,
+      "wins": 30,
+      "win_rate": 0.8823529411764706,
+      "compound_pct": 15.01682972116367,
+      "maxdd_pct": 2.8463078417600207,
+      "median_mfe_pct": 0.9133662349769978,
+      "median_mae_pct": 0.39669719437428475,
+      "median_capture": 0.6014705882352958,
+      "stop_count": 3,
+      "flip_count": 1,
+      "exit_reasons": {
+        "EMERGENCY_STOP": 3,
+        "MFE_RECOIL": 30,
+        "OPPOSITE_ULTRA_FLIP": 1
+      }
+    },
+    "MAY_diagnostic": {
+      "trades": 31,
+      "wins": 27,
+      "win_rate": 0.8709677419354839,
+      "compound_pct": 11.046292347445718,
+      "maxdd_pct": 3.2233051344133345,
+      "median_mfe_pct": 1.0504269896418394,
+      "median_mae_pct": 0.6264250570022778,
+      "median_capture": 0.5830388692579466,
+      "stop_count": 3,
+      "flip_count": 1,
+      "exit_reasons": {
+        "EMERGENCY_STOP": 3,
+        "MFE_RECOIL": 27,
+        "OPPOSITE_ULTRA_FLIP": 1
+      }
+    }
+  },
   "signal_scores": {
     "MAY": {
       "episodes": 118,
