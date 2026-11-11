@@ -1,15 +1,17 @@
 from __future__ import annotations
-import os, re, asyncio
+import os,re,asyncio
 from datetime import timezone
 from typing import Any
 import httpx
+from public_parser import parse_profile,parse_post
 
 TIMEOUT=20.0
 HANDLE=re.compile(r"^[A-Za-z0-9._]{1,30}$")
+HEADERS={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/156 Safari/537.36","Accept-Language":"en-US,en;q=0.9"}
 
 def normalize_username(value:str)->str:
     v=(value or "").strip()
-    v=re.sub(r"^https?://(www\\.)?instagram\\.com/","",v,flags=re.I)
+    v=re.sub(r"^https?://(www\.)?instagram\.com/","",v,flags=re.I)
     v=v.split("?")[0].strip("/")
     if v.startswith("@"): v=v[1:]
     if "/" in v: v=v.split("/")[0]
@@ -45,16 +47,40 @@ async def business_discovery(username:str)->dict[str,Any]:
 async def media_comments(media_id:str,limit:int=100)->dict[str,Any]:
     return await meta_get(media_id+"/comments",{"fields":"id,text,timestamp,username,like_count,replies{id,text,timestamp,username,like_count}","limit":max(1,min(limit,100))})
 
-async def public_profile(username:str)->dict[str,Any]:
-    url="https://www.instagram.com/"+username+"/"
-    headers={"User-Agent":"Mozilla/5.0","Accept-Language":"en-US,en;q=0.9"}
+async def public_embedded_collect(username:str,max_posts:int=12)->dict[str,Any]:
+    """MIT 2scraper-inspired: read server-rendered application/json from logged-out pages."""
+    profile_url="https://www.instagram.com/"+username+"/?hl=en"
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT,follow_redirects=True,headers=headers) as client:
+        async with httpx.AsyncClient(timeout=TIMEOUT,follow_redirects=True,headers=HEADERS) as client:
+            r=await client.get(profile_url)
+            if r.status_code>=400:
+                return {"status":"unavailable","source":"public_embedded","http_status":r.status_code}
+            prof=parse_profile(r.text,username)
+            if not prof:
+                return {"status":"partial","source":"public_embedded","detail":"embedded_profile_missing","profile":{},"posts":[]}
+            posts=[]
+            codes=(prof.get("recent_post_codes") or [])[:max(0,min(max_posts,12))]
+            for code in codes:
+                try:
+                    pr=await client.get("https://www.instagram.com/p/"+code+"/?hl=en")
+                    if pr.status_code<400:
+                        parsed=parse_post(pr.text,code)
+                        if parsed: posts.append(parsed)
+                except Exception:
+                    continue
+        return {"status":"ok","source":"public_embedded","profile":prof,"posts":posts}
+    except Exception as e:
+        return {"status":"unavailable","source":"public_embedded","detail":type(e).__name__}
+
+async def public_profile(username:str)->dict[str,Any]:
+    url="https://www.instagram.com/"+username+"/?hl=en"
+    try:
+        async with httpx.AsyncClient(timeout=TIMEOUT,follow_redirects=True,headers=HEADERS) as client:
             r=await client.get(url)
         if r.status_code>=400: return {"status":"unavailable","source":"public_page","http_status":r.status_code}
-        text=r.text[:1000000]
+        text=r.text[:1500000]
         def m(prop):
-            x=re.search(r'<meta[^>]+property=["\\\']'+prop+r'["\\\'][^>]+content=["\\\']([^"\\\']*)',text,re.I)
+            x=re.search(r'<meta[^>]+property=["\']'+prop+r'["\'][^>]+content=["\']([^"\']*)',text,re.I)
             return x.group(1) if x else ""
         return {"status":"ok","source":"public_page","url":str(r.url),"title":m("og:title"),"description":m("og:description"),"image":m("og:image")}
     except Exception as e:
@@ -77,11 +103,12 @@ def _instaloader_collect(username:str,max_posts:int=30)->dict[str,Any]:
         elif session_file and login_user and os.path.exists(session_file):
             L.load_session_from_file(login_user,session_file)
         profile=instaloader.Profile.from_username(L.context,username)
-        out={"status":"ok","source":"instaloader","profile":{"username":profile.username,"name":profile.full_name or "",
-             "biography":profile.biography or "","followers_count":getattr(profile,"followers",None),
+        out={"status":"ok","source":"instaloader","profile":{"username":profile.username,"user_id":str(getattr(profile,"userid","")) or None,
+             "name":profile.full_name or "","biography":profile.biography or "","followers_count":getattr(profile,"followers",None),
              "follows_count":getattr(profile,"followees",None),"media_count":getattr(profile,"mediacount",None),
              "profile_picture_url":str(profile.profile_pic_url) if profile.profile_pic_url else None,
-             "is_verified":getattr(profile,"is_verified",None)},"posts":[],"followers":[],"following":[],"warnings":[]}
+             "is_verified":getattr(profile,"is_verified",None),"is_private":getattr(profile,"is_private",None)},
+             "posts":[],"followers":None,"following":None,"warnings":[]}
         for i,post in enumerate(profile.get_posts()):
             if i>=max_posts: break
             row={"id":post.mediaid,"shortcode":post.shortcode,"permalink":"https://www.instagram.com/p/"+post.shortcode+"/",
@@ -94,21 +121,28 @@ def _instaloader_collect(username:str,max_posts:int=30)->dict[str,Any]:
                     if actor: row["comments_detail"].append({"username":actor,"text":c.text or "","timestamp":c.created_at_utc.replace(tzinfo=timezone.utc).isoformat() if c.created_at_utc else None})
             except Exception as e: out["warnings"].append("comments:"+post.shortcode+":"+type(e).__name__)
             try:
+                likes=[]
                 for j,u in enumerate(post.get_likes()):
                     if j>=500: break
-                    if getattr(u,"username",None): row["likers"].append(u.username)
+                    if getattr(u,"username",None): likes.append(u.username)
+                row["likers"]=likes
             except Exception as e: out["warnings"].append("likes:"+post.shortcode+":"+type(e).__name__)
             out["posts"].append(row)
-        try:
-            for i,u in enumerate(profile.get_followers()):
-                if i>=10000: break
-                out["followers"].append({"pk":str(getattr(u,"userid",u.username)),"username":u.username,"full_name":getattr(u,"full_name","") or "","is_verified":bool(getattr(u,"is_verified",False))})
-        except Exception as e: out["warnings"].append("followers:"+type(e).__name__)
-        try:
-            for i,u in enumerate(profile.get_followees()):
-                if i>=10000: break
-                out["following"].append({"pk":str(getattr(u,"userid",u.username)),"username":u.username,"full_name":getattr(u,"full_name","") or "","is_verified":bool(getattr(u,"is_verified",False))})
-        except Exception as e: out["warnings"].append("following:"+type(e).__name__)
+        if login_user and (session_b64 or (session_file and os.path.exists(session_file))):
+            try:
+                followers=[]
+                for i,u in enumerate(profile.get_followers()):
+                    if i>=10000: break
+                    followers.append({"pk":str(getattr(u,"userid",u.username)),"username":u.username,"full_name":getattr(u,"full_name","") or "","is_verified":bool(getattr(u,"is_verified",False))})
+                out["followers"]=followers
+            except Exception as e: out["warnings"].append("followers:"+type(e).__name__)
+            try:
+                following=[]
+                for i,u in enumerate(profile.get_followees()):
+                    if i>=10000: break
+                    following.append({"pk":str(getattr(u,"userid",u.username)),"username":u.username,"full_name":getattr(u,"full_name","") or "","is_verified":bool(getattr(u,"is_verified",False))})
+                out["following"]=following
+            except Exception as e: out["warnings"].append("following:"+type(e).__name__)
         return out
     except Exception as e:
         return {"status":"unavailable","source":"instaloader","detail":type(e).__name__}
