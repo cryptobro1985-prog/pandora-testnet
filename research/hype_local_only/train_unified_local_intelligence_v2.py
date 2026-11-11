@@ -50,33 +50,48 @@ def _logit(p):
     return math.log(p/(1-p))
 
 def _minute_regime(minutes,end_times,ts_ms):
-    """Absolute market regime using completed M1 bars only, including 6h/8h."""
+    """Strictly causal regime from contiguous completed minute bars only.
+
+    Missing minutes must NOT turn a 6h/8h return into a return over a longer
+    unknown interval. A window is unavailable (not zero-valued) after a gap.
+    """
     j=bisect.bisect_right(end_times,int(ts_ms))
     if j<2:return {}
-    closes=[float(x["close"]) for x in minutes[max(0,j-500):j] if finite(x.get("close"))]
-    if len(closes)<2:return {}
-    px=closes[-1]
     out={}
+    valid_windows={}
     for n in (5,15,30,60,180,360,480):
-        if len(closes)>n and closes[-n-1]>0:
-            out[f"discovery__market_ret_{n}m"]=px/closes[-n-1]-1.0
-    if len(closes)>=61:
-        rr=[closes[i]/closes[i-1]-1 for i in range(max(1,len(closes)-60),len(closes)) if closes[i-1]>0]
-        if rr: out["discovery__market_realized_vol_60m"]=statistics.pstdev(rr)
-    r15=out.get("discovery__market_ret_15m",0.0)
-    r60=out.get("discovery__market_ret_60m",0.0)
-    r360=out.get("discovery__market_ret_360m",0.0)
-    r480=out.get("discovery__market_ret_480m",0.0)
-    # bounded trend score; all terms are causal returns ending at snapshot t.
-    score=(.35*math.tanh(r15*80)+.30*math.tanh(r60*35)+
-           .20*math.tanh(r360*12)+.15*math.tanh(r480*10))
-    out["discovery__market_regime_score"]=score
-    out["discovery__market_bull_strength"]=max(0.0,score)
-    out["discovery__market_bear_strength"]=max(0.0,-score)
-    out["discovery__market_transition_strength"]=max(0.0,1.0-abs(score)*2.0)
-    out["discovery__market_accel_15v60"]=r15-r60/4.0
-    out["discovery__market_accel_60v360"]=r60-r360/6.0
-    out["discovery__market_accel_60v480"]=r60-r480/8.0
+        if j<n+1:continue
+        window=minutes[j-n-1:j]
+        if any(bool(x.get("gap")) or not finite(x.get("close")) or float(x["close"])<=0
+               for x in window):
+            continue
+        times=[int(x["bar_end_ms"]) for x in window]
+        if any(b-a!=60000 for a,b in zip(times,times[1:])):
+            continue
+        vals=[float(x["close"]) for x in window]
+        out[f"discovery__market_ret_{n}m"]=vals[-1]/vals[0]-1.0
+        valid_windows[n]=vals
+    if 60 in valid_windows:
+        vals=valid_windows[60]
+        rr=[vals[i]/vals[i-1]-1.0 for i in range(1,len(vals))]
+        out["discovery__market_realized_vol_60m"]=statistics.pstdev(rr)
+    # Fail closed when the 6h or 8h regime window is unavailable; do not
+    # impute a missing regime with a misleading neutral zero.
+    required=(15,60,360,480)
+    if all(n in valid_windows for n in required):
+        r15=out["discovery__market_ret_15m"]
+        r60=out["discovery__market_ret_60m"]
+        r360=out["discovery__market_ret_360m"]
+        r480=out["discovery__market_ret_480m"]
+        score=(.35*math.tanh(r15*80)+.30*math.tanh(r60*35)+
+               .20*math.tanh(r360*12)+.15*math.tanh(r480*10))
+        out["discovery__market_regime_score"]=score
+        out["discovery__market_bull_strength"]=max(0.0,score)
+        out["discovery__market_bear_strength"]=max(0.0,-score)
+        out["discovery__market_transition_strength"]=max(0.0,1.0-abs(score)*2.0)
+        out["discovery__market_accel_15v60"]=r15-r60/4.0
+        out["discovery__market_accel_60v360"]=r60-r360/6.0
+        out["discovery__market_accel_60v480"]=r60-r480/8.0
     return out
 
 class CortexRelationshipExpert:
