@@ -2,6 +2,7 @@ from __future__ import annotations
 import argparse, gzip, hashlib, json, os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import requests
 
 from research.hype_full_micro_202607 import build_full_micro as base
 
@@ -27,6 +28,35 @@ def sha256(path):
         for b in iter(lambda:f.read(1024*1024),b""):
             h.update(b)
     return h.hexdigest()
+
+
+def fetch_static_metadata():
+    out={"server_time_ms":None,"instrument":None}
+    try:
+        r=requests.get("https://api.bybit.com/v5/market/time",timeout=10)
+        obj=r.json()
+        out["server_time_ms"]=int((obj.get("result") or {}).get("timeNano","0"))//1_000_000
+    except Exception:
+        pass
+    try:
+        r=requests.get("https://api.bybit.com/v5/market/instruments-info",params={"category":"linear","symbol":base.SYMBOL},timeout=10)
+        obj=r.json()
+        xs=(obj.get("result") or {}).get("list") or []
+        if xs:
+            z=xs[0]
+            out["instrument"]={
+                "symbol":z.get("symbol"),
+                "contractType":z.get("contractType"),
+                "status":z.get("status"),
+                "tickSize":((z.get("priceFilter") or {}).get("tickSize")),
+                "qtyStep":((z.get("lotSizeFilter") or {}).get("qtyStep")),
+                "minOrderQty":((z.get("lotSizeFilter") or {}).get("minOrderQty")),
+                "maxOrderQty":((z.get("lotSizeFilter") or {}).get("maxOrderQty")),
+                "fundingInterval":z.get("fundingInterval"),
+            }
+    except Exception:
+        pass
+    return out
 
 def main():
     ap=argparse.ArgumentParser()
@@ -104,6 +134,16 @@ def main():
                 for k,v in z.items():
                     if k!="_ts_ms" and base.finite(v):
                         feat[f"fullmicro_{kind}_{k}"]=float(v)
+
+            mark=None; index=None
+            for k,v in list(feat.items()):
+                lk=k.lower()
+                if mark is None and "mark" in lk and "price" in lk and base.finite(v): mark=float(v)
+                if index is None and "index" in lk and "price" in lk and base.finite(v): index=float(v)
+            if mark is not None and index not in (None,0.0):
+                feat["fullmicro_basis_bps_derived"]=(mark/index-1.0)*10000.0
+            feat["fullmicro_gap_health_orderbook_valid"]=float(feat.get("fullmicro_book_valid",0.0) or 0.0)
+            feat["fullmicro_gap_health_liq_60s_valid"]=float(feat.get("fullmicro_liq_stream_valid_60s",0.0) or 0.0)
             rows.append({"ts_ms":t,"features":feat})
 
         dt+=timedelta(hours=1)
@@ -129,10 +169,20 @@ def main():
     out=args.output/"missing_rich_layers_1m.jsonl.gz"
     write_jsonl_gz(out,rows)
 
+    static_meta=fetch_static_metadata()
     manifest={
         "symbol":base.SYMBOL,
         "period":[start.isoformat(),end.isoformat()],
         "purpose":"MISSING_RICH_LAYERS_ONLY",
+        "seven_blocks":[
+            "L50_ORDERBOOK_DYNAMICS",
+            "PUBLIC_LIQUIDATIONS",
+            "OPEN_INTEREST_DELTA_NOTIONAL",
+            "MARK_INDEX_FUNDING_BASIS",
+            "LONG_SHORT_HOLDER_RATIO_5M",
+            "TIME_AND_INSTRUMENT_METADATA",
+            "GAP_CONTINUITY_VALIDITY_MASKS"
+        ],
         "join_key":"ts_ms",
         "rows_1m":len(rows),
         "downloaded_kinds":list(KINDS),
@@ -146,6 +196,7 @@ def main():
         "compression":"gzip-9",
         "schemas":schemas,
         "account_ratio_rows":len(ratio_rows),
+        "static_metadata":static_meta,
         "quality_contract":base.MICRO_QUALITY_CONTRACT,
     }
     (args.output/"manifest.json").write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+"\n")
