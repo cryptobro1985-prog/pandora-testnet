@@ -2,7 +2,7 @@
 """Live L50 quality guard must fail closed on crossed book."""
 import unittest
 from types import SimpleNamespace
-from research.hype_local_only.feature_discovery import _book_features
+from research.hype_local_only.feature_discovery import _book_features, _liq_features
 
 def book(bids=None,asks=None):
     return SimpleNamespace(book_bids=bids or {},book_asks=asks or {},
@@ -33,5 +33,40 @@ class LiveBookQualityTest(unittest.TestCase):
         f=_book_features(book({100.0:-1},{100.1:2}),100.0,"HIGH")
         self.assertEqual(f["book_quality_valid"],0.)
         self.assertNotIn("book_spread_bps",f)
+
+class EventWindowCausalityTest(unittest.TestCase):
+    def test_future_book_change_excluded(self):
+        ts=1700000000000
+        state=book({100.:3},{100.1:2})
+        state.last_ts_ms=ts
+        state.book_changes=[
+            (ts-1000,{"bid_add":10.0,"ask_add":0.0}),
+            (ts+1000,{"bid_add":0.0,"ask_add":10000.0})]
+        f=_book_features(state,100.05,"LOW")
+        self.assertEqual(f["book_add_imbalance_15s"],1.0)
+
+    def test_future_only_book_change_not_feature(self):
+        ts=1700000000000
+        state=book({100.:3},{100.1:2})
+        state.last_ts_ms=ts
+        state.book_changes=[(ts+1000,{"bid_add":0.0,"ask_add":1.0})]
+        f=_book_features(state,100.05,"LOW")
+        self.assertNotIn("book_add_imbalance_15s",f)
+
+    def test_future_liquidation_excluded(self):
+        ts=1700000000000
+        state=SimpleNamespace(last_ts_ms=ts,liqs=[
+            {"ts_ms":ts-1000,"notional":100.0,"side":1},
+            {"ts_ms":ts+1000,"notional":100000.0,"side":-1}])
+        f=_liq_features(state,{},"LOW")
+        self.assertEqual(f["liq_events_15s"],1.)
+        self.assertEqual(f["liq_side_imbalance_15s"],-1.)
+
+    def test_future_only_liquidation_not_feature(self):
+        ts=1700000000000
+        state=SimpleNamespace(last_ts_ms=ts,liqs=[
+            {"ts_ms":ts+1000,"notional":100000.0,"side":-1}])
+        f=_liq_features(state,{},"LOW")
+        self.assertNotIn("liq_events_15s",f)
 
 if __name__=="__main__": unittest.main()
