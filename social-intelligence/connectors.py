@@ -44,6 +44,15 @@ async def _discover_meta_ig_user_id()->str|None:
     version=os.getenv("META_GRAPH_VERSION","v24.0")
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+            # Instagram-user tokens can identify the IG account directly.
+            direct=await client.get("https://graph.facebook.com/"+version+"/me",params={
+              "fields":"id,username,name,account_type",
+              "access_token":token
+            })
+            direct_data=_safe_json(direct)
+            if direct.status_code<400 and direct_data.get("id") and direct_data.get("username"):
+                return str(direct_data["id"])
+            # Facebook user/page tokens expose linked professional IG accounts through /me/accounts.
             r=await client.get("https://graph.facebook.com/"+version+"/me/accounts",params={
               "fields":"id,name,instagram_business_account{id,username}",
               "limit":100,
