@@ -17,8 +17,8 @@ from .audit_dense_coverage import read_jsonl
 from .causal_sequential_engine import CausalReversalMachine
 
 
-def audit(bars):
-    machine = CausalReversalMachine()
+def audit(bars, *, reset_anchors_on_flip=True):
+    machine = CausalReversalMachine(reset_anchors_on_flip=reset_anchors_on_flip)
     flips = []
     n_bars = 0
     first_ts = last_ts = None
@@ -46,6 +46,7 @@ def audit(bars):
     return {
         "orders": "OFF",
         "signal_generation": "completed_M1_label_blind",
+        "reset_anchors_on_flip": reset_anchors_on_flip,
         "bars": n_bars,
         "observed_utc_days": len(by_day),
         "total_core_flips": len(flips),
