@@ -55,7 +55,7 @@ def parse_profile(html:str,username:str):
             for edge in conn.get("edges") or []:
                 node=edge.get("node") if isinstance(edge,dict) else None
                 code=node.get("code") if isinstance(node,dict) else None
-                if code and code not in posts: posts.append(code)
+                if isinstance(code,str) and SHORTCODE_RE.fullmatch(code) and code not in posts: posts.append(code)
         return {
           "username":user.get("username") or username,
           "user_id":pk,
