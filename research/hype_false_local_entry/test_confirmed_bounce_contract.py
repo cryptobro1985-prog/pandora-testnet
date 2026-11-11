@@ -3,6 +3,7 @@
 Run: python -m unittest research.hype_false_local_entry.test_confirmed_bounce_contract
 """
 import unittest
+from unittest.mock import patch
 
 from research.hype_false_local_entry import confirmed_local_bounce_cv as cv
 from research.hype_quant.feature_contract import INPUT_IDS
@@ -27,6 +28,17 @@ class ConfirmedBounceContractTests(unittest.TestCase):
         self.assertEqual(audit["decision_rows"], 2)
         self.assertEqual(audit["certified_micro_rows"], 0)
         self.assertFalse(audit["rich_micro_validated_for_cv"])
+
+    def test_event_sampling_reaches_inventory(self):
+        # Verify the CLI-facing CV builder does not silently revert to the
+        # legacy candidate-age grid.
+        with patch.object(cv.replay, "inventory", return_value=({}, {})) as inventory:
+            periods, rows = cv.build("unused-master", decision_sampling="completed_m1_events")
+        inventory.assert_called_once_with(
+            "unused-master", {}, decision_sampling="completed_m1_events"
+        )
+        self.assertEqual(periods, {})
+        self.assertEqual(rows, {})
 
     def test_no_features_not_misreported_as_coverage(self):
         result = cv.predictor_coverage({"period_a": [{"features": {}}]})["period_a"]
