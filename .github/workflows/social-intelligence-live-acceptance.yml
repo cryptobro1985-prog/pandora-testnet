@@ -5,6 +5,7 @@ on:
     branches:
       - feature/social-intelligence-miniapp-mvp-20261111
     paths:
+      - "social-intelligence/**"
       - ".github/workflows/social-intelligence-live-acceptance.yml"
   workflow_dispatch:
 
