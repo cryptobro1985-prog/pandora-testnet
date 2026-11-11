@@ -457,7 +457,7 @@ def main():
       "research_only":True,"real_orders":False
     }
     (args.output/"HYPE_TRI_BRAIN_ABLATION_V1.json").write_text(
-        json.dumps(ablation,indent=2,ensure_ascii=False,allow_nan=False)+"\\n")
+        json.dumps(ablation,indent=2,ensure_ascii=False,allow_nan=False)+"\n")
     torch.save(bundle,args.output/"HYPE_UNIFIED_LOCAL_INTELLIGENCE_V2.pt")
     (args.output/"HYPE_UNIFIED_LOCAL_INTELLIGENCE_V2_REPORT.json").write_text(
         json.dumps(report,indent=2,ensure_ascii=False,allow_nan=False)+"\n")
