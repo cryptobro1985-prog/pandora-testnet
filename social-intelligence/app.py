@@ -49,8 +49,31 @@ def snapshot(username,followers,following,profile):
               (username,now,json.dumps(followers or []),json.dumps(following or []),json.dumps(profile,ensure_ascii=False)))
     c.commit(); c.close(); d["snapshot_at"]=now; return d
 
+async def _startup_smoke():
+    target=os.getenv("IG_STARTUP_SMOKE_TARGET","").strip()
+    if not target:
+        return
+    try:
+        result=await scan(ScanRequest(query=target,max_posts=12))
+        print("instagram_smoke_test="+json.dumps({
+            "username":result.get("username"),
+            "profile_keys":sorted((result.get("profile") or {}).keys()),
+            "posts":len(result.get("posts") or []),
+            "events":len(result.get("events") or []),
+            "relationships":len(result.get("relationships") or []),
+            "followers_observed":result.get("followers") is not None,
+            "following_observed":result.get("following") is not None,
+            "sources":result.get("sources"),
+            "warnings":(result.get("warnings") or [])[:8]
+        },ensure_ascii=False))
+    except Exception as e:
+        print("instagram_smoke_test_error="+type(e).__name__+":"+str(e)[:300])
+
 @app.on_event("startup")
-def startup(): db().close()
+async def startup():
+    db().close()
+    import asyncio
+    asyncio.create_task(_startup_smoke())
 @app.head("/")
 def head(): return Response(status_code=200)
 @app.get("/")
