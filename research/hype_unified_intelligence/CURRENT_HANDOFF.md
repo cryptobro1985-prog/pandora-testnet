@@ -233,3 +233,25 @@ as-of event timestamp; avoid forward-filled gaps and stale source snapshots.
 Then compare frozen candidate-level LOW/HIGH and separately LONG/SHORT
 entry-path/MFE exit models across disjoint chronological sessions; require
 fresh untouched forward for deployment verdict.
+
+## Continuation checkpoint — event-time upper bound (2026-11-11)
+
+Inspected the live feature generator, not merely the July snapshot report.
+Found a **causal leakage bug** in `research/hype_local_only/feature_discovery.py`:
+book-change and liquidation windows included events with
+`event_ts >= decision_ts - window` but did **not** require
+`event_ts <= decision_ts`. A buffered out-of-order or future-dated event
+could therefore influence a prediction before that event happened.
+
+Fixed both paths in commit `89de073cdfeeaf87cc8e98d5fe476e1fe492a2b4`;
+added deterministic past/future boundary regression tests in
+`research/hype_local_only/test_feature_discovery_book_quality.py` commit
+`21420150362ba023e00b173ed0def64fd88b03d0`.
+
+This is **code-level evidence**, not yet evidence that historical HYPE
+predictions were affected. No new PnL, MFE capture, forward alpha or
+live-readiness claims. The existing July crossed-book quarantine remains.
+Next: verify CI; audit raw Nov8–10 source timestamps (exchange vs local
+receipt vs decision) for actual future-event inclusion, stale snapshots,
+missing streams, and unmatched source generations. Then freeze causal
+features and evaluate on fresh untouched forward. Real orders OFF.
