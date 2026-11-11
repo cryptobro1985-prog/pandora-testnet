@@ -17,7 +17,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from source_registry import capability_snapshot
-from connectors import telegram_get_chat, telegram_get_chat_member, vk_users_get, vk_wall_get, vk_wall_comments, vk_likes_get_list, instagram_business_discovery, instagram_media_comments, public_profile_page
+from connectors import telegram_get_chat, telegram_get_chat_member, vk_users_get, vk_wall_get, vk_wall_comments, vk_likes_get_list, instagram_business_discovery, instagram_media_comments, public_profile_page, public_telegram_feed, public_vk_wall
 
 app = FastAPI(title="Social Intelligence Mini App", version="0.1.0")
 WEB = Path(__file__).resolve().parent / "web"
@@ -253,7 +253,7 @@ async def _collect_instagram_events(api_result: dict) -> dict:
             "url": permalink,
         })
         if m.get("like_count") is not None:
-            events["Входящие лайки"].append({
+            events["Полученные лайки"].append({
                 "title": "Лайки на публикации",
                 "text": "%s лайков на публикации%s" % (m.get("like_count"), (": "+caption[:90]) if caption else ""),
                 "when": ts,
@@ -270,7 +270,7 @@ async def _collect_instagram_events(api_result: dict) -> dict:
             for item in data[:50]:
                 username = item.get("username") or "Публичный пользователь"
                 text = item.get("text") or ""
-                events["Входящие комментарии"].append({
+                events["Полученные комментарии"].append({
                     "title": "@"+username if username else "Комментарий",
                     "text": text[:500],
                     "when": item.get("timestamp"),
@@ -279,11 +279,24 @@ async def _collect_instagram_events(api_result: dict) -> dict:
     return events
 
 
-async def _collect_vk_events(user_result: dict) -> dict:
+async def _collect_vk_events(user_result: dict, public_wall: dict | None = None) -> dict:
     events = {k: [] for k in [
         "Исходящие лайки","Исходящие комментарии","Входящие лайки","Входящие комментарии",
         "Новые подписки","Новые подписчики","Сообщества","Стена"
     ]}
+    if public_wall and public_wall.get("status") == "ok":
+        for p in (public_wall.get("items") or [])[:20]:
+            detail = p.get("text") or "Публичная публикация"
+            counts = []
+            if p.get("likes"): counts.append("лайки: "+str(p["likes"]))
+            if p.get("comments"): counts.append("комментарии: "+str(p["comments"]))
+            if counts: detail += " · " + " · ".join(counts)
+            events["Стена"].append({
+                "title": p.get("title") or "Публикация VK",
+                "text": detail[:2000],
+                "when": p.get("when"),
+                "url": p.get("url"),
+            })
     if user_result.get("status") != "ok":
         return events
     users = user_result.get("response") or []
@@ -322,7 +335,7 @@ async def _collect_vk_events(user_result: dict) -> dict:
                 for cm in (cp.get("items") or [])[:100]:
                     author=profiles.get(cm.get("from_id"),{})
                     name=" ".join(x for x in [author.get("first_name"),author.get("last_name")] if x).strip() or str(cm.get("from_id") or "Пользователь")
-                    events["Полученные комментарии"].append({
+                    events["Входящие комментарии"].append({
                         "title": name,
                         "text": (cm.get("text") or "")[:500],
                         "when": cm.get("date"),
@@ -335,7 +348,7 @@ async def _collect_vk_events(user_result: dict) -> dict:
                         name=" ".join(x for x in [it.get("first_name"),it.get("last_name")] if x).strip() or str(it.get("id") or "Пользователь")
                     else:
                         name=str(it)
-                    events["Полученные лайки"].append({
+                    events["Входящие лайки"].append({
                         "title": name,
                         "text": "Поставил(а) лайк доступной публикации",
                         "when": p.get("date"),
@@ -344,7 +357,7 @@ async def _collect_vk_events(user_result: dict) -> dict:
     return events
 
 
-def _telegram_events(api_result: dict) -> dict:
+def _telegram_events(api_result: dict, public_feed: dict | None = None) -> dict:
     events = {k: [] for k in ["Публичные чаты и каналы","Публичные сообщения","Комментарии / обсуждения","Реакции"]}
     if api_result.get("status")=="ok" and api_result.get("chat"):
         chat=api_result["chat"]
@@ -354,7 +367,19 @@ def _telegram_events(api_result: dict) -> dict:
             "when": None,
             "url": ("https://t.me/"+chat["username"]) if chat.get("username") else None,
         })
+    if public_feed and public_feed.get("status")=="ok":
+        for item in (public_feed.get("items") or [])[:100]:
+            text=item.get("text") or ""
+            if item.get("views"):
+                text=(text+" · просмотры: "+str(item["views"])).strip(" ·")
+            events["Публичные сообщения"].append({
+                "title": item.get("title") or "Публичное сообщение",
+                "text": text[:2000],
+                "when": item.get("when"),
+                "url": item.get("url"),
+            })
     return events
+
 
 @app.post("/api/search")
 async def search(payload: SearchRequest):
@@ -376,6 +401,11 @@ async def search(payload: SearchRequest):
         handle = [p for p in urlsplit(normalized).path.split("/") if p][0]
         public_task = public_profile_page(normalized)
         api_task = None
+        extra_task = None
+        if item.platform == "telegram":
+            extra_task = public_telegram_feed(handle, 60)
+        elif item.platform == "vk":
+            extra_task = public_vk_wall(handle, 30)
 
         if item.platform == "telegram" and capabilities["telegram"]["configured"]:
             api_task = telegram_get_chat("@" + handle)
@@ -388,12 +418,13 @@ async def search(payload: SearchRequest):
 
         public_result = await public_task
         api_result = await api_task if api_task else {"status": "not_configured"}
+        extra_result = await extra_task if extra_task else {"status": "not_applicable"}
         if item.platform == "instagram":
             events = await _collect_instagram_events(api_result)
         elif item.platform == "vk":
-            events = await _collect_vk_events(api_result)
+            events = await _collect_vk_events(api_result, extra_result)
         else:
-            events = _telegram_events(api_result)
+            events = _telegram_events(api_result, extra_result)
 
         return {
             "platform": item.platform,
@@ -403,6 +434,7 @@ async def search(payload: SearchRequest):
             "public": public_result,
             "api": api_result,
             "events": events,
+            "public_feed": extra_result,
             "api_configured": bool(capabilities[item.platform]["configured"]),
         }
 
