@@ -34,6 +34,15 @@ class BruteForceAudit(unittest.TestCase):
             expected=brute(seq)
             self.assertAlmostEqual(actual["total_net_pct"],expected,places=8,msg=str(seq))
 
+    def test_exact_cooldown_boundary(self):
+        # First exit at t=60, next entry at t=120: exactly 60s cooldown.
+        # Two disjoint profitable long trades should both be selected.
+        rr=rows((100,102,100,102))
+        out=oracle(rr,fee_bps=0,slip_bps=0,
+                   min_hold_seconds=60,cooldown_seconds=60)
+        self.assertAlmostEqual(out["total_net_pct"],4.0,places=8)
+        self.assertEqual(out["trade_count"],2)
+
     def test_no_trade_crosses_gap(self):
         rr=rows((100,101,102))+[(3600,105,105,105),(3660,106,106,106)]
         out=oracle(rr,fee_bps=0,slip_bps=0,max_gap_seconds=300)
