@@ -1,5 +1,5 @@
 from __future__ import annotations
-import os,re,asyncio
+import os,re,asyncio,json,base64
 from datetime import timezone
 from typing import Any
 import httpx
@@ -47,6 +47,38 @@ async def business_discovery(username:str)->dict[str,Any]:
 async def media_comments(media_id:str,limit:int=100)->dict[str,Any]:
     return await meta_get(media_id+"/comments",{"fields":"id,text,timestamp,username,like_count,replies{id,text,timestamp,username,like_count}","limit":max(1,min(limit,100))})
 
+async def playwright_public_collect(username:str,max_posts:int=12)->dict[str,Any]:
+    """2scraper-style browser collector: open logged-out Instagram pages in Chromium and parse server-rendered JSON."""
+    try:
+        from playwright.async_api import async_playwright
+    except Exception as e:
+        return {"status":"unavailable","source":"playwright_public","detail":"playwright_not_installed"}
+    try:
+        async with async_playwright() as pw:
+            browser=await pw.chromium.launch(headless=True,args=["--no-sandbox","--disable-dev-shm-usage"])
+            context=await browser.new_context(locale="en-US",user_agent=HEADERS["User-Agent"])
+            page=await context.new_page()
+            await page.goto("https://www.instagram.com/"+username+"/?hl=en",wait_until="domcontentloaded",timeout=45000)
+            await page.wait_for_timeout(1500)
+            html=await page.content()
+            prof=parse_profile(html,username)
+            posts=[]
+            if prof:
+                for code in (prof.get("recent_post_codes") or [])[:max(0,min(max_posts,12))]:
+                    try:
+                        await page.goto("https://www.instagram.com/p/"+code+"/?hl=en",wait_until="domcontentloaded",timeout=45000)
+                        await page.wait_for_timeout(1200)
+                        parsed=parse_post(await page.content(),code)
+                        if parsed: posts.append(parsed)
+                    except Exception:
+                        continue
+            await context.close(); await browser.close()
+        if not prof:
+            return {"status":"partial","source":"playwright_public","detail":"embedded_profile_missing","profile":{},"posts":[]}
+        return {"status":"ok","source":"playwright_public","profile":prof,"posts":posts}
+    except Exception as e:
+        return {"status":"unavailable","source":"playwright_public","detail":type(e).__name__}
+
 async def public_embedded_collect(username:str,max_posts:int=12)->dict[str,Any]:
     """MIT 2scraper-inspired: read server-rendered application/json from logged-out pages."""
     profile_url="https://www.instagram.com/"+username+"/?hl=en"
@@ -93,22 +125,37 @@ def _instaloader_collect(username:str,max_posts:int=30)->dict[str,Any]:
         login_user=os.getenv("IG_USERNAME","").strip()
         session_file=os.getenv("IG_SESSIONFILE","").strip()
         session_b64=os.getenv("IG_SESSION_B64","").strip()
-        if session_b64 and login_user:
-            import base64,tempfile
+        session_json_b64=os.getenv("IG_SESSION_JSON_B64","").strip()
+        cookie_sessionid=os.getenv("IG_SESSIONID","").strip()
+        cookie_csrf=os.getenv("IG_CSRFTOKEN","").strip()
+        cookie_ds=os.getenv("IG_DS_USER_ID","").strip()
+        cookie_mid=os.getenv("IG_MID","").strip()
+        authed=False
+        if session_json_b64 and login_user:
+            data=json.loads(base64.b64decode(session_json_b64).decode("utf-8"))
+            if not isinstance(data,dict): raise ValueError("IG_SESSION_JSON_B64 must decode to a cookie dict")
+            L.context.load_session(login_user,data); authed=bool(L.test_login())
+        elif cookie_sessionid and cookie_csrf and login_user:
+            data={"sessionid":cookie_sessionid,"csrftoken":cookie_csrf}
+            if cookie_ds: data["ds_user_id"]=cookie_ds
+            if cookie_mid: data["mid"]=cookie_mid
+            L.context.load_session(login_user,data); authed=bool(L.test_login())
+        elif session_b64 and login_user:
+            import tempfile
             p=tempfile.NamedTemporaryFile(delete=False); p.write(base64.b64decode(session_b64)); p.close()
-            try: L.load_session_from_file(login_user,p.name)
+            try: L.load_session_from_file(login_user,p.name); authed=bool(L.test_login())
             finally:
                 try: os.unlink(p.name)
                 except OSError: pass
         elif session_file and login_user and os.path.exists(session_file):
-            L.load_session_from_file(login_user,session_file)
+            L.load_session_from_file(login_user,session_file); authed=bool(L.test_login())
         profile=instaloader.Profile.from_username(L.context,username)
         out={"status":"ok","source":"instaloader","profile":{"username":profile.username,"user_id":str(getattr(profile,"userid","")) or None,
              "name":profile.full_name or "","biography":profile.biography or "","followers_count":getattr(profile,"followers",None),
              "follows_count":getattr(profile,"followees",None),"media_count":getattr(profile,"mediacount",None),
              "profile_picture_url":str(profile.profile_pic_url) if profile.profile_pic_url else None,
              "is_verified":getattr(profile,"is_verified",None),"is_private":getattr(profile,"is_private",None)},
-             "posts":[],"followers":None,"following":None,"warnings":[]}
+             "posts":[],"followers":None,"following":None,"warnings":[],"authenticated":authed}
         for i,post in enumerate(profile.get_posts()):
             if i>=max_posts: break
             row={"id":post.mediaid,"shortcode":post.shortcode,"permalink":"https://www.instagram.com/p/"+post.shortcode+"/",
@@ -128,7 +175,7 @@ def _instaloader_collect(username:str,max_posts:int=30)->dict[str,Any]:
                 row["likers"]=likes
             except Exception as e: out["warnings"].append("likes:"+post.shortcode+":"+type(e).__name__)
             out["posts"].append(row)
-        if login_user and (session_b64 or (session_file and os.path.exists(session_file))):
+        if authed:
             try:
                 followers=[]
                 for i,u in enumerate(profile.get_followers()):
