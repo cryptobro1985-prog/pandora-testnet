@@ -51,5 +51,24 @@ class StrictDailyPathAuditTest(unittest.TestCase):
         self.assertEqual(len(report["source_sha256"]), 64)
 
 
+    def test_dense_burst_does_not_fake_daily_coverage(self):
+        rows = [
+            {"timestamp": f"2026-11-10T00:00:{i:02d}Z", "price": 100,
+             "executable_bid": 99.99, "executable_ask": 100.01}
+            for i in range(60)
+        ]
+        report = audit(self.write_rows(rows), expected_step_seconds=1440,
+                       max_gap_seconds=300, min_coverage=0.95)
+        day = report["days"]["2026-11-10"]
+        self.assertEqual(day["status"], "REJECT_INCOMPLETE_COVERAGE")
+        self.assertLess(day["coverage_fraction"], 0.95)
+
+    def test_rejects_naive_datetime(self):
+        path = self.write_rows([{"timestamp": "2026-11-10T00:00:00",
+                                "price": 100, "executable_bid": 99.99,
+                                "executable_ask": 100.01}])
+        with self.assertRaisesRegex(ValueError, "timezone"):
+            audit(path)
+
 if __name__ == "__main__":
     unittest.main()
