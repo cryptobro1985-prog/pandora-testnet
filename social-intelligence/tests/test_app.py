@@ -67,3 +67,21 @@ def test_capabilities_endpoint_is_explicit_about_limits():
     assert data["instagram"]["viewer_identity"] is False
     assert data["vk"]["private_messages"] is False
     assert data["telegram"]["all_user_groups"] is False
+
+
+def test_search_empty_payload():
+    r = client.post("/api/search", json={"profiles": []})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["status"] == "complete"
+    assert data["results"] == []
+
+
+def test_search_rejects_bad_profile_without_network():
+    r = client.post("/api/search", json={
+        "profiles": [{"platform": "instagram", "url": "https://evil.example/user"}]
+    })
+    assert r.status_code == 200
+    item = r.json()["results"][0]
+    assert item["platform"] == "instagram"
+    assert item["status"] == "invalid"
