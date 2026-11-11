@@ -5,7 +5,7 @@ from datetime import datetime,timezone
 from fastapi import FastAPI,Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel,Field
-from connectors import normalize_username,business_discovery,media_comments,public_profile,public_embedded_collect,playwright_public_collect,instaloader_collect
+from connectors import normalize_username,business_discovery,media_comments,public_profile,public_embedded_collect,playwright_public_collect,instaloader_collect,warm_playwright
 from analysis import build_events,relationship_report,audience_quality,graph_payload,timeline
 from storage import init_schema,get_last_snapshot,save_snapshot,begin_run,finish_run,save_posts,save_events,history,backend_info
 
@@ -96,12 +96,14 @@ async def _bounded(coro,source,timeout=22):
 @app.on_event("startup")
 async def startup():
     init_schema()
+    import asyncio,logging
+    warm=await warm_playwright()
+    logging.getLogger("uvicorn.error").warning("playwright_warmup=%s",json.dumps(warm))
     target=os.getenv("IG_STARTUP_SMOKE_TARGET","").strip()
     if target:
-        import asyncio,logging
         async def runner():
             try:
-                result=await asyncio.wait_for(scan(ScanRequest(query=target,max_posts=8)),timeout=70)
+                result=await asyncio.wait_for(scan(ScanRequest(query=target,max_posts=8)),timeout=90)
                 logging.getLogger("uvicorn.error").warning("instagram_smoke_test=%s",json.dumps({
                     "username":result.get("username"),"posts":len(result.get("posts") or []),"events":len(result.get("events") or []),
                     "relationships":len(result.get("relationships") or []),"sources":result.get("sources"),"warnings":(result.get("warnings") or [])[:8]
