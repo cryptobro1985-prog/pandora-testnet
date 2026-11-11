@@ -350,3 +350,19 @@ from a decision clock. Next cycle should inspect Nov raw source field mappings
 and enforce availability/freshness in the source adapter, then audit measured
 stale/future/crossed rates. No new PnL or OOS improvement claimed.
 Previous 161/1252 crossed July books remain quarantined. Real orders OFF.
+
+## Continuation checkpoint — missing L50 timestamp gate (2026-11-11)
+
+Single issue: previously `_book_features` accepted untimestamped books as
+valid even though quote age and causal as-of alignment were unknown. Now
+`book_ts_ms is None` returns `book_quality_valid=0` plus
+`book_quality_timestamp_missing=1`; derived spread, depth, and microprice
+are withheld. Stale, future, crossed, and valid timestamped cases retain
+prior semantics. Regression test added. Commits: dde17502, 791fc621.
+
+**CI: pending verification**; previous run 42985174019 SUCCESS applies to
+older code only, not this change. November raw missing-timestamp incidence
+has not been measured. The source adapter may not populate book_ts_ms and
+therefore suppress all live L50 predictors; inspect source mappings and
+freshness coverage before any model claims. Historical July 161/1252 crossed
+books remain excluded. No new edge, MFE or PnL measured; real orders OFF.
