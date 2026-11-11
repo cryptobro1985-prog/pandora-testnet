@@ -1,0 +1,52 @@
+name: Social Intelligence Direct Collector Probe
+
+on:
+  push:
+    branches:
+      - feature/social-intelligence-miniapp-mvp-20261111
+    paths:
+      - ".github/workflows/social-intelligence-direct-probe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  direct-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install collector dependencies
+        run: |
+          python -m pip install httpx beautifulsoup4 playwright
+          python -m playwright install chromium
+      - name: Probe Instagram directly from GitHub runner
+        working-directory: social-intelligence
+        run: |
+          python - <<'PY'
+          import asyncio,json
+          from connectors import public_profile,public_embedded_collect,playwright_public_collect
+          async def one(target):
+              a,b,c=await asyncio.gather(
+                  public_profile(target),
+                  public_embedded_collect(target,3),
+                  playwright_public_collect(target,3),
+              )
+              print("TARGET",target)
+              print("public_page",json.dumps(a,ensure_ascii=False)[:1500])
+              print("embedded_status",b.get("status"),b.get("detail"),"posts",len(b.get("posts") or []),"profile",bool(b.get("profile")))
+              print("browser_status",c.get("status"),c.get("detail"),"posts",len(c.get("posts") or []),"profile",bool(c.get("profile")))
+              return max(len(b.get("posts") or []),len(c.get("posts") or []))
+          async def main():
+              counts=[]
+              for t in ("instagram","natgeo","nasa"):
+                  counts.append(await one(t))
+              print("POST_COUNTS",counts)
+              if not any(x>0 for x in counts):
+                  raise SystemExit("NO_DEEP_PUBLIC_DATA")
+          asyncio.run(main())
+          PY

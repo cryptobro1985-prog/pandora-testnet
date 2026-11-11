@@ -1,0 +1,49 @@
+name: Social Intelligence Mini App - CI
+
+on:
+  push:
+    branches:
+      - feature/social-intelligence-miniapp-mvp-20261111
+    paths:
+      - 'social-intelligence/**'
+      - '.github/workflows/social-intelligence-miniapp.yml'
+  pull_request:
+    paths:
+      - 'social-intelligence/**'
+      - '.github/workflows/social-intelligence-miniapp.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install -r social-intelligence/requirements.txt
+      - name: Run tests
+        run: python -m pytest -q social-intelligence/tests
+      - name: Check Mini App JavaScript syntax
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          html = Path("social-intelligence/web/index.html").read_text(encoding="utf-8")
+          scripts = re.findall(r"<script>(.*?)</script>", html, flags=re.S)
+          assert len(scripts) == 1, f"expected one inline script, got {len(scripts)}"
+          Path("/tmp/social-intelligence-miniapp.js").write_text(scripts[0], encoding="utf-8")
+          PY
+          node --check /tmp/social-intelligence-miniapp.js
+      - name: Package Telegram Mini App static frontend
+        uses: actions/upload-artifact@v4
+        with:
+          name: social-intelligence-miniapp
+          path: social-intelligence/web/index.html
+          if-no-files-found: error
+          retention-days: 14

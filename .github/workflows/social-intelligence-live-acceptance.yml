@@ -1,0 +1,47 @@
+name: Social Intelligence Live Acceptance
+
+on:
+  workflow_dispatch:
+
+jobs:
+  live-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Scan multiple public profiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="https://social-intelligence-live-v2.onrender.com"
+          BASE="$ROOT/api/smoke"
+          echo "Waiting for deployed backend health..."
+          curl -fsS --retry 18 --retry-all-errors --retry-delay 5 --max-time 10 "$ROOT/api/health" -o /tmp/health.json
+          cat /tmp/health.json
+          echo
+          for TARGET in instagram natgeo nasa; do
+            echo "=== TARGET $TARGET ==="
+            curl -fsS --retry 4 --retry-all-errors --retry-delay 4 --max-time 180 "$BASE?target=$TARGET" -o "/tmp/$TARGET.json"
+            cat "/tmp/$TARGET.json"
+            echo
+          done
+          python - <<'PY'
+          import json
+          results=[]
+          for target in ("instagram","natgeo","nasa"):
+              d=json.load(open(f"/tmp/{target}.json"))
+              print("RESULT",target,
+                    "profile",d.get("profile_present"),
+                    "posts",d.get("posts"),
+                    "comments",d.get("comment_events"),
+                    "likes",d.get("like_identity_events"),
+                    "relationships",d.get("relationships"))
+              print(" sources=",json.dumps(d.get("sources"),ensure_ascii=False))
+              print(" coverage=",json.dumps(d.get("coverage"),ensure_ascii=False))
+              assert d.get("ok") is True
+              assert d.get("profile_present") is True
+              results.append(d)
+          # A live acceptance is only real when at least one public profile returns actual post data.
+          assert any((d.get("posts") or 0) > 0 for d in results), "all live scans returned zero posts"
+          # At least one deep collector must have worked; OpenGraph-only is not sufficient.
+          assert any(any(s.get("source")!="public_page" and s.get("status")=="ok" for s in (d.get("sources") or [])) for d in results), "no deep collector succeeded"
+          PY
