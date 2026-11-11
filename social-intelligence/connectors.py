@@ -242,6 +242,9 @@ async def public_profile(username:str)->dict[str,Any]:
         async with httpx.AsyncClient(timeout=TIMEOUT,follow_redirects=True,headers=HEADERS) as client:
             r=await client.get(url)
         if r.status_code>=400: return {"status":"unavailable","source":"public_page","http_status":r.status_code}
+        final_url=str(r.url)
+        if "/accounts/login/" in final_url:
+            return {"status":"unavailable","source":"public_page","detail":"login_wall","url":final_url}
         text=r.text[:1500000]
         def m(prop):
             x=re.search(r'<meta[^>]+property=["\']'+prop+r'["\'][^>]+content=["\']([^"\']*)',text,re.I)
