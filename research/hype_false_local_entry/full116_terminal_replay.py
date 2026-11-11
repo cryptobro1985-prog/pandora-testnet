@@ -314,7 +314,7 @@ def inventory(master, clean_index, decision_sampling="legacy_age_grid"):
         early = (rows if decision_sampling == "completed_m1_events" else
                  [row for row in rows if row["age_s"] in features.EARLY_AGES])
         matched = 0
-        if name == prior.PERIODS[0] and clean_index:
+        if clean_index:
             for row in early:
                 additional = features.clean_micro_features(row, clean_index)
                 matched += bool(features.available_points(additional) - QUALITY_ONLY)
