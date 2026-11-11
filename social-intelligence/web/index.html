@@ -60,13 +60,13 @@ function render(d){
   html+='</section>';
 
   html+='<section class="card"><h3>Изменения подписок между наблюдениями</h3>';
-  html+='<div class="row"><span class="good">Новые подписчики</span><b>'+(ch.new_followers||[]).length+'</b></div>';
+  html+='<div class="row"><span class="good">Новые подписчики</span><b>'+(ch.followers_observed?((ch.new_followers||[]).length):'UNKNOWN')+'</b></div>';
   html+=list(ch.new_followers,function(x){return '<div class="row"><span>@'+esc(x)+'</span><span class="pill">followed</span></div>'});
-  html+='<div class="row"><span class="warn">Отписались</span><b>'+(ch.lost_followers||[]).length+'</b></div>';
+  html+='<div class="row"><span class="warn">Отписались</span><b>'+(ch.followers_observed?((ch.lost_followers||[]).length):'UNKNOWN')+'</b></div>';
   html+=list(ch.lost_followers,function(x){return '<div class="row"><span>@'+esc(x)+'</span><span class="pill">unfollowed</span></div>'});
-  html+='<div class="row"><span class="good">TARGET подписался</span><b>'+(ch.new_following||[]).length+'</b></div>';
+  html+='<div class="row"><span class="good">TARGET подписался</span><b>'+(ch.following_observed?((ch.new_following||[]).length):'UNKNOWN')+'</b></div>';
   html+=list(ch.new_following,function(x){return '<div class="row"><span>@'+esc(x)+'</span><span class="pill">new following</span></div>'});
-  html+='<div class="row"><span class="warn">TARGET отписался</span><b>'+(ch.unfollowed||[]).length+'</b></div>';
+  html+='<div class="row"><span class="warn">TARGET отписался</span><b>'+(ch.following_observed?((ch.unfollowed||[]).length):'UNKNOWN')+'</b></div>';
   html+=list(ch.unfollowed,function(x){return '<div class="row"><span>@'+esc(x)+'</span><span class="pill">unfollowed</span></div>'});
   html+='</section></div>';
 
