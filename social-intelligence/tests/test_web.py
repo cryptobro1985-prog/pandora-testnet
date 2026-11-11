@@ -22,7 +22,7 @@ def test_miniapp_has_controls_and_report_tabs():
     parser.feed(html)
     assert {"search", "consent", "go", "instagram", "vk", "telegram",
             "lastName", "firstName", "middleName", "birth", "city", "phone", "photo", "report",
-            "tabs", "export", "reportContent"} <= parser.ids
+            "tabs", "periodTabs", "export", "reportContent"} <= parser.ids
     assert parser.scripts == 1
     assert "localStorage" in html
     assert "social_intelligence_search_history_v1" in html
@@ -38,3 +38,10 @@ def test_bot_configuration_does_not_embed_secret():
     assert 'os.environ.get("BOT_TOKEN"' in script
     assert "setChatMenuButton" in script
     assert "print(token)" not in script
+
+
+def test_interaction_report_has_periods_and_platform_sections():
+    html = (Path(__file__).resolve().parents[1] / "web" / "index.html").read_text(encoding="utf-8")
+    for token in ["30 дней", "60 дней", "90 дней", "Новые подписки", "Поставленные лайки",
+                  "Публичные чаты и каналы", "Публичные сообщения", "eventRail"]:
+        assert token in html
