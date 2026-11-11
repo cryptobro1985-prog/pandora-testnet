@@ -12,6 +12,7 @@ from sklearn.pipeline import Pipeline
 
 from research.hype_false_local_entry import full116_candidate_features as feat
 from research.hype_false_local_entry import full116_terminal_replay as replay
+from research.hype_false_local_entry import full116_data_sources as sources
 from research.hype_quant.feature_contract import INPUT_IDS
 
 QUALITY_ONLY=set(replay.QUALITY_ONLY)
@@ -33,8 +34,8 @@ def legal_predictor(name, value):
     return point in INPUT_IDS and point not in QUALITY_ONLY
 
 
-def build(master):
-    periods,_=replay.inventory(master,{})
+def build(master, clean_index=None):
+    periods,_=replay.inventory(master,clean_index or {})
     rows={}
     for name,p in periods.items():
         tags=replay.outcomes(p["early"],p["scope"])
@@ -268,8 +269,14 @@ def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--master",type=Path,required=True)
     ap.add_argument("--output",type=Path,required=True)
-    a=ap.parse_args();a.output.parent.mkdir(parents=True,exist_ok=True)
-    periods,rows=build(a.master)
+    ap.add_argument("--clean-cache",type=Path,help="Certified rich-micro cache (optional)")
+    ap.add_argument("--clean-sha256",help="Required expected SHA256 when --clean-cache is set")
+    a=ap.parse_args()
+    if bool(a.clean_cache) != bool(a.clean_sha256):
+        ap.error("--clean-cache and --clean-sha256 must be provided together")
+    clean_index = sources.read_clean_cache(a.clean_cache,a.clean_sha256) if a.clean_cache else {}
+    a.output.parent.mkdir(parents=True,exist_ok=True)
+    periods,rows=build(a.master,clean_index)
     out={"version":"HYPE-CONFIRMED-LOCAL-BOUNCE-ENTRY-CV-v2-inner-period-OOF",
          "objective":"CONFIRM_LOCAL_THEN_ENTER_REVERSAL_MOVE_NOT_EXTREME_GUESS",
          "time_gate":False,"decision_sampling":"FIXED_CANDIDATE_AGE_GRID_NOT_EVENT_DRIVEN",
@@ -277,8 +284,9 @@ def main():
          "by_side":{},"real_orders":False,
          "predictor_coverage":predictor_coverage(rows),
          "micro_provenance":micro_provenance(rows),
-         "micro_source_status":"NOT_LOADED: replay.inventory(master,{}) passes no certified micro snapshot index",
-         "micro_warning":"Historical M1 flow proxies are not evidence that L50, OI, liquidation, mark or funding streams were used. Do not claim rich-micro CV until a verified archive is loaded and timestamp-aligned."}
+         "micro_source_status":("CERTIFIED_CACHE_SHA256_VERIFIED" if clean_index else "NOT_LOADED"),
+         "micro_cache_sha256":a.clean_sha256 if clean_index else None,
+         "micro_warning":"Historical M1 flow proxies are not certified L50/OI/liquidation data. Certified cache availability is restricted by upstream period coverage; audit per-period provenance and feature selection before claiming rich-micro OOS."}
     for side in ("LOW","HIGH"):
         out["by_side"][side]=run_side(periods,rows,side)
     a.output.write_text(json.dumps(out,indent=2,ensure_ascii=False)+"\n")
