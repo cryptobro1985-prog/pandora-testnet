@@ -124,6 +124,37 @@ def metric(trades):
                       for k in sorted({x["reason"] for x in trades})}
     }
 
+def risk_grid(trades,stop_pct):
+    out=[]
+    for L in (3,5,10,15,20,25):
+        liq=max(0.0,1/L-.005)
+        for margin in (.02,.03,.05,.075,.10,.20):
+            exposure=L*margin
+            for extra_bps in (0,8,25):
+                shock=.0075
+                eq=1.;peak=1.;dd=0.
+                for t in trades:
+                    r=float(t["net"])-extra_bps/10000
+                    if t["reason"]=="EMERGENCY_STOP":
+                        r-=shock
+                    eq*=max(1e-12,1+exposure*r)
+                    peak=max(peak,eq);dd=max(dd,1-eq/peak)
+                stressed_underlying=stop_pct/100+COST+extra_bps/10000+shock
+                cushion=liq/stressed_underlying if stressed_underlying>0 else None
+                worst_stop_equity=exposure*stressed_underlying
+                out.append({
+                  "leverage":L,"margin_fraction":margin,"equity_exposure":exposure,
+                  "extra_cost_bps":extra_bps,
+                  "compound_pct":100*(eq-1),"maxdd_pct":100*dd,
+                  "approx_liq_distance_pct":100*liq,
+                  "stressed_stop_underlying_pct":100*stressed_underlying,
+                  "liq_cushion_multiple":cushion,
+                  "worst_stressed_stop_equity_loss_pct":100*worst_stop_equity,
+                  "passes_2p5x_liq_cushion":bool(cushion is not None and cushion>=2.5),
+                  "passes_2pct_equity_stop_budget":bool(worst_stop_equity<=.02)
+                })
+    return out
+
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--block",action="append",nargs=3,metavar=("NAME","COMPACT","LABELS"),required=True)
@@ -153,8 +184,16 @@ def main():
         trials.append((score,p,per))
     best=max(trials,key=lambda x:x[0])
     p=best[1]
-    test=metric(simulate(data[TEST]["bars"],data[TEST]["sig"],p))
-    may=metric(simulate(data["MAY"]["bars"],data["MAY"]["sig"],p)) if "MAY" in data else None
+    test_trades=simulate(data[TEST]["bars"],data[TEST]["sig"],p)
+    test=metric(test_trades)
+    may_trades=simulate(data["MAY"]["bars"],data["MAY"]["sig"],p) if "MAY" in data else []
+    may=metric(may_trades) if may_trades else None
+    risk=risk_grid(test_trades,p[0])
+    candidates=[z for z in risk if z["extra_cost_bps"]==8
+                and z["passes_2p5x_liq_cushion"]
+                and z["passes_2pct_equity_stop_budget"]
+                and z["compound_pct"]>0]
+    bounded_best=max(candidates,key=lambda z:(z["equity_exposure"],z["compound_pct"],-z["leverage"])) if candidates else None
     positive_all_dev=all(best[2][n]["compound_pct"]>0 for n in DEV)
     result={
       "version":"HYPE-ULTRA-SURVIVAL-V2-DYNAMIC-MFE-EXIT-v1",
@@ -166,6 +205,8 @@ def main():
       "development":best[2],"development_positive_all_blocks":positive_all_dev,
       "historical_later_test_OCT_NOV":test,
       "MAY_diagnostic_not_used_for_exit_selection":may,
+      "paper_risk_grid_OCT_NOV":risk,
+      "bounded_aggressive_paper_scenario_plus8bps":bounded_best,
       "signal_scores":{n:data[n]["score"]["evaluation"] for n in data},
       "research_only":True,"real_orders":False,
       "verdict":("PROMISING_HISTORICAL_EXIT_NOT_PRODUCTION"
