@@ -40,6 +40,20 @@ class ConfirmedBounceContractTests(unittest.TestCase):
         self.assertEqual(periods, {})
         self.assertEqual(rows, {})
 
+    def test_post_extreme_confirmation_requires_observed_reversal(self):
+        low = {"side": "LOW", "price": 100.0, "signal_price": 100.01}
+        high = {"side": "HIGH", "price": 100.0, "signal_price": 99.99}
+        self.assertTrue(cv.reversal_observed(low))
+        self.assertTrue(cv.reversal_observed(high))
+        for row in (
+            {**low, "signal_price": 100.0},
+            {**low, "signal_price": 99.99},
+            {**high, "signal_price": 100.0},
+            {**high, "signal_price": 100.01},
+            {**low, "signal_price": float("nan")},
+        ):
+            self.assertFalse(cv.reversal_observed(row))
+
     def test_no_features_not_misreported_as_coverage(self):
         result = cv.predictor_coverage({"period_a": [{"features": {}}]})["period_a"]
         self.assertEqual(result["available_point_count"], 0)
