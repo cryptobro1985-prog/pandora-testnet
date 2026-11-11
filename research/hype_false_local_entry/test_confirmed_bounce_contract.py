@@ -54,6 +54,16 @@ class ConfirmedBounceContractTests(unittest.TestCase):
         ):
             self.assertFalse(cv.reversal_observed(row))
 
+    def test_model_cannot_fit_only_pre_reversal_rows(self):
+        rows = [
+            {"side": "LOW", "price": 100.0, "signal_price": 100.0,
+             "terminal": False, "features": {"p001_any": 1.0}, "candidate_id": "a"},
+            {"side": "LOW", "price": 100.0, "signal_price": 99.9,
+             "terminal": True, "features": {"p001_any": 2.0}, "candidate_id": "b"},
+        ]
+        with self.assertRaisesRegex(ValueError, "Post-reversal training"):
+            cv.fit(rows, ["p001_any"])
+
     def test_no_features_not_misreported_as_coverage(self):
         result = cv.predictor_coverage({"period_a": [{"features": {}}]})["period_a"]
         self.assertEqual(result["available_point_count"], 0)
