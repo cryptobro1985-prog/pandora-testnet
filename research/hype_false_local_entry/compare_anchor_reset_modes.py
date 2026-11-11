@@ -9,28 +9,27 @@ import json
 from pathlib import Path
 from .audit_dense_coverage import read_jsonl
 from .audit_flip_churn import audit
-from .causal_sequential_engine import CausalReversalMachine
 
 def compare(bars):
     bars = list(bars)
     baseline = audit(bars)
-    # audit() intentionally instantiates the default machine; independently
-    # replay the opt-in research variant on exactly the same bars.
-    machine = CausalReversalMachine(reset_anchors_on_flip=False)
-    flips = []
-    for bar in bars:
-        flips.extend(s for s in machine.on_bar(bar) if s.core_flip)
-    timestamps = [s.ts_ms for s in flips]
-    gaps = [(b-a)/60000 for a,b in zip(timestamps,timestamps[1:])]
+    retained = audit(bars, reset_anchors_on_flip=False)
     return {
         "orders": "OFF",
         "bars": len(bars),
         "baseline": baseline,
-        "retained_anchor": {
-            "total_core_flips": len(flips),
-            "flips_within_5m_of_previous": sum(g <= 5 for g in gaps),
-            "adjacent_flip_pairs_within_5m_fraction": sum(g <= 5 for g in gaps)/len(gaps) if gaps else None,
-            "core_side_alternation_violations": sum(a.side == b.side for a,b in zip(flips,flips[1:])),
+        "retained_anchor": retained,
+        "delta_retained_minus_baseline": {
+            key: retained[key] - baseline[key]
+            for key in (
+                "total_core_flips",
+                "flips_within_5m_of_previous",
+                "flips_within_15m_of_previous",
+                "flips_within_60m_of_previous",
+                "max_flips_per_utc_hour",
+                "utc_hours_with_at_least_5_flips",
+                "core_side_alternation_violations",
+            )
         },
         "warning": "Label-blind churn comparison only; lower flips does not imply better recall, precision or PnL. Evaluate both modes on complete 122 internal/76 strict labels and untouched forward OOS before selection."
     }
