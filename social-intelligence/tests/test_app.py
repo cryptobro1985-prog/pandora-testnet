@@ -106,3 +106,19 @@ def test_search_public_collectors_shape(monkeypatch):
 
     vk = client.post("/api/search", json={"profiles":[{"platform":"vk","url":"https://vk.com/demo"}]}).json()["results"][0]
     assert vk["events"]["Стена"][0]["url"].endswith("wall1_1")
+
+
+def test_instagram_public_feed_is_merged(monkeypatch):
+    import app as appmod
+
+    async def fake_page(url):
+        return {"status":"ok","url":url,"title":"x","description":"","image":"","source":"public_profile_page"}
+    async def fake_ig(handle, limit=24):
+        return {"status":"ok","items":[{"title":"Публикация Instagram","text":"caption","when":None,"url":"https://www.instagram.com/p/abc/"}]}
+    monkeypatch.setattr(appmod, "public_profile_page", fake_page)
+    monkeypatch.setattr(appmod, "public_instagram_feed", fake_ig)
+
+    r = client.post("/api/search", json={"profiles":[{"platform":"instagram","url":"https://instagram.com/demo"}]})
+    assert r.status_code == 200
+    item = r.json()["results"][0]
+    assert item["events"]["Публикации"][0]["url"].endswith("/p/abc/")
