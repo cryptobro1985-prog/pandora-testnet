@@ -117,6 +117,12 @@ def weights(rows):
 
 
 def fit(rows,names):
+    # Train on actionable post-extreme states, not pre-bounce snapshots.
+    # This is NOT a new oracle label: terminal remains an offline evaluation
+    # target until event-level confirmation supervision is implemented.
+    rows = [r for r in rows if reversal_observed(r)]
+    if not rows or len({bool(r["terminal"]) for r in rows}) != 2:
+        raise ValueError("Post-reversal training requires both terminal classes")
     y=np.asarray([r["terminal"] for r in rows],dtype=int)
     m=Pipeline([
         ("impute",SimpleImputer(strategy="median",add_indicator=True)),
@@ -340,7 +346,7 @@ def main():
          "event_driven":False,
          "completed_m1_event_clock":a.decision_sampling == "completed_m1_events",
          "confirmation_rule":"Model threshold AND causally observed price reversal away from candidate (no fixed age gate).",
-         "supervision_warning":"Training still uses exact-terminal candidate membership. This is a research baseline, NOT validated post-extreme confirmation supervision or tick-level event-driven trading.",
+         "supervision_warning":"Training is restricted to causally observed post-extreme reversal states, but target remains exact-terminal candidate membership. This is NOT validated confirmation supervision or tick-level event-driven trading.",
          "sampling_warning":("Completed M1 bars are causal decision events, not tick-level L50 events; rich-micro alignment still requires validation." if a.decision_sampling == "completed_m1_events" else "Legacy predefined candidate-age snapshots; not event-driven."),
          "by_side":{},"real_orders":False,
          "predictor_coverage":predictor_coverage(rows),
