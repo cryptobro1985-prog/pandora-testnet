@@ -174,18 +174,21 @@ async def playwright_public_collect(username:str,max_posts:int=12)->dict[str,Any
             route=page_route(html)
             if route and "LoginHomepageRoute" in route:
                 await page.close()
-                if not remote: await context.close()
-                await browser.close()
+                if not remote:
+                    await context.close()
+                    await browser.close()
                 return {"status":"unavailable","source":"playwright_public","detail":"login_wall","route":route}
             if route and "ErrorRoute" in route:
                 await page.close()
-                if not remote: await context.close()
-                await browser.close()
+                if not remote:
+                    await context.close()
+                    await browser.close()
                 return {"status":"not_found","source":"playwright_public","detail":"profile_not_found","route":route}
             if route and "ProfileRoute" in route and not has_embedded_data(html):
                 await page.close()
-                if not remote: await context.close()
-                await browser.close()
+                if not remote:
+                    await context.close()
+                    await browser.close()
                 return {"status":"rate_limited","source":"playwright_public","detail":"profile_shell_without_embedded_data","route":route}
             prof=parse_profile(html,username)
             posts=[]
@@ -201,7 +204,7 @@ async def playwright_public_collect(username:str,max_posts:int=12)->dict[str,Any
             await page.close()
             if not remote:
                 await context.close()
-            await browser.close()
+                await browser.close()
         if not prof:
             return {"status":"partial","source":"playwright_public","detail":"embedded_profile_missing","profile":{},"posts":[]}
         return {"status":"ok","source":"playwright_public","profile":prof,"posts":posts}
