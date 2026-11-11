@@ -5,87 +5,15 @@
   "blocks": {
     "JUL_AUG": {
       "internal": {
-        "score": {
-          "finalized_locals": 0,
-          "complete_swings": 0,
-          "detected_locals": 0,
-          "missed_locals": 0,
-          "completed_swing_true_first": 0,
-          "completed_swing_missed": 0,
-          "completed_swing_missed_rate": null,
-          "completed_swing_recall": null,
-          "completed_swing_wrong_first": 0,
-          "completed_swing_no_signal": 0,
-          "completed_swing_first_present": 0,
-          "completed_swing_direction_precision_given_first": null,
-          "completed_swing_first_signal_precision": 0.0,
-          "completed_swing_false_first": 2277,
-          "terminal_local_hit_excluded_from_completed_swing_precision": false,
-          "missed_local_rate": null,
-          "no_signal_locals": 0,
-          "wrong_first_locals": 0,
-          "direction_precision_given_first": null,
-          "total_core_flips": 2277,
-          "false_first": 2277,
-          "first_signal_precision": 0.0,
-          "median_lag_ms": null,
-          "median_entry_distance_bps": null,
-          "median_adverse_extension_bps": null,
-          "median_remaining_swing_fraction": null,
-          "completed_swing_median_lag_ms": null,
-          "completed_swing_median_entry_distance_bps": null,
-          "completed_swing_median_adverse_extension_bps": null,
-          "completed_swing_median_remaining_swing_fraction": null
-        },
-        "trade_geometry": {
-          "signals": 0,
-          "correct": 0,
-          "wrong": 0,
-          "direction_precision_given_first": null,
-          "correct_lag_min": {
-            "median": null,
-            "p90": null,
-            "p95": null,
-            "max": null
-          },
-          "correct_entry_distance_pct": {
-            "median": null,
-            "p90": null,
-            "p95": null,
-            "max": null
-          },
-          "correct_mfe_pct": {
-            "median": null,
-            "p90": null,
-            "p95": null,
-            "max": null
-          },
-          "correct_mae_pct": {
-            "median": null,
-            "p90": null,
-            "p95": null,
-            "max": null
-          },
-          "wrong_mae_pct": {
-            "median": null,
-            "p90": null,
-            "p95": null,
-            "max": null
-          },
-          "wrong_mfe_pct": {
-            "median": null,
-            "p90": null,
-            "p95": null,
-            "max": null
-          },
-          "wrong_to_next_local_pct": {
-            "median": null,
-            "p90": null,
-            "p95": null,
-            "max": null
-          },
-          "rows": []
-        }
+        "status": "MISSING_OR_INSUFFICIENT_LABELS",
+        "block": "JUL_AUG",
+        "cohort": "internal",
+        "available_keys": [
+          "strict",
+          "strict_exclusions"
+        ],
+        "label_count": 0,
+        "not_scored": true
       },
       "strict": {
         "score": {
@@ -13989,8 +13917,58 @@
       ]
     }
   },
+  "cohort_coverage": {
+    "internal": [
+      {
+        "block": "JUL_AUG",
+        "status": "MISSING"
+      },
+      {
+        "block": "AUG_SEP",
+        "status": "SCORED",
+        "labels": 96
+      },
+      {
+        "block": "SEP_OCT",
+        "status": "SCORED",
+        "labels": 129
+      },
+      {
+        "block": "OCT_NOV",
+        "status": "SCORED",
+        "labels": 122
+      }
+    ],
+    "strict": [
+      {
+        "block": "JUL_AUG",
+        "status": "SCORED",
+        "labels": 47
+      },
+      {
+        "block": "AUG_SEP",
+        "status": "SCORED",
+        "labels": 64
+      },
+      {
+        "block": "SEP_OCT",
+        "status": "SCORED",
+        "labels": 73
+      },
+      {
+        "block": "OCT_NOV",
+        "status": "SCORED",
+        "labels": 76
+      }
+    ]
+  },
+  "aggregate_completeness": {
+    "internal": "PARTIAL_MISSING_LABELS",
+    "strict": "COMPLETE"
+  },
   "limitations": [
     "This reproduces the checked-in CausalReversalMachine, not the later Ultra detector.",
+    "Missing label cohorts are excluded and aggregate marked PARTIAL; never infer all-block coverage.",
     "Teacher labels are used only after causal signal generation for scoring and path geometry.",
     "No execution latency/slippage/mark-price liquidation model.",
     "This baseline still includes wrong-first and duplicate core-flip behavior; veto/dedupe is the next optimization target."
