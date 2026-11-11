@@ -1,0 +1,25 @@
+name: HYPE Book Freshness Causality Smoke
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - research/hype_local_only/feature_discovery.py
+      - research/hype_local_only/test_feature_discovery_book_quality.py
+      - .github/workflows/hype-book-freshness-smoke.yml
+permissions:
+  contents: read
+jobs:
+  causality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Book quote and future-event boundary regression
+        run: |
+          python -m unittest -v research.hype_local_only.test_feature_discovery_book_quality
+          python -m py_compile research/hype_local_only/feature_discovery.py
