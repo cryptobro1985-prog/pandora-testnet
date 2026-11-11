@@ -1638,6 +1638,20 @@
     }
   },
   {
+    "id": 13638197659,
+    "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42533955275",
+    "size_in_bytes": 7323,
+    "created_at": "2026-11-08T23:12:35Z",
+    "expires_at": "2026-11-11T23:12:34Z",
+    "workflow_run": {
+      "head_branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+      "head_repository_id": 1430598683,
+      "head_sha": "fad678807af713908cbdcc18e084c751d581bf92",
+      "id": 42533955275,
+      "repository_id": 1430598683
+    }
+  },
+  {
     "id": 13637684944,
     "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42534044315",
     "size_in_bytes": 13398,
