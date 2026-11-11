@@ -112,6 +112,7 @@ def backend_info():
 
 
 def save_bridge_payload(username,payload):
+    init_schema()
     c=_connect(); now=datetime.now(timezone.utc).isoformat()
     body=json.dumps(payload,ensure_ascii=False)
     sql="insert into si_bridge_payloads(username,observed_at,payload_json) values(%s,%s,%s)" if _pg() else "insert into si_bridge_payloads(username,observed_at,payload_json) values(?,?,?)"
@@ -119,6 +120,7 @@ def save_bridge_payload(username,payload):
     return now
 
 def get_latest_bridge_payload(username):
+    init_schema()
     c=_connect()
     sql="select observed_at,payload_json from si_bridge_payloads where username=%s order by id desc limit 1" if _pg() else "select observed_at,payload_json from si_bridge_payloads where username=? order by id desc limit 1"
     row=c.execute(sql,(username,)).fetchone();c.close()
