@@ -51,3 +51,9 @@ def test_event_cards_show_source_links():
     html = (Path(__file__).resolve().parents[1] / "web" / "index.html").read_text(encoding="utf-8")
     assert "Открыть источник" in html
     assert "live?.events?.[section]" in html
+
+
+def test_vk_report_separates_inbound_and_outbound():
+    html = (Path(__file__).resolve().parents[1] / "web" / "index.html").read_text(encoding="utf-8")
+    for token in ["Исходящие лайки", "Исходящие комментарии", "Входящие лайки", "Входящие комментарии"]:
+        assert token in html
