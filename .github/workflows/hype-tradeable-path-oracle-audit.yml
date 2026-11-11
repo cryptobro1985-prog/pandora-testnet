@@ -1,0 +1,23 @@
+name: HYPE tradeable-path oracle audit
+on:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - 'research/hype_movement_signature/tradeable_path_oracle_v2.py'
+      - 'research/hype_movement_signature/test_tradeable_path_oracle_v2*.py'
+      - '.github/workflows/hype-tradeable-path-oracle-audit.yml'
+  workflow_dispatch:
+jobs:
+  oracle-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run independent exhaustive audit and unit tests
+        run: |
+          cd research/hype_movement_signature
+          python -m unittest -v test_tradeable_path_oracle_v2.py test_tradeable_path_oracle_v2_bruteforce.py
