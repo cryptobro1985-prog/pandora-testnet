@@ -136,17 +136,34 @@ def _playwright_cookie_list():
     return cookies
 
 async def playwright_public_collect(username:str,max_posts:int=12)->dict[str,Any]:
-    """2scraper-style browser collector; uses the user's configured Instagram session when present."""
+    """2scraper-style browser collector.
+    Supports a local Chromium session, imported Playwright storage state, or a user-owned remote CDP browser.
+    """
     try:
         from playwright.async_api import async_playwright
     except Exception:
         return {"status":"unavailable","source":"playwright_public","detail":"playwright_not_installed"}
+    browser=None; context=None; remote=False
     try:
-        if not await _ensure_playwright_browser():
-            return {"status":"unavailable","source":"playwright_public","detail":"chromium_install_failed"}
+        cdp=os.getenv("IG_CDP_ENDPOINT","").strip()
+        storage_b64=os.getenv("IG_BROWSER_STORAGE_STATE_B64","").strip()
         async with async_playwright() as pw:
-            browser=await pw.chromium.launch(headless=True,args=["--no-sandbox","--disable-dev-shm-usage"])
-            context=await browser.new_context(locale="en-US",user_agent=HEADERS["User-Agent"])
+            if cdp:
+                browser=await pw.chromium.connect_over_cdp(cdp,timeout=30000)
+                remote=True
+                context=browser.contexts[0] if browser.contexts else await browser.new_context(locale="en-US")
+            else:
+                if not await _ensure_playwright_browser():
+                    return {"status":"unavailable","source":"playwright_public","detail":"chromium_install_failed"}
+                browser=await pw.chromium.launch(headless=True,args=["--no-sandbox","--disable-dev-shm-usage"])
+                kwargs={"locale":"en-US","user_agent":HEADERS["User-Agent"]}
+                if storage_b64:
+                    try:
+                        state=json.loads(base64.b64decode(storage_b64).decode("utf-8"))
+                        if isinstance(state,dict): kwargs["storage_state"]=state
+                    except Exception:
+                        return {"status":"unavailable","source":"playwright_public","detail":"invalid_storage_state"}
+                context=await browser.new_context(**kwargs)
             auth_cookies=_playwright_cookie_list()
             if auth_cookies:
                 await context.add_cookies(auth_cookies)
@@ -156,13 +173,19 @@ async def playwright_public_collect(username:str,max_posts:int=12)->dict[str,Any
             html=await page.content()
             route=page_route(html)
             if route and "LoginHomepageRoute" in route:
-                await context.close(); await browser.close()
+                await page.close()
+                if not remote: await context.close()
+                await browser.close()
                 return {"status":"unavailable","source":"playwright_public","detail":"login_wall","route":route}
             if route and "ErrorRoute" in route:
-                await context.close(); await browser.close()
+                await page.close()
+                if not remote: await context.close()
+                await browser.close()
                 return {"status":"not_found","source":"playwright_public","detail":"profile_not_found","route":route}
             if route and "ProfileRoute" in route and not has_embedded_data(html):
-                await context.close(); await browser.close()
+                await page.close()
+                if not remote: await context.close()
+                await browser.close()
                 return {"status":"rate_limited","source":"playwright_public","detail":"profile_shell_without_embedded_data","route":route}
             prof=parse_profile(html,username)
             posts=[]
@@ -175,7 +198,10 @@ async def playwright_public_collect(username:str,max_posts:int=12)->dict[str,Any
                         if parsed: posts.append(parsed)
                     except Exception:
                         continue
-            await context.close(); await browser.close()
+            await page.close()
+            if not remote:
+                await context.close()
+            await browser.close()
         if not prof:
             return {"status":"partial","source":"playwright_public","detail":"embedded_profile_missing","profile":{},"posts":[]}
         return {"status":"ok","source":"playwright_public","profile":prof,"posts":posts}
