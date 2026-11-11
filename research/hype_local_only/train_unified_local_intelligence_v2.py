@@ -97,13 +97,14 @@ class CortexRelationshipExpert:
         med=statistics.median(vals);mad=statistics.median(abs(v-med) for v in vals)
         return med,max(1e-9,1.4826*mad,abs(med)*.02)
 
-    def fit(self,rows):
+    def fit(self,rows,allowed_names=None):
+        allowed=set(allowed_names or [])
         for side in ("LOW","HIGH"):
             for stage in PRED_STAGES:
                 rr=[r for r in rows if r["side"]==side and int(r["delay_s"])==stage
                     and split_name(r["candidate_ts_ms"])=="train"]
                 base=sum(bool(r["strict_true"]) for r in rr)/max(1,len(rr))
-                names=sorted({k for r in rr for k in r["features"]})
+                names=sorted({k for r in rr for k in r["features"] if not allowed or k in allowed})
                 rel=[]
                 for k in names:
                     pos=[r["features"][k] for r in rr if r["strict_true"] and k in r["features"]]
@@ -227,7 +228,7 @@ def inventory_extra(root):
     return {"root":str(root),"file_count":len(files),"files":files[:500],
             "note":"Extra saved artifacts are inventoried; only schema-compatible, causally aligned data are admitted to fitting."}
 
-def merge_compatible_rows(base_rows,extra_root):
+def merge_compatible_rows(base_rows,extra_root,valid_label_ids):
     rows=list(base_rows);seen={(r.get("candidate_id"),int(r.get("delay_s",-1)),int(r.get("snapshot_ts_ms",0))) for r in rows}
     admitted=[]
     if extra_root and Path(extra_root).exists():
@@ -238,8 +239,13 @@ def merge_compatible_rows(base_rows,extra_root):
             for r in extra:
                 key=(r.get("candidate_id"),int(r.get("delay_s",-1)),int(r.get("snapshot_ts_ms",0)))
                 if key in seen:continue
-                # Only rows whose timestamps fit declared historical boundaries are usable here.
+                # Extra candidate artifacts are admitted only when they carry a
+                # strict label id compatible with the current finalized teacher.
+                # This prevents an older teacher generation from silently becoming
+                # a huge pool of false negatives.
                 if not (0<int(r.get("candidate_ts_ms",0))<END_MS):continue
+                lid=r.get("strict_label_id")
+                if lid is None or int(lid) not in valid_label_ids:continue
                 rows.append(r);seen.add(key)
             if len(rows)>n0:admitted.append({"path":str(p),"rows_added":len(rows)-n0})
     return rows,admitted
@@ -258,8 +264,9 @@ def main():
     assert len(POINTS)==116 and len(INPUT_IDS)==86 and not(INPUT_IDS&TARGET_IDS)
 
     base_rows=load_rows(args.snapshots)
-    rows,extra_admitted=merge_compatible_rows(base_rows,args.extra_root)
     all_teacher,finalized=load_teacher_labels(args.labels_gz)
+    valid_label_ids={int(x["label_id"]) for x in finalized}
+    rows,extra_admitted=merge_compatible_rows(base_rows,args.extra_root,valid_label_ids)
     teacher_coverage=apply_teacher(rows,finalized)
     minutes=load_minutes(args.compact_1m);h1_index=build_index(minutes)
     end_times=[int(z["bar_end_ms"]) for z in minutes]
@@ -281,7 +288,7 @@ def main():
     river=train_river(rows);trees=train_trees(samples,args.workers)
     attach_probs(samples,fin,quant,river);attach_river_probs(samples,rows,river);attach_tree_probs(samples,trees)
 
-    cortex=CortexRelationshipExpert().fit(rows)
+    cortex=CortexRelationshipExpert().fit(rows,allowed_names=names)
     attach_cortex_probs(samples,rows,cortex);attach_regime_to_samples(samples,rows)
 
     meta,threshold,cal_metrics,meta_split=fit_meta(samples["valid"])
