@@ -2,13 +2,42 @@
 
 From this checkpoint forward there is ONE primary HYPE strategy only.
 
+**CRITICAL CORRECTION**
+The historical ~0.33–0.40% distance from extreme is a DIAGNOSTIC RESULT,
+not an entry threshold and not a required retrace. Do NOT wait for a fixed
+percentage before deciding Local.
+
 **PRIMARY ENTRY CONCEPT**
 - New running extreme candidate.
-- Price retraces roughly **0.33–0.40%** from the extreme.
-- Retrace alone is NOT sufficient.
-- Confirm Local using causal evidence available at that moment: no new same-side extension, price response, reversal/impact efficiency, persistence, relative strength versus failed same-leg attempts, flow/volume context, and valid causally aligned L50/OI/liquidation evidence when available.
+- Immediately evaluate causal market evidence in real time.
+- Confirm Local when the combined causal evidence shows that same-side
+  extension has stopped and control is transferring.
+- The decision is based on the 12 causal blocks:
+  1) structural extreme;
+  2) candidate survival / no new same-side extension;
+  3) price-response speed/shape;
+  4) 30s->60s->180s->300s trajectory;
+  5) M1/M3/M5 persistence;
+  6) buyer/seller price-impact efficiency;
+  7) flow transition / control transfer;
+  8) liquidation exhaustion;
+  9) L10/L50 book recovery/transfer;
+  10) OI + price relationship;
+  11) exhaustion/normalization of the pre-extreme impulse;
+  12) comparison against prior failed attempts in the same leg.
+- L50/OI/liquidations are used only when fresh, valid and causally aligned.
 - Confirmed LOW -> LONG.
 - Confirmed HIGH -> SHORT.
+- Enter as early as the evidence supports, regardless of whether price has
+  moved 0.15%, 0.35%, 0.70% or another amount from the extreme.
+
+**ROLE OF RETRACE %**
+Distance from extreme is REPORTING/QUALITY METRIC ONLY:
+- entry delay/distance;
+- remaining move;
+- version comparison;
+- optional volatility normalization in analysis.
+Never use the rule "wait for 0.33–0.40% retrace, then decide Local".
 
 **DO NOT replace this primary strategy** with:
 - Ultra Survival V2,
@@ -20,13 +49,13 @@ From this checkpoint forward there is ONE primary HYPE strategy only.
 Those remain auxiliary comparators, confidence/fallback layers, or historical research only.
 
 **ONLY optimization target now**
-EARLY LOCAL ~0.33–0.40%
--> ENTRY
+REAL-TIME CAUSAL LOCAL CONFIRMATION
+-> ENTRY AS EARLY AS EVIDENCE ALLOWS
 -> suppress wrong-first without delaying true signals
 -> emergency STOP sized from true/false MAE
 -> HOLD through normal corrections
 -> MFE protection
--> early opposite Local
+-> early opposite causal Local
 -> CLOSE + FLIP.
 
 Do not broaden the research objective unless the user explicitly changes this decision.
