@@ -6,6 +6,9 @@ enumerate memberships or produce people-tracking dossiers.
 from __future__ import annotations
 
 import re
+import os
+import json
+from http.client import HTTPSConnection
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit, urlunsplit
@@ -93,6 +96,40 @@ def normalize_profile(platform: str, raw_url: str) -> str:
     except (ValueError, KeyError) as exc:
         raise ValueError(str(exc)) from exc
 
+
+
+def configure_telegram_menu_on_startup() -> None:
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    target = os.getenv("MINIAPP_URL", "").strip()
+    if not token or not target.startswith("https://"):
+        return
+    payload = json.dumps({
+        "menu_button": {
+            "type": "web_app",
+            "text": "Открыть Social Intelligence",
+            "web_app": {"url": target},
+        }
+    }, ensure_ascii=False).encode("utf-8")
+    conn = HTTPSConnection("api.telegram.org", timeout=15)
+    try:
+        conn.request(
+            "POST",
+            "/bot" + token + "/setChatMenuButton",
+            body=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        response = conn.getresponse()
+        body = response.read().decode("utf-8", "replace")
+        data = json.loads(body)
+        if response.status != 200 or not data.get("ok"):
+            raise RuntimeError("Telegram Bot API rejected setChatMenuButton")
+    finally:
+        conn.close()
+
+
+@app.on_event("startup")
+def startup_configure_telegram_menu():
+    configure_telegram_menu_on_startup()
 
 @app.get("/")
 def index():
