@@ -4,6 +4,16 @@ from bs4 import BeautifulSoup
 from typing import Any
 
 ROUTE_RE=re.compile(r'"canonicalRouteName"\s*:\s*"([A-Za-z0-9_.]+)"')
+SHORTCODE_RE=re.compile(r"^[A-Za-z0-9_-]{5,64}$")
+
+def page_route(html:str):
+    m=ROUTE_RE.search(html or "")
+    return m.group(1) if m else None
+
+def has_embedded_data(html:str):
+    s=html or ""
+    return '"xig_user_by_username"' in s or '"xig_polaris_media"' in s
+
 MENTION_RE=re.compile(r"(?<![\w.])@([A-Za-z0-9._]{1,30})")
 HASHTAG_RE=re.compile(r"(?<![\w&])#(\w+)",re.U)
 
