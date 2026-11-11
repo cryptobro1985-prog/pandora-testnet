@@ -17,7 +17,7 @@ input[type=text],input[type=date],input[type=tel],input[type=url]{width:100%;min
 <div class="grid"><section class="card" aria-label="Поисковая форма"><h2>Новая проверка</h2>
 <form id="search" autocomplete="off">
 <div class="section">Данные для уточнения запроса · необязательно</div><div class="fields">
-<div class="field wide"><label for="name">ФИО</label><input id="name" type="text" placeholder="Фамилия, имя, отчество" maxlength="160"></div>
+<div class="field"><label for="lastName">Фамилия</label><input id="lastName" type="text" placeholder="Фамилия" maxlength="80"></div><div class="field"><label for="firstName">Имя</label><input id="firstName" type="text" placeholder="Имя" maxlength="80"></div><div class="field wide"><label for="middleName">Отчество</label><input id="middleName" type="text" placeholder="Отчество" maxlength="80"></div>
 <div class="field"><label for="birth">Дата рождения</label><input id="birth" type="date"></div>
 <div class="field"><label for="city">Город рождения</label><input id="city" type="text" placeholder="Город" maxlength="100"></div>
 <div class="field wide"><label for="phone">Телефон</label><input id="phone" type="tel" placeholder="+7 ..." maxlength="40"></div>
@@ -42,6 +42,7 @@ async function loadCapabilities(){try{const r=await fetch("/api/capabilities",{h
 loadCapabilities();
 const platforms=["instagram","vk","telegram"];
 const labels={overview:"Обзор",instagram:"Instagram",vk:"ВКонтакте",telegram:"Telegram",other:"Дополнительно"};
+const reportSections={instagram:["Профиль","Публикации","Комментарии","Лайки и реакции","Подписки и подписчики","Источники"],vk:["Профиль","Стена","Комментарии","Лайки","Сообщества","Источники"],telegram:["Профиль / чат","Публичные сообщения","Комментарии / обсуждения","Участие в конкретных доступных чатах","Источники"]};
 const hostnames={instagram:["instagram.com","www.instagram.com"],vk:["vk.com","www.vk.com"],telegram:["t.me","telegram.me"]};
 let current=null,selected="overview",previewUrl=null;
 $("consent").addEventListener("change",()=>{$("go").disabled=!$("consent").checked;});
@@ -98,8 +99,8 @@ function render(){
  const match=current.source_checks.filter(s=>s.platform===selected);
  if(!match.length)area.append(el("div","Для этой платформы ссылка не была указана.","empty"));
  match.forEach(s=>area.append(block(labels[s.platform],s.status==="invalid"?s.reason:"Исходная ссылка проверена. Данные об активности стороннего аккаунта не получены.",s.status==="invalid"?"Ошибка":"Формат OK",s.url)));
- area.append(block("Публикации, комментарии и активность","Проверенных событий пока нет. Подключение официальных API для разрешённых аккаунтов является следующим этапом.","Нет данных"));
- area.append(block("Подписки, реакции и история изменений","Полная история действий произвольного человека недоступна по одной ссылке.","Нет данных"));
+ (reportSections[selected]||[]).forEach(section=>area.append(block(section, section==="Источники" ? "Здесь будут отображаться точные ссылки/объекты API, откуда получен результат." : "Раздел подготовлен. Будут показаны только события, которые реально вернул подключённый источник.", "Ожидает данных"));
+ area.append(block("Ограничения","Полная история действий произвольного человека по одной ссылке не существует в открытых API. Если платформа не отдаёт конкретные подписки, лайки или комментарии, раздел останется помечен как недоступный, а не будет заполнен предположениями.","Прозрачно"));
  }
 }
 $("search").addEventListener("submit",event=>{
