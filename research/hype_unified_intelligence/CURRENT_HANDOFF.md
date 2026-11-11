@@ -182,3 +182,54 @@ Next most valuable work: match full-micro July source to compatible labels for
 ablation of L50/OI/liquidation contributions, train separate LONG and SHORT
 path-quality models on chrono training data, then run fresh independent
 forward with trade-level PnL, MFE capture, and risk.
+
+## Continuation checkpoint — FULL-MICRO source quality investigation (2026-11-11)
+
+Question: can feeding all 116 HYPE points and derived L50/OI/liquidation dimensions
+into Quantum/JEPA/Cortex produce reliable entry/HOLD/CLOSE/FLIP?
+
+**New verified data-integrity discovery:**
+- HYPE July12-Aug07 full-micro 300s candidate snapshots: 1252 total.
+- `fullmicro_spread_bps < 0` for **161/1252 (12.8594%)** snapshots.
+- All **161** invalid crossed books are marked `fullmicro_book_valid=1`,
+  `fullmicro_book_gap_count=0`. Five snapshots also carry `strict_true=1`.
+- Those are **NOT executable bid/ask states**. Do not train quote-based
+  predictors or backtest executable fills on them.
+- Corrected live `research/hype_local_only/feature_discovery.py`: crossed,
+  locked, missing and malformed books now fail closed and omit derived
+  spread/imbalance/microprice; previous implementation silently clamped
+  negative spread to zero (commit `153ee26adc9500487595511b28e57c1e63a77977`).
+
+**Reproducible quality-corrected July-only ablation:**
+- `research/hype_unified_intelligence/fullmicro_quote_audit_v1.py`
+- `research/hype_unified_intelligence/FULLMICRO_QUALITY_ABLATION_LATEST.json`
+- `research/hype_local_only/test_feature_discovery_book_quality.py`
+- `research/hype_unified_intelligence/test_fullmicro_quote_audit_v1.py`
+- GitHub Actions runs `42975364892` (historical quality/ablation PASS) and
+  `42975517442` (also live book fail-closed tests PASS).
+- Valid clean cohort: 1091 snapshots. Within-July last chrono 20%: only
+  3 true LOW out of 84 and 4 true HIGH out of 135.
+- LOW/HIGH July test PR-AUC on price only: 0.8095 / 0.2320;
+  price+flow: 0.1508 / 0.1636;
+  price+flow+book: 0.1289 / 0.3885;
+  +liquidations: 0.1996 / 0.4492;
+  +OI: 0.4028 / 0.3486.
+- **Verdict: DIAGNOSTIC ONLY / NO VERIFIED INCREMENTAL MICRO EDGE.**
+  High variability and tiny true-local counts preclude confidence.
+- This July sample and Oct/Nov historical OOS are ALREADY inspected;
+  no tuning on them may claim an untouched validation.
+
+Automation for ongoing work:
+`HYPE Universal Tri-Brain Research — Continuous` ID
+`6af3961141e48191985b9b3fdd72d1b7` re-enabled and changed from
+finite COUNT=8 to hourly without COUNT; continuation follows these checkpoints.
+REAL ORDERS remain OFF.
+
+**Next investigation priority:** independently audit timestamp alignment,
+bid/ask cross, and snapshot integrity in raw Nov8–10 L50, trades, OI and
+liquidation streams (parquet in retained artifacts) BEFORE estimating
+incremental FULL-MICRO signal value. Reproducibly align the causal quote
+as-of event timestamp; avoid forward-filled gaps and stale source snapshots.
+Then compare frozen candidate-level LOW/HIGH and separately LONG/SHORT
+entry-path/MFE exit models across disjoint chronological sessions; require
+fresh untouched forward for deployment verdict.
