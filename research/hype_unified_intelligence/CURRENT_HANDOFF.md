@@ -101,3 +101,45 @@ Execute the attached master prompt:
 `research/hype_unified_intelligence/PROMPT_FOR_CODEX.md`
 
 Do not restart from zero.
+
+## Continuation checkpoint — 2026-11-11 (current turn)
+
+Completed and committed:
+- candidate-group purged meta calibration and minimum calibration support gate;
+- fail-closed contiguous 6h/8h market regime;
+- quarantine of cross-generation snapshot merges;
+- seven-arm Quantum/JEPA/Cortex diagnostic ablation code in Unified v2;
+- paper-only LONG/SHORT/HOLD/CLOSE/FLIP state machine and unit tests;
+- causal future path target generator (3/5/10/15/30/60/120m; MFE/MAE/first-hit) and tests;
+- reproducible preserved-master price-vs-flow benchmark script and measured report;
+- persistent experiment ledger and architecture note;
+- July/October crossperiod transfer diagnostic;
+- recovery fallback from expired `local116-HYPE` to retained historical master artifact 13650399622;
+- GitHub Actions train queue guard, fast smoke workflow.
+
+Verified: fast paper policy tests passed in run 42970456491.
+Latest Unified train attempt 42970809302 had completed dependency installation,
+artifact inventory, historical master recovery and extra artifact inventory,
+then entered the model-training step; no final model report was available at that
+observation. Do not claim Unified OOS success without reading its emitted report.
+
+Important rejected or unsupported claims:
+- Legacy 5-expert classifier: OOS precision 9.64%, 150 FP / 16 TP, REJECT.
+- Simple price+flow 60m research benchmark: Oct 12/18 first-hit positive
+  versus price-only 9/19, but Sep only 2 events; SHADOW/INSUFFICIENT_SUPPORT.
+- Existing historical OOS windows have been inspected and are no longer untouched.
+- No verified live trader, no orders, no statistically established MFE-capture edge.
+
+Source of truth:
+- `research/hype_unified_intelligence/ARCHITECTURE.md`
+- `research/hype_unified_intelligence/EXPERIMENT_LEDGER.jsonl`
+- `research/hype_unified_intelligence/CAUSAL_PATH_BENCHMARK_V1_REPORT.json`
+- `research/hype_unified_intelligence/CROSSPERIOD_RELATIONSHIP_DIAGNOSTIC_2026-11-11.md`
+- `research/hype_unified_intelligence/entry_path_targets.py`
+- `research/hype_unified_intelligence/state_machine.py`
+- `research/hype_local_only/train_unified_local_intelligence_v2.py`
+
+Next action: inspect outcome of GitHub Actions run 42970809302 and latest
+published report; investigate a concrete failure before changing model hyperparameters.
+If it completes, evaluate expert/LOW/HIGH metrics and ablations, then build an
+actual entry/exit OOS evaluator using matched executable quotes where available.
