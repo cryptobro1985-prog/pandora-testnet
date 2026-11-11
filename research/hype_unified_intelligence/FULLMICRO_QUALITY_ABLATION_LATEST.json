@@ -1,0 +1,324 @@
+{
+  "version": "HYPE-FULLMICRO-CROSSED-BOOK-QUALITY-V1",
+  "master_sha256": "c9d588b5c78d0e72a3073ceb62c7fa100381ebf69df911b22a170171a2653975",
+  "research_only": true,
+  "real_orders": false,
+  "promotable": false,
+  "cohort": "July12-Aug07 300-second candidate snapshots, pre-inspected",
+  "audit": {
+    "total_300s": 1252,
+    "invalid_book_300s": 161,
+    "invalid_pct": 12.8594,
+    "invalid_marked_book_valid": 161,
+    "invalid_true_locals": 5,
+    "reasons": {
+      "NEGATIVE_CROSSED_BOOK_SPREAD": 161
+    }
+  },
+  "valid_300s": 1091,
+  "split": {
+    "train_before_ms": 1785236835779,
+    "dev_before_ms": 1785756141446,
+    "test": "last 20% of quality-clean chronological July cohort; previously inspected"
+  },
+  "ablation": {
+    "price_only": {
+      "LOW": {
+        "status": "DIAGNOSTIC_ONLY_TOO_FEW_TRUE_LOCALS",
+        "train_positive": 11,
+        "fitted_dimensions": 16,
+        "dev": {
+          "n": 133,
+          "positives": 7,
+          "base_rate": 0.0526,
+          "pr_auc": 0.5756,
+          "roc_auc": 0.9308,
+          "brier": 0.123,
+          "accepted_thr0p5": 29,
+          "tp_thr0p5": 6,
+          "precision_thr0p5": 0.2069
+        },
+        "test": {
+          "n": 84,
+          "positives": 3,
+          "base_rate": 0.0357,
+          "pr_auc": 0.8095,
+          "roc_auc": 0.9835,
+          "brier": 0.1157,
+          "accepted_thr0p5": 17,
+          "tp_thr0p5": 3,
+          "precision_thr0p5": 0.1765
+        },
+        "promotable": false
+      },
+      "HIGH": {
+        "status": "DIAGNOSTIC_ONLY_TOO_FEW_TRUE_LOCALS",
+        "train_positive": 12,
+        "fitted_dimensions": 16,
+        "dev": {
+          "n": 85,
+          "positives": 5,
+          "base_rate": 0.0588,
+          "pr_auc": 0.4742,
+          "roc_auc": 0.9025,
+          "brier": 0.1695,
+          "accepted_thr0p5": 29,
+          "tp_thr0p5": 5,
+          "precision_thr0p5": 0.1724
+        },
+        "test": {
+          "n": 135,
+          "positives": 4,
+          "base_rate": 0.0296,
+          "pr_auc": 0.232,
+          "roc_auc": 0.9389,
+          "brier": 0.1688,
+          "accepted_thr0p5": 42,
+          "tp_thr0p5": 4,
+          "precision_thr0p5": 0.0952
+        },
+        "promotable": false
+      }
+    },
+    "price_flow": {
+      "LOW": {
+        "status": "DIAGNOSTIC_ONLY_TOO_FEW_TRUE_LOCALS",
+        "train_positive": 11,
+        "fitted_dimensions": 29,
+        "dev": {
+          "n": 133,
+          "positives": 7,
+          "base_rate": 0.0526,
+          "pr_auc": 0.4888,
+          "roc_auc": 0.9206,
+          "brier": 0.1183,
+          "accepted_thr0p5": 29,
+          "tp_thr0p5": 5,
+          "precision_thr0p5": 0.1724
+        },
+        "test": {
+          "n": 84,
+          "positives": 3,
+          "base_rate": 0.0357,
+          "pr_auc": 0.1508,
+          "roc_auc": 0.856,
+          "brier": 0.1031,
+          "accepted_thr0p5": 13,
+          "tp_thr0p5": 1,
+          "precision_thr0p5": 0.0769
+        },
+        "promotable": false
+      },
+      "HIGH": {
+        "status": "DIAGNOSTIC_ONLY_TOO_FEW_TRUE_LOCALS",
+        "train_positive": 12,
+        "fitted_dimensions": 29,
+        "dev": {
+          "n": 85,
+          "positives": 5,
+          "base_rate": 0.0588,
+          "pr_auc": 0.6564,
+          "roc_auc": 0.855,
+          "brier": 0.1618,
+          "accepted_thr0p5": 24,
+          "tp_thr0p5": 4,
+          "precision_thr0p5": 0.1667
+        },
+        "test": {
+          "n": 135,
+          "positives": 4,
+          "base_rate": 0.0296,
+          "pr_auc": 0.1636,
+          "roc_auc": 0.895,
+          "brier": 0.1723,
+          "accepted_thr0p5": 43,
+          "tp_thr0p5": 4,
+          "precision_thr0p5": 0.093
+        },
+        "promotable": false
+      }
+    },
+    "price_flow_book": {
+      "LOW": {
+        "status": "DIAGNOSTIC_ONLY_TOO_FEW_TRUE_LOCALS",
+        "train_positive": 11,
+        "fitted_dimensions": 34,
+        "dev": {
+          "n": 133,
+          "positives": 7,
+          "base_rate": 0.0526,
+          "pr_auc": 0.4226,
+          "roc_auc": 0.9172,
+          "brier": 0.1049,
+          "accepted_thr0p5": 27,
+          "tp_thr0p5": 6,
+          "precision_thr0p5": 0.2222
+        },
+        "test": {
+          "n": 84,
+          "positives": 3,
+          "base_rate": 0.0357,
+          "pr_auc": 0.1289,
+          "roc_auc": 0.8395,
+          "brier": 0.0953,
+          "accepted_thr0p5": 12,
+          "tp_thr0p5": 1,
+          "precision_thr0p5": 0.0833
+        },
+        "promotable": false
+      },
+      "HIGH": {
+        "status": "DIAGNOSTIC_ONLY_TOO_FEW_TRUE_LOCALS",
+        "train_positive": 12,
+        "fitted_dimensions": 34,
+        "dev": {
+          "n": 85,
+          "positives": 5,
+          "base_rate": 0.0588,
+          "pr_auc": 0.5811,
+          "roc_auc": 0.89,
+          "brier": 0.1638,
+          "accepted_thr0p5": 28,
+          "tp_thr0p5": 4,
+          "precision_thr0p5": 0.1429
+        },
+        "test": {
+          "n": 135,
+          "positives": 4,
+          "base_rate": 0.0296,
+          "pr_auc": 0.3885,
+          "roc_auc": 0.9141,
+          "brier": 0.1701,
+          "accepted_thr0p5": 44,
+          "tp_thr0p5": 4,
+          "precision_thr0p5": 0.0909
+        },
+        "promotable": false
+      }
+    },
+    "price_flow_book_liq": {
+      "LOW": {
+        "status": "DIAGNOSTIC_ONLY_TOO_FEW_TRUE_LOCALS",
+        "train_positive": 11,
+        "fitted_dimensions": 39,
+        "dev": {
+          "n": 133,
+          "positives": 7,
+          "base_rate": 0.0526,
+          "pr_auc": 0.402,
+          "roc_auc": 0.9116,
+          "brier": 0.1136,
+          "accepted_thr0p5": 25,
+          "tp_thr0p5": 5,
+          "precision_thr0p5": 0.2
+        },
+        "test": {
+          "n": 84,
+          "positives": 3,
+          "base_rate": 0.0357,
+          "pr_auc": 0.1996,
+          "roc_auc": 0.8971,
+          "brier": 0.0865,
+          "accepted_thr0p5": 10,
+          "tp_thr0p5": 2,
+          "precision_thr0p5": 0.2
+        },
+        "promotable": false
+      },
+      "HIGH": {
+        "status": "DIAGNOSTIC_ONLY_TOO_FEW_TRUE_LOCALS",
+        "train_positive": 12,
+        "fitted_dimensions": 39,
+        "dev": {
+          "n": 85,
+          "positives": 5,
+          "base_rate": 0.0588,
+          "pr_auc": 0.3788,
+          "roc_auc": 0.855,
+          "brier": 0.1656,
+          "accepted_thr0p5": 27,
+          "tp_thr0p5": 4,
+          "precision_thr0p5": 0.1481
+        },
+        "test": {
+          "n": 135,
+          "positives": 4,
+          "base_rate": 0.0296,
+          "pr_auc": 0.4492,
+          "roc_auc": 0.9198,
+          "brier": 0.1723,
+          "accepted_thr0p5": 43,
+          "tp_thr0p5": 4,
+          "precision_thr0p5": 0.093
+        },
+        "promotable": false
+      }
+    },
+    "price_flow_book_liq_oi": {
+      "LOW": {
+        "status": "DIAGNOSTIC_ONLY_TOO_FEW_TRUE_LOCALS",
+        "train_positive": 11,
+        "fitted_dimensions": 44,
+        "dev": {
+          "n": 133,
+          "positives": 7,
+          "base_rate": 0.0526,
+          "pr_auc": 0.3003,
+          "roc_auc": 0.8878,
+          "brier": 0.1168,
+          "accepted_thr0p5": 23,
+          "tp_thr0p5": 5,
+          "precision_thr0p5": 0.2174
+        },
+        "test": {
+          "n": 84,
+          "positives": 3,
+          "base_rate": 0.0357,
+          "pr_auc": 0.4028,
+          "roc_auc": 0.7942,
+          "brier": 0.0727,
+          "accepted_thr0p5": 7,
+          "tp_thr0p5": 1,
+          "precision_thr0p5": 0.1429
+        },
+        "promotable": false
+      },
+      "HIGH": {
+        "status": "DIAGNOSTIC_ONLY_TOO_FEW_TRUE_LOCALS",
+        "train_positive": 12,
+        "fitted_dimensions": 44,
+        "dev": {
+          "n": 85,
+          "positives": 5,
+          "base_rate": 0.0588,
+          "pr_auc": 0.3307,
+          "roc_auc": 0.81,
+          "brier": 0.3472,
+          "accepted_thr0p5": 49,
+          "tp_thr0p5": 5,
+          "precision_thr0p5": 0.102
+        },
+        "test": {
+          "n": 135,
+          "positives": 4,
+          "base_rate": 0.0296,
+          "pr_auc": 0.3486,
+          "roc_auc": 0.8817,
+          "brier": 0.3372,
+          "accepted_thr0p5": 67,
+          "tp_thr0p5": 4,
+          "precision_thr0p5": 0.0597
+        },
+        "promotable": false
+      }
+    }
+  },
+  "verdict": "QUARANTINE_CROSSED_BOOK_AND_DO_NOT_PROMOTE_MICRO_ALPHA",
+  "limitations": [
+    "July test only contains a handful of true LOW/HIGH candidates.",
+    "Micro data availability and candidate generation may differ in October.",
+    "Results cannot establish out-of-period robustness or executable PnL.",
+    "No future labels are used in predictors; past outcome labels are only y.",
+    "No broker's real liquidation calculation or price-impact execution is modeled."
+  ]
+}
