@@ -26,7 +26,7 @@ def test_miniapp_has_controls_and_report_tabs():
     assert parser.scripts == 1
     assert "localStorage" not in html
     assert 'innerHTML' not in html
-    assert "fetch(" not in html  # no false claim of external platform search
+    assert '/api/capabilities' in html
 
 
 def test_bot_configuration_does_not_embed_secret():
