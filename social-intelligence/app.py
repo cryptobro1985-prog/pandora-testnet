@@ -34,19 +34,56 @@ def score(username,events):
     rows=[{"username":u,"score":round(math.log1p(v["raw"])*10,2),**v} for u,v in a.items()]
     rows.sort(key=lambda x:(x["score"],x["events"]),reverse=True); return rows
 
+def _state(items):
+    if items is None:
+        return {"observed":False,"items":[]}
+    return {"observed":True,"items":items}
+
+def _decode_state(raw):
+    if not raw:
+        return {"observed":False,"items":[]}
+    try:
+        value=json.loads(raw)
+    except Exception:
+        return {"observed":False,"items":[]}
+    if isinstance(value,dict) and "observed" in value:
+        return {"observed":bool(value.get("observed")),"items":value.get("items") or []}
+    if isinstance(value,list):
+        # Legacy empty lists were also used for UNKNOWN, so stay conservative.
+        return {"observed":bool(value),"items":value}
+    return {"observed":False,"items":[]}
+
+def _identity_map(items):
+    out={}
+    for item in items or []:
+        if isinstance(item,dict):
+            key=str(item.get("pk") or item.get("id") or item.get("username") or "").strip()
+            label=str(item.get("username") or key).strip()
+        else:
+            key=label=str(item).strip()
+        if key:
+            out[key]=label
+    return out
+
 def snapshot(username,followers,following,profile):
     now=datetime.now(timezone.utc).isoformat(); c=db()
     prev=c.execute("select * from snapshots where username=? order by id desc limit 1",(username,)).fetchone()
-    d={"new_followers":[],"lost_followers":[],"new_following":[],"unfollowed":[],"previous_snapshot":None,"followers_observed":followers is not None,"following_observed":following is not None}
+    current_f=_state(followers); current_g=_state(following)
+    d={"new_followers":[],"lost_followers":[],"new_following":[],"unfollowed":[],"previous_snapshot":None,
+       "followers_observed":current_f["observed"],"following_observed":current_g["observed"]}
     if prev:
-        pf=set(json.loads(prev["followers_json"] or "[]")); pg=set(json.loads(prev["following_json"] or "[]"))
-        if followers is not None:
-            cf=set(followers); d["new_followers"]=sorted(cf-pf); d["lost_followers"]=sorted(pf-cf)
-        if following is not None:
-            cg=set(following); d["new_following"]=sorted(cg-pg); d["unfollowed"]=sorted(pg-cg)
+        old_f=_decode_state(prev["followers_json"]); old_g=_decode_state(prev["following_json"])
+        if current_f["observed"] and old_f["observed"]:
+            old=_identity_map(old_f["items"]); cur=_identity_map(current_f["items"])
+            d["new_followers"]=sorted(cur[k] for k in cur.keys()-old.keys())
+            d["lost_followers"]=sorted(old[k] for k in old.keys()-cur.keys())
+        if current_g["observed"] and old_g["observed"]:
+            old=_identity_map(old_g["items"]); cur=_identity_map(current_g["items"])
+            d["new_following"]=sorted(cur[k] for k in cur.keys()-old.keys())
+            d["unfollowed"]=sorted(old[k] for k in old.keys()-cur.keys())
         d["previous_snapshot"]=prev["created_at"]
     c.execute("insert into snapshots(username,created_at,followers_json,following_json,profile_json) values(?,?,?,?,?)",
-              (username,now,json.dumps(followers or []),json.dumps(following or []),json.dumps(profile,ensure_ascii=False)))
+              (username,now,json.dumps(current_f,ensure_ascii=False),json.dumps(current_g,ensure_ascii=False),json.dumps(profile,ensure_ascii=False)))
     c.commit(); c.close(); d["snapshot_at"]=now; return d
 
 async def _startup_smoke():
