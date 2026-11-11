@@ -102,12 +102,12 @@ def _instaloader_collect(username:str,max_posts:int=30)->dict[str,Any]:
         try:
             for i,u in enumerate(profile.get_followers()):
                 if i>=10000: break
-                out["followers"].append(u.username)
+                out["followers"].append({"pk":str(getattr(u,"userid",u.username)),"username":u.username,"full_name":getattr(u,"full_name","") or "","is_verified":bool(getattr(u,"is_verified",False))})
         except Exception as e: out["warnings"].append("followers:"+type(e).__name__)
         try:
             for i,u in enumerate(profile.get_followees()):
                 if i>=10000: break
-                out["following"].append(u.username)
+                out["following"].append({"pk":str(getattr(u,"userid",u.username)),"username":u.username,"full_name":getattr(u,"full_name","") or "","is_verified":bool(getattr(u,"is_verified",False))})
         except Exception as e: out["warnings"].append("following:"+type(e).__name__)
         return out
     except Exception as e:
