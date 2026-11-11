@@ -7,6 +7,9 @@ on:
       - research/hype-h1-local-v5-oi-microstructure-20261104
     paths:
       - "research/hype_local_only/train_unified_local_intelligence_v2.py"
+      - "research/hype_local_only/test_unified_meta_integrity.py"
+      - "research/hype_unified_intelligence/state_machine.py"
+      - "research/hype_unified_intelligence/test_state_machine.py"
       - ".github/workflows/hype-unified-local-intelligence-v2.yml"
 
 permissions:
@@ -41,7 +44,15 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install numpy river scikit-learn
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-          python -m py_compile             research/hype_local_only/train_unified_local_intelligence_v2.py             research/hype_local_only/train_local_ensemble_30d.py             research/hype_local_only/feature_discovery.py             research/hype_local_only/h1_teacher_context.py
+          python -m py_compile \
+            research/hype_local_only/train_unified_local_intelligence_v2.py \
+            research/hype_local_only/train_local_ensemble_30d.py \
+            research/hype_local_only/feature_discovery.py \
+            research/hype_local_only/h1_teacher_context.py \
+            research/hype_unified_intelligence/state_machine.py
+          python -m unittest \
+            research.hype_local_only.test_unified_meta_integrity \
+            research.hype_unified_intelligence.test_state_machine -v
 
       - name: Inventory all retained HYPE research artifacts
         id: inventory
