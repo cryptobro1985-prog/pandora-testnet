@@ -278,8 +278,7 @@ def main():
     base.write_jsonl_gz(args.output/"candidate_snapshots_full_micro.jsonl.gz",records)
     base.write_jsonl_gz(args.output/"compact_1m.jsonl.gz",[r for r in mins if r["start_ms"]>=base.ms(base.START)])
     base.write_json_gz(args.output/"labels.json.gz",{"strict":strict,"strict_exclusions":strict_exc})
-    (args.output/"feature_availability.json").write_text(json.dumps(availability,indent=2)+"
-")
+    (args.output/"feature_availability.json").write_text(json.dumps(availability,indent=2)+"\n")
 
     manifest={
         "symbol":base.SYMBOL,"period":[base.START.isoformat(),base.END.isoformat()],
@@ -298,13 +297,11 @@ def main():
         "microstructure_quality_contract":base.MICRO_QUALITY_CONTRACT,
         "future_leakage_guard":"strict labels/episode boundaries are offline teacher only; no target/eval point enters features",
     }
-    (args.output/"manifest.json").write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+"
-")
+    (args.output/"manifest.json").write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+"\n")
     am={}
     for p in args.output.iterdir():
         if p.is_file():am[p.name]={"bytes":p.stat().st_size,"sha256":sha(p)}
-    (args.output/"artifact_manifest.json").write_text(json.dumps(am,indent=2)+"
-")
+    (args.output/"artifact_manifest.json").write_text(json.dumps(am,indent=2)+"\n")
     print("DENSE_FULL_MICRO="+json.dumps({
         "candidates":manifest["candidates"],"true_candidates":manifest["true_candidates"],
         "false_candidates":manifest["false_candidates"],"snapshots":manifest["snapshots"],
