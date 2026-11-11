@@ -360,8 +360,8 @@ valid even though quote age and causal as-of alignment were unknown. Now
 are withheld. Stale, future, crossed, and valid timestamped cases retain
 prior semantics. Regression test added. Commits: dde17502, 791fc621.
 
-**CI: pending verification**; previous run 42985174019 SUCCESS applies to
-older code only, not this change. November raw missing-timestamp incidence
+**CI: VERIFIED** run 42992316987 SUCCESS on commit 791fc621; earlier
+42992314094 failed at test-first commit before code fix (expected red phase). November raw missing-timestamp incidence
 has not been measured. The source adapter may not populate book_ts_ms and
 therefore suppress all live L50 predictors; inspect source mappings and
 freshness coverage before any model claims. Historical July 161/1252 crossed
