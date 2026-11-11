@@ -36,9 +36,31 @@ async def meta_get(path:str,params:dict[str,Any]|None=None)->dict[str,Any]:
         return {"status":"unavailable","source":"meta_graph","detail":e.get("message","Meta Graph API error"),"code":e.get("code")}
     return {"status":"ok","source":"meta_graph","response":data}
 
+async def _discover_meta_ig_user_id()->str|None:
+    explicit=os.getenv("META_IG_USER_ID","").strip()
+    if explicit: return explicit
+    token=os.getenv("META_ACCESS_TOKEN","").strip()
+    if not token: return None
+    version=os.getenv("META_GRAPH_VERSION","v24.0")
+    try:
+        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+            r=await client.get("https://graph.facebook.com/"+version+"/me/accounts",params={
+              "fields":"id,name,instagram_business_account{id,username}",
+              "limit":100,
+              "access_token":token
+            })
+        data=_safe_json(r)
+        for page in data.get("data") or []:
+            iga=page.get("instagram_business_account") if isinstance(page,dict) else None
+            if isinstance(iga,dict) and iga.get("id"): return str(iga["id"])
+    except Exception:
+        pass
+    return None
+
 async def business_discovery(username:str)->dict[str,Any]:
-    ig_user_id=os.getenv("META_IG_USER_ID","").strip()
-    if not ig_user_id: return {"status":"not_configured","source":"meta_business_discovery"}
+    ig_user_id=await _discover_meta_ig_user_id()
+    if not ig_user_id:
+        return {"status":"not_configured","source":"meta_business_discovery","detail":"missing_or_undiscoverable_meta_ig_user_id"}
     fields=("business_discovery.username("+username+"){id,username,name,biography,website,followers_count,"
             "follows_count,media_count,profile_picture_url,media.limit(40){id,caption,comments_count,like_count,"
             "media_type,permalink,timestamp}}")
