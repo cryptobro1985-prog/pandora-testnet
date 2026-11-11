@@ -5,47 +5,37 @@ on:
     branches:
       - feature/social-intelligence-miniapp-mvp-20261111
     paths:
-      - "social-intelligence/**"
       - ".github/workflows/social-intelligence-live-acceptance.yml"
   workflow_dispatch:
 
 jobs:
   live-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
-      - name: Warm public collectors
-        shell: bash
-        run: |
-          set +e
-          curl -sS --max-time 150 "https://social-intelligence-live-v2.onrender.com/api/smoke" -o /tmp/smoke1.json
-          RC=$?
-          echo "warm_rc=$RC"
-          test -f /tmp/smoke1.json && cat /tmp/smoke1.json || true
-          sleep 12
-      - name: Run acceptance scan
+      - name: Scan multiple public profiles
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsS --max-time 180 "https://social-intelligence-live-v2.onrender.com/api/smoke" -o /tmp/smoke2.json
-          echo "=== LIVE_SMOKE_JSON ==="
-          cat /tmp/smoke2.json
-          echo
+          BASE="https://social-intelligence-live-v2.onrender.com/api/smoke"
+          for TARGET in instagram natgeo nasa; do
+            echo "=== TARGET $TARGET ==="
+            curl -fsS --max-time 180 "$BASE?target=$TARGET" -o "/tmp/$TARGET.json"
+            cat "/tmp/$TARGET.json"
+            echo
+          done
           python - <<'PY'
           import json
-          p="/tmp/smoke2.json"
-          d=json.load(open(p))
-          print("target=",d.get("target"))
-          print("profile_present=",d.get("profile_present"))
-          print("posts=",d.get("posts"))
-          print("comment_events=",d.get("comment_events"))
-          print("like_identity_events=",d.get("like_identity_events"))
-          print("mention_events=",d.get("mention_events"))
-          print("tag_events=",d.get("tag_events"))
-          print("relationships=",d.get("relationships"))
-          print("coverage=",json.dumps(d.get("coverage"),ensure_ascii=False))
-          print("sources=",json.dumps(d.get("sources"),ensure_ascii=False))
-          print("warnings=",json.dumps(d.get("warnings"),ensure_ascii=False))
-          assert d.get("ok") is True
-          assert d.get("profile_present") is True
+          for target in ("instagram","natgeo","nasa"):
+              d=json.load(open(f"/tmp/{target}.json"))
+              print("RESULT",target,
+                    "profile",d.get("profile_present"),
+                    "posts",d.get("posts"),
+                    "comments",d.get("comment_events"),
+                    "likes",d.get("like_identity_events"),
+                    "relationships",d.get("relationships"))
+              print(" sources=",json.dumps(d.get("sources"),ensure_ascii=False))
+              print(" coverage=",json.dumps(d.get("coverage"),ensure_ascii=False))
+              assert d.get("ok") is True
+              assert d.get("profile_present") is True
           PY
