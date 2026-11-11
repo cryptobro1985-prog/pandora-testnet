@@ -24,7 +24,9 @@ def test_miniapp_has_controls_and_report_tabs():
             "lastName", "firstName", "middleName", "birth", "city", "phone", "photo", "report",
             "tabs", "export", "reportContent"} <= parser.ids
     assert parser.scripts == 1
-    assert "localStorage" not in html
+    assert "localStorage" in html
+    assert "social_intelligence_search_history_v1" in html
+    assert "historyView" in parser.ids
     assert 'innerHTML' not in html
     assert '/api/capabilities' in html
 
