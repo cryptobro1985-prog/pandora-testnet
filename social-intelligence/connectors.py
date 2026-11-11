@@ -100,27 +100,39 @@ async def warm_playwright()->dict[str,Any]:
     except Exception as e:
         return {"ok":False,"detail":type(e).__name__}
 
+def _decode_cookie_blob():
+    blob=os.getenv("IG_SESSION_JSON_B64","").strip()
+    if not blob: return {}
+    try:
+        data=json.loads(base64.b64decode(blob).decode("utf-8"))
+    except Exception:
+        return {}
+    if isinstance(data,dict):
+        return {str(k):str(v) for k,v in data.items() if v is not None}
+    if isinstance(data,list):
+        out={}
+        for item in data:
+            if not isinstance(item,dict): continue
+            name=item.get("name"); value=item.get("value")
+            domain=str(item.get("domain") or "")
+            if name and value is not None and ("instagram.com" in domain or not domain):
+                out[str(name)]=str(value)
+        return out
+    return {}
+
 def _playwright_cookie_list():
     cookies=[]
-    sessionid=os.getenv("IG_SESSIONID","").strip()
-    csrf=os.getenv("IG_CSRFTOKEN","").strip()
-    ds=os.getenv("IG_DS_USER_ID","").strip()
-    mid=os.getenv("IG_MID","").strip()
-    if sessionid: cookies.append({"name":"sessionid","value":sessionid,"domain":".instagram.com","path":"/","httpOnly":True,"secure":True,"sameSite":"Lax"})
-    if csrf: cookies.append({"name":"csrftoken","value":csrf,"domain":".instagram.com","path":"/","secure":True,"sameSite":"Lax"})
-    if ds: cookies.append({"name":"ds_user_id","value":ds,"domain":".instagram.com","path":"/","secure":True,"sameSite":"Lax"})
-    if mid: cookies.append({"name":"mid","value":mid,"domain":".instagram.com","path":"/","secure":True,"sameSite":"Lax"})
-    blob=os.getenv("IG_SESSION_JSON_B64","").strip()
-    if blob:
-        try:
-            data=json.loads(base64.b64decode(blob).decode("utf-8"))
-            if isinstance(data,dict):
-                existing={x["name"] for x in cookies}
-                for name,value in data.items():
-                    if name in existing or value is None: continue
-                    cookies.append({"name":str(name),"value":str(value),"domain":".instagram.com","path":"/","secure":True,"sameSite":"Lax"})
-        except Exception:
-            pass
+    explicit={
+      "sessionid":os.getenv("IG_SESSIONID","").strip(),
+      "csrftoken":os.getenv("IG_CSRFTOKEN","").strip(),
+      "ds_user_id":os.getenv("IG_DS_USER_ID","").strip(),
+      "mid":os.getenv("IG_MID","").strip(),
+    }
+    merged={**_decode_cookie_blob(),**{k:v for k,v in explicit.items() if v}}
+    for name,value in merged.items():
+        cookie={"name":name,"value":value,"domain":".instagram.com","path":"/","secure":True,"sameSite":"Lax"}
+        if name=="sessionid": cookie["httpOnly"]=True
+        cookies.append(cookie)
     return cookies
 
 async def playwright_public_collect(username:str,max_posts:int=12)->dict[str,Any]:
@@ -223,8 +235,8 @@ def _instaloader_collect(username:str,max_posts:int=30)->dict[str,Any]:
         cookie_mid=os.getenv("IG_MID","").strip()
         authed=False
         if session_json_b64 and login_user:
-            data=json.loads(base64.b64decode(session_json_b64).decode("utf-8"))
-            if not isinstance(data,dict): raise ValueError("IG_SESSION_JSON_B64 must decode to a cookie dict")
+            data=_decode_cookie_blob()
+            if not data: raise ValueError("IG_SESSION_JSON_B64 must contain Instagram cookies")
             L.context.load_session(login_user,data); authed=bool(L.test_login())
         elif cookie_sessionid and cookie_csrf and login_user:
             data={"sessionid":cookie_sessionid,"csrftoken":cookie_csrf}
