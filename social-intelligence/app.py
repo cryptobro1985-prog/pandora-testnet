@@ -17,7 +17,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from source_registry import capability_snapshot
-from connectors import telegram_get_chat, telegram_get_chat_member, vk_users_get, vk_wall_get, vk_wall_comments, vk_likes_get_list, instagram_business_discovery, instagram_media_comments
+from connectors import telegram_get_chat, telegram_get_chat_member, vk_users_get, vk_wall_get, vk_wall_comments, vk_likes_get_list, instagram_business_discovery, instagram_media_comments, public_profile_page
 
 app = FastAPI(title="Social Intelligence Mini App", version="0.1.0")
 WEB = Path(__file__).resolve().parent / "web"
@@ -38,6 +38,9 @@ class InputProfile(BaseModel):
 
 class AnalyzeRequest(BaseModel):
     authorized: bool = False
+    profiles: list[InputProfile] = Field(default_factory=list, max_length=12)
+
+class SearchRequest(BaseModel):
     profiles: list[InputProfile] = Field(default_factory=list, max_length=12)
 
 class TelegramChatRequest(BaseModel):
@@ -197,6 +200,57 @@ async def api_ig_discovery(payload: IGDiscoveryRequest):
 @app.post("/api/instagram/comments")
 async def api_ig_comments(payload: IGCommentsRequest):
     return await instagram_media_comments(payload.media_id, payload.limit)
+
+@app.post("/api/search")
+async def search(payload: SearchRequest):
+    """Run a real best-effort public lookup for supplied social profile URLs.
+
+    The endpoint returns only data available from the supplied public profile page
+    and configured official APIs. It does not enumerate hidden relationships or
+    reconstruct private activity histories.
+    """
+    import asyncio
+    capabilities = capability_snapshot()["platforms"]
+
+    async def one(item: InputProfile):
+        try:
+            normalized = normalize_profile(item.platform, item.url)
+        except ValueError as exc:
+            return {"platform": item.platform, "status": "invalid", "reason": str(exc)}
+
+        handle = [p for p in urlsplit(normalized).path.split("/") if p][0]
+        public_task = public_profile_page(normalized)
+        api_task = None
+
+        if item.platform == "telegram" and capabilities["telegram"]["configured"]:
+            api_task = telegram_get_chat("@" + handle)
+        elif item.platform == "vk" and capabilities["vk"]["configured"]:
+            api_task = vk_users_get(handle)
+        elif item.platform == "instagram" and capabilities["instagram"]["configured"]:
+            ig_user_id = os.getenv("META_IG_USER_ID", "").strip()
+            if ig_user_id:
+                api_task = instagram_business_discovery(ig_user_id, handle)
+
+        public_result = await public_task
+        api_result = await api_task if api_task else {"status": "not_configured"}
+
+        return {
+            "platform": item.platform,
+            "status": "complete",
+            "url": normalized,
+            "handle": handle,
+            "public": public_result,
+            "api": api_result,
+            "api_configured": bool(capabilities[item.platform]["configured"]),
+        }
+
+    results = await asyncio.gather(*(one(item) for item in payload.profiles))
+    return {
+        "status": "complete",
+        "results": results,
+        "capabilities": capabilities,
+        "notice": "Best-effort lookup of supplied public profile URLs and configured official APIs only.",
+    }
 
 @app.post("/api/analyze")
 def analyze(payload: AnalyzeRequest):
