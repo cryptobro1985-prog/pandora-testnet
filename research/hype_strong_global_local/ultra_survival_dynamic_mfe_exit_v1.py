@@ -183,6 +183,13 @@ def main():
         score=(minret,aggret-.5*maxdd+.25*medcap,totaltr)
         trials.append((score,p,per))
     best=max(trials,key=lambda x:x[0])
+    robust=[z for z in trials if all(z[2][n]["compound_pct"]>0 for n in DEV)
+            and all(z[2][n]["median_capture"] is not None for n in DEV)]
+    capture_best=(max(robust,key=lambda z:(
+        min(z[2][n]["median_capture"] for n in DEV),
+        min(z[2][n]["compound_pct"] for n in DEV),
+        -max(z[2][n]["maxdd_pct"] for n in DEV)))
+        if robust else None)
     p=best[1]
     test_trades=simulate(data[TEST]["bars"],data[TEST]["sig"],p)
     test=metric(test_trades)
@@ -196,6 +203,19 @@ def main():
                 and z["compound_pct"]>0]
     bounded_best=max(candidates,key=lambda z:(z["equity_exposure"],z["compound_pct"],-z["leverage"])) if candidates else None
     positive_all_dev=all(best[2][n]["compound_pct"]>0 for n in DEV)
+    capture_variant=None
+    if capture_best is not None:
+        cp=capture_best[1]
+        ctest=metric(simulate(data[TEST]["bars"],data[TEST]["sig"],cp))
+        cmay=metric(simulate(data["MAY"]["bars"],data["MAY"]["sig"],cp)) if "MAY" in data else None
+        capture_variant={
+          "selected":{"stop_pct":cp[0],"activation_mfe_pct":cp[1],
+                      "recoil_floor_pct":cp[2],"recoil_fraction_of_mfe":cp[3],
+                      "confirmation_bars":cp[4],"require_opposite_flow":cp[5]},
+          "development":capture_best[2],
+          "historical_later_test_OCT_NOV":ctest,
+          "MAY_diagnostic":cmay
+        }
     result={
       "version":"HYPE-ULTRA-SURVIVAL-V2-DYNAMIC-MFE-EXIT-v1",
       "detector":"frozen Ultra Survival V2 unchanged",
@@ -208,6 +228,7 @@ def main():
       "MAY_diagnostic_not_used_for_exit_selection":may,
       "paper_risk_grid_OCT_NOV":risk,
       "bounded_aggressive_paper_scenario_plus8bps_plus0p25pct_stop_gap":bounded_best,
+      "capture_first_positive_development_variant":capture_variant,
       "signal_scores":{n:data[n]["score"]["evaluation"] for n in data},
       "research_only":True,"real_orders":False,
       "verdict":("PROMISING_HISTORICAL_EXIT_NOT_PRODUCTION"
