@@ -9,11 +9,17 @@ DATABASE_URL=os.getenv("DATABASE_URL","").strip()
 def _pg():
     return bool(DATABASE_URL)
 
+_PG_FAILED=False
+
 def _connect():
-    if _pg():
-        import psycopg
-        from psycopg.rows import dict_row
-        return psycopg.connect(DATABASE_URL,row_factory=dict_row,autocommit=False)
+    global _PG_FAILED
+    if _pg() and not _PG_FAILED:
+        try:
+            import psycopg
+            from psycopg.rows import dict_row
+            return psycopg.connect(DATABASE_URL,row_factory=dict_row,autocommit=False,connect_timeout=5)
+        except Exception:
+            _PG_FAILED=True
     SQLITE_DB.parent.mkdir(parents=True,exist_ok=True)
     c=sqlite3.connect(SQLITE_DB);c.row_factory=sqlite3.Row
     return c
@@ -100,4 +106,4 @@ def history(username,limit=200):
     c.close();return [dict(r) for r in rows]
 
 def backend_info():
-    return {"persistence":"postgres" if _pg() else "sqlite_ephemeral","database_url_configured":_pg()}
+    return {"persistence":"postgres" if (_pg() and not _PG_FAILED) else "sqlite_ephemeral","database_url_configured":_pg(),"postgres_available":bool(_pg() and not _PG_FAILED)}
