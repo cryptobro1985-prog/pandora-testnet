@@ -237,3 +237,40 @@ async def public_vk_wall(handle: str, limit: int = 20) -> dict[str, Any]:
         return {"status":"ok","items":items,"source":url}
     except Exception:
         return {"status":"unavailable","items":[],"detail":"public VK wall request failed"}
+
+
+async def public_instagram_feed(username: str, limit: int = 24) -> dict[str, Any]:
+    username = username.strip().lstrip("@")
+    if not username:
+        return {"status":"invalid","items":[]}
+    url=f"https://www.instagram.com/{username}/"
+    headers={
+        "User-Agent":"Mozilla/5.0 (compatible; SocialIntelligenceMVP/0.5)",
+        "Accept-Language":"en-US,en;q=0.9",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=TIMEOUT, follow_redirects=True, headers=headers) as client:
+            r=await client.get(url)
+        if r.status_code>=400:
+            return {"status":"unavailable","items":[],"http_status":r.status_code}
+        soup=BeautifulSoup(r.text,"html.parser")
+        items=[]
+        seen=set()
+        for a in soup.select('a[href^="/p/"], a[href^="/reel/"]'):
+            href=a.get("href") or ""
+            if not href or href in seen:
+                continue
+            seen.add(href)
+            img=a.select_one("img")
+            text=(img.get("alt") if img else "") or a.get_text(" ",strip=True)
+            items.append({
+                "title":"Публикация Instagram" if href.startswith("/p/") else "Reel Instagram",
+                "text":text[:1000],
+                "when":None,
+                "url":"https://www.instagram.com"+href,
+            })
+            if len(items)>=max(1,min(limit,50)):
+                break
+        return {"status":"ok","items":items,"source":url}
+    except Exception:
+        return {"status":"unavailable","items":[],"detail":"public Instagram feed request failed"}
