@@ -1,0 +1,38 @@
+{
+  "version": "HYPE_12P_CLEAN_CORE_V1",
+  "source_artifact_id": 13650399622,
+  "source_period": "2026-07-12T17:00Z..2026-11-03",
+  "clean_days_utc": ["2026-07-17","2026-07-18","2026-07-29"],
+  "candidate_snapshots_total": 496,
+  "compact_m1_rows_total": 4320,
+  "selection_rule": "Only full UTC days with the rich causal terminal-local stack present: structure + executed flow + price response/impact efficiency + L50 book + liquidations + OI + mark/index/funding. Never impute unavailable microstructure as zero.",
+  "required_groups": [
+    "structure_extreme_position",
+    "candidate_survival_retrace",
+    "reversal_price_response",
+    "aggressor_flow_imbalance",
+    "buy_sell_pressure",
+    "price_impact_efficiency",
+    "trade_activity_concentration",
+    "l50_book_state",
+    "near_book_depth",
+    "liquidation_exhaustion",
+    "open_interest_context",
+    "mark_index_funding_context"
+  ],
+  "extra_causal_context": [
+    "candidate_side_and_extreme",
+    "60m_6h_24h_market_position",
+    "mark_index_basis_bps",
+    "near_touch_depth",
+    "M1_context"
+  ],
+  "excluded_periods": {
+    "2026-08-08..2026-09-01": "No full rich microstructure stack in preserved master.",
+    "2026-09-01..2026-10-01": "No full rich microstructure stack in preserved master.",
+    "2026-10-04..2026-11-03": "Historical audit marks L50, liquidations and OI unavailable.",
+    "other_2026-07-12..2026-08-07_days": "At least one hourly liquidation source is missing."
+  },
+  "teacher_guard": "Strict H1 Local labels are evaluation-only and forbidden from model inputs.",
+  "quality_warning": "Old Jul-Aug book_valid flag admitted crossed books in prior audit. Apply crossed-book masking before promotion-grade scoring."
+}
