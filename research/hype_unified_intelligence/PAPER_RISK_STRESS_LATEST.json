@@ -1,8 +1,222 @@
 {
   "version": "HYPE-PAPER-RISK-REPLAY-v1",
-  "status": "FAILED_BEFORE_REPORT",
-  "replay_outcome": "skipped",
-  "github_run_id": "42972980658",
-  "master_artifact_id": "",
-  "real_orders": false
+  "status": "DIAGNOSTIC_NO_PROMOTION",
+  "real_orders": false,
+  "github_run_id": "42973182059",
+  "master_sha256": "c9d588b5c78d0e72a3073ceb62c7fa100381ebf69df911b22a170171a2653975",
+  "frozen_model": "price+flow frozen Jul train and Aug development threshold 0.80",
+  "execution": {
+    "entry": "next 1m open",
+    "stop_underlying_bps": 35,
+    "fixed_take_underlying_bps": 50,
+    "roundtrip_cost_bps": 12,
+    "take_stop_same_bar": "stop wins",
+    "max_hold_mins": 120,
+    "risk": "1/L minus 0.5pct approximated maintenance, NOT Bybit liquidation formula",
+    "source": "historical minute OHLC/flow, NOT executable quote/mark tick replay"
+  },
+  "by_period": {
+    "dev": {
+      "fixed": {
+        "trades": 14,
+        "long": 9,
+        "short": 5,
+        "wins": 6,
+        "win_rate": 0.42857142857142855,
+        "underlying_compound_pct": -1.4820921162923217,
+        "profit_factor": 0.6063829787233994,
+        "max_drawdown_pct": 2.7870719154228007,
+        "median_mfe_bps": 51.378876238725724,
+        "median_mae_bps": 39.40185349688041,
+        "median_capture": -0.49015655637256106,
+        "exit_reasons": {
+          "HARD_STOP": 8,
+          "TAKE_PROFIT": 6
+        },
+        "largest_winner_pct": 0.38000000000000045
+      },
+      "trend_hold": {
+        "trades": 11,
+        "long": 7,
+        "short": 4,
+        "wins": 5,
+        "win_rate": 0.45454545454545453,
+        "underlying_compound_pct": 7.9486685555648195,
+        "profit_factor": 3.7825001613264133,
+        "max_drawdown_pct": 1.7488834545348886,
+        "median_mfe_bps": 70.63144511936682,
+        "median_mae_bps": 37.03261259108803,
+        "median_capture": 0.3399999999999849,
+        "exit_reasons": {
+          "HARD_STOP": 6,
+          "SUSTAINED_OPPOSING_EFFICIENCY_NEXT_OPEN": 4,
+          "MAX_HOLD_NEXT_OPEN": 1
+        },
+        "largest_winner_pct": 5.495150311217043
+      }
+    },
+    "validation": {
+      "fixed": {
+        "trades": 2,
+        "long": 0,
+        "short": 2,
+        "wins": 2,
+        "win_rate": 1.0,
+        "underlying_compound_pct": 0.7614439999999778,
+        "profit_factor": null,
+        "max_drawdown_pct": 0.0,
+        "median_mfe_bps": 57.28963042313906,
+        "median_mae_bps": 11.448636006888835,
+        "median_capture": 0.8743683574879317,
+        "exit_reasons": {
+          "TAKE_PROFIT": 2
+        },
+        "largest_winner_pct": 0.38000000000000045
+      },
+      "trend_hold": {
+        "trades": 2,
+        "long": 0,
+        "short": 2,
+        "wins": 1,
+        "win_rate": 0.5,
+        "underlying_compound_pct": 0.29586800877297037,
+        "profit_factor": 1.6372012475079074,
+        "max_drawdown_pct": 0.47000000000001485,
+        "median_mfe_bps": 123.08712037074454,
+        "median_mae_bps": 29.632815770493927,
+        "median_capture": -0.05433464762717957,
+        "exit_reasons": {
+          "SUSTAINED_OPPOSING_EFFICIENCY_NEXT_OPEN": 1,
+          "HARD_STOP": 1
+        },
+        "largest_winner_pct": 0.769484586328726
+      }
+    },
+    "holdout": {
+      "fixed": {
+        "trades": 15,
+        "long": 9,
+        "short": 6,
+        "wins": 7,
+        "win_rate": 0.4666666666666667,
+        "underlying_compound_pct": -1.107724066334248,
+        "profit_factor": 0.7074468085106341,
+        "max_drawdown_pct": 2.596714426870117,
+        "median_mfe_bps": 44.89683280971324,
+        "median_mae_bps": 35.25620906827398,
+        "median_capture": -0.7795650118203051,
+        "exit_reasons": {
+          "TAKE_PROFIT": 7,
+          "HARD_STOP": 8
+        },
+        "largest_winner_pct": 0.38000000000001155
+      },
+      "trend_hold": {
+        "trades": 13,
+        "long": 7,
+        "short": 6,
+        "wins": 2,
+        "win_rate": 0.15384615384615385,
+        "underlying_compound_pct": 0.9604892728659831,
+        "profit_factor": 1.2075193017747712,
+        "max_drawdown_pct": 2.3280135792452805,
+        "median_mfe_bps": 31.139582918315867,
+        "median_mae_bps": 53.26231691078487,
+        "median_capture": -1.1239713804712832,
+        "exit_reasons": {
+          "HARD_STOP": 11,
+          "SUSTAINED_OPPOSING_EFFICIENCY_NEXT_OPEN": 1,
+          "MAX_HOLD_NEXT_OPEN": 1
+        },
+        "largest_winner_pct": 4.117415477084905
+      }
+    }
+  },
+  "verdict": "NO_PROVEN_OPTIMAL_LEVERAGE; ZERO_REAL_ORDER_FRACTION",
+  "selected_stress": {
+    "fixed": {
+      "no_extra_cost": {
+        "period": "holdout",
+        "mode": "fixed",
+        "additional_cost_bps": 0,
+        "leverage": 25,
+        "margin_fraction": 0.2,
+        "equity_exposure": 5.0,
+        "equity_return_pct": -5.681,
+        "max_dd_pct": 12.522,
+        "worst_open_equity_loss_pct": 5.553,
+        "approx_liquidations": 0,
+        "approx_liq_underlying_pct": 3.5
+      },
+      "plus_8_bps": {
+        "period": "holdout",
+        "mode": "fixed",
+        "additional_cost_bps": 8,
+        "leverage": 25,
+        "margin_fraction": 0.2,
+        "equity_exposure": 5.0,
+        "equity_return_pct": -11.207,
+        "max_dd_pct": 16.341,
+        "worst_open_equity_loss_pct": 5.953,
+        "approx_liquidations": 0,
+        "approx_liq_underlying_pct": 3.5
+      },
+      "plus_25_bps": {
+        "period": "holdout",
+        "mode": "fixed",
+        "additional_cost_bps": 25,
+        "leverage": 25,
+        "margin_fraction": 0.2,
+        "equity_exposure": 5.0,
+        "equity_return_pct": -21.961,
+        "max_dd_pct": 23.957,
+        "worst_open_equity_loss_pct": 6.803,
+        "approx_liquidations": 0,
+        "approx_liq_underlying_pct": 3.5
+      }
+    },
+    "trend_hold": {
+      "no_extra_cost": {
+        "period": "holdout",
+        "mode": "trend_hold",
+        "additional_cost_bps": 0,
+        "leverage": 25,
+        "margin_fraction": 0.2,
+        "equity_exposure": 5.0,
+        "equity_return_pct": 2.697,
+        "max_dd_pct": 11.211,
+        "worst_open_equity_loss_pct": 5.553,
+        "approx_liquidations": 0,
+        "approx_liq_underlying_pct": 3.5
+      },
+      "plus_8_bps": {
+        "period": "holdout",
+        "mode": "trend_hold",
+        "additional_cost_bps": 8,
+        "leverage": 25,
+        "margin_fraction": 0.2,
+        "equity_exposure": 5.0,
+        "equity_return_pct": -2.516,
+        "max_dd_pct": 14.238,
+        "worst_open_equity_loss_pct": 5.953,
+        "approx_liquidations": 0,
+        "approx_liq_underlying_pct": 3.5
+      },
+      "plus_25_bps": {
+        "period": "holdout",
+        "mode": "trend_hold",
+        "additional_cost_bps": 25,
+        "leverage": 25,
+        "margin_fraction": 0.2,
+        "equity_exposure": 5.0,
+        "equity_return_pct": -12.793,
+        "max_dd_pct": 21.364,
+        "worst_open_equity_loss_pct": 6.803,
+        "approx_liquidations": 0,
+        "approx_liq_underlying_pct": 3.5
+      }
+    }
+  },
+  "warning": "Validation contains only 2 trades; Oct historical OOS previously inspected; larger microstructure not yet covered",
+  "limitations": "OHLC and 12bps cost proxy, no multi-month executable historical L50/mark replay, no real liquidation engine, October previously inspected."
 }
