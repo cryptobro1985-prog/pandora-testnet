@@ -52,6 +52,20 @@ def build(master):
     return periods,rows
 
 
+def micro_provenance(rows_by_period):
+    """Make absent certified micro explicit; common M1 proxies are not L50/OI evidence."""
+    result = {}
+    for period, rows in rows_by_period.items():
+        certified = sum(bool(r.get("clean_features")) for r in rows)
+        result[period] = {
+            "decision_rows": len(rows),
+            "certified_micro_rows": certified,
+            "certified_micro_fraction": certified / len(rows) if rows else None,
+            "rich_micro_validated_for_cv": certified > 0,
+        }
+    return result
+
+
 def predictor_coverage(rows_by_period):
     """Audit actual legal predictor availability without treating missing micro as zero."""
     out = {}
@@ -261,7 +275,10 @@ def main():
          "time_gate":False,"decision_sampling":"FIXED_CANDIDATE_AGE_GRID_NOT_EVENT_DRIVEN",
          "event_driven":False,"sampling_warning":"No explicit entry time gate, but decision opportunities are sampled at predefined candidate ages; OOS metrics must not be represented as continuous event-driven performance.",
          "by_side":{},"real_orders":False,
-         "predictor_coverage":predictor_coverage(rows)}
+         "predictor_coverage":predictor_coverage(rows),
+         "micro_provenance":micro_provenance(rows),
+         "micro_source_status":"NOT_LOADED: replay.inventory(master,{}) passes no certified micro snapshot index",
+         "micro_warning":"Historical M1 flow proxies are not evidence that L50, OI, liquidation, mark or funding streams were used. Do not claim rich-micro CV until a verified archive is loaded and timestamp-aligned."}
     for side in ("LOW","HIGH"):
         out["by_side"][side]=run_side(periods,rows,side)
     a.output.write_text(json.dumps(out,indent=2,ensure_ascii=False)+"\n")
