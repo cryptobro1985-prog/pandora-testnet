@@ -1,75 +1,5 @@
 [
   {
-    "id": 13603766532,
-    "name": "HYPE-LOCAL-ONLY-EVIDENCE-42442094604",
-    "size_in_bytes": 3528561,
-    "created_at": "2026-11-08T04:11:28Z",
-    "expires_at": "2026-11-15T04:11:27Z",
-    "workflow_run": {
-      "head_branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
-      "head_repository_id": 1430598683,
-      "head_sha": "6fbe579ce13256c33b7c35008b5ad5aae3f34aa6",
-      "id": 42442094604,
-      "repository_id": 1430598683
-    }
-  },
-  {
-    "id": 13604927711,
-    "name": "HYPE-LOCAL-ONLY-EVIDENCE-42445794722",
-    "size_in_bytes": 3744379,
-    "created_at": "2026-11-08T05:04:45Z",
-    "expires_at": "2026-11-15T05:04:44Z",
-    "workflow_run": {
-      "head_branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
-      "head_repository_id": 1430598683,
-      "head_sha": "6fbe579ce13256c33b7c35008b5ad5aae3f34aa6",
-      "id": 42445794722,
-      "repository_id": 1430598683
-    }
-  },
-  {
-    "id": 13605949776,
-    "name": "HYPE-LOCAL-ONLY-EVIDENCE-42449333450",
-    "size_in_bytes": 3747275,
-    "created_at": "2026-11-08T05:57:43Z",
-    "expires_at": "2026-11-15T05:57:42Z",
-    "workflow_run": {
-      "head_branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
-      "head_repository_id": 1430598683,
-      "head_sha": "6fbe579ce13256c33b7c35008b5ad5aae3f34aa6",
-      "id": 42449333450,
-      "repository_id": 1430598683
-    }
-  },
-  {
-    "id": 13608255179,
-    "name": "HYPE-LOCAL-RAW-42452782723",
-    "size_in_bytes": 3455843,
-    "created_at": "2026-11-08T06:50:40Z",
-    "expires_at": "2026-11-11T06:50:39Z",
-    "workflow_run": {
-      "head_branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
-      "head_repository_id": 1430598683,
-      "head_sha": "6fbe579ce13256c33b7c35008b5ad5aae3f34aa6",
-      "id": 42452782723,
-      "repository_id": 1430598683
-    }
-  },
-  {
-    "id": 13607517514,
-    "name": "HYPE-LOCAL-ONLY-EVIDENCE-42452782723",
-    "size_in_bytes": 3871376,
-    "created_at": "2026-11-08T06:50:43Z",
-    "expires_at": "2026-11-15T06:50:42Z",
-    "workflow_run": {
-      "head_branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
-      "head_repository_id": 1430598683,
-      "head_sha": "6fbe579ce13256c33b7c35008b5ad5aae3f34aa6",
-      "id": 42452782723,
-      "repository_id": 1430598683
-    }
-  },
-  {
     "id": 13609282692,
     "name": "HYPE-LOCAL-RAW-42456390610",
     "size_in_bytes": 3415161,
@@ -416,20 +346,6 @@
       "head_repository_id": 1430598683,
       "head_sha": "1fc8a85d7aa78630fe4e02a4feca6019bb031a0e",
       "id": 42468865592,
-      "repository_id": 1430598683
-    }
-  },
-  {
-    "id": 13612269985,
-    "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42469135215",
-    "size_in_bytes": 3326,
-    "created_at": "2026-11-08T09:54:36Z",
-    "expires_at": "2026-11-11T09:54:35Z",
-    "workflow_run": {
-      "head_branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
-      "head_repository_id": 1430598683,
-      "head_sha": "659ecbc63467e5644d353e23bcda8f27a2b12028",
-      "id": 42469135215,
       "repository_id": 1430598683
     }
   },
@@ -4910,6 +4826,104 @@
       "head_repository_id": 1430598683,
       "head_sha": "210b35b5fed387a84c27dcade753cdf884565eed",
       "id": 42969073890,
+      "repository_id": 1430598683
+    }
+  },
+  {
+    "id": 13831903748,
+    "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42969172779",
+    "size_in_bytes": 8428,
+    "created_at": "2026-11-11T05:58:54Z",
+    "expires_at": "2026-11-14T05:58:53Z",
+    "workflow_run": {
+      "head_branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+      "head_repository_id": 1430598683,
+      "head_sha": "0c65fc847f43a1c2053e4eeee068d36a3c1f0a6d",
+      "id": 42969172779,
+      "repository_id": 1430598683
+    }
+  },
+  {
+    "id": 13832368303,
+    "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42969230173",
+    "size_in_bytes": 8428,
+    "created_at": "2026-11-11T06:00:02Z",
+    "expires_at": "2026-11-14T06:00:02Z",
+    "workflow_run": {
+      "head_branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+      "head_repository_id": 1430598683,
+      "head_sha": "76e4d8486b37dc44e98901de2d0543459108d9dd",
+      "id": 42969230173,
+      "repository_id": 1430598683
+    }
+  },
+  {
+    "id": 13832209006,
+    "name": "HYPE-FALSE-LOCAL-DUAL-SCOPE-42969346282",
+    "size_in_bytes": 57846,
+    "created_at": "2026-11-11T06:00:05Z",
+    "expires_at": "2026-11-25T06:00:05Z",
+    "workflow_run": {
+      "head_branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+      "head_repository_id": 1430598683,
+      "head_sha": "429989d8d3f81f3ddcbffd52363b0a5cc207135b",
+      "id": 42969346282,
+      "repository_id": 1430598683
+    }
+  },
+  {
+    "id": 13832811051,
+    "name": "HYPE-DENSE-CROSS-PERIOD-42969346279",
+    "size_in_bytes": 51339,
+    "created_at": "2026-11-11T06:00:10Z",
+    "expires_at": "2026-11-25T06:00:09Z",
+    "workflow_run": {
+      "head_branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+      "head_repository_id": 1430598683,
+      "head_sha": "429989d8d3f81f3ddcbffd52363b0a5cc207135b",
+      "id": 42969346279,
+      "repository_id": 1430598683
+    }
+  },
+  {
+    "id": 13832971218,
+    "name": "HYPE-DENSE-ALL-STRICT-42969346340",
+    "size_in_bytes": 1886,
+    "created_at": "2026-11-11T06:00:24Z",
+    "expires_at": "2026-11-25T06:00:23Z",
+    "workflow_run": {
+      "head_branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+      "head_repository_id": 1430598683,
+      "head_sha": "429989d8d3f81f3ddcbffd52363b0a5cc207135b",
+      "id": 42969346340,
+      "repository_id": 1430598683
+    }
+  },
+  {
+    "id": 13832751408,
+    "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42969364345",
+    "size_in_bytes": 8859,
+    "created_at": "2026-11-11T06:02:24Z",
+    "expires_at": "2026-11-14T06:02:23Z",
+    "workflow_run": {
+      "head_branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+      "head_repository_id": 1430598683,
+      "head_sha": "62234cdbb7dd8423091bcc5e0588330130c1ee01",
+      "id": 42969364345,
+      "repository_id": 1430598683
+    }
+  },
+  {
+    "id": 13833256363,
+    "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42969851833",
+    "size_in_bytes": 8428,
+    "created_at": "2026-11-11T06:05:01Z",
+    "expires_at": "2026-11-14T06:05:00Z",
+    "workflow_run": {
+      "head_branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+      "head_repository_id": 1430598683,
+      "head_sha": "0071a6ae97ea4b935643b9b0b5a31e713235f7b3",
+      "id": 42969851833,
       "repository_id": 1430598683
     }
   }
