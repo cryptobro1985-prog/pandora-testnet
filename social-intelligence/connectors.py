@@ -1,5 +1,5 @@
 from __future__ import annotations
-import os,re,asyncio,json,base64
+import os,re,asyncio,json,base64,subprocess,sys
 from datetime import timezone
 from typing import Any
 import httpx
@@ -47,13 +47,29 @@ async def business_discovery(username:str)->dict[str,Any]:
 async def media_comments(media_id:str,limit:int=100)->dict[str,Any]:
     return await meta_get(media_id+"/comments",{"fields":"id,text,timestamp,username,like_count,replies{id,text,timestamp,username,like_count}","limit":max(1,min(limit,100))})
 
+_PW_INSTALL_LOCK=asyncio.Lock()
+_PW_READY=False
+
+async def _ensure_playwright_browser():
+    global _PW_READY
+    if _PW_READY: return True
+    async with _PW_INSTALL_LOCK:
+        if _PW_READY: return True
+        def install():
+            return subprocess.run([sys.executable,"-m","playwright","install","chromium"],capture_output=True,text=True,timeout=180)
+        r=await asyncio.to_thread(install)
+        _PW_READY=(r.returncode==0)
+        return _PW_READY
+
 async def playwright_public_collect(username:str,max_posts:int=12)->dict[str,Any]:
     """2scraper-style browser collector: open logged-out Instagram pages in Chromium and parse server-rendered JSON."""
     try:
         from playwright.async_api import async_playwright
-    except Exception as e:
+    except Exception:
         return {"status":"unavailable","source":"playwright_public","detail":"playwright_not_installed"}
     try:
+        if not await _ensure_playwright_browser():
+            return {"status":"unavailable","source":"playwright_public","detail":"chromium_install_failed"}
         async with async_playwright() as pw:
             browser=await pw.chromium.launch(headless=True,args=["--no-sandbox","--disable-dev-shm-usage"])
             context=await browser.new_context(locale="en-US",user_agent=HEADERS["User-Agent"])
