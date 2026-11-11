@@ -63,17 +63,15 @@ def home(): return Response(PAGE,mimetype="text/html")
 @app.get("/health")
 def health(): return jsonify({"status":"ok","scraper_dir":SCRAPER_DIR})
 
-@app.post("/api/analyze")
-def analyze():
-    username=norm((request.get_json(silent=True) or {}).get("username",""))
-    if not username: return jsonify({"status":"error","message":"Введи username."}),400
+def run_scrape(username):
+    if not username: return {"status":"error","message":"Введи username."},400
     with tempfile.TemporaryDirectory() as td:
         out=os.path.join(td,"result.json")
         cmd=["python3",os.path.join(SCRAPER_DIR,"playwright_scraper.py"),"--url",username,"--posts","12","--format","json","--out",out,"--delay-between-pages","1.2","--retries","1","--solve-captcha","off"]
         try:
             cp=subprocess.run(cmd,cwd=SCRAPER_DIR,capture_output=True,text=True,timeout=110)
         except subprocess.TimeoutExpired:
-            return jsonify({"status":"error","message":"Instagram не ответил вовремя. Повтори попытку."}),504
+            return {"status":"error","message":"Instagram не ответил вовремя. Повтори попытку."},504
         rows=[]
         if os.path.exists(out):
             try:
@@ -87,10 +85,22 @@ def analyze():
                 msg="Instagram отдал серверу страницу входа вместо публичных данных. Это ограничение Instagram для дата-центров, а не ошибка интерфейса."
             else:
                 msg="2scraper не получил публичные данные с Instagram."
-            return jsonify({"status":"error","message":msg,"detail":detail[-1200:],"exit_code":cp.returncode}),502
+            return {"status":"error","message":msg,"detail":detail[-1200:],"exit_code":cp.returncode},502
         profile=next((x for x in rows if x.get("category")=="profile"),{})
         posts=[x for x in rows if x.get("category")=="post"]
-        return jsonify({"status":"ok","username":username,"profile":profile,"posts":posts,"count":len(rows),"exit_code":cp.returncode})
+        return {"status":"ok","username":username,"profile":profile,"posts":posts,"count":len(rows),"exit_code":cp.returncode},200
+
+@app.post("/api/analyze")
+def analyze():
+    username=norm((request.get_json(silent=True) or {}).get("username",""))
+    body,code=run_scrape(username)
+    return jsonify(body),code
+
+@app.get("/api/smoke")
+def smoke():
+    username=norm(request.args.get("username","natgeo"))
+    body,code=run_scrape(username)
+    return jsonify(body),code
 
 if __name__=="__main__":
     app.run(host="0.0.0.0",port=int(os.getenv("PORT","10000")))
