@@ -15,7 +15,7 @@ class ConfirmedBounceContractTests(unittest.TestCase):
     def test_malformed_and_nonfinite_values_rejected(self):
         for name in ("", "unknown", "p999_not_a_real_point"):
             self.assertFalse(cv.legal_predictor(name, 1.0))
-        for value in (None, float("nan"), float("inf"), "3.14"):
+        for value in (None, float("nan"), float("inf"), "3.14", True, False, cv.np.bool_(True)):
             self.assertFalse(cv.legal_predictor("p001_any", value))
 
     def test_empty_certified_micro_not_counted(self):
