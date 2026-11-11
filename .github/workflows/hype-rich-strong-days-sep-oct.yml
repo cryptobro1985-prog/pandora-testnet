@@ -170,14 +170,52 @@ jobs:
         env:
           MATRIX_ID: ${{ matrix.id }}
 
+      - name: Compact output and remove raw cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="rich_out_${{ matrix.id }}"
+          CACHE="rich_cache_${{ matrix.id }}"
+          RAW_BYTES=$(python - <<'PY'
+          import json,os,pathlib
+          m=json.load(open(pathlib.Path("rich_out_"+os.environ["MATRIX_ID"])/"manifest.json"))
+          print(int(m.get("downloaded_bytes") or 0))
+          PY
+          )
+          OUT_BYTES=$(du -sb "$OUT" | awk '{print $1}')
+          export RAW_BYTES OUT_BYTES
+          gzip -9 -f "build_${{ matrix.id }}.log"
+          rm -rf "$CACHE"
+          python - <<'PY'
+          import json,os,pathlib
+          out=pathlib.Path("rich_out_"+os.environ["MATRIX_ID"])
+          p=out/"COLLECTION_AUDIT.json"
+          d=json.load(open(p))
+          raw=int(os.environ.get("RAW_BYTES","0"))
+          compact=int(os.environ.get("OUT_BYTES","0"))
+          d["raw_download_bytes_ephemeral"]=raw
+          d["compact_output_bytes"]=compact
+          d["compression_ratio_raw_to_compact"]=(raw/compact if compact else None)
+          d["raw_cache_retained"]=False
+          json.dump(d,open(p,"w"),indent=2)
+          print(json.dumps({
+            "raw_download_mb":round(raw/1024/1024,2),
+            "compact_output_mb":round(compact/1024/1024,2),
+            "compression_ratio":round(raw/compact,2) if compact else None,
+            "raw_cache_retained":False
+          }))
+          PY
+        env:
+          MATRIX_ID: ${{ matrix.id }}
+
       - name: Upload rich dataset
         uses: actions/upload-artifact@v4
         with:
           name: HYPE-RICH-STRONG-${{ matrix.id }}-${{ github.run_id }}
           path: |
             rich_out_${{ matrix.id }}/**
-            build_${{ matrix.id }}.log
-          retention-days: 90
+            build_${{ matrix.id }}.log.gz
+          retention-days: 14
           compression-level: 0
 
   summary:
