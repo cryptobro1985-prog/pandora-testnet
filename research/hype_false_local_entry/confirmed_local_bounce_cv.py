@@ -12,7 +12,7 @@ from sklearn.pipeline import Pipeline
 
 from research.hype_false_local_entry import full116_candidate_features as feat
 from research.hype_false_local_entry import full116_terminal_replay as replay
-from research.hype_false_local_entry import full116_data_sources as sources
+from research.hype_false_local_entry import full116_sources as sources
 from research.hype_quant.feature_contract import INPUT_IDS
 
 QUALITY_ONLY=set(replay.QUALITY_ONLY)
