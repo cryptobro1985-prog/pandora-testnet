@@ -20,7 +20,7 @@ THRESHOLDS=np.arange(.50,.996,.01)
 
 
 def finite(v):
-    return isinstance(v,(int,float,np.number)) and math.isfinite(float(v))
+    return not isinstance(v, (bool, np.bool_)) and isinstance(v,(int,float,np.number)) and math.isfinite(float(v))
 
 
 def legal_predictor(name, value):
