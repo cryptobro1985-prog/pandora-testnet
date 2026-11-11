@@ -1,0 +1,11 @@
+{
+  "version": "HYPE-UNIFIED-LOCAL-INTELLIGENCE-v2",
+  "status": "WORKFLOW_FAILED_BEFORE_REPORT",
+  "train_outcome": "skipped",
+  "github_run_id": "42967444000",
+  "github_sha": "b455f627ca86e64e4b32156021158b8a9feff9ac",
+  "base_artifact_id": "",
+  "gap_artifact_id": "",
+  "research_only": true,
+  "real_orders": false
+}
