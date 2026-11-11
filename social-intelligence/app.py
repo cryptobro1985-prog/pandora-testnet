@@ -98,8 +98,10 @@ async def startup():
     init_schema()
     import asyncio,logging
     if os.getenv("IG_PREWARM_PLAYWRIGHT","").strip().lower() in ("1","true","yes","on"):
-        warm=await warm_playwright()
-        logging.getLogger("uvicorn.error").warning("playwright_warmup=%s",json.dumps(warm))
+        async def warm_runner():
+            warm=await warm_playwright()
+            logging.getLogger("uvicorn.error").warning("playwright_warmup=%s",json.dumps(warm))
+        asyncio.create_task(warm_runner())
     target=os.getenv("IG_STARTUP_SMOKE_TARGET","").strip()
     if target:
         async def runner():
