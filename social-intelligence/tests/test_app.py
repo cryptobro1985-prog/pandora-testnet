@@ -11,7 +11,7 @@ def test_health():
     r=client.get("/api/health")
     assert r.status_code==200
     assert r.json()["service"]=="instagram-intelligence"
-    assert r.json()["version"]=="2.0.0"
+    assert r.json()["version"]=="2.1.0"
 
 def test_capabilities_instagram_only():
     r=client.get("/api/capabilities")
@@ -65,3 +65,21 @@ def test_session_status_does_not_expose_secrets():
     raw=str(data).lower()
     assert "access_token" not in raw
     assert "sessionid" not in raw.replace("ig_sessionid","")
+
+
+def test_browser_bridge_ingest_and_latest():
+    payload={
+      "username":"demo_public",
+      "profile":{"username":"demo_public","followers_count":2,"follows_count":1},
+      "followers":[{"pk":"1","username":"alice"},{"pk":"2","username":"bob"}],
+      "following":[{"pk":"1","username":"alice"}],
+      "posts":[{"id":"p1","shortcode":"ABC123","caption":"hello @alice","comments_detail":[],"likers":[]}]
+    }
+    r=client.post("/api/bridge/ingest",json=payload)
+    assert r.status_code==200
+    data=r.json()
+    assert data["followers"]==2
+    assert data["following"]==1
+    latest=client.get("/api/bridge/latest/demo_public")
+    assert latest.status_code==200
+    assert latest.json()["followers"]==2
