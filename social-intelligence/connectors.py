@@ -153,3 +153,87 @@ async def public_profile_page(url: str) -> dict[str, Any]:
         }
     except Exception:
         return {"status": "unavailable", "detail": "public page request failed"}
+
+
+from bs4 import BeautifulSoup
+from datetime import datetime, timezone
+
+async def public_telegram_feed(username: str, limit: int = 30) -> dict[str, Any]:
+    username = username.lstrip("@").strip()
+    if not username:
+        return {"status": "invalid", "items": []}
+    url = f"https://t.me/s/{username}"
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; SocialIntelligenceMVP/0.4)"}
+    try:
+        async with httpx.AsyncClient(timeout=TIMEOUT, follow_redirects=True, headers=headers) as client:
+            r = await client.get(url)
+        if r.status_code >= 400:
+            return {"status":"unavailable","items":[],"http_status":r.status_code}
+        soup = BeautifulSoup(r.text, "html.parser")
+        items=[]
+        for msg in soup.select(".tgme_widget_message_wrap")[-max(1,min(limit,100)):]:
+            node = msg.select_one(".tgme_widget_message")
+            text_node = msg.select_one(".tgme_widget_message_text")
+            time_node = msg.select_one("time")
+            views_node = msg.select_one(".tgme_widget_message_views")
+            link_node = msg.select_one(".tgme_widget_message_date")
+            if not node:
+                continue
+            post = node.get("data-post") or ""
+            author = node.get("data-peer") or username
+            dt = time_node.get("datetime") if time_node else None
+            href = link_node.get("href") if link_node else (f"https://t.me/{post}" if post else None)
+            items.append({
+                "title": f"@{author}",
+                "text": (text_node.get_text(" ", strip=True) if text_node else "")[:2000],
+                "when": dt,
+                "views": views_node.get_text(" ", strip=True) if views_node else None,
+                "url": href,
+            })
+        return {"status":"ok","items":items,"source":url}
+    except Exception:
+        return {"status":"unavailable","items":[],"detail":"public Telegram feed request failed"}
+
+async def public_vk_wall(handle: str, limit: int = 20) -> dict[str, Any]:
+    handle = handle.strip().lstrip("/")
+    if not handle:
+        return {"status":"invalid","items":[]}
+    url=f"https://vk.com/{handle}"
+    headers={"User-Agent":"Mozilla/5.0 (compatible; SocialIntelligenceMVP/0.4)"}
+    try:
+        async with httpx.AsyncClient(timeout=TIMEOUT, follow_redirects=True, headers=headers) as client:
+            r=await client.get(url)
+        if r.status_code>=400:
+            return {"status":"unavailable","items":[],"http_status":r.status_code}
+        soup=BeautifulSoup(r.text,"html.parser")
+        items=[]
+        selectors=["div._post","div.post","div[data-post-id]"]
+        seen=set()
+        for sel in selectors:
+            for post in soup.select(sel):
+                pid=post.get("id") or post.get("data-post-id") or ""
+                if pid in seen: continue
+                seen.add(pid)
+                text_node=post.select_one(".wall_post_text, .post_text, [data-testid='wall_post_text']")
+                time_node=post.select_one("time, .rel_date, .post_date")
+                like_node=post.select_one(".PostBottomAction--like .PostBottomAction__count, .like_btns .like_button_count")
+                comments_node=post.select_one(".PostBottomAction--comment .PostBottomAction__count, .reply_link")
+                href=None
+                if pid.startswith("post"):
+                    wall_id=pid[4:]
+                    href=f"https://vk.com/wall{wall_id}"
+                txt=text_node.get_text(" ",strip=True) if text_node else ""
+                if not txt and not pid: continue
+                items.append({
+                    "title":"Публикация VK",
+                    "text":txt[:2000],
+                    "when":time_node.get("datetime") if time_node and time_node.get("datetime") else (time_node.get_text(" ",strip=True) if time_node else None),
+                    "likes":like_node.get_text(" ",strip=True) if like_node else None,
+                    "comments":comments_node.get_text(" ",strip=True) if comments_node else None,
+                    "url":href or url,
+                })
+                if len(items)>=limit: break
+            if items: break
+        return {"status":"ok","items":items,"source":url}
+    except Exception:
+        return {"status":"unavailable","items":[],"detail":"public VK wall request failed"}
