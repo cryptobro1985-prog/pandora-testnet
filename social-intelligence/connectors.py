@@ -83,8 +83,31 @@ async def _ensure_playwright_browser():
         _PW_READY=(r.returncode==0)
         return _PW_READY
 
+def _playwright_cookie_list():
+    cookies=[]
+    sessionid=os.getenv("IG_SESSIONID","").strip()
+    csrf=os.getenv("IG_CSRFTOKEN","").strip()
+    ds=os.getenv("IG_DS_USER_ID","").strip()
+    mid=os.getenv("IG_MID","").strip()
+    if sessionid: cookies.append({"name":"sessionid","value":sessionid,"domain":".instagram.com","path":"/","httpOnly":True,"secure":True,"sameSite":"Lax"})
+    if csrf: cookies.append({"name":"csrftoken","value":csrf,"domain":".instagram.com","path":"/","secure":True,"sameSite":"Lax"})
+    if ds: cookies.append({"name":"ds_user_id","value":ds,"domain":".instagram.com","path":"/","secure":True,"sameSite":"Lax"})
+    if mid: cookies.append({"name":"mid","value":mid,"domain":".instagram.com","path":"/","secure":True,"sameSite":"Lax"})
+    blob=os.getenv("IG_SESSION_JSON_B64","").strip()
+    if blob:
+        try:
+            data=json.loads(base64.b64decode(blob).decode("utf-8"))
+            if isinstance(data,dict):
+                existing={x["name"] for x in cookies}
+                for name,value in data.items():
+                    if name in existing or value is None: continue
+                    cookies.append({"name":str(name),"value":str(value),"domain":".instagram.com","path":"/","secure":True,"sameSite":"Lax"})
+        except Exception:
+            pass
+    return cookies
+
 async def playwright_public_collect(username:str,max_posts:int=12)->dict[str,Any]:
-    """2scraper-style browser collector: open logged-out Instagram pages in Chromium and parse server-rendered JSON."""
+    """2scraper-style browser collector; uses the user's configured Instagram session when present."""
     try:
         from playwright.async_api import async_playwright
     except Exception:
@@ -95,6 +118,9 @@ async def playwright_public_collect(username:str,max_posts:int=12)->dict[str,Any
         async with async_playwright() as pw:
             browser=await pw.chromium.launch(headless=True,args=["--no-sandbox","--disable-dev-shm-usage"])
             context=await browser.new_context(locale="en-US",user_agent=HEADERS["User-Agent"])
+            auth_cookies=_playwright_cookie_list()
+            if auth_cookies:
+                await context.add_cookies(auth_cookies)
             page=await context.new_page()
             await page.goto("https://www.instagram.com/"+username+"/?hl=en",wait_until="domcontentloaded",timeout=45000)
             await page.wait_for_timeout(1500)
