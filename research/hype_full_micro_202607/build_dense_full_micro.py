@@ -8,6 +8,8 @@ from pathlib import Path
 from research.hype_full_micro_202607 import build_full_micro as base
 from research.hype_quant.feature_contract import INPUT_IDS, TARGET_IDS, METADATA_IDS
 
+finite = base.finite
+
 # Sampling timestamps are observation points for historical reconstruction only.
 # They NEVER gate live entry eligibility.
 OBSERVATION_DELAYS=(0,5,15,30,60,120,180,300,600)
