@@ -238,10 +238,29 @@ def run_side(periods, rows, side):
             for r in train
         )) if train else set()
         selected_certified = sorted(certified_names.intersection(names))
+        # A feature selected from the training archive may be entirely absent
+        # in the held-out period. In that case the imputer, not observed
+        # microstructure, supplies the value at inference time.
+        test_certified = set().union(*(
+            {k for k, v in (r.get("clean_features") or {}).items()
+             if legal_predictor(k, v)}
+            for r in test
+        )) if test else set()
+        selected_test_certified = sorted(set(selected_certified).intersection(test_certified))
+        test_rows_with_selected_micro = sum(
+            any(legal_predictor(k, (r.get("clean_features") or {}).get(k))
+                for k in selected_certified)
+            for r in test
+        )
         folds.append({"holdout": hold, "threshold": th,
                       "selected_certified_micro_feature_names": selected_certified,
                       "selected_certified_micro_feature_count": len(selected_certified),
                       "certified_micro_used_in_model": bool(selected_certified),
+                      "selected_certified_micro_available_on_holdout": selected_test_certified,
+                      "holdout_rows_with_selected_certified_micro": test_rows_with_selected_micro,
+                      "holdout_selected_certified_micro_fraction": (
+                          test_rows_with_selected_micro / len(test) if test else None),
+                      "certified_micro_observed_at_oos_inference": bool(test_rows_with_selected_micro),
                       "calibration": calibration_metrics, "inner_oof_folds": inner_folds,
                       "test": test_metrics, "test_records": records,
                       "feature_count": len(names),
