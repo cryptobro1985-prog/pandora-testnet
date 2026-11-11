@@ -1,235 +1,90 @@
 <!doctype html>
-<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0a1020"><title>Social Intelligence — Mini App</title>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#09090b">
+<title>Instagram Intelligence</title>
 <style>
-:root{color-scheme:dark;--bg:#080d18;--panel:#111b2b;--border:#2d3b50;--text:#e9f2fc;--muted:#91a7bb;--mint:#8df5c8;--purple:#b9a1ff}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 15% -15%,#284b50 0,transparent 45%),radial-gradient(ellipse at 100% 0,#332344 0,transparent 42%),var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,Arial,sans-serif}
-main{max-width:1050px;padding:18px 15px 66px;margin:auto}button,input{font:inherit}button{cursor:pointer}.head{display:flex;align-items:center;justify-content:space-between;margin-bottom:32px}.brand{display:flex;align-items:center;gap:10px;font-weight:800;line-height:1.1;letter-spacing:1px}.logo{height:37px;width:37px;border-radius:11px;background:linear-gradient(130deg,var(--mint),#91b9ff);color:#0c1930;display:grid;place-items:center;font-size:24px}.pill{font-size:11px;border-radius:100px;padding:5px 10px;color:var(--mint);border:1px solid #3a7868;background:#13392c80}.sub{color:var(--mint);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:2px}h1{font-size:clamp(28px,6vw,46px);letter-spacing:-1.4px;line-height:1.1;margin:12px 0}h1 em{font-style:normal;color:var(--mint)}.lead{color:var(--muted);max-width:640px;font-size:15px;margin:0 0 25px}.grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(270px,.8fr);gap:16px;align-items:start}.stack{display:grid;gap:16px}
-.card{background:linear-gradient(155deg,#172338,#0e1727 88%);border:1px solid var(--border);border-radius:19px;padding:21px;min-width:0}.card h2{margin:0 0 16px;font-size:19px;letter-spacing:-.3px}.section{font-size:12px;font-weight:750;margin:17px 0 13px;display:flex;align-items:center;gap:10px}.section:after{content:"";height:1px;background:var(--border);flex:1}.fields{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}.field{margin-bottom:12px;display:grid;gap:6px;min-width:0}.wide{grid-column:span 2}label{font-size:12px;font-weight:650;color:#d8e4f0}
-input[type=text],input[type=date],input[type=tel],input[type=url]{width:100%;min-width:0;border-radius:11px;background:#081121;color:var(--text);border:1px solid #354760;padding:11px 12px;outline:none;transition:border-color .15s}input::placeholder{color:#647d95}input:focus{border-color:var(--mint)}
-.file{border:1px dashed #405b72;border-radius:11px;background:#111e30;padding:11px}input[type=file]{max-width:100%;font-size:11px;color:var(--muted)}.preview{display:none;width:65px;height:65px;object-fit:cover;border-radius:9px;margin-top:10px}
-.check{display:flex;gap:12px;align-items:flex-start;background:#0a1628;border:1px solid var(--border);padding:13px;border-radius:12px;margin:16px 0}.check input{accent-color:var(--mint);width:18px;height:18px;margin:1px 0 0;flex:none}.check label{font-weight:450;line-height:1.55}.btn{display:block;border:0;width:100%;background:linear-gradient(90deg,#8df5c8,#9bc0ff);color:#0b1930;font-weight:850;padding:13px;border-radius:12px}.btn:disabled{opacity:.4;cursor:not-allowed}.small{font-size:11px;color:var(--muted);line-height:1.6}.stats{display:grid;grid-template-columns:1fr 1fr;gap:9px}.stat{border:1px solid var(--border);border-radius:13px;background:#0b1628;padding:15px}.stat strong{display:block;font-size:27px;color:var(--mint);line-height:1.2}.stat span{font-size:11px;color:var(--muted)}.feature{padding:10px 0;border-bottom:1px solid #2c3c4c;display:flex;align-items:flex-start;gap:10px}.feature:last-child{border:0}.dot{width:8px;height:8px;margin-top:5px;border-radius:50%;background:var(--mint);flex:none}
-#report{display:none;margin-top:20px}.reportHead{display:flex;align-items:center;justify-content:space-between;gap:10px}.tabs{display:flex;gap:8px;overflow-x:auto;scrollbar-width:thin;padding:12px 0}.tab{border:1px solid #32445a;background:#18253a;color:#bbcce0;border-radius:10px;padding:9px 13px;white-space:nowrap}.tab.active{background:#153a31;color:var(--mint);border-color:#4b8f78}.source{padding:14px;border-radius:12px;background:#0c1829;border:1px solid var(--border);margin:10px 0;overflow-wrap:anywhere}.source h3{margin:0 0 6px;font-size:14px}.source a{color:var(--mint)}.status{font-size:11px;color:#b8d0ec;background:#24364f;border-radius:7px;padding:4px 7px}.line{display:flex;justify-content:space-between;align-items:center;gap:10px}.notice{padding:13px;border-left:3px solid #8ab9ff;background:#162439;color:#c7d8e9;border-radius:8px;margin:11px 0;font-size:12px}.warning{border-left-color:#ffca86}.loading{display:none;color:var(--mint);font-size:12px;margin:11px 0}.empty{font-size:13px;color:var(--muted);padding:22px 10px;text-align:center}.eventRail{display:flex;gap:10px;overflow-x:auto;padding:4px 0 12px;scroll-snap-type:x proximity}.eventCard{min-width:250px;max-width:320px;scroll-snap-align:start;border:1px solid var(--border);border-radius:13px;background:#0b1628;padding:13px}.eventCard h4{margin:0 0 7px;font-size:13px}.eventCard p{margin:0;color:var(--muted);font-size:12px;line-height:1.5}.badge{display:inline-block;margin-top:8px;padding:3px 7px;border:1px solid #36506b;border-radius:999px;color:#bcd1e6;font-size:10px}
-@media(max-width:760px){.grid{grid-template-columns:1fr}.card{padding:17px}}@media(max-width:420px){.fields{grid-template-columns:1fr}.wide{grid-column:span 1}main{padding:14px 12px 50px}}
-</style></head>
+:root{--bg:#09090b;--card:#141419;--line:#2a2a33;--text:#f7f7fb;--muted:#9b9bab;--pink:#ff4d8d;--violet:#8b5cf6;--good:#8df5c8;--bad:#f7b4b4}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#22102d 0,#09090b 34%);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,Arial}
+main{max-width:1080px;margin:auto;padding:20px 14px 70px}.brand{font-size:25px;font-weight:900}.sub{color:var(--muted);margin:5px 0 20px}
+.search{display:flex;gap:9px}.search input{flex:1;min-width:0;background:#101014;border:1px solid var(--line);color:#fff;border-radius:15px;padding:15px 16px;font-size:16px}.search button{border:0;border-radius:15px;padding:0 21px;color:white;font-weight:850;background:linear-gradient(135deg,var(--pink),var(--violet))}
+.status{margin:12px 0;color:var(--muted)}.grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}.card{background:rgba(20,20,25,.95);border:1px solid var(--line);border-radius:19px;padding:17px;margin-top:13px}.profile{display:flex;gap:14px;align-items:center}.avatar{width:74px;height:74px;border-radius:50%;object-fit:cover;background:#222}.name{font-size:21px;font-weight:850}.muted{color:var(--muted)}.stats{display:flex;gap:20px;margin-top:14px}.stats b{display:block;font-size:18px}.row{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid #24242b}.row:first-child{border-top:0}.pill{font-size:11px;background:#24242d;border-radius:99px;padding:4px 8px}.good{color:var(--good)}.warn{color:var(--bad);font-size:12px}.bar{height:6px;background:#272730;border-radius:10px;overflow:hidden;margin-top:6px}.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--pink),var(--violet))}a{color:#c6a7ff}
+@media(max-width:720px){.grid{grid-template-columns:1fr}.search{flex-direction:column}.search button{height:49px}.stats{gap:12px;flex-wrap:wrap}}
+</style>
+</head>
 <body><main>
-<header class="head"><div class="brand"><div class="logo" aria-hidden="true">⌕</div><div>SOCIAL<br><span style="color:var(--mint)">INTELLIGENCE</span></div></div><span class="pill">MINI APP · MVP</span></header><nav class="tabs" id="topTabs"><button class="tab active" type="button" data-view="searchView">Поиск</button><button class="tab" type="button" data-view="historyView">История</button></nav>
-<div class="sub">Проверка открытых источников</div><h1>Один запрос.<br><em>Несколько платформ.</em></h1><p class="lead">Введите доступные данные, отметьте право на их проверку, получите структурированный отчёт с проверенными ссылками и прозрачным статусом источников.</p>
-<div id="searchView"><div class="grid"><section class="card" aria-label="Поисковая форма"><h2>Новая проверка</h2>
-<form id="search" autocomplete="off">
-<div class="section">Данные для уточнения запроса · необязательно</div><div class="fields">
-<div class="field"><label for="lastName">Фамилия</label><input id="lastName" type="text" placeholder="Фамилия" maxlength="80"></div><div class="field"><label for="firstName">Имя</label><input id="firstName" type="text" placeholder="Имя" maxlength="80"></div><div class="field wide"><label for="middleName">Отчество</label><input id="middleName" type="text" placeholder="Отчество" maxlength="80"></div>
-<div class="field"><label for="birth">Дата рождения</label><input id="birth" type="date"></div>
-<div class="field"><label for="city">Город рождения</label><input id="city" type="text" placeholder="Город" maxlength="100"></div>
-<div class="field wide"><label for="phone">Телефон</label><input id="phone" type="tel" placeholder="+7 ..." maxlength="40"></div>
-</div>
-<div class="section">Ссылки на профили</div>
-<div class="field"><label for="instagram">Instagram</label><input id="instagram" type="url" placeholder="https://instagram.com/..." maxlength="500"></div>
-<div class="field"><label for="vk">ВКонтакте</label><input id="vk" type="url" placeholder="https://vk.com/..." maxlength="500"></div>
-<div class="field"><label for="telegram">Telegram</label><input id="telegram" type="url" placeholder="https://t.me/..." maxlength="500"></div>
-<div class="section">Изображение · необязательно</div><div class="file"><label for="photo">Фото для собственного справочника</label><input id="photo" type="file" accept="image/png,image/jpeg,image/webp"><img id="preview" class="preview" alt="Предпросмотр загруженного фото"><p class="small">Фото остаётся только на этом устройстве. Поиск человека по лицу не выполняется.</p></div>
-<div class="check"><input id="consent" type="checkbox"><label for="consent">Я подтверждаю, что имею право проверять указанные данные и согласен с условиями поиска. Мне понятно, что это не является согласием третьего лица на сбор его личной истории.</label></div>
-<button class="btn" type="submit" id="go">Начать поиск</button><p class="small">MVP проверяет формат переданных ссылок. История чужих лайков, скрытых подписок, переписок и перемещений недоступна.</p>
-</form></section>
-<aside class="stack"><section class="card"><h2>Обзор источников</h2><div id="apiStatus" class="small" style="margin-bottom:12px">Проверяем подключение API…</div><div class="stats"><div class="stat"><strong id="provided">0</strong><span>Передано ссылок</span></div><div class="stat"><strong>3</strong><span>Поддерживаемых платформы</span></div><div class="stat"><strong id="checked">0</strong><span>Проверено форматов</span></div><div class="stat"><strong id="errors">0</strong><span>Ошибок проверки</span></div></div></section>
-<section class="card"><h2>Этапы анализа</h2><div class="feature"><span class="dot"></span><div>Проверка структуры ссылок<div class="small">Нормализация и исключение неподдерживаемых адресов</div></div></div><div class="feature"><span class="dot"></span><div>Распределение по платформам<div class="small">Instagram, VK, Telegram</div></div></div><div class="feature"><span class="dot"></span><div>Сборка отчёта<div class="small">Источники, ограничения и результаты без домыслов</div></div></div><div class="notice warning">Для реального сбора контента потребуются разрешённые API, аутентификация и отдельный сервер. GitHub Actions выполняет тесты, а не постоянный поиск.</div></section></aside></div></div>
-<section class="card" id="historyView" style="display:none"><div class="reportHead"><h2 style="margin:0">История поисков</h2><button id="clearHistory" class="tab" type="button">Очистить историю</button></div><div id="historyList" class="empty">История пока пуста.</div></section>
-<section class="card" id="report" aria-live="polite"><div class="reportHead"><h2 style="margin:0">Отчёт по источникам</h2><span id="reportTime" class="small"></span></div><div class="loading" id="working">Проверка ссылок…</div><div class="section">Период анализа</div><nav class="tabs" id="periodTabs" aria-label="Период анализа"><button type="button" class="tab active" data-days="30">30 дней</button><button type="button" class="tab" data-days="60">60 дней</button><button type="button" class="tab" data-days="90">90 дней</button></nav><nav class="tabs" id="tabs" aria-label="Разделы отчёта"></nav><div id="reportContent"></div><button id="export" class="btn" type="button" style="margin-top:15px">Экспорт отчёта в JSON</button><div class="notice">Статус «ссылка проверена» означает только корректный адрес. Он не доказывает, что аккаунт принадлежит указанному человеку, или что активность была получена.</div></section>
+<div class="brand">Instagram Intelligence</div>
+<div class="sub">Один профиль → полный отчёт по наблюдаемой публичной активности и связям.</div>
+<div class="search"><input id="q" placeholder="@username или https://instagram.com/username"><button id="go">FULL SCAN</button></div>
+<div id="status" class="status">Готово к сканированию.</div>
+<div id="out"></div>
 </main>
 <script>
 (function(){
-"use strict";
-const $=id=>document.getElementById(id);
-async function loadCapabilities(){try{const r=await fetch("/api/capabilities",{headers:{"Accept":"application/json"}});if(!r.ok)throw Error("HTTP "+r.status);const data=await r.json();const p=data.platforms||{};const names={instagram:"Instagram",vk:"VK",telegram:"Telegram"};const parts=Object.keys(names).map(k=>names[k]+": "+(p[k]?.configured?"API подключён":"ключ не настроен"));$("apiStatus").textContent=parts.join(" · ");}catch(e){$("apiStatus").textContent="Backend API временно недоступен";}}
-loadCapabilities();
-document.querySelectorAll("#periodTabs .tab").forEach(b=>b.addEventListener("click",()=>{periodDays=Number(b.dataset.days)||30;document.querySelectorAll("#periodTabs .tab").forEach(x=>x.classList.toggle("active",x===b));if(current)render();}));
-const platforms=["instagram","vk","telegram"];
-const labels={overview:"Обзор",instagram:"Instagram",vk:"ВКонтакте",telegram:"Telegram",other:"Дополнительно"};
-const reportSections={
- instagram:["Новые подписки","Новые подписчики","Поставленные лайки","Полученные лайки","Оставленные комментарии","Полученные комментарии","Публикации","Источники"],
- vk:["Исходящие лайки","Исходящие комментарии","Входящие лайки","Входящие комментарии","Новые подписки","Новые подписчики","Сообщества","Стена","Источники"],
- telegram:["Публичные чаты и каналы","Публичные сообщения","Комментарии / обсуждения","Реакции","Источники"]
-};
-const availability={
- instagram:{
-  "Новые подписки":"Недоступно для произвольного стороннего аккаунта через официальный API.",
-  "Новые подписчики":"Недоступно для произвольного стороннего аккаунта через официальный API.",
-  "Поставленные лайки":"Полная история чужих лайков не предоставляется официальным API.",
-  "Полученные лайки":"Доступны только в рамках контента, который разрешён API/источником.",
-  "Оставленные комментарии":"Можно показать только реально найденные публичные комментарии.",
-  "Полученные комментарии":"Доступны для разрешённого контента, который вернул API/источник."
- },
- vk:{
-  "Новые подписки":"Исторические изменения показываются только если источник действительно отдаёт их или сервис ранее наблюдал состояние.",
-  "Новые подписчики":"Исторические изменения показываются только если источник действительно отдаёт их или сервис ранее наблюдал состояние.",
-  "Исходящие лайки":"Глобальная история того, что произвольный сторонний аккаунт лайкал по всему VK, официальным API не выдаётся. Для разрешённого собственного/управляемого аккаунта можно подключать доступные scoped-события.",
-  "Входящие лайки":"Можно показывать конкретных людей, лайкнувших доступные посты/объекты, если VK API вернул список.",
-  "Исходящие комментарии":"Глобальный журнал комментариев произвольного стороннего аккаунта по всему VK не предоставляется. Показываются только конкретно найденные публичные комментарии из доступных источников.",
-  "Входящие комментарии":"Можно показывать автора, текст, дату и ссылку на комментарий к доступному объекту."
- },
- telegram:{
-  "Публичные чаты и каналы":"Общий список всех чатов пользователя недоступен. Показываются только конкретные публичные чаты, доступные боту/источнику.",
-  "Публичные сообщения":"Показываются только сообщения в чатах, доступных боту/источнику.",
-  "Комментарии / обсуждения":"Только доступные публичные обсуждения.",
-  "Реакции":"Только реакции, которые реально видны в доступном чате."
- }
-};
-const hostnames={instagram:["instagram.com","www.instagram.com"],vk:["vk.com","www.vk.com"],telegram:["t.me","telegram.me"]};
-let current=null,selected="overview",previewUrl=null,periodDays=30;
-const STORAGE_KEY="social_intelligence_search_history_v1";
-const DRAFT_KEY="social_intelligence_draft_v1";
-function getDraft(){return {lastName:$("lastName").value,firstName:$("firstName").value,middleName:$("middleName").value,birth:$("birth").value,city:$("city").value,phone:$("phone").value,instagram:$("instagram").value,vk:$("vk").value,telegram:$("telegram").value};}
-function setDraft(d){if(!d)return;["lastName","firstName","middleName","birth","city","phone","instagram","vk","telegram"].forEach(k=>{if($(k)&&d[k]!==undefined)$(k).value=d[k]||"";});}
-function loadHistory(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]")}catch(e){return[]}}
-function saveHistory(items){localStorage.setItem(STORAGE_KEY,JSON.stringify(items.slice(0,50)));}
-function saveDraft(){localStorage.setItem(DRAFT_KEY,JSON.stringify(getDraft()));}
-function restoreDraft(){try{setDraft(JSON.parse(localStorage.getItem(DRAFT_KEY)||"{}"));}catch(e){}}
-function renderHistory(){const list=$("historyList"),items=loadHistory();list.replaceChildren();if(!items.length){list.className="empty";list.textContent="История пока пуста.";return;}list.className="";items.forEach((item,idx)=>{const card=el("article",undefined,"source"),line=el("div",undefined,"line");const title=el("h3",(item.firstName||item.lastName||item.instagram||item.vk||item.telegram||"Без имени"));const open=el("button","Открыть","tab");open.type="button";open.addEventListener("click",()=>{setDraft(item);saveDraft();switchView("searchView");window.scrollTo({top:0,behavior:"smooth"});});line.append(title,open);card.append(line,el("p",new Date(item.saved_at).toLocaleString("ru-RU"),"small"));const meta=[item.instagram&&"Instagram",item.vk&&"VK",item.telegram&&"Telegram",item.phone&&"Телефон"].filter(Boolean).join(" · ");card.append(el("div",meta||"Дополнительные данные","small"));list.append(card);});}
-function pushHistory(){const item={...getDraft(),saved_at:new Date().toISOString()};const items=loadHistory();const key=[item.instagram,item.vk,item.telegram,item.phone,item.firstName,item.lastName].join("|").toLowerCase();const filtered=items.filter(x=>[x.instagram,x.vk,x.telegram,x.phone,x.firstName,x.lastName].join("|").toLowerCase()!==key);saveHistory([item,...filtered]);renderHistory();}
-function switchView(id){["searchView","historyView"].forEach(v=>$(v).style.display=v===id?"":"none");document.querySelectorAll("#topTabs .tab").forEach(b=>b.classList.toggle("active",b.dataset.view===id));if(id==="historyView")renderHistory();}
-document.querySelectorAll("#topTabs .tab").forEach(b=>b.addEventListener("click",()=>switchView(b.dataset.view)));
-$("clearHistory").addEventListener("click",()=>{localStorage.removeItem(STORAGE_KEY);renderHistory();});
-["lastName","firstName","middleName","birth","city","phone","instagram","vk","telegram"].forEach(k=>$(k).addEventListener("input",saveDraft));
-restoreDraft();
-renderHistory();
+const byId=function(x){return document.getElementById(x)};
+const esc=function(s){return String(s==null?"":s).replace(/[&<>"']/g,function(m){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]})};
+const num=function(n){return n==null?"—":new Intl.NumberFormat("ru-RU").format(n)};
+const list=function(items,fn,empty){return items&&items.length?items.map(fn).join(""):'<div class="muted">'+(empty||"Нет наблюдаемых данных")+'</div>'};
 
-$("photo").addEventListener("change",()=>{
- if(previewUrl) URL.revokeObjectURL(previewUrl); previewUrl=null; $("preview").style.display="none";
- const file=$("photo").files?.[0];
- if(file&&/^image\/(png|jpeg|webp)$/.test(file.type)&&file.size<=5_000_000){previewUrl=URL.createObjectURL(file);$("preview").src=previewUrl;$("preview").style.display="block";}
- else if(file) alert("Допустимы PNG/JPEG/WebP размером до 5 МБ.");
-});
-function normalize(p,value){
- const u=new URL(value.trim()); const host=u.hostname.toLowerCase().replace(/\.$/,"");
- if(!["https:","http:"].includes(u.protocol)||!hostnames[p].includes(host)||u.username||u.password||u.port)throw Error("Неофициальная ссылка");
- const parts=u.pathname.split("/").filter(Boolean);
- if(parts.length!==1||parts[0].startsWith("+")||!(/^[\w.]{2,64}$/.test(parts[0])||(p==="vk"&&/^[\w.-]{2,64}$/.test(parts[0]))))throw Error("Ожидается прямая ссылка на профиль");
- if(["p","reel","reels","stories","login","joinchat","share","settings","explore"].includes(parts[0].toLowerCase()))throw Error("Это не ссылка на профиль");
- return "https://"+({instagram:"instagram.com",vk:"vk.com",telegram:"t.me"}[p])+"/"+parts[0];
+async function scan(){
+  const q=byId("q").value.trim(); if(!q)return;
+  byId("status").textContent="Собираю профиль, публикации, комментарии, лайки и связи…";
+  byId("out").innerHTML="";
+  try{
+    const r=await fetch("/api/scan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({query:q,max_posts:30})});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.detail||("HTTP "+r.status));
+    render(d);
+    byId("status").textContent="Сканирование завершено · "+new Date().toLocaleTimeString("ru-RU");
+  }catch(e){byId("status").innerHTML='<span class="warn">'+esc(e.message)+'</span>'}
 }
-function clean(v){return String(v).replace(/[\u0000-\u001f<>]/g,"");}
-function el(tag,txt,cls){const node=document.createElement(tag);if(txt!==undefined)node.textContent=txt;if(cls)node.className=cls;return node;}
-function eventTime(v){
- if(!v)return null;
- try{if(typeof v==="number"||/^\d{9,13}$/.test(String(v))){const n=Number(v);return n<1e12?n*1000:n;}const t=new Date(v).getTime();return isNaN(t)?null:t;}catch(e){return null;}
+
+function render(d){
+  const p=d.profile||{}, rel=d.relationships||[], ch=d.changes||{}, events=d.events||[], posts=d.posts||[];
+  const max=Math.max.apply(null,[1].concat(rel.slice(0,20).map(function(x){return x.score||0})));
+  let html='';
+  html+='<div class="grid">';
+  html+='<section class="card"><div class="profile">';
+  if(p.profile_picture_url) html+='<img class="avatar" src="'+esc(p.profile_picture_url)+'" onerror="this.style.display=\'none\'">';
+  html+='<div><div class="name">'+esc(p.name||p.username||d.username)+'</div><div class="muted">@'+esc(d.username)+'</div></div></div>';
+  html+='<div class="stats"><div><b>'+num(p.followers_count)+'</b><span class="muted">followers</span></div><div><b>'+num(p.follows_count)+'</b><span class="muted">following</span></div><div><b>'+num(p.media_count)+'</b><span class="muted">posts</span></div></div><p>'+esc(p.biography||"")+'</p></section>';
+  html+='<section class="card"><div class="row"><span>Публикаций собрано</span><b>'+posts.length+'</b></div><div class="row"><span>Событий взаимодействия</span><b>'+events.length+'</b></div><div class="row"><span>Связанных аккаунтов</span><b>'+rel.length+'</b></div><div class="row"><span>Snapshot</span><span class="pill">'+esc((ch.snapshot_at||"").replace("T"," ").slice(0,19))+'</span></div></section></div>';
+
+  html+='<div class="grid"><section class="card"><h3>Кто взаимодействует чаще</h3>';
+  html+=list(rel.slice(0,20),function(x,i){
+    const width=Math.max(3,(x.score/max)*100);
+    return '<div class="row"><div style="flex:1"><b>'+(i+1)+'. @'+esc(x.username)+'</b><div class="muted">комм. '+(x.comments_in||0)+' · лайки '+(x.likes_in||0)+' · упоминания '+(x.mentions_out||0)+'</div><div class="bar"><i style="width:'+width+'%"></i></div></div><b>'+x.score+'</b></div>';
+  });
+  html+='</section>';
+
+  html+='<section class="card"><h3>Изменения подписок между наблюдениями</h3>';
+  html+='<div class="row"><span class="good">Новые подписчики</span><b>'+(ch.new_followers||[]).length+'</b></div>';
+  html+=list(ch.new_followers,function(x){return '<div class="row"><span>@'+esc(x)+'</span><span class="pill">followed</span></div>'});
+  html+='<div class="row"><span class="warn">Отписались</span><b>'+(ch.lost_followers||[]).length+'</b></div>';
+  html+=list(ch.lost_followers,function(x){return '<div class="row"><span>@'+esc(x)+'</span><span class="pill">unfollowed</span></div>'});
+  html+='<div class="row"><span class="good">TARGET подписался</span><b>'+(ch.new_following||[]).length+'</b></div>';
+  html+=list(ch.new_following,function(x){return '<div class="row"><span>@'+esc(x)+'</span><span class="pill">new following</span></div>'});
+  html+='<div class="row"><span class="warn">TARGET отписался</span><b>'+(ch.unfollowed||[]).length+'</b></div>';
+  html+=list(ch.unfollowed,function(x){return '<div class="row"><span>@'+esc(x)+'</span><span class="pill">unfollowed</span></div>'});
+  html+='</section></div>';
+
+  html+='<section class="card"><h3>Последние наблюдаемые взаимодействия</h3>';
+  html+=list(events.slice(0,100),function(e){return '<div class="row"><div><b>@'+esc(e.actor)+'</b><div class="muted">'+esc(e.kind)+' '+esc(e.text||"")+'</div></div>'+(e.url?'<a href="'+esc(e.url)+'" target="_blank">post</a>':'')+'</div>'});
+  html+='</section>';
+
+  html+='<section class="card"><h3>Публикации</h3>';
+  html+=list(posts.slice(0,30),function(pst){return '<div class="row"><div><b>'+esc((pst.caption||"Публикация").slice(0,90))+'</b><div class="muted">♥ '+num(pst.like_count)+' · 💬 '+num(pst.comments_count)+' · конкретных likers: '+((pst.likers||[]).length)+'</div></div>'+(pst.permalink?'<a href="'+esc(pst.permalink)+'" target="_blank">открыть</a>':'')+'</div>'});
+  html+='</section>';
+
+  html+='<section class="card"><h3>Покрытие источников</h3>';
+  (d.sources||[]).forEach(function(s){html+='<div class="row"><span>'+esc(s.source)+'</span><b class="'+(s.status==="ok"?"good":"warn")+'">'+esc(s.status)+'</b></div>'});
+  (d.warnings||[]).forEach(function(w){html+='<div class="warn">'+esc(w)+'</div>'});
+  html+='<p class="muted">UNKNOWN ≠ 0. Если Instagram не отдал список лайкнувших или followers/following, приложение не придумывает данные. Просмотры профиля и история того, какие профили человек открывал, публично не доступны.</p></section>';
+  byId("out").innerHTML=html;
 }
-function filterEvents(items){
- const cutoff=Date.now()-periodDays*24*60*60*1000;
- return (items||[]).filter(it=>{const t=eventTime(it.when);return t===null||t>=cutoff;});
-}
-function fmtWhen(v){
- if(!v)return "";
- try{
-   if(typeof v==="number"||/^\d{9,13}$/.test(String(v))){const n=Number(v);return new Date(n<1e12?n*1000:n).toLocaleString("ru-RU");}
-   const d=new Date(v);return isNaN(d.getTime())?String(v):d.toLocaleString("ru-RU");
- }catch(e){return String(v);}
-}
-function eventRail(title,items,fallback){
- const wrap=el("section",undefined,"source");
- wrap.append(el("h3",title));
- const rail=el("div",undefined,"eventRail");
- if(items&&items.length){
-   items.forEach(it=>{
-     const card=el("article",undefined,"eventCard");
-     card.append(el("h4",it.title||"Событие"),el("p",it.text||""));
-     if(it.when)card.append(el("span",fmtWhen(it.when),"badge"));
-     if(it.url){const a=el("a","Открыть источник");a.href=it.url;a.target="_blank";a.rel="noopener noreferrer";a.style.display="block";a.style.marginTop="9px";card.append(a);}
-     rail.append(card);
-   });
- }else{
-   const card=el("article",undefined,"eventCard");card.append(el("h4","Нет подтверждённых событий"),el("p",fallback||"Источник не вернул данных за выбранный период."));rail.append(card);
- }
- wrap.append(rail);return wrap;
-}
-function block(title,description,status,url){
- const card=el("article",undefined,"source"),heading=el("div",undefined,"line");
- heading.append(el("h3",title),el("span",status,"status"));card.append(heading,el("p",description,"small"));
- if(url){const a=el("a",url);a.href=url;a.target="_blank";a.rel="noopener noreferrer";card.append(a);}
- return card;
-}
-async function makeReport(){
- const profiles=[];let invalid=0;
- platforms.forEach(p=>{const raw=$(p).value.trim();if(!raw)return;
-  try{profiles.push({platform:p,status:"link_verified",url:normalize(p,raw),source:"user_supplied"});}
-  catch(e){profiles.push({platform:p,status:"invalid",reason:String(e.message||e)});invalid++;}
- });
- $("provided").textContent=String(profiles.length);
- $("checked").textContent=String(profiles.length-invalid);
- $("errors").textContent=String(invalid);
- pushHistory();
- current={generated_at:new Date().toISOString(),version:"0.3.0",source_checks:profiles,live_results:{},backend_error:null};
- $("report").style.display="block";$("reportTime").textContent=new Date().toLocaleString("ru-RU");selected="overview";
- $("working").style.display="block";$("working").textContent="Идёт поиск по доступным публичным источникам…";
- render();
- $("report").scrollIntoView({behavior:"smooth",block:"start"});
- const valid=profiles.filter(x=>x.status==="link_verified").map(x=>({platform:x.platform,url:x.url}));
- if(!valid.length){$("working").style.display="none";render();return;}
- try{
-   const response=await fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({profiles:valid})});
-   const data=await response.json();
-   if(!response.ok) throw Error(data.detail||("HTTP "+response.status));
-   (data.results||[]).forEach(r=>{current.live_results[r.platform]=r;});
- }catch(e){
-   current.backend_error=String(e.message||e);
- }finally{
-   $("working").style.display="none";render();
- }
-}
-function render(){
- const tabs=$("tabs");tabs.replaceChildren();
- Object.entries(labels).forEach(([id,label])=>{
- const b=el("button",label,"tab"+(id===selected?" active":""));b.type="button";b.setAttribute("aria-pressed",String(id===selected));
- b.addEventListener("click",()=>{selected=id;render();});tabs.append(b);
- });
- const area=$("reportContent");area.replaceChildren();
- if(selected==="overview"){
- area.append(block("Поиск по источникам",current.backend_error?("Backend вернул ошибку: "+current.backend_error):"Публичные страницы и подключённые официальные API проверены. Результаты смотрите во вкладках платформ.",current.backend_error?"Ошибка":"Готово"));
- current.source_checks.forEach(s=>area.append(block(labels[s.platform],s.status==="invalid"?s.reason:"Нормализованная ссылка; принадлежность не подтверждена",s.status==="invalid"?"Ошибка":"Формат OK",s.url)));
- if(!current.source_checks.length)area.append(el("div","Укажите хотя бы одну ссылку на профиль для её проверки.","empty"));
- }else if(selected==="other"){
- area.append(block("Дополнительные сведения","ФИО, дата рождения, город и телефон не отправляются на сервер и не используются для идентификации другого человека.","Не обработано"));
- area.append(block("Проверка сторонних сайтов","Поиск скрытых профилей знакомств, истории перемещений и других личных записей не выполняется.","Недоступно"));
- }else{
- const match=current.source_checks.filter(s=>s.platform===selected);
- if(!match.length)area.append(el("div","Для этой платформы ссылка не была указана.","empty"));
- const live=current.live_results?.[selected];
- match.forEach(s=>area.append(block(labels[s.platform],s.status==="invalid"?s.reason:"Исходная ссылка принята для реальной проверки.",s.status==="invalid"?"Ошибка":"Принято",s.url)));
- if(live){
-   const pub=live.public||{};
-   if(pub.status==="ok"){
-     area.append(block("Публичная страница",[pub.title,pub.description].filter(Boolean).join(" — ")||"Публичная страница доступна.","Найдено",pub.url||live.url));
-   }else{
-     area.append(block("Публичная страница",pub.detail||"Страница не отдала читаемые публичные данные.","Недоступно",live.url));
-   }
-   const api=live.api||{};
-   if(api.status==="ok"){
-     let summary="Официальный API вернул данные.";
-     if(selected==="telegram"&&api.chat){summary=[api.chat.title,api.chat.username&&("@"+api.chat.username),api.chat.description].filter(Boolean).join(" — ");}
-     if(selected==="vk"&&Array.isArray(api.response)){const u=api.response[0]||{};summary=[u.first_name,u.last_name,u.city?.title,u.status].filter(Boolean).join(" · ")||summary;}
-     if(selected==="instagram"&&api.response){const bd=api.response.business_discovery||{};summary=[bd.username&&("@"+bd.username),bd.name,bd.biography,bd.followers_count!=null?("подписчики: "+bd.followers_count):null,bd.media_count!=null?("публикации: "+bd.media_count):null].filter(Boolean).join(" · ")||summary;}
-     area.append(block("Официальный API",summary,"API OK"));
-   }else{
-     area.append(block("Официальный API",api.status==="not_configured"?"Ключ этой платформы на сервере ещё не настроен.":(api.detail||"API не вернул доступные данные."),api.status==="not_configured"?"Не настроен":"Нет данных"));
-   }
- }else if(!current.backend_error){
-   area.append(block("Поиск","Ожидаем ответ backend…","В процессе"));
- }
- (reportSections[selected]||[]).forEach(section=>{
-   if(section==="Источники"){area.append(block("Источники","Показываются только реально проверенные backend-источники за выбранный период: "+periodDays+" дней.",live?"Проверено":"Ожидает данных"));return;}
-   const items=filterEvents(live?.events?.[section]||[]); area.append(eventRail(section,items,availability[selected]?.[section]||("Источник не вернул подтверждённых событий за "+periodDays+" дней.")));
- });
- area.append(block("Период",periodDays+" дней. Пустой раздел означает отсутствие подтверждённых данных, а не отсутствие самой активности.","Выбран"));
- }
-}
-$("search").addEventListener("submit",event=>{
- event.preventDefault();
- const provided = Object.values(getDraft()).some(v=>String(v||"").trim());
- if(!provided){ alert("Добавьте хотя бы одно значение: имя, телефон или ссылку на профиль."); return; }
- $("go").disabled=true;$("go").textContent="Проверяем доступные данные…";
- (async()=>{try{await makeReport();}finally{$("go").disabled=false;$("go").textContent="Начать поиск";}})();
-});
-$("export").addEventListener("click",()=>{
- if(!current)return;const blob=new Blob([JSON.stringify(current,null,2)],{type:"application/json"});
- const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="social-intelligence-report.json";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-});
+byId("go").onclick=scan;
+byId("q").addEventListener("keydown",function(e){if(e.key==="Enter")scan()});
 })();
 </script></body></html>
