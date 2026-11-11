@@ -1,55 +1,32 @@
 from __future__ import annotations
-import os,json,sqlite3,math,re
+import os,json
 from pathlib import Path
 from datetime import datetime,timezone
-from collections import defaultdict
 from fastapi import FastAPI,Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel,Field
-from connectors import normalize_username,business_discovery,media_comments,public_profile,instaloader_collect
+from connectors import normalize_username,business_discovery,media_comments,public_profile,public_embedded_collect,instaloader_collect
+from analysis import build_events,relationship_report,audience_quality,graph_payload,timeline
+from storage import connect,begin_run,finish_run,save_posts,save_events,history
 
-app=FastAPI(title="Instagram Intelligence",version="1.0.0")
+app=FastAPI(title="Instagram Intelligence",version="2.0.0")
 WEB=Path(__file__).resolve().parent/"web"
-DB=Path(os.getenv("IG_INTEL_DB","/tmp/instagram_intelligence.sqlite3"))
 
 class ScanRequest(BaseModel):
     query:str=Field(min_length=1,max_length=300)
     max_posts:int=Field(default=30,ge=1,le=60)
 
-def db():
-    DB.parent.mkdir(parents=True,exist_ok=True)
-    c=sqlite3.connect(DB); c.row_factory=sqlite3.Row
-    c.executescript("create table if not exists snapshots(id integer primary key autoincrement,username text not null,created_at text not null,followers_json text,following_json text,profile_json text not null);create index if not exists idx_snap_user on snapshots(username,id);")
-    return c
-
-def score(username,events):
-    a=defaultdict(lambda:{"comments_in":0,"likes_in":0,"mentions_out":0,"events":0,"raw":0.0})
-    for e in events:
-        actor=(e.get("actor") or "").lower(); kind=e.get("kind")
-        if not actor or actor==username.lower(): continue
-        w={"comment_in":3.0,"like_in":1.0,"mention_out":4.0}.get(kind,1.0); x=a[actor]; x["events"]+=1; x["raw"]+=w
-        if kind=="comment_in": x["comments_in"]+=1
-        elif kind=="like_in": x["likes_in"]+=1
-        elif kind=="mention_out": x["mentions_out"]+=1
-    rows=[{"username":u,"score":round(math.log1p(v["raw"])*10,2),**v} for u,v in a.items()]
-    rows.sort(key=lambda x:(x["score"],x["events"]),reverse=True); return rows
-
 def _state(items):
-    if items is None:
-        return {"observed":False,"items":[]}
+    if items is None: return {"observed":False,"items":[]}
     return {"observed":True,"items":items}
 
 def _decode_state(raw):
-    if not raw:
-        return {"observed":False,"items":[]}
-    try:
-        value=json.loads(raw)
-    except Exception:
-        return {"observed":False,"items":[]}
+    if not raw: return {"observed":False,"items":[]}
+    try: value=json.loads(raw)
+    except Exception: return {"observed":False,"items":[]}
     if isinstance(value,dict) and "observed" in value:
         return {"observed":bool(value.get("observed")),"items":value.get("items") or []}
     if isinstance(value,list):
-        # Legacy empty lists were also used for UNKNOWN, so stay conservative.
         return {"observed":bool(value),"items":value}
     return {"observed":False,"items":[]}
 
@@ -61,12 +38,11 @@ def _identity_map(items):
             label=str(item.get("username") or key).strip()
         else:
             key=label=str(item).strip()
-        if key:
-            out[key]=label
+        if key: out[key]=label
     return out
 
 def snapshot(username,followers,following,profile):
-    now=datetime.now(timezone.utc).isoformat(); c=db()
+    now=datetime.now(timezone.utc).isoformat(); c=connect()
     prev=c.execute("select * from snapshots where username=? order by id desc limit 1",(username,)).fetchone()
     current_f=_state(followers); current_g=_state(following)
     d={"new_followers":[],"lost_followers":[],"new_following":[],"unfollowed":[],"previous_snapshot":None,
@@ -84,131 +60,167 @@ def snapshot(username,followers,following,profile):
         d["previous_snapshot"]=prev["created_at"]
     c.execute("insert into snapshots(username,created_at,followers_json,following_json,profile_json) values(?,?,?,?,?)",
               (username,now,json.dumps(current_f,ensure_ascii=False),json.dumps(current_g,ensure_ascii=False),json.dumps(profile,ensure_ascii=False)))
-    c.commit(); c.close(); d["snapshot_at"]=now; return d
+    c.commit();c.close();d["snapshot_at"]=now;return d
 
-async def _startup_smoke():
-    target=os.getenv("IG_STARTUP_SMOKE_TARGET","").strip()
-    if not target:
-        return
-    try:
-        import asyncio
-        result=await asyncio.wait_for(scan(ScanRequest(query=target,max_posts=8)), timeout=28)
-        import logging
-        logging.getLogger("uvicorn.error").warning("instagram_smoke_test=%s", json.dumps({
-            "username":result.get("username"),
-            "profile_keys":sorted((result.get("profile") or {}).keys()),
-            "posts":len(result.get("posts") or []),
-            "events":len(result.get("events") or []),
-            "relationships":len(result.get("relationships") or []),
-            "followers_observed":result.get("followers") is not None,
-            "following_observed":result.get("following") is not None,
-            "sources":result.get("sources"),
-            "warnings":(result.get("warnings") or [])[:8]
-        },ensure_ascii=False))
-    except Exception as e:
-        import logging
-        logging.getLogger("uvicorn.error").warning("instagram_smoke_test_error=%s:%s", type(e).__name__, str(e)[:300])
+def _post_key(p):
+    return str(p.get("shortcode") or p.get("permalink") or p.get("id") or "")
+
+def _merge_posts(*groups):
+    merged={}
+    for group in groups:
+        for p in group or []:
+            key=_post_key(p)
+            if not key: continue
+            if key not in merged: merged[key]=dict(p)
+            else:
+                cur=merged[key]
+                for k,v in p.items():
+                    if v not in (None,"",[],{}) and cur.get(k) in (None,"",[],{}): cur[k]=v
+                    elif k in ("comments_detail","likers","mentions","hashtags","tagged_users","coauthors") and v:
+                        old=cur.get(k) or []
+                        if k=="comments_detail":
+                            seen={(x.get("username"),x.get("timestamp"),x.get("text")) for x in old if isinstance(x,dict)}
+                            for x in v:
+                                sig=(x.get("username"),x.get("timestamp"),x.get("text")) if isinstance(x,dict) else (str(x),None,None)
+                                if sig not in seen: old.append(x);seen.add(sig)
+                            cur[k]=old
+                        else: cur[k]=list(dict.fromkeys(old+v))
+    return list(merged.values())
+
+async def _bounded(coro,source,timeout=22):
+    import asyncio
+    try: return await asyncio.wait_for(coro,timeout=timeout)
+    except asyncio.TimeoutError: return {"status":"unavailable","source":source,"detail":"timeout"}
+    except Exception as e: return {"status":"unavailable","source":source,"detail":type(e).__name__}
 
 @app.on_event("startup")
 async def startup():
-    db().close()
-    import asyncio
-    asyncio.create_task(_startup_smoke())
+    connect().close()
+    target=os.getenv("IG_STARTUP_SMOKE_TARGET","").strip()
+    if target:
+        import asyncio,logging
+        async def runner():
+            try:
+                result=await asyncio.wait_for(scan(ScanRequest(query=target,max_posts=8)),timeout=45)
+                logging.getLogger("uvicorn.error").warning("instagram_smoke_test=%s",json.dumps({
+                    "username":result.get("username"),"posts":len(result.get("posts") or []),"events":len(result.get("events") or []),
+                    "relationships":len(result.get("relationships") or []),"sources":result.get("sources"),"warnings":(result.get("warnings") or [])[:8]
+                },ensure_ascii=False))
+            except Exception as e:
+                logging.getLogger("uvicorn.error").warning("instagram_smoke_test_error=%s:%s",type(e).__name__,str(e)[:300])
+        asyncio.create_task(runner())
+
 @app.head("/")
 def head(): return Response(status_code=200)
+
 @app.get("/")
 def index(): return FileResponse(WEB/"index.html",headers={"Cache-Control":"no-store"})
+
 @app.get("/api/health")
-def health(): return {"ok":True,"service":"instagram-intelligence","version":"1.0.0"}
+def health(): return {"ok":True,"service":"instagram-intelligence","version":"2.0.0"}
+
 @app.get("/api/capabilities")
 def capabilities():
-    return {"instagram_only":True,"meta_configured":bool(os.getenv("META_ACCESS_TOKEN") and os.getenv("META_IG_USER_ID")),
-            "instaloader_session_configured":bool(os.getenv("IG_USERNAME") and (os.getenv("IG_SESSIONFILE") or os.getenv("IG_SESSION_B64"))),
-            "profile_viewers":False,"profiles_viewed_by_target":False}
+    return {"instagram_only":True,
+      "collectors":["2scraper_public_embedded","instaloader","meta_business_discovery","public_page_fallback"],
+      "open_source_components":["2scraper/instagram-scraper","instaloader/instaloader","JuaniVeltri/igstalker","mohammedelahmar/InstaTrack","ignromanov/safe-unfollow"],
+      "meta_configured":bool(os.getenv("META_ACCESS_TOKEN") and os.getenv("META_IG_USER_ID")),
+      "instaloader_session_configured":bool(os.getenv("IG_USERNAME") and (os.getenv("IG_SESSIONFILE") or os.getenv("IG_SESSION_B64"))),
+      "not_observable":["profile_viewer_identities","profiles_viewed_by_target","private_messages"]}
 
-async def _bounded(coro, source, timeout=22):
-    import asyncio
-    try:
-        return await asyncio.wait_for(coro, timeout=timeout)
-    except asyncio.TimeoutError:
-        return {"status":"unavailable","source":source,"detail":"timeout"}
-    except Exception as e:
-        return {"status":"unavailable","source":source,"detail":type(e).__name__}
+@app.get("/api/history/{username}")
+def api_history(username:str,limit:int=200):
+    return {"username":normalize_username(username),"events":history(normalize_username(username),max(1,min(limit,1000)))}
 
 @app.get("/api/smoke")
 async def smoke():
     result=await scan(ScanRequest(query="instagram",max_posts=8))
-    comments=sum(1 for e in result.get("events",[]) if e.get("kind")=="comment_in")
-    likes=sum(1 for e in result.get("events",[]) if e.get("kind")=="like_in")
-    mentions=sum(1 for e in result.get("events",[]) if e.get("kind")=="mention_out")
-    aggregate_like_posts=sum(1 for p in result.get("posts",[]) if p.get("like_count") is not None)
-    concrete_liker_posts=sum(1 for p in result.get("posts",[]) if p.get("likers"))
-    return {
-      "ok":True,
-      "target":result.get("username"),
-      "profile_present":bool(result.get("profile")),
-      "posts":len(result.get("posts",[])),
-      "comment_events":comments,
-      "like_identity_events":likes,
-      "mention_events":mentions,
-      "relationships":len(result.get("relationships",[])),
-      "followers_observed":result.get("followers") is not None,
-      "following_observed":result.get("following") is not None,
-      "aggregate_like_posts":aggregate_like_posts,
-      "concrete_liker_posts":concrete_liker_posts,
-      "sources":result.get("sources",[]),
-      "warnings":result.get("warnings",[])[:10],
-      "unknown_is_not_zero":result.get("limits",{}).get("unknown_is_not_zero") is True
-    }
+    comments=sum(1 for e in result["events"] if e.get("kind")=="comment_in")
+    likes=sum(1 for e in result["events"] if e.get("kind")=="like_in")
+    mentions=sum(1 for e in result["events"] if e.get("kind")=="mention_out")
+    tags=sum(1 for e in result["events"] if e.get("kind")=="tag_out")
+    return {"ok":True,"target":result["username"],"profile_present":bool(result["profile"]),"posts":len(result["posts"]),
+      "comment_events":comments,"like_identity_events":likes,"mention_events":mentions,"tag_events":tags,
+      "relationships":len(result["relationships"]),"graph_nodes":len(result["graph"]["nodes"]),"timeline_events":len(result["timeline"]),
+      "followers_observed":result["changes"]["followers_observed"],"following_observed":result["changes"]["following_observed"],
+      "audience_quality_status":result["audience_quality"]["status"],"sources":result["sources"],"warnings":result["warnings"][:10],
+      "unknown_is_not_zero":result["limits"]["unknown_is_not_zero"]}
 
 @app.post("/api/scan")
 async def scan(req:ScanRequest):
     import asyncio
     username=normalize_username(req.query)
-    public,meta,insta=await asyncio.gather(
-        _bounded(public_profile(username),"public_page",12),
-        _bounded(business_discovery(username),"meta_business_discovery",18),
-        _bounded(instaloader_collect(username,req.max_posts),"instaloader",22)
-    )
-    p={"username":username}; posts=[]; warnings=[]; sources=[]; followers=None; following=None
-    if public.get("status")=="ok":
-        p.update({"public_title":public.get("title"),"public_description":public.get("description"),"profile_picture_url":public.get("image")}); sources.append({"source":"public_page","status":"ok"})
-    else: sources.append({"source":"public_page","status":public.get("status")})
-    if meta.get("status")=="ok":
-        bd=((meta.get("response") or {}).get("business_discovery") or {})
-        for k in ["username","name","biography","website","followers_count","follows_count","media_count","profile_picture_url"]:
-            if bd.get(k) is not None: p[k]=bd.get(k)
-        posts=[dict(x) for x in (((bd.get("media") or {}).get("data") or []))]; sources.append({"source":"meta_business_discovery","status":"ok"})
-    else: sources.append({"source":"meta_business_discovery","status":meta.get("status"),"detail":meta.get("detail")})
-    if insta.get("status")=="ok":
-        ip=insta.get("profile") or {}
-        for k,v in ip.items():
-            if v not in [None,"",[]] and not p.get(k): p[k]=v
-        if insta.get("followers"): followers=list(dict.fromkeys(insta["followers"]))
-        if insta.get("following"): following=list(dict.fromkeys(insta["following"]))
-        warnings.extend(insta.get("warnings") or []); sources.append({"source":"instaloader","status":"ok"})
-        known={str(x.get("id")):x for x in posts if x.get("id") is not None}
-        for x in insta.get("posts") or []:
-            if str(x.get("id")) in known:
-                known[str(x.get("id"))]["comments_detail"]=x.get("comments_detail",[]); known[str(x.get("id"))]["likers"]=x.get("likers",[])
-            else: posts.append(x)
-    else: sources.append({"source":"instaloader","status":insta.get("status"),"detail":insta.get("detail")})
-    jobs=[]; jobposts=[]
-    for x in posts:
-        if x.get("id") and not x.get("comments_detail"):
-            jobs.append(media_comments(str(x["id"]),100)); jobposts.append(x)
-    if jobs:
-        rs=await asyncio.gather(*jobs)
-        for x,r in zip(jobposts,rs):
-            if r.get("status")=="ok": x["comments_detail"]=(r.get("response") or {}).get("data") or []
-    events=[]; mention=re.compile(r"@([A-Za-z0-9._]{1,30})")
-    for x in posts:
-        url=x.get("permalink") or ("https://www.instagram.com/p/"+x.get("shortcode")+"/" if x.get("shortcode") else None)
-        for c in x.get("comments_detail") or []:
-            actor=c.get("username")
-            if actor: events.append({"kind":"comment_in","actor":actor,"timestamp":c.get("timestamp"),"text":c.get("text",""),"url":url})
-        for actor in x.get("likers") or []: events.append({"kind":"like_in","actor":actor,"timestamp":x.get("timestamp"),"url":url})
-        for actor in set(mention.findall(x.get("caption") or "")): events.append({"kind":"mention_out","actor":actor,"timestamp":x.get("timestamp"),"url":url})
-    return {"ok":True,"username":username,"profile":p,"posts":posts,"events":events,"relationships":score(username,events),
-            "followers":followers,"following":following,"changes":snapshot(username,followers,following,p),"sources":sources,"warnings":warnings,
-            "limits":{"profile_viewers":"not_observable","profiles_viewed_by_target":"not_observable","unknown_is_not_zero":True}}
+    run_id=begin_run(username)
+    warnings=[];sources=[]
+    try:
+        public,embedded,meta,insta=await asyncio.gather(
+          _bounded(public_profile(username),"public_page",12),
+          _bounded(public_embedded_collect(username,min(req.max_posts,12)),"public_embedded",28),
+          _bounded(business_discovery(username),"meta_business_discovery",18),
+          _bounded(instaloader_collect(username,req.max_posts),"instaloader",30)
+        )
+        p={"username":username}; followers=None;following=None
+        if public.get("status")=="ok":
+            p.update({"public_title":public.get("title"),"public_description":public.get("description"),"profile_picture_url":public.get("image")})
+        sources.append({"source":"public_page","status":public.get("status"),"detail":public.get("detail")})
+
+        embedded_posts=[]
+        if embedded.get("status") in ("ok","partial"):
+            ep=embedded.get("profile") or {}
+            for k,v in ep.items():
+                if k!="recent_post_codes" and v not in (None,"",[],{}) and p.get(k) in (None,"",[],{}): p[k]=v
+            embedded_posts=embedded.get("posts") or []
+        sources.append({"source":"public_embedded","status":embedded.get("status"),"detail":embedded.get("detail")})
+
+        meta_posts=[]
+        if meta.get("status")=="ok":
+            bd=((meta.get("response") or {}).get("business_discovery") or {})
+            mapping={"name":"name","biography":"biography","website":"website","followers_count":"followers_count","follows_count":"follows_count","media_count":"media_count","profile_picture_url":"profile_picture_url","username":"username"}
+            for src,dst in mapping.items():
+                if bd.get(src) is not None: p[dst]=bd.get(src)
+            for x in (((bd.get("media") or {}).get("data") or [])):
+                row=dict(x);row["_meta_id"]=row.get("id");meta_posts.append(row)
+        sources.append({"source":"meta_business_discovery","status":meta.get("status"),"detail":meta.get("detail")})
+
+        insta_posts=[]
+        if insta.get("status")=="ok":
+            ip=insta.get("profile") or {}
+            for k,v in ip.items():
+                if v not in (None,"",[],{}) and p.get(k) in (None,"",[],{}): p[k]=v
+            if "followers" in insta and insta.get("followers") is not None: followers=insta.get("followers")
+            if "following" in insta and insta.get("following") is not None: following=insta.get("following")
+            warnings.extend(insta.get("warnings") or [])
+            insta_posts=insta.get("posts") or []
+        sources.append({"source":"instaloader","status":insta.get("status"),"detail":insta.get("detail")})
+
+        posts=_merge_posts(embedded_posts,meta_posts,insta_posts)
+
+        # Meta comments are fetched only for Meta media IDs.
+        jobs=[];targets=[]
+        for x in posts:
+            mid=x.get("_meta_id")
+            if mid and not x.get("comments_detail"):
+                jobs.append(_bounded(media_comments(str(mid),100),"meta_comments",12));targets.append(x)
+        if jobs:
+            for x,r in zip(targets,await asyncio.gather(*jobs)):
+                if r.get("status")=="ok":
+                    x["comments_detail"]=(r.get("response") or {}).get("data") or []
+                elif r.get("detail"): warnings.append("meta_comments:"+str(r.get("detail")))
+
+        events=build_events(username,posts)
+        changes=snapshot(username,followers,following,p)
+        relationships=relationship_report(username,events,followers,following)
+        aq=audience_quality(followers,events)
+        graph=graph_payload(username,relationships)
+        tl=timeline(events,changes)
+
+        save_posts(username,posts);save_events(username,tl)
+        finish_run(run_id,"complete",sources,warnings)
+        return {"ok":True,"username":username,"profile":p,"posts":posts,"events":events,"relationships":relationships,
+          "followers":followers,"following":following,"changes":changes,"audience_quality":aq,"graph":graph,"timeline":tl,
+          "history":history(username,200),"sources":sources,"warnings":warnings,
+          "limits":{"profile_viewers":"not_observable","profiles_viewed_by_target":"not_observable","private_messages":"not_observable",
+                    "outgoing_likes_comments":"only_directly_observed","unknown_is_not_zero":True}}
+    except Exception as e:
+        finish_run(run_id,"failed",sources,warnings+[type(e).__name__+":"+str(e)[:200]])
+        raise
