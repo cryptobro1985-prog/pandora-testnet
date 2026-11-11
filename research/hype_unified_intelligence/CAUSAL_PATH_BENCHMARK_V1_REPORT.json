@@ -1,0 +1,118 @@
+{
+  "experiment": "HYPE_CAUSAL_PATH_BENCHMARK_V1",
+  "created_utc": "2026-11-11",
+  "research_only": true,
+  "real_orders": false,
+  "data": {
+    "source": "Preserved HYPE_HISTORY_20260712_20261103_MASTER (/mnt/data/hype_master.zip in analysis runtime)",
+    "sha256": "c9d588b5c78d0e72a3073ceb62c7fa100381ebf69df911b22a170171a2653975",
+    "periods": {
+      "train": {
+        "span": "Jul12-Aug07",
+        "raw_bars": 36419,
+        "eligible_samples": 7068,
+        "gaps_or_invalid": 1
+      },
+      "dev": {
+        "span": "Aug08-Sep01",
+        "raw_bars": 34559,
+        "eligible_samples": 6696,
+        "gaps_or_invalid": 1
+      },
+      "validation": {
+        "span": "Sep01-Oct01",
+        "raw_bars": 43199,
+        "eligible_samples": 8424,
+        "gaps_or_invalid": 1
+      },
+      "holdout": {
+        "span": "Oct04-Nov03",
+        "raw_bars": 43198,
+        "eligible_samples": 8480,
+        "gaps_or_invalid": 2
+      }
+    },
+    "note": "Historical validation and holdout had already been inspected in previous project cycles; NOT untouched"
+  },
+  "inputs": "19 completed-minute price/flow derived causal features; no unavailable historical L50/OI/liqs are imputed",
+  "target": "Within next 60m +50bps favorable BEFORE -35bps adverse; first-hit outcome using future H/L for EVALUATION ONLY",
+  "fitting": {
+    "model": "standard-scaled logistic per LONG/SHORT",
+    "train": "Jul12-Aug07",
+    "dev_thresholds": [
+      0.4,
+      0.45,
+      0.5,
+      0.55,
+      0.6,
+      0.65,
+      0.7,
+      0.75,
+      0.8
+    ],
+    "event_cooldown_minutes": 30,
+    "signal_score_gap": 0.08,
+    "threshold_frozen_after_dev": true
+  },
+  "costs": {
+    "round_trip_bps_proxy": 12,
+    "method": "idealized barrier payoff proxy only; not guaranteed executable"
+  },
+  "results": {
+    "price_only": {
+      "dev": {
+        "threshold": 0.8,
+        "events": 26,
+        "correct": 6,
+        "precision": 0.2308,
+        "proxy_total_bps": -712
+      },
+      "validation": {
+        "events": 4,
+        "correct": 2,
+        "precision": 0.5,
+        "proxy_total_bps": -18
+      },
+      "holdout": {
+        "events": 19,
+        "correct": 9,
+        "precision": 0.4737,
+        "long": 9,
+        "short": 10,
+        "median_mfe_bps": 133.44,
+        "median_mae_bps": 110.14,
+        "proxy_total_bps": -128
+      }
+    },
+    "price_flow": {
+      "dev": {
+        "threshold": 0.8,
+        "events": 15,
+        "correct": 7,
+        "precision": 0.4667,
+        "proxy_total_bps": -110
+      },
+      "validation": {
+        "events": 2,
+        "correct": 2,
+        "precision": 1,
+        "proxy_total_bps": 76
+      },
+      "holdout": {
+        "events": 18,
+        "correct": 12,
+        "precision": 0.6667,
+        "long": 10,
+        "short": 8,
+        "long_precision": 0.6,
+        "short_precision": 0.75,
+        "median_mfe_bps": 185.72,
+        "median_mae_bps": 90.81,
+        "proxy_total_bps": 174
+      }
+    }
+  },
+  "verdict": "SHADOW_INSUFFICIENT_VALIDATION_SUPPORT",
+  "explanation": "Price+flow appears better on dev and already-inspected holdout, but validation has only TWO independent signals. These statistics do NOT prove robust edge, tradable PnL, or safe leveraged returns. Not approved for live promotion.",
+  "next": "Require new untouched forward, executable prices/costs and MFE-protecting exit policy; compare incremental full-micro in periods with valid L50/OI/liquidation coverage."
+}
