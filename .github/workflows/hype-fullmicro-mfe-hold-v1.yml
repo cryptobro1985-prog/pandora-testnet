@@ -1,0 +1,117 @@
+name: HYPE FULL-MICRO MFE HOLD Replay V1
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/hype_unified_intelligence/fullmicro_mfe_hold_replay_v1.py"
+      - ".github/workflows/hype-fullmicro-mfe-hold-v1.yml"
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: hype-fullmicro-mfe-hold-v1
+  cancel-in-progress: false
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install numeric dependencies
+        run: |
+          python -m pip install numpy scikit-learn
+          python -m py_compile \
+            research/hype_unified_intelligence/fullmicro_economic_candidate_search_v1.py \
+            research/hype_unified_intelligence/fullmicro_mfe_hold_replay_v1.py
+      - name: Restore HYPE immutable fullmicro master
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p preserved_master
+          ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=HYPE-HISTORY-20260712-20261103-MASTER" --jq '.artifacts|map(select((.expired|not) and .name=="HYPE-HISTORY-20260712-20261103-MASTER"))|sort_by(.created_at)|reverse|.[0].id//empty')"
+          test -n "$ID" || { echo "HYPE historical master unavailable"; exit 2; }
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$ID/zip" >/tmp/hype_master_artifact.zip
+          python - <<'PY'
+          import pathlib,zipfile,shutil
+          root=pathlib.Path('preserved_master')
+          key='01_JUL12_AUG07_FULL_MICRO/candidate_snapshots_full_micro.jsonl.gz'
+          with zipfile.ZipFile('/tmp/hype_master_artifact.zip') as z:
+              if key in z.namelist():
+                  shutil.copy2('/tmp/hype_master_artifact.zip',root/'master.zip')
+              else:
+                  z.extractall(root/'unpacked')
+                  matches=[]
+                  for f in (root/'unpacked').rglob('*.zip'):
+                      try:
+                          with zipfile.ZipFile(f) as inner:
+                              if key in inner.namelist():matches.append(f)
+                      except zipfile.BadZipFile:pass
+                  if not matches:
+                      raise SystemExit('HYPE fullmicro missing from master')
+                  shutil.copy2(matches[0],root/'master.zip')
+          PY
+      - name: Evaluate 120/180 minute correction hold and MFE
+        id: evaluate
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "2"
+        run: |
+          set -euo pipefail
+          mkdir -p mfe_out
+          python -m research.hype_unified_intelligence.fullmicro_mfe_hold_replay_v1 \
+            --master preserved_master/master.zip \
+            --out mfe_out/HYPE_FULLMICRO_MFE_HOLD_V1.json
+          python - <<'PY'
+          import json
+          d=json.load(open('mfe_out/HYPE_FULLMICRO_MFE_HOLD_V1.json'))
+          assert not d['real_orders']
+          assert d['clean_count']==1091
+          assert d['arms'] and len(d['arms'])==4
+          print('status',d['verdict'])
+          PY
+      - name: Preserve full replay trade-level report
+        if: steps.evaluate.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-FULLMICRO-MFE-HOLD-${{ github.run_id }}
+          path: mfe_out/HYPE_FULLMICRO_MFE_HOLD_V1.json
+          retention-days: 90
+          if-no-files-found: error
+      - name: Publish report or fail-closed marker
+        if: always()
+        env:
+          RESULT: ${{ steps.evaluate.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=research/hype_unified_intelligence/FULLMICRO_MFE_HOLD_LATEST.json
+          if test -s mfe_out/HYPE_FULLMICRO_MFE_HOLD_V1.json; then
+            cp mfe_out/HYPE_FULLMICRO_MFE_HOLD_V1.json "$OUT"
+          else
+            python - <<'PY'
+          import pathlib,json,os
+          pathlib.Path('research/hype_unified_intelligence/FULLMICRO_MFE_HOLD_LATEST.json').write_text(json.dumps({
+            'status':'FAILED_BEFORE_REPORT','run_id':os.getenv('GITHUB_RUN_ID'),
+            'result':os.getenv('RESULT'),'real_orders':False
+          },indent=2)+'\n')
+          PY
+          fi
+          git config user.name pandora-research-bot
+          git config user.email actions@users.noreply.github.com
+          git add "$OUT"
+          git commit -m "research(hype): publish fullmicro MFE hold historical result [skip ci]" || true
+          for i in 1 2 3 4; do
+            git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104 || true
+            git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104 && exit 0
+            sleep 3
+          done
+          exit 1
