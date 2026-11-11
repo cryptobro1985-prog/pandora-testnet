@@ -42,8 +42,8 @@ def _identity_map(items):
     return out
 
 def snapshot(username,followers,following,profile):
-    now=datetime.now(timezone.utc).isoformat(); c=connect()
-    prev=c.execute("select * from snapshots where username=? order by id desc limit 1",(username,)).fetchone()
+    now=datetime.now(timezone.utc).isoformat()
+    prev=get_last_snapshot(username)
     current_f=_state(followers); current_g=_state(following)
     d={"new_followers":[],"lost_followers":[],"new_following":[],"unfollowed":[],"previous_snapshot":None,
        "followers_observed":current_f["observed"],"following_observed":current_g["observed"]}
