@@ -1,0 +1,131 @@
+name: HYPE FULL-MICRO Economic Entry Search V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/hype_unified_intelligence/fullmicro_economic_candidate_search_v1.py"
+      - ".github/workflows/hype-fullmicro-economic-search-v1.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: hype-fullmicro-economic-search-v1
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies and check syntax
+        run: |
+          python -m pip install numpy scikit-learn
+          python -m py_compile research/hype_unified_intelligence/fullmicro_economic_candidate_search_v1.py
+
+      - name: Restore canonical HYPE full-micro master
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p preserved_master
+          MASTER_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=HYPE-HISTORY-20260712-20261103-MASTER" --jq '.artifacts|map(select((.expired|not) and .name=="HYPE-HISTORY-20260712-20261103-MASTER"))|sort_by(.created_at)|reverse|.[0].id//empty')"
+          test -n "$MASTER_ID" || { echo "MISSING_HISTORICAL_MASTER"; exit 2; }
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$MASTER_ID/zip" >/tmp/master_artifact.zip
+          python - <<'PY'
+          import pathlib,zipfile,shutil
+          root=pathlib.Path('preserved_master')
+          key='01_JUL12_AUG07_FULL_MICRO/candidate_snapshots_full_micro.jsonl.gz'
+          with zipfile.ZipFile('/tmp/master_artifact.zip') as z:
+              if key in z.namelist():
+                  shutil.copy2('/tmp/master_artifact.zip',root/'master.zip')
+              else:
+                  z.extractall(root/'unwrapped')
+                  matches=[]
+                  for p in (root/'unwrapped').rglob('*.zip'):
+                      try:
+                          with zipfile.ZipFile(p) as inner:
+                              if key in inner.namelist():
+                                  matches.append(p)
+                      except zipfile.BadZipFile:pass
+                  if not matches:
+                      raise SystemExit('fullmicro historical source missing')
+                  shutil.copy2(matches[0],root/'master.zip')
+          print('ready', (root/'master.zip').stat().st_size)
+          PY
+
+      - name: Run strictly chronological LONG and SHORT candidate ablations
+        id: evaluate
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "2"
+        run: |
+          set -euo pipefail
+          mkdir -p economic_out
+          python -m research.hype_unified_intelligence.fullmicro_economic_candidate_search_v1 \
+            --master preserved_master/master.zip \
+            --out economic_out/HYPE_FULLMICRO_ECONOMIC_ENTRY_V1.json
+          python - <<'PY'
+          import json
+          x=json.load(open('economic_out/HYPE_FULLMICRO_ECONOMIC_ENTRY_V1.json'))
+          assert x['real_orders'] is False
+          assert x['candidate_count']>=1000
+          assert x['quality_clean_count']<x['candidate_count']
+          assert all(v['promotion_allowed'] is False for v in x['models'].values())
+          print('cohort',x['quality_clean_count'],'excluded',x['excluded_by_reason'])
+          PY
+
+      - name: Archive complete signed run result
+        if: steps.evaluate.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-FULLMICRO-ECONOMIC-V1-${{ github.run_id }}
+          path: economic_out/HYPE_FULLMICRO_ECONOMIC_ENTRY_V1.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Save verifiable report or explicit failure
+        if: always()
+        env:
+          BENCH_OUTCOME: ${{ steps.evaluate.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=research/hype_unified_intelligence/FULLMICRO_ECONOMIC_ENTRY_LATEST.json
+          if test -s economic_out/HYPE_FULLMICRO_ECONOMIC_ENTRY_V1.json; then
+            cp economic_out/HYPE_FULLMICRO_ECONOMIC_ENTRY_V1.json "$OUT"
+          else
+            python - <<'PY'
+          import json,os,pathlib
+          p=pathlib.Path('research/hype_unified_intelligence/FULLMICRO_ECONOMIC_ENTRY_LATEST.json')
+          p.write_text(json.dumps({
+            'status':'WORKFLOW_FAILED_BEFORE_REPORT',
+            'evaluation_outcome':os.getenv('BENCH_OUTCOME'),
+            'run_id':os.getenv('GITHUB_RUN_ID'),
+            'real_orders':False,
+          },indent=2)+'\n')
+          PY
+          fi
+          git config user.name pandora-research-bot
+          git config user.email actions@users.noreply.github.com
+          git add "$OUT"
+          git commit -m "research(hype): publish fullmicro economic entry results [skip ci]" || true
+          for TRY in 1 2 3 4; do
+            git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104 || true
+            git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104 && exit 0
+            sleep 3
+          done
+          exit 1
