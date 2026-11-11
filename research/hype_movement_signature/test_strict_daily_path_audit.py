@@ -39,12 +39,12 @@ class StrictDailyPathAuditTest(unittest.TestCase):
 
     def test_complete_tiny_day_uses_strict_quotes(self):
         rows = [
-            {"timestamp": f"2026-11-10T00:0{i}:00Z", "price": p,
+            {"timestamp": f"2026-11-10T{i*6:02d}:00:00Z", "price": p,
              "executable_bid": p-0.01, "executable_ask": p+0.01}
             for i, p in enumerate([100, 102, 100, 102])
         ]
         path = self.write_rows(rows)
-        report = audit(path, expected_step_seconds=21600, min_coverage=1.0)
+        report = audit(path, expected_step_seconds=21600, max_gap_seconds=21600, min_coverage=1.0)
         day = report["days"]["2026-11-10"]
         self.assertEqual(day["status"], "EVALUATION_ONLY")
         self.assertIn("0.0025", day["thresholds"])
