@@ -328,3 +328,25 @@ Next workstream (not repeating rejected models):
 5. Require a genuinely NEW forward session, sufficient trades on independent
    market regimes, risk-of-ruin and leverage robustness before any
    strategy acceptance. Never tune on already inspected July/Oct/Nov8-10.
+
+## Continuation checkpoint — timestamped L50 freshness gate (2026-11-11)
+
+**One engineering hypothesis only:** a non-crossed book may still be stale or
+future-dated at the decision timestamp. In
+`research/hype_local_only/feature_discovery.py`, when `book_ts_ms` exists:
+- book timestamp > decision `last_ts_ms` -> fail closed;
+- age > 5000ms -> fail closed;
+- malformed/nonfinite timestamp -> fail closed;
+- age exactly 5000ms remains valid.
+The resulting invalid book omits spread/depth/microprice and change-derived
+book predictors. Four synthetic boundary regression tests added to
+`research/hype_local_only/test_feature_discovery_book_quality.py`.
+CI workflow: `.github/workflows/hype-book-freshness-smoke.yml`.
+Commits: c261d46e, 79296b95, 6bc9cf2d.
+
+**Important limitation:** if source state has no `book_ts_ms`, timestamp
+freshness is UNKNOWN, not certified. The guard cannot infer exchange quote age
+from a decision clock. Next cycle should inspect Nov raw source field mappings
+and enforce availability/freshness in the source adapter, then audit measured
+stale/future/crossed rates. No new PnL or OOS improvement claimed.
+Previous 161/1252 crossed July books remain quarantined. Real orders OFF.
