@@ -1,0 +1,599 @@
+{
+  "version": "HYPE-FULLMICRO-MFE-HOLD-REPLAY-v1",
+  "master_sha256": "c9d588b5c78d0e72a3073ceb62c7fa100381ebf69df911b22a170171a2653975",
+  "candidate_count": 1252,
+  "clean_count": 1091,
+  "exclusions": {
+    "CROSSED_OR_INVALID_BOOK": 161
+  },
+  "split_counts": {
+    "train": 646,
+    "dev": 216,
+    "historical_test": 219
+  },
+  "cost": "12bps roundtrip proxy, next-minute OPEN, 60bps emergency underlying stop",
+  "limitations": [
+    "Historical July already inspected",
+    "Not executable bid/ask/mark-price tick replay",
+    "Stop gaps are estimates; cannot guarantee no liquidation",
+    "Development returns must be positive with sufficient events before promotion",
+    "MFE path uses bars up to exit, not hindsight theoretical max"
+  ],
+  "arms": {
+    "price_flow/flow_confirmed": {
+      "threshold_dev_only": 0.5,
+      "development": {
+        "trades": 5,
+        "wins": 1,
+        "underlying_pct": -2.552,
+        "maxdd_pct": 2.552,
+        "median_capture": -1.496,
+        "median_mfe_pct": 0.481,
+        "median_mae_pct": 0.654,
+        "exit_reasons": {
+          "HARD_STOP": 4,
+          "FLOW_PRICE_TRANSFER_NEXT_OPEN": 1
+        }
+      },
+      "historical_test": {
+        "trades": 9,
+        "wins": 3,
+        "underlying_pct": -1.319,
+        "maxdd_pct": 2.209,
+        "median_capture": -0.057,
+        "median_mfe_pct": 0.574,
+        "median_mae_pct": 0.566,
+        "exit_reasons": {
+          "HARD_STOP": 3,
+          "FLOW_PRICE_TRANSFER_NEXT_OPEN": 6
+        }
+      },
+      "historical_test_trades": [
+        {
+          "timestamp_ms": 1785765658159,
+          "direction": "SHORT",
+          "net": -0.007200000000000005,
+          "mfe": 0.002859332074978016,
+          "mae": 0.006129809938514974,
+          "exit_index": 31530,
+          "exit": 53.830054000000004,
+          "reason": "HARD_STOP"
+        },
+        {
+          "timestamp_ms": 1785767621259,
+          "direction": "SHORT",
+          "net": -0.007200000000000005,
+          "mfe": 0.001227952668006127,
+          "mae": 0.007925876311676738,
+          "exit_index": 31549,
+          "exit": 54.070488,
+          "reason": "HARD_STOP"
+        },
+        {
+          "timestamp_ms": 1785771858547,
+          "direction": "SHORT",
+          "net": -0.007200000000000005,
+          "mfe": 0.0,
+          "mae": 0.006494944276330461,
+          "exit_index": 31625,
+          "exit": 54.521176,
+          "reason": "HARD_STOP"
+        },
+        {
+          "timestamp_ms": 1785774118096,
+          "direction": "SHORT",
+          "net": -0.00010356888328490904,
+          "mfe": 0.006267931217221245,
+          "mae": 0.0013705388958940024,
+          "exit_index": 31665,
+          "exit": 54.663,
+          "reason": "FLOW_PRICE_TRANSFER_NEXT_OPEN"
+        },
+        {
+          "timestamp_ms": 1785845517429,
+          "direction": "SHORT",
+          "net": -0.0005545263837340097,
+          "mfe": 0.005737543255697197,
+          "mae": 8.964911337017156e-05,
+          "exit_index": 32875,
+          "exit": 55.737,
+          "reason": "FLOW_PRICE_TRANSFER_NEXT_OPEN"
+        },
+        {
+          "timestamp_ms": 1785899036419,
+          "direction": "SHORT",
+          "net": 0.004882423038728968,
+          "mfe": 0.012058448006809441,
+          "mae": 0.0,
+          "exit_index": 33805,
+          "exit": 56.049,
+          "reason": "FLOW_PRICE_TRANSFER_NEXT_OPEN"
+        },
+        {
+          "timestamp_ms": 1785910912470,
+          "direction": "SHORT",
+          "net": 0.00011696781330659107,
+          "mfe": 0.006988709195947185,
+          "mae": 0.005847337091081428,
+          "exit_index": 34006,
+          "exit": 56.874,
+          "reason": "FLOW_PRICE_TRANSFER_NEXT_OPEN"
+        },
+        {
+          "timestamp_ms": 1785917816367,
+          "direction": "SHORT",
+          "net": 0.005952032774363715,
+          "mfe": 0.014581814394334036,
+          "mae": 0.005659132729229688,
+          "exit_index": 34165,
+          "exit": 57.194,
+          "reason": "FLOW_PRICE_TRANSFER_NEXT_OPEN"
+        },
+        {
+          "timestamp_ms": 1786036328519,
+          "direction": "SHORT",
+          "net": -0.0018582224436062488,
+          "mfe": 0.005105671386892552,
+          "mae": 0.0033444816053511683,
+          "exit_index": 36122,
+          "exit": 56.249,
+          "reason": "FLOW_PRICE_TRANSFER_NEXT_OPEN"
+        }
+      ],
+      "accepted_for_live": false
+    },
+    "price_flow/trail_only": {
+      "threshold_dev_only": 0.5,
+      "development": {
+        "trades": 5,
+        "wins": 1,
+        "underlying_pct": -1.904,
+        "maxdd_pct": 2.144,
+        "median_capture": -1.496,
+        "median_mfe_pct": 0.481,
+        "median_mae_pct": 0.654,
+        "exit_reasons": {
+          "HARD_STOP": 4,
+          "TRAIL_NEXT_OPEN": 1
+        }
+      },
+      "historical_test": {
+        "trades": 9,
+        "wins": 5,
+        "underlying_pct": -0.187,
+        "maxdd_pct": 2.144,
+        "median_capture": 0.308,
+        "median_mfe_pct": 0.699,
+        "median_mae_pct": 0.566,
+        "exit_reasons": {
+          "HARD_STOP": 4,
+          "MAX_HOLD_MARK_UNVERIFIED": 2,
+          "TRAIL_NEXT_OPEN": 3
+        }
+      },
+      "historical_test_trades": [
+        {
+          "timestamp_ms": 1785765658159,
+          "direction": "SHORT",
+          "net": -0.007200000000000005,
+          "mfe": 0.002859332074978016,
+          "mae": 0.006129809938514974,
+          "exit_index": 31530,
+          "exit": 53.830054000000004,
+          "reason": "HARD_STOP"
+        },
+        {
+          "timestamp_ms": 1785767621259,
+          "direction": "SHORT",
+          "net": -0.007200000000000005,
+          "mfe": 0.001227952668006127,
+          "mae": 0.007925876311676738,
+          "exit_index": 31549,
+          "exit": 54.070488,
+          "reason": "HARD_STOP"
+        },
+        {
+          "timestamp_ms": 1785771858547,
+          "direction": "SHORT",
+          "net": -0.007200000000000005,
+          "mfe": 0.0,
+          "mae": 0.006494944276330461,
+          "exit_index": 31625,
+          "exit": 54.521176,
+          "reason": "HARD_STOP"
+        },
+        {
+          "timestamp_ms": 1785774118096,
+          "direction": "SHORT",
+          "net": 0.007553175081775422,
+          "mfe": 0.011311514354110708,
+          "mae": 0.002010123713977574,
+          "exit_index": 31821,
+          "exit": 54.244,
+          "reason": "MAX_HOLD_MARK_UNVERIFIED"
+        },
+        {
+          "timestamp_ms": 1785845517429,
+          "direction": "SHORT",
+          "net": 0.00577470102020692,
+          "mfe": 0.011995051368942078,
+          "mae": 0.0019005612034495023,
+          "exit_index": 32946,
+          "exit": 55.384,
+          "reason": "TRAIL_NEXT_OPEN"
+        },
+        {
+          "timestamp_ms": 1785899036419,
+          "direction": "SHORT",
+          "net": 0.005769073627464906,
+          "mfe": 0.012058448006809441,
+          "mae": 0.0,
+          "exit_index": 33778,
+          "exit": 55.999,
+          "reason": "TRAIL_NEXT_OPEN"
+        },
+        {
+          "timestamp_ms": 1785910912470,
+          "direction": "SHORT",
+          "net": -0.007200000000000005,
+          "mfe": 0.006988709195947185,
+          "mae": 0.00614584979543098,
+          "exit_index": 34027,
+          "exit": 57.290693999999995,
+          "reason": "HARD_STOP"
+        },
+        {
+          "timestamp_ms": 1785917816367,
+          "direction": "SHORT",
+          "net": 0.007323417699545233,
+          "mfe": 0.014581814394334036,
+          "mae": 0.005659132729229688,
+          "exit_index": 34163,
+          "exit": 57.115,
+          "reason": "TRAIL_NEXT_OPEN"
+        },
+        {
+          "timestamp_ms": 1786036328519,
+          "direction": "SHORT",
+          "net": 0.0007035081477265515,
+          "mfe": 0.005105671386892552,
+          "mae": 0.0033444816053511683,
+          "exit_index": 36192,
+          "exit": 56.105,
+          "reason": "MAX_HOLD_MARK_UNVERIFIED"
+        }
+      ],
+      "accepted_for_live": false
+    },
+    "all_derived/flow_confirmed": {
+      "threshold_dev_only": 0.3,
+      "development": {
+        "trades": 18,
+        "wins": 10,
+        "underlying_pct": -2.175,
+        "maxdd_pct": 2.651,
+        "median_capture": 0.043,
+        "median_mfe_pct": 0.528,
+        "median_mae_pct": 0.34,
+        "exit_reasons": {
+          "HARD_STOP": 8,
+          "FLOW_PRICE_TRANSFER_NEXT_OPEN": 9,
+          "MAX_HOLD_MARK_UNVERIFIED": 1
+        }
+      },
+      "historical_test": {
+        "trades": 13,
+        "wins": 4,
+        "underlying_pct": -2.746,
+        "maxdd_pct": 3.561,
+        "median_capture": -1.457,
+        "median_mfe_pct": 0.494,
+        "median_mae_pct": 0.628,
+        "exit_reasons": {
+          "HARD_STOP": 7,
+          "FLOW_PRICE_TRANSFER_NEXT_OPEN": 6
+        }
+      },
+      "historical_test_trades": [
+        {
+          "timestamp_ms": 1785765423299,
+          "direction": "SHORT",
+          "net": -0.007200000000000005,
+          "mfe": 0.004942093582738116,
+          "mae": 0.006284851084463083,
+          "exit_index": 31540,
+          "exit": 53.942726,
+          "reason": "HARD_STOP"
+        },
+        {
+          "timestamp_ms": 1785768162889,
+          "direction": "SHORT",
+          "net": -0.007200000000000005,
+          "mfe": 0.002467532467532396,
+          "mae": 0.007068645640074145,
+          "exit_index": 31554,
+          "exit": 54.2234,
+          "reason": "HARD_STOP"
+        },
+        {
+          "timestamp_ms": 1785771655387,
+          "direction": "SHORT",
+          "net": -0.007200000000000005,
+          "mfe": 0.002099292869770286,
+          "mae": 0.006279463759575776,
+          "exit_index": 31635,
+          "exit": 54.629824,
+          "reason": "HARD_STOP"
+        },
+        {
+          "timestamp_ms": 1785774118096,
+          "direction": "SHORT",
+          "net": -0.00010356888328490904,
+          "mfe": 0.006267931217221245,
+          "mae": 0.0013705388958940024,
+          "exit_index": 31665,
+          "exit": 54.663,
+          "reason": "FLOW_PRICE_TRANSFER_NEXT_OPEN"
+        },
+        {
+          "timestamp_ms": 1785845517429,
+          "direction": "SHORT",
+          "net": -0.0005545263837340097,
+          "mfe": 0.005737543255697197,
+          "mae": 8.964911337017156e-05,
+          "exit_index": 32875,
+          "exit": 55.737,
+          "reason": "FLOW_PRICE_TRANSFER_NEXT_OPEN"
+        },
+        {
+          "timestamp_ms": 1785898963860,
+          "direction": "SHORT",
+          "net": 0.003275941812756457,
+          "mfe": 0.010461625903625094,
+          "mae": 0.001953784124615998,
+          "exit_index": 33805,
+          "exit": 56.049,
+          "reason": "FLOW_PRICE_TRANSFER_NEXT_OPEN"
+        },
+        {
+          "timestamp_ms": 1785907173037,
+          "direction": "SHORT",
+          "net": -0.007200000000000005,
+          "mfe": 0.0048389934893542375,
+          "mae": 0.00673939820517333,
+          "exit_index": 33950,
+          "exit": 57.17098,
+          "reason": "HARD_STOP"
+        },
+        {
+          "timestamp_ms": 1785912818749,
+          "direction": "SHORT",
+          "net": 0.0044993006993006915,
+          "mfe": 0.011346153846153895,
+          "mae": 0.0009265734265733183,
+          "exit_index": 34006,
+          "exit": 56.874,
+          "reason": "FLOW_PRICE_TRANSFER_NEXT_OPEN"
+        },
+        {
+          "timestamp_ms": 1785917622092,
+          "direction": "SHORT",
+          "net": -0.007200000000000005,
+          "mfe": 0.0014421740339171096,
+          "mae": 0.006602724492632772,
+          "exit_index": 34045,
+          "exit": 57.897312,
+          "reason": "HARD_STOP"
+        },
+        {
+          "timestamp_ms": 1785979711139,
+          "direction": "LONG",
+          "net": -0.007200000000000005,
+          "mfe": 0.003877204164011161,
+          "mae": 0.006444302811415725,
+          "exit_index": 35129,
+          "exit": 56.145096,
+          "reason": "HARD_STOP"
+        },
+        {
+          "timestamp_ms": 1785983622779,
+          "direction": "LONG",
+          "net": 0.0027008229133268294,
+          "mfe": 0.009778775248477034,
+          "mae": 0.0016743258166791453,
+          "exit_index": 35267,
+          "exit": 56.361,
+          "reason": "FLOW_PRICE_TRANSFER_NEXT_OPEN"
+        },
+        {
+          "timestamp_ms": 1786022035509,
+          "direction": "LONG",
+          "net": 0.01302526991537798,
+          "mfe": 0.023836445871024292,
+          "mae": 0.0031733294426612435,
+          "exit_index": 35923,
+          "exit": 55.612,
+          "reason": "FLOW_PRICE_TRANSFER_NEXT_OPEN"
+        },
+        {
+          "timestamp_ms": 1786035273839,
+          "direction": "SHORT",
+          "net": -0.007200000000000005,
+          "mfe": 0.0010498220640570155,
+          "mae": 0.007686832740213534,
+          "exit_index": 36006,
+          "exit": 56.537200000000006,
+          "reason": "HARD_STOP"
+        }
+      ],
+      "accepted_for_live": false
+    },
+    "all_derived/trail_only": {
+      "threshold_dev_only": 0.3,
+      "development": {
+        "trades": 17,
+        "wins": 8,
+        "underlying_pct": -1.733,
+        "maxdd_pct": 3.299,
+        "median_capture": -1.142,
+        "median_mfe_pct": 0.631,
+        "median_mae_pct": 0.607,
+        "exit_reasons": {
+          "HARD_STOP": 9,
+          "TRAIL_NEXT_OPEN": 6,
+          "MAX_HOLD_MARK_UNVERIFIED": 2
+        }
+      },
+      "historical_test": {
+        "trades": 13,
+        "wins": 6,
+        "underlying_pct": -2.073,
+        "maxdd_pct": 2.144,
+        "median_capture": -1.457,
+        "median_mfe_pct": 0.494,
+        "median_mae_pct": 0.628,
+        "exit_reasons": {
+          "HARD_STOP": 7,
+          "MAX_HOLD_MARK_UNVERIFIED": 1,
+          "TRAIL_NEXT_OPEN": 5
+        }
+      },
+      "historical_test_trades": [
+        {
+          "timestamp_ms": 1785765423299,
+          "direction": "SHORT",
+          "net": -0.007200000000000005,
+          "mfe": 0.004942093582738116,
+          "mae": 0.006284851084463083,
+          "exit_index": 31540,
+          "exit": 53.942726,
+          "reason": "HARD_STOP"
+        },
+        {
+          "timestamp_ms": 1785768162889,
+          "direction": "SHORT",
+          "net": -0.007200000000000005,
+          "mfe": 0.002467532467532396,
+          "mae": 0.007068645640074145,
+          "exit_index": 31554,
+          "exit": 54.2234,
+          "reason": "HARD_STOP"
+        },
+        {
+          "timestamp_ms": 1785771655387,
+          "direction": "SHORT",
+          "net": -0.007200000000000005,
+          "mfe": 0.002099292869770286,
+          "mae": 0.006279463759575776,
+          "exit_index": 31635,
+          "exit": 54.629824,
+          "reason": "HARD_STOP"
+        },
+        {
+          "timestamp_ms": 1785774118096,
+          "direction": "SHORT",
+          "net": 0.007553175081775422,
+          "mfe": 0.011311514354110708,
+          "mae": 0.002010123713977574,
+          "exit_index": 31821,
+          "exit": 54.244,
+          "reason": "MAX_HOLD_MARK_UNVERIFIED"
+        },
+        {
+          "timestamp_ms": 1785845517429,
+          "direction": "SHORT",
+          "net": 0.00577470102020692,
+          "mfe": 0.011995051368942078,
+          "mae": 0.0019005612034495023,
+          "exit_index": 32946,
+          "exit": 55.384,
+          "reason": "TRAIL_NEXT_OPEN"
+        },
+        {
+          "timestamp_ms": 1785898963860,
+          "direction": "SHORT",
+          "net": 0.004164025505763648,
+          "mfe": 0.010461625903625094,
+          "mae": 0.001953784124615998,
+          "exit_index": 33778,
+          "exit": 55.999,
+          "reason": "TRAIL_NEXT_OPEN"
+        },
+        {
+          "timestamp_ms": 1785907173037,
+          "direction": "SHORT",
+          "net": -0.007200000000000005,
+          "mfe": 0.0048389934893542375,
+          "mae": 0.00673939820517333,
+          "exit_index": 33950,
+          "exit": 57.17098,
+          "reason": "HARD_STOP"
+        },
+        {
+          "timestamp_ms": 1785912818749,
+          "direction": "SHORT",
+          "net": 0.0044993006993006915,
+          "mfe": 0.011346153846153895,
+          "mae": 0.0009265734265733183,
+          "exit_index": 34006,
+          "exit": 56.874,
+          "reason": "TRAIL_NEXT_OPEN"
+        },
+        {
+          "timestamp_ms": 1785917622092,
+          "direction": "SHORT",
+          "net": -0.007200000000000005,
+          "mfe": 0.0014421740339171096,
+          "mae": 0.006602724492632772,
+          "exit_index": 34045,
+          "exit": 57.897312,
+          "reason": "HARD_STOP"
+        },
+        {
+          "timestamp_ms": 1785979711139,
+          "direction": "LONG",
+          "net": -0.007200000000000005,
+          "mfe": 0.003877204164011161,
+          "mae": 0.006444302811415725,
+          "exit_index": 35129,
+          "exit": 56.145096,
+          "reason": "HARD_STOP"
+        },
+        {
+          "timestamp_ms": 1785983622779,
+          "direction": "LONG",
+          "net": 0.003573609775212684,
+          "mfe": 0.009778775248477034,
+          "mae": 0.0016743258166791453,
+          "exit_index": 35266,
+          "exit": 56.41,
+          "reason": "TRAIL_NEXT_OPEN"
+        },
+        {
+          "timestamp_ms": 1786022035509,
+          "direction": "LONG",
+          "net": 0.0041435949810329845,
+          "mfe": 0.010523052232273011,
+          "mae": 0.0031733294426612435,
+          "exit_index": 35821,
+          "exit": 55.125,
+          "reason": "TRAIL_NEXT_OPEN"
+        },
+        {
+          "timestamp_ms": 1786035273839,
+          "direction": "SHORT",
+          "net": -0.007200000000000005,
+          "mfe": 0.0010498220640570155,
+          "mae": 0.007686832740213534,
+          "exit_index": 36006,
+          "exit": 56.537200000000006,
+          "reason": "HARD_STOP"
+        }
+      ],
+      "accepted_for_live": false
+    }
+  },
+  "research_only": true,
+  "real_orders": false,
+  "verdict": "NO_UNTOUCHED_PROFITABLE_ENTRY_EXIT_EDGE_ESTABLISHED"
+}
