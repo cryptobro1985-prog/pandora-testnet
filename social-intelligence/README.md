@@ -38,3 +38,19 @@ Open http://127.0.0.1:8000/ . Run tests with `pytest -q tests`.
 ## Purpose and boundaries
 
 This module organizes publicly supplied profile links and can evolve into an authorized analytics service for accounts managed by the user or verified professional organizations. It must not be used to create detailed tracking dossiers about private individuals, discover secret dating accounts, infer private social relations, or obtain addresses/location trails.
+
+## One-time GitHub Pages activation (current deployment blocker)
+
+The Pages workflow is committed at `.github/workflows/social-intelligence-pages.yml`, but GitHub rejected auto-enablement with `Resource not accessible by integration`.
+
+- Repository owner: open `https://github.com/cryptobro1985-prog/pandora-testnet/settings/pages`.
+- Under Build and deployment, select **GitHub Actions** as the source and save.
+- Re-run the failed **Social Intelligence - Deploy GitHub Pages** workflow from the Actions tab (or push a change to this feature branch). Verify a successful deployment and take the exact HTTPS URL from its job output.
+- The published UI is static and checks input link syntax only. No hosted backend is supplied by Pages.
+
+## Optional Telegram menu integration
+
+- **Rotate** any bot token previously posted to chat; do not reuse exposed tokens in production.
+- Store only the rotated token as the repository Actions secret `SOCIAL_INTELLIGENCE_BOT_TOKEN`.
+- With a verified HTTPS Mini App URL, run `Social Intelligence - Configure Telegram Menu` via workflow_dispatch with `miniapp_url`. Note that GitHub only surfaces manual workflow dispatch when the workflow exists on the default branch; merge the changes deliberately or run the local Python script with secrets set in environment.
+- The bot menu button opens the page without a continuously running bot backend; it does not provide automatic social-network searches.
