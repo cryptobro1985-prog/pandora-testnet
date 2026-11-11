@@ -1,276 +1,117 @@
-"""Official/public source connector scaffolding.
-
-Only calls platform APIs for data those APIs actually expose. No private-message
-access, no hidden membership enumeration, no viewer deanonymization, no secret
-follow/like history reconstruction.
-"""
 from __future__ import annotations
-import os
+import os, re, asyncio
+from datetime import timezone
 from typing import Any
 import httpx
 
-TIMEOUT = 15.0
+TIMEOUT=20.0
+HANDLE=re.compile(r"^[A-Za-z0-9._]{1,30}$")
 
-def _token(name:str)->str:
-    return os.getenv(name,"").strip()
+def normalize_username(value:str)->str:
+    v=(value or "").strip()
+    v=re.sub(r"^https?://(www\\.)?instagram\\.com/","",v,flags=re.I)
+    v=v.split("?")[0].strip("/")
+    if v.startswith("@"): v=v[1:]
+    if "/" in v: v=v.split("/")[0]
+    if not HANDLE.fullmatch(v): raise ValueError("Некорректный Instagram username/URL")
+    return v
 
 def _safe_json(resp:httpx.Response)->dict[str,Any]:
     try:
-        data=resp.json()
-        return data if isinstance(data,dict) else {"data":data}
-    except Exception:
-        return {"error":"non_json_response","status_code":resp.status_code}
+        d=resp.json(); return d if isinstance(d,dict) else {"data":d}
+    except Exception: return {"error":"non_json_response","status_code":resp.status_code}
 
-async def telegram_get_chat(chat_id:str)->dict[str,Any]:
-    token=_token("TELEGRAM_BOT_TOKEN")
-    if not token:
-        return {"status":"not_configured"}
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        r=await client.get(f"https://api.telegram.org/bot{token}/getChat",params={"chat_id":chat_id})
-    data=_safe_json(r)
-    if not data.get("ok"):
-        return {"status":"unavailable","detail":data.get("description","Telegram API error")}
-    result=data.get("result",{})
-    return {"status":"ok","chat":{"id":result.get("id"),"type":result.get("type"),"title":result.get("title"),"username":result.get("username"),"description":result.get("description")}}
-
-async def telegram_get_chat_member(chat_id:str,user_id:int)->dict[str,Any]:
-    token=_token("TELEGRAM_BOT_TOKEN")
-    if not token:
-        return {"status":"not_configured"}
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        r=await client.get(f"https://api.telegram.org/bot{token}/getChatMember",params={"chat_id":chat_id,"user_id":user_id})
-    data=_safe_json(r)
-    if not data.get("ok"):
-        return {"status":"unavailable","detail":data.get("description","Telegram API error")}
-    result=data.get("result",{})
-    return {"status":"ok","member":{"status":result.get("status"),"user":result.get("user")}}
-
-async def vk_call(method:str, params:dict[str,Any])->dict[str,Any]:
-    token=_token("VK_ACCESS_TOKEN")
-    if not token:
-        return {"status":"not_configured"}
-    api_version=os.getenv("VK_API_VERSION","5.199")
-    full=dict(params)
-    full.update({"access_token":token,"v":api_version})
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        r=await client.get(f"https://api.vk.com/method/{method}",params=full)
-    data=_safe_json(r)
-    if "error" in data:
-        err=data["error"] if isinstance(data["error"],dict) else {}
-        return {"status":"unavailable","error_code":err.get("error_code"),"detail":err.get("error_msg","VK API error")}
-    return {"status":"ok","response":data.get("response")}
-
-async def vk_users_get(user_ids:str)->dict[str,Any]:
-    return await vk_call("users.get",{"user_ids":user_ids,"fields":"photo_200,city,country,education,universities,schools,career,domain,status,site,verified"})
-
-async def vk_wall_get(owner_id:str,count:int=30)->dict[str,Any]:
-    return await vk_call("wall.get",{"owner_id":owner_id,"count":max(1,min(count,100)),"extended":1})
-
-async def vk_wall_comments(owner_id:str,post_id:int,count:int=100)->dict[str,Any]:
-    return await vk_call("wall.getComments",{"owner_id":owner_id,"post_id":post_id,"count":max(1,min(count,100)),"extended":1,"thread_items_count":10})
-
-async def vk_likes_get_list(owner_id:str,item_id:int,item_type:str="post",count:int=100)->dict[str,Any]:
-    allowed={"post","comment","photo","video","note","market","photo_comment","video_comment","topic_comment","market_comment"}
-    if item_type not in allowed:
-        return {"status":"invalid","detail":"unsupported VK like object type"}
-    return await vk_call("likes.getList",{"type":item_type,"owner_id":owner_id,"item_id":item_id,"count":max(1,min(count,1000)),"extended":1})
-
-async def meta_get(path:str, params:dict[str,Any]|None=None)->dict[str,Any]:
-    token=_token("META_ACCESS_TOKEN")
-    if not token:
-        return {"status":"not_configured"}
+async def meta_get(path:str,params:dict[str,Any]|None=None)->dict[str,Any]:
+    token=os.getenv("META_ACCESS_TOKEN","").strip()
+    if not token: return {"status":"not_configured","source":"meta_graph"}
     version=os.getenv("META_GRAPH_VERSION","v24.0")
-    q=dict(params or {})
-    q["access_token"]=token
+    q=dict(params or {}); q["access_token"]=token
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        r=await client.get(f"https://graph.facebook.com/{version}/{path.lstrip('/')}",params=q)
+        r=await client.get("https://graph.facebook.com/"+version+"/"+path.lstrip("/"),params=q)
     data=_safe_json(r)
     if "error" in data:
-        err=data.get("error") or {}
-        return {"status":"unavailable","detail":err.get("message","Meta Graph API error"),"code":err.get("code")}
-    return {"status":"ok","response":data}
+        e=data.get("error") or {}
+        return {"status":"unavailable","source":"meta_graph","detail":e.get("message","Meta Graph API error"),"code":e.get("code")}
+    return {"status":"ok","source":"meta_graph","response":data}
 
-async def instagram_business_discovery(ig_user_id:str, username:str)->dict[str,Any]:
-    fields="business_discovery.username("+username+"){id,username,name,biography,website,followers_count,follows_count,media_count,profile_picture_url,media.limit(25){id,caption,comments_count,like_count,media_type,permalink,timestamp}}"
+async def business_discovery(username:str)->dict[str,Any]:
+    ig_user_id=os.getenv("META_IG_USER_ID","").strip()
+    if not ig_user_id: return {"status":"not_configured","source":"meta_business_discovery"}
+    fields=("business_discovery.username("+username+"){id,username,name,biography,website,followers_count,"
+            "follows_count,media_count,profile_picture_url,media.limit(40){id,caption,comments_count,like_count,"
+            "media_type,permalink,timestamp}}")
     return await meta_get(ig_user_id,{"fields":fields})
 
-async def instagram_media_comments(media_id:str,limit:int=100)->dict[str,Any]:
-    return await meta_get(f"{media_id}/comments",{"fields":"id,text,timestamp,username,like_count,replies{id,text,timestamp,username,like_count}","limit":max(1,min(limit,100))})
+async def media_comments(media_id:str,limit:int=100)->dict[str,Any]:
+    return await meta_get(media_id+"/comments",{"fields":"id,text,timestamp,username,like_count,replies{id,text,timestamp,username,like_count}","limit":max(1,min(limit,100))})
 
-
-from html.parser import HTMLParser
-
-class _MetaParser(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.title = ""
-        self._in_title = False
-        self.meta = {}
-    def handle_starttag(self, tag, attrs):
-        attrs = dict(attrs)
-        if tag.lower() == "title":
-            self._in_title = True
-        if tag.lower() == "meta":
-            key = (attrs.get("property") or attrs.get("name") or "").lower()
-            value = attrs.get("content")
-            if key and value:
-                self.meta[key] = value[:2000]
-    def handle_endtag(self, tag):
-        if tag.lower() == "title":
-            self._in_title = False
-    def handle_data(self, data):
-        if self._in_title and len(self.title) < 500:
-            self.title += data
-
-async def public_profile_page(url: str) -> dict[str, Any]:
-    """Fetch public page metadata only for a prevalidated social-profile URL."""
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; SocialIntelligenceMVP/0.3; +https://social-intelligence-miniapp-mvp.onrender.com)",
-        "Accept": "text/html,application/xhtml+xml",
-    }
+async def public_profile(username:str)->dict[str,Any]:
+    url="https://www.instagram.com/"+username+"/"
+    headers={"User-Agent":"Mozilla/5.0","Accept-Language":"en-US,en;q=0.9"}
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT, follow_redirects=True, headers=headers) as client:
-            r = await client.get(url)
-        ctype = (r.headers.get("content-type") or "").lower()
-        if r.status_code >= 400:
-            return {"status": "unavailable", "http_status": r.status_code, "detail": "public page did not return a readable profile"}
-        if "text/html" not in ctype:
-            return {"status": "unavailable", "http_status": r.status_code, "detail": "public page was not HTML"}
-        text = r.text[:1_000_000]
-        parser = _MetaParser()
-        parser.feed(text)
-        title = (parser.meta.get("og:title") or parser.title or "").strip()
-        description = (parser.meta.get("og:description") or parser.meta.get("description") or "").strip()
-        image = (parser.meta.get("og:image") or "").strip()
-        canonical = str(r.url)
-        return {
-            "status": "ok",
-            "url": canonical,
-            "title": title[:500],
-            "description": description[:2000],
-            "image": image[:2000],
-            "source": "public_profile_page",
-        }
-    except Exception:
-        return {"status": "unavailable", "detail": "public page request failed"}
-
-
-from bs4 import BeautifulSoup
-from datetime import datetime, timezone
-
-async def public_telegram_feed(username: str, limit: int = 30) -> dict[str, Any]:
-    username = username.lstrip("@").strip()
-    if not username:
-        return {"status": "invalid", "items": []}
-    url = f"https://t.me/s/{username}"
-    headers = {"User-Agent": "Mozilla/5.0 (compatible; SocialIntelligenceMVP/0.4)"}
-    try:
-        async with httpx.AsyncClient(timeout=TIMEOUT, follow_redirects=True, headers=headers) as client:
-            r = await client.get(url)
-        if r.status_code >= 400:
-            return {"status":"unavailable","items":[],"http_status":r.status_code}
-        soup = BeautifulSoup(r.text, "html.parser")
-        items=[]
-        for msg in soup.select(".tgme_widget_message_wrap")[-max(1,min(limit,100)):]:
-            node = msg.select_one(".tgme_widget_message")
-            text_node = msg.select_one(".tgme_widget_message_text")
-            time_node = msg.select_one("time")
-            views_node = msg.select_one(".tgme_widget_message_views")
-            link_node = msg.select_one(".tgme_widget_message_date")
-            if not node:
-                continue
-            post = node.get("data-post") or ""
-            author = node.get("data-peer") or username
-            dt = time_node.get("datetime") if time_node else None
-            href = link_node.get("href") if link_node else (f"https://t.me/{post}" if post else None)
-            items.append({
-                "title": f"@{author}",
-                "text": (text_node.get_text(" ", strip=True) if text_node else "")[:2000],
-                "when": dt,
-                "views": views_node.get_text(" ", strip=True) if views_node else None,
-                "url": href,
-            })
-        return {"status":"ok","items":items,"source":url}
-    except Exception:
-        return {"status":"unavailable","items":[],"detail":"public Telegram feed request failed"}
-
-async def public_vk_wall(handle: str, limit: int = 20) -> dict[str, Any]:
-    handle = handle.strip().lstrip("/")
-    if not handle:
-        return {"status":"invalid","items":[]}
-    url=f"https://vk.com/{handle}"
-    headers={"User-Agent":"Mozilla/5.0 (compatible; SocialIntelligenceMVP/0.4)"}
-    try:
-        async with httpx.AsyncClient(timeout=TIMEOUT, follow_redirects=True, headers=headers) as client:
+        async with httpx.AsyncClient(timeout=TIMEOUT,follow_redirects=True,headers=headers) as client:
             r=await client.get(url)
-        if r.status_code>=400:
-            return {"status":"unavailable","items":[],"http_status":r.status_code}
-        soup=BeautifulSoup(r.text,"html.parser")
-        items=[]
-        selectors=["div._post","div.post","div[data-post-id]"]
-        seen=set()
-        for sel in selectors:
-            for post in soup.select(sel):
-                pid=post.get("id") or post.get("data-post-id") or ""
-                if pid in seen: continue
-                seen.add(pid)
-                text_node=post.select_one(".wall_post_text, .post_text, [data-testid='wall_post_text']")
-                time_node=post.select_one("time, .rel_date, .post_date")
-                like_node=post.select_one(".PostBottomAction--like .PostBottomAction__count, .like_btns .like_button_count")
-                comments_node=post.select_one(".PostBottomAction--comment .PostBottomAction__count, .reply_link")
-                href=None
-                if pid.startswith("post"):
-                    wall_id=pid[4:]
-                    href=f"https://vk.com/wall{wall_id}"
-                txt=text_node.get_text(" ",strip=True) if text_node else ""
-                if not txt and not pid: continue
-                items.append({
-                    "title":"Публикация VK",
-                    "text":txt[:2000],
-                    "when":time_node.get("datetime") if time_node and time_node.get("datetime") else (time_node.get_text(" ",strip=True) if time_node else None),
-                    "likes":like_node.get_text(" ",strip=True) if like_node else None,
-                    "comments":comments_node.get_text(" ",strip=True) if comments_node else None,
-                    "url":href or url,
-                })
-                if len(items)>=limit: break
-            if items: break
-        return {"status":"ok","items":items,"source":url}
-    except Exception:
-        return {"status":"unavailable","items":[],"detail":"public VK wall request failed"}
+        if r.status_code>=400: return {"status":"unavailable","source":"public_page","http_status":r.status_code}
+        text=r.text[:1000000]
+        def m(prop):
+            x=re.search(r'<meta[^>]+property=["\\\']'+prop+r'["\\\'][^>]+content=["\\\']([^"\\\']*)',text,re.I)
+            return x.group(1) if x else ""
+        return {"status":"ok","source":"public_page","url":str(r.url),"title":m("og:title"),"description":m("og:description"),"image":m("og:image")}
+    except Exception as e:
+        return {"status":"unavailable","source":"public_page","detail":type(e).__name__}
 
-
-async def public_instagram_feed(username: str, limit: int = 24) -> dict[str, Any]:
-    username = username.strip().lstrip("@")
-    if not username:
-        return {"status":"invalid","items":[]}
-    url=f"https://www.instagram.com/{username}/"
-    headers={
-        "User-Agent":"Mozilla/5.0 (compatible; SocialIntelligenceMVP/0.5)",
-        "Accept-Language":"en-US,en;q=0.9",
-    }
+def _instaloader_collect(username:str,max_posts:int=30)->dict[str,Any]:
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT, follow_redirects=True, headers=headers) as client:
-            r=await client.get(url)
-        if r.status_code>=400:
-            return {"status":"unavailable","items":[],"http_status":r.status_code}
-        soup=BeautifulSoup(r.text,"html.parser")
-        items=[]
-        seen=set()
-        for a in soup.select('a[href^="/p/"], a[href^="/reel/"]'):
-            href=a.get("href") or ""
-            if not href or href in seen:
-                continue
-            seen.add(href)
-            img=a.select_one("img")
-            text=(img.get("alt") if img else "") or a.get_text(" ",strip=True)
-            items.append({
-                "title":"Публикация Instagram" if href.startswith("/p/") else "Reel Instagram",
-                "text":text[:1000],
-                "when":None,
-                "url":"https://www.instagram.com"+href,
-            })
-            if len(items)>=max(1,min(limit,50)):
-                break
-        return {"status":"ok","items":items,"source":url}
-    except Exception:
-        return {"status":"unavailable","items":[],"detail":"public Instagram feed request failed"}
+        import instaloader
+        L=instaloader.Instaloader(download_pictures=False,download_videos=False,download_video_thumbnails=False,save_metadata=False,compress_json=False,quiet=True)
+        login_user=os.getenv("IG_USERNAME","").strip()
+        session_file=os.getenv("IG_SESSIONFILE","").strip()
+        session_b64=os.getenv("IG_SESSION_B64","").strip()
+        if session_b64 and login_user:
+            import base64,tempfile
+            p=tempfile.NamedTemporaryFile(delete=False); p.write(base64.b64decode(session_b64)); p.close()
+            try: L.load_session_from_file(login_user,p.name)
+            finally:
+                try: os.unlink(p.name)
+                except OSError: pass
+        elif session_file and login_user and os.path.exists(session_file):
+            L.load_session_from_file(login_user,session_file)
+        profile=instaloader.Profile.from_username(L.context,username)
+        out={"status":"ok","source":"instaloader","profile":{"username":profile.username,"name":profile.full_name or "",
+             "biography":profile.biography or "","followers_count":getattr(profile,"followers",None),
+             "follows_count":getattr(profile,"followees",None),"media_count":getattr(profile,"mediacount",None),
+             "profile_picture_url":str(profile.profile_pic_url) if profile.profile_pic_url else None,
+             "is_verified":getattr(profile,"is_verified",None)},"posts":[],"followers":[],"following":[],"warnings":[]}
+        for i,post in enumerate(profile.get_posts()):
+            if i>=max_posts: break
+            row={"id":post.mediaid,"shortcode":post.shortcode,"permalink":"https://www.instagram.com/p/"+post.shortcode+"/",
+                 "timestamp":post.date_utc.replace(tzinfo=timezone.utc).isoformat(),"caption":post.caption or "",
+                 "like_count":getattr(post,"likes",None),"comments_count":getattr(post,"comments",None),"comments_detail":[],"likers":[]}
+            try:
+                for j,c in enumerate(post.get_comments()):
+                    if j>=250: break
+                    actor=getattr(getattr(c,"owner",None),"username",None)
+                    if actor: row["comments_detail"].append({"username":actor,"text":c.text or "","timestamp":c.created_at_utc.replace(tzinfo=timezone.utc).isoformat() if c.created_at_utc else None})
+            except Exception as e: out["warnings"].append("comments:"+post.shortcode+":"+type(e).__name__)
+            try:
+                for j,u in enumerate(post.get_likes()):
+                    if j>=500: break
+                    if getattr(u,"username",None): row["likers"].append(u.username)
+            except Exception as e: out["warnings"].append("likes:"+post.shortcode+":"+type(e).__name__)
+            out["posts"].append(row)
+        try:
+            for i,u in enumerate(profile.get_followers()):
+                if i>=10000: break
+                out["followers"].append(u.username)
+        except Exception as e: out["warnings"].append("followers:"+type(e).__name__)
+        try:
+            for i,u in enumerate(profile.get_followees()):
+                if i>=10000: break
+                out["following"].append(u.username)
+        except Exception as e: out["warnings"].append("following:"+type(e).__name__)
+        return out
+    except Exception as e:
+        return {"status":"unavailable","source":"instaloader","detail":type(e).__name__}
+
+async def instaloader_collect(username:str,max_posts:int=30)->dict[str,Any]:
+    return await asyncio.to_thread(_instaloader_collect,username,max_posts)
