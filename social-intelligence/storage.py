@@ -34,7 +34,10 @@ def init_schema():
       """create table if not exists si_interactions(
         id {idtype},username text,observed_at text,kind text,actor text,direction text,event_time text,url text,text text,source text,dedupe_key text unique)""",
       """create table if not exists si_posts(
-        id {idtype},username text,observed_at text,shortcode text,permalink text,data_json text,unique(username,shortcode))"""
+        id {idtype},username text,observed_at text,shortcode text,permalink text,data_json text,unique(username,shortcode))""",
+      """create table if not exists si_bridge_payloads(
+        id {idtype},username text not null,observed_at text not null,payload_json text not null)""",
+      "create index if not exists idx_si_bridge_user on si_bridge_payloads(username,id)"
     ]
     idtype="bigserial primary key" if _pg() else "integer primary key autoincrement"
     for s in stmts:
@@ -106,3 +109,20 @@ def history(username,limit=200):
 
 def backend_info():
     return {"persistence":"postgres" if _pg() else "sqlite_ephemeral","database_url_configured":bool(DATABASE_URL),"postgres_available":_pg()}
+
+
+def save_bridge_payload(username,payload):
+    c=_connect(); now=datetime.now(timezone.utc).isoformat()
+    body=json.dumps(payload,ensure_ascii=False)
+    sql="insert into si_bridge_payloads(username,observed_at,payload_json) values(%s,%s,%s)" if _pg() else "insert into si_bridge_payloads(username,observed_at,payload_json) values(?,?,?)"
+    c.execute(sql,(username,now,body));c.commit();c.close()
+    return now
+
+def get_latest_bridge_payload(username):
+    c=_connect()
+    sql="select observed_at,payload_json from si_bridge_payloads where username=%s order by id desc limit 1" if _pg() else "select observed_at,payload_json from si_bridge_payloads where username=? order by id desc limit 1"
+    row=c.execute(sql,(username,)).fetchone();c.close()
+    if not row: return None
+    try: payload=json.loads(row["payload_json"])
+    except Exception: return None
+    return {"observed_at":row["observed_at"],"payload":payload}
