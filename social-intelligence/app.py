@@ -253,7 +253,7 @@ async def _collect_instagram_events(api_result: dict) -> dict:
             "url": permalink,
         })
         if m.get("like_count") is not None:
-            events["Полученные лайки"].append({
+            events["Входящие лайки"].append({
                 "title": "Лайки на публикации",
                 "text": "%s лайков на публикации%s" % (m.get("like_count"), (": "+caption[:90]) if caption else ""),
                 "when": ts,
@@ -270,7 +270,7 @@ async def _collect_instagram_events(api_result: dict) -> dict:
             for item in data[:50]:
                 username = item.get("username") or "Публичный пользователь"
                 text = item.get("text") or ""
-                events["Полученные комментарии"].append({
+                events["Входящие комментарии"].append({
                     "title": "@"+username if username else "Комментарий",
                     "text": text[:500],
                     "when": item.get("timestamp"),
@@ -281,8 +281,8 @@ async def _collect_instagram_events(api_result: dict) -> dict:
 
 async def _collect_vk_events(user_result: dict) -> dict:
     events = {k: [] for k in [
-        "Новые подписки","Новые подписчики","Поставленные лайки","Полученные лайки",
-        "Оставленные комментарии","Полученные комментарии","Сообщества","Стена"
+        "Исходящие лайки","Исходящие комментарии","Входящие лайки","Входящие комментарии",
+        "Новые подписки","Новые подписчики","Сообщества","Стена"
     ]}
     if user_result.get("status") != "ok":
         return events
