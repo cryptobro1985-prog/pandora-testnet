@@ -108,12 +108,25 @@ function normalize(p,value){
 }
 function clean(v){return String(v).replace(/[\u0000-\u001f<>]/g,"");}
 function el(tag,txt,cls){const node=document.createElement(tag);if(txt!==undefined)node.textContent=txt;if(cls)node.className=cls;return node;}
+function fmtWhen(v){
+ if(!v)return "";
+ try{
+   if(typeof v==="number"||/^\d{9,13}$/.test(String(v))){const n=Number(v);return new Date(n<1e12?n*1000:n).toLocaleString("ru-RU");}
+   const d=new Date(v);return isNaN(d.getTime())?String(v):d.toLocaleString("ru-RU");
+ }catch(e){return String(v);}
+}
 function eventRail(title,items,fallback){
  const wrap=el("section",undefined,"source");
  wrap.append(el("h3",title));
  const rail=el("div",undefined,"eventRail");
  if(items&&items.length){
-   items.forEach(it=>{const card=el("article",undefined,"eventCard");card.append(el("h4",it.title||"Событие"),el("p",it.text||""));if(it.when)card.append(el("span",it.when,"badge"));rail.append(card);});
+   items.forEach(it=>{
+     const card=el("article",undefined,"eventCard");
+     card.append(el("h4",it.title||"Событие"),el("p",it.text||""));
+     if(it.when)card.append(el("span",fmtWhen(it.when),"badge"));
+     if(it.url){const a=el("a","Открыть источник");a.href=it.url;a.target="_blank";a.rel="noopener noreferrer";a.style.display="block";a.style.marginTop="9px";card.append(a);}
+     rail.append(card);
+   });
  }else{
    const card=el("article",undefined,"eventCard");card.append(el("h4","Нет подтверждённых событий"),el("p",fallback||"Источник не вернул данных за выбранный период."));rail.append(card);
  }
@@ -194,7 +207,7 @@ function render(){
  }
  (reportSections[selected]||[]).forEach(section=>{
    if(section==="Источники"){area.append(block("Источники","Показываются только реально проверенные backend-источники за выбранный период: "+periodDays+" дней.",live?"Проверено":"Ожидает данных"));return;}
-   area.append(eventRail(section,[],availability[selected]?.[section]||("Источник не вернул подтверждённых событий за "+periodDays+" дней.")));
+   const items=(live?.events?.[section]||[]); area.append(eventRail(section,items,availability[selected]?.[section]||("Источник не вернул подтверждённых событий за "+periodDays+" дней.")));
  });
  area.append(block("Период",periodDays+" дней. Пустой раздел означает отсутствие подтверждённых данных, а не отсутствие самой активности.","Выбран"));
  }
