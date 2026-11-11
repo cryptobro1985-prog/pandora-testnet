@@ -18,10 +18,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          BASE="https://social-intelligence-live-v2.onrender.com/api/smoke"
+          ROOT="https://social-intelligence-live-v2.onrender.com"
+          BASE="$ROOT/api/smoke"
+          echo "Waiting for deployed backend health..."
+          curl -fsS --retry 18 --retry-all-errors --retry-delay 5 --max-time 10 "$ROOT/api/health" -o /tmp/health.json
+          cat /tmp/health.json
+          echo
           for TARGET in instagram natgeo nasa; do
             echo "=== TARGET $TARGET ==="
-            curl -fsS --max-time 180 "$BASE?target=$TARGET" -o "/tmp/$TARGET.json"
+            curl -fsS --retry 4 --retry-all-errors --retry-delay 4 --max-time 180 "$BASE?target=$TARGET" -o "/tmp/$TARGET.json"
             cat "/tmp/$TARGET.json"
             echo
           done
