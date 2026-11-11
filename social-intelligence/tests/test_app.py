@@ -56,3 +56,14 @@ def test_report_does_not_fabricate_social_activity():
 
 def test_health():
     assert client.get("/api/health").json()["ok"] is True
+
+
+def test_capabilities_endpoint_is_explicit_about_limits():
+    r = client.get("/api/capabilities")
+    assert r.status_code == 200
+    data = r.json()["platforms"]
+    assert set(data) == {"instagram", "vk", "telegram"}
+    assert data["instagram"]["followers_history"] is False
+    assert data["instagram"]["viewer_identity"] is False
+    assert data["vk"]["private_messages"] is False
+    assert data["telegram"]["all_user_groups"] is False
