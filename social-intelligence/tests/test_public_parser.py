@@ -1,3 +1,6 @@
+import sys
+from pathlib import Path
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from public_parser import parse_profile,parse_post
 
 def test_public_profile_parser():
