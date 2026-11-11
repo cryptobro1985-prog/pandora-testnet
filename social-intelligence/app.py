@@ -13,6 +13,7 @@ from urllib.parse import urlsplit, urlunsplit
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+from source_registry import capability_snapshot
 
 app = FastAPI(title="Social Intelligence Mini App", version="0.1.0")
 WEB = Path(__file__).resolve().parent / "web"
@@ -67,7 +68,12 @@ def index():
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "service": "social-intelligence", "version": "0.1.0"}
+    return {"ok": True, "service": "social-intelligence", "version": "0.2.0"}
+
+
+@app.get("/api/capabilities")
+def capabilities():
+    return capability_snapshot()
 
 
 @app.post("/api/analyze")
