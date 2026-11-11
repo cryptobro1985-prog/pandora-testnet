@@ -1,8 +1,5 @@
 name: HYPE Movement Adaptive Rank V6 Fast
 on:
-  push:
-    branches: [research/hype-h1-local-v5-oi-microstructure-20261104]
-    paths: ['research/hype_movement_signature/replay_adaptive_rank_v6_fast.py','.github/workflows/hype-movement-adaptive-v6-fast.yml']
   workflow_dispatch:
 permissions: {contents: write, actions: read}
 concurrency: {group: hype-movement-adaptive-v6-fast, cancel-in-progress: true}
