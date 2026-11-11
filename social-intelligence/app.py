@@ -144,6 +144,7 @@ def configure_telegram_menu_on_startup() -> None:
 @app.on_event("startup")
 def startup_configure_telegram_menu():
     configure_telegram_menu_on_startup()
+    print("telegram_bot_status_startup=" + json.dumps(TELEGRAM_STATUS, ensure_ascii=False))
 
 @app.get("/api/telegram/bot-status")
 def telegram_bot_status():
