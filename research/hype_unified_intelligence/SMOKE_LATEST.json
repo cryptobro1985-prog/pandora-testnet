@@ -1,0 +1,8 @@
+{
+  "status": "success",
+  "run_id": "42970456491",
+  "sha": "4215c7662b5965cfff531bcf7084d542be9fae1d",
+  "tests": "research.hype_unified_intelligence.test_state_machine",
+  "research_only": true,
+  "real_orders": false
+}
