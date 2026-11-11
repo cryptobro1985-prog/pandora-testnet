@@ -1,8 +1,8 @@
 {
   "status": "success",
-  "run_id": "42970456491",
-  "sha": "4215c7662b5965cfff531bcf7084d542be9fae1d",
-  "tests": "research.hype_unified_intelligence.test_state_machine",
+  "run_id": "42971521256",
+  "sha": "8b575d88d3a420b18209bc10610560274040fc5f",
+  "tests": "state_machine + entry_path_targets",
   "research_only": true,
   "real_orders": false
 }
