@@ -1,0 +1,134 @@
+name: HYPE Ultra Survival V2 — Dynamic MFE Exit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/hype_strong_global_local/ultra_survival_dynamic_mfe_exit_v1.py"
+      - ".github/workflows/hype-ultra-survival-dynamic-mfe-exit.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: hype-ultra-survival-dynamic-mfe-exit
+  cancel-in-progress: false
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Compile frozen detector and dynamic exit study
+        run: |
+          python -m py_compile research/hype_local_only/replay_ultra_survival_v2.py
+          python -m py_compile research/hype_strong_global_local/ultra_survival_dynamic_mfe_exit_v1.py
+
+      - name: Recover exact preserved tapes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p tapes/may tapes/master_raw tapes/master
+          MAY_ID=13652089234
+          MASTER_ID=13650399622
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${MAY_ID}/zip" >/tmp/may.zip
+          unzip -q /tmp/may.zip -d tapes/may
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${MASTER_ID}/zip" >/tmp/master_wrapper.zip
+          unzip -q /tmp/master_wrapper.zip -d tapes/master_raw
+          python - <<'PY'
+          import pathlib,zipfile,shutil
+          raw=pathlib.Path("tapes/master_raw");target=pathlib.Path("tapes/master")
+          key="04_OCT04_NOV03/compact_1m.jsonl.gz"
+          direct=list(raw.rglob(key))
+          if direct:
+              root=direct[0].parents[1]
+              for p in root.iterdir():
+                  dst=target/p.name
+                  shutil.copytree(p,dst,dirs_exist_ok=True) if p.is_dir() else shutil.copy2(p,dst)
+          else:
+              chosen=None
+              for p in raw.rglob("*.zip"):
+                  try:
+                      with zipfile.ZipFile(p) as z:
+                          if key in z.namelist():chosen=p;break
+                  except zipfile.BadZipFile:pass
+              if chosen is None:raise SystemExit("canonical master unavailable")
+              with zipfile.ZipFile(chosen) as z:z.extractall(target)
+          for folder in ("01_JUL12_AUG07_FULL_MICRO","02_AUG08_SEP01","03_SEP01_OCT01","04_OCT04_NOV03"):
+              assert (target/folder/"compact_1m.jsonl.gz").is_file()
+              assert (target/folder/"labels.json.gz").is_file()
+          PY
+
+      - name: Select exit only on development blocks then score later block
+        id: score
+        run: |
+          set -euo pipefail
+          mkdir -p exit_out
+          python -m research.hype_strong_global_local.ultra_survival_dynamic_mfe_exit_v1 \
+            --block MAY tapes/may/compact_1m.jsonl.gz tapes/may/labels.json.gz \
+            --block JUL_AUG tapes/master/01_JUL12_AUG07_FULL_MICRO/compact_1m.jsonl.gz tapes/master/01_JUL12_AUG07_FULL_MICRO/labels.json.gz \
+            --block AUG_SEP tapes/master/02_AUG08_SEP01/compact_1m.jsonl.gz tapes/master/02_AUG08_SEP01/labels.json.gz \
+            --block SEP_OCT tapes/master/03_SEP01_OCT01/compact_1m.jsonl.gz tapes/master/03_SEP01_OCT01/labels.json.gz \
+            --block OCT_NOV tapes/master/04_OCT04_NOV03/compact_1m.jsonl.gz tapes/master/04_OCT04_NOV03/labels.json.gz \
+            --out exit_out/HYPE_ULTRA_SURVIVAL_DYNAMIC_MFE_EXIT_V1.json
+          python - <<'PY'
+          import json
+          x=json.load(open("exit_out/HYPE_ULTRA_SURVIVAL_DYNAMIC_MFE_EXIT_V1.json"))
+          assert x["real_orders"] is False
+          assert x["selected"]["stop_pct"] in (1.0,1.25,1.5,2.0)
+          print(json.dumps({"selected":x["selected"],"development":x["development"],
+                            "test":x["historical_later_test_OCT_NOV"],
+                            "may":x["MAY_diagnostic_not_used_for_exit_selection"],
+                            "verdict":x["verdict"]},separators=(",",":")))
+          PY
+
+      - name: Upload full trade exit report
+        if: steps.score.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-ULTRA-SURVIVAL-DYNAMIC-MFE-${{ github.run_id }}
+          path: exit_out/HYPE_ULTRA_SURVIVAL_DYNAMIC_MFE_EXIT_V1.json
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Publish latest result
+        if: always()
+        env:
+          SCORE_OUTCOME: ${{ steps.score.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=research/hype_strong_global_local/ULTRA_SURVIVAL_DYNAMIC_MFE_EXIT_LATEST.json
+          if test -s exit_out/HYPE_ULTRA_SURVIVAL_DYNAMIC_MFE_EXIT_V1.json; then
+            cp exit_out/HYPE_ULTRA_SURVIVAL_DYNAMIC_MFE_EXIT_V1.json "$OUT"
+          else
+            python - <<'PY'
+          import json,os,pathlib
+          pathlib.Path("research/hype_strong_global_local/ULTRA_SURVIVAL_DYNAMIC_MFE_EXIT_LATEST.json").write_text(json.dumps({
+            "status":"FAILED_BEFORE_REPORT","run_id":os.getenv("GITHUB_RUN_ID"),
+            "score_outcome":os.getenv("SCORE_OUTCOME"),"real_orders":False
+          },indent=2)+"\n")
+          PY
+          fi
+          git config user.name pandora-research-bot
+          git config user.email actions@users.noreply.github.com
+          git add "$OUT"
+          git commit -m "research(hype): publish frozen-Ultra dynamic MFE exit [skip ci]" || true
+          for i in 1 2 3 4; do
+            git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104 || true
+            git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104 && exit 0
+            sleep 3
+          done
+          exit 1
