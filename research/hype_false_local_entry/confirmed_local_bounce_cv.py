@@ -311,7 +311,7 @@ def main():
     ap.add_argument("--output",type=Path,required=True)
     ap.add_argument("--clean-cache",type=Path,help="Certified rich-micro cache (optional)")
     ap.add_argument("--clean-sha256",help="Required expected SHA256 when --clean-cache is set")
-    ap.add_argument("--decision-sampling",choices=("legacy_age_grid","completed_m1_events"),default="legacy_age_grid")
+    ap.add_argument("--decision-sampling",choices=("legacy_age_grid","completed_m1_events"),default="completed_m1_events")
     a=ap.parse_args()
     if bool(a.clean_cache) != bool(a.clean_sha256):
         ap.error("--clean-cache and --clean-sha256 must be provided together")
@@ -319,9 +319,11 @@ def main():
     a.output.parent.mkdir(parents=True,exist_ok=True)
     periods,rows=build(a.master,clean_index,decision_sampling=a.decision_sampling)
     out={"version":"HYPE-CONFIRMED-LOCAL-BOUNCE-ENTRY-CV-v2-inner-period-OOF",
-         "objective":"CONFIRM_LOCAL_THEN_ENTER_REVERSAL_MOVE_NOT_EXTREME_GUESS",
+         "objective":"POST_EXTREME_REVERSAL_CONFIRMATION_RESEARCH_BASELINE",
          "time_gate":False,"decision_sampling":a.decision_sampling,
-         "event_driven":a.decision_sampling == "completed_m1_events",
+         "event_driven":False,
+         "completed_m1_event_clock":a.decision_sampling == "completed_m1_events",
+         "supervision_warning":"Training still uses exact-terminal candidate membership. This is a research baseline, NOT validated post-extreme confirmation supervision or tick-level event-driven trading.",
          "sampling_warning":("Completed M1 bars are causal decision events, not tick-level L50 events; rich-micro alignment still requires validation." if a.decision_sampling == "completed_m1_events" else "Legacy predefined candidate-age snapshots; not event-driven."),
          "by_side":{},"real_orders":False,
          "predictor_coverage":predictor_coverage(rows),
