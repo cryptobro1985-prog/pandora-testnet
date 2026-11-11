@@ -37,7 +37,10 @@ class ReplayTest(unittest.TestCase):
 
     def test_gap_open_fills_worse_than_stop(self):
         def fix(rows):
-            rows[3].update(open=98.0,high=99,low=97.0,close=98.5)
+            # The entry is filled at bar 3 OPEN = 100. The next minute
+            # then gaps below its 99.65 stop and must fill at 98.
+            rows[3].update(open=100.0,high=100.1,low=99.95,close=100.0)
+            rows[4].update(open=98.0,high=99.0,low=97.0,close=98.5)
         tt=self._run(fix)
         self.assertEqual(tt[0]["reason"],"HARD_STOP")
         self.assertAlmostEqual(tt[0]["exit"],98.0)
