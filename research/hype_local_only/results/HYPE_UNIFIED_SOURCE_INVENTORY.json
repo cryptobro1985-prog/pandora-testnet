@@ -28,20 +28,6 @@
     }
   },
   {
-    "id": 13609083309,
-    "name": "HYPE-LOCAL-ONLY-EVIDENCE-42456390610",
-    "size_in_bytes": 4111237,
-    "created_at": "2026-11-08T07:43:26Z",
-    "expires_at": "2026-11-15T07:43:26Z",
-    "workflow_run": {
-      "head_branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
-      "head_repository_id": 1430598683,
-      "head_sha": "6fbe579ce13256c33b7c35008b5ad5aae3f34aa6",
-      "id": 42456390610,
-      "repository_id": 1430598683
-    }
-  },
-  {
     "id": 13611175339,
     "name": "HYPE-LOCAL-RAW-42459950734",
     "size_in_bytes": 3664097,
