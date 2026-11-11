@@ -1,90 +1,82 @@
 <!doctype html>
-<html lang="ru">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#09090b">
-<title>Instagram Intelligence</title>
+<html lang="ru"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#08090d"><title>Instagram Intelligence</title>
 <style>
-:root{--bg:#09090b;--card:#141419;--line:#2a2a33;--text:#f7f7fb;--muted:#9b9bab;--pink:#ff4d8d;--violet:#8b5cf6;--good:#8df5c8;--bad:#f7b4b4}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#22102d 0,#09090b 34%);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,Arial}
-main{max-width:1080px;margin:auto;padding:20px 14px 70px}.brand{font-size:25px;font-weight:900}.sub{color:var(--muted);margin:5px 0 20px}
-.search{display:flex;gap:9px}.search input{flex:1;min-width:0;background:#101014;border:1px solid var(--line);color:#fff;border-radius:15px;padding:15px 16px;font-size:16px}.search button{border:0;border-radius:15px;padding:0 21px;color:white;font-weight:850;background:linear-gradient(135deg,var(--pink),var(--violet))}
-.status{margin:12px 0;color:var(--muted)}.grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}.card{background:rgba(20,20,25,.95);border:1px solid var(--line);border-radius:19px;padding:17px;margin-top:13px}.profile{display:flex;gap:14px;align-items:center}.avatar{width:74px;height:74px;border-radius:50%;object-fit:cover;background:#222}.name{font-size:21px;font-weight:850}.muted{color:var(--muted)}.stats{display:flex;gap:20px;margin-top:14px}.stats b{display:block;font-size:18px}.row{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid #24242b}.row:first-child{border-top:0}.pill{font-size:11px;background:#24242d;border-radius:99px;padding:4px 8px}.good{color:var(--good)}.warn{color:var(--bad);font-size:12px}.bar{height:6px;background:#272730;border-radius:10px;overflow:hidden;margin-top:6px}.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--pink),var(--violet))}a{color:#c6a7ff}
-@media(max-width:720px){.grid{grid-template-columns:1fr}.search{flex-direction:column}.search button{height:49px}.stats{gap:12px;flex-wrap:wrap}}
-</style>
-</head>
+:root{--bg:#08090d;--card:#13141a;--line:#292b36;--text:#f5f6fb;--muted:#9699aa;--pink:#ff4d8d;--violet:#8b5cf6;--cyan:#42d5ff;--good:#7ef0bd;--bad:#ff8ea1;--amber:#ffd166}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at 15% 0,#281037 0,#08090d 34%);color:var(--text);font:14px/1.5 Inter,system-ui,-apple-system,Segoe UI,Arial}
+main{max-width:1180px;margin:auto;padding:18px 14px 80px}.brand{font-size:27px;font-weight:950;letter-spacing:-.7px}.sub{color:var(--muted);margin:4px 0 18px}
+.search{display:flex;gap:10px;position:sticky;top:0;z-index:5;padding:10px 0;background:linear-gradient(#08090df2,#08090dcc,transparent)}.search input{flex:1;min-width:0;background:#0e0f14;border:1px solid var(--line);color:#fff;border-radius:15px;padding:15px 16px;font-size:16px;outline:none}.search input:focus{border-color:#7455d9}.search button{border:0;border-radius:15px;padding:0 22px;color:white;font-weight:900;background:linear-gradient(135deg,var(--pink),var(--violet));cursor:pointer}
+.status{margin:8px 0 0;color:var(--muted)}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:13px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:13px}.card{background:linear-gradient(180deg,rgba(22,23,30,.97),rgba(15,16,22,.97));border:1px solid var(--line);border-radius:20px;padding:17px;margin-top:13px;box-shadow:0 15px 40px #0004}.profile{display:flex;gap:14px;align-items:center}.avatar{width:78px;height:78px;border-radius:50%;object-fit:cover;background:#222;border:2px solid #45315c}.name{font-size:22px;font-weight:900}.muted{color:var(--muted)}.stats{display:flex;gap:22px;flex-wrap:wrap;margin-top:14px}.stats b{display:block;font-size:20px}.small{font-size:12px}.row{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid #242631;align-items:flex-start}.row:first-child{border-top:0}.pill{font-size:11px;background:#252733;border:1px solid #343746;border-radius:99px;padding:4px 8px;display:inline-block;margin:2px}.good{color:var(--good)}.bad{color:var(--bad)}.amber{color:var(--amber)}.bar{height:6px;background:#272a35;border-radius:10px;overflow:hidden;margin-top:7px}.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--pink),var(--violet),var(--cyan))}a{color:#cbb5ff;text-decoration:none}h3{margin:0 0 10px;font-size:15px}h2{margin:20px 0 0;font-size:18px}.kpi{font-size:28px;font-weight:950}.kpiLabel{color:var(--muted);font-size:12px}
+.nav{display:flex;gap:7px;overflow:auto;padding:9px 0}.nav a{white-space:nowrap;border:1px solid var(--line);border-radius:999px;padding:8px 11px;background:#111217;color:#ddd}
+.graph{position:relative;height:360px;overflow:hidden;background:radial-gradient(circle at center,#201833 0,#0e1016 60%);border-radius:16px;border:1px solid #272a36}.node{position:absolute;transform:translate(-50%,-50%);padding:7px 10px;border-radius:999px;background:#242736;border:1px solid #4b4f64;font-size:11px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.node.target{background:linear-gradient(135deg,#7c3aed,#db2777);font-weight:900;border:0}.line{position:absolute;height:1px;background:#656b84;transform-origin:0 0;opacity:.45}
+.source-ok{color:var(--good)}.source-partial{color:var(--amber)}.source-bad{color:var(--bad)}
+pre{white-space:pre-wrap;word-break:break-word}
+@media(max-width:800px){.grid2,.grid3{grid-template-columns:1fr}.search{flex-direction:column}.search button{height:50px}.graph{height:430px}.stats{gap:14px}.brand{font-size:24px}}
+</style></head>
 <body><main>
 <div class="brand">Instagram Intelligence</div>
-<div class="sub">Один профиль → полный отчёт по наблюдаемой публичной активности и связям.</div>
+<div class="sub">Открытый профиль → публикации → комментарии → доступные лайки → followers/following snapshots → связи → история.</div>
 <div class="search"><input id="q" placeholder="@username или https://instagram.com/username"><button id="go">FULL SCAN</button></div>
 <div id="status" class="status">Готово к сканированию.</div>
+<div class="nav"><a href="#overview">Overview</a><a href="#relations">Relations</a><a href="#changes">Follow Δ</a><a href="#activity">Activity</a><a href="#graphSec">Graph</a><a href="#posts">Posts</a><a href="#timeline">Timeline</a><a href="#sources">Sources</a></div>
 <div id="out"></div>
 </main>
 <script>
 (function(){
-const byId=function(x){return document.getElementById(x)};
-const esc=function(s){return String(s==null?"":s).replace(/[&<>"']/g,function(m){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]})};
-const num=function(n){return n==null?"—":new Intl.NumberFormat("ru-RU").format(n)};
-const list=function(items,fn,empty){return items&&items.length?items.map(fn).join(""):'<div class="muted">'+(empty||"Нет наблюдаемых данных")+'</div>'};
-
+const E=s=>String(s==null?"":s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));
+const N=n=>n==null?"UNKNOWN":new Intl.NumberFormat("ru-RU").format(n);
+const arr=x=>Array.isArray(x)?x:[];
+const list=(xs,fn,empty)=>xs&&xs.length?xs.map(fn).join(""):'<div class="muted">'+(empty||"Нет наблюдаемых данных")+'</div>';
+const badge=b=>'<span class="pill">'+E(b)+'</span>';
+function sourceClass(s){return s==="ok"?"source-ok":(s==="partial"?"source-partial":"source-bad")}
+function graphHTML(g){
+  const nodes=arr(g&&g.nodes).slice(0,25); if(!nodes.length)return '<div class="muted">Нет данных для графа.</div>';
+  const w=700,h=360,cx=w/2,cy=h/2,center=nodes[0],peers=nodes.slice(1);
+  let lines='',ns='<div class="node target" style="left:50%;top:50%">'+E(center.label)+'</div>';
+  peers.forEach((n,i)=>{const a=(Math.PI*2*i/Math.max(1,peers.length))-Math.PI/2;const r=130+(i%3)*35;const x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r;
+    const dx=x-cx,dy=y-cy,len=Math.sqrt(dx*dx+dy*dy),deg=Math.atan2(dy,dx)*180/Math.PI;
+    lines+='<div class="line" style="left:50%;top:50%;width:'+len+'px;transform:rotate('+deg+'deg)"></div>';
+    ns+='<div class="node" style="left:'+(x/w*100)+'%;top:'+(y/h*100)+'%">'+E(n.label)+' <b>'+N(n.score)+'</b></div>';
+  });return '<div class="graph">'+lines+ns+'</div>';
+}
 async function scan(){
-  const q=byId("q").value.trim(); if(!q)return;
-  byId("status").textContent="Собираю профиль, публикации, комментарии, лайки и связи…";
-  byId("out").innerHTML="";
+  const q=document.getElementById("q").value.trim();if(!q)return;
+  document.getElementById("status").textContent="Сканирую несколько источников параллельно…";
+  document.getElementById("out").innerHTML="";
   try{
     const r=await fetch("/api/scan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({query:q,max_posts:30})});
-    const d=await r.json();
-    if(!r.ok) throw new Error(d.detail||("HTTP "+r.status));
-    render(d);
-    byId("status").textContent="Сканирование завершено · "+new Date().toLocaleTimeString("ru-RU");
-  }catch(e){byId("status").innerHTML='<span class="warn">'+esc(e.message)+'</span>'}
+    const d=await r.json();if(!r.ok)throw new Error(d.detail||"HTTP "+r.status);render(d);
+    document.getElementById("status").textContent="Готово · "+new Date().toLocaleTimeString("ru-RU");
+  }catch(e){document.getElementById("status").innerHTML='<span class="bad">'+E(e.message)+'</span>'}
 }
-
 function render(d){
-  const p=d.profile||{}, rel=d.relationships||[], ch=d.changes||{}, events=d.events||[], posts=d.posts||[];
-  const max=Math.max.apply(null,[1].concat(rel.slice(0,20).map(function(x){return x.score||0})));
-  let html='';
-  html+='<div class="grid">';
-  html+='<section class="card"><div class="profile">';
-  if(p.profile_picture_url) html+='<img class="avatar" src="'+esc(p.profile_picture_url)+'" onerror="this.style.display=\'none\'">';
-  html+='<div><div class="name">'+esc(p.name||p.username||d.username)+'</div><div class="muted">@'+esc(d.username)+'</div></div></div>';
-  html+='<div class="stats"><div><b>'+num(p.followers_count)+'</b><span class="muted">followers</span></div><div><b>'+num(p.follows_count)+'</b><span class="muted">following</span></div><div><b>'+num(p.media_count)+'</b><span class="muted">posts</span></div></div><p>'+esc(p.biography||"")+'</p></section>';
-  html+='<section class="card"><div class="row"><span>Публикаций собрано</span><b>'+posts.length+'</b></div><div class="row"><span>Событий взаимодействия</span><b>'+events.length+'</b></div><div class="row"><span>Связанных аккаунтов</span><b>'+rel.length+'</b></div><div class="row"><span>Snapshot</span><span class="pill">'+esc((ch.snapshot_at||"").replace("T"," ").slice(0,19))+'</span></div></section></div>';
+  const p=d.profile||{},rel=arr(d.relationships),ch=d.changes||{},aq=d.audience_quality||{},posts=arr(d.posts),events=arr(d.events),tl=arr(d.timeline);
+  const inbound=rel.slice().sort((a,b)=>(b.inbound_score||0)-(a.inbound_score||0));
+  const outbound=rel.slice().sort((a,b)=>(b.outbound_score||0)-(a.outbound_score||0));
+  const max=Math.max(1,...rel.slice(0,20).map(x=>x.score||0));
+  let h='<section id="overview" class="grid2">';
+  h+='<div class="card"><div class="profile">'+(p.profile_picture_url?'<img class="avatar" src="'+E(p.profile_picture_url)+'" onerror="this.style.display=\'none\'">':'')+'<div><div class="name">'+E(p.name||p.username||d.username)+'</div><div class="muted">@'+E(d.username)+'</div></div></div><div class="stats"><div><b>'+N(p.followers_count)+'</b><span class="muted">followers</span></div><div><b>'+N(p.follows_count)+'</b><span class="muted">following</span></div><div><b>'+N(p.media_count)+'</b><span class="muted">posts</span></div></div><p>'+E(p.biography||"")+'</p></div>';
+  h+='<div class="card"><div class="grid3"><div><div class="kpi">'+posts.length+'</div><div class="kpiLabel">POSTS LOADED</div></div><div><div class="kpi">'+events.length+'</div><div class="kpiLabel">OBSERVED EVENTS</div></div><div><div class="kpi">'+rel.length+'</div><div class="kpiLabel">RELATIONSHIPS</div></div></div><div class="row"><span>Followers list</span><b class="'+(ch.followers_observed?"good":"amber")+'">'+(ch.followers_observed?"OBSERVED":"UNKNOWN")+'</b></div><div class="row"><span>Following list</span><b class="'+(ch.following_observed?"good":"amber")+'">'+(ch.following_observed?"OBSERVED":"UNKNOWN")+'</b></div></div></section>';
 
-  html+='<div class="grid"><section class="card"><h3>Кто взаимодействует чаще</h3>';
-  html+=list(rel.slice(0,20),function(x,i){
-    const width=Math.max(3,(x.score/max)*100);
-    return '<div class="row"><div style="flex:1"><b>'+(i+1)+'. @'+esc(x.username)+'</b><div class="muted">комм. '+(x.comments_in||0)+' · лайки '+(x.likes_in||0)+' · упоминания '+(x.mentions_out||0)+'</div><div class="bar"><i style="width:'+width+'%"></i></div></div><b>'+x.score+'</b></div>';
-  });
-  html+='</section>';
+  h+='<h2 id="relations">Relationship Intelligence</h2><section class="grid2">';
+  h+='<div class="card"><h3>TOP INBOUND — кто взаимодействует с профилем</h3>'+list(inbound.slice(0,20),(x,i)=>'<div class="row"><div style="flex:1"><b>'+(i+1)+'. @'+E(x.username)+'</b><div class="muted small">comments '+(x.comments_in||0)+' · likes '+(x.likes_in||0)+' · score '+N(x.inbound_score)+'</div><div>'+arr(x.badges).map(badge).join("")+'</div><div class="bar"><i style="width:'+Math.max(3,(x.score/max)*100)+'%"></i></div></div><b>'+N(x.score)+'</b></div>')+'</div>';
+  h+='<div class="card"><h3>TOP OUTBOUND — с кем взаимодействует профиль</h3>'+list(outbound.filter(x=>(x.outbound_score||0)>0).slice(0,20),(x,i)=>'<div class="row"><div><b>'+(i+1)+'. @'+E(x.username)+'</b><div class="muted small">mentions '+(x.mentions_out||0)+' · tags '+(x.tags_out||0)+' · coauthors '+(x.coauthors_out||0)+'</div>'+arr(x.badges).map(badge).join("")+'</div><b>'+N(x.outbound_score)+'</b></div>')+'</div></section>';
 
-  html+='<section class="card"><h3>Изменения подписок между наблюдениями</h3>';
-  html+='<div class="row"><span class="good">Новые подписчики</span><b>'+(ch.followers_observed?((ch.new_followers||[]).length):'UNKNOWN')+'</b></div>';
-  html+=list(ch.new_followers,function(x){return '<div class="row"><span>@'+esc(x)+'</span><span class="pill">followed</span></div>'});
-  html+='<div class="row"><span class="warn">Отписались</span><b>'+(ch.followers_observed?((ch.lost_followers||[]).length):'UNKNOWN')+'</b></div>';
-  html+=list(ch.lost_followers,function(x){return '<div class="row"><span>@'+esc(x)+'</span><span class="pill">unfollowed</span></div>'});
-  html+='<div class="row"><span class="good">TARGET подписался</span><b>'+(ch.following_observed?((ch.new_following||[]).length):'UNKNOWN')+'</b></div>';
-  html+=list(ch.new_following,function(x){return '<div class="row"><span>@'+esc(x)+'</span><span class="pill">new following</span></div>'});
-  html+='<div class="row"><span class="warn">TARGET отписался</span><b>'+(ch.following_observed?((ch.unfollowed||[]).length):'UNKNOWN')+'</b></div>';
-  html+=list(ch.unfollowed,function(x){return '<div class="row"><span>@'+esc(x)+'</span><span class="pill">unfollowed</span></div>'});
-  html+='</section></div>';
+  h+='<h2 id="changes">Followers / Following Changes</h2><section class="grid2"><div class="card"><h3>Входящие изменения</h3><div class="row"><span class="good">Новые подписчики</span><b>'+(ch.followers_observed?arr(ch.new_followers).length:"UNKNOWN")+'</b></div>'+list(arr(ch.new_followers),x=>'<div class="row"><span>@'+E(x)+'</span><span class="pill">followed</span></div>')+'<div class="row"><span class="bad">Отписались</span><b>'+(ch.followers_observed?arr(ch.lost_followers).length:"UNKNOWN")+'</b></div>'+list(arr(ch.lost_followers),x=>'<div class="row"><span>@'+E(x)+'</span><span class="pill">unfollowed</span></div>')+'</div>';
+  h+='<div class="card"><h3>Исходящие изменения</h3><div class="row"><span class="good">TARGET подписался</span><b>'+(ch.following_observed?arr(ch.new_following).length:"UNKNOWN")+'</b></div>'+list(arr(ch.new_following),x=>'<div class="row"><span>@'+E(x)+'</span><span class="pill">new following</span></div>')+'<div class="row"><span class="bad">TARGET отписался</span><b>'+(ch.following_observed?arr(ch.unfollowed).length:"UNKNOWN")+'</b></div>'+list(arr(ch.unfollowed),x=>'<div class="row"><span>@'+E(x)+'</span><span class="pill">unfollowed</span></div>')+'</div></section>';
 
-  html+='<section class="card"><h3>Последние наблюдаемые взаимодействия</h3>';
-  html+=list(events.slice(0,100),function(e){return '<div class="row"><div><b>@'+esc(e.actor)+'</b><div class="muted">'+esc(e.kind)+' '+esc(e.text||"")+'</div></div>'+(e.url?'<a href="'+esc(e.url)+'" target="_blank">post</a>':'')+'</div>'});
-  html+='</section>';
+  h+='<h2 id="activity">Audience / Engagement</h2><section class="grid3"><div class="card"><div class="kpi">'+(aq.status==="ok"?N(aq.engaged_followers):"UNKNOWN")+'</div><div class="kpiLabel">ENGAGED FOLLOWERS OBSERVED</div></div><div class="card"><div class="kpi">'+(aq.status==="ok"?N(aq.ghost_candidates):"UNKNOWN")+'</div><div class="kpiLabel">GHOST CANDIDATES</div></div><div class="card"><div class="kpi">'+(aq.status==="ok"?N(aq.ghost_percentage)+"%":"UNKNOWN")+'</div><div class="kpiLabel">GHOST RATIO (OBSERVED WINDOW)</div></div></section>';
 
-  html+='<section class="card"><h3>Публикации</h3>';
-  html+=list(posts.slice(0,30),function(pst){return '<div class="row"><div><b>'+esc((pst.caption||"Публикация").slice(0,90))+'</b><div class="muted">♥ '+num(pst.like_count)+' · 💬 '+num(pst.comments_count)+' · конкретных likers: '+((pst.likers||[]).length)+'</div></div>'+(pst.permalink?'<a href="'+esc(pst.permalink)+'" target="_blank">открыть</a>':'')+'</div>'});
-  html+='</section>';
+  h+='<h2 id="graphSec">Relationship Graph</h2><section class="card">'+graphHTML(d.graph)+'</section>';
 
-  html+='<section class="card"><h3>Покрытие источников</h3>';
-  (d.sources||[]).forEach(function(s){html+='<div class="row"><span>'+esc(s.source)+'</span><b class="'+(s.status==="ok"?"good":"warn")+'">'+esc(s.status)+'</b></div>'});
-  (d.warnings||[]).forEach(function(w){html+='<div class="warn">'+esc(w)+'</div>'});
-  html+='<p class="muted">UNKNOWN ≠ 0. Если Instagram не отдал список лайкнувших или followers/following, приложение не придумывает данные. Просмотры профиля и история того, какие профили человек открывал, публично не доступны.</p></section>';
-  byId("out").innerHTML=html;
+  h+='<h2 id="posts">Posts / Reels Intelligence</h2><section class="card">'+list(posts.slice(0,40),p=>'<div class="row"><div style="max-width:75%"><b>'+E((p.caption||"Публикация").slice(0,120))+'</b><div class="muted small">'+E(p.timestamp||"")+' · ♥ '+N(p.like_count)+' · 💬 '+N(p.comments_count)+'</div><div>'+arr(p.mentions).map(x=>badge("@"+x)).join("")+arr(p.tagged_users).map(x=>badge("tag:"+x)).join("")+arr(p.coauthors).map(x=>badge("coauthor:"+x)).join("")+'</div>'+(p.location&&p.location.name?'<div class="small muted">location: '+E(p.location.name)+'</div>':'')+'</div>'+(p.permalink?'<a target="_blank" href="'+E(p.permalink)+'">открыть</a>':'')+'</div>')+'</section>';
+
+  h+='<h2 id="timeline">Timeline</h2><section class="card">'+list(tl.slice(0,150),e=>'<div class="row"><div><b>@'+E(e.actor||d.username)+'</b> <span class="pill">'+E(e.kind)+'</span><div class="muted small">'+E(e.timestamp||"")+' '+E((e.text||"").slice(0,180))+'</div></div>'+(e.url?'<a target="_blank" href="'+E(e.url)+'">source</a>':'')+'</div>')+'</section>';
+
+  h+='<h2 id="sources">Sources / Coverage</h2><section class="card">'+arr(d.sources).map(s=>'<div class="row"><span>'+E(s.source)+'</span><b class="'+sourceClass(s.status)+'">'+E(s.status||"unknown")+'</b></div>').join("")+arr(d.warnings).map(w=>'<div class="bad small">'+E(w)+'</div>').join("")+'<p class="muted">UNKNOWN ≠ 0. Identity of profile viewers, browsing history and private messages are not public Instagram data and are never fabricated. Outgoing likes/comments are shown only when directly observed by an enabled legitimate collector.</p></section>';
+  document.getElementById("out").innerHTML=h;
 }
-byId("go").onclick=scan;
-byId("q").addEventListener("keydown",function(e){if(e.key==="Enter")scan()});
+document.getElementById("go").onclick=scan;document.getElementById("q").addEventListener("keydown",e=>{if(e.key==="Enter")scan()});
 })();
 </script></body></html>
