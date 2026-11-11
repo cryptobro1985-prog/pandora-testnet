@@ -129,6 +129,77 @@ def target_records(cands,sec5,mins):
     return out
 
 
+
+def attach_positioning_lifecycle(records):
+    """Derive causal positioning/unwind features along each candidate trajectory.
+
+    These are proxies, not exact exchange-side open/close labels: public OI does not
+    identify whether a specific trade opened or closed a long/short.  The features
+    combine OI trajectory, price reversal, aggressor flow, account ratio and
+    liquidation exhaustion without fabricating missing observations.
+    """
+    groups={}
+    for r in records:
+        groups.setdefault(str(r.get("candidate_id")),[]).append(r)
+    for rows in groups.values():
+        rows.sort(key=lambda x:int(x.get("snapshot_ts_ms",0)))
+        base=None
+        for r in rows:
+            f=r.get("features") or {}
+            oi=f.get("fullmicro_open_interest_sum_open_interest")
+            oiv=f.get("fullmicro_open_interest_sum_open_interest_value")
+            ratio=f.get("fullmicro_account_long_short_ratio")
+            if base is None:
+                base={"oi":oi if finite(oi) else None,
+                      "oiv":oiv if finite(oiv) else None,
+                      "ratio":ratio if finite(ratio) else None,
+                      "old_eff":None,
+                      "liq":None}
+                side=str(r.get("side"))
+                old_eff=f.get("sell_eff_60s" if side=="LOW" else "buy_eff_60s")
+                liq=f.get("fullmicro_long_liq_notional_60s" if side=="LOW" else "fullmicro_short_liq_notional_60s")
+                if finite(old_eff): base["old_eff"]=float(old_eff)
+                if finite(liq): base["liq"]=float(liq)
+            if base.get("oi") is not None and finite(oi):
+                d=float(oi)-float(base["oi"])
+                f["positioning_oi_delta_from_candidate"]=d
+                if abs(float(base["oi"]))>1e-12:
+                    f["positioning_oi_delta_pct_from_candidate"]=d/abs(float(base["oi"]))
+            if base.get("oiv") is not None and finite(oiv):
+                d=float(oiv)-float(base["oiv"])
+                f["positioning_oi_notional_delta_from_candidate"]=d
+                if abs(float(base["oiv"]))>1e-12:
+                    f["positioning_oi_notional_delta_pct_from_candidate"]=d/abs(float(base["oiv"]))
+            if base.get("ratio") is not None and finite(ratio):
+                f["positioning_long_short_ratio_delta_from_candidate"]=float(ratio)-float(base["ratio"])
+
+            side=str(r.get("side")); rev_bps=float(f.get("retrace_bps",0.0) or 0.0)
+            rev_flow=float(f.get("rev_flow_60s",0.0) or 0.0)
+            old_eff=f.get("sell_eff_60s" if side=="LOW" else "buy_eff_60s")
+            if base.get("old_eff") is not None and finite(old_eff):
+                f["positioning_old_side_efficiency_decay_60s"]=float(base["old_eff"])-float(old_eff)
+
+            liq=f.get("fullmicro_long_liq_notional_60s" if side=="LOW" else "fullmicro_short_liq_notional_60s")
+            if base.get("liq") is not None and finite(liq):
+                b=float(base["liq"])
+                if b>1e-12:
+                    ratio_now=float(liq)/b
+                    f["positioning_old_side_liq_ratio_from_candidate"]=ratio_now
+                    f["positioning_old_side_liq_exhaustion"]=1.0-ratio_now
+
+            oi_pct=f.get("positioning_oi_delta_pct_from_candidate")
+            if finite(oi_pct):
+                op=float(oi_pct)
+                # Positive OI while the reversal side gains price/flow = probable
+                # fresh positioning in the new direction. Falling OI with a
+                # reversal = probable unwind/capitulation of the old direction.
+                f["positioning_new_side_opening_proxy"]=max(op,0.0)*max(rev_flow,0.0)*max(rev_bps,0.0)
+                f["positioning_old_side_closing_proxy"]=max(-op,0.0)*max(rev_flow,0.0)*max(rev_bps,0.0)
+            decay=f.get("positioning_old_side_efficiency_decay_60s")
+            if finite(decay):
+                f["positioning_control_transfer_proxy"]=max(float(decay),0.0)*max(rev_flow,0.0)*max(rev_bps,0.0)
+    return records
+
 def sha(path):
     h=hashlib.sha256()
     with open(path,"rb") as f:
@@ -177,7 +248,7 @@ def main():
 
     ratio_rows=base.fetch_account_ratio()
     records=base.attach_account_ratio(records,ratio_rows)
-    records=base.enrich(src,records,schemas)
+    records=base.enrich(src,records,schemas)\n    records=attach_positioning_lifecycle(records)
 
     observed=set(range(1,44))|{77,78,79,80,116}
     if src.counts.get("orderbook",0) and any(r["features"].get("fullmicro_book_valid")==1.0 for r in records):
