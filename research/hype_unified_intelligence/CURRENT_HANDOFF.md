@@ -255,3 +255,76 @@ Next: verify CI; audit raw Nov8–10 source timestamps (exchange vs local
 receipt vs decision) for actual future-event inclusion, stale snapshots,
 missing streams, and unmatched source generations. Then freeze causal
 features and evaluate on fresh untouched forward. Real orders OFF.
+
+## Full-micro economic strategy search checkpoint — 2026-11-11
+
+User requested actual, maximally profitable and leveraged HYPE strategy from
+ALL historically available 116-point contract inputs. **Do not fabricate a
+100% accurate or guaranteed profitable strategy**. Research must prioritize
+economic net edge, robust MFE capture and real execution; if no robust edge,
+choose FLAT and report REJECT.
+
+**Data reality:** full-micro Jul12–Aug07 includes 116-point contract but
+only 83/86 causal input IDs observed/derived; other 28 target/evaluation and
+2 metadata fields cannot be predictors. 1,252 300s candidates, 161 crossed
+L50 books excluded; 1,091 quality-clean. 289 numerically derived causal
+features were evaluated, alongside price-only/flow/L50/OI/liquidations
+ablations. Training 646, development 216, last July already-inspected
+historical test 219, with 121-minute purge.
+
+**Economic entry replay (verified run 42979620987, PASS):**
+`research/hype_unified_intelligence/fullmicro_economic_candidate_search_v1.py`
+`research/hype_unified_intelligence/FULLMICRO_ECONOMIC_ENTRY_LATEST.json`
+- LONG and SHORT heads separately, training target +0.75% before −0.40%
+  within 60m, next-minute OPEN entry, 0.12% costs estimated, 30m cooldown.
+- Historical test net underlying: ridge price+flow −2.651% (7 trades);
+  ridge all289 −7.354% (23); ExtraTrees price+flow −0.720% (8);
+  ExtraTrees all289 −2.663% (12); HGB price+flow −0.424% (10);
+  HGB all289 **+0.617%** (9).
+- **HGB all289 development = −2.006% on 5 trades**. Do not select it
+  because its already-inspected historical test happened to be positive.
+- The baseline selecting all 300s candidates had about −8.249%
+  underlying / 38 test trades (local independent diagnostic).
+- Verdict: NO reproducibly profitable underlying strategy across these
+  development and historical test splits.
+
+**MFE HOLD / corrective exit replay (verified run 42979958634, PASS):**
+`research/hype_unified_intelligence/fullmicro_mfe_hold_replay_v1.py`
+`research/hype_unified_intelligence/FULLMICRO_MFE_HOLD_LATEST.json`
+- 180m HOLD, 0.60% adverse underlying emergency stop,
+  0.12% cost, next-bar execution, dev-selected entry thresholds.
+- Price+flow opposing-flow-confirmed EXIT: dev −2.552%, test −1.319%;
+  price+flow pure MFE recoil: dev −1.904%, test −0.187%;
+  full289 flow-confirmed EXIT: dev −2.175%, test −2.746%;
+  full289 bare MFE recoil: dev −1.733%, test −2.073%.
+- None is positive in both development and historical test. They all FAIL
+  robust positive expectancy criterion. MFE capture remains inadequate;
+  price+flow trail test median ~0.308 net/MFE on 9 trades (not stable).
+
+**Anti-overfit/verdict:** these are previously inspected July segments, NOT
+new untouched OOS, with insufficient independent events. No verified
+execution, bid/ask, market-impact, or liquidation engine. Do not apply
+leverage to a statistically unsupported underlying edge. Paper/shadow only,
+real orders OFF.
+
+**Reproducible permanent assets:**
+- `research/hype_unified_intelligence/FULLMICRO_ECONOMIC_SEARCH_2026-11-11.md`
+- `research/hype_unified_intelligence/EXPERIMENT_LEDGER.jsonl`
+- `.github/workflows/hype-fullmicro-economic-search-v1.yml`
+- `.github/workflows/hype-fullmicro-mfe-hold-v1.yml`
+
+Next workstream (not repeating rejected models):
+1. Audit November raw L50/orderbook/mark/OI/trades/liq timestamp sync,
+   crossed-book and stale quote/lag. Decide which 86 input families are truly
+   reproducible live AND historically. Do not zero-fill missing.
+2. Define **intraday continuous-scan** LONG/SHORT ignition/continuation models,
+   not only sparse 300s Local proposals; candidate-only entries miss too much
+   daily path. Use the highest-coverage, synchronized and quality-valid
+   forward snapshots.
+3. Train economic outcomes (MFE/MAE/time-to-MFE/first-hit on several horizons)
+   separately for LONG and SHORT. Fit model/thresholds solely on development.
+4. Compare MFE-protecting HOLD/CLOSE/FLIP and strict first-trade sequential
+   execution with executable mark/bid/ask if synchronized.
+5. Require a genuinely NEW forward session, sufficient trades on independent
+   market regimes, risk-of-ruin and leverage robustness before any
+   strategy acceptance. Never tune on already inspected July/Oct/Nov8-10.
