@@ -36,6 +36,7 @@ def audit(bars):
                      if s.core_flip and s.stage in ("HARD_CONFIRMED", "ULTRA_CONFIRMED"))
     gaps = [(b.ts_ms - a.ts_ms) / 60000 for a, b in zip(flips, flips[1:])]
     by_day = Counter(datetime.fromtimestamp(s.ts_ms / 1000, tz=timezone.utc).date().isoformat() for s in flips)
+    by_hour = Counter(s.ts_ms // 3600000 for s in flips)
     if first_ts is not None:
         day = datetime.fromtimestamp(first_ts / 1000, tz=timezone.utc).date()
         last_day = datetime.fromtimestamp(last_ts / 1000, tz=timezone.utc).date()
@@ -54,6 +55,9 @@ def audit(bars):
         "flips_within_15m_of_previous": sum(g <= 15 for g in gaps),
         "flips_within_60m_of_previous": sum(g <= 60 for g in gaps),
         "daily_flip_counts": dict(sorted(by_day.items())),
+        "max_flips_per_utc_hour": max(by_hour.values(), default=0),
+        "utc_hours_with_at_least_5_flips": sum(v >= 5 for v in by_hour.values()),
+        "adjacent_flip_pairs_within_5m_fraction": sum(g <= 5 for g in gaps) / len(gaps) if gaps else None,
         "daily_median_flips": median(by_day.values()) if by_day else None,
         "core_side_alternation_violations": sum(a.side == b.side for a, b in zip(flips, flips[1:])),
         "warning": "No labels used; this is a churn diagnostic, not a first-signal precision or untouched OOS estimate.",
