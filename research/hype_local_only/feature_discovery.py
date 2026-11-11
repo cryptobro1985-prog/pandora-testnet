@@ -105,6 +105,20 @@ def _book_features(state,price,side):
     asks=sorted((getattr(state,"book_asks",{}) or {}).items())[:50]
     if not bids or not asks:
         return {"book_quality_valid":0.0}
+    # If the source exposes an exchange-time book timestamp, reject stale or
+    # future-dated quotes rather than treating them as current liquidity.
+    # Missing timestamp is explicitly unknown (not a fabricated fresh quote).
+    book_ts=getattr(state,"book_ts_ms",None)
+    decision_ts=getattr(state,"last_ts_ms",None)
+    if book_ts is not None:
+        if (not finite(book_ts) or not finite(decision_ts)
+            or book_ts<=0 or decision_ts<=0):
+            return {"book_quality_valid":0.0,"book_quality_timestamp_invalid":1.0}
+        age_ms=decision_ts-book_ts
+        if age_ms<0:
+            return {"book_quality_valid":0.0,"book_quality_future":1.0}
+        if age_ms>5000:
+            return {"book_quality_valid":0.0,"book_quality_stale":1.0}
     # Do NOT clamp negative spreads to zero. A crossed/locked or malformed
     # book is an invalid executable quote, not a valid low-spread signal.
     # Keep all derived depth/microprice features absent when book is bad.
