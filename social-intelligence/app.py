@@ -96,6 +96,32 @@ async def _bounded(coro, source, timeout=22):
     except Exception as e:
         return {"status":"unavailable","source":source,"detail":type(e).__name__}
 
+@app.get("/api/smoke")
+async def smoke():
+    result=await scan(ScanRequest(query="instagram",max_posts=8))
+    comments=sum(1 for e in result.get("events",[]) if e.get("kind")=="comment_in")
+    likes=sum(1 for e in result.get("events",[]) if e.get("kind")=="like_in")
+    mentions=sum(1 for e in result.get("events",[]) if e.get("kind")=="mention_out")
+    aggregate_like_posts=sum(1 for p in result.get("posts",[]) if p.get("like_count") is not None)
+    concrete_liker_posts=sum(1 for p in result.get("posts",[]) if p.get("likers"))
+    return {
+      "ok":True,
+      "target":result.get("username"),
+      "profile_present":bool(result.get("profile")),
+      "posts":len(result.get("posts",[])),
+      "comment_events":comments,
+      "like_identity_events":likes,
+      "mention_events":mentions,
+      "relationships":len(result.get("relationships",[])),
+      "followers_observed":result.get("followers") is not None,
+      "following_observed":result.get("following") is not None,
+      "aggregate_like_posts":aggregate_like_posts,
+      "concrete_liker_posts":concrete_liker_posts,
+      "sources":result.get("sources",[]),
+      "warnings":result.get("warnings",[])[:10],
+      "unknown_is_not_zero":result.get("limits",{}).get("unknown_is_not_zero") is True
+    }
+
 @app.post("/api/scan")
 async def scan(req:ScanRequest):
     import asyncio
