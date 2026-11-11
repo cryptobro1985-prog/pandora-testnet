@@ -1,0 +1,139 @@
+name: HYPE FULL-MICRO Crossed Book Audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/hype_unified_intelligence/fullmicro_quote_audit_v1.py"
+      - "research/hype_unified_intelligence/test_fullmicro_quote_audit_v1.py"
+      - ".github/workflows/hype-fullmicro-quality-ablation.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: hype-fullmicro-crossedbook-v1
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install minimal benchmark dependencies and test quality
+        run: |
+          python -m pip install numpy scikit-learn
+          python -m py_compile research/hype_unified_intelligence/fullmicro_quote_audit_v1.py
+          python -m unittest research.hype_unified_intelligence.test_fullmicro_quote_audit_v1 -v
+
+      - name: Recover saved historical FULL-MICRO source
+        id: recover
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p recovered
+          ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=HYPE-HISTORY-20260712-20261103-MASTER" --jq '.artifacts|map(select((.expired|not) and .name=="HYPE-HISTORY-20260712-20261103-MASTER"))|sort_by(.created_at)|reverse|.[0].id//empty')"
+          test -n "$ID" || { echo "missing preserved HYPE historical master artifact"; exit 2; }
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$ID/zip" > /tmp/hype_master_artifact.zip
+          python - <<'PY'
+          import pathlib,shutil,zipfile
+          source=pathlib.Path('/tmp/hype_master_artifact.zip')
+          test='01_JUL12_AUG07_FULL_MICRO/candidate_snapshots_full_micro.jsonl.gz'
+          with zipfile.ZipFile(source) as z:
+              if test in z.namelist():
+                  shutil.copy2(source,'recovered/master.zip')
+              else:
+                  z.extractall('recovered/raw')
+                  cand=[]
+                  for f in pathlib.Path('recovered/raw').rglob('*.zip'):
+                      try:
+                          with zipfile.ZipFile(f) as inner:
+                              if test in inner.namelist():
+                                  cand.append(f)
+                      except zipfile.BadZipFile:
+                          continue
+                  if not cand:
+                      raise SystemExit('retained master does not contain the required causal fullmicro snapshots')
+                  shutil.copy2(cand[0],'recovered/master.zip')
+          print('verified fullmicro source',pathlib.Path('recovered/master.zip').stat().st_size)
+          PY
+          echo "master_artifact_id=$ID" >> "$GITHUB_OUTPUT"
+
+      - name: Run independent clean-book family ablations
+        id: score
+        run: |
+          set -euo pipefail
+          mkdir -p fullmicro_out
+          python -m research.hype_unified_intelligence.fullmicro_quote_audit_v1 \
+            --master recovered/master.zip \
+            --out fullmicro_out/HYPE_FULLMICRO_QUALITY_ABLATION_V1.json
+          python - <<'PY'
+          import json
+          p='fullmicro_out/HYPE_FULLMICRO_QUALITY_ABLATION_V1.json'
+          j=json.load(open(p))
+          assert not j["real_orders"] and not j["promotable"]
+          assert j["audit"]["total_300s"]>0
+          assert j["audit"]["invalid_book_300s"]>0
+          print('book_crossed',j["audit"]["invalid_book_300s"])
+          print('valid',j["valid_300s"])
+          print('verdict',j["verdict"])
+          PY
+
+      - name: Upload full reproducible report
+        if: steps.score.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-FULLMICRO-CROSSEDBOOK-${{ github.run_id }}
+          path: fullmicro_out/HYPE_FULLMICRO_QUALITY_ABLATION_V1.json
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Publish report and explicit failure gate
+        if: always()
+        shell: bash
+        env:
+          SCORING_OUTCOME: ${{ steps.score.outcome }}
+          MASTER_ARTIFACT_ID: ${{ steps.recover.outputs.master_artifact_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p research/hype_unified_intelligence
+          OUT=research/hype_unified_intelligence/FULLMICRO_QUALITY_ABLATION_LATEST.json
+          if test -s fullmicro_out/HYPE_FULLMICRO_QUALITY_ABLATION_V1.json; then
+            cp fullmicro_out/HYPE_FULLMICRO_QUALITY_ABLATION_V1.json "$OUT"
+          else
+            python - <<'PY'
+          import json,os,pathlib
+          p=pathlib.Path('research/hype_unified_intelligence/FULLMICRO_QUALITY_ABLATION_LATEST.json')
+          p.write_text(json.dumps({
+            "status":"WORKFLOW_FAILED_BEFORE_VERIFIED_REPORT",
+            "scoring_outcome":os.getenv("SCORING_OUTCOME"),
+            "master_artifact_id":os.getenv("MASTER_ARTIFACT_ID"),
+            "github_run_id":os.getenv("GITHUB_RUN_ID"),
+            "real_orders":False,
+            "promotable":False
+          },indent=2)+'\n')
+          PY
+          fi
+          git config user.name pandora-research-bot
+          git config user.email actions@users.noreply.github.com
+          git add "$OUT"
+          git commit -m "research(hype): persist fullmicro crossed-book quality ablation [skip ci]" || true
+          for ATTEMPT in 1 2 3 4; do
+            git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104 || true
+            git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104 && exit 0
+            sleep 3
+          done
+          exit 1
