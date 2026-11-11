@@ -1,4 +1,4 @@
-name: HYPE Rich Strong-Days Collector Sep-Oct 2026
+name: HYPE Fast 7-Missing-Layers Strong Days
 
 on:
   workflow_dispatch:
@@ -7,7 +7,6 @@ on:
       - research/hype-h1-local-v5-oi-microstructure-20261104
     paths:
       - ".github/workflows/hype-rich-strong-days-sep-oct.yml"
-      - "research/hype_full_micro_202607/build_dense_full_micro.py"
       - "research/hype_full_micro_202607/collect_missing_rich_layers.py"
 
 permissions:
@@ -15,46 +14,32 @@ permissions:
   actions: read
 
 concurrency:
-  group: hype-rich-strong-days-sep-oct-v1
+  group: hype-fast-7-missing-strong-days
   cancel-in-progress: true
 
 jobs:
   collect:
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 8
       matrix:
         include:
-          - id: SEP03
-            start: "2026-09-02T12:00:00+00:00"
-            end:   "2026-09-04T12:00:00+00:00"
-          - id: SEP10
-            start: "2026-09-09T12:00:00+00:00"
-            end:   "2026-09-11T12:00:00+00:00"
-          - id: SEP17_18
-            start: "2026-09-16T12:00:00+00:00"
-            end:   "2026-09-19T12:00:00+00:00"
-          - id: SEP30
-            start: "2026-09-29T12:00:00+00:00"
-            end:   "2026-10-01T12:00:00+00:00"
-          - id: OCT05
-            start: "2026-10-04T12:00:00+00:00"
-            end:   "2026-10-06T12:00:00+00:00"
-          - id: OCT08
-            start: "2026-10-07T12:00:00+00:00"
-            end:   "2026-10-09T12:00:00+00:00"
-          - id: OCT12
-            start: "2026-10-11T12:00:00+00:00"
-            end:   "2026-10-13T12:00:00+00:00"
-          - id: OCT22
-            start: "2026-10-21T12:00:00+00:00"
-            end:   "2026-10-23T12:00:00+00:00"
-          - id: OCT26_30
-            start: "2026-10-25T12:00:00+00:00"
-            end:   "2026-10-31T12:00:00+00:00"
+          - { id: SEP03, start: "2026-09-03T00:00:00+00:00", end: "2026-09-04T00:00:00+00:00" }
+          - { id: SEP10, start: "2026-09-10T00:00:00+00:00", end: "2026-09-11T00:00:00+00:00" }
+          - { id: SEP17, start: "2026-09-17T00:00:00+00:00", end: "2026-09-18T00:00:00+00:00" }
+          - { id: SEP18, start: "2026-09-18T00:00:00+00:00", end: "2026-09-19T00:00:00+00:00" }
+          - { id: SEP30, start: "2026-09-30T00:00:00+00:00", end: "2026-10-01T00:00:00+00:00" }
+          - { id: OCT05, start: "2026-10-05T00:00:00+00:00", end: "2026-10-06T00:00:00+00:00" }
+          - { id: OCT08, start: "2026-10-08T00:00:00+00:00", end: "2026-10-09T00:00:00+00:00" }
+          - { id: OCT12, start: "2026-10-12T00:00:00+00:00", end: "2026-10-13T00:00:00+00:00" }
+          - { id: OCT22, start: "2026-10-22T00:00:00+00:00", end: "2026-10-23T00:00:00+00:00" }
+          - { id: OCT26, start: "2026-10-26T00:00:00+00:00", end: "2026-10-27T00:00:00+00:00" }
+          - { id: OCT27, start: "2026-10-27T00:00:00+00:00", end: "2026-10-28T00:00:00+00:00" }
+          - { id: OCT29, start: "2026-10-29T00:00:00+00:00", end: "2026-10-30T00:00:00+00:00" }
+          - { id: OCT30, start: "2026-10-30T00:00:00+00:00", end: "2026-10-31T00:00:00+00:00" }
 
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 75
     env:
       PYTHONUNBUFFERED: "1"
       CRYPTOHFTDATA_API_KEY: ${{ secrets.CRYPTOHFTDATA_API_KEY }}
@@ -71,90 +56,48 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install stack
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install numpy polars pyarrow requests scikit-learn zstandard
+      - name: Install minimal stack
+        run: python -m pip install --disable-pip-version-check polars pyarrow requests zstandard
 
-      - name: Smoke-test missing-rich collector
-        run: |
-          python -m py_compile research/hype_full_micro_202607/collect_missing_rich_layers.py
+      - name: Syntax check
+        run: python -m py_compile research/hype_full_micro_202607/collect_missing_rich_layers.py
 
-      - name: Build missing rich layers only
+      - name: Collect ONLY 7 missing layers
         run: |
           set -euo pipefail
-          OUT="rich_out_${{ matrix.id }}"
-          CACHE="rich_cache_${{ matrix.id }}"
+          OUT="rich7_${{ matrix.id }}"
+          CACHE="/tmp/rich7_cache_${{ matrix.id }}"
           mkdir -p "$OUT" "$CACHE"
           python -m research.hype_full_micro_202607.collect_missing_rich_layers \
-  --output "$OUT" --cache "$CACHE" | tee "build_${{ matrix.id }}.log"
+            --output "$OUT" --cache "$CACHE" | tee "/tmp/build_${{ matrix.id }}.log"
           test -s "$OUT/missing_rich_layers_1m.jsonl.gz"
-test -s "$OUT/manifest.json"
-test -s "$OUT/COLLECTION_AUDIT.json"
+          test -s "$OUT/manifest.json"
+          test -s "$OUT/COLLECTION_AUDIT.json"
+          rm -rf "$CACHE"
+          gzip -9 -f "/tmp/build_${{ matrix.id }}.log"
 
-      - name: Verify completeness and quality
-        shell: bash
+      - name: Verify exact scope
         run: |
-          set -euo pipefail
-          OUT="rich_out_${{ matrix.id }}"
           python - <<'PY'
-          import json,os,pathlib,gzip
-          out=pathlib.Path("rich_out_"+os.environ["MATRIX_ID"])
+          import json, os, pathlib
+          out=pathlib.Path("rich7_"+os.environ["MATRIX_ID"])
           m=json.load(open(out/"manifest.json"))
           a=json.load(open(out/"COLLECTION_AUDIT.json"))
-          assert m.get("explicitly_not_downloaded")==["trades"]
-          assert m.get("reuses_existing_history") is True
-          assert int(a.get("rows_1m") or 0)>0
-          print("MISSING_RICH_AUDIT="+json.dumps(a,separators=(",",":")))
+          assert m["explicitly_not_downloaded"] == ["trades"]
+          assert m["reuses_existing_history"] is True
+          assert int(a["rows_1m"]) > 0
+          print(json.dumps({"day":os.environ["MATRIX_ID"],"rows":a["rows_1m"],"missing":a["missing_file_count"],"compact_mb":a["compact_output_mb"]}))
           PY
         env:
           MATRIX_ID: ${{ matrix.id }}
 
-      - name: Compact output and remove raw cache
-        shell: bash
-        run: |
-          set -euo pipefail
-          OUT="rich_out_${{ matrix.id }}"
-          CACHE="rich_cache_${{ matrix.id }}"
-          RAW_BYTES=$(python - <<'PY'
-          import json,os,pathlib
-          m=json.load(open(pathlib.Path("rich_out_"+os.environ["MATRIX_ID"])/"manifest.json"))
-          print(int(m.get("downloaded_bytes_ephemeral") or m.get("downloaded_bytes") or 0))
-          PY
-          )
-          OUT_BYTES=$(du -sb "$OUT" | awk '{print $1}')
-          export RAW_BYTES OUT_BYTES
-          gzip -9 -f "build_${{ matrix.id }}.log"
-          rm -rf "$CACHE"
-          python - <<'PY'
-          import json,os,pathlib
-          out=pathlib.Path("rich_out_"+os.environ["MATRIX_ID"])
-          p=out/"COLLECTION_AUDIT.json"
-          d=json.load(open(p))
-          raw=int(os.environ.get("RAW_BYTES","0"))
-          compact=int(os.environ.get("OUT_BYTES","0"))
-          d["raw_download_bytes_ephemeral"]=raw
-          d["compact_output_bytes"]=compact
-          d["compression_ratio_raw_to_compact"]=(raw/compact if compact else None)
-          d["raw_cache_retained"]=False
-          json.dump(d,open(p,"w"),indent=2)
-          print(json.dumps({
-            "raw_download_mb":round(raw/1024/1024,2),
-            "compact_output_mb":round(compact/1024/1024,2),
-            "compression_ratio":round(raw/compact,2) if compact else None,
-            "raw_cache_retained":False
-          }))
-          PY
-        env:
-          MATRIX_ID: ${{ matrix.id }}
-
-      - name: Upload rich dataset
+      - name: Upload compact overlay
         uses: actions/upload-artifact@v4
         with:
-          name: HYPE-RICH-STRONG-${{ matrix.id }}-${{ github.run_id }}
+          name: HYPE-7LAYER-${{ matrix.id }}-${{ github.run_id }}
           path: |
-            rich_out_${{ matrix.id }}/**
-            build_${{ matrix.id }}.log.gz
+            rich7_${{ matrix.id }}/**
+            /tmp/build_${{ matrix.id }}.log.gz
           retention-days: 14
           compression-level: 0
 
@@ -163,7 +106,4 @@ test -s "$OUT/COLLECTION_AUDIT.json"
     needs: collect
     runs-on: ubuntu-latest
     steps:
-      - name: Final collector status
-        run: |
-          echo "All matrix windows reached terminal state."
-          echo "Result: ${{ needs.collect.result }}"
+      - run: echo "Fast 7-layer collection matrix finished with result=${{ needs.collect.result }}"
