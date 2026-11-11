@@ -108,6 +108,14 @@ function normalize(p,value){
 }
 function clean(v){return String(v).replace(/[\u0000-\u001f<>]/g,"");}
 function el(tag,txt,cls){const node=document.createElement(tag);if(txt!==undefined)node.textContent=txt;if(cls)node.className=cls;return node;}
+function eventTime(v){
+ if(!v)return null;
+ try{if(typeof v==="number"||/^\d{9,13}$/.test(String(v))){const n=Number(v);return n<1e12?n*1000:n;}const t=new Date(v).getTime();return isNaN(t)?null:t;}catch(e){return null;}
+}
+function filterEvents(items){
+ const cutoff=Date.now()-periodDays*24*60*60*1000;
+ return (items||[]).filter(it=>{const t=eventTime(it.when);return t===null||t>=cutoff;});
+}
 function fmtWhen(v){
  if(!v)return "";
  try{
@@ -207,7 +215,7 @@ function render(){
  }
  (reportSections[selected]||[]).forEach(section=>{
    if(section==="Источники"){area.append(block("Источники","Показываются только реально проверенные backend-источники за выбранный период: "+periodDays+" дней.",live?"Проверено":"Ожидает данных"));return;}
-   const items=(live?.events?.[section]||[]); area.append(eventRail(section,items,availability[selected]?.[section]||("Источник не вернул подтверждённых событий за "+periodDays+" дней.")));
+   const items=filterEvents(live?.events?.[section]||[]); area.append(eventRail(section,items,availability[selected]?.[section]||("Источник не вернул подтверждённых событий за "+periodDays+" дней.")));
  });
  area.append(block("Период",periodDays+" дней. Пустой раздел означает отсутствие подтверждённых данных, а не отсутствие самой активности.","Выбран"));
  }
