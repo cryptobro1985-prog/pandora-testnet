@@ -6,7 +6,7 @@ from research.hype_local_only.feature_discovery import _book_features, _liq_feat
 
 def book(bids=None,asks=None):
     return SimpleNamespace(book_bids=bids or {},book_asks=asks or {},
-        last_ts_ms=1700000000000,book_changes=[])
+        last_ts_ms=1700000000000,book_ts_ms=1700000000000,book_changes=[])
 
 class LiveBookQualityTest(unittest.TestCase):
     def test_crossed_is_not_zero_spread(self):
@@ -26,6 +26,13 @@ class LiveBookQualityTest(unittest.TestCase):
     def test_stale_last_trade_outside_book_not_crossed(self):
         f=_book_features(book({100.2:3},{100.3:2}),100.0,"LOW")
         self.assertEqual(f["book_quality_valid"],1.)
+    def test_untimestamped_quote_fails_closed(self):
+        q=book({100.0:3},{100.1:2})
+        del q.book_ts_ms
+        f=_book_features(q,100.05,"LOW")
+        self.assertEqual(f,{"book_quality_valid":0.0,"book_quality_timestamp_missing":1.0})
+        self.assertNotIn("book_depth_imbalance_5",f)
+
     def test_timestamped_stale_book_is_masked(self):
         q=book({100.0:3},{100.1:2})
         q.book_ts_ms=q.last_ts_ms-5001
