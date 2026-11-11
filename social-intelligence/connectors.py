@@ -96,3 +96,60 @@ async def instagram_business_discovery(ig_user_id:str, username:str)->dict[str,A
 
 async def instagram_media_comments(media_id:str,limit:int=100)->dict[str,Any]:
     return await meta_get(f"{media_id}/comments",{"fields":"id,text,timestamp,username,like_count,replies{id,text,timestamp,username,like_count}","limit":max(1,min(limit,100))})
+
+
+from html.parser import HTMLParser
+
+class _MetaParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.title = ""
+        self._in_title = False
+        self.meta = {}
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag.lower() == "title":
+            self._in_title = True
+        if tag.lower() == "meta":
+            key = (attrs.get("property") or attrs.get("name") or "").lower()
+            value = attrs.get("content")
+            if key and value:
+                self.meta[key] = value[:2000]
+    def handle_endtag(self, tag):
+        if tag.lower() == "title":
+            self._in_title = False
+    def handle_data(self, data):
+        if self._in_title and len(self.title) < 500:
+            self.title += data
+
+async def public_profile_page(url: str) -> dict[str, Any]:
+    """Fetch public page metadata only for a prevalidated social-profile URL."""
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; SocialIntelligenceMVP/0.3; +https://social-intelligence-miniapp-mvp.onrender.com)",
+        "Accept": "text/html,application/xhtml+xml",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=TIMEOUT, follow_redirects=True, headers=headers) as client:
+            r = await client.get(url)
+        ctype = (r.headers.get("content-type") or "").lower()
+        if r.status_code >= 400:
+            return {"status": "unavailable", "http_status": r.status_code, "detail": "public page did not return a readable profile"}
+        if "text/html" not in ctype:
+            return {"status": "unavailable", "http_status": r.status_code, "detail": "public page was not HTML"}
+        text = r.text[:1_000_000]
+        parser = _MetaParser()
+        parser.feed(text)
+        title = (parser.meta.get("og:title") or parser.title or "").strip()
+        description = (parser.meta.get("og:description") or parser.meta.get("description") or "").strip()
+        image = (parser.meta.get("og:image") or "").strip()
+        canonical = str(r.url)
+        return {
+            "status": "ok",
+            "url": canonical,
+            "title": title[:500],
+            "description": description[:2000],
+            "image": image[:2000],
+            "source": "public_profile_page",
+        }
+    except Exception:
+        return {"status": "unavailable", "detail": "public page request failed"}
