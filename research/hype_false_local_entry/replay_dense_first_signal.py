@@ -33,6 +33,7 @@ def main():
     p.add_argument("--base-dir", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--max-lag-ms", type=int, default=3600000)
+    p.add_argument("--anchor-mode", choices=("reset", "retain"), default="reset")
     p.add_argument("--scope", choices=("both", "internal", "strict"), default="both")
     p.add_argument("--expected-total", type=int)
     p.add_argument("--expected-low", type=int)
@@ -99,13 +100,14 @@ def main():
                 f"missing={report['missing_label_ids']}"
             )
     # Generate one shared causal stream; NEVER select signals using labels.
-    machine = CausalReversalMachine()
+    machine = CausalReversalMachine(reset_anchors_on_flip=(args.anchor_mode == "reset"))
     emitted = []
     for bar in bars:
         emitted.extend(machine.on_bar(bar))
     flips = [s for s in emitted if s.core_flip and
              s.stage in ("HARD_CONFIRMED", "ULTRA_CONFIRMED")]
     result = {
+        "anchor_mode": args.anchor_mode,
         "status": "offline_historical_diagnostic_not_untouched_oos",
         "orders": "OFF",
         "core_flip_policy": "HARD_CONFIRMED_OR_ULTRA_CONFIRMED_ONLY",
