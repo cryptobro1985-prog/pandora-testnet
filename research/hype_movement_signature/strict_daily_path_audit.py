@@ -44,7 +44,10 @@ def audit(path, expected_step_seconds=60, max_gap_seconds=300,
                 if t > 1e11:
                     t /= 1000
             except ValueError:
-                t = datetime.fromisoformat(raw.replace("Z", "+00:00")).timestamp()
+                parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    raise ValueError(f"timestamp must contain timezone on line {number}")
+                t = parsed.timestamp()
             if not all(row.get(k) for k in ("price", "executable_bid", "executable_ask")):
                 raise ValueError(f"missing executable quote on line {number}")
             mid, bid, ask = (float(row[k]) for k in ("price", "executable_bid", "executable_ask"))
@@ -63,13 +66,23 @@ def audit(path, expected_step_seconds=60, max_gap_seconds=300,
         # Count coverage against the full UTC day, not merely the observed span.
         expected = round(86400 / expected_step_seconds)
         observed = len(rows)
-        coverage = min(1.0, observed / expected)
+        midnight = datetime.fromisoformat(day).replace(tzinfo=timezone.utc).timestamp()
+        aligned_slots = set()
+        off_grid_rows = 0
+        for t in times:
+            slot = round((t - midnight) / expected_step_seconds)
+            if 0 <= slot < expected and abs(t - (midnight + slot * expected_step_seconds)) <= min(1.0, expected_step_seconds * 0.01):
+                aligned_slots.add(slot)
+            else:
+                off_grid_rows += 1
+        coverage = len(aligned_slots) / expected
         gaps = [b-a for a, b in zip(times, times[1:]) if b-a > max_gap_seconds]
         record = {"rows": observed, "expected_rows": expected,
-                  "coverage_fraction": coverage, "gaps_over_limit_seconds": gaps,
+                  "coverage_fraction": coverage, "aligned_slots": len(aligned_slots),
+                  "off_grid_rows": off_grid_rows, "gaps_over_limit_seconds": gaps,
                   "first_utc": datetime.fromtimestamp(times[0], timezone.utc).isoformat(),
                   "last_utc": datetime.fromtimestamp(times[-1], timezone.utc).isoformat()}
-        if coverage < min_coverage or gaps:
+        if coverage < min_coverage or gaps or off_grid_rows:
             record["status"] = "REJECT_INCOMPLETE_COVERAGE"
             record["thresholds"] = {}
         else:
