@@ -23,7 +23,8 @@ class Signal:
     core_flip: bool
 
 class CausalReversalMachine:
-    def __init__(self):
+    def __init__(self, reset_anchors_on_flip=True):
+        self.reset_anchors_on_flip = reset_anchors_on_flip
         self.bars = deque(maxlen=400)
         self.last_ts = None
         self.active = {"LOW": "WATCH", "HIGH": "WATCH"}
@@ -111,7 +112,7 @@ class CausalReversalMachine:
             self.active[side] = stage
         # A confirmed reversal begins a fresh structural leg. Reset anchors
         # after evaluating both sides, allowing nested H1 turns.
-        if any(event.core_flip for event in out):
+        if self.reset_anchors_on_flip and any(event.core_flip for event in out):
             self.anchor = {"LOW": low, "HIGH": high}
             self.anchor_end = {"LOW": end, "HIGH": end}
             self.active = {"LOW": "WATCH", "HIGH": "WATCH"}
