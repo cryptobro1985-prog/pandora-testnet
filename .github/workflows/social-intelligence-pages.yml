@@ -1,0 +1,39 @@
+name: Social Intelligence - Deploy GitHub Pages
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/social-intelligence-miniapp-mvp-20261111
+    paths:
+      - 'social-intelligence/web/**'
+      - '.github/workflows/social-intelligence-pages.yml'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-social-intelligence
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Upload static Mini App
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: social-intelligence/web
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
