@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel,Field
 from connectors import normalize_username,business_discovery,media_comments,public_profile,public_embedded_collect,instaloader_collect
 from analysis import build_events,relationship_report,audience_quality,graph_payload,timeline
-from storage import connect,begin_run,finish_run,save_posts,save_events,history
+from storage import init_schema,get_last_snapshot,save_snapshot,begin_run,finish_run,save_posts,save_events,history,backend_info
 
 app=FastAPI(title="Instagram Intelligence",version="2.0.0")
 WEB=Path(__file__).resolve().parent/"web"
@@ -95,7 +95,7 @@ async def _bounded(coro,source,timeout=22):
 
 @app.on_event("startup")
 async def startup():
-    connect().close()
+    init_schema()
     target=os.getenv("IG_STARTUP_SMOKE_TARGET","").strip()
     if target:
         import asyncio,logging
@@ -117,7 +117,7 @@ def head(): return Response(status_code=200)
 def index(): return FileResponse(WEB/"index.html",headers={"Cache-Control":"no-store"})
 
 @app.get("/api/health")
-def health(): return {"ok":True,"service":"instagram-intelligence","version":"2.0.0"}
+def health(): return {"ok":True,"service":"instagram-intelligence","version":"2.0.0","storage":backend_info()}
 
 @app.get("/api/capabilities")
 def capabilities():
