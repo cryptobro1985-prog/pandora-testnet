@@ -2,19 +2,29 @@ from __future__ import annotations
 import os,json
 from pathlib import Path
 from datetime import datetime,timezone
-from fastapi import FastAPI,Response
-from fastapi.responses import FileResponse
+from fastapi import FastAPI,Response,HTTPException
+from fastapi.responses import FileResponse,PlainTextResponse
 from pydantic import BaseModel,Field
 from connectors import normalize_username,business_discovery,media_comments,public_profile,public_embedded_collect,playwright_public_collect,instaloader_collect,warm_playwright
 from analysis import build_events,relationship_report,audience_quality,graph_payload,timeline
-from storage import init_schema,get_last_snapshot,save_snapshot,begin_run,finish_run,save_posts,save_events,history,backend_info
+from storage import init_schema,get_last_snapshot,save_snapshot,begin_run,finish_run,save_posts,save_events,history,backend_info,save_bridge_payload,get_latest_bridge_payload
 
-app=FastAPI(title="Instagram Intelligence",version="2.0.0")
+app=FastAPI(title="Instagram Intelligence",version="2.1.0")
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(CORSMiddleware,allow_origins=["https://www.instagram.com","https://instagram.com"],allow_credentials=False,allow_methods=["POST","OPTIONS"],allow_headers=["*"])
 WEB=Path(__file__).resolve().parent/"web"
 
 class ScanRequest(BaseModel):
     query:str=Field(min_length=1,max_length=300)
     max_posts:int=Field(default=30,ge=1,le=60)
+
+class BridgePayload(BaseModel):
+    username:str=Field(min_length=1,max_length=30)
+    profile:dict={}
+    followers:list[dict]=Field(default_factory=list,max_length=20000)
+    following:list[dict]=Field(default_factory=list,max_length=20000)
+    posts:list[dict]=Field(default_factory=list,max_length=100)
+    source:str="browser_bridge"
 
 def _state(items):
     if items is None: return {"observed":False,"items":[]}
@@ -133,6 +143,26 @@ def capabilities():
       "instaloader_session_configured":bool(os.getenv("IG_USERNAME") and (os.getenv("IG_SESSIONFILE") or os.getenv("IG_SESSION_B64") or os.getenv("IG_SESSION_JSON_B64") or os.getenv("IG_SESSIONID"))),
       "not_observable":["profile_viewer_identities","profiles_viewed_by_target","private_messages"]}
 
+@app.post("/api/bridge/ingest")
+def bridge_ingest(payload:BridgePayload):
+    username=normalize_username(payload.username)
+    p=dict(payload.profile or {})
+    p["username"]=username
+    clean=lambda xs:[x for x in xs if isinstance(x,dict) and (x.get("pk") or x.get("id") or x.get("username"))]
+    data={"username":username,"profile":p,"followers":clean(payload.followers)[:20000],"following":clean(payload.following)[:20000],
+          "posts":[x for x in payload.posts if isinstance(x,dict)][:100],"source":"browser_bridge"}
+    at=save_bridge_payload(username,data)
+    return {"ok":True,"username":username,"stored_at":at,"followers":len(data["followers"]),"following":len(data["following"]),"posts":len(data["posts"])}
+
+@app.get("/api/bridge/latest/{username}")
+def bridge_latest(username:str):
+    username=normalize_username(username)
+    item=get_latest_bridge_payload(username)
+    if not item: raise HTTPException(status_code=404,detail="no_bridge_snapshot")
+    p=item["payload"]
+    return {"ok":True,"username":username,"observed_at":item["observed_at"],
+            "followers":len(p.get("followers") or []),"following":len(p.get("following") or []),"posts":len(p.get("posts") or [])}
+
 @app.get("/api/history/{username}")
 def api_history(username:str,limit:int=200):
     return {"username":normalize_username(username),"events":history(normalize_username(username),max(1,min(limit,1000)))}
@@ -209,6 +239,19 @@ async def scan(req:ScanRequest):
         sources.append({"source":"instaloader","status":insta.get("status"),"detail":insta.get("detail")})
 
         posts=_merge_posts(browser_posts,embedded_posts,meta_posts,insta_posts)
+
+        bridge=get_latest_bridge_payload(username)
+        if bridge:
+            bp=bridge.get("payload") or {}
+            bprof=bp.get("profile") or {}
+            for k,v in bprof.items():
+                if v not in (None,"",[],{}) and p.get(k) in (None,"",[],{}): p[k]=v
+            if followers is None and isinstance(bp.get("followers"),list): followers=bp.get("followers")
+            if following is None and isinstance(bp.get("following"),list): following=bp.get("following")
+            posts=_merge_posts(posts,bp.get("posts") or [])
+            sources.append({"source":"browser_bridge","status":"ok","detail":"snapshot "+str(bridge.get("observed_at"))})
+        else:
+            sources.append({"source":"browser_bridge","status":"not_configured","detail":"run authorized browser bridge once"})
 
         # Meta comments are fetched only for Meta media IDs.
         jobs=[];targets=[]
