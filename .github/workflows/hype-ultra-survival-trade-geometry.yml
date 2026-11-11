@@ -85,8 +85,7 @@ jobs:
                   p=target/folder/name
                   if not p.is_file() or not p.stat().st_size:
                       raise SystemExit(f"missing {p}")
-          print("may_artifact",${MAY_ID})
-          print("master_artifact",${MASTER_ID})
+          print("recovered sealed May and canonical Jul-Nov master")
           PY
 
       - name: Replay frozen Ultra Survival V2 and measure trade geometry
