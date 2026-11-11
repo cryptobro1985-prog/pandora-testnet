@@ -206,15 +206,25 @@ def main():
     capture_variant=None
     if capture_best is not None:
         cp=capture_best[1]
-        ctest=metric(simulate(data[TEST]["bars"],data[TEST]["sig"],cp))
+        ctest_trades=simulate(data[TEST]["bars"],data[TEST]["sig"],cp)
+        ctest=metric(ctest_trades)
         cmay=metric(simulate(data["MAY"]["bars"],data["MAY"]["sig"],cp)) if "MAY" in data else None
+        crisk=risk_grid(ctest_trades,cp[0])
+        ccandidates=[z for z in crisk if z["extra_cost_bps"]==8
+                     and abs(z["stop_gap_shock_pct"]-.25)<1e-9
+                     and z["passes_2p5x_liq_cushion"]
+                     and z["passes_2pct_equity_stop_budget"]
+                     and z["compound_pct"]>0]
+        cbounded=max(ccandidates,key=lambda z:(z["equity_exposure"],z["compound_pct"],-z["leverage"])) if ccandidates else None
         capture_variant={
           "selected":{"stop_pct":cp[0],"activation_mfe_pct":cp[1],
                       "recoil_floor_pct":cp[2],"recoil_fraction_of_mfe":cp[3],
                       "confirmation_bars":cp[4],"require_opposite_flow":cp[5]},
           "development":capture_best[2],
           "historical_later_test_OCT_NOV":ctest,
-          "MAY_diagnostic":cmay
+          "MAY_diagnostic":cmay,
+          "paper_risk_grid_OCT_NOV":crisk,
+          "bounded_aggressive_paper_scenario_plus8bps_plus0p25pct_stop_gap":cbounded
         }
     result={
       "version":"HYPE-ULTRA-SURVIVAL-V2-DYNAMIC-MFE-EXIT-v1",
