@@ -517,4 +517,12 @@ scale-in economic replay without changing the frozen full-size detector.
 
 ## Early-core cohort integrity checkpoint — 2026-11-11
 
-Focused one issue: original early causal replay workflow 43001455158 SUCCESS, but July internal cohort had 0 labels while July strict had 47. Earlier aggregate internal metrics were therefore partial (Aug-Nov only) despite appearing to cover Jul-Nov. Corrected early_causal_core_entry_mfe_v1.py to explicitly flag missing/insufficient labels and mark aggregate completeness PARTIAL_MISSING_LABELS; added three regression tests. No attempt to synthesize missing internal teacher labels, and no OOS tuning. Oct-Nov original early core: 111/121 correct first, 10 wrong-first, 2,507 core flips; first-swing side accuracy is NOT event-level precision or profitable execution. Correct-first median 6m; wrong-first MAE median about 2.03% across available internal cohorts. Full-size live trading remains OFF. Next: inspect source label schema and restore compatible July internal cohort only if canonical, otherwise keep it excluded; dedupe/veto must be tested on fresh chronological forward. 
+Focused one issue: original early causal replay workflow 43001455158 SUCCESS, but July internal cohort had 0 labels while July strict had 47. Earlier aggregate internal metrics were therefore partial (Aug-Nov only) despite appearing to cover Jul-Nov. Corrected early_causal_core_entry_mfe_v1.py to explicitly flag missing/insufficient labels and mark aggregate completeness PARTIAL_MISSING_LABELS; added three regression tests. No attempt to synthesize missing internal teacher labels, and no OOS tuning. Oct-Nov original early core: 111/121 correct first, 10 wrong-first, 2,507 core flips; first-swing side accuracy is NOT event-level precision or profitable execution. Correct-first median 6m; wrong-first MAE median about 2.03% across available internal cohorts. Full-size live trading remains OFF. Next: inspect source label schema and restore compatible July internal cohort only if canonical, otherwise keep it excluded; dedupe/veto must be tested on fresh chronological forward.
+
+## Confirmed bounce CV import repair — 2026-11-11
+
+- Run 43012122455 failed in regression tests, before CV: nonexistent `full116_data_sources` import in `confirmed_local_bounce_cv.py`.
+- Existing `full116_sources.py` is already used by `full116_terminal_replay.py` and provides `read_clean_cache`.
+- One-line import corrected in commit `7ffa64b51cec2226c7c8bd745aee0ea35b878e51`.
+- Do not claim training or OOS improvement from this infrastructure fix; check next CI and address any new failure without changing strategy thresholds.
+- Primary strategy remains early 0.33–0.40% causal Local confirmation; real orders OFF.
