@@ -26,6 +26,7 @@ jobs:
           done
           python - <<'PY'
           import json
+          results=[]
           for target in ("instagram","natgeo","nasa"):
               d=json.load(open(f"/tmp/{target}.json"))
               print("RESULT",target,
@@ -38,4 +39,9 @@ jobs:
               print(" coverage=",json.dumps(d.get("coverage"),ensure_ascii=False))
               assert d.get("ok") is True
               assert d.get("profile_present") is True
+              results.append(d)
+          # A live acceptance is only real when at least one public profile returns actual post data.
+          assert any((d.get("posts") or 0) > 0 for d in results), "all live scans returned zero posts"
+          # At least one deep collector must have worked; OpenGraph-only is not sufficient.
+          assert any(any(s.get("source")!="public_page" and s.get("status")=="ok" for s in (d.get("sources") or [])) for d in results), "no deep collector succeeded"
           PY
