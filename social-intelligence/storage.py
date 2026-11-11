@@ -5,15 +5,14 @@ from datetime import datetime,timezone
 
 SQLITE_DB=Path(os.getenv("IG_INTEL_DB","/tmp/instagram_intelligence.sqlite3"))
 DATABASE_URL=os.getenv("DATABASE_URL","").strip()
+_PG_FAILED=False
 
 def _pg():
-    return bool(DATABASE_URL)
-
-_PG_FAILED=False
+    return bool(DATABASE_URL) and not _PG_FAILED
 
 def _connect():
     global _PG_FAILED
-    if _pg() and not _PG_FAILED:
+    if _pg():
         try:
             import psycopg
             from psycopg.rows import dict_row
@@ -106,4 +105,4 @@ def history(username,limit=200):
     c.close();return [dict(r) for r in rows]
 
 def backend_info():
-    return {"persistence":"postgres" if (_pg() and not _PG_FAILED) else "sqlite_ephemeral","database_url_configured":_pg(),"postgres_available":bool(_pg() and not _PG_FAILED)}
+    return {"persistence":"postgres" if _pg() else "sqlite_ephemeral","database_url_configured":bool(DATABASE_URL),"postgres_available":_pg()}
