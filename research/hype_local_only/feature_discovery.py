@@ -103,10 +103,22 @@ def _book_features(state,price,side):
     out={}
     bids=sorted((getattr(state,"book_bids",{}) or {}).items(),reverse=True)[:50]
     asks=sorted((getattr(state,"book_asks",{}) or {}).items())[:50]
-    if not bids or not asks:return out
+    if not bids or not asks:
+        return {"book_quality_valid":0.0}
+    # Do NOT clamp negative spreads to zero. A crossed/locked or malformed
+    # book is an invalid executable quote, not a valid low-spread signal.
+    # Keep all derived depth/microprice features absent when book is bad.
+    if (not finite(price) or price<=0 or
+        any(not finite(p) or not finite(q) or p<=0 or q<=0
+            for p,q in bids+asks)):
+        return {"book_quality_valid":0.0,"book_quality_malformed":1.0}
+    bb,bq=bids[0];aa,aq=asks[0]
+    if bb>=aa:
+        return {"book_quality_valid":0.0,"book_quality_crossed_or_locked":1.0}
     rev=1.0 if side=="LOW" else -1.0
-    bb,bq=bids[0];aa,aq=asks[0];spread=max(aa-bb,0.0)
-    out["book_spread_bps"]=spread/max(price,1e-12)*10000.0
+    spread=aa-bb
+    out["book_quality_valid"]=1.0
+    out["book_spread_bps"]=spread/price*10000.0
     den=bq+aq
     if den>0:
         micro=(aa*bq+bb*aq)/den
