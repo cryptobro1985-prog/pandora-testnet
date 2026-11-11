@@ -85,18 +85,33 @@ function block(title,description,status,url){
  if(url){const a=el("a",url);a.href=url;a.target="_blank";a.rel="noopener noreferrer";card.append(a);}
  return card;
 }
-function makeReport(){
+async function makeReport(){
  const profiles=[];let invalid=0;
  platforms.forEach(p=>{const raw=$(p).value.trim();if(!raw)return;
- try{profiles.push({platform:p,status:"link_verified",url:normalize(p,raw),source:"user_supplied"});}
- catch(e){profiles.push({platform:p,status:"invalid",reason:String(e.message||e)});invalid++;}
+  try{profiles.push({platform:p,status:"link_verified",url:normalize(p,raw),source:"user_supplied"});}
+  catch(e){profiles.push({platform:p,status:"invalid",reason:String(e.message||e)});invalid++;}
  });
  $("provided").textContent=String(profiles.length);
  $("checked").textContent=String(profiles.length-invalid);
  $("errors").textContent=String(invalid);
- pushHistory(); current={generated_at:new Date().toISOString(),version:"0.1.0",source_checks:profiles,capabilities:"URL syntax only; no external social network lookup",limitations:["No identity matching","No tracking private individuals","No face identification","No private messages","No hidden memberships","No historical third-party follows or likes","No dating-account discovery"]};
- $("report").style.display="block";$("reportTime").textContent=new Date().toLocaleString("ru-RU");selected="overview";render();
+ pushHistory();
+ current={generated_at:new Date().toISOString(),version:"0.3.0",source_checks:profiles,live_results:{},backend_error:null};
+ $("report").style.display="block";$("reportTime").textContent=new Date().toLocaleString("ru-RU");selected="overview";
+ $("working").style.display="block";$("working").textContent="Идёт поиск по доступным публичным источникам…";
+ render();
  $("report").scrollIntoView({behavior:"smooth",block:"start"});
+ const valid=profiles.filter(x=>x.status==="link_verified").map(x=>({platform:x.platform,url:x.url}));
+ if(!valid.length){$("working").style.display="none";render();return;}
+ try{
+   const response=await fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({profiles:valid})});
+   const data=await response.json();
+   if(!response.ok) throw Error(data.detail||("HTTP "+response.status));
+   (data.results||[]).forEach(r=>{current.live_results[r.platform]=r;});
+ }catch(e){
+   current.backend_error=String(e.message||e);
+ }finally{
+   $("working").style.display="none";render();
+ }
 }
 function render(){
  const tabs=$("tabs");tabs.replaceChildren();
@@ -106,7 +121,7 @@ function render(){
  });
  const area=$("reportContent");area.replaceChildren();
  if(selected==="overview"){
- area.append(block("Проверка завершена","Система проверила корректность введённых ссылок. Проверка принадлежности профилей, поиск публикаций, лайков или сообщений ещё не выполняется.","Проверено"));
+ area.append(block("Поиск по источникам",current.backend_error?("Backend вернул ошибку: "+current.backend_error):"Публичные страницы и подключённые официальные API проверены. Результаты смотрите во вкладках платформ.",current.backend_error?"Ошибка":"Готово"));
  current.source_checks.forEach(s=>area.append(block(labels[s.platform],s.status==="invalid"?s.reason:"Нормализованная ссылка; принадлежность не подтверждена",s.status==="invalid"?"Ошибка":"Формат OK",s.url)));
  if(!current.source_checks.length)area.append(el("div","Укажите хотя бы одну ссылку на профиль для её проверки.","empty"));
  }else if(selected==="other"){
@@ -115,9 +130,30 @@ function render(){
  }else{
  const match=current.source_checks.filter(s=>s.platform===selected);
  if(!match.length)area.append(el("div","Для этой платформы ссылка не была указана.","empty"));
- match.forEach(s=>area.append(block(labels[s.platform],s.status==="invalid"?s.reason:"Исходная ссылка проверена. Данные об активности стороннего аккаунта не получены.",s.status==="invalid"?"Ошибка":"Формат OK",s.url)));
- (reportSections[selected]||[]).forEach(section=>area.append(block(section, section==="Источники" ? "Здесь будут отображаться точные ссылки/объекты API, откуда получен результат." : "Раздел подготовлен. Будут показаны только события, которые реально вернул подключённый источник.", "Ожидает данных"));
- area.append(block("Ограничения","Полная история действий произвольного человека по одной ссылке не существует в открытых API. Если платформа не отдаёт конкретные подписки, лайки или комментарии, раздел останется помечен как недоступный, а не будет заполнен предположениями.","Прозрачно"));
+ const live=current.live_results?.[selected];
+ match.forEach(s=>area.append(block(labels[s.platform],s.status==="invalid"?s.reason:"Исходная ссылка принята для реальной проверки.",s.status==="invalid"?"Ошибка":"Принято",s.url)));
+ if(live){
+   const pub=live.public||{};
+   if(pub.status==="ok"){
+     area.append(block("Публичная страница",[pub.title,pub.description].filter(Boolean).join(" — ")||"Публичная страница доступна.","Найдено",pub.url||live.url));
+   }else{
+     area.append(block("Публичная страница",pub.detail||"Страница не отдала читаемые публичные данные.","Недоступно",live.url));
+   }
+   const api=live.api||{};
+   if(api.status==="ok"){
+     let summary="Официальный API вернул данные.";
+     if(selected==="telegram"&&api.chat){summary=[api.chat.title,api.chat.username&&("@"+api.chat.username),api.chat.description].filter(Boolean).join(" — ");}
+     if(selected==="vk"&&Array.isArray(api.response)){const u=api.response[0]||{};summary=[u.first_name,u.last_name,u.city?.title,u.status].filter(Boolean).join(" · ")||summary;}
+     if(selected==="instagram"&&api.response){const bd=api.response.business_discovery||{};summary=[bd.username&&("@"+bd.username),bd.name,bd.biography,bd.followers_count!=null?("подписчики: "+bd.followers_count):null,bd.media_count!=null?("публикации: "+bd.media_count):null].filter(Boolean).join(" · ")||summary;}
+     area.append(block("Официальный API",summary,"API OK"));
+   }else{
+     area.append(block("Официальный API",api.status==="not_configured"?"Ключ этой платформы на сервере ещё не настроен.":(api.detail||"API не вернул доступные данные."),api.status==="not_configured"?"Не настроен":"Нет данных"));
+   }
+ }else if(!current.backend_error){
+   area.append(block("Поиск","Ожидаем ответ backend…","В процессе"));
+ }
+ (reportSections[selected]||[]).forEach(section=>area.append(block(section, section==="Источники" ? "Показываются только источники, реально проверенные backend." : "Раздел заполняется только тем, что вернул публичный источник или официальный API.", live?"Проверено":"Ожидает данных")));
+ area.append(block("Ограничения","Полная история действий произвольного человека по одной ссылке не существует в открытых API. Если платформа не отдаёт конкретные подписки, лайки или комментарии, раздел останется помечен как недоступный.","Прозрачно"));
  }
 }
 $("search").addEventListener("submit",event=>{
@@ -125,7 +161,7 @@ $("search").addEventListener("submit",event=>{
  const provided = Object.values(getDraft()).some(v=>String(v||"").trim());
  if(!provided){ alert("Добавьте хотя бы одно значение: имя, телефон или ссылку на профиль."); return; }
  $("go").disabled=true;$("go").textContent="Проверяем доступные данные…";
- requestAnimationFrame(()=>{makeReport();$("go").disabled=false;$("go").textContent="Начать поиск";});
+ (async()=>{try{await makeReport();}finally{$("go").disabled=false;$("go").textContent="Начать поиск";}})();
 });
 $("export").addEventListener("click",()=>{
  if(!current)return;const blob=new Blob([JSON.stringify(current,null,2)],{type:"application/json"});
