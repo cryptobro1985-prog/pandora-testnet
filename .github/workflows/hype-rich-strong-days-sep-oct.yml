@@ -6,7 +6,7 @@ on:
     branches:
       - research/hype-h1-local-v5-oi-microstructure-20261104
     paths:
-      - ".github/workflows/hype-rich-strong-days-sep-oct.yml"
+      - ".github/workflows/hype-rich-strong-days-sep-oct.yml"\n      - "research/hype_full_micro_202607/build_dense_full_micro.py"
 
 permissions:
   contents: read
@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: hype-rich-strong-days-sep-oct-v1
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   collect:
