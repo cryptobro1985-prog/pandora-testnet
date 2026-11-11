@@ -37,7 +37,7 @@ def score(username,events):
 def snapshot(username,followers,following,profile):
     now=datetime.now(timezone.utc).isoformat(); c=db()
     prev=c.execute("select * from snapshots where username=? order by id desc limit 1",(username,)).fetchone()
-    d={"new_followers":[],"lost_followers":[],"new_following":[],"unfollowed":[],"previous_snapshot":None}
+    d={"new_followers":[],"lost_followers":[],"new_following":[],"unfollowed":[],"previous_snapshot":None,"followers_observed":followers is not None,"following_observed":following is not None}
     if prev:
         pf=set(json.loads(prev["followers_json"] or "[]")); pg=set(json.loads(prev["following_json"] or "[]"))
         if followers is not None:
@@ -54,7 +54,8 @@ async def _startup_smoke():
     if not target:
         return
     try:
-        result=await scan(ScanRequest(query=target,max_posts=12))
+        import asyncio
+        result=await asyncio.wait_for(scan(ScanRequest(query=target,max_posts=8)), timeout=28)
         print("instagram_smoke_test="+json.dumps({
             "username":result.get("username"),
             "profile_keys":sorted((result.get("profile") or {}).keys()),
@@ -86,11 +87,24 @@ def capabilities():
             "instaloader_session_configured":bool(os.getenv("IG_USERNAME") and (os.getenv("IG_SESSIONFILE") or os.getenv("IG_SESSION_B64"))),
             "profile_viewers":False,"profiles_viewed_by_target":False}
 
+async def _bounded(coro, source, timeout=22):
+    import asyncio
+    try:
+        return await asyncio.wait_for(coro, timeout=timeout)
+    except asyncio.TimeoutError:
+        return {"status":"unavailable","source":source,"detail":"timeout"}
+    except Exception as e:
+        return {"status":"unavailable","source":source,"detail":type(e).__name__}
+
 @app.post("/api/scan")
 async def scan(req:ScanRequest):
     import asyncio
     username=normalize_username(req.query)
-    public,meta,insta=await asyncio.gather(public_profile(username),business_discovery(username),instaloader_collect(username,req.max_posts))
+    public,meta,insta=await asyncio.gather(
+        _bounded(public_profile(username),"public_page",12),
+        _bounded(business_discovery(username),"meta_business_discovery",18),
+        _bounded(instaloader_collect(username,req.max_posts),"instaloader",22)
+    )
     p={"username":username}; posts=[]; warnings=[]; sources=[]; followers=None; following=None
     if public.get("status")=="ok":
         p.update({"public_title":public.get("title"),"public_description":public.get("description"),"profile_picture_url":public.get("image")}); sources.append({"source":"public_page","status":"ok"})
