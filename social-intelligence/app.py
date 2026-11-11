@@ -132,12 +132,12 @@ def head(): return Response(status_code=200)
 def index(): return FileResponse(WEB/"index.html",headers={"Cache-Control":"no-store"})
 
 @app.get("/api/health")
-def health(): return {"ok":True,"service":"instagram-intelligence","version":"2.0.0","storage":backend_info()}
+def health(): return {"ok":True,"service":"instagram-intelligence","version":"2.1.0","storage":backend_info()}
 
 @app.get("/api/capabilities")
 def capabilities():
     return {"instagram_only":True,
-      "collectors":["2scraper_playwright_public","2scraper_public_embedded","instaloader","meta_business_discovery","public_page_fallback"],
+      "collectors":["browser_bridge_authorized","2scraper_playwright_public","2scraper_public_embedded","instaloader","meta_business_discovery","public_page_fallback"],
       "open_source_components":["2scraper/instagram-scraper","instaloader/instaloader","JuaniVeltri/igstalker","mohammedelahmar/InstaTrack","ignromanov/safe-unfollow"],
       "meta_configured":bool(os.getenv("META_ACCESS_TOKEN") and os.getenv("META_IG_USER_ID")),
       "instaloader_session_configured":bool(os.getenv("IG_USERNAME") and (os.getenv("IG_SESSIONFILE") or os.getenv("IG_SESSION_B64") or os.getenv("IG_SESSION_JSON_B64") or os.getenv("IG_SESSIONID"))),
