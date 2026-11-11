@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify, Response
-import os, re, json, subprocess, tempfile
+import os, re, json, subprocess, tempfile, threading, time
 
 app = Flask(__name__)
 SCRAPER_DIR = os.getenv("SCRAPER_DIR","/opt/render/project/src/instascraper-src")
@@ -102,5 +102,16 @@ def smoke():
     body,code=run_scrape(username)
     return jsonify(body),code
 
+def _startup_smoke():
+    time.sleep(3)
+    try:
+        body,code=run_scrape("natgeo")
+        summary={"code":code,"status":body.get("status"),"count":body.get("count"),"message":body.get("message"),"exit_code":body.get("exit_code")}
+        print("STARTUP_SMOKE_2SCRAPER "+json.dumps(summary,ensure_ascii=False),flush=True)
+    except Exception as exc:
+        print("STARTUP_SMOKE_2SCRAPER "+json.dumps({"status":"exception","message":str(exc)},ensure_ascii=False),flush=True)
+
 if __name__=="__main__":
+    if os.getenv("SMOKE_ON_START","1")=="1":
+        threading.Thread(target=_startup_smoke,daemon=True).start()
     app.run(host="0.0.0.0",port=int(os.getenv("PORT","10000")))
