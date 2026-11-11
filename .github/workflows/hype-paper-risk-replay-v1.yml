@@ -1,0 +1,152 @@
+name: HYPE Paper Risk Replay — leverage and MFE stress
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/hype_unified_intelligence/paper_risk_replay_v1.py"
+      - "research/hype_unified_intelligence/test_paper_risk_replay_v1.py"
+      - ".github/workflows/hype-paper-risk-replay-v1.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: hype-paper-risk-replay-v1
+  cancel-in-progress: false
+
+jobs:
+  risk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install lightweight analysis dependencies
+        run: |
+          python -m pip install numpy scikit-learn
+          python -m py_compile research/hype_unified_intelligence/paper_risk_replay_v1.py
+          python -m unittest research.hype_unified_intelligence.test_paper_risk_replay_v1 -v
+
+      - name: Recover immutable HYPE historical master
+        id: data
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p historical_input
+          ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=HYPE-HISTORY-20260712-20261103-MASTER" --jq '.artifacts|map(select((.expired|not) and .name=="HYPE-HISTORY-20260712-20261103-MASTER"))|sort_by(.created_at)|reverse|.[0].id//empty')"
+          test -n "$ID" || { echo "retained historical master not found"; exit 2; }
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$ID/zip" > /tmp/master_artifact.zip
+          unzip -q /tmp/master_artifact.zip -d historical_input
+          python - <<'PY'
+          import pathlib,zipfile,shutil
+          root=pathlib.Path('historical_input')
+          if list(root.glob('01_JUL12_AUG07_FULL_MICRO/compact_1m.jsonl.gz')):
+              print('source master already unpacked')
+              with zipfile.ZipFile('/tmp/master_artifact.zip') as z:
+                  z.extractall('historical_input/replay_source')
+              # the replay script consumes a ZIP with the original master layout
+              shutil.copy2('/tmp/master_artifact.zip','historical_input/HYPE_MASTER_REPLAY.zip')
+          else:
+              found=None
+              for p in root.rglob('*.zip'):
+                  try:
+                      with zipfile.ZipFile(p) as z:
+                          if 'MASTER_INDEX.json' in z.namelist() and '04_OCT04_NOV03/compact_1m.jsonl.gz' in z.namelist():
+                              found=p;break
+                  except zipfile.BadZipFile:continue
+              if found is None:
+                  raise SystemExit('no master ZIP with canonical 4 historical periods')
+              shutil.copy2(found,'historical_input/HYPE_MASTER_REPLAY.zip')
+          PY
+          echo "artifact_id=$ID" >> "$GITHUB_OUTPUT"
+
+      - name: Run frozen entry + paper exit + leverage grid
+        id: replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p risk_out
+          python -m research.hype_unified_intelligence.paper_risk_replay_v1             --master historical_input/HYPE_MASTER_REPLAY.zip             --output risk_out/HYPE_PAPER_RISK_STRESS_FULL.json
+          test -s risk_out/HYPE_PAPER_RISK_STRESS_FULL.json
+          python - <<'PY'
+          import json,pathlib,os
+          x=json.load(open('risk_out/HYPE_PAPER_RISK_STRESS_FULL.json'))
+          out={
+            "version":x["version"],"status":x["status"],"real_orders":False,
+            "github_run_id":os.getenv("GITHUB_RUN_ID"),
+            "master_sha256":x["data_sha256"],
+            "frozen_model":x["model"],"execution":x["execution"],
+            "by_period":x["by_period"],"verdict":x["verdict"],
+            "selected_stress":{
+              mode:{
+                "no_extra_cost":next(r for r in x["stress_grid"]
+                   if r["period"]=="holdout" and r["mode"]==mode
+                   and r["additional_cost_bps"]==0
+                   and r["leverage"]==25 and r["margin_fraction"]==.20),
+                "plus_8_bps":next(r for r in x["stress_grid"]
+                   if r["period"]=="holdout" and r["mode"]==mode
+                   and r["additional_cost_bps"]==8
+                   and r["leverage"]==25 and r["margin_fraction"]==.20),
+                "plus_25_bps":next(r for r in x["stress_grid"]
+                   if r["period"]=="holdout" and r["mode"]==mode
+                   and r["additional_cost_bps"]==25
+                   and r["leverage"]==25 and r["margin_fraction"]==.20)
+              } for mode in ("fixed","trend_hold")
+            },
+            "warning":x["warning"],
+            "limitations":"OHLC and 12bps cost proxy, no multi-month executable historical L50/mark replay, no real liquidation engine, October previously inspected."
+          }
+          pathlib.Path('research/hype_unified_intelligence/PAPER_RISK_STRESS_LATEST.json').write_text(json.dumps(out,indent=2)+'\n')
+          PY
+
+      - name: Publish full replay artifact
+        if: steps.replay.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-PAPER-RISK-REPLAY-${{ github.run_id }}
+          path: risk_out/HYPE_PAPER_RISK_STRESS_FULL.json
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Publish auditable research report
+        if: always()
+        env:
+          REPLAY_OUTCOME: ${{ steps.replay.outcome }}
+          SOURCE_ARTIFACT_ID: ${{ steps.data.outputs.artifact_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! test -s research/hype_unified_intelligence/PAPER_RISK_STRESS_LATEST.json; then
+            python - <<'PY'
+          import json,os,pathlib
+          p=pathlib.Path('research/hype_unified_intelligence/PAPER_RISK_STRESS_LATEST.json')
+          p.write_text(json.dumps({
+            "version":"HYPE-PAPER-RISK-REPLAY-v1",
+            "status":"FAILED_BEFORE_REPORT",
+            "replay_outcome":os.getenv("REPLAY_OUTCOME"),
+            "github_run_id":os.getenv("GITHUB_RUN_ID"),
+            "master_artifact_id":os.getenv("SOURCE_ARTIFACT_ID"),
+            "real_orders":False
+          },indent=2)+'\n')
+          PY
+          fi
+          git config user.name "pandora-research-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add research/hype_unified_intelligence/PAPER_RISK_STRESS_LATEST.json
+          git commit -m "research(hype): publish frozen paper risk stress [skip ci]" || true
+          for i in 1 2 3 4; do
+            git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104 || true
+            git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104 && exit 0
+            sleep 3
+          done
+          exit 1
