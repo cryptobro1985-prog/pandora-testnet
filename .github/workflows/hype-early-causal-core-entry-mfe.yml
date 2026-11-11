@@ -1,0 +1,108 @@
+name: HYPE Early Causal Core — Entry MFE Audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/hype_false_local_entry/early_causal_core_entry_mfe_v1.py"
+      - ".github/workflows/hype-early-causal-core-entry-mfe.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Recover canonical Jul-Nov master
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p tapes/raw tapes/master
+          MASTER_ID=13650399622
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${MASTER_ID}/zip" >/tmp/master_wrapper.zip
+          unzip -q /tmp/master_wrapper.zip -d tapes/raw
+          python - <<'PY'
+          import pathlib,zipfile,shutil
+          raw=pathlib.Path("tapes/raw");target=pathlib.Path("tapes/master")
+          key="04_OCT04_NOV03/compact_1m.jsonl.gz"
+          direct=list(raw.rglob(key))
+          if direct:
+              root=direct[0].parents[1]
+              for p in root.iterdir():
+                  dst=target/p.name
+                  shutil.copytree(p,dst,dirs_exist_ok=True) if p.is_dir() else shutil.copy2(p,dst)
+          else:
+              chosen=None
+              for p in raw.rglob("*.zip"):
+                  try:
+                      with zipfile.ZipFile(p) as z:
+                          if key in z.namelist(): chosen=p; break
+                  except zipfile.BadZipFile:
+                      pass
+              if chosen is None:
+                  raise SystemExit("canonical master unavailable")
+              with zipfile.ZipFile(chosen) as z:
+                  z.extractall(target)
+          for folder in ("01_JUL12_AUG07_FULL_MICRO","02_AUG08_SEP01","03_SEP01_OCT01","04_OCT04_NOV03"):
+              for name in ("compact_1m.jsonl.gz","labels.json.gz"):
+                  p=target/folder/name
+                  assert p.is_file() and p.stat().st_size, p
+          PY
+
+      - name: Replay exact checked-in early causal engine
+        id: score
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          python -m research.hype_false_local_entry.early_causal_core_entry_mfe_v1 \
+            --block JUL_AUG tapes/master/01_JUL12_AUG07_FULL_MICRO/compact_1m.jsonl.gz tapes/master/01_JUL12_AUG07_FULL_MICRO/labels.json.gz \
+            --block AUG_SEP tapes/master/02_AUG08_SEP01/compact_1m.jsonl.gz tapes/master/02_AUG08_SEP01/labels.json.gz \
+            --block SEP_OCT tapes/master/03_SEP01_OCT01/compact_1m.jsonl.gz tapes/master/03_SEP01_OCT01/labels.json.gz \
+            --block OCT_NOV tapes/master/04_OCT04_NOV03/compact_1m.jsonl.gz tapes/master/04_OCT04_NOV03/labels.json.gz \
+            --out out/HYPE_EARLY_CAUSAL_CORE_ENTRY_MFE_V1.json
+          python - <<'PY'
+          import json
+          x=json.load(open("out/HYPE_EARLY_CAUSAL_CORE_ENTRY_MFE_V1.json"))
+          print(json.dumps({k:{kk:vv for kk,vv in v.items() if kk!="rows"} for k,v in x["aggregate"].items()},separators=(",",":")))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: steps.score.outcome == 'success'
+        with:
+          name: HYPE-EARLY-CAUSAL-CORE-ENTRY-MFE-${{ github.run_id }}
+          path: out/HYPE_EARLY_CAUSAL_CORE_ENTRY_MFE_V1.json
+          retention-days: 90
+
+      - name: Publish latest
+        if: always()
+        env:
+          SCORE_OUTCOME: ${{ steps.score.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=research/hype_false_local_entry/results/HYPE_EARLY_CAUSAL_CORE_ENTRY_MFE_LATEST.json
+          if test -s out/HYPE_EARLY_CAUSAL_CORE_ENTRY_MFE_V1.json; then
+            cp out/HYPE_EARLY_CAUSAL_CORE_ENTRY_MFE_V1.json "$OUT"
+          else
+            printf '{"status":"FAILED","score_outcome":"%s","real_orders":false}\n' "$SCORE_OUTCOME" > "$OUT"
+          fi
+          git config user.name pandora-research-bot
+          git config user.email actions@users.noreply.github.com
+          git add "$OUT"
+          git commit -m "research(hype): publish early causal core entry MFE audit [skip ci]" || true
+          git pull --rebase origin research/hype-h1-local-v5-oi-microstructure-20261104 || true
+          git push origin HEAD:research/hype-h1-local-v5-oi-microstructure-20261104
