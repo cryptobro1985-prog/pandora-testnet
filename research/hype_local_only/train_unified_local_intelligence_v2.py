@@ -190,25 +190,60 @@ def candidate_metrics_meta(ss,model,threshold):
             "median_delay_s":float(np.median(delays)) if delays else None}
 
 def fit_meta(valid):
-    ordered=sorted(valid,key=lambda z:(z["ts"],z["candidate_id"],z["stage"]))
-    cut=max(1,int(len(ordered)*.60))
-    train=ordered[:cut];cal=ordered[cut:]
+    """Chronological candidate-group split with a label-maturity purge.
+
+    Never put stages (60/180/300) from the SAME candidate in both meta-fit and
+    calibration: that was a source of selection leakage in the earlier prototype.
+    The later calibration subset must have distinct candidate IDs AND no
+    overlapping 3-hour teacher-maturity boundary.
+    """
+    if not valid:
+        raise RuntimeError("no validation samples")
+    first_ts={}
+    for z in valid:
+        cid=str(z["candidate_id"])
+        first_ts[cid]=min(int(z["ts"]),first_ts.get(cid,int(z["ts"])))
+    ordered=sorted(first_ts,key=lambda cid:(first_ts[cid],cid))
+    if len(ordered)<12:
+        raise RuntimeError("insufficient distinct validation candidates for meta split")
+    cut_ts=first_ts[ordered[int(len(ordered)*.60)]]
+    left={cid for cid,t in first_ts.items() if t<cut_ts-PURGE_MS}
+    right={cid for cid,t in first_ts.items() if t>=cut_ts}
+    train=sorted((z for z in valid if z["candidate_id"] in left),
+                 key=lambda z:(z["ts"],z["candidate_id"],z["stage"]))
+    cal=sorted((z for z in valid if z["candidate_id"] in right),
+               key=lambda z:(z["ts"],z["candidate_id"],z["stage"]))
+    assert {z["candidate_id"] for z in train}.isdisjoint(
+           {z["candidate_id"] for z in cal})
+    if not train or not cal:raise RuntimeError("meta split empty after chronology purge")
     X=np.stack([_meta_vector(z) for z in train]);y=np.asarray([int(z["y"]) for z in train])
-    if len(np.unique(y))<2:raise RuntimeError("meta validation-train has one class")
+    if len(np.unique(y))<2:
+        raise RuntimeError("meta validation-fit segment has one class")
     m=LogisticRegression(C=.5,class_weight="balanced",max_iter=2000,random_state=SEED)
     m.fit(X,y)
+    # Calibrate ONLY on later candidate groups, never in OOS. Gate will reject
+    # insufficient positive support, even if a tiny subset looks perfect.
     best=None
     for th in np.arange(.30,.951,.025):
         met=candidate_metrics_meta(cal,m,float(th))
         if met["accepted"]<3:continue
-        # precision-first, but retain useful coverage.
         objective=.58*met["precision"]+.27*met["f1"]+.15*met["recall"]-.0001*(met["median_delay_s"] or 300)
         if met["recall"]<.25:objective-=.15
         row=(objective,met["precision"],met["f1"],met["recall"],float(th),met)
         if best is None or row[:4]>best[:4]:best=row
-    if best is None:
-        return m,.5,candidate_metrics_meta(cal,m,.5),{"meta_train_rows":len(train),"cal_rows":len(cal)}
-    return m,best[4],best[5],{"meta_train_rows":len(train),"cal_rows":len(cal)}
+    th=best[4] if best is not None else .5
+    metrics=best[5] if best is not None else candidate_metrics_meta(cal,m,.5)
+    info={
+        "meta_train_rows":len(train),"cal_rows":len(cal),
+        "meta_train_candidates":len(left),"cal_candidates":len(right),
+        "meta_train_positive_candidates":len({z["candidate_id"] for z in train if z["y"]}),
+        "cal_positive_candidates":len({z["candidate_id"] for z in cal if z["y"]}),
+        "cut_ts_ms":int(cut_ts),"purge_ms":int(PURGE_MS),
+        "candidate_id_overlap":0,"support_gate_min_cal_positives":5,
+    }
+    info["calibration_support_pass"]=bool(info["cal_positive_candidates"]>=5 and
+                                          info["cal_candidates"]>=30)
+    return m,th,metrics,info
 
 def by_regime(oos,model,threshold):
     groups={"BEAR":[],"TRANSITION":[],"BULL":[]}
@@ -266,7 +301,13 @@ def main():
     base_rows=load_rows(args.snapshots)
     all_teacher,finalized=load_teacher_labels(args.labels_gz)
     valid_label_ids={int(x["label_id"]) for x in finalized}
-    rows,extra_admitted=merge_compatible_rows(base_rows,args.extra_root,valid_label_ids)
+    # FAIL-CLOSED: cross-artifact candidate IDs/teacher generations are not
+    # sufficient proof of comparable negatives or feature timing. Inventory
+    # extra full-micro / recent evidence, but do not silently concatenate it
+    # into this 30D candidate-level classifier (selection-bias prevention).
+    rows=list(base_rows)
+    extra_admitted=[]
+    extra_merge_verdict="QUARANTINED_UNTIL_FULL_TEACHER_AND_NEGATIVE_ALIGNMENT"
     teacher_coverage=apply_teacher(rows,finalized)
     minutes=load_minutes(args.compact_1m);h1_index=build_index(minutes)
     end_times=[int(z["bar_end_ms"]) for z in minutes]
@@ -302,7 +343,8 @@ def main():
     river_full=train_river_all(rows)
     trees_full=train_trees({"train":all_refit},args.workers)
 
-    gate=bool(oos_metrics["accepted"]>=5 and oos_metrics["precision"]>=.70 and
+    gate=bool(meta_split["calibration_support_pass"] and
+              oos_metrics["accepted"]>=5 and oos_metrics["precision"]>=.70 and
               oos_metrics["recall"]>=.40 and oos_metrics["f1"]>=.50)
     report={
       "version":"HYPE-UNIFIED-LOCAL-INTELLIGENCE-v2",
@@ -321,11 +363,12 @@ def main():
                  "compact_sha256":sha256(args.compact_1m),"labels_sha256":sha256(args.labels_gz),
                  "base_rows":len(base_rows),"rows_after_compatible_merge":len(rows),
                  "extra_schema_compatible_admitted":extra_admitted,
+                 "extra_merge_verdict":extra_merge_verdict,
                  "saved_source_inventory":inventory_extra(args.extra_root)},
       "split":{"train":"before 2026-10-23 with 3h purge",
-               "meta_fit":"first 60% of validation 2026-10-23..2026-10-27",
-               "meta_calibration":"last 40% of validation",
-               "untouched_oos":"2026-10-27..2026-11-03 with terminal maturity purge"},
+               "meta_fit":"earliest 60% of distinct validation candidates, with 3h purge before cut",
+               "meta_calibration":"later 40% of distinct validation candidates",
+               "historical_oos_previously_inspected":"2026-10-27..2026-11-03 with terminal maturity purge; no longer untouched for model selection"},
       "samples":{k:len(v) for k,v in samples.items()},
       "teacher_coverage":teacher_coverage,
       "fin_jepa_validation_loss":val_loss,
