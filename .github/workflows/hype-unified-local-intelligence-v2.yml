@@ -87,26 +87,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          BASE_ID="$(python - <<'PY'
-          import json
-          a=json.load(open('all_saved_sources/ARTIFACT_INVENTORY.json'))
-          q=[x for x in a if x.get('name')=='local116-HYPE']
-          print(q[-1]['id'] if q else '')
-          PY
-          )"
+          # Query canonical artifact names directly. The repository now has enough
+          # artifacts that a fixed first-10-pages inventory can omit older but
+          # still-retained canonical datasets.
+          BASE_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=local116-HYPE" \
+            --jq '.artifacts | map(select((.expired|not) and .name=="local116-HYPE")) | sort_by(.created_at) | reverse | .[0].id // empty')"
           if [ -n "$BASE_ID" ]; then
             echo "recovering original local116-HYPE artifact $BASE_ID"
             gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$BASE_ID/zip" > history30.zip
             unzip -q history30.zip -d history30
             SOURCE_NAME="local116-HYPE"
           else
-            MASTER_ID="$(python - <<'PY'
-          import json
-          a=json.load(open('all_saved_sources/ARTIFACT_INVENTORY.json'))
-          q=[x for x in a if x.get('name')=='HYPE-HISTORY-20260712-20261103-MASTER']
-          print(q[-1]['id'] if q else '')
-          PY
-          )"
+            MASTER_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=HYPE-HISTORY-20260712-20261103-MASTER" \
+              --jq '.artifacts | map(select((.expired|not) and .name=="HYPE-HISTORY-20260712-20261103-MASTER")) | sort_by(.created_at) | reverse | .[0].id // empty')"
             test -n "$MASTER_ID" || { echo "FAIL: local116 and retained master are both absent"; exit 2; }
             echo "local116 expired/missing; restoring 30D October source from master $MASTER_ID"
             mkdir -p master_stage master_unpacked
