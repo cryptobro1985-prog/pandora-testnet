@@ -1,0 +1,22 @@
+{
+ "written_at_local": "2026-11-12 14:57 MSK",
+ "note": "Declared after seeing only WF_Jul fold output and before WF_Aug/WF_Sep/WF_Oct/FINAL_FORWARD results. Forward period Nov4..Nov11 never inspected before model freeze.",
+ "primary_early_detector": "B0.4_SAFE_MAX_OOF_CAL",
+ "fallback_detectors": [
+  "B0.7_SAFE_MAX_OOF_CAL",
+  "B1.0_SAFE_MAX_OOF_CAL"
+ ],
+ "two_stage": {
+  "PROTECT": "B0.7_CAL_Q995 (opposite-side) or any REVERSE",
+  "REVERSE": "B1.0_SAFE_MAX_OOF_CAL early signal OR frozen V1 teacher signal (285m/130bps)"
+ },
+ "threshold_rule": "thresholds = functions of calibration-period FALSE-row scores (+train OOF FALSE scores for SAFE); frozen before test predictions; asserted unchanged",
+ "success_criteria": [
+  "false_first==0 on every frozen transfer fold with >=20 true Locals per side",
+  "median entry distance materially below 2.47% (<=0.70%)",
+  "captured MFE ratio materially above teacher",
+  "no single-month dependence",
+  "fresh forward confirms frozen model"
+ ],
+ "amendment_1": "Added 'survival_ladder.py' (earlier-age checkpoints of the frozen V1 teacher family) after seeing WF ML fold outputs but before running FINAL_FORWARD aggregation. Its selection rule (zero-FP plateau on development months only, greedy ladder by age) is fixed in code before any test/forward evaluation of the ladder."
+}

@@ -1,0 +1,2483 @@
+{
+ "family": "one-shot age checkpoint x min retrace x min fraction of causal pre-move-180 (V1 teacher family, earlier ages)",
+ "folds": {
+  "WF_Jul": {
+   "LOW": {
+    "dev_months": [
+     "May",
+     "Jun"
+    ],
+    "selected_ladder": [
+     {
+      "age_min": 30,
+      "min_retrace_bps": 40,
+      "min_fraction_pre180": 0.8
+     }
+    ],
+    "dev": {
+     "true_terminal_locals": 71,
+     "accepted": 3,
+     "tp": 3,
+     "false_first": 0,
+     "fn": 68,
+     "precision": 1.0,
+     "coverage": 0.04225352112676056,
+     "median_delay_s": 1800.0,
+     "p90_delay_s": 1800.0,
+     "median_dist_pct": 2.669216837900512,
+     "p90_dist_pct": 3.0075966484200034,
+     "median_remaining_move_pct": 4.161031108282276,
+     "median_captured_mfe_ratio": 0.5811111111111109,
+     "mean_captured_mfe_ratio": 0.6077914273719541,
+     "mfe_giveback_vs_ideal_median": 0.4188888888888891
+    },
+    "test": {
+     "true_terminal_locals": 30,
+     "accepted": 2,
+     "tp": 1,
+     "false_first": 1,
+     "fn": 29,
+     "precision": 0.5,
+     "coverage": 0.03333333333333333,
+     "median_delay_s": 1800.0,
+     "p90_delay_s": 1800.0,
+     "median_dist_pct": 1.4136596156504977,
+     "p90_dist_pct": 1.4136596156504977,
+     "median_remaining_move_pct": 1.1434511434511352,
+     "median_captured_mfe_ratio": 0.4506380120886484,
+     "mean_captured_mfe_ratio": 0.4506380120886484,
+     "mfe_giveback_vs_ideal_median": 0.5493619879113516
+    },
+    "test_records": [
+     {
+      "episode_id": 159,
+      "side": "LOW",
+      "accepted": true,
+      "true_first": false,
+      "kind": "T1800",
+      "signal_t": 5805632,
+      "entry": 66.358
+     },
+     {
+      "episode_id": 161,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 163,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 165,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 167,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 169,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 171,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 173,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 175,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 177,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 179,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 181,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 183,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 185,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 187,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 189,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 191,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 193,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 195,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 197,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 199,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 201,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 203,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 205,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 207,
+      "side": "LOW",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T1800",
+      "signal_t": 7915998,
+      "entry": 58.682,
+      "dist_pct": 1.4136596156504977,
+      "delay_s": 1800,
+      "remaining_move_pct": 1.1434511434511352,
+      "captured_mfe_ratio": 0.4506380120886484
+     },
+     {
+      "episode_id": 209,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 211,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 213,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 215,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 217,
+      "side": "LOW",
+      "accepted": false
+     }
+    ]
+   },
+   "HIGH": {
+    "dev_months": [
+     "May",
+     "Jun"
+    ],
+    "selected_ladder": [
+     {
+      "age_min": 30,
+      "min_retrace_bps": 100,
+      "min_fraction_pre180": 0.9
+     },
+     {
+      "age_min": 60,
+      "min_retrace_bps": 160,
+      "min_fraction_pre180": 0.9
+     },
+     {
+      "age_min": 180,
+      "min_retrace_bps": 40,
+      "min_fraction_pre180": 0.9
+     }
+    ],
+    "dev": {
+     "true_terminal_locals": 71,
+     "accepted": 23,
+     "tp": 23,
+     "false_first": 0,
+     "fn": 48,
+     "precision": 1.0,
+     "coverage": 0.323943661971831,
+     "median_delay_s": 10800.0,
+     "p90_delay_s": 10800.0,
+     "median_dist_pct": 2.696701233889609,
+     "p90_dist_pct": 5.546621678408715,
+     "median_remaining_move_pct": 2.182284980744542,
+     "median_captured_mfe_ratio": 0.3557889344262281,
+     "mean_captured_mfe_ratio": 0.4082960776459655,
+     "mfe_giveback_vs_ideal_median": 0.6442110655737718
+    },
+    "test": {
+     "true_terminal_locals": 30,
+     "accepted": 11,
+     "tp": 11,
+     "false_first": 0,
+     "fn": 19,
+     "precision": 1.0,
+     "coverage": 0.36666666666666664,
+     "median_delay_s": 10800.0,
+     "p90_delay_s": 10800.0,
+     "median_dist_pct": 1.860682835493388,
+     "p90_dist_pct": 2.1662534255513455,
+     "median_remaining_move_pct": 1.3230117534753338,
+     "median_captured_mfe_ratio": 0.47301587301587195,
+     "mean_captured_mfe_ratio": 0.5043166918907735,
+     "mfe_giveback_vs_ideal_median": 0.526984126984128
+    },
+    "test_records": [
+     {
+      "episode_id": 160,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 162,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 164,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T1800",
+      "signal_t": 6138729,
+      "entry": 70.439,
+      "dist_pct": 1.345938375350153,
+      "delay_s": 1800,
+      "remaining_move_pct": 0.7140930450460492,
+      "captured_mfe_ratio": 0.3435792349726683
+     },
+     {
+      "episode_id": 166,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 168,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 170,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 172,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 174,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 6533646,
+      "entry": 67.473,
+      "dist_pct": 2.1662534255513455,
+      "delay_s": 10800,
+      "remaining_move_pct": 1.9874616513271937,
+      "captured_mfe_ratio": 0.47301587301587195
+     },
+     {
+      "episode_id": 176,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 178,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 180,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 182,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 6754979,
+      "entry": 67.044,
+      "dist_pct": 0.9031113738822039,
+      "delay_s": 10800,
+      "remaining_move_pct": 1.3230117534753338,
+      "captured_mfe_ratio": 0.5921228304405859
+     },
+     {
+      "episode_id": 184,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 6828389,
+      "entry": 66.891,
+      "dist_pct": 1.995516680585463,
+      "delay_s": 10800,
+      "remaining_move_pct": 0.7325350196588643,
+      "captured_mfe_ratio": 0.26457883369330887
+     },
+     {
+      "episode_id": 186,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 6908489,
+      "entry": 67.09,
+      "dist_pct": 1.860682835493388,
+      "delay_s": 10800,
+      "remaining_move_pct": 6.838575048442397,
+      "captured_mfe_ratio": 0.782935153583619
+     },
+     {
+      "episode_id": 188,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 190,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 7142415,
+      "entry": 67.87,
+      "dist_pct": 1.6091620759640435,
+      "delay_s": 10800,
+      "remaining_move_pct": 13.886842493001328,
+      "captured_mfe_ratio": 0.8946369245372569
+     },
+     {
+      "episode_id": 192,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 194,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 196,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 7528327,
+      "entry": 60.491,
+      "dist_pct": 1.8640493186242724,
+      "delay_s": 10800,
+      "remaining_move_pct": 1.2200162007571347,
+      "captured_mfe_ratio": 0.3910969793322731
+     },
+     {
+      "episode_id": 198,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 200,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 7702854,
+      "entry": 60.22,
+      "dist_pct": 1.565922390401775,
+      "delay_s": 10800,
+      "remaining_move_pct": 4.7293258053802685,
+      "captured_mfe_ratio": 0.7482921702574884
+     },
+     {
+      "episode_id": 202,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 204,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 7835523,
+      "entry": 58.709,
+      "dist_pct": 2.244534359025585,
+      "delay_s": 10800,
+      "remaining_move_pct": 2.7218995384012734,
+      "captured_mfe_ratio": 0.5424304141208429
+     },
+     {
+      "episode_id": 206,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 7904075,
+      "entry": 58.291,
+      "dist_pct": 1.2987232889701716,
+      "delay_s": 10800,
+      "remaining_move_pct": 0.7325316086531308,
+      "captured_mfe_ratio": 0.3576214405360123
+     },
+     {
+      "episode_id": 208,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 210,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 212,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 214,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 216,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 8428656,
+      "entry": 53.0,
+      "dist_pct": 2.1580608835311654,
+      "delay_s": 10800,
+      "remaining_move_pct": 0.4113207547169928,
+      "captured_mfe_ratio": 0.15717375630858216
+     },
+     {
+      "episode_id": 218,
+      "side": "HIGH",
+      "accepted": false
+     }
+    ]
+   }
+  },
+  "WF_Aug": {
+   "LOW": {
+    "dev_months": [
+     "May",
+     "Jun",
+     "Jul"
+    ],
+    "selected_ladder": [
+     {
+      "age_min": 30,
+      "min_retrace_bps": 200,
+      "min_fraction_pre180": 0.7
+     }
+    ],
+    "dev": {
+     "true_terminal_locals": 101,
+     "accepted": 3,
+     "tp": 3,
+     "false_first": 0,
+     "fn": 98,
+     "precision": 1.0,
+     "coverage": 0.0297029702970297,
+     "median_delay_s": 1800.0,
+     "p90_delay_s": 1800.0,
+     "median_dist_pct": 3.0921916010498762,
+     "p90_dist_pct": 5.442019669753222,
+     "median_remaining_move_pct": 4.161031108282276,
+     "median_captured_mfe_ratio": 0.5811111111111109,
+     "mean_captured_mfe_ratio": 0.502157929282925,
+     "mfe_giveback_vs_ideal_median": 0.4188888888888891
+    },
+    "test": {
+     "true_terminal_locals": 42,
+     "accepted": 0,
+     "tp": 0,
+     "false_first": 0,
+     "fn": 42,
+     "precision": null,
+     "coverage": 0.0,
+     "median_delay_s": null,
+     "p90_delay_s": null,
+     "median_dist_pct": null,
+     "p90_dist_pct": null,
+     "median_remaining_move_pct": null,
+     "median_captured_mfe_ratio": null,
+     "mean_captured_mfe_ratio": null,
+     "mfe_giveback_vs_ideal_median": null
+    },
+    "test_records": [
+     {
+      "episode_id": 219,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 221,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 223,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 225,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 227,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 229,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 231,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 233,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 235,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 237,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 239,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 241,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 243,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 245,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 247,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 249,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 251,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 253,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 255,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 257,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 259,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 261,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 263,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 265,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 267,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 269,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 271,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 273,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 275,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 277,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 279,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 281,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 283,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 285,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 287,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 289,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 291,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 293,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 295,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 297,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 299,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 301,
+      "side": "LOW",
+      "accepted": false
+     }
+    ]
+   },
+   "HIGH": {
+    "dev_months": [
+     "May",
+     "Jun",
+     "Jul"
+    ],
+    "selected_ladder": [
+     {
+      "age_min": 30,
+      "min_retrace_bps": 100,
+      "min_fraction_pre180": 0.9
+     },
+     {
+      "age_min": 60,
+      "min_retrace_bps": 160,
+      "min_fraction_pre180": 0.9
+     },
+     {
+      "age_min": 180,
+      "min_retrace_bps": 40,
+      "min_fraction_pre180": 1.0
+     }
+    ],
+    "dev": {
+     "true_terminal_locals": 101,
+     "accepted": 31,
+     "tp": 31,
+     "false_first": 0,
+     "fn": 70,
+     "precision": 1.0,
+     "coverage": 0.3069306930693069,
+     "median_delay_s": 10800.0,
+     "p90_delay_s": 10800.0,
+     "median_dist_pct": 2.2572494687348343,
+     "p90_dist_pct": 4.858021460350703,
+     "median_remaining_move_pct": 1.466280742499615,
+     "median_captured_mfe_ratio": 0.3910969793322731,
+     "mean_captured_mfe_ratio": 0.42378579098771885,
+     "mfe_giveback_vs_ideal_median": 0.6089030206677268
+    },
+    "test": {
+     "true_terminal_locals": 42,
+     "accepted": 6,
+     "tp": 5,
+     "false_first": 1,
+     "fn": 37,
+     "precision": 0.8333333333333334,
+     "coverage": 0.11904761904761904,
+     "median_delay_s": 10800.0,
+     "p90_delay_s": 10800.0,
+     "median_dist_pct": 1.8261504747991264,
+     "p90_dist_pct": 3.098414431188816,
+     "median_remaining_move_pct": 2.345881069285327,
+     "median_captured_mfe_ratio": 0.5202398800599697,
+     "mean_captured_mfe_ratio": 0.48313158682172064,
+     "mfe_giveback_vs_ideal_median": 0.4797601199400303
+    },
+    "test_records": [
+     {
+      "episode_id": 220,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 222,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 224,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 226,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 228,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 230,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 232,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 234,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 236,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 9126094,
+      "entry": 55.833,
+      "dist_pct": 2.1109104616301666,
+      "delay_s": 10800,
+      "remaining_move_pct": 4.536743502946283,
+      "captured_mfe_ratio": 0.6778164302916778
+     },
+     {
+      "episode_id": 238,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 9259705,
+      "entry": 54.645,
+      "dist_pct": 1.2344563331405434,
+      "delay_s": 10800,
+      "remaining_move_pct": 0.9515966694116584,
+      "captured_mfe_ratio": 0.4322527015793864
+     },
+     {
+      "episode_id": 240,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 242,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 244,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 246,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 9444998,
+      "entry": 54.99,
+      "dist_pct": 1.1540120793787634,
+      "delay_s": 10800,
+      "remaining_move_pct": 2.345881069285327,
+      "captured_mfe_ratio": 0.6677018633540386
+     },
+     {
+      "episode_id": 248,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 250,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 252,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 254,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 256,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 258,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 260,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 262,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 264,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 266,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 268,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 270,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 272,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 274,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 276,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 278,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 280,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": false,
+      "kind": "T1800",
+      "signal_t": 10655440,
+      "entry": 80.61
+     },
+     {
+      "episode_id": 282,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 284,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 286,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 288,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 290,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 292,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 294,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T3600",
+      "signal_t": 10943818,
+      "entry": 81.98,
+      "dist_pct": 3.7567504108945826,
+      "delay_s": 3600,
+      "remaining_move_pct": 4.232739692607956,
+      "captured_mfe_ratio": 0.5202398800599697
+     },
+     {
+      "episode_id": 296,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 298,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 300,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 11195642,
+      "entry": 80.64,
+      "dist_pct": 1.8261504747991264,
+      "delay_s": 10800,
+      "remaining_move_pct": 0.24801587301587213,
+      "captured_mfe_ratio": 0.11764705882353088
+     },
+     {
+      "episode_id": 302,
+      "side": "HIGH",
+      "accepted": false
+     }
+    ]
+   }
+  },
+  "WF_Sep": {
+   "LOW": {
+    "dev_months": [
+     "May",
+     "Jun",
+     "Jul",
+     "Aug"
+    ],
+    "selected_ladder": [
+     {
+      "age_min": 30,
+      "min_retrace_bps": 200,
+      "min_fraction_pre180": 0.7
+     }
+    ],
+    "dev": {
+     "true_terminal_locals": 143,
+     "accepted": 3,
+     "tp": 3,
+     "false_first": 0,
+     "fn": 140,
+     "precision": 1.0,
+     "coverage": 0.02097902097902098,
+     "median_delay_s": 1800.0,
+     "p90_delay_s": 1800.0,
+     "median_dist_pct": 3.0921916010498762,
+     "p90_dist_pct": 5.442019669753222,
+     "median_remaining_move_pct": 4.161031108282276,
+     "median_captured_mfe_ratio": 0.5811111111111109,
+     "mean_captured_mfe_ratio": 0.502157929282925,
+     "mfe_giveback_vs_ideal_median": 0.4188888888888891
+    },
+    "test": {
+     "true_terminal_locals": 37,
+     "accepted": 3,
+     "tp": 3,
+     "false_first": 0,
+     "fn": 34,
+     "precision": 1.0,
+     "coverage": 0.08108108108108109,
+     "median_delay_s": 1800.0,
+     "p90_delay_s": 1800.0,
+     "median_dist_pct": 2.8632307897189957,
+     "p90_dist_pct": 3.373024587461293,
+     "median_remaining_move_pct": 4.091144484722964,
+     "median_captured_mfe_ratio": 0.5950752393980858,
+     "mean_captured_mfe_ratio": 0.5091445731710992,
+     "mfe_giveback_vs_ideal_median": 0.4049247606019142
+    },
+    "test_records": [
+     {
+      "episode_id": 303,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 305,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 307,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 309,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 311,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 313,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 315,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 317,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 319,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 321,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 323,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 325,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 327,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 329,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 331,
+      "side": "LOW",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T1800",
+      "signal_t": 12319003,
+      "entry": 78.08,
+      "dist_pct": 2.2123314569969965,
+      "delay_s": 1800,
+      "remaining_move_pct": 1.1014344262294973,
+      "captured_mfe_ratio": 0.33725490196078445
+     },
+     {
+      "episode_id": 333,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 335,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 337,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 339,
+      "side": "LOW",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T1800",
+      "signal_t": 12511168,
+      "entry": 77.24,
+      "dist_pct": 2.8632307897189957,
+      "delay_s": 1800,
+      "remaining_move_pct": 4.091144484722964,
+      "captured_mfe_ratio": 0.5951035781544274
+     },
+     {
+      "episode_id": 341,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 343,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 345,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 347,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 349,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 351,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 353,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 355,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 357,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 359,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 361,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 363,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 365,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 367,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 369,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 371,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 373,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 375,
+      "side": "LOW",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T1800",
+      "signal_t": 13795052,
+      "entry": 87.52,
+      "dist_pct": 3.5004730368968673,
+      "delay_s": 1800,
+      "remaining_move_pct": 4.970292504570395,
+      "captured_mfe_ratio": 0.5950752393980858
+     }
+    ]
+   },
+   "HIGH": {
+    "dev_months": [
+     "May",
+     "Jun",
+     "Jul",
+     "Aug"
+    ],
+    "selected_ladder": [
+     {
+      "age_min": 60,
+      "min_retrace_bps": 160,
+      "min_fraction_pre180": 0.9
+     },
+     {
+      "age_min": 180,
+      "min_retrace_bps": 100,
+      "min_fraction_pre180": 1.0
+     }
+    ],
+    "dev": {
+     "true_terminal_locals": 143,
+     "accepted": 35,
+     "tp": 35,
+     "false_first": 0,
+     "fn": 108,
+     "precision": 1.0,
+     "coverage": 0.24475524475524477,
+     "median_delay_s": 10800.0,
+     "p90_delay_s": 10800.0,
+     "median_dist_pct": 2.3577252469655696,
+     "p90_dist_pct": 4.5113789363583665,
+     "median_remaining_move_pct": 1.9874616513271937,
+     "median_captured_mfe_ratio": 0.39130434782608403,
+     "mean_captured_mfe_ratio": 0.41658804223163176,
+     "mfe_giveback_vs_ideal_median": 0.608695652173916
+    },
+    "test": {
+     "true_terminal_locals": 37,
+     "accepted": 18,
+     "tp": 18,
+     "false_first": 0,
+     "fn": 19,
+     "precision": 1.0,
+     "coverage": 0.4864864864864865,
+     "median_delay_s": 10800.0,
+     "p90_delay_s": 10800.0,
+     "median_dist_pct": 2.2619056295031803,
+     "p90_dist_pct": 2.877858405240458,
+     "median_remaining_move_pct": 2.140695871086989,
+     "median_captured_mfe_ratio": 0.46355019430690736,
+     "mean_captured_mfe_ratio": 0.47969348829109815,
+     "mfe_giveback_vs_ideal_median": 0.5364498056930926
+    },
+    "test_records": [
+     {
+      "episode_id": 304,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 11293782,
+      "entry": 81.96,
+      "dist_pct": 2.971469160648754,
+      "delay_s": 10800,
+      "remaining_move_pct": 1.6959492435334345,
+      "captured_mfe_ratio": 0.35641025641025603
+     },
+     {
+      "episode_id": 306,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 308,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 11350832,
+      "entry": 81.55,
+      "dist_pct": 2.5803368773145374,
+      "delay_s": 10800,
+      "remaining_move_pct": 1.6309012875536433,
+      "captured_mfe_ratio": 0.3810888252148998
+     },
+     {
+      "episode_id": 310,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 312,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 314,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T3600",
+      "signal_t": 11538019,
+      "entry": 85.34,
+      "dist_pct": 2.3793182338137653,
+      "delay_s": 3600,
+      "remaining_move_pct": 2.2849777361143686,
+      "captured_mfe_ratio": 0.48387096774193605
+     },
+     {
+      "episode_id": 316,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 318,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 11806055,
+      "entry": 85.83,
+      "dist_pct": 2.8192934782608647,
+      "delay_s": 10800,
+      "remaining_move_pct": 3.0874985436327496,
+      "captured_mfe_ratio": 0.5155642023346301
+     },
+     {
+      "episode_id": 320,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 11884846,
+      "entry": 82.96,
+      "dist_pct": 1.9037483741279448,
+      "delay_s": 10800,
+      "remaining_move_pct": 1.808100289296044,
+      "captured_mfe_ratio": 0.482315112540193
+     },
+     {
+      "episode_id": 322,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 324,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 326,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 328,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 330,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 12257087,
+      "entry": 79.91,
+      "dist_pct": 1.0892437182819736,
+      "delay_s": 10800,
+      "remaining_move_pct": 4.404955575021896,
+      "captured_mfe_ratio": 0.799999999999998
+     },
+     {
+      "episode_id": 332,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 12355268,
+      "entry": 77.41,
+      "dist_pct": 1.9381808968837122,
+      "delay_s": 10800,
+      "remaining_move_pct": 0.6588296085776935,
+      "captured_mfe_ratio": 0.24999999999999653
+     },
+     {
+      "episode_id": 334,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 336,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 12439843,
+      "entry": 80.12,
+      "dist_pct": 2.8377395100654734,
+      "delay_s": 10800,
+      "remaining_move_pct": 2.1218172740888663,
+      "captured_mfe_ratio": 0.42079207920792233
+     },
+     {
+      "episode_id": 338,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 12499596,
+      "entry": 77.09,
+      "dist_pct": 3.359659019681571,
+      "delay_s": 10800,
+      "remaining_move_pct": 2.5943702166299154,
+      "captured_mfe_ratio": 0.42735042735042805
+     },
+     {
+      "episode_id": 340,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 342,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 344,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 12859304,
+      "entry": 91.99,
+      "dist_pct": 1.5307214729180174,
+      "delay_s": 10800,
+      "remaining_move_pct": 2.5872377432329507,
+      "captured_mfe_ratio": 0.6246719160104971
+     },
+     {
+      "episode_id": 346,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 13011657,
+      "entry": 94.0,
+      "dist_pct": 2.1444930251925953,
+      "delay_s": 10800,
+      "remaining_move_pct": 2.1595744680851126,
+      "captured_mfe_ratio": 0.49633251833740816
+     },
+     {
+      "episode_id": 348,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 350,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 352,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 13162582,
+      "entry": 96.32,
+      "dist_pct": 1.7343399306264051,
+      "delay_s": 10800,
+      "remaining_move_pct": 4.588870431893676,
+      "captured_mfe_ratio": 0.7222222222222213
+     },
+     {
+      "episode_id": 354,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 356,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 358,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 13300032,
+      "entry": 92.15,
+      "dist_pct": 2.733797762296797,
+      "delay_s": 10800,
+      "remaining_move_pct": 1.323928377645145,
+      "captured_mfe_ratio": 0.32020997375328153
+     },
+     {
+      "episode_id": 360,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 13356538,
+      "entry": 91.94,
+      "dist_pct": 2.5439898240407044,
+      "delay_s": 10800,
+      "remaining_move_pct": 1.8164020013052062,
+      "captured_mfe_ratio": 0.41031941031941
+     },
+     {
+      "episode_id": 362,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 364,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 13463988,
+      "entry": 91.57,
+      "dist_pct": 1.1550086355785916,
+      "delay_s": 10800,
+      "remaining_move_pct": 0.6552364311455672,
+      "captured_mfe_ratio": 0.35928143712574473
+     },
+     {
+      "episode_id": 366,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 368,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 13617458,
+      "entry": 88.04,
+      "dist_pct": 2.8148802296059094,
+      "delay_s": 10800,
+      "remaining_move_pct": 2.8169014084507116,
+      "captured_mfe_ratio": 0.4930417495029828
+     },
+     {
+      "episode_id": 370,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 13704615,
+      "entry": 87.54,
+      "dist_pct": 1.6846361185983816,
+      "delay_s": 10800,
+      "remaining_move_pct": 3.129997715330146,
+      "captured_mfe_ratio": 0.6462264150943404
+     },
+     {
+      "episode_id": 372,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 374,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T3600",
+      "signal_t": 13789023,
+      "entry": 86.01,
+      "dist_pct": 2.0610339330448535,
+      "delay_s": 3600,
+      "remaining_move_pct": 1.6858504825020382,
+      "captured_mfe_ratio": 0.4447852760736217
+     },
+     {
+      "episode_id": 376,
+      "side": "HIGH",
+      "accepted": false
+     }
+    ]
+   }
+  },
+  "WF_Oct": {
+   "LOW": {
+    "dev_months": [
+     "May",
+     "Jun",
+     "Jul",
+     "Aug",
+     "Sep"
+    ],
+    "selected_ladder": [
+     {
+      "age_min": 30,
+      "min_retrace_bps": 200,
+      "min_fraction_pre180": 0.7
+     }
+    ],
+    "dev": {
+     "true_terminal_locals": 180,
+     "accepted": 6,
+     "tp": 6,
+     "false_first": 0,
+     "fn": 174,
+     "precision": 1.0,
+     "coverage": 0.03333333333333333,
+     "median_delay_s": 1800.0,
+     "p90_delay_s": 1800.0,
+     "median_dist_pct": 2.977711195384436,
+     "p90_dist_pct": 4.764974861912963,
+     "median_remaining_move_pct": 4.12608779650262,
+     "median_captured_mfe_ratio": 0.5880931752545984,
+     "mean_captured_mfe_ratio": 0.505651251227012,
+     "mfe_giveback_vs_ideal_median": 0.41190682474540163
+    },
+    "test": {
+     "true_terminal_locals": 43,
+     "accepted": 2,
+     "tp": 1,
+     "false_first": 1,
+     "fn": 42,
+     "precision": 0.5,
+     "coverage": 0.023255813953488372,
+     "median_delay_s": 1800.0,
+     "p90_delay_s": 1800.0,
+     "median_dist_pct": 3.102736189984512,
+     "p90_dist_pct": 3.102736189984512,
+     "median_remaining_move_pct": 3.399929898352605,
+     "median_captured_mfe_ratio": 0.5304687499999998,
+     "mean_captured_mfe_ratio": 0.5304687499999998,
+     "mfe_giveback_vs_ideal_median": 0.4695312500000002
+    },
+    "test_records": [
+     {
+      "episode_id": 377,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 379,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 381,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 383,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 385,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 387,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 389,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 391,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 393,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 395,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 397,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 399,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 401,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 403,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 405,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 407,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 409,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 411,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 413,
+      "side": "LOW",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T1800",
+      "signal_t": 15085469,
+      "entry": 79.884,
+      "dist_pct": 3.102736189984512,
+      "delay_s": 1800,
+      "remaining_move_pct": 3.399929898352605,
+      "captured_mfe_ratio": 0.5304687499999998
+     },
+     {
+      "episode_id": 415,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 417,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 419,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 421,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 423,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 425,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 427,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 429,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 431,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 433,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 435,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 437,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 439,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 441,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 443,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 445,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 447,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 449,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 451,
+      "side": "LOW",
+      "accepted": true,
+      "true_first": false,
+      "kind": "T1800",
+      "signal_t": 16319835,
+      "entry": 94.174
+     },
+     {
+      "episode_id": 453,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 455,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 457,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 459,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 461,
+      "side": "LOW",
+      "accepted": false
+     }
+    ]
+   },
+   "HIGH": {
+    "dev_months": [
+     "May",
+     "Jun",
+     "Jul",
+     "Aug",
+     "Sep"
+    ],
+    "selected_ladder": [
+     {
+      "age_min": 60,
+      "min_retrace_bps": 200,
+      "min_fraction_pre180": 0.9
+     },
+     {
+      "age_min": 180,
+      "min_retrace_bps": 100,
+      "min_fraction_pre180": 1.0
+     }
+    ],
+    "dev": {
+     "true_terminal_locals": 180,
+     "accepted": 51,
+     "tp": 51,
+     "false_first": 0,
+     "fn": 129,
+     "precision": 1.0,
+     "coverage": 0.2833333333333333,
+     "median_delay_s": 10800.0,
+     "p90_delay_s": 10800.0,
+     "median_dist_pct": 2.3793182338137653,
+     "p90_dist_pct": 3.8898168770106545,
+     "median_remaining_move_pct": 2.1595744680851126,
+     "median_captured_mfe_ratio": 0.4447852760736217,
+     "mean_captured_mfe_ratio": 0.4484872781608299,
+     "mfe_giveback_vs_ideal_median": 0.5552147239263783
+    },
+    "test": {
+     "true_terminal_locals": 43,
+     "accepted": 11,
+     "tp": 10,
+     "false_first": 1,
+     "fn": 33,
+     "precision": 0.9090909090909091,
+     "coverage": 0.23255813953488372,
+     "median_delay_s": 10800.0,
+     "p90_delay_s": 10800.0,
+     "median_dist_pct": 2.5023276922737034,
+     "p90_dist_pct": 3.961662920719969,
+     "median_remaining_move_pct": 1.859271457157663,
+     "median_captured_mfe_ratio": 0.4280724332946624,
+     "mean_captured_mfe_ratio": 0.4704319694850449,
+     "mfe_giveback_vs_ideal_median": 0.5719275667053376
+    },
+    "test_records": [
+     {
+      "episode_id": 378,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 13878663,
+      "entry": 88.14,
+      "dist_pct": 2.8117763810784013,
+      "delay_s": 10800,
+      "remaining_move_pct": 1.9174041297935096,
+      "captured_mfe_ratio": 0.3985849056603773
+     },
+     {
+      "episode_id": 380,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 13970293,
+      "entry": 89.32,
+      "dist_pct": 2.38251366120219,
+      "delay_s": 10800,
+      "remaining_move_pct": 3.6833855799372928,
+      "captured_mfe_ratio": 0.6014625228519183
+     },
+     {
+      "episode_id": 382,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 384,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 386,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 388,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 390,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 392,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 394,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 14444266,
+      "entry": 87.3,
+      "dist_pct": 1.7555705604321403,
+      "delay_s": 10800,
+      "remaining_move_pct": 5.372279495990839,
+      "captured_mfe_ratio": 0.7503999999999996
+     },
+     {
+      "episode_id": 396,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 398,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 400,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 402,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 404,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 406,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 408,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 410,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 412,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 414,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 15125178,
+      "entry": 81.634,
+      "dist_pct": 1.169491525423727,
+      "delay_s": 10800,
+      "remaining_move_pct": 1.609623441213226,
+      "captured_mfe_ratio": 0.5763157894736871
+     },
+     {
+      "episode_id": 416,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 418,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 420,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": false,
+      "kind": "T10800",
+      "signal_t": 15293101,
+      "entry": 77.89
+     },
+     {
+      "episode_id": 422,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 15347278,
+      "entry": 77.451,
+      "dist_pct": 2.5822600120748773,
+      "delay_s": 10800,
+      "remaining_move_pct": 1.8011387845218163,
+      "captured_mfe_ratio": 0.4045823665893251
+     },
+     {
+      "episode_id": 424,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 426,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 15493108,
+      "entry": 78.54,
+      "dist_pct": 1.492537313432829,
+      "delay_s": 10800,
+      "remaining_move_pct": 0.9167303284950523,
+      "captured_mfe_ratio": 0.37696335078534504
+     },
+     {
+      "episode_id": 428,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 430,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 432,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 434,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 436,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 438,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 440,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 442,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 444,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 446,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 16203862,
+      "entry": 80.48,
+      "dist_pct": 2.5488890234303896,
+      "delay_s": 10800,
+      "remaining_move_pct": 1.2512425447316122,
+      "captured_mfe_ratio": 0.3235861182519302
+     },
+     {
+      "episode_id": 448,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 450,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 452,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T3600",
+      "signal_t": 16358656,
+      "entry": 91.516,
+      "dist_pct": 2.4557663611170177,
+      "delay_s": 3600,
+      "remaining_move_pct": 1.1702871629004852,
+      "captured_mfe_ratio": 0.31733333333333696
+     },
+     {
+      "episode_id": 454,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 16395838,
+      "entry": 90.124,
+      "dist_pct": 4.116263977104673,
+      "delay_s": 10800,
+      "remaining_move_pct": 4.354001153965637,
+      "captured_mfe_ratio": 0.5035288079045293
+     },
+     {
+      "episode_id": 456,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 458,
+      "side": "HIGH",
+      "accepted": false
+     },
+     {
+      "episode_id": 460,
+      "side": "HIGH",
+      "accepted": true,
+      "true_first": true,
+      "kind": "T10800",
+      "signal_t": 16614262,
+      "entry": 85.475,
+      "dist_pct": 3.9444850255661135,
+      "delay_s": 10800,
+      "remaining_move_pct": 3.3811055864287787,
+      "captured_mfe_ratio": 0.4515624999999997
+     },
+     {
+      "episode_id": 462,
+      "side": "HIGH",
+      "accepted": false
+     }
+    ]
+   }
+  },
+  "FINAL_FORWARD": {
+   "LOW": {
+    "dev_months": [
+     "May",
+     "Jun",
+     "Jul",
+     "Aug",
+     "Sep",
+     "Oct"
+    ],
+    "selected_ladder": [
+     {
+      "age_min": 30,
+      "min_retrace_bps": 160,
+      "min_fraction_pre180": 0.9
+     }
+    ],
+    "dev": {
+     "true_terminal_locals": 223,
+     "accepted": 6,
+     "tp": 6,
+     "false_first": 0,
+     "fn": 217,
+     "precision": 1.0,
+     "coverage": 0.026905829596412557,
+     "median_delay_s": 1800.0,
+     "p90_delay_s": 1800.0,
+     "median_dist_pct": 2.6522615290234364,
+     "p90_dist_pct": 3.3016046134406896,
+     "median_remaining_move_pct": 2.846666132338571,
+     "median_captured_mfe_ratio": 0.5557899305555554,
+     "mean_captured_mfe_ratio": 0.4688483701091834,
+     "mfe_giveback_vs_ideal_median": 0.44421006944444463
+    },
+    "test": {
+     "true_terminal_locals": 7,
+     "accepted": 1,
+     "tp": 0,
+     "false_first": 1,
+     "fn": 7,
+     "precision": 0.0,
+     "coverage": 0.0,
+     "median_delay_s": null,
+     "p90_delay_s": null,
+     "median_dist_pct": null,
+     "p90_dist_pct": null,
+     "median_remaining_move_pct": null,
+     "median_captured_mfe_ratio": null,
+     "mean_captured_mfe_ratio": null,
+     "mfe_giveback_vs_ideal_median": null
+    },
+    "test_records": [
+     {
+      "episode_id": 463,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 465,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 467,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 469,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 471,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 473,
+      "side": "LOW",
+      "accepted": false
+     },
+     {
+      "episode_id": 475,
+      "side": "LOW",
+      "accepted": true,
+      "true_first": false,
+      "kind": "T1800",
+      "signal_t": 17334155,
+      "entry": 74.122
+     }
+    ]
+   },
+   "HIGH": {
+    "dev_months": [
+     "May",
+     "Jun",
+     "Jul",
+     "Aug",
+     "Sep",
+     "Oct"
+    ],
+    "selected_ladder": [],
+    "dev": null,
+    "test": null,
+    "test_records": []
+   }
+  }
+ }
+}

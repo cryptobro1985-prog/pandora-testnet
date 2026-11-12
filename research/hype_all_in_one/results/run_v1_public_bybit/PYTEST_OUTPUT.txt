@@ -1,0 +1,28 @@
+........................                                                 [100%]
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tests/test_no_candidate_leakage.py::test_segments_disjoint_and_purged[WF_Jul]
+PASSED tests/test_no_candidate_leakage.py::test_segments_disjoint_and_purged[WF_Aug]
+PASSED tests/test_no_candidate_leakage.py::test_segments_disjoint_and_purged[WF_Sep]
+PASSED tests/test_no_candidate_leakage.py::test_segments_disjoint_and_purged[WF_Oct]
+PASSED tests/test_no_candidate_leakage.py::test_segments_disjoint_and_purged[FINAL_FORWARD]
+PASSED tests/test_no_candidate_leakage.py::test_thresholds_depend_only_on_calibration_and_train[WF_Jul]
+PASSED tests/test_no_candidate_leakage.py::test_thresholds_depend_only_on_calibration_and_train[WF_Aug]
+PASSED tests/test_no_candidate_leakage.py::test_thresholds_depend_only_on_calibration_and_train[WF_Sep]
+PASSED tests/test_no_candidate_leakage.py::test_thresholds_depend_only_on_calibration_and_train[WF_Oct]
+PASSED tests/test_no_candidate_leakage.py::test_thresholds_depend_only_on_calibration_and_train[FINAL_FORWARD]
+PASSED tests/test_no_candidate_leakage.py::test_normalization_fit_on_train_only[WF_Jul]
+PASSED tests/test_no_candidate_leakage.py::test_normalization_fit_on_train_only[WF_Aug]
+PASSED tests/test_no_candidate_leakage.py::test_normalization_fit_on_train_only[WF_Sep]
+PASSED tests/test_no_candidate_leakage.py::test_normalization_fit_on_train_only[WF_Oct]
+PASSED tests/test_no_candidate_leakage.py::test_normalization_fit_on_train_only[FINAL_FORWARD]
+PASSED tests/test_no_candidate_leakage.py::test_forward_model_frozen_before_forward_period
+PASSED tests/test_no_candidate_leakage.py::test_x_never_contains_label_columns
+PASSED tests/test_no_future_leakage.py::test_contract_counts
+PASSED tests/test_no_future_leakage.py::test_feature_names_have_no_target_or_label_fields
+PASSED tests/test_no_future_leakage.py::test_feature_function_never_sees_labels
+PASSED tests/test_no_future_leakage.py::test_family_to_contract_ids_are_inputs_only
+PASSED tests/test_no_future_leakage.py::test_features_invariant_to_future_perturbation
+PASSED tests/test_no_future_leakage.py::test_lineage_context_invariant_to_future
+PASSED tests/test_no_future_leakage.py::test_decision_points_precede_supersession
+24 passed in 150.58s (0:02:30)
