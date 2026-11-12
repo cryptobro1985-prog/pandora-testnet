@@ -10,7 +10,7 @@ on:
       - ".github/workflows/hype-all-in-one-bundle.yml"
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 jobs:
@@ -87,10 +87,60 @@ jobs:
           find ALL_IN_ONE -type f -print0 | sort -z | xargs -0 sha256sum > ALL_IN_ONE/SHA256SUMS.txt
           du -sh ALL_IN_ONE
 
+      - name: Recover preserved Jul-Nov source blocks and current models for public release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p PUBLIC_RELEASE
+          fetch_zip () {
+            ID="$1"; NAME="$2"
+            echo "fetch artifact $ID -> $NAME"
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$ID/zip" > "PUBLIC_RELEASE/$NAME"
+          }
+
+          # Historical source blocks used by the preserved master workflow.
+          fetch_zip 13585701406 HYPE_JUL12_AUG07_FULL_MICRO.zip
+          fetch_zip 13638795292 HYPE_AUG08_SEP01.zip
+          fetch_zip 13637558401 HYPE_SEP01_OCT01.zip
+          fetch_zip 13435356156 HYPE_OCT04_NOV03_LOCAL116.zip
+
+          # Historical enrichment + latest trained models.
+          fetch_zip 13533587104 HYPE_LOCAL_HISTORICAL_GAPS.zip
+          fetch_zip 13841989968 HYPE_LOCAL_ENSEMBLE_30D.zip
+          fetch_zip 13844968349 HYPE_LOCAL_ONLY_CHECKPOINT.zip
+          fetch_zip 13929250672 HYPE_UNIFIED_LOCAL_INTELLIGENCE_V2.zip
+          fetch_zip 13844693781 HYPE_LATEST_LOCAL_RAW.zip
+
+          # May/June were freshly rebuilt in this run from public source data.
+          tar -czf PUBLIC_RELEASE/HYPE_MAY_2026_CANONICAL.tar.gz -C ALL_IN_ONE/data/2026-05 .
+          tar -czf PUBLIC_RELEASE/HYPE_JUNE_2026_CANONICAL.tar.gz -C ALL_IN_ONE/data/2026-06 .
+
+          cp research/hype_all_in_one/README.md PUBLIC_RELEASE/README.md
+          cp research/hype_all_in_one/MANIFEST.json PUBLIC_RELEASE/MANIFEST.json
+          cp research/hype_all_in_one/PROMPT_FOR_OTHER_AI.md PUBLIC_RELEASE/PROMPT_FOR_OTHER_AI.md
+          sha256sum PUBLIC_RELEASE/* > PUBLIC_RELEASE/SHA256SUMS.txt
+
+      - name: Publish/update public GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="hype-public-data-v1"
+          TITLE="HYPE Public Research Data + Models v1"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --target research/hype-h1-local-v5-oi-microstructure-20261104 --title "$TITLE" --notes "Public HYPE research bundle: May-Nov historical data, canonical 116-point datasets/enrichment, latest Local-Only/Ensemble/Unified models, manifests and external-AI handoff. Research only; no secrets or real-order credentials."
+          fi
+          gh release upload "$TAG" PUBLIC_RELEASE/* --clobber
+
       - uses: actions/upload-artifact@v4
         with:
           name: HYPE-ALL-IN-ONE-${{ github.run_id }}
-          path: ALL_IN_ONE/**
+          path: |
+            ALL_IN_ONE/**
+            PUBLIC_RELEASE/**
           retention-days: 90
           compression-level: 0
           if-no-files-found: error
