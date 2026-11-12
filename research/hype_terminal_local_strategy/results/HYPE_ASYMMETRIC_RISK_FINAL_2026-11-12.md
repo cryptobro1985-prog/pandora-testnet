@@ -60,3 +60,21 @@ This is not implementable because the exact opposite Local extreme is only known
 ## Verdict
 Promotable research candidate for the loss side: 1% adverse-price cut, no tight profit trail.
 The remaining bottleneck is causal exit timing. Do not increase leverage to compensate for MFE giveback; improve the opposite-local / control-transfer exit detector instead.
+
+
+## Additional exit/pyramiding challenges (rejected)
+After freezing the 1% loss-cut, additional causal overlays were challenged:
+- flow + MFE giveback exit;
+- H1 opposite candidate K0/K1 exits;
+- K0/K1 allowed only after material MFE;
+- simple profit-only pyramiding with rung stops.
+
+None produced a better transferable full-history compound than the plain 1% loss-cut + winner-run baseline at the same 5x account exposure. The best-looking development exits either clipped May/Oct-Nov or reduced total compound. Therefore they are not promoted.
+
+Current best robust 5x baseline remains:
+- $100 -> $1,308.86
+- max closed-equity DD 29.36%
+- worst modeled trade -5.75%
+- no tight profit trail
+- 1% adverse price loss-cut
+- causal opposite-Local exit until a better OOS-stable MFE/exit detector is found.
