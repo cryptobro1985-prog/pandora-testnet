@@ -53,17 +53,10 @@ jobs:
           }
           fetch_latest_prefix () {
             PREFIX="$1"; DEST="$2"
-            python - "$PREFIX" > /tmp/ids.txt <<'PY'
-import json,os,subprocess,sys
-prefix=sys.argv[1]
-raw=subprocess.check_output(["gh","api",f"repos/{os.environ['GITHUB_REPOSITORY']}/actions/artifacts?per_page=100"]).decode()
-a=json.loads(raw)["artifacts"]
-rows=[x for x in a if not x.get("expired") and str(x.get("name","")).startswith(prefix)]
-rows.sort(key=lambda x:x.get("created_at",""),reverse=True)
-if rows: print(rows[0]["id"],rows[0]["name"])
-PY
-            if [ ! -s /tmp/ids.txt ]; then echo "MISSING prefix artifact: $PREFIX"; return 0; fi
-            read ID NAME < /tmp/ids.txt
+            ROW="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" --jq ".artifacts | map(select((.expired|not) and (.name|startswith(\"$PREFIX\")))) | sort_by(.created_at) | reverse | .[0] | [.id,.name] | @tsv" 2>/dev/null || true)"
+            if [ -z "$ROW" ] || [ "$ROW" = "null" ]; then echo "MISSING prefix artifact: $PREFIX"; return 0; fi
+            ID="$(printf '%s' "$ROW" | cut -f1)"
+            NAME="$(printf '%s' "$ROW" | cut -f2-)"
             mkdir -p "$DEST"
             gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$ID/zip" > "$RUNNER_TEMP/a.zip"
             unzip -q "$RUNNER_TEMP/a.zip" -d "$DEST"
