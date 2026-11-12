@@ -1,0 +1,57 @@
+{
+ "May": {
+  "project_minutes": 44640,
+  "compared": 44640,
+  "missing_or_gap": 0,
+  "high_exact": 0.9999327956989247,
+  "low_exact": 0.9998431899641577,
+  "close_exact": 0.9992159498207885,
+  "p99_hl_diff_bps": 0.0,
+  "max_hl_diff_bps": 2.736594710321949,
+  "median_volume_ratio": null
+ },
+ "Jul": {
+  "project_minutes": 36419,
+  "compared": 36419,
+  "missing_or_gap": 0,
+  "high_exact": 0.9996155852714242,
+  "low_exact": 0.9997254180510173,
+  "close_exact": 0.9996979598561191,
+  "p99_hl_diff_bps": 0.0,
+  "max_hl_diff_bps": 18.539851681185215,
+  "median_volume_ratio": null
+ },
+ "Aug": {
+  "project_minutes": 34559,
+  "compared": 34559,
+  "missing_or_gap": 0,
+  "high_exact": 0.9999421279550913,
+  "low_exact": 0.9999710639775456,
+  "close_exact": 0.9997106397754565,
+  "p99_hl_diff_bps": 0.0,
+  "max_hl_diff_bps": 1.7292062943119468,
+  "median_volume_ratio": null
+ },
+ "Sep": {
+  "project_minutes": 43199,
+  "compared": 43199,
+  "missing_or_gap": 0,
+  "high_exact": 0.9999537026320053,
+  "low_exact": 1.0,
+  "close_exact": 0.9997916618440241,
+  "p99_hl_diff_bps": 0.0,
+  "max_hl_diff_bps": 1.1475786091352802,
+  "median_volume_ratio": null
+ },
+ "Oct": {
+  "project_minutes": 43198,
+  "compared": 43198,
+  "missing_or_gap": 0,
+  "high_exact": 0.9999305523403861,
+  "low_exact": 0.9999768507801287,
+  "close_exact": 0.9995833140423168,
+  "p99_hl_diff_bps": 0.0,
+  "max_hl_diff_bps": 1.2663357309272705,
+  "median_volume_ratio": null
+ }
+}

@@ -1,0 +1,5141 @@
+{
+ "listed_total_repo_artifacts": 3884,
+ "hype_related": 570,
+ "status_counts": {
+  "downloaded": 58,
+  "not_selected_duplicate_or_irrelevant": 511,
+  "download_failed_expired_410": 1
+ },
+ "artifacts": [
+  {
+   "id": 13950238744,
+   "name": "HYPE-ALL-IN-ONE-43230219891",
+   "size_bytes": 368409286,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-12T14:04:28Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13931521875,
+   "name": "HYPE-LOCAL-ONLY-CHECKPOINT",
+   "size_bytes": 16844725,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-12T09:33:20Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13930938928,
+   "name": "HYPE-LOCAL-RAW-43185106251",
+   "size_bytes": 2759475,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-12T09:33:16Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13930509001,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-43185106251",
+   "size_bytes": 14138446,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-12T09:33:25Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13929250672,
+   "name": "HYPE-UNIFIED-LOCAL-INTELLIGENCE-V2-43185697907",
+   "size_bytes": 35189753,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-12T08:53:31Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13928600312,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-43185106197",
+   "size_bytes": 8858,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-12T08:44:26Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13877197917,
+   "name": "HYPE-RICH-STRONG-OCT22-43029629190",
+   "size_bytes": 3278638,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T17:41:34Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13873877652,
+   "name": "HYPE-7LAYER-OCT29-43031802445",
+   "size_bytes": 4353314,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T16:49:39Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13871232885,
+   "name": "HYPE-RICH-STRONG-OCT12-43029629190",
+   "size_bytes": 7042339,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T16:11:21Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13869265734,
+   "name": "HYPE-RICH-STRONG-OCT05-43029629190",
+   "size_bytes": 2794070,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T15:33:13Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13867877330,
+   "name": "HYPE-7LAYER-OCT30-43031802445",
+   "size_bytes": 4314252,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T15:25:14Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13866858373,
+   "name": "HYPE-RICH-STRONG-SEP30-43029629190",
+   "size_bytes": 4853893,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T15:10:49Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13866413770,
+   "name": "HYPE-RICH-STRONG-OCT08-43029629190",
+   "size_bytes": 1052341,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T15:10:06Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13865837240,
+   "name": "HYPE-RICH-STRONG-SEP17_18-43029629190",
+   "size_bytes": 4725605,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T14:55:36Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13865457026,
+   "name": "HYPE-7LAYER-OCT22-43031802445",
+   "size_bytes": 4379606,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T14:44:42Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13864912751,
+   "name": "HYPE-7LAYER-OCT26-43031802445",
+   "size_bytes": 4375871,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T14:42:51Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13864794254,
+   "name": "HYPE-7LAYER-OCT08-43031802445",
+   "size_bytes": 4194297,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T14:51:15Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13864618624,
+   "name": "HYPE-7LAYER-SEP17-43031802445",
+   "size_bytes": 3973128,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T14:41:25Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13864325656,
+   "name": "HYPE-7LAYER-OCT12-43031802445",
+   "size_bytes": 4263150,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T14:20:16Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13864289533,
+   "name": "HYPE-7LAYER-SEP30-43031802445",
+   "size_bytes": 4168997,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T14:40:52Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13863613570,
+   "name": "HYPE-7LAYER-OCT05-43031802445",
+   "size_bytes": 4193400,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T14:30:41Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13863139869,
+   "name": "HYPE-7LAYER-OCT27-43031802445",
+   "size_bytes": 4365276,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T14:27:05Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13861570280,
+   "name": "HYPE-RICH-STRONG-SEP10-43029629190",
+   "size_bytes": 1259751,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T13:42:53Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13861541312,
+   "name": "HYPE-7LAYER-SEP03-43031802445",
+   "size_bytes": 171719,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T13:48:11Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13861069878,
+   "name": "HYPE-7LAYER-SEP18-43031802445",
+   "size_bytes": 452641,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T13:50:13Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13860144574,
+   "name": "HYPE-7LAYER-SEP10-43031802445",
+   "size_bytes": 478373,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T13:50:46Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13859274718,
+   "name": "HYPE-RICH-STRONG-SEP03-43029629190",
+   "size_bytes": 1152226,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T13:39:03Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13857580722,
+   "name": "HYPE-RICH-STRONG-SEP03-43024525169",
+   "size_bytes": 1106487,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T13:05:41Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13855171361,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-43020559608",
+   "size_bytes": 8858,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T12:30:21Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13854185160,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-43017674347",
+   "size_bytes": 8863,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T12:10:10Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13851745270,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-43012135530",
+   "size_bytes": 8859,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T11:30:18Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13846566579,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-43001641647",
+   "size_bytes": 8863,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T10:14:53Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13846391464,
+   "name": "HYPE-EARLY-CAUSAL-CORE-ENTRY-MFE-43001630038",
+   "size_bytes": 66335,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T10:12:49Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13846321848,
+   "name": "HYPE-EARLY-CAUSAL-CORE-ENTRY-MFE-43001455158",
+   "size_bytes": 65952,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T10:11:34Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13846057752,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-43001425769",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T10:12:28Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13845145246,
+   "name": "HYPE-ULTRA-SURVIVAL-DYNAMIC-MFE-42997052092",
+   "size_bytes": 5526,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T09:40:30Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13845135853,
+   "name": "HYPE-ULTRA-SURVIVAL-DYNAMIC-MFE-42997349060",
+   "size_bytes": 13753,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T09:42:42Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13845058225,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42992316932",
+   "size_bytes": 14138445,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T09:59:13Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13844968349,
+   "name": "HYPE-LOCAL-ONLY-CHECKPOINT",
+   "size_bytes": 16844726,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T09:59:11Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13844693781,
+   "name": "HYPE-LOCAL-RAW-42992316932",
+   "size_bytes": 6491752,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T09:59:08Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13844392186,
+   "name": "HYPE-ULTRA-SURVIVAL-DYNAMIC-MFE-42997239290",
+   "size_bytes": 12967,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T09:41:40Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13844226720,
+   "name": "HYPE-ULTRA-SURVIVAL-V2-TRADE-GEOMETRY-42996512191",
+   "size_bytes": 4124,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T09:36:10Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13843929232,
+   "name": "HYPE-ULTRA-SURVIVAL-DYNAMIC-MFE-42997543119",
+   "size_bytes": 24737,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T09:43:50Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13843623528,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42995338951",
+   "size_bytes": 8860,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T09:29:56Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13843394355,
+   "name": "HYPE-ULTRA-SURVIVAL-DYNAMIC-MFE-42996742357",
+   "size_bytes": 1689,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T09:38:21Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13843040084,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42985165451",
+   "size_bytes": 14138444,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T09:07:25Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13843040076,
+   "name": "HYPE-LOCAL-RAW-42985165451",
+   "size_bytes": 5971764,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T09:07:21Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13842965325,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42992316904",
+   "size_bytes": 8860,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T09:08:25Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13842845334,
+   "name": "HYPE-LOCAL-ONLY-CHECKPOINT",
+   "size_bytes": 16845123,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T09:07:24Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13842446664,
+   "name": "HYPE-FULLMICRO-CROSSEDBOOK-42992316928",
+   "size_bytes": 1695,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T09:07:00Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13841989968,
+   "name": "HYPE-LOCAL-ENSEMBLE-30D-42992316882",
+   "size_bytes": 118874738,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T09:16:09Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13841859004,
+   "name": "HYPE-FULLMICRO-CROSSEDBOOK-42992314153",
+   "size_bytes": 1695,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T09:06:33Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13841141492,
+   "name": "HYPE-DENSE-CROSS-PERIOD-42988985637",
+   "size_bytes": 51384,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T08:41:24Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13840389177,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42988985772",
+   "size_bytes": 8859,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T08:43:24Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13840318975,
+   "name": "HYPE-FALSE-LOCAL-DUAL-SCOPE-42988985808",
+   "size_bytes": 57871,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T08:41:26Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13839785840,
+   "name": "HYPE-LOCAL-RAW-42977821712",
+   "size_bytes": 6415001,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T08:15:29Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13839636776,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42977821712",
+   "size_bytes": 14138446,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T08:15:33Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13839332046,
+   "name": "HYPE-FULLMICRO-CROSSEDBOOK-42985154563",
+   "size_bytes": 1695,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T08:12:32Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13838914052,
+   "name": "HYPE-LOCAL-ENSEMBLE-30D-42985154213",
+   "size_bytes": 118874738,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T08:22:03Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13838734190,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42985166061",
+   "size_bytes": 8861,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T08:14:45Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13838699008,
+   "name": "HYPE-FULLMICRO-CROSSEDBOOK-42985165500",
+   "size_bytes": 1695,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T08:12:58Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13838604642,
+   "name": "HYPE-LOCAL-ONLY-CHECKPOINT",
+   "size_bytes": 16845037,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T08:15:31Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13837445977,
+   "name": "HYPE-FULLMICRO-MFE-HOLD-42979958634",
+   "size_bytes": 2770,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T07:30:50Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13837292057,
+   "name": "HYPE-ANCHOR-AB-30D-42980982412",
+   "size_bytes": 2298,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T07:38:45Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13837091087,
+   "name": "HYPE-LOCAL-RAW-42969916241",
+   "size_bytes": 6905549,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T07:24:06Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13836854681,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42980982380",
+   "size_bytes": 8860,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T07:41:06Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13836772665,
+   "name": "HYPE-FULLMICRO-ECONOMIC-V1-42979620987",
+   "size_bytes": 1372,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T07:27:50Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13836719339,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42980312201",
+   "size_bytes": 8862,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T07:35:34Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13836428382,
+   "name": "HYPE-LOCAL-ENSEMBLE-30D-42977803037",
+   "size_bytes": 118874738,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T07:19:21Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13836073987,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42969916241",
+   "size_bytes": 14138445,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T07:24:10Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13835869372,
+   "name": "HYPE-LOCAL-ONLY-CHECKPOINT",
+   "size_bytes": 16845036,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T07:24:08Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13835862970,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42977821761",
+   "size_bytes": 8858,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T07:15:03Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13835788300,
+   "name": "HYPE-FULLMICRO-CROSSEDBOOK-42977821601",
+   "size_bytes": 1695,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T07:13:12Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13835523927,
+   "name": "HYPE-FULLMICRO-CROSSEDBOOK-42977803045",
+   "size_bytes": 1695,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T07:12:51Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13835137471,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42975459920",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T06:52:57Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13835105179,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42967356891",
+   "size_bytes": 14138444,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T06:32:37Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13834798906,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42975498021",
+   "size_bytes": 8856,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T06:55:21Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13834684981,
+   "name": "HYPE-LOCAL-ENSEMBLE-30D-42975459932",
+   "size_bytes": 118874738,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T06:57:18Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13834514881,
+   "name": "HYPE-FULLMICRO-CROSSEDBOOK-42975517442",
+   "size_bytes": 1695,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T06:53:26Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13834349494,
+   "name": "HYPE-FULLMICRO-CROSSEDBOOK-42975364892",
+   "size_bytes": 1695,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T06:51:59Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13834060010,
+   "name": "HYPE-UNIFIED-LOCAL-INTELLIGENCE-V2-42970809302",
+   "size_bytes": 35191690,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T06:20:47Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13834027314,
+   "name": "HYPE-LOCAL-RAW-42967356891",
+   "size_bytes": 5466155,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T06:32:33Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13833887454,
+   "name": "HYPE-PAPER-RISK-REPLAY-42973182059",
+   "size_bytes": 11376,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T06:33:16Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13833873036,
+   "name": "HYPE-LOCAL-ONLY-CHECKPOINT",
+   "size_bytes": 16845063,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T06:32:35Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13833782509,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42972412242",
+   "size_bytes": 8859,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T06:28:36Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13833704875,
+   "name": "HYPE-ANCHOR-AB-30D-42973235382",
+   "size_bytes": 1766,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T06:33:22Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13833289966,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42972707642",
+   "size_bytes": 8859,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T06:31:18Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13833256363,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42969851833",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T06:05:01Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13833206910,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42969916005",
+   "size_bytes": 8856,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T06:07:26Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13832971218,
+   "name": "HYPE-DENSE-ALL-STRICT-42969346340",
+   "size_bytes": 1886,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T06:00:24Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13832811051,
+   "name": "HYPE-DENSE-CROSS-PERIOD-42969346279",
+   "size_bytes": 51339,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T06:00:10Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13832751408,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42969364345",
+   "size_bytes": 8859,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T06:02:24Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13832368303,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42969230173",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T06:00:02Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13832209006,
+   "name": "HYPE-FALSE-LOCAL-DUAL-SCOPE-42969346282",
+   "size_bytes": 57846,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T06:00:05Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13832114188,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42969073890",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T05:58:20Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13831903748,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42969172779",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T05:58:54Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13831882754,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42967444007",
+   "size_bytes": 8861,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T05:44:26Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13831875581,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42966364331",
+   "size_bytes": 8859,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T05:34:17Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13831837499,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42967356960",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T05:42:05Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13829525849,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42961152250",
+   "size_bytes": 8859,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T04:46:27Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13828198136,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42959412800",
+   "size_bytes": 8858,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T04:30:23Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13825482625,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42953176580",
+   "size_bytes": 8856,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T03:32:39Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13823747026,
+   "name": "HYPE-FALSE-LOCAL-DUAL-SCOPE-42948673389",
+   "size_bytes": 57846,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T02:50:15Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13823057919,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42946490547",
+   "size_bytes": 8862,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T02:32:56Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13820695425,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42939486934",
+   "size_bytes": 8862,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T01:33:09Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13816655665,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42931138798",
+   "size_bytes": 8862,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-11T00:27:07Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13815200443,
+   "name": "HYPE-FALSE-LOCAL-DUAL-SCOPE-42927245943",
+   "size_bytes": 57846,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T23:55:28Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13812863560,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42924070691",
+   "size_bytes": 8862,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T23:33:56Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13809649208,
+   "name": "HYPE-FALSE-LOCAL-DUAL-SCOPE-42919583956",
+   "size_bytes": 657,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T23:00:25Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13808194647,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42914872268",
+   "size_bytes": 8860,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T22:31:00Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13805546422,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42906154369",
+   "size_bytes": 8859,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T21:35:40Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13799249330,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42895708795",
+   "size_bytes": 8861,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T20:31:25Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13796876490,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42886462107",
+   "size_bytes": 8860,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T19:35:48Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13796415408,
+   "name": "HYPE-FRESH-ADAPTIVE-MICRO-OOS-42878488490",
+   "size_bytes": 26127,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T19:25:55Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13794204520,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42883368003",
+   "size_bytes": 8861,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T19:17:30Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13794043634,
+   "name": "HYPE-DENSE-CROSS-PERIOD-42883367985",
+   "size_bytes": 51339,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T19:15:27Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13793549193,
+   "name": "HYPE-DENSE-ALL-STRICT-42883368110",
+   "size_bytes": 1886,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T19:15:31Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13792107660,
+   "name": "HYPE-UNIVERSAL-MOVEMENT-V1-42874807935",
+   "size_bytes": 7614,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T18:38:12Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13791157944,
+   "name": "HYPE-UNIVERSAL-TRIGGER-NOV-OOS-42876414916",
+   "size_bytes": 1654,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T18:34:41Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13790459777,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42874913583",
+   "size_bytes": 8857,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T18:27:04Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13790349536,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42874463909",
+   "size_bytes": 8860,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T18:24:24Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13787820168,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42864916933",
+   "size_bytes": 8859,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T17:28:31Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13786005893,
+   "name": "HYPE-DENSE-CROSS-PERIOD-42862280484",
+   "size_bytes": 51339,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T17:11:25Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13785596898,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42862280764",
+   "size_bytes": 8858,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T17:13:41Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13785536975,
+   "name": "HYPE-DENSE-ALL-STRICT-42862258426",
+   "size_bytes": 1886,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T17:11:20Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13783394745,
+   "name": "HYPE-MOVEMENT-V3FAST-NOV48",
+   "size_bytes": 1658,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T17:03:22Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13782436918,
+   "name": "HYPE-MOVEMENT-V2-NOV48",
+   "size_bytes": 1873,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T16:30:17Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13782408303,
+   "name": "HYPE-DIRECT-STRENGTH-V4-NOV48",
+   "size_bytes": 324061,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T16:37:24Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13781967204,
+   "name": "HYPE-MOVEMENT-V2-NOV48-FAST2",
+   "size_bytes": 1177,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T16:27:20Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13781912424,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42854439085",
+   "size_bytes": 8860,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T16:28:19Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13780894347,
+   "name": "HYPE-MOVEMENT-V2-NOV48",
+   "size_bytes": 1177,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T16:28:29Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13777639506,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42847160371",
+   "size_bytes": 8858,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T15:44:51Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13776240567,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42839726707",
+   "size_bytes": 8857,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T15:01:50Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13776169323,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42844021846",
+   "size_bytes": 8860,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T15:26:55Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13773056378,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42834095948",
+   "size_bytes": 8860,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T14:28:47Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13769061271,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42824952351",
+   "size_bytes": 8861,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T13:31:38Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13767780871,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42820840033",
+   "size_bytes": 8858,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T13:04:25Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13766081593,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42817305111",
+   "size_bytes": 8859,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:39:45Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13766040058,
+   "name": "HYPE-DENSE-POST-LOCAL-SURVIVAL-42816004085",
+   "size_bytes": 111477,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:28:58Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13766021897,
+   "name": "HYPE-DENSE-IMPULSE-NORMALIZED-GATE-42817909540",
+   "size_bytes": 2322,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:42:12Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13765861800,
+   "name": "HYPE-DENSE-DUAL-IMPULSE-GATE-42817461843",
+   "size_bytes": 1956,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:39:06Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13765825975,
+   "name": "HYPE-DENSE-FIRST-SIGNAL-FEATURE-AUDIT-42816749120",
+   "size_bytes": 24476,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:34:02Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13765726371,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42817094673",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:37:23Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13765572514,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42817657254",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:41:30Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13765495658,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42816004127",
+   "size_bytes": 8859,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:30:46Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13765352200,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42816948398",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:35:53Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13765321108,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42815902829",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:28:20Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13765108287,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42817884638",
+   "size_bytes": 8858,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:43:53Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13765006847,
+   "name": "HYPE-DENSE-PRE-IMPULSE-GATE-42817094724",
+   "size_bytes": 1130,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:36:33Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13764887739,
+   "name": "HYPE-DENSE-FINAL-CONFIRMATION-GATE-42817679702",
+   "size_bytes": 2121,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:40:27Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13764840459,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42815806906",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:27:36Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13764512215,
+   "name": "HYPE-DENSE-PRE-IMPULSE-GATE-42816975910",
+   "size_bytes": 1130,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:35:41Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13764476880,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42816447931",
+   "size_bytes": 8861,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:33:31Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13764412210,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42816819710",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:34:53Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13764243901,
+   "name": "HYPE-DENSE-POST-LOCAL-SURVIVAL-42815806933",
+   "size_bytes": 111477,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:32:46Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13764212723,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42814018745",
+   "size_bytes": 8860,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:16:34Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13764118169,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42814398568",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:18:31Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13763879612,
+   "name": "HYPE-DENSE-POST-LOCAL-MODEL-CV-42815288565",
+   "size_bytes": 4925,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:26:13Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13763874043,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42814943232",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:23:04Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13763864780,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42815691542",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:26:55Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13763862503,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42813640082",
+   "size_bytes": 8859,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:13:54Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13763668494,
+   "name": "HYPE-DENSE-CROSS-PERIOD-42814715354",
+   "size_bytes": 51195,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:19:25Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13763644758,
+   "name": "HYPE-DENSE-POST-LOCAL-MODEL-CV-42815421919",
+   "size_bytes": 4086,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:25:01Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13763419679,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42815422029",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:26:06Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13763287340,
+   "name": "HYPE-DENSE-CROSS-PERIOD-42813731848",
+   "size_bytes": 50707,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:12:27Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13763283982,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42814715224",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:20:50Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13763263974,
+   "name": "HYPE-DENSE-ALL-STRICT-42814973749",
+   "size_bytes": 1886,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:21:23Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13763233898,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42814611179",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:19:16Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13763219504,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42815259141",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:24:12Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13763024382,
+   "name": "HYPE-DENSE-CROSS-PERIOD-42814045780",
+   "size_bytes": 50707,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:24:40Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13762997345,
+   "name": "HYPE-DENSE-CROSS-PERIOD-42813640054",
+   "size_bytes": 56673,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:11:51Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13762877601,
+   "name": "HYPE-DENSE-CROSS-PERIOD-42813645913",
+   "size_bytes": 27026,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:11:49Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13762534976,
+   "name": "HYPE-DENSE-CROSS-PERIOD-42814632446",
+   "size_bytes": 51230,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:20:52Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13762488290,
+   "name": "HYPE-DENSE-CROSS-PERIOD-42813536443",
+   "size_bytes": 56673,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T12:10:57Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13760981283,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42808059808",
+   "size_bytes": 8860,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T11:33:02Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13758483544,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42806688522",
+   "size_bytes": 8857,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T11:23:01Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13755696281,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42800050370",
+   "size_bytes": 8860,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T10:35:07Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13753881271,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42796246760",
+   "size_bytes": 8860,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T10:08:28Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13751017573,
+   "name": "HYPE-LOCAL-RAW-42783093115",
+   "size_bytes": 7516318,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T09:21:49Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13750862698,
+   "name": "HYPE-LOCAL-ONLY-CHECKPOINT",
+   "size_bytes": 16844707,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T09:21:52Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13750681941,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42788546180",
+   "size_bytes": 8860,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T09:13:24Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13750528003,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42783093115",
+   "size_bytes": 14138445,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T09:21:54Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13743174576,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42776067685",
+   "size_bytes": 8860,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T07:35:23Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13742931372,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42773193970",
+   "size_bytes": 8860,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T07:10:40Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13739874041,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42768023854",
+   "size_bytes": 8856,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T06:24:23Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13738903872,
+   "name": "HYPE-24H-LOW-SIGNATURE-REPLAY",
+   "size_bytes": 9811,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T05:56:27Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13737814113,
+   "name": "HYPE-48H-INTERNAL-LOCALS-REPLAY",
+   "size_bytes": 2065,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T05:35:14Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13737684438,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42762235383",
+   "size_bytes": 8859,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T05:29:41Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13735583948,
+   "name": "HYPE-BLIND-CURRENT-LOCAL-CONFIRMATION",
+   "size_bytes": 644,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T04:42:26Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13735269668,
+   "name": "HYPE-BLIND-CURRENT-LOCAL-CONFIRMATION",
+   "size_bytes": 4435,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T04:43:55Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13731619890,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42749699567",
+   "size_bytes": 8857,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T03:31:09Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13731346252,
+   "name": "HYPE-FAST48-TAIL-c1",
+   "size_bytes": 9302,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T02:47:54Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13731061758,
+   "name": "HYPE-RECENT-48H-FROZEN-REPLAY-42735182846",
+   "size_bytes": 859075,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T02:47:44Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13730946407,
+   "name": "HYPE-FAST48-TAIL-c2",
+   "size_bytes": 9300,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T02:43:44Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13730438424,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42745462541",
+   "size_bytes": 8857,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T02:52:41Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13729018859,
+   "name": "HYPE-FAST48-SHARD-c",
+   "size_bytes": 9469,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T02:21:19Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13728940011,
+   "name": "HYPE-FAST48-SHARD-a",
+   "size_bytes": 9522,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T01:56:21Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13728229560,
+   "name": "HYPE-FAST48-SHARD-b",
+   "size_bytes": 9317,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T02:06:33Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13726892883,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42736589321",
+   "size_bytes": 8857,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T01:35:30Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13725179266,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42734079246",
+   "size_bytes": 8854,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T01:14:38Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13723890600,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42728383665",
+   "size_bytes": 8860,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T00:29:25Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13723739486,
+   "name": "HYPE-RECENT-48H-RAW-42730081009",
+   "size_bytes": 291678904,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T00:45:47Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13722424654,
+   "name": "HYPE-RECENT-48H-RAW-42728586550",
+   "size_bytes": 291678902,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-10T00:33:59Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13721641132,
+   "name": "HYPE-LOCAL-RAW-42715533050",
+   "size_bytes": 5236962,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T23:41:55Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13720957898,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42715533050",
+   "size_bytes": 14138445,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T23:42:00Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13720688138,
+   "name": "HYPE-LOCAL-ONLY-CHECKPOINT",
+   "size_bytes": 16845153,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T23:41:58Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13716559253,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42714386606",
+   "size_bytes": 8860,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T22:45:38Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13715654567,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42711944601",
+   "size_bytes": 8862,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T22:29:09Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13709063568,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42696569441",
+   "size_bytes": 8858,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T20:51:26Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13703958140,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42685131813",
+   "size_bytes": 8861,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T19:39:45Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13700914280,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42678222096",
+   "size_bytes": 8860,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T18:56:41Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13698179516,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42672196361",
+   "size_bytes": 8861,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T18:17:21Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13694471123,
+   "name": "HYPE-ALL-LOCAL-RELATIONSHIP-ATLAS-42660469338",
+   "size_bytes": 761147,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T17:02:26Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13694367190,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42661335978",
+   "size_bytes": 8859,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T17:08:56Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13694326258,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42660439736",
+   "size_bytes": 8860,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T17:03:11Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13693469315,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42661008862",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T17:06:30Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13693158216,
+   "name": "HYPE-STRICT-LOCAL-ORACLE-42659065477",
+   "size_bytes": 2897,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T16:52:20Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13692769403,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42659277044",
+   "size_bytes": 8862,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T16:56:03Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13692383671,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42659039342",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T16:52:58Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13692298754,
+   "name": "HYPE-STRICT-LOCAL-ORACLE-42659206099",
+   "size_bytes": 3237,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T16:53:12Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13691949098,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42659167846",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T16:53:40Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13691511075,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42652631109",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T16:14:31Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13691328746,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42655965937",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T16:34:22Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13691269241,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42656101330",
+   "size_bytes": 8858,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T16:36:46Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13691180553,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42651761460",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T16:10:18Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13690996864,
+   "name": "HYPE-LOCAL-CONTINUATION-RISK-42652658783",
+   "size_bytes": 1393913,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T16:19:47Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13690530848,
+   "name": "HYPE-LOCAL-SIGNATURE-BOOTSTRAP-42651235821",
+   "size_bytes": 8077,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T16:06:19Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13690445607,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42650765971",
+   "size_bytes": 8615,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T16:03:54Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13690438372,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42653094069",
+   "size_bytes": 8859,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T16:19:01Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13690302044,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42651999261",
+   "size_bytes": 8860,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T16:12:39Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13690298187,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42652713140",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T16:16:41Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13689681953,
+   "name": "HYPE-LOCAL-SIGNATURE-CHAMPION-42651553613",
+   "size_bytes": 385608,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T16:08:25Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13689607810,
+   "name": "HYPE-LOCAL-SIGNATURE-CV-42652029737",
+   "size_bytes": 798956,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T16:12:30Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13689419536,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42651160851",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T16:07:30Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13689099004,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42651005784",
+   "size_bytes": 8139,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T16:05:11Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13688704966,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42651531479",
+   "size_bytes": 8428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T16:08:54Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13688126143,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42646021086",
+   "size_bytes": 14767,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T15:37:00Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13688038763,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42648236868",
+   "size_bytes": 15857,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T15:50:24Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13687873561,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42648024448",
+   "size_bytes": 8059,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T15:47:54Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13686499156,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42645616738",
+   "size_bytes": 8057,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T15:34:13Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13685724823,
+   "name": "HYPE-DUAL-SCOPE-LIVE-SMOKE-42644688099",
+   "size_bytes": 14724,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T15:28:52Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13685408044,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42633706475",
+   "size_bytes": 14130387,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T15:12:33Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13685293505,
+   "name": "HYPE-LOCAL-RAW-42633706475",
+   "size_bytes": 14238813,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T15:12:27Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13685114021,
+   "name": "HYPE-LOCAL-ONLY-CHECKPOINT",
+   "size_bytes": 16835188,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T15:12:30Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13682556342,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42624925967",
+   "size_bytes": 13775671,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T14:20:23Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13682087697,
+   "name": "HYPE-LOCAL-ONLY-CHECKPOINT",
+   "size_bytes": 15418384,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T14:20:21Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13682067758,
+   "name": "HYPE-LOCAL-RAW-42624925967",
+   "size_bytes": 6832151,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T14:20:19Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "download_failed_expired_410"
+  },
+  {
+   "id": 13677747365,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42616792697",
+   "size_bytes": 13532542,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T13:22:34Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13677742339,
+   "name": "HYPE-LOCAL-ONLY-CHECKPOINT",
+   "size_bytes": 15079225,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T13:22:31Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13676870079,
+   "name": "HYPE-DENSE-CROSS-PERIOD-42619931386",
+   "size_bytes": 101495,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T12:47:39Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13672308280,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42609153539",
+   "size_bytes": 13242871,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T12:24:44Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13670240048,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42601348898",
+   "size_bytes": 12770104,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T11:27:06Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13666241324,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42594649317",
+   "size_bytes": 12114607,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T10:30:21Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13662048731,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42587653481",
+   "size_bytes": 11542209,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T09:35:47Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13659892050,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42581260027",
+   "size_bytes": 11263345,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T08:40:20Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13656404338,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42575350391",
+   "size_bytes": 10985803,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T07:44:49Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13655260727,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42570114999",
+   "size_bytes": 10731990,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T06:48:39Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13653260108,
+   "name": "HYPE-2026-02-SEALED-TAPE-42569197383",
+   "size_bytes": 4075873,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T05:55:37Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13653131312,
+   "name": "HYPE-2026-01-SEALED-TAPE-42569197383",
+   "size_bytes": 4440360,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T05:57:05Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13652867392,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42565044230",
+   "size_bytes": 10562835,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T05:56:19Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13652777880,
+   "name": "HYPE-2026-03-SEALED-TAPE-42569197383",
+   "size_bytes": 4481989,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T05:55:04Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13652224982,
+   "name": "HYPE-2026-04-SEALED-TAPE-42569197383",
+   "size_bytes": 4240010,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T05:52:45Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13652089234,
+   "name": "HYPE-MAY-SEALED-TAPE-42569087931",
+   "size_bytes": 4529329,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T05:57:25Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13651151805,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42560407730",
+   "size_bytes": 10559022,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T05:02:51Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13650399622,
+   "name": "HYPE-HISTORY-20260712-20261103-MASTER",
+   "size_bytes": 72995748,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T04:55:49Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13649580469,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42555715614",
+   "size_bytes": 10260190,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T04:11:23Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13646508942,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42551090061",
+   "size_bytes": 9885241,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T03:18:56Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13645845345,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42546374526",
+   "size_bytes": 9608982,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T02:27:57Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13644025152,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42541379372",
+   "size_bytes": 9323348,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T01:35:34Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13642589524,
+   "name": "HYPE-HIGH-FLOW-V3-42545076500",
+   "size_bytes": 12954,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T01:22:02Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13642343143,
+   "name": "HYPE-HIGH-EARLY60-PERSISTENCE-42543892133",
+   "size_bytes": 2365,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T01:09:28Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13641711453,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42536616916",
+   "size_bytes": 9038392,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-09T00:39:31Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13639545105,
+   "name": "HYPE-JUNE-SEALED-TAPE-42534251346",
+   "size_bytes": 4488336,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T23:28:30Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13639293789,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42531830430",
+   "size_bytes": 8751372,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T23:44:27Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13639046437,
+   "name": "HYPE-FOUR-REGIME-META-SELECTION-42534624940",
+   "size_bytes": 9455,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T23:20:48Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13638795292,
+   "name": "HYPE-LATE-AUGUST-SEALED-TAPE-42533153127",
+   "size_bytes": 3221984,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T23:06:51Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13638560846,
+   "name": "HYPE-SEPTEMBER-FROZEN-CHALLENGERS-42532927720",
+   "size_bytes": 10775,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T23:01:16Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13638208124,
+   "name": "HYPE-SEPTEMBER-HIGHFLOW-DIAGNOSTIC-42533439868",
+   "size_bytes": 3752,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T23:06:08Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13638207694,
+   "name": "HYPE-SEPTEMBER-UNTOUCHED-42532688403",
+   "size_bytes": 4034771,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T23:03:41Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13638191450,
+   "name": "HYPE-PERSISTENCE-DEVELOPMENT-42532466580",
+   "size_bytes": 8129,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T22:55:12Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13638066868,
+   "name": "HYPE-PERSISTENCE-DEVELOPMENT-42532538435",
+   "size_bytes": 8129,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T22:55:57Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13637993456,
+   "name": "HYPE-SEPTEMBER-PERSISTENCE-42533246592",
+   "size_bytes": 5428,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T23:04:09Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13637954444,
+   "name": "HYPE-HIGH-FLOW-V2-SEALED-LATE-AUG-42533691601",
+   "size_bytes": 8960,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T23:09:14Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13637857867,
+   "name": "HYPE-HIGH-FLOW-REGIME-V2-DEV-42533554372",
+   "size_bytes": 12223,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T23:07:45Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13637608818,
+   "name": "HYPE-SEPTEMBER-HARD120-HIGHFLOW-42533130921",
+   "size_bytes": 4319,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T23:02:48Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13637574977,
+   "name": "HYPE-HIGH-FLOW-REGIME-V2-DEV-42533850533",
+   "size_bytes": 12503,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T23:12:34Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13637558401,
+   "name": "HYPE-SEPTEMBER-UNTOUCHED-42532438646",
+   "size_bytes": 4028434,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T22:58:00Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13637554654,
+   "name": "HYPE-HIGH-FLOW-V2-THREE-PERIOD-42533533417",
+   "size_bytes": 11175,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T23:08:41Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13637502685,
+   "name": "HYPE-EARLY60-FULL-STACK-42531210218",
+   "size_bytes": 6747,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T22:39:57Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13637214360,
+   "name": "HYPE-PERSISTENCE-DEVELOPMENT-42532759559",
+   "size_bytes": 8129,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T22:58:32Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13636999843,
+   "name": "HYPE-HIGH60-VETO-DUAL-42532669032",
+   "size_bytes": 8103,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T22:57:48Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13636892857,
+   "name": "HYPE-DENSE-CROSS-PERIOD-42530202438",
+   "size_bytes": 100991,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T22:26:05Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13636778917,
+   "name": "HYPE-HARD120-PLUS-HIGH-FLOW-42530397814",
+   "size_bytes": 6389,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T22:29:38Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13635832428,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42523528311",
+   "size_bytes": 7976228,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T22:01:30Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13635658014,
+   "name": "HYPE-LOCAL-ONLY-CHECKPOINT",
+   "size_bytes": 11073277,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T22:01:28Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13634406439,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42518958851",
+   "size_bytes": 7972467,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T21:06:40Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13633583915,
+   "name": "HYPE-LOCAL-ONLY-CHECKPOINT",
+   "size_bytes": 9639513,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T21:06:38Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13632640826,
+   "name": "HYPE-LOCAL-ONLY-CHECKPOINT",
+   "size_bytes": 9331033,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T20:12:38Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13632013191,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42514429646",
+   "size_bytes": 7677039,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T20:12:41Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13630906171,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42510001267",
+   "size_bytes": 7433380,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T19:19:09Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13628104175,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42505394687",
+   "size_bytes": 7097431,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T18:26:07Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13627585880,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42500792917",
+   "size_bytes": 6832646,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T17:31:31Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13625058620,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42496146316",
+   "size_bytes": 6519325,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T16:36:53Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13623725651,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42491654092",
+   "size_bytes": 6093360,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T15:42:11Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13621951536,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42487322104",
+   "size_bytes": 5839238,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T14:48:58Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13619614000,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42482956235",
+   "size_bytes": 5441802,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T13:56:17Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13617989102,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42478831453",
+   "size_bytes": 5076417,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T13:01:28Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13615679563,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42474973977",
+   "size_bytes": 5071527,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T12:08:21Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13613270686,
+   "name": "HYPE-HARD120-EXACT-REPLAY-42469415228",
+   "size_bytes": 6052,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T09:58:45Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13613188135,
+   "name": "HYPE-HARD120-CROSS-PERIOD-202607-42470755724",
+   "size_bytes": 4860,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T10:17:29Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13612808449,
+   "name": "HYPE-HARD120-EXACT-REPLAY-42470740565",
+   "size_bytes": 6104,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T10:17:26Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13612782342,
+   "name": "HYPE-HARD120-EXACT-REPLAY-42469746618",
+   "size_bytes": 6052,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T10:04:01Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13612565340,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42463658964",
+   "size_bytes": 4410874,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T09:29:03Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13611145348,
+   "name": "HYPE-LOCAL-ONLY-CHECKPOINT",
+   "size_bytes": 5186014,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T08:36:25Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13610756838,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42459950734",
+   "size_bytes": 4211598,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T08:36:26Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13609426412,
+   "name": "HYPE-LOCAL-ONLY-CHECKPOINT",
+   "size_bytes": 5047568,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T07:43:25Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13609083309,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42456390610",
+   "size_bytes": 4111237,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T07:43:26Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13607517514,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42452782723",
+   "size_bytes": 3871376,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T06:50:43Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13605949776,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42449333450",
+   "size_bytes": 3747275,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T05:57:43Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13604927711,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42445794722",
+   "size_bytes": 3744379,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T05:04:45Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13603766532,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42442094604",
+   "size_bytes": 3528561,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T04:11:28Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13601258843,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42438369507",
+   "size_bytes": 3399789,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T03:17:28Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13600213639,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42434568332",
+   "size_bytes": 3216758,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T02:23:52Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13599380865,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42430590504",
+   "size_bytes": 2966903,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T01:30:47Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13596748154,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42426447008",
+   "size_bytes": 2705736,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-08T00:37:21Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13595223071,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42422364968",
+   "size_bytes": 2624795,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-07T23:42:13Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13594226941,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42418150906",
+   "size_bytes": 2473117,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-07T22:48:55Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13585701406,
+   "name": "HYPE-FULL-MICRO-202607-DATA-42393911761",
+   "size_bytes": 20945314,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-07T18:31:24Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13584864098,
+   "name": "HYPE-FULL-MICRO-202607-MODEL-42393911761",
+   "size_bytes": 6773116,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-07T18:31:33Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13583070681,
+   "name": "HYPE-LOW-HIGH-RELATIONS-42393927170",
+   "size_bytes": 2591,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-07T16:58:30Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13578399041,
+   "name": "HYPE-FULL-MICRO-202607-DATA-42376949791",
+   "size_bytes": 20945315,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-07T14:59:38Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13578389090,
+   "name": "HYPE-FULL-MICRO-202607-MODEL-42376949791",
+   "size_bytes": 6773116,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-07T14:59:46Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13571524548,
+   "name": "HYPE-JULAUG-STAGED-PRETRAIN-42367308628",
+   "size_bytes": 7590764,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-07T11:19:19Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13568214476,
+   "name": "HYPE-LOCAL-ENSEMBLE-30D-42359138931",
+   "size_bytes": 118867442,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-07T09:24:53Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13568175401,
+   "name": "HYPE-LOCAL-ENSEMBLE-30D-42356161740",
+   "size_bytes": 1077061,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-07T08:37:11Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13568037753,
+   "name": "HYPE-LOCAL-ENSEMBLE-30D-42356678774",
+   "size_bytes": 26707590,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-07T08:45:54Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13567321126,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42350849383",
+   "size_bytes": 96995,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-07T08:14:19Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13567074632,
+   "name": "HYPE-LOCAL-ENSEMBLE-30D-42356530494",
+   "size_bytes": 1109396,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-07T08:42:29Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13565482349,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42347045429",
+   "size_bytes": 93529,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-07T07:20:09Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13564122305,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42343246992",
+   "size_bytes": 88570,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-07T06:26:54Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13562083353,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42339420489",
+   "size_bytes": 83307,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-07T05:33:39Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13558879975,
+   "name": "PANDORA-HYPE-LOCAL-ONLY-CODEX-BUNDLE",
+   "size_bytes": 15298887,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-07T03:55:13Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13557354551,
+   "name": "HYPE-LOCAL-ONLY-EVIDENCE-42328561790",
+   "size_bytes": 72367,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-07T03:11:30Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13555476845,
+   "name": "HYPE-H1-V6-12H-COMBINED-INDEX",
+   "size_bytes": 79122,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-07T01:58:52Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13554899247,
+   "name": "HYPE-CATERPILLAR-QUANT-CHECKPOINT",
+   "size_bytes": 223651740,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-07T01:59:16Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13533915813,
+   "name": "HYPE-LOCAL-HISTORICAL-GAPS",
+   "size_bytes": 5697095,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-06T19:06:40Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13533886684,
+   "name": "HYPE-LOCAL-HISTORY-GAP-OOS-42277216925",
+   "size_bytes": 4324,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-06T19:11:42Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13533865895,
+   "name": "HYPE-LOCAL-HISTORY-GAP-OOS-42276188227",
+   "size_bytes": 3898,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-06T19:06:43Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13533861729,
+   "name": "HYPE-LOCAL-ONLY-ENRICHED-PRETRAIN",
+   "size_bytes": 260595,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-06T19:11:40Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13533641249,
+   "name": "HYPE-LOCAL-ONLY-ENRICHED-PRETRAIN",
+   "size_bytes": 228564,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-06T19:06:42Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13533591798,
+   "name": "HYPE-LOCAL-ONLY-ENRICHED-PRETRAIN",
+   "size_bytes": 227973,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-06T19:09:04Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13533587104,
+   "name": "HYPE-LOCAL-HISTORICAL-GAPS",
+   "size_bytes": 5654192,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-06T19:11:38Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13533461839,
+   "name": "HYPE-LOCAL-HISTORY-GAP-OOS-42276874615",
+   "size_bytes": 3839,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-06T19:09:05Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13533391925,
+   "name": "HYPE-LOCAL-HISTORICAL-GAPS",
+   "size_bytes": 5654194,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-06T19:09:03Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13532842958,
+   "name": "HYPE-QUANT-12H-FINAL",
+   "size_bytes": 323448695,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-06T18:58:01Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13509519710,
+   "name": "HYPE-H1-V6-12H-COMBINED-INDEX",
+   "size_bytes": 79121,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-06T14:33:32Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13486060353,
+   "name": "HYPE-CATERPILLAR-QUANT-CHECKPOINT",
+   "size_bytes": 21799788,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-06T07:32:31Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13485815671,
+   "name": "HYPE-CATERPILLAR-QUANT-CHECKPOINT",
+   "size_bytes": 21799788,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-06T07:32:04Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13484709278,
+   "name": "HYPE-CATERPILLAR-QUANT-CHECKPOINT",
+   "size_bytes": 21799788,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-06T07:29:30Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13481584354,
+   "name": "HYPE-FULL116-LOCALS",
+   "size_bytes": 2184,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-06T06:20:50Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13480144550,
+   "name": "HYPE-ONLY-PROFIT-24H-FULL116",
+   "size_bytes": 113834742,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-06T05:39:40Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13477409314,
+   "name": "HYPE-UNIFIED-30D-WARMSTART",
+   "size_bytes": 70768034,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-06T04:39:08Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13462526536,
+   "name": "HYPE-H1-V6-12H-COMBINED-INDEX",
+   "size_bytes": 80687,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-05T23:22:42Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13435380791,
+   "name": "local116-HYPE",
+   "size_bytes": 8251702,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-05T16:51:48Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13435356156,
+   "name": "local116-HYPE",
+   "size_bytes": 8251701,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-05T16:53:34Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13435071622,
+   "name": "local116-HYPE",
+   "size_bytes": 8251700,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-05T16:47:08Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13434996324,
+   "name": "HYPE-H1-V6-12H-COMBINED-INDEX",
+   "size_bytes": 79128,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-05T16:34:07Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13434927286,
+   "name": "local116-HYPE",
+   "size_bytes": 7774439,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-05T16:43:22Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13434302051,
+   "name": "HYPE-QUANT-12H-FINAL",
+   "size_bytes": 225884390,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-05T16:35:55Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13434231737,
+   "name": "local116-HYPE",
+   "size_bytes": 7774439,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-05T16:34:32Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13434059172,
+   "name": "local116-HYPE",
+   "size_bytes": 8251700,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-05T16:48:57Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13433038945,
+   "name": "HYPE-QUANT-12H-FINAL",
+   "size_bytes": 381787216,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-05T16:47:34Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13431551006,
+   "name": "HYPE-QUANT-12H-FINAL",
+   "size_bytes": 13494690,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-05T15:55:25Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13427855754,
+   "name": "HYPE-EMA-MACD-30D-result",
+   "size_bytes": 11433,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-05T15:02:51Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13427711098,
+   "name": "HYPE-EMA-MACD-30D-result",
+   "size_bytes": 11433,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-05T15:04:03Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13426571662,
+   "name": "HYPE-EMA-MACD-30D-result",
+   "size_bytes": 8398,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-05T14:54:58Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13426291382,
+   "name": "HYPE-EMA-MACD-30D-result",
+   "size_bytes": 2719,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-05T14:50:45Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13425625777,
+   "name": "HYPE-EMA-MACD-30D-result",
+   "size_bytes": 1684,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-05T14:36:57Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13425604496,
+   "name": "HYPE-EMA-MACD-30D-result",
+   "size_bytes": 8398,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-05T14:55:33Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13424832054,
+   "name": "HYPE-EMA-MACD-30D-result",
+   "size_bytes": 2435,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-05T14:40:15Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13424603995,
+   "name": "HYPE-EMA-MACD-30D-result",
+   "size_bytes": 2719,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-05T14:50:48Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13423684801,
+   "name": "HYPE-EMA-MACD-30D-result",
+   "size_bytes": 2435,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-05T14:40:31Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13399521099,
+   "name": "HYPE-QUANT-12H-FINAL",
+   "size_bytes": 13226716,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-05T08:20:23Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13399064345,
+   "name": "HYPE-QUANT-12H-FINAL",
+   "size_bytes": 151593981,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-05T08:30:52Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13388975710,
+   "name": "HYPE-QUANT-12H-FINAL",
+   "size_bytes": 10675489,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-05T04:32:49Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13357086786,
+   "name": "HYPE-H1-LOCAL-V5-LIVE-MICROSTRUCTURE",
+   "size_bytes": 2126752,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T19:33:28Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13356308042,
+   "name": "HYPE-H1-LOCAL-V5-FINAL-REPORTS",
+   "size_bytes": 8950,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T19:33:47Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13355765127,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-1",
+   "size_bytes": 278327,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T19:13:35Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13355412228,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-2",
+   "size_bytes": 4741431,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T19:13:41Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13355093543,
+   "name": "HYPE-H1-LOCAL-V5-CAUSAL-STUDY",
+   "size_bytes": 2315,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T19:14:32Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13354874081,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-0",
+   "size_bytes": 4062443,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T19:13:43Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13354795538,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-1",
+   "size_bytes": 3659804,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:52:50Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13354784440,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-3",
+   "size_bytes": 5089115,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T19:13:46Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13354565385,
+   "name": "HYPE-H1-LOCAL-V5-LIVE-MICROSTRUCTURE",
+   "size_bytes": 3506331,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:49:05Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13354551066,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-3",
+   "size_bytes": 5089115,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:52:58Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13354414465,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-4",
+   "size_bytes": 295861,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T19:13:30Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13354411076,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-0",
+   "size_bytes": 4062443,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:52:50Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13354355662,
+   "name": "HYPE-H1-LOCAL-V5-FINAL-REPORTS",
+   "size_bytes": 8940,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:49:22Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13354244857,
+   "name": "HYPE-H1-LOCAL-V5-FINAL-REPORTS",
+   "size_bytes": 8960,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T19:13:03Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13354224718,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-0",
+   "size_bytes": 286560,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T19:13:20Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13354101226,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-5",
+   "size_bytes": 317287,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:52:56Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13354081204,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-4",
+   "size_bytes": 4956342,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:52:49Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13354056232,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-2",
+   "size_bytes": 296371,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:52:35Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13353999083,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-3",
+   "size_bytes": 298628,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T19:13:28Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13353984322,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-5",
+   "size_bytes": 6020615,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T19:14:02Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13353939219,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-5",
+   "size_bytes": 317287,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T19:13:46Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13353804639,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-2",
+   "size_bytes": 296371,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T19:13:24Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13353766810,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-0",
+   "size_bytes": 286560,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:52:40Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13353754771,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-4",
+   "size_bytes": 4956342,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T19:13:40Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13353561778,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-3",
+   "size_bytes": 298628,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:52:42Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13353559687,
+   "name": "HYPE-H1-LOCAL-V5-LIVE-MICROSTRUCTURE",
+   "size_bytes": 2762182,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T19:12:43Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13353544809,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-1",
+   "size_bytes": 3659804,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T19:13:43Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13353427156,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-2",
+   "size_bytes": 4741431,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:52:58Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13353347212,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-1",
+   "size_bytes": 278327,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:52:34Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13352995242,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-3",
+   "size_bytes": 298628,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:29:02Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13352870543,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-0",
+   "size_bytes": 286560,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:29:00Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13352854491,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-4",
+   "size_bytes": 295861,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:52:40Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13352815811,
+   "name": "HYPE-H1-LOCAL-V5-CAUSAL-STUDY",
+   "size_bytes": 2314,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:29:43Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13352769864,
+   "name": "HYPE-H1-LOCAL-V5-CAUSAL-STUDY",
+   "size_bytes": 2314,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:53:42Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13352759891,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-5",
+   "size_bytes": 6020615,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:53:20Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13352701019,
+   "name": "HYPE-H1-LOCAL-V5-FINAL-REPORTS",
+   "size_bytes": 107161493,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:28:36Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13352646609,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-4",
+   "size_bytes": 4956342,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:29:17Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13352431752,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-1",
+   "size_bytes": 3659804,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:29:11Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13352401835,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-2",
+   "size_bytes": 4741431,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:29:16Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13352072052,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-4",
+   "size_bytes": 295861,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:28:56Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13352057042,
+   "name": "HYPE-H1-LOCAL-V5-LIVE-MICROSTRUCTURE",
+   "size_bytes": 2912791,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:27:53Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13351762771,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-2",
+   "size_bytes": 296371,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:29:01Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13351667738,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-1",
+   "size_bytes": 278327,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:29:01Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13351388147,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-0",
+   "size_bytes": 4062443,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:29:21Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13351295123,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-1",
+   "size_bytes": 3659804,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:08:05Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13351060721,
+   "name": "HYPE-H1-LOCAL-V5-CAUSAL-STUDY",
+   "size_bytes": 53554143,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:09:59Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13350824719,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-3",
+   "size_bytes": 5089115,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:29:21Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13350773826,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-5",
+   "size_bytes": 317287,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:29:22Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13350699331,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-5",
+   "size_bytes": 6020615,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:29:27Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13350656325,
+   "name": "HYPE-H1-LOCAL-V5-FINAL-REPORTS",
+   "size_bytes": 107161514,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:07:26Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13350641571,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-5",
+   "size_bytes": 6020615,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:08:34Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13350531782,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-0",
+   "size_bytes": 286560,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:07:46Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13350422093,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-4",
+   "size_bytes": 295861,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:07:50Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13350416975,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-1",
+   "size_bytes": 278327,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:07:46Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13350320010,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-1",
+   "size_bytes": 278327,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T17:46:38Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13350317464,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-3",
+   "size_bytes": 298628,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:07:52Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13350298537,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-3",
+   "size_bytes": 5089115,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:08:11Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13350293545,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-2",
+   "size_bytes": 4741431,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:08:11Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13350207793,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-2",
+   "size_bytes": 296371,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:07:51Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13350028028,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-5",
+   "size_bytes": 317287,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:07:59Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13349680219,
+   "name": "HYPE-H1-LOCAL-V5-CAUSAL-STUDY",
+   "size_bytes": 53554141,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T17:48:33Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13349550808,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-0",
+   "size_bytes": 4062443,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T17:46:56Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13349544507,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-0",
+   "size_bytes": 4062443,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:08:01Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13349281378,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-5",
+   "size_bytes": 317287,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T17:46:48Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13349094624,
+   "name": "HYPE-H1-LOCAL-V5-LIVE-MICROSTRUCTURE",
+   "size_bytes": 2954424,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:06:49Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13348984824,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-4",
+   "size_bytes": 4956342,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T18:08:11Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13348981696,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-4",
+   "size_bytes": 295861,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T17:46:41Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13348896855,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-2",
+   "size_bytes": 296371,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T17:46:43Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13348847022,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-5",
+   "size_bytes": 6020615,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T17:47:23Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13348637877,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-1",
+   "size_bytes": 3659804,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T17:46:55Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13348188478,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-0",
+   "size_bytes": 286560,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T17:46:39Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13347714827,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-3",
+   "size_bytes": 5089115,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T17:47:05Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13347629996,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-2",
+   "size_bytes": 4741431,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T17:46:57Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13347444568,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-4",
+   "size_bytes": 4956342,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T17:46:59Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13347299862,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-3",
+   "size_bytes": 298628,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T17:46:45Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13340140997,
+   "name": "HYPE-H1-LOCAL-V5-FINAL-REPORTS",
+   "size_bytes": 10317,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T15:45:50Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13339941399,
+   "name": "HYPE-H1-LOCAL-V5-LIVE-MICROSTRUCTURE",
+   "size_bytes": 6499315,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T15:45:29Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "downloaded"
+  },
+  {
+   "id": 13339345799,
+   "name": "HYPE-H1-LOCAL-V5-CAUSAL-STUDY",
+   "size_bytes": 53554135,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T15:32:36Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13338596680,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-1",
+   "size_bytes": 3659804,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T15:25:51Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13338187346,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-0",
+   "size_bytes": 4062443,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T15:25:43Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13338172423,
+   "name": "HYPE-H1-LOCAL-V5-CAUSAL-STUDY",
+   "size_bytes": 2748,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T15:26:28Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13338167382,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-3",
+   "size_bytes": 5089115,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T15:25:39Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13337888916,
+   "name": "HYPE-H1-LOCAL-V5-FINAL-REPORTS",
+   "size_bytes": 107161165,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T15:33:29Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13337637737,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-5",
+   "size_bytes": 6020615,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T15:26:02Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13337224591,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-2",
+   "size_bytes": 4741431,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T15:25:55Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13336809429,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-4",
+   "size_bytes": 4956342,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T15:25:44Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13329622644,
+   "name": "HYPE-H1-LOCAL-V5-LIVE-MICROSTRUCTURE",
+   "size_bytes": 177431,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:56:31Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13329108006,
+   "name": "HYPE-H1-LOCAL-V5-LIVE-MICROSTRUCTURE",
+   "size_bytes": 177623,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:56:25Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13328800255,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-1",
+   "size_bytes": 3659804,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:36:44Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13328780395,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-3",
+   "size_bytes": 298628,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:36:43Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13328661685,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-5",
+   "size_bytes": 6020615,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:37:04Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13328630685,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-3",
+   "size_bytes": 5089115,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:37:04Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13328555658,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-4",
+   "size_bytes": 4956342,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:36:45Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13328475862,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-0",
+   "size_bytes": 286560,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:36:32Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13328435858,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-0",
+   "size_bytes": 4062443,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:36:53Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13328350853,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-5",
+   "size_bytes": 6020615,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:36:50Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13328226046,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-3",
+   "size_bytes": 298628,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:36:37Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13328058687,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-4",
+   "size_bytes": 295861,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:36:38Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13327798481,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-2",
+   "size_bytes": 296371,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:36:36Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13327673742,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-2",
+   "size_bytes": 4741431,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:37:00Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13327644382,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-3",
+   "size_bytes": 5089115,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:36:44Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13327551515,
+   "name": "HYPE-H1-LOCAL-V5-LIVE-MICROSTRUCTURE",
+   "size_bytes": 183571,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:22:05Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13327519487,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-4",
+   "size_bytes": 4956342,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:37:03Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13327479595,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-1",
+   "size_bytes": 3659804,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:37:01Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13327454510,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-0",
+   "size_bytes": 286560,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:36:57Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13327449061,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-1",
+   "size_bytes": 278327,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:36:38Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13327324150,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-1",
+   "size_bytes": 278327,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:36:34Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13327263747,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-2",
+   "size_bytes": 296371,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:36:37Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13327244196,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-5",
+   "size_bytes": 317287,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:37:23Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13327234282,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-5",
+   "size_bytes": 317287,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:37:01Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13326984742,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-4",
+   "size_bytes": 295861,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:37:05Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13326878835,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-2",
+   "size_bytes": 4741431,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:36:43Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13326854785,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-0",
+   "size_bytes": 4062443,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:36:35Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13325730250,
+   "name": "HYPE-H1-LOCAL-V5-LIVE-MICROSTRUCTURE",
+   "size_bytes": 189314,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:05:03Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13325705039,
+   "name": "HYPE-H1-LOCAL-V5-LIVE-MICROSTRUCTURE",
+   "size_bytes": 189078,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:03:52Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13325280021,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-3",
+   "size_bytes": 298628,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:02:11Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13325031552,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-1",
+   "size_bytes": 3659804,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:02:11Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13325016367,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-2",
+   "size_bytes": 4741431,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:02:16Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13324966441,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-1",
+   "size_bytes": 278327,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:02:06Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13324901644,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-5",
+   "size_bytes": 6020615,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:02:37Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13324717515,
+   "name": "HYPE-H1-LOCAL-V5-LIVE-MICROSTRUCTURE",
+   "size_bytes": 189183,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:04:08Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13324362355,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-0",
+   "size_bytes": 286560,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:02:11Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13324327357,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-4",
+   "size_bytes": 4956342,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:02:14Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13324162513,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-0",
+   "size_bytes": 4062443,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:02:09Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13323862646,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-3",
+   "size_bytes": 5089115,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:02:13Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13323735194,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-0",
+   "size_bytes": 286560,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:45:16Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13323705254,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-0",
+   "size_bytes": 4062443,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:45:18Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13323555184,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-5",
+   "size_bytes": 317287,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:44:28Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13323498022,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-4",
+   "size_bytes": 295861,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:02:04Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13323485309,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-5",
+   "size_bytes": 6020615,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:45:47Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13323448023,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-2",
+   "size_bytes": 296371,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:02:06Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13323388113,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-5",
+   "size_bytes": 317287,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T13:02:16Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13323355341,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-1",
+   "size_bytes": 278327,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:44:21Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13323243192,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-2",
+   "size_bytes": 296371,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:44:17Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13323203272,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-4",
+   "size_bytes": 295861,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:44:26Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13323123679,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-3",
+   "size_bytes": 298628,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:44:05Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13323020984,
+   "name": "HYPE-H1-LOCAL-V5-LIVE-MICROSTRUCTURE",
+   "size_bytes": 186249,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:29:19Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13322998915,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-2",
+   "size_bytes": 296371,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:44:31Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13322983578,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-5",
+   "size_bytes": 317287,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:45:30Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13322898728,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-4",
+   "size_bytes": 4956342,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:45:22Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13322894104,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-3",
+   "size_bytes": 5089115,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:45:13Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13322858612,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-4",
+   "size_bytes": 295861,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:45:16Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13322823985,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-2",
+   "size_bytes": 4741431,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:45:20Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13322753951,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-0",
+   "size_bytes": 286560,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:44:16Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13322499098,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-5",
+   "size_bytes": 317287,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:44:42Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13322494097,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-0",
+   "size_bytes": 286560,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:44:03Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13322364245,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-1",
+   "size_bytes": 278327,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:45:10Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13322359163,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-3",
+   "size_bytes": 298628,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:44:21Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13322134408,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-2",
+   "size_bytes": 296371,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:45:11Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13322043619,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-1",
+   "size_bytes": 278327,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:44:02Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13321779674,
+   "name": "HYPE-H1-LOCAL-V5-MICRO5S-1",
+   "size_bytes": 3659804,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:45:09Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13321704998,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-3",
+   "size_bytes": 298628,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:45:15Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13321669766,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-4",
+   "size_bytes": 295861,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:44:15Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13321627224,
+   "name": "HYPE-H1-LOCAL-V5-LIVE-MICROSTRUCTURE",
+   "size_bytes": 187112,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:28:31Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13321242644,
+   "name": "HYPE-H1-LOCAL-V5-LIVE-MICROSTRUCTURE",
+   "size_bytes": 191187,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:29:34Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13320220685,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-2",
+   "size_bytes": 296371,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:09:29Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13320160273,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-5",
+   "size_bytes": 317287,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:08:19Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13320135629,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-5",
+   "size_bytes": 317287,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:07:37Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13320090651,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-0",
+   "size_bytes": 286560,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:07:19Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13320045497,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-2",
+   "size_bytes": 296371,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:08:02Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13320045495,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-0",
+   "size_bytes": 286560,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:08:01Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13319920678,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-3",
+   "size_bytes": 298628,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:07:18Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13319916322,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-4",
+   "size_bytes": 295861,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:07:59Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13319856895,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-5",
+   "size_bytes": 317287,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:09:52Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13319781223,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-0",
+   "size_bytes": 286560,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:08:40Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13319781215,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-1",
+   "size_bytes": 278327,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:08:36Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13319706212,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-1",
+   "size_bytes": 278327,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:07:56Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13319691472,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-4",
+   "size_bytes": 295861,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:09:28Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13319686512,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-3",
+   "size_bytes": 298628,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:09:48Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13319542174,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-2",
+   "size_bytes": 296371,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:08:41Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13319522029,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-2",
+   "size_bytes": 296371,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:07:15Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13319516857,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-1",
+   "size_bytes": 278327,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:07:13Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13319471883,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-5",
+   "size_bytes": 317287,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:10:04Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13319372777,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-3",
+   "size_bytes": 298628,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:07:57Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13319372674,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-4",
+   "size_bytes": 295861,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:07:24Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13319258376,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-2",
+   "size_bytes": 296371,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:09:50Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13319168230,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-1",
+   "size_bytes": 278327,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:09:21Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13319128417,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-0",
+   "size_bytes": 286560,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:09:31Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13319113404,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-0",
+   "size_bytes": 286560,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:09:40Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13318898859,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-5",
+   "size_bytes": 317287,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:08:50Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13318817968,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-1",
+   "size_bytes": 278327,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:09:45Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13318779319,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-4",
+   "size_bytes": 295861,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:09:42Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13318639385,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-3",
+   "size_bytes": 298628,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:08:42Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13318619389,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-4",
+   "size_bytes": 295861,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:08:37Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  },
+  {
+   "id": 13318554593,
+   "name": "HYPE-H1-LOCAL-V5-TICKS-3",
+   "size_bytes": 298628,
+   "expired_flag_api": false,
+   "created_utc": "2026-11-04T12:09:32Z",
+   "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+   "status": "not_selected_duplicate_or_irrelevant"
+  }
+ ]
+}

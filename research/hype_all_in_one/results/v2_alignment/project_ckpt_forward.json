@@ -1,0 +1,91 @@
+{
+ "forward_window_utc": [
+  "2026-11-04T00:00Z",
+  "2026-11-11T12:00Z"
+ ],
+ "forward_candidates": 470,
+ "results": [
+  {
+   "model": "HYPE_LOCAL_ENSEMBLE.pt",
+   "threshold": 0.39999999999999997,
+   "candidate_level": {
+    "candidates": 293,
+    "reference_true_candidates": 15,
+    "accepted": 151,
+    "tp": 12,
+    "fp": 139,
+    "median_delay_s_tp": 60.0,
+    "median_dist_pct_tp": 0.19596550492076426
+   },
+   "h1_episode_level": {
+    "LOW": {
+     "episodes": 7,
+     "accepted": 7,
+     "true_first": 0,
+     "false_first": 7
+    },
+    "HIGH": {
+     "episodes": 7,
+     "accepted": 6,
+     "true_first": 0,
+     "false_first": 6
+    }
+   }
+  },
+  {
+   "model": "HYPE_LOCAL_FULL30D_TEACHER.pt",
+   "threshold": 0.39999999999999997,
+   "candidate_level": {
+    "candidates": 293,
+    "reference_true_candidates": 15,
+    "accepted": 96,
+    "tp": 7,
+    "fp": 89,
+    "median_delay_s_tp": 180.0,
+    "median_dist_pct_tp": 0.1356661077905552
+   },
+   "h1_episode_level": {
+    "LOW": {
+     "episodes": 7,
+     "accepted": 5,
+     "true_first": 0,
+     "false_first": 5
+    },
+    "HIGH": {
+     "episodes": 7,
+     "accepted": 6,
+     "true_first": 1,
+     "false_first": 5
+    }
+   }
+  },
+  {
+   "model": "HYPE_UNIFIED_LOCAL_INTELLIGENCE_V2.pt",
+   "threshold": 0.8250000000000004,
+   "candidate_level": {
+    "candidates": 293,
+    "reference_true_candidates": 15,
+    "accepted": 5,
+    "tp": 3,
+    "fp": 2,
+    "median_delay_s_tp": 300.0,
+    "median_dist_pct_tp": 0.4523956405510954
+   },
+   "h1_episode_level": {
+    "LOW": {
+     "episodes": 7,
+     "accepted": 0,
+     "true_first": 0,
+     "false_first": 0
+    },
+    "HIGH": {
+     "episodes": 7,
+     "accepted": 4,
+     "true_first": 2,
+     "false_first": 2
+    }
+   }
+  }
+ ],
+ "note": "Timeline expert of Unified V2 was not saved in the bundle; refit deterministically (seed 20261107) on the project artifact train split, as in the project code."
+}
