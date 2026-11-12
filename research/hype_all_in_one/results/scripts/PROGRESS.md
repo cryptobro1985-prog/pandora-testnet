@@ -19,3 +19,8 @@ NEXT:
 6. zips v2 + docs zip; commit/push; mark PR ready
 PR: https://github.com/cryptobro1985-prog/pandora-testnet/pull/27
 PIPELINE: nohup run_v2_pipeline.sh (markers /workspace/data/v2_steps, logs /workspace/data/v2_*.log); rerun same script to resume
+
+## STATUS 2026-11-12: STOPPED by user
+- Compute stopped by user instruction. fetch_liq covers 2026-04-24..2026-10-10 14h UTC (3491 hourly files). liq features, LIQ=1 training, liq atlas, v2 zips were NOT run.
+- v2a (aligned tape/labels, no liquidations) completed: see v2_alignment/v2a_metrics_raw.json and v2a_mfe_raw.json.
+- Final summary: results/HYPE_EARLY_LOCAL_FULL_SUMMARY_AND_STRATEGY_RU.md. PR #27 stays DRAFT (do not mark ready).
