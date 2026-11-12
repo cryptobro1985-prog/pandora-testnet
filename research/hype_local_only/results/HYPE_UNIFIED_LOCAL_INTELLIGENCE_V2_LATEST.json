@@ -1,11 +1,3542 @@
 {
   "version": "HYPE-UNIFIED-LOCAL-INTELLIGENCE-v2",
-  "status": "WORKFLOW_FAILED_BEFORE_REPORT",
-  "train_outcome": "skipped",
-  "github_run_id": "43185106259",
-  "github_sha": "a07f6d69adf8ac2956290a42ec25c7a82459a754",
-  "base_artifact_id": "",
-  "gap_artifact_id": "",
+  "status": "OOS_GATE_REJECT",
   "research_only": true,
-  "real_orders": false
+  "real_orders": false,
+  "auto_live_promotion": false,
+  "architecture": {
+    "JEPA": "sequential latent/representation agent",
+    "QUANTUM": "tabular MLP + River + nonlinear tree evidence",
+    "CORTEX": "train-only relationship-memory expert; LLM explanation is non-predictive",
+    "META": "validation-only logistic arbiter; threshold selection is false-first-first, then earlier causal detection",
+    "regime_context": "5/15/30/60/180/360/480m completed-M1 returns, 60m realized vol, acceleration; no future bars"
+  },
+  "contract": {
+    "points_total": 116,
+    "causal_quality_inputs": 86,
+    "target_eval": 28,
+    "metadata": 2,
+    "scalar_features_used": 171,
+    "input_width_with_masks": 342
+  },
+  "sources": {
+    "base_snapshots_sha256": "b60ab75745483a9903ce1af7a5e251e646273631e78b83997956fc62369fe9c3",
+    "compact_sha256": "dea89e1eaf9ad47a0d47564e0880f4cd6e5cdfdc523f750a54777963bbca10ee",
+    "labels_sha256": "d512b8438637f21f22c9b9996d3b2ea9806be0242a006967baae995cf6ea913f",
+    "base_rows": 5524,
+    "rows_after_compatible_merge": 5524,
+    "extra_schema_compatible_admitted": [],
+    "extra_merge_verdict": "QUARANTINED_UNTIL_FULL_TEACHER_AND_NEGATIVE_ALIGNMENT",
+    "saved_source_inventory": {
+      "root": "all_saved_sources",
+      "file_count": 706,
+      "files": [
+        {
+          "path": "ARTIFACT_INVENTORY.json",
+          "bytes": 94628
+        },
+        {
+          "path": "HYPE-FRESH-ADAPTIVE-MICRO-OOS-42878488490/FRESH_ADAPTIVE_MICRO_OOS_REPORT.json",
+          "bytes": 1397
+        },
+        {
+          "path": "HYPE-FRESH-ADAPTIVE-MICRO-OOS-42878488490/FRESH_ADAPTIVE_MICRO_OOS_ROWS.csv",
+          "bytes": 101352
+        },
+        {
+          "path": "HYPE-FULLMICRO-CROSSEDBOOK-42975364892/HYPE_FULLMICRO_QUALITY_ABLATION_V1.json",
+          "bytes": 8791
+        },
+        {
+          "path": "HYPE-FULLMICRO-CROSSEDBOOK-42975517442/HYPE_FULLMICRO_QUALITY_ABLATION_V1.json",
+          "bytes": 8791
+        },
+        {
+          "path": "HYPE-FULLMICRO-CROSSEDBOOK-42977803045/HYPE_FULLMICRO_QUALITY_ABLATION_V1.json",
+          "bytes": 8791
+        },
+        {
+          "path": "HYPE-FULLMICRO-CROSSEDBOOK-42977821601/HYPE_FULLMICRO_QUALITY_ABLATION_V1.json",
+          "bytes": 8791
+        },
+        {
+          "path": "HYPE-FULLMICRO-CROSSEDBOOK-42985154563/HYPE_FULLMICRO_QUALITY_ABLATION_V1.json",
+          "bytes": 8791
+        },
+        {
+          "path": "HYPE-FULLMICRO-CROSSEDBOOK-42985165500/HYPE_FULLMICRO_QUALITY_ABLATION_V1.json",
+          "bytes": 8791
+        },
+        {
+          "path": "HYPE-FULLMICRO-CROSSEDBOOK-42992314153/HYPE_FULLMICRO_QUALITY_ABLATION_V1.json",
+          "bytes": 8791
+        },
+        {
+          "path": "HYPE-FULLMICRO-CROSSEDBOOK-42992316928/HYPE_FULLMICRO_QUALITY_ABLATION_V1.json",
+          "bytes": 8791
+        },
+        {
+          "path": "HYPE-FULLMICRO-ECONOMIC-V1-42979620987/HYPE_FULLMICRO_ECONOMIC_ENTRY_V1.json",
+          "bytes": 5625
+        },
+        {
+          "path": "HYPE-FULLMICRO-MFE-HOLD-42979958634/HYPE_FULLMICRO_MFE_HOLD_V1.json",
+          "bytes": 17948
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42715533050/RESILIENT_CAPTURE_MANIFEST.json",
+          "bytes": 1647
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42715533050/chunks/chunk_0001/CHUNK_STATUS.json",
+          "bytes": 320
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42715533050/chunks/chunk_0001/HYPE_live_liquidations.jsonl.gz",
+          "bytes": 170
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42715533050/chunks/chunk_0001/HYPE_live_microstructure_1s.jsonl.gz",
+          "bytes": 250105
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42715533050/chunks/chunk_0001/HYPE_live_raw_frames.jsonl.gz",
+          "bytes": 1998078
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42715533050/chunks/chunk_0001/HYPE_market_context.jsonl.gz",
+          "bytes": 841
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42715533050/chunks/chunk_0001/HYPE_structural_context_1m.jsonl.gz",
+          "bytes": 972
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42715533050/chunks/chunk_0002/CHUNK_STATUS.json",
+          "bytes": 320
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42715533050/chunks/chunk_0002/HYPE_live_liquidations.jsonl.gz",
+          "bytes": 217
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42715533050/chunks/chunk_0002/HYPE_live_microstructure_1s.jsonl.gz",
+          "bytes": 250218
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42715533050/chunks/chunk_0002/HYPE_live_raw_frames.jsonl.gz",
+          "bytes": 1770658
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42715533050/chunks/chunk_0002/HYPE_market_context.jsonl.gz",
+          "bytes": 842
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42715533050/chunks/chunk_0002/HYPE_structural_context_1m.jsonl.gz",
+          "bytes": 975
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42715533050/chunks/chunk_0003/CHUNK_STATUS.json",
+          "bytes": 329
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42715533050/chunks/chunk_0003/HYPE_live_microstructure_1s.jsonl.gz",
+          "bytes": 122774
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42715533050/chunks/chunk_0003/HYPE_live_raw_frames.jsonl.gz",
+          "bytes": 833678
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42715533050/chunks/chunk_0003/HYPE_market_context.jsonl.gz",
+          "bytes": 692
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42715533050/chunks/chunk_0003/HYPE_structural_context_1m.jsonl.gz",
+          "bytes": 780
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42783093115/RESILIENT_CAPTURE_MANIFEST.json",
+          "bytes": 1677
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42783093115/chunks/chunk_0001/CHUNK_STATUS.json",
+          "bytes": 320
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42783093115/chunks/chunk_0001/HYPE_live_liquidations.jsonl.gz",
+          "bytes": 169
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42783093115/chunks/chunk_0001/HYPE_live_microstructure_1s.jsonl.gz",
+          "bytes": 257310
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42783093115/chunks/chunk_0001/HYPE_live_raw_frames.jsonl.gz",
+          "bytes": 2191417
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42783093115/chunks/chunk_0001/HYPE_market_context.jsonl.gz",
+          "bytes": 845
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42783093115/chunks/chunk_0001/HYPE_structural_context_1m.jsonl.gz",
+          "bytes": 973
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42783093115/chunks/chunk_0002/CHUNK_STATUS.json",
+          "bytes": 351
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42783093115/chunks/chunk_0002/HYPE_live_microstructure_1s.jsonl.gz",
+          "bytes": 260497
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42783093115/chunks/chunk_0002/HYPE_live_raw_frames.jsonl.gz",
+          "bytes": 3085324
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42783093115/chunks/chunk_0002/HYPE_market_context.jsonl.gz",
+          "bytes": 841
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42783093115/chunks/chunk_0002/HYPE_structural_context_1m.jsonl.gz",
+          "bytes": 973
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42783093115/chunks/chunk_0003/CHUNK_STATUS.json",
+          "bytes": 328
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42783093115/chunks/chunk_0003/HYPE_live_microstructure_1s.jsonl.gz",
+          "bytes": 132178
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42783093115/chunks/chunk_0003/HYPE_live_raw_frames.jsonl.gz",
+          "bytes": 1578487
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42783093115/chunks/chunk_0003/HYPE_market_context.jsonl.gz",
+          "bytes": 695
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42783093115/chunks/chunk_0003/HYPE_structural_context_1m.jsonl.gz",
+          "bytes": 777
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42967356891/RESILIENT_CAPTURE_MANIFEST.json",
+          "bytes": 1646
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42967356891/chunks/chunk_0001/CHUNK_STATUS.json",
+          "bytes": 320
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42967356891/chunks/chunk_0001/HYPE_live_liquidations.jsonl.gz",
+          "bytes": 171
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42967356891/chunks/chunk_0001/HYPE_live_microstructure_1s.jsonl.gz",
+          "bytes": 245271
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42967356891/chunks/chunk_0001/HYPE_live_raw_frames.jsonl.gz",
+          "bytes": 2098979
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42967356891/chunks/chunk_0001/HYPE_market_context.jsonl.gz",
+          "bytes": 850
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42967356891/chunks/chunk_0001/HYPE_structural_context_1m.jsonl.gz",
+          "bytes": 973
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42967356891/chunks/chunk_0002/CHUNK_STATUS.json",
+          "bytes": 319
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42967356891/chunks/chunk_0002/HYPE_live_liquidations.jsonl.gz",
+          "bytes": 171
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42967356891/chunks/chunk_0002/HYPE_live_microstructure_1s.jsonl.gz",
+          "bytes": 244318
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42967356891/chunks/chunk_0002/HYPE_live_raw_frames.jsonl.gz",
+          "bytes": 1877260
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42967356891/chunks/chunk_0002/HYPE_market_context.jsonl.gz",
+          "bytes": 849
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42967356891/chunks/chunk_0002/HYPE_structural_context_1m.jsonl.gz",
+          "bytes": 971
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42967356891/chunks/chunk_0003/CHUNK_STATUS.json",
+          "bytes": 329
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42967356891/chunks/chunk_0003/HYPE_live_microstructure_1s.jsonl.gz",
+          "bytes": 116210
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42967356891/chunks/chunk_0003/HYPE_live_raw_frames.jsonl.gz",
+          "bytes": 872699
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42967356891/chunks/chunk_0003/HYPE_market_context.jsonl.gz",
+          "bytes": 695
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42967356891/chunks/chunk_0003/HYPE_structural_context_1m.jsonl.gz",
+          "bytes": 778
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42969916241/RESILIENT_CAPTURE_MANIFEST.json",
+          "bytes": 1647
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42969916241/chunks/chunk_0001/CHUNK_STATUS.json",
+          "bytes": 320
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42969916241/chunks/chunk_0001/HYPE_live_liquidations.jsonl.gz",
+          "bytes": 248
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42969916241/chunks/chunk_0001/HYPE_live_microstructure_1s.jsonl.gz",
+          "bytes": 249429
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42969916241/chunks/chunk_0001/HYPE_live_raw_frames.jsonl.gz",
+          "bytes": 2242245
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42969916241/chunks/chunk_0001/HYPE_market_context.jsonl.gz",
+          "bytes": 201838
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42969916241/chunks/chunk_0001/HYPE_structural_context_1m.jsonl.gz",
+          "bytes": 2488
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42969916241/chunks/chunk_0002/CHUNK_STATUS.json",
+          "bytes": 320
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42969916241/chunks/chunk_0002/HYPE_live_liquidations.jsonl.gz",
+          "bytes": 248
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42969916241/chunks/chunk_0002/HYPE_live_microstructure_1s.jsonl.gz",
+          "bytes": 249745
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42969916241/chunks/chunk_0002/HYPE_live_raw_frames.jsonl.gz",
+          "bytes": 2201033
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42969916241/chunks/chunk_0002/HYPE_market_context.jsonl.gz",
+          "bytes": 202852
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42969916241/chunks/chunk_0002/HYPE_structural_context_1m.jsonl.gz",
+          "bytes": 2544
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42969916241/chunks/chunk_0003/CHUNK_STATUS.json",
+          "bytes": 329
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42969916241/chunks/chunk_0003/HYPE_live_microstructure_1s.jsonl.gz",
+          "bytes": 126086
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42969916241/chunks/chunk_0003/HYPE_live_raw_frames.jsonl.gz",
+          "bytes": 1292779
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42969916241/chunks/chunk_0003/HYPE_market_context.jsonl.gz",
+          "bytes": 126567
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42969916241/chunks/chunk_0003/HYPE_structural_context_1m.jsonl.gz",
+          "bytes": 1485
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42977821712/RESILIENT_CAPTURE_MANIFEST.json",
+          "bytes": 1647
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42977821712/chunks/chunk_0001/CHUNK_STATUS.json",
+          "bytes": 320
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42977821712/chunks/chunk_0001/HYPE_live_liquidations.jsonl.gz",
+          "bytes": 170
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42977821712/chunks/chunk_0001/HYPE_live_microstructure_1s.jsonl.gz",
+          "bytes": 248121
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42977821712/chunks/chunk_0001/HYPE_live_raw_frames.jsonl.gz",
+          "bytes": 2209596
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42977821712/chunks/chunk_0001/HYPE_market_context.jsonl.gz",
+          "bytes": 843
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42977821712/chunks/chunk_0001/HYPE_structural_context_1m.jsonl.gz",
+          "bytes": 973
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42977821712/chunks/chunk_0002/CHUNK_STATUS.json",
+          "bytes": 320
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42977821712/chunks/chunk_0002/HYPE_live_liquidations.jsonl.gz",
+          "bytes": 214
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42977821712/chunks/chunk_0002/HYPE_live_microstructure_1s.jsonl.gz",
+          "bytes": 256252
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42977821712/chunks/chunk_0002/HYPE_live_raw_frames.jsonl.gz",
+          "bytes": 2330305
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42977821712/chunks/chunk_0002/HYPE_market_context.jsonl.gz",
+          "bytes": 853
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42977821712/chunks/chunk_0002/HYPE_structural_context_1m.jsonl.gz",
+          "bytes": 971
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42977821712/chunks/chunk_0003/CHUNK_STATUS.json",
+          "bytes": 329
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42977821712/chunks/chunk_0003/HYPE_live_microstructure_1s.jsonl.gz",
+          "bytes": 127954
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42977821712/chunks/chunk_0003/HYPE_live_raw_frames.jsonl.gz",
+          "bytes": 1231314
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42977821712/chunks/chunk_0003/HYPE_market_context.jsonl.gz",
+          "bytes": 695
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42977821712/chunks/chunk_0003/HYPE_structural_context_1m.jsonl.gz",
+          "bytes": 778
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42985165451/RESILIENT_CAPTURE_MANIFEST.json",
+          "bytes": 1647
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42985165451/chunks/chunk_0001/CHUNK_STATUS.json",
+          "bytes": 320
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42985165451/chunks/chunk_0001/HYPE_live_liquidations.jsonl.gz",
+          "bytes": 170
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42985165451/chunks/chunk_0001/HYPE_live_microstructure_1s.jsonl.gz",
+          "bytes": 254547
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42985165451/chunks/chunk_0001/HYPE_live_raw_frames.jsonl.gz",
+          "bytes": 2242481
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42985165451/chunks/chunk_0001/HYPE_market_context.jsonl.gz",
+          "bytes": 842
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42985165451/chunks/chunk_0001/HYPE_structural_context_1m.jsonl.gz",
+          "bytes": 978
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42985165451/chunks/chunk_0002/CHUNK_STATUS.json",
+          "bytes": 320
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42985165451/chunks/chunk_0002/HYPE_live_liquidations.jsonl.gz",
+          "bytes": 169
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42985165451/chunks/chunk_0002/HYPE_live_microstructure_1s.jsonl.gz",
+          "bytes": 247954
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42985165451/chunks/chunk_0002/HYPE_live_raw_frames.jsonl.gz",
+          "bytes": 1941997
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42985165451/chunks/chunk_0002/HYPE_market_context.jsonl.gz",
+          "bytes": 839
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42985165451/chunks/chunk_0002/HYPE_structural_context_1m.jsonl.gz",
+          "bytes": 973
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42985165451/chunks/chunk_0003/CHUNK_STATUS.json",
+          "bytes": 329
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42985165451/chunks/chunk_0003/HYPE_live_microstructure_1s.jsonl.gz",
+          "bytes": 124066
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42985165451/chunks/chunk_0003/HYPE_live_raw_frames.jsonl.gz",
+          "bytes": 1149320
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42985165451/chunks/chunk_0003/HYPE_market_context.jsonl.gz",
+          "bytes": 688
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42985165451/chunks/chunk_0003/HYPE_structural_context_1m.jsonl.gz",
+          "bytes": 778
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42992316932/RESILIENT_CAPTURE_MANIFEST.json",
+          "bytes": 1647
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42992316932/chunks/chunk_0001/CHUNK_STATUS.json",
+          "bytes": 320
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42992316932/chunks/chunk_0001/HYPE_live_microstructure_1s.jsonl.gz",
+          "bytes": 255170
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42992316932/chunks/chunk_0001/HYPE_live_raw_frames.jsonl.gz",
+          "bytes": 2427453
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42992316932/chunks/chunk_0001/HYPE_market_context.jsonl.gz",
+          "bytes": 845
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42992316932/chunks/chunk_0001/HYPE_structural_context_1m.jsonl.gz",
+          "bytes": 974
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42992316932/chunks/chunk_0002/CHUNK_STATUS.json",
+          "bytes": 320
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42992316932/chunks/chunk_0002/HYPE_live_microstructure_1s.jsonl.gz",
+          "bytes": 248717
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42992316932/chunks/chunk_0002/HYPE_live_raw_frames.jsonl.gz",
+          "bytes": 2265894
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42992316932/chunks/chunk_0002/HYPE_market_context.jsonl.gz",
+          "bytes": 850
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42992316932/chunks/chunk_0002/HYPE_structural_context_1m.jsonl.gz",
+          "bytes": 973
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42992316932/chunks/chunk_0003/CHUNK_STATUS.json",
+          "bytes": 329
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42992316932/chunks/chunk_0003/HYPE_live_microstructure_1s.jsonl.gz",
+          "bytes": 125445
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42992316932/chunks/chunk_0003/HYPE_live_raw_frames.jsonl.gz",
+          "bytes": 1158379
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42992316932/chunks/chunk_0003/HYPE_market_context.jsonl.gz",
+          "bytes": 690
+        },
+        {
+          "path": "HYPE-LOCAL-RAW-42992316932/chunks/chunk_0003/HYPE_structural_context_1m.jsonl.gz",
+          "bytes": 780
+        },
+        {
+          "path": "HYPE-RECENT-48H-FROZEN-REPLAY-42735182846/recent48_out/RECENT_48H_CAUSAL_SCORED.jsonl.gz",
+          "bytes": 565765
+        },
+        {
+          "path": "HYPE-RECENT-48H-FROZEN-REPLAY-42735182846/recent48_out/RECENT_48H_COMPACT_1M.jsonl.gz",
+          "bytes": 282641
+        },
+        {
+          "path": "HYPE-RECENT-48H-FROZEN-REPLAY-42735182846/recent48_out/RECENT_48H_FROZEN_REPLAY.json",
+          "bytes": 79712
+        },
+        {
+          "path": "HYPE-RECENT-48H-FROZEN-REPLAY-42735182846/recent48_replay.log",
+          "bytes": 3550
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_00_liquidations.parquet",
+          "bytes": 3961
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_00_mark_price.parquet",
+          "bytes": 42612
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_00_open_interest.parquet",
+          "bytes": 26364
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_00_orderbook.parquet",
+          "bytes": 2790917
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_00_ticker.parquet",
+          "bytes": 43864
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_00_trades.parquet",
+          "bytes": 97668
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_01_mark_price.parquet",
+          "bytes": 44321
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_01_open_interest.parquet",
+          "bytes": 27926
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_01_orderbook.parquet",
+          "bytes": 2890480
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_01_ticker.parquet",
+          "bytes": 45092
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_01_trades.parquet",
+          "bytes": 129704
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_02_mark_price.parquet",
+          "bytes": 49040
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_02_open_interest.parquet",
+          "bytes": 29286
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_02_orderbook.parquet",
+          "bytes": 3426439
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_02_ticker.parquet",
+          "bytes": 42219
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_02_trades.parquet",
+          "bytes": 97598
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_03_liquidations.parquet",
+          "bytes": 4059
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_03_mark_price.parquet",
+          "bytes": 51180
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_03_open_interest.parquet",
+          "bytes": 29949
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_03_orderbook.parquet",
+          "bytes": 3371472
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_03_ticker.parquet",
+          "bytes": 47311
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_03_trades.parquet",
+          "bytes": 137006
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_04_liquidations.parquet",
+          "bytes": 4046
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_04_mark_price.parquet",
+          "bytes": 44704
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_04_open_interest.parquet",
+          "bytes": 26629
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_04_orderbook.parquet",
+          "bytes": 2809521
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_04_ticker.parquet",
+          "bytes": 38615
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_04_trades.parquet",
+          "bytes": 98445
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_05_liquidations.parquet",
+          "bytes": 3961
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_05_mark_price.parquet",
+          "bytes": 39954
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_05_open_interest.parquet",
+          "bytes": 26525
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_05_orderbook.parquet",
+          "bytes": 2740349
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_05_ticker.parquet",
+          "bytes": 34095
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_05_trades.parquet",
+          "bytes": 71621
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_06_mark_price.parquet",
+          "bytes": 43243
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_06_open_interest.parquet",
+          "bytes": 25981
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_06_orderbook.parquet",
+          "bytes": 2560512
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_06_ticker.parquet",
+          "bytes": 40798
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_06_trades.parquet",
+          "bytes": 94103
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_07_mark_price.parquet",
+          "bytes": 43667
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_07_open_interest.parquet",
+          "bytes": 28080
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_07_orderbook.parquet",
+          "bytes": 2729245
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_07_ticker.parquet",
+          "bytes": 45143
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_07_trades.parquet",
+          "bytes": 92860
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_08_liquidations.parquet",
+          "bytes": 3961
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_08_mark_price.parquet",
+          "bytes": 35773
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_08_open_interest.parquet",
+          "bytes": 23358
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_08_orderbook.parquet",
+          "bytes": 2354147
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_08_ticker.parquet",
+          "bytes": 33541
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_08_trades.parquet",
+          "bytes": 68299
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_09_liquidations.parquet",
+          "bytes": 4486
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_09_mark_price.parquet",
+          "bytes": 53908
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_09_open_interest.parquet",
+          "bytes": 33222
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_09_orderbook.parquet",
+          "bytes": 3439884
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_09_ticker.parquet",
+          "bytes": 84226
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_09_trades.parquet",
+          "bytes": 286713
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_10_liquidations.parquet",
+          "bytes": 4055
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_10_mark_price.parquet",
+          "bytes": 50244
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_10_open_interest.parquet",
+          "bytes": 30241
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_10_orderbook.parquet",
+          "bytes": 3025334
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_10_ticker.parquet",
+          "bytes": 50763
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_10_trades.parquet",
+          "bytes": 146370
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_11_liquidations.parquet",
+          "bytes": 4228
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_11_mark_price.parquet",
+          "bytes": 54716
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_11_open_interest.parquet",
+          "bytes": 32390
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_11_orderbook.parquet",
+          "bytes": 3654124
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_11_ticker.parquet",
+          "bytes": 50322
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_11_trades.parquet",
+          "bytes": 140890
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_12_liquidations.parquet",
+          "bytes": 4264
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_12_mark_price.parquet",
+          "bytes": 50479
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_12_open_interest.parquet",
+          "bytes": 29974
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_12_orderbook.parquet",
+          "bytes": 3398857
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_12_ticker.parquet",
+          "bytes": 47249
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_12_trades.parquet",
+          "bytes": 130166
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_13_liquidations.parquet",
+          "bytes": 4287
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_13_mark_price.parquet",
+          "bytes": 68960
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_13_open_interest.parquet",
+          "bytes": 37194
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_13_orderbook.parquet",
+          "bytes": 4588693
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_13_ticker.parquet",
+          "bytes": 79699
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_13_trades.parquet",
+          "bytes": 222242
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_14_liquidations.parquet",
+          "bytes": 3961
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_14_mark_price.parquet",
+          "bytes": 59029
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_14_open_interest.parquet",
+          "bytes": 32538
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_14_orderbook.parquet",
+          "bytes": 3732135
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_14_ticker.parquet",
+          "bytes": 56928
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_14_trades.parquet",
+          "bytes": 150221
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_15_liquidations.parquet",
+          "bytes": 3976
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_15_mark_price.parquet",
+          "bytes": 53241
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_15_open_interest.parquet",
+          "bytes": 32716
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_15_orderbook.parquet",
+          "bytes": 3738185
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_15_ticker.parquet",
+          "bytes": 51305
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_15_trades.parquet",
+          "bytes": 130277
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_16_liquidations.parquet",
+          "bytes": 4769
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_16_mark_price.parquet",
+          "bytes": 70452
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_16_open_interest.parquet",
+          "bytes": 36736
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_16_orderbook.parquet",
+          "bytes": 4811774
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_16_ticker.parquet",
+          "bytes": 75342
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_16_trades.parquet",
+          "bytes": 203208
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_17_liquidations.parquet",
+          "bytes": 4877
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_17_mark_price.parquet",
+          "bytes": 67498
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_17_open_interest.parquet",
+          "bytes": 35756
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_17_orderbook.parquet",
+          "bytes": 4486564
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_17_ticker.parquet",
+          "bytes": 70317
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_17_trades.parquet",
+          "bytes": 208300
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_18_liquidations.parquet",
+          "bytes": 4123
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_18_mark_price.parquet",
+          "bytes": 69675
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_18_open_interest.parquet",
+          "bytes": 36273
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_18_orderbook.parquet",
+          "bytes": 4534690
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_18_ticker.parquet",
+          "bytes": 75565
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_18_trades.parquet",
+          "bytes": 190127
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_19_mark_price.parquet",
+          "bytes": 47016
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_19_open_interest.parquet",
+          "bytes": 29436
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_19_orderbook.parquet",
+          "bytes": 3205799
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_19_ticker.parquet",
+          "bytes": 50570
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_19_trades.parquet",
+          "bytes": 130146
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_20_liquidations.parquet",
+          "bytes": 5252
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_20_mark_price.parquet",
+          "bytes": 62477
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_20_open_interest.parquet",
+          "bytes": 34619
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_20_orderbook.parquet",
+          "bytes": 4162831
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_20_ticker.parquet",
+          "bytes": 75954
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_20_trades.parquet",
+          "bytes": 207807
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_21_liquidations.parquet",
+          "bytes": 15594
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_21_mark_price.parquet",
+          "bytes": 98275
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_21_open_interest.parquet",
+          "bytes": 50603
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_21_orderbook.parquet",
+          "bytes": 7884559
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_21_ticker.parquet",
+          "bytes": 240728
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_21_trades.parquet",
+          "bytes": 1396611
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_22_liquidations.parquet",
+          "bytes": 4363
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_22_mark_price.parquet",
+          "bytes": 116008
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_22_open_interest.parquet",
+          "bytes": 57724
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_22_orderbook.parquet",
+          "bytes": 10591038
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_22_ticker.parquet",
+          "bytes": 279489
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_22_trades.parquet",
+          "bytes": 1154496
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_23_liquidations.parquet",
+          "bytes": 4297
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_23_mark_price.parquet",
+          "bytes": 110539
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_23_open_interest.parquet",
+          "bytes": 60055
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_23_orderbook.parquet",
+          "bytes": 9797642
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_23_ticker.parquet",
+          "bytes": 214078
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261108_23_trades.parquet",
+          "bytes": 720131
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_00_liquidations.parquet",
+          "bytes": 3956
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_00_mark_price.parquet",
+          "bytes": 115064
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_00_open_interest.parquet",
+          "bytes": 59653
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_00_orderbook.parquet",
+          "bytes": 10219113
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_00_ticker.parquet",
+          "bytes": 186101
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_00_trades.parquet",
+          "bytes": 595577
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_01_liquidations.parquet",
+          "bytes": 4573
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_01_mark_price.parquet",
+          "bytes": 103046
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_01_open_interest.parquet",
+          "bytes": 56621
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_01_orderbook.parquet",
+          "bytes": 9266797
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_01_ticker.parquet",
+          "bytes": 166025
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_01_trades.parquet",
+          "bytes": 459526
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_02_liquidations.parquet",
+          "bytes": 4046
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_02_mark_price.parquet",
+          "bytes": 78109
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_02_open_interest.parquet",
+          "bytes": 44229
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_02_orderbook.parquet",
+          "bytes": 6967041
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_02_ticker.parquet",
+          "bytes": 104842
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_02_trades.parquet",
+          "bytes": 282881
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_03_liquidations.parquet",
+          "bytes": 4053
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_03_mark_price.parquet",
+          "bytes": 72573
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_03_open_interest.parquet",
+          "bytes": 44671
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_03_orderbook.parquet",
+          "bytes": 5807908
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_03_ticker.parquet",
+          "bytes": 94902
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_03_trades.parquet",
+          "bytes": 274367
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_04_liquidations.parquet",
+          "bytes": 4046
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_04_mark_price.parquet",
+          "bytes": 69494
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_04_open_interest.parquet",
+          "bytes": 42124
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_04_orderbook.parquet",
+          "bytes": 5749005
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_04_ticker.parquet",
+          "bytes": 90355
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_04_trades.parquet",
+          "bytes": 223539
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_05_liquidations.parquet",
+          "bytes": 4630
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_05_mark_price.parquet",
+          "bytes": 76352
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_05_open_interest.parquet",
+          "bytes": 49990
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_05_orderbook.parquet",
+          "bytes": 6951637
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_05_ticker.parquet",
+          "bytes": 110377
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_05_trades.parquet",
+          "bytes": 317150
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_06_liquidations.parquet",
+          "bytes": 4328
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_06_mark_price.parquet",
+          "bytes": 89558
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_06_open_interest.parquet",
+          "bytes": 52795
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_06_orderbook.parquet",
+          "bytes": 8220357
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_06_ticker.parquet",
+          "bytes": 136829
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_06_trades.parquet",
+          "bytes": 394990
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_07_liquidations.parquet",
+          "bytes": 8552
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_07_mark_price.parquet",
+          "bytes": 117939
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_07_open_interest.parquet",
+          "bytes": 60722
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_07_orderbook.parquet",
+          "bytes": 10140637
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_07_ticker.parquet",
+          "bytes": 260975
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_07_trades.parquet",
+          "bytes": 992483
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_08_liquidations.parquet",
+          "bytes": 4432
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_08_mark_price.parquet",
+          "bytes": 105028
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_08_open_interest.parquet",
+          "bytes": 58034
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_08_orderbook.parquet",
+          "bytes": 8720700
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_08_ticker.parquet",
+          "bytes": 196177
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_08_trades.parquet",
+          "bytes": 655877
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_09_liquidations.parquet",
+          "bytes": 4293
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_09_mark_price.parquet",
+          "bytes": 84467
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_09_open_interest.parquet",
+          "bytes": 51464
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_09_orderbook.parquet",
+          "bytes": 6816865
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_09_ticker.parquet",
+          "bytes": 133857
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_09_trades.parquet",
+          "bytes": 396239
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_10_liquidations.parquet",
+          "bytes": 4321
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_10_mark_price.parquet",
+          "bytes": 74191
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_10_open_interest.parquet",
+          "bytes": 47368
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_10_orderbook.parquet",
+          "bytes": 6137531
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_10_ticker.parquet",
+          "bytes": 102628
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_10_trades.parquet",
+          "bytes": 289454
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_11_liquidations.parquet",
+          "bytes": 4380
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_11_mark_price.parquet",
+          "bytes": 89422
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_11_open_interest.parquet",
+          "bytes": 53186
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_11_orderbook.parquet",
+          "bytes": 7897298
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_11_ticker.parquet",
+          "bytes": 153371
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_11_trades.parquet",
+          "bytes": 502618
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_12_mark_price.parquet",
+          "bytes": 86318
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_12_open_interest.parquet",
+          "bytes": 53289
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_12_orderbook.parquet",
+          "bytes": 7747292
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_12_ticker.parquet",
+          "bytes": 132179
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_12_trades.parquet",
+          "bytes": 397051
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_13_liquidations.parquet",
+          "bytes": 4117
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_13_mark_price.parquet",
+          "bytes": 84371
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_13_open_interest.parquet",
+          "bytes": 48959
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_13_orderbook.parquet",
+          "bytes": 7071178
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_13_ticker.parquet",
+          "bytes": 114971
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_13_trades.parquet",
+          "bytes": 302805
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_14_liquidations.parquet",
+          "bytes": 4800
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_14_mark_price.parquet",
+          "bytes": 120098
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_14_open_interest.parquet",
+          "bytes": 59487
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_14_orderbook.parquet",
+          "bytes": 10091103
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_14_ticker.parquet",
+          "bytes": 263453
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_14_trades.parquet",
+          "bytes": 974184
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_15_liquidations.parquet",
+          "bytes": 4488
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_15_mark_price.parquet",
+          "bytes": 134625
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_15_open_interest.parquet",
+          "bytes": 64510
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_15_orderbook.parquet",
+          "bytes": 10372766
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_15_ticker.parquet",
+          "bytes": 265459
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_15_trades.parquet",
+          "bytes": 1075368
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_16_liquidations.parquet",
+          "bytes": 4744
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_16_mark_price.parquet",
+          "bytes": 110747
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_16_open_interest.parquet",
+          "bytes": 60915
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_16_orderbook.parquet",
+          "bytes": 9346091
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_16_ticker.parquet",
+          "bytes": 215245
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_16_trades.parquet",
+          "bytes": 971344
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_17_liquidations.parquet",
+          "bytes": 4140
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_17_mark_price.parquet",
+          "bytes": 94908
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_17_open_interest.parquet",
+          "bytes": 53404
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_17_orderbook.parquet",
+          "bytes": 7185439
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_17_ticker.parquet",
+          "bytes": 141282
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_17_trades.parquet",
+          "bytes": 466366
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_18_liquidations.parquet",
+          "bytes": 3961
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_18_mark_price.parquet",
+          "bytes": 80508
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_18_open_interest.parquet",
+          "bytes": 46473
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_18_orderbook.parquet",
+          "bytes": 6327028
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_18_ticker.parquet",
+          "bytes": 115519
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_18_trades.parquet",
+          "bytes": 367783
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_19_liquidations.parquet",
+          "bytes": 4167
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_19_mark_price.parquet",
+          "bytes": 80601
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_19_open_interest.parquet",
+          "bytes": 46157
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_19_orderbook.parquet",
+          "bytes": 7709577
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_19_ticker.parquet",
+          "bytes": 154521
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_19_trades.parquet",
+          "bytes": 540684
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_20_mark_price.parquet",
+          "bytes": 78191
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_20_open_interest.parquet",
+          "bytes": 48339
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_20_orderbook.parquet",
+          "bytes": 6768459
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_20_ticker.parquet",
+          "bytes": 115622
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_20_trades.parquet",
+          "bytes": 340601
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_21_liquidations.parquet",
+          "bytes": 3961
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_21_mark_price.parquet",
+          "bytes": 70829
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_21_open_interest.parquet",
+          "bytes": 42225
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_21_orderbook.parquet",
+          "bytes": 5068404
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_21_ticker.parquet",
+          "bytes": 95209
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_21_trades.parquet",
+          "bytes": 284783
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_22_liquidations.parquet",
+          "bytes": 4223
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_22_mark_price.parquet",
+          "bytes": 61679
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_22_open_interest.parquet",
+          "bytes": 35858
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_22_orderbook.parquet",
+          "bytes": 4393486
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_22_ticker.parquet",
+          "bytes": 84914
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_22_trades.parquet",
+          "bytes": 232313
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_23_liquidations.parquet",
+          "bytes": 4168
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_23_mark_price.parquet",
+          "bytes": 70759
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_23_open_interest.parquet",
+          "bytes": 43623
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_23_orderbook.parquet",
+          "bytes": 4567108
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_23_ticker.parquet",
+          "bytes": 93855
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/cache/20261109_23_trades.parquet",
+          "bytes": 228119
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/meta/RAW_48H_MANIFEST.json",
+          "bytes": 47810
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42728586550/meta/download.log",
+          "bytes": 509
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_00_liquidations.parquet",
+          "bytes": 3961
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_00_mark_price.parquet",
+          "bytes": 42612
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_00_open_interest.parquet",
+          "bytes": 26364
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_00_orderbook.parquet",
+          "bytes": 2790917
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_00_ticker.parquet",
+          "bytes": 43864
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_00_trades.parquet",
+          "bytes": 97668
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_01_mark_price.parquet",
+          "bytes": 44321
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_01_open_interest.parquet",
+          "bytes": 27926
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_01_orderbook.parquet",
+          "bytes": 2890480
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_01_ticker.parquet",
+          "bytes": 45092
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_01_trades.parquet",
+          "bytes": 129704
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_02_mark_price.parquet",
+          "bytes": 49040
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_02_open_interest.parquet",
+          "bytes": 29286
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_02_orderbook.parquet",
+          "bytes": 3426439
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_02_ticker.parquet",
+          "bytes": 42219
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_02_trades.parquet",
+          "bytes": 97598
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_03_liquidations.parquet",
+          "bytes": 4059
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_03_mark_price.parquet",
+          "bytes": 51180
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_03_open_interest.parquet",
+          "bytes": 29949
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_03_orderbook.parquet",
+          "bytes": 3371472
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_03_ticker.parquet",
+          "bytes": 47311
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_03_trades.parquet",
+          "bytes": 137006
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_04_liquidations.parquet",
+          "bytes": 4046
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_04_mark_price.parquet",
+          "bytes": 44704
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_04_open_interest.parquet",
+          "bytes": 26629
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_04_orderbook.parquet",
+          "bytes": 2809521
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_04_ticker.parquet",
+          "bytes": 38615
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_04_trades.parquet",
+          "bytes": 98445
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_05_liquidations.parquet",
+          "bytes": 3961
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_05_mark_price.parquet",
+          "bytes": 39954
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_05_open_interest.parquet",
+          "bytes": 26525
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_05_orderbook.parquet",
+          "bytes": 2740349
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_05_ticker.parquet",
+          "bytes": 34095
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_05_trades.parquet",
+          "bytes": 71621
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_06_mark_price.parquet",
+          "bytes": 43243
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_06_open_interest.parquet",
+          "bytes": 25981
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_06_orderbook.parquet",
+          "bytes": 2560512
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_06_ticker.parquet",
+          "bytes": 40798
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_06_trades.parquet",
+          "bytes": 94103
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_07_mark_price.parquet",
+          "bytes": 43667
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_07_open_interest.parquet",
+          "bytes": 28080
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_07_orderbook.parquet",
+          "bytes": 2729245
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_07_ticker.parquet",
+          "bytes": 45143
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_07_trades.parquet",
+          "bytes": 92860
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_08_liquidations.parquet",
+          "bytes": 3961
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_08_mark_price.parquet",
+          "bytes": 35773
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_08_open_interest.parquet",
+          "bytes": 23358
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_08_orderbook.parquet",
+          "bytes": 2354147
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_08_ticker.parquet",
+          "bytes": 33541
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_08_trades.parquet",
+          "bytes": 68299
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_09_liquidations.parquet",
+          "bytes": 4486
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_09_mark_price.parquet",
+          "bytes": 53908
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_09_open_interest.parquet",
+          "bytes": 33222
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_09_orderbook.parquet",
+          "bytes": 3439884
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_09_ticker.parquet",
+          "bytes": 84226
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_09_trades.parquet",
+          "bytes": 286713
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_10_liquidations.parquet",
+          "bytes": 4055
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_10_mark_price.parquet",
+          "bytes": 50244
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_10_open_interest.parquet",
+          "bytes": 30241
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_10_orderbook.parquet",
+          "bytes": 3025334
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_10_ticker.parquet",
+          "bytes": 50763
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_10_trades.parquet",
+          "bytes": 146370
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_11_liquidations.parquet",
+          "bytes": 4228
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_11_mark_price.parquet",
+          "bytes": 54716
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_11_open_interest.parquet",
+          "bytes": 32390
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_11_orderbook.parquet",
+          "bytes": 3654124
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_11_ticker.parquet",
+          "bytes": 50322
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_11_trades.parquet",
+          "bytes": 140890
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_12_liquidations.parquet",
+          "bytes": 4264
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_12_mark_price.parquet",
+          "bytes": 50479
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_12_open_interest.parquet",
+          "bytes": 29974
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_12_orderbook.parquet",
+          "bytes": 3398857
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_12_ticker.parquet",
+          "bytes": 47249
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_12_trades.parquet",
+          "bytes": 130166
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_13_liquidations.parquet",
+          "bytes": 4287
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_13_mark_price.parquet",
+          "bytes": 68960
+        },
+        {
+          "path": "HYPE-RECENT-48H-RAW-42730081009/cache/20261108_13_open_interest.parquet",
+          "bytes": 37194
+        }
+      ],
+      "note": "Extra saved artifacts are inventoried; only schema-compatible, causally aligned data are admitted to fitting."
+    }
+  },
+  "split": {
+    "train": "before 2026-10-23 with 3h purge",
+    "meta_fit": "earliest 60% of distinct validation candidates, with 3h purge before cut",
+    "meta_calibration": "later 40% of distinct validation candidates",
+    "historical_oos_previously_inspected": "2026-10-27..2026-11-03 with terminal maturity purge; no longer untouched for model selection"
+  },
+  "samples": {
+    "train": 1560,
+    "valid": 291,
+    "oos": 499
+  },
+  "teacher_coverage": {
+    "strict_labels_total": 76,
+    "strict_labels_by_side": {
+      "LOW": 38,
+      "HIGH": 38
+    },
+    "strict_label_ids_seen_in_candidate_replay": 76,
+    "strict_label_ids_missing_from_candidate_replay": []
+  },
+  "fin_jepa_validation_loss": 0.35107236355543137,
+  "meta_split": {
+    "meta_train_rows": 162,
+    "cal_rows": 111,
+    "meta_train_candidates": 76,
+    "cal_candidates": 55,
+    "meta_train_positive_candidates": 5,
+    "cal_positive_candidates": 4,
+    "cut_ts_ms": 1792919625023,
+    "purge_ms": 10800000,
+    "candidate_id_overlap": 0,
+    "support_gate_min_cal_positives": 5,
+    "calibration_support_pass": false
+  },
+  "calibration": {
+    "candidates": 55,
+    "reference_true": 4,
+    "accepted": 3,
+    "tp": 1,
+    "fp": 2,
+    "fn": 3,
+    "precision": 0.3333333333333333,
+    "recall": 0.25,
+    "f1": 0.28571428571428575,
+    "median_delay_s": 60.0
+  },
+  "oos": {
+    "candidates": 253,
+    "reference_true": 19,
+    "accepted": 12,
+    "tp": 3,
+    "fp": 9,
+    "fn": 16,
+    "precision": 0.25,
+    "recall": 0.15789473684210525,
+    "f1": 0.1935483870967742,
+    "median_delay_s": 300.0
+  },
+  "oos_by_market_regime": {
+    "BEAR": {
+      "candidates": 105,
+      "reference_true": 7,
+      "accepted": 0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 7,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "median_delay_s": null
+    },
+    "TRANSITION": {
+      "candidates": 69,
+      "reference_true": 11,
+      "accepted": 2,
+      "tp": 1,
+      "fp": 1,
+      "fn": 10,
+      "precision": 0.5,
+      "recall": 0.09090909090909091,
+      "f1": 0.15384615384615385,
+      "median_delay_s": 300.0
+    },
+    "BULL": {
+      "candidates": 107,
+      "reference_true": 6,
+      "accepted": 10,
+      "tp": 2,
+      "fp": 8,
+      "fn": 4,
+      "precision": 0.2,
+      "recall": 0.3333333333333333,
+      "f1": 0.25,
+      "median_delay_s": 240.0
+    }
+  },
+  "tri_brain_ablation_summary": {
+    "FULL_TRI_BRAIN": "INSUFFICIENT_CALIBRATION_SUPPORT",
+    "NO_JEPA": "INSUFFICIENT_CALIBRATION_SUPPORT",
+    "NO_QUANTUM": "INSUFFICIENT_CALIBRATION_SUPPORT",
+    "NO_CORTEX": "INSUFFICIENT_CALIBRATION_SUPPORT",
+    "JEPA_ONLY": "INSUFFICIENT_CALIBRATION_SUPPORT",
+    "QUANTUM_ONLY": "INSUFFICIENT_CALIBRATION_SUPPORT",
+    "CORTEX_ONLY": "INSUFFICIENT_CALIBRATION_SUPPORT"
+  },
+  "gate": {
+    "passed": false,
+    "requirements": {
+      "accepted_min": 5,
+      "false_first_max": 0,
+      "precision_min": 0.95,
+      "recall_min": 0.2,
+      "median_delay_s_max": 180
+    }
+  },
+  "cortex_relationship_heads": {
+    "LOW_60s": {
+      "base_rate": 0.05741626794258373,
+      "relationships": [
+        {
+          "feature": "discovery__return_accel_15v60",
+          "effect": -0.7482040793795107,
+          "median": -0.0006157945569799095,
+          "pos": 24,
+          "neg": 393
+        },
+        {
+          "feature": "discovery__return_accel_15v60_rev",
+          "effect": -0.7482040793795107,
+          "median": -0.0006157945569799095,
+          "pos": 24,
+          "neg": 393
+        },
+        {
+          "feature": "discovery__market_accel_15v60",
+          "effect": -0.7034912896017803,
+          "median": -0.0019907977987058817,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "discovery__flow_price_divergence_180s",
+          "effect": -0.6807515218869209,
+          "median": 0.3505584164410084,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "reversal_attempts",
+          "effect": -0.6744907594765952,
+          "median": 4.0,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "teacherctx_hour_progress",
+          "effect": -0.6509777361298605,
+          "median": 0.5336595833333333,
+          "pos": 24,
+          "neg": 388
+        },
+        {
+          "feature": "discovery__flow_price_agreement_60s",
+          "effect": 0.5887704318186244,
+          "median": 6.673705493077913e-05,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "discovery__return_accel_180v300",
+          "effect": 0.5337493174057308,
+          "median": 0.0007758181210943405,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "discovery__return_accel_180v300_rev",
+          "effect": 0.5337493174057308,
+          "median": 0.0007758181210943405,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "retrace_bps",
+          "effect": 0.5202560908578273,
+          "median": 9.836896480022173,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "trade_count_300s",
+          "effect": 0.5180014365906509,
+          "median": 2236.5,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "discovery__market_ret_15m",
+          "effect": -0.5150981612496132,
+          "median": -0.004284577411879209,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "total_30s_log",
+          "effect": 0.514794705197135,
+          "median": 10.844435717294829,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "rev_eff_15s",
+          "effect": -0.5095639711722434,
+          "median": 0.002806513673852763,
+          "pos": 24,
+          "neg": 393
+        },
+        {
+          "feature": "discovery__range_pressure_6h",
+          "effect": -0.5066839367043068,
+          "median": 0.9039843275254839,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "discovery__range_pressure_6h_rev",
+          "effect": -0.5066839367043068,
+          "median": 0.9039843275254839,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "position_6h",
+          "effect": 0.5057511836694749,
+          "median": 0.047952626299258276,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "total_180s_log",
+          "effect": 0.4674530706158297,
+          "median": 13.43820869456809,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "buy_30s_log",
+          "effect": 0.4534999970278227,
+          "median": 9.976365622168625,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "discovery__flow_accel_60v180",
+          "effect": 0.44707357598894576,
+          "median": 0.40828255162815486,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "discovery__flow_accel_60v180_rev",
+          "effect": 0.44707357598894576,
+          "median": 0.40828255162815486,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "buy_300s_log",
+          "effect": 0.43863918892373593,
+          "median": 12.725821567649158,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "imbalance_30s",
+          "effect": 0.43812403123479216,
+          "median": 0.06053191778559298,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "rev_flow_30s",
+          "effect": 0.43812403123479216,
+          "median": 0.06053191778559298,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "buy_15s_log",
+          "effect": 0.41858587592693663,
+          "median": 8.9847232614352,
+          "pos": 24,
+          "neg": 393
+        },
+        {
+          "feature": "rev_eff_30s",
+          "effect": 0.4127275397432649,
+          "median": 0.005325002995595879,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "ret_180s",
+          "effect": 0.4093140555031032,
+          "median": -0.0010506659484241232,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "rev_ret_180s",
+          "effect": 0.4093140555031032,
+          "median": -0.0010506659484241232,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "teacherctx_h1_retrace_from_extreme_bps",
+          "effect": 0.4075574629144311,
+          "median": 6.981760282915861,
+          "pos": 24,
+          "neg": 388
+        },
+        {
+          "feature": "discovery__range_pressure_24h",
+          "effect": -0.40541216571346256,
+          "median": 0.7889928123632995,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "discovery__range_pressure_24h_rev",
+          "effect": -0.40541216571346256,
+          "median": 0.7889928123632995,
+          "pos": 24,
+          "neg": 394
+        },
+        {
+          "feature": "position_24h",
+          "effect": 0.4047693279975534,
+          "median": 0.10512940597519131,
+          "pos": 24,
+          "neg": 394
+        }
+      ],
+      "examples": 418,
+      "positives": 24
+    },
+    "LOW_180s": {
+      "base_rate": 0.09056603773584905,
+      "relationships": [
+        {
+          "feature": "rev_eff_300s",
+          "effect": 1064174.617586171,
+          "median": 0.0,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "old_eff_5s",
+          "effect": 293388.76415856817,
+          "median": 0.0,
+          "pos": 22,
+          "neg": 226
+        },
+        {
+          "feature": "trade_count_5s",
+          "effect": 1.1321809176928561,
+          "median": 20.0,
+          "pos": 22,
+          "neg": 226
+        },
+        {
+          "feature": "discovery__flow_price_agreement_60s",
+          "effect": 0.9716182540148227,
+          "median": 7.267573972178871e-05,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "old_eff_300s",
+          "effect": -0.7457659050445363,
+          "median": 0.0007563891338620363,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "discovery__m1__lh_ratio",
+          "effect": -0.6744907594765952,
+          "median": 0.6363636363636364,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "discovery__m1__roc5",
+          "effect": 0.6706109488149677,
+          "median": -0.0008797541788323482,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "discovery__m1__roc5_rev",
+          "effect": 0.6706109488149677,
+          "median": -0.0008797541788323482,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "discovery__market_ret_5m",
+          "effect": 0.6706109488149677,
+          "median": -0.0008797541788323482,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "ret_180s",
+          "effect": 0.6649879705878081,
+          "median": 0.001339285714285765,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "rev_ret_180s",
+          "effect": 0.6649879705878081,
+          "median": 0.001339285714285765,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "ret_60s",
+          "effect": 0.6365086136442695,
+          "median": 9.567661304799024e-05,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "rev_ret_60s",
+          "effect": 0.6365086136442695,
+          "median": 9.567661304799024e-05,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "teacherctx_hour_progress",
+          "effect": -0.607288441941808,
+          "median": 0.5461612499999999,
+          "pos": 24,
+          "neg": 236
+        },
+        {
+          "feature": "ret_300s",
+          "effect": 0.606990741216884,
+          "median": -0.00047755491881573686,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "rev_ret_300s",
+          "effect": 0.606990741216884,
+          "median": -0.00047755491881573686,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "rev_eff_180s",
+          "effect": 0.6061607627607032,
+          "median": 0.005883791009049931,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "discovery__flow_price_divergence_15s",
+          "effect": -0.6038591943874895,
+          "median": 0.11293471555955448,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "discovery__m1__roc3",
+          "effect": 0.5936455183569225,
+          "median": 0.00035034450543025564,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "discovery__m1__roc3_rev",
+          "effect": 0.5936455183569225,
+          "median": 0.00035034450543025564,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "discovery__m1__body_share",
+          "effect": 0.5898598989576337,
+          "median": 0.5438596491227994,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "discovery__m1__ema9_gap_bps",
+          "effect": 0.5852240423403555,
+          "median": -4.108257114842084,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "discovery__m1__ema5_gap_bps",
+          "effect": 0.5715357505240284,
+          "median": 0.9180790006979578,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "max_trade_5s_log",
+          "effect": 0.5694509781159426,
+          "median": 7.118754896768474,
+          "pos": 22,
+          "neg": 226
+        },
+        {
+          "feature": "imbalance_5s",
+          "effect": -0.5177106623092231,
+          "median": 0.393909038243078,
+          "pos": 22,
+          "neg": 226
+        },
+        {
+          "feature": "rev_flow_5s",
+          "effect": -0.5177106623092231,
+          "median": 0.393909038243078,
+          "pos": 22,
+          "neg": 226
+        },
+        {
+          "feature": "discovery__m1__ema50_gap_bps",
+          "effect": 0.5104456530317929,
+          "median": -33.53934265446501,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "discovery__m1__bollinger_z20",
+          "effect": 0.506424570538667,
+          "median": -1.1569509247571448,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "discovery__m1__bollinger_z20_rev",
+          "effect": 0.506424570538667,
+          "median": -1.1569509247571448,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "discovery__m1__ema14_gap_bps",
+          "effect": 0.4879836305649958,
+          "median": -8.857977105222181,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "retrace_bps",
+          "effect": 0.4850279819103074,
+          "median": 17.611835153221733,
+          "pos": 24,
+          "neg": 241
+        },
+        {
+          "feature": "distance_low_60m_bps",
+          "effect": 0.47274559514437314,
+          "median": 18.103643358227117,
+          "pos": 24,
+          "neg": 241
+        }
+      ],
+      "examples": 265,
+      "positives": 24
+    },
+    "LOW_300s": {
+      "base_rate": 0.11214953271028037,
+      "relationships": [
+        {
+          "feature": "old_eff_60s",
+          "effect": 1233273.9138173563,
+          "median": 0.0,
+          "pos": 24,
+          "neg": 190
+        },
+        {
+          "feature": "rev_eff_30s",
+          "effect": 3.0429734931344172,
+          "median": 0.0016450922011527424,
+          "pos": 24,
+          "neg": 190
+        },
+        {
+          "feature": "rev_eff_60s",
+          "effect": -0.9984796611585527,
+          "median": 0.0014759108169093036,
+          "pos": 24,
+          "neg": 190
+        },
+        {
+          "feature": "teacherctx_hour_progress",
+          "effect": -0.5688903753563909,
+          "median": 0.5616191666666667,
+          "pos": 23,
+          "neg": 188
+        },
+        {
+          "feature": "imbalance_300s",
+          "effect": -0.5267975223179114,
+          "median": 0.2199115161004132,
+          "pos": 24,
+          "neg": 190
+        },
+        {
+          "feature": "rev_flow_300s",
+          "effect": -0.5267975223179114,
+          "median": 0.2199115161004132,
+          "pos": 24,
+          "neg": 190
+        },
+        {
+          "feature": "discovery__flow_price_divergence_5s",
+          "effect": -0.5187143362843972,
+          "median": 0.1072767010070701,
+          "pos": 21,
+          "neg": 180
+        },
+        {
+          "feature": "imbalance_30s",
+          "effect": -0.4837241244517838,
+          "median": 0.1672341435030124,
+          "pos": 24,
+          "neg": 190
+        },
+        {
+          "feature": "rev_flow_30s",
+          "effect": -0.4837241244517838,
+          "median": 0.1672341435030124,
+          "pos": 24,
+          "neg": 190
+        },
+        {
+          "feature": "discovery__m1__ema9_21_gap_bps",
+          "effect": -0.4549957813812245,
+          "median": -9.612121409791063,
+          "pos": 24,
+          "neg": 190
+        },
+        {
+          "feature": "imbalance_5s",
+          "effect": -0.43680822496131877,
+          "median": 0.10348619000092536,
+          "pos": 21,
+          "neg": 180
+        },
+        {
+          "feature": "rev_flow_5s",
+          "effect": -0.43680822496131877,
+          "median": 0.10348619000092536,
+          "pos": 21,
+          "neg": 180
+        },
+        {
+          "feature": "turnover_24h_log",
+          "effect": -0.43660013738919545,
+          "median": 18.85866876953184,
+          "pos": 24,
+          "neg": 190
+        },
+        {
+          "feature": "discovery__flow_price_agreement_60s",
+          "effect": -0.4061084707540268,
+          "median": 0.00012553643057556027,
+          "pos": 24,
+          "neg": 190
+        },
+        {
+          "feature": "total_60s_log",
+          "effect": 0.4002692489254922,
+          "median": 11.246071370309705,
+          "pos": 24,
+          "neg": 190
+        },
+        {
+          "feature": "discovery__market_ret_180m",
+          "effect": 0.3945578138325289,
+          "median": -0.011800302910774774,
+          "pos": 24,
+          "neg": 190
+        },
+        {
+          "feature": "discovery__return_accel_180v300",
+          "effect": -0.3907330350875403,
+          "median": -0.0013363077363773845,
+          "pos": 24,
+          "neg": 190
+        },
+        {
+          "feature": "discovery__return_accel_180v300_rev",
+          "effect": -0.3907330350875403,
+          "median": -0.0013363077363773845,
+          "pos": 24,
+          "neg": 190
+        },
+        {
+          "feature": "discovery__flow_price_divergence_15s",
+          "effect": -0.37784651009704173,
+          "median": 0.13767625773381087,
+          "pos": 24,
+          "neg": 189
+        },
+        {
+          "feature": "discovery__flow_accel_15v60",
+          "effect": -0.3681821888294161,
+          "median": 0.02500439533193549,
+          "pos": 24,
+          "neg": 189
+        },
+        {
+          "feature": "discovery__flow_accel_15v60_rev",
+          "effect": -0.3681821888294161,
+          "median": 0.02500439533193549,
+          "pos": 24,
+          "neg": 189
+        },
+        {
+          "feature": "volume_24h_log",
+          "effect": -0.36506055588683073,
+          "median": 14.424178630567667,
+          "pos": 24,
+          "neg": 190
+        },
+        {
+          "feature": "discovery__market_accel_60v480",
+          "effect": 0.3544546855026186,
+          "median": -0.004789927019349993,
+          "pos": 24,
+          "neg": 190
+        },
+        {
+          "feature": "rev_eff_300s",
+          "effect": 0.3491087135627218,
+          "median": 0.005374377957993496,
+          "pos": 24,
+          "neg": 190
+        },
+        {
+          "feature": "max_trade_60s_log",
+          "effect": 0.3469790926368897,
+          "median": 9.051398646583191,
+          "pos": 24,
+          "neg": 190
+        },
+        {
+          "feature": "max_trade_300s_log",
+          "effect": -0.3404630728967793,
+          "median": 9.934359916376025,
+          "pos": 24,
+          "neg": 190
+        },
+        {
+          "feature": "discovery__flow_price_agreement_5s",
+          "effect": 0.34021174878549204,
+          "median": 3.378820084522896e-05,
+          "pos": 21,
+          "neg": 180
+        },
+        {
+          "feature": "discovery__m1__lh_ratio",
+          "effect": -0.33724537973829716,
+          "median": 0.5454545454545454,
+          "pos": 24,
+          "neg": 190
+        },
+        {
+          "feature": "discovery__m1__roc3",
+          "effect": -0.3332481183725916,
+          "median": 0.0005827527497705987,
+          "pos": 24,
+          "neg": 190
+        },
+        {
+          "feature": "discovery__m1__roc3_rev",
+          "effect": -0.3332481183725916,
+          "median": 0.0005827527497705987,
+          "pos": 24,
+          "neg": 190
+        },
+        {
+          "feature": "discovery__market_accel_60v360",
+          "effect": 0.32829501935639216,
+          "median": -0.004073135116650741,
+          "pos": 24,
+          "neg": 190
+        },
+        {
+          "feature": "teacherctx_h1_partial_extreme_position",
+          "effect": 0.31507048471034443,
+          "median": -0.11456310679611705,
+          "pos": 23,
+          "neg": 188
+        }
+      ],
+      "examples": 214,
+      "positives": 24
+    },
+    "HIGH_60s": {
+      "base_rate": 0.07301587301587302,
+      "relationships": [
+        {
+          "feature": "rev_eff_15s",
+          "effect": 1173593.4023721872,
+          "median": 0.0,
+          "pos": 23,
+          "neg": 290
+        },
+        {
+          "feature": "rev_eff_30s",
+          "effect": 1.2310967487933486,
+          "median": 0.0035461187893576674,
+          "pos": 23,
+          "neg": 292
+        },
+        {
+          "feature": "teacherctx_h1_partial_close_position",
+          "effect": -0.8701280058805134,
+          "median": 0.9306184012066264,
+          "pos": 23,
+          "neg": 288
+        },
+        {
+          "feature": "teacherctx_h1_break_high_bps",
+          "effect": 0.7783511515965356,
+          "median": 17.69324339267797,
+          "pos": 23,
+          "neg": 288
+        },
+        {
+          "feature": "teacherctx_h1_side_break_bps",
+          "effect": 0.7783511515965356,
+          "median": 17.69324339267797,
+          "pos": 23,
+          "neg": 288
+        },
+        {
+          "feature": "trade_count_30s",
+          "effect": 0.7253957224559608,
+          "median": 89.0,
+          "pos": 23,
+          "neg": 292
+        },
+        {
+          "feature": "position_60m",
+          "effect": -0.6957074003073407,
+          "median": 0.9230769230769251,
+          "pos": 23,
+          "neg": 292
+        },
+        {
+          "feature": "imbalance_5s",
+          "effect": -0.6784926644862835,
+          "median": 0.08237662887640924,
+          "pos": 23,
+          "neg": 266
+        },
+        {
+          "feature": "rev_flow_5s",
+          "effect": 0.6784926644862835,
+          "median": -0.08237662887640924,
+          "pos": 23,
+          "neg": 266
+        },
+        {
+          "feature": "discovery__m1__lh_ratio",
+          "effect": 0.6744907594765956,
+          "median": 0.2727272727272727,
+          "pos": 23,
+          "neg": 292
+        },
+        {
+          "feature": "discovery__m1__ll_ratio",
+          "effect": 0.6744907594765956,
+          "median": 0.2727272727272727,
+          "pos": 23,
+          "neg": 292
+        },
+        {
+          "feature": "reversal_attempts",
+          "effect": -0.6744907594765952,
+          "median": 4.0,
+          "pos": 23,
+          "neg": 292
+        },
+        {
+          "feature": "discovery__range_pressure_60m",
+          "effect": 0.6660755158884015,
+          "median": -0.8476448467541237,
+          "pos": 23,
+          "neg": 292
+        },
+        {
+          "feature": "discovery__range_pressure_60m_rev",
+          "effect": -0.6660755158884015,
+          "median": 0.8476448467541237,
+          "pos": 23,
+          "neg": 292
+        },
+        {
+          "feature": "teacherctx_h1_retrace_from_extreme_bps",
+          "effect": 0.6618426723537478,
+          "median": 4.660375160199237,
+          "pos": 23,
+          "neg": 288
+        },
+        {
+          "feature": "max_trade_30s_log",
+          "effect": 0.6345122832503117,
+          "median": 8.611156391723586,
+          "pos": 23,
+          "neg": 292
+        },
+        {
+          "feature": "discovery__range_pressure_6h",
+          "effect": 0.6239728179813328,
+          "median": -0.9325754347581758,
+          "pos": 23,
+          "neg": 292
+        },
+        {
+          "feature": "discovery__range_pressure_6h_rev",
+          "effect": -0.6239728179813328,
+          "median": 0.9325754347581758,
+          "pos": 23,
+          "neg": 292
+        },
+        {
+          "feature": "retrace_bps",
+          "effect": 0.6231352764425478,
+          "median": 6.921199003346867,
+          "pos": 23,
+          "neg": 292
+        },
+        {
+          "feature": "position_6h",
+          "effect": -0.6081964256429433,
+          "median": 0.9652173913043426,
+          "pos": 23,
+          "neg": 292
+        },
+        {
+          "feature": "discovery__flow_accel_15v60",
+          "effect": -0.5695181747257598,
+          "median": 0.07731450116926497,
+          "pos": 23,
+          "neg": 290
+        },
+        {
+          "feature": "discovery__flow_accel_15v60_rev",
+          "effect": 0.5695181747257598,
+          "median": -0.07731450116926497,
+          "pos": 23,
+          "neg": 290
+        },
+        {
+          "feature": "distance_high_60m_bps",
+          "effect": 0.5599550676896191,
+          "median": 7.029876977153737,
+          "pos": 23,
+          "neg": 292
+        },
+        {
+          "feature": "distance_high_6h_bps",
+          "effect": 0.5599550676896191,
+          "median": 7.029876977153737,
+          "pos": 23,
+          "neg": 292
+        },
+        {
+          "feature": "rev_eff_60s",
+          "effect": 0.5439743951325394,
+          "median": 0.008186367795897959,
+          "pos": 23,
+          "neg": 292
+        },
+        {
+          "feature": "discovery__return_accel_5v15",
+          "effect": 0.5167930084420389,
+          "median": 0.0,
+          "pos": 23,
+          "neg": 266
+        },
+        {
+          "feature": "discovery__return_accel_5v15_rev",
+          "effect": -0.5167930084420389,
+          "median": -0.0,
+          "pos": 23,
+          "neg": 266
+        },
+        {
+          "feature": "discovery__flow_price_divergence_5s",
+          "effect": -0.5115370026067393,
+          "median": 0.02994577202241306,
+          "pos": 23,
+          "neg": 266
+        },
+        {
+          "feature": "distance_high_24h_bps",
+          "effect": -0.5020473193700768,
+          "median": 67.89122777080215,
+          "pos": 23,
+          "neg": 292
+        },
+        {
+          "feature": "total_5s_log",
+          "effect": -0.5005233881102501,
+          "median": 7.763452806046338,
+          "pos": 23,
+          "neg": 266
+        },
+        {
+          "feature": "buy_180s_log",
+          "effect": 0.49896641423036414,
+          "median": 12.445534777185518,
+          "pos": 23,
+          "neg": 292
+        },
+        {
+          "feature": "discovery__return_accel_60v180",
+          "effect": -0.49810425872480363,
+          "median": -0.00133781826602275,
+          "pos": 23,
+          "neg": 292
+        }
+      ],
+      "examples": 315,
+      "positives": 23
+    },
+    "HIGH_180s": {
+      "base_rate": 0.11734693877551021,
+      "relationships": [
+        {
+          "feature": "rev_eff_30s",
+          "effect": 2712147.0809350517,
+          "median": 0.0,
+          "pos": 23,
+          "neg": 173
+        },
+        {
+          "feature": "rev_eff_15s",
+          "effect": 470433.84600887314,
+          "median": 0.0,
+          "pos": 23,
+          "neg": 169
+        },
+        {
+          "feature": "rev_eff_60s",
+          "effect": 2.78186357511834,
+          "median": 0.0016555676578928749,
+          "pos": 23,
+          "neg": 173
+        },
+        {
+          "feature": "buy_5s_log",
+          "effect": -0.9838866866236948,
+          "median": 6.505342436125657,
+          "pos": 20,
+          "neg": 150
+        },
+        {
+          "feature": "teacherctx_h1_break_high_bps",
+          "effect": 0.8557856075765045,
+          "median": 16.44543639140128,
+          "pos": 23,
+          "neg": 164
+        },
+        {
+          "feature": "teacherctx_h1_side_break_bps",
+          "effect": 0.8557856075765045,
+          "median": 16.44543639140128,
+          "pos": 23,
+          "neg": 164
+        },
+        {
+          "feature": "imbalance_5s",
+          "effect": -0.8424297834498866,
+          "median": 0.1538748775921269,
+          "pos": 20,
+          "neg": 150
+        },
+        {
+          "feature": "rev_flow_5s",
+          "effect": 0.8424297834498866,
+          "median": -0.1538748775921269,
+          "pos": 20,
+          "neg": 150
+        },
+        {
+          "feature": "discovery__flow_price_divergence_5s",
+          "effect": -0.7649428454321222,
+          "median": 0.14564105510964467,
+          "pos": 20,
+          "neg": 150
+        },
+        {
+          "feature": "discovery__flow_price_agreement_180s",
+          "effect": 0.7606219822462033,
+          "median": 0.00015707515512612913,
+          "pos": 23,
+          "neg": 173
+        },
+        {
+          "feature": "ret_180s",
+          "effect": -0.7490541564826617,
+          "median": -0.0009990480875482488,
+          "pos": 23,
+          "neg": 173
+        },
+        {
+          "feature": "rev_ret_180s",
+          "effect": 0.7490541564826617,
+          "median": 0.0009990480875482488,
+          "pos": 23,
+          "neg": 173
+        },
+        {
+          "feature": "ret_30s",
+          "effect": -0.6956619152362415,
+          "median": 0.0,
+          "pos": 23,
+          "neg": 173
+        },
+        {
+          "feature": "rev_ret_30s",
+          "effect": 0.6956619152362415,
+          "median": -0.0,
+          "pos": 23,
+          "neg": 173
+        },
+        {
+          "feature": "teacherctx_h1_retrace_from_extreme_bps",
+          "effect": 0.685107463764781,
+          "median": 12.478253044573284,
+          "pos": 23,
+          "neg": 164
+        },
+        {
+          "feature": "discovery__m1__hl_ratio",
+          "effect": -0.6744907594765952,
+          "median": 0.6363636363636364,
+          "pos": 23,
+          "neg": 173
+        },
+        {
+          "feature": "discovery__m1__lh_ratio",
+          "effect": 0.6744907594765952,
+          "median": 0.36363636363636365,
+          "pos": 23,
+          "neg": 173
+        },
+        {
+          "feature": "retrace_bps",
+          "effect": 0.6724287367102014,
+          "median": 10.475162071305611,
+          "pos": 23,
+          "neg": 173
+        },
+        {
+          "feature": "position_6h",
+          "effect": -0.6708256848541371,
+          "median": 0.9496892157431112,
+          "pos": 23,
+          "neg": 173
+        },
+        {
+          "feature": "discovery__range_pressure_6h",
+          "effect": 0.6698136451434714,
+          "median": -0.9016225564988689,
+          "pos": 23,
+          "neg": 173
+        },
+        {
+          "feature": "discovery__range_pressure_6h_rev",
+          "effect": -0.6698136451434714,
+          "median": 0.9016225564988689,
+          "pos": 23,
+          "neg": 173
+        },
+        {
+          "feature": "distance_high_60m_bps",
+          "effect": 0.6263439128901316,
+          "median": 10.52288351910513,
+          "pos": 23,
+          "neg": 173
+        },
+        {
+          "feature": "distance_high_6h_bps",
+          "effect": 0.6263439128901316,
+          "median": 10.52288351910513,
+          "pos": 23,
+          "neg": 173
+        },
+        {
+          "feature": "ret_60s",
+          "effect": -0.6256886330699598,
+          "median": -9.33484345360669e-05,
+          "pos": 23,
+          "neg": 173
+        },
+        {
+          "feature": "rev_ret_60s",
+          "effect": 0.6256886330699598,
+          "median": 9.33484345360669e-05,
+          "pos": 23,
+          "neg": 173
+        },
+        {
+          "feature": "buy_15s_log",
+          "effect": -0.6226538839506238,
+          "median": 8.169996565164407,
+          "pos": 23,
+          "neg": 169
+        },
+        {
+          "feature": "discovery__m1__roc20",
+          "effect": 0.6070987919290775,
+          "median": 0.0029075069532853437,
+          "pos": 23,
+          "neg": 173
+        },
+        {
+          "feature": "discovery__m1__roc20_rev",
+          "effect": -0.6070987919290775,
+          "median": -0.0029075069532853437,
+          "pos": 23,
+          "neg": 173
+        },
+        {
+          "feature": "discovery__return_accel_15v60",
+          "effect": 0.539571745072035,
+          "median": 0.00011015680308945619,
+          "pos": 23,
+          "neg": 169
+        },
+        {
+          "feature": "discovery__return_accel_15v60_rev",
+          "effect": -0.539571745072035,
+          "median": -0.00011015680308945619,
+          "pos": 23,
+          "neg": 169
+        },
+        {
+          "feature": "discovery__return_accel_60v180",
+          "effect": 0.5321363461114378,
+          "median": 0.0009313901678371095,
+          "pos": 23,
+          "neg": 173
+        },
+        {
+          "feature": "discovery__return_accel_60v180_rev",
+          "effect": -0.5321363461114378,
+          "median": -0.0009313901678371095,
+          "pos": 23,
+          "neg": 173
+        }
+      ],
+      "examples": 196,
+      "positives": 23
+    },
+    "HIGH_300s": {
+      "base_rate": 0.1513157894736842,
+      "relationships": [
+        {
+          "feature": "rev_eff_30s",
+          "effect": 9294073.793777127,
+          "median": 0.0,
+          "pos": 23,
+          "neg": 129
+        },
+        {
+          "feature": "rev_eff_15s",
+          "effect": 2892522.7772632614,
+          "median": 0.0,
+          "pos": 22,
+          "neg": 127
+        },
+        {
+          "feature": "distance_high_60m_bps",
+          "effect": 1.2972599489760162,
+          "median": 12.996586164918389,
+          "pos": 23,
+          "neg": 129
+        },
+        {
+          "feature": "distance_high_6h_bps",
+          "effect": 1.2972599489760162,
+          "median": 12.996586164918389,
+          "pos": 23,
+          "neg": 129
+        },
+        {
+          "feature": "retrace_bps",
+          "effect": 1.2946624472491932,
+          "median": 12.979716897680849,
+          "pos": 23,
+          "neg": 129
+        },
+        {
+          "feature": "teacherctx_h1_break_high_bps",
+          "effect": 1.230872830859299,
+          "median": 12.558081125204623,
+          "pos": 22,
+          "neg": 127
+        },
+        {
+          "feature": "teacherctx_h1_side_break_bps",
+          "effect": 1.230872830859299,
+          "median": 12.558081125204623,
+          "pos": 22,
+          "neg": 127
+        },
+        {
+          "feature": "position_6h",
+          "effect": -1.1870535632041703,
+          "median": 0.9341686778110222,
+          "pos": 23,
+          "neg": 129
+        },
+        {
+          "feature": "discovery__range_pressure_6h",
+          "effect": 1.1411863682912537,
+          "median": -0.8742208344990844,
+          "pos": 23,
+          "neg": 129
+        },
+        {
+          "feature": "discovery__range_pressure_6h_rev",
+          "effect": -1.1411863682912537,
+          "median": 0.8742208344990844,
+          "pos": 23,
+          "neg": 129
+        },
+        {
+          "feature": "teacherctx_h1_retrace_from_extreme_bps",
+          "effect": 1.0206666566918277,
+          "median": 15.067548586459312,
+          "pos": 22,
+          "neg": 127
+        },
+        {
+          "feature": "teacherctx_h1_partial_extreme_position",
+          "effect": -1.004251003475836,
+          "median": -0.0761035007610419,
+          "pos": 22,
+          "neg": 127
+        },
+        {
+          "feature": "trade_count_15s",
+          "effect": 0.9323842851588228,
+          "median": 31.0,
+          "pos": 22,
+          "neg": 127
+        },
+        {
+          "feature": "trade_count_60s",
+          "effect": 0.9250158987107592,
+          "median": 147.0,
+          "pos": 23,
+          "neg": 129
+        },
+        {
+          "feature": "imbalance_5s",
+          "effect": -0.8475785301808628,
+          "median": 0.18239879127304742,
+          "pos": 21,
+          "neg": 115
+        },
+        {
+          "feature": "rev_flow_5s",
+          "effect": 0.8475785301808628,
+          "median": -0.18239879127304742,
+          "pos": 21,
+          "neg": 115
+        },
+        {
+          "feature": "ret_300s",
+          "effect": -0.835457056841891,
+          "median": -0.0013783835018456592,
+          "pos": 23,
+          "neg": 129
+        },
+        {
+          "feature": "rev_ret_300s",
+          "effect": 0.835457056841891,
+          "median": 0.0013783835018456592,
+          "pos": 23,
+          "neg": 129
+        },
+        {
+          "feature": "trade_count_30s",
+          "effect": 0.81263946924891,
+          "median": 69.5,
+          "pos": 23,
+          "neg": 129
+        },
+        {
+          "feature": "rev_eff_60s",
+          "effect": 0.7531503103934534,
+          "median": 0.0013031820273816162,
+          "pos": 23,
+          "neg": 129
+        },
+        {
+          "feature": "buy_300s_log",
+          "effect": 0.7245747774724383,
+          "median": 11.729206748360966,
+          "pos": 23,
+          "neg": 129
+        },
+        {
+          "feature": "max_trade_300s_log",
+          "effect": 0.705189192561662,
+          "median": 9.599379014189584,
+          "pos": 23,
+          "neg": 129
+        },
+        {
+          "feature": "discovery__m1__ll_ratio",
+          "effect": 0.6744907594765952,
+          "median": 0.36363636363636365,
+          "pos": 23,
+          "neg": 129
+        },
+        {
+          "feature": "position_60m",
+          "effect": -0.6429615853816371,
+          "median": 0.8264229566959125,
+          "pos": 23,
+          "neg": 129
+        },
+        {
+          "feature": "discovery__range_pressure_60m",
+          "effect": 0.6405890950794796,
+          "median": -0.6574326809731652,
+          "pos": 23,
+          "neg": 129
+        },
+        {
+          "feature": "discovery__range_pressure_60m_rev",
+          "effect": -0.6405890950794796,
+          "median": 0.6574326809731652,
+          "pos": 23,
+          "neg": 129
+        },
+        {
+          "feature": "discovery__m1__roc3",
+          "effect": -0.5978921898546365,
+          "median": -0.0003370535192384061,
+          "pos": 23,
+          "neg": 129
+        },
+        {
+          "feature": "discovery__m1__roc3_rev",
+          "effect": 0.5978921898546365,
+          "median": 0.0003370535192384061,
+          "pos": 23,
+          "neg": 129
+        },
+        {
+          "feature": "discovery__m1__lower_wick_share",
+          "effect": -0.5817044108118771,
+          "median": 0.1633333333332977,
+          "pos": 23,
+          "neg": 129
+        },
+        {
+          "feature": "teacherctx_h1_partial_range_bps",
+          "effect": 0.5726191480528712,
+          "median": 57.380751809934516,
+          "pos": 22,
+          "neg": 127
+        },
+        {
+          "feature": "discovery__flow_price_divergence_180s",
+          "effect": 0.5725519282814182,
+          "median": 0.16775725303152325,
+          "pos": 23,
+          "neg": 129
+        },
+        {
+          "feature": "sell_15s_log",
+          "effect": 0.5693461140617356,
+          "median": 7.5382772002845035,
+          "pos": 22,
+          "neg": 127
+        }
+      ],
+      "examples": 152,
+      "positives": 23
+    }
+  },
+  "warning": "A local detector can be useful research without being safe for trading. No live promotion unless a genuinely fresh forward window confirms the frozen model."
 }
