@@ -1,0 +1,117 @@
+{
+  "version": "HYPE-ALL-IN-ONE-v1",
+  "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+  "generated_utc": "2026-11-12",
+  "research_only": true,
+  "real_orders": false,
+  "feature_contract": {
+    "total": 116,
+    "causal_quality_inputs": 86,
+    "target_eval": 28,
+    "metadata": 2,
+    "path": "research/hype_quant/feature_contract.py"
+  },
+  "data_sources": [
+    {
+      "period": "2026-05",
+      "mode": "rebuildable sealed tape",
+      "path": "research/hype_full_micro_202605/build_base_may.py",
+      "workflow": ".github/workflows/hype-may-sealed-build.yml"
+    },
+    {
+      "period": "2026-06",
+      "mode": "rebuildable sealed tape",
+      "path": "research/hype_full_micro_202606/build_base_june.py",
+      "workflow": ".github/workflows/hype-june-sealed-build.yml"
+    },
+    {
+      "period": "2026-07-12..2026-08-07",
+      "mode": "full micro",
+      "path": "research/hype_full_micro_202607/"
+    },
+    {
+      "period": "2026-08-08..2026-09-01",
+      "mode": "historical",
+      "path": "research/hype_full_micro_202608_late/"
+    },
+    {
+      "period": "2026-09-01..2026-10-01",
+      "mode": "historical",
+      "path": "research/hype_full_micro_202609/"
+    },
+    {
+      "period": "2026-07-12..2026-11-03",
+      "mode": "preserved master artifact",
+      "artifact_name": "HYPE-HISTORY-20260712-20261103-MASTER",
+      "path": "research/hype_historical_master/"
+    },
+    {
+      "period": "30D canonical candidate snapshots",
+      "mode": "artifact",
+      "artifact_name": "local116-HYPE"
+    },
+    {
+      "period": "historical enrichment",
+      "mode": "artifact",
+      "artifact_name": "HYPE-LOCAL-HISTORICAL-GAPS"
+    },
+    {
+      "period": "recent live/raw",
+      "mode": "artifact family",
+      "artifact_prefix": "HYPE-LOCAL-RAW-"
+    },
+    {
+      "period": "rich strong-day evidence",
+      "mode": "artifact family",
+      "artifact_prefix": "HYPE-RICH-STRONG-"
+    },
+    {
+      "period": "7-layer evidence",
+      "mode": "artifact family",
+      "artifact_prefix": "HYPE-7LAYER-"
+    }
+  ],
+  "models": [
+    {
+      "name": "Local-Only",
+      "path": "research/hype_local_only/",
+      "artifact_name": "HYPE-LOCAL-ONLY-CHECKPOINT"
+    },
+    {
+      "name": "Fin-JEPA",
+      "path": "research/hype_local_only/fin_jepa_adapter.py"
+    },
+    {
+      "name": "Quantum",
+      "path": "research/hype_quant/"
+    },
+    {
+      "name": "Cortex",
+      "path": "research/hype_local_only/train_unified_local_intelligence_v2.py"
+    },
+    {
+      "name": "30D ensemble",
+      "artifact_prefix": "HYPE-LOCAL-ENSEMBLE-30D-"
+    },
+    {
+      "name": "Unified Quantum+JEPA+Cortex",
+      "artifact_prefix": "HYPE-UNIFIED-LOCAL-INTELLIGENCE-V2-"
+    }
+  ],
+  "teacher": {
+    "contract": "research/hype_terminal_local_strategy/H1_TRUE_FALSE_LOCAL_STATE_MACHINE_2026-11-12.md",
+    "detector": "research/hype_terminal_local_strategy/h1_real_local_detector_v1.py",
+    "report": "research/hype_terminal_local_strategy/results/HYPE_STRICT_H1_REAL_LOCAL_ZERO_FP_PLATEAU_V1_2026-11-12.md",
+    "observed_history": {
+      "episodes": 312,
+      "accepted": 101,
+      "true_first": 101,
+      "false_first": 0,
+      "coverage": 0.3237,
+      "median_entry_distance_pct": 2.47
+    },
+    "note": "Late high-precision teacher; not acceptable as final trading entry."
+  },
+  "primary_task": "Learn an early causal TRUE/FALSE/WAIT H1 Local detector from all aligned data, with false-first as hard failure and captured MFE/entry distance as secondary optimization.",
+  "handoff_prompt": "research/hype_all_in_one/PROMPT_FOR_OTHER_AI.md"
+}

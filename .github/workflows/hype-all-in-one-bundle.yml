@@ -1,0 +1,103 @@
+name: HYPE All-In-One Canonical Bundle
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/hype-h1-local-v5-oi-microstructure-20261104
+    paths:
+      - "research/hype_all_in_one/**"
+      - ".github/workflows/hype-all-in-one-bundle.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/hype-h1-local-v5-oi-microstructure-20261104
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build May and June canonical sealed tapes
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          mkdir -p ALL_IN_ONE/data/2026-05 ALL_IN_ONE/data/2026-06
+          python -m research.hype_full_micro_202605.build_base_may --cache "$RUNNER_TEMP/may-cache" --output ALL_IN_ONE/data/2026-05
+          python -m research.hype_full_micro_202606.build_base_june --cache "$RUNNER_TEMP/june-cache" --output ALL_IN_ONE/data/2026-06
+
+      - name: Recover canonical retained artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ALL_IN_ONE/artifacts ALL_IN_ONE/models
+          fetch_latest_exact () {
+            NAME="$1"; DEST="$2"
+            ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&name=$NAME" --jq ".artifacts | map(select((.expired|not) and .name==\"$NAME\")) | sort_by(.created_at) | reverse | .[0].id // empty")"
+            if [ -z "$ID" ]; then echo "MISSING exact artifact: $NAME"; return 0; fi
+            mkdir -p "$DEST"
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$ID/zip" > "$RUNNER_TEMP/a.zip"
+            unzip -q "$RUNNER_TEMP/a.zip" -d "$DEST"
+            echo "$NAME $ID" >> ALL_IN_ONE/ARTIFACT_IDS.txt
+          }
+          fetch_latest_prefix () {
+            PREFIX="$1"; DEST="$2"
+            python - "$PREFIX" > /tmp/ids.txt <<'PY'
+import json,os,subprocess,sys
+prefix=sys.argv[1]
+raw=subprocess.check_output(["gh","api",f"repos/{os.environ['GITHUB_REPOSITORY']}/actions/artifacts?per_page=100"]).decode()
+a=json.loads(raw)["artifacts"]
+rows=[x for x in a if not x.get("expired") and str(x.get("name","")).startswith(prefix)]
+rows.sort(key=lambda x:x.get("created_at",""),reverse=True)
+if rows: print(rows[0]["id"],rows[0]["name"])
+PY
+            if [ ! -s /tmp/ids.txt ]; then echo "MISSING prefix artifact: $PREFIX"; return 0; fi
+            read ID NAME < /tmp/ids.txt
+            mkdir -p "$DEST"
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/$ID/zip" > "$RUNNER_TEMP/a.zip"
+            unzip -q "$RUNNER_TEMP/a.zip" -d "$DEST"
+            echo "$NAME $ID" >> ALL_IN_ONE/ARTIFACT_IDS.txt
+          }
+
+          fetch_latest_exact "HYPE-HISTORY-20260712-20261103-MASTER" "ALL_IN_ONE/data/JUL-NOV-MASTER"
+          fetch_latest_exact "local116-HYPE" "ALL_IN_ONE/data/LOCAL116"
+          fetch_latest_exact "HYPE-LOCAL-HISTORICAL-GAPS" "ALL_IN_ONE/data/HISTORICAL-GAPS"
+          fetch_latest_exact "HYPE-LOCAL-ONLY-CHECKPOINT" "ALL_IN_ONE/models/LOCAL-ONLY"
+          fetch_latest_prefix "HYPE-LOCAL-ENSEMBLE-30D-" "ALL_IN_ONE/models/ENSEMBLE-30D"
+          fetch_latest_prefix "HYPE-UNIFIED-LOCAL-INTELLIGENCE-V2-" "ALL_IN_ONE/models/UNIFIED-V2"
+
+      - name: Preserve code, contracts, reports and provenance
+        run: |
+          set -euo pipefail
+          mkdir -p ALL_IN_ONE/repository
+          cp -a research/hype_all_in_one ALL_IN_ONE/repository/
+          cp -a research/hype_quant ALL_IN_ONE/repository/
+          cp -a research/hype_local_only ALL_IN_ONE/repository/
+          cp -a research/hype_terminal_local_strategy ALL_IN_ONE/repository/
+          cp -a research/hype_full_micro_202605 ALL_IN_ONE/repository/
+          cp -a research/hype_full_micro_202606 ALL_IN_ONE/repository/
+          cp -a research/hype_full_micro_202607 ALL_IN_ONE/repository/
+          cp -a research/hype_full_micro_202608_late ALL_IN_ONE/repository/
+          cp -a research/hype_full_micro_202609 ALL_IN_ONE/repository/
+          cp -a research/hype_historical_master ALL_IN_ONE/repository/
+          find ALL_IN_ONE -type f -print0 | sort -z | xargs -0 sha256sum > ALL_IN_ONE/SHA256SUMS.txt
+          du -sh ALL_IN_ONE
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HYPE-ALL-IN-ONE-${{ github.run_id }}
+          path: ALL_IN_ONE/**
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
