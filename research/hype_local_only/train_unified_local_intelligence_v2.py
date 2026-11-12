@@ -238,16 +238,24 @@ def fit_meta(valid):
     m.fit(X,y)
     # Calibrate ONLY on later candidate groups, never in OOS. Gate will reject
     # insufficient positive support, even if a tiny subset looks perfect.
+    # EARLY-LOCAL objective: false-first dominates everything. Among thresholds
+    # with equally low FP, prefer more true captures and the earliest median
+    # causal stage. This makes the training target match the Local->Local trading
+    # geometry instead of rewarding a late but cosmetically high F1 score.
     best=None
     for th in np.arange(.30,.951,.025):
         met=candidate_metrics_meta(cal,m,float(th))
         if met["accepted"]<3:continue
-        objective=.58*met["precision"]+.27*met["f1"]+.15*met["recall"]-.0001*(met["median_delay_s"] or 300)
-        if met["recall"]<.25:objective-=.15
-        row=(objective,met["precision"],met["f1"],met["recall"],float(th),met)
-        if best is None or row[:4]>best[:4]:best=row
-    th=best[4] if best is not None else .5
-    metrics=best[5] if best is not None else candidate_metrics_meta(cal,m,.5)
+        if met["recall"]<.10:continue
+        delay=float(met["median_delay_s"] or 300.0)
+        # Lexicographic: zero/min FP first, then precision, true captures,
+        # recall/F1, then earlier decision.
+        rank=(-int(met["fp"]), float(met["precision"]), int(met["tp"]),
+              float(met["recall"]), float(met["f1"]), -delay, float(th))
+        if best is None or rank>best[0]:
+            best=(rank,float(th),met)
+    th=best[1] if best is not None else .5
+    metrics=best[2] if best is not None else candidate_metrics_meta(cal,m,.5)
     info={
         "meta_train_rows":len(train),"cal_rows":len(cal),
         "meta_train_candidates":len(left),"cal_candidates":len(right),
@@ -411,9 +419,13 @@ def main():
     river_full=train_river_all(rows)
     trees_full=train_trees({"train":all_refit},args.workers)
 
+    # Research gate is intentionally strict on false-first. Historical OOS has
+    # been inspected, so this gate is diagnostic only; genuine promotion still
+    # requires a fresh frozen forward window.
     gate=bool(meta_split["calibration_support_pass"] and
-              oos_metrics["accepted"]>=5 and oos_metrics["precision"]>=.70 and
-              oos_metrics["recall"]>=.40 and oos_metrics["f1"]>=.50)
+              oos_metrics["accepted"]>=5 and oos_metrics["fp"]==0 and
+              oos_metrics["precision"]>=.95 and oos_metrics["recall"]>=.20 and
+              (oos_metrics["median_delay_s"] or 999)<=180)
     report={
       "version":"HYPE-UNIFIED-LOCAL-INTELLIGENCE-v2",
       "status":"OOS_GATE_PASS" if gate else "OOS_GATE_REJECT",
@@ -422,7 +434,7 @@ def main():
         "JEPA":"sequential latent/representation agent",
         "QUANTUM":"tabular MLP + River + nonlinear tree evidence",
         "CORTEX":"train-only relationship-memory expert; LLM explanation is non-predictive",
-        "META":"validation-only logistic arbiter using expert agreement/disagreement + causal regime",
+        "META":"validation-only logistic arbiter; threshold selection is false-first-first, then earlier causal detection",
         "regime_context":"5/15/30/60/180/360/480m completed-M1 returns, 60m realized vol, acceleration; no future bars"
       },
       "contract":{"points_total":116,"causal_quality_inputs":86,"target_eval":28,"metadata":2,
@@ -445,7 +457,7 @@ def main():
       "oos":oos_metrics,
       "oos_by_market_regime":regime_oos,
       "tri_brain_ablation_summary":{k:v.get("status") for k,v in ablation["arms"].items()},
-      "gate":{"passed":gate,"requirements":{"accepted_min":5,"precision_min":.70,"recall_min":.40,"f1_min":.50}},
+      "gate":{"passed":gate,"requirements":{"accepted_min":5,"false_first_max":0,"precision_min":.95,"recall_min":.20,"median_delay_s_max":180}},
       "cortex_relationship_heads":cortex.report(),
       "warning":"A local detector can be useful research without being safe for trading. No live promotion unless a genuinely fresh forward window confirms the frozen model."
     }
