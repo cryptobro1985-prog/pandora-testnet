@@ -1,0 +1,204 @@
+{
+ "generated_local": "2026-11-12 15:21 MSK",
+ "repo": "cryptobro1985-prog/pandora-testnet",
+ "branch": "research/hype-h1-local-v5-oi-microstructure-20261104",
+ "repo_commit": "393f5ea7c632dfe4ca891a8797944ad2d16f8bf6",
+ "repo_artifacts_status": "GitHub Actions artifacts (local116-HYPE, HYPE-HISTORY-...-MASTER, HYPE-LOCAL-HISTORICAL-GAPS, HYPE-LOCAL-RAW-*, HYPE-RICH-STRONG-*, HYPE-7LAYER-*, model checkpoints) are NOT in git and require an authenticated GitHub token to download - NOT used. Every input was rebuilt from public exchange sources below with the repo's own builders' logic (teacher labels: research/hype_local_v5/labels.py).",
+ "sources": {
+  "trades": {
+   "url": "https://public.bybit.com/trading/HYPEUSDT/HYPEUSDT{YYYY-MM-DD}.csv.gz",
+   "days": "2026-04-24..2026-11-11 (202 files)",
+   "use": "1s aggressor bars: price, buy/sell notional, counts, max trade"
+  },
+  "orderbook": {
+   "url": "https://quote-saver.bycsi.com/orderbook/linear/HYPEUSDT/{date}_HYPEUSDT_ob200.data.zip",
+   "days": "202 days replayed",
+   "use": "1s causal L50 features (depth, imbalance, spread); raw deleted after processing"
+  },
+  "open_interest": {
+   "url": "https://api.bybit.com/v5/market/open-interest (5min)",
+   "availability_rule": "value usable only 5 min after its stamp"
+  },
+  "holder_ratio": {
+   "url": "https://api.bybit.com/v5/market/account-ratio (5min)",
+   "availability_rule": "usable 5 min after stamp"
+  },
+  "mark_index": {
+   "url": "https://api.bybit.com/v5/market/mark-price-kline / index-price-kline (1m)",
+   "availability_rule": "usable at bar close"
+  },
+  "funding": {
+   "url": "https://api.bybit.com/v5/market/funding/history",
+   "availability_rule": "usable at settlement time"
+  },
+  "liquidations": {
+   "status": "UNAVAILABLE historically from public sources; excluded, never imputed"
+  }
+ },
+ "period_roles": {
+  "2026-05..2026-06": "development/transfer (June never in repo plateau set)",
+  "2026-07..2026-10 (to 11-03)": "historical transfer folds - previously inspected by project, NOT pristine",
+  "2026-11-04..2026-11-11": "post-freeze forward for THIS model (frozen before first look). Not live; the project may have seen part of this period as recent raw/live evidence."
+ },
+ "intermediate_hashes": {
+  "dataset.pkl": "6c064c6b9f1f2c59b7d87828c733bd787504132a344c54d064caebc2fdd75b3b",
+  "teacher_continuous.json": "3cb3cf5d434a3d48496c06fdf129c69bcfb54b285d763429df96174c7258048b",
+  "atlas.json": "b8ed75597de952a1c305a19e761b42db84c76a48a25d9055e3d52019d4cabf6f"
+ },
+ "feature_availability": {
+  "May": {
+   "rows": 20161,
+   "family_mean_availability": {
+    "mark-index basis (ids 2,3,114)": 1.0,
+    "L50 order book (ids 44-55)": 1.0,
+    "aggressive burst proxy - NOT liquidation (ids 16,19)": 1.0,
+    "price-response efficiency (ids 26-34)": 1.0,
+    "aggressor flow / CVD / intensity (ids 12-25,35)": 0.989,
+    "funding (id 62)": 1.0,
+    "H1 structure (id 7,10)": 1.0,
+    "holder ratio (id 113)": 1.0,
+    "lineage: candidate survival/invalidation/prior false attempts (ids 37,40-43)": 0.9883,
+    "open interest (ids 58,59,115)": 1.0,
+    "causal opposite swing anchor (ids 10,37)": 1.0,
+    "price/OI relationship (id 61)": 1.0,
+    "last-mark premium (ids 1,2)": 1.0,
+    "price structure / retrace (ids 1,4-11,36-39)": 1.0,
+    "quality / freshness / continuity masks (ids 56,60,79,80,116)": 1.0,
+    "market regime": 1.0,
+    "volatility (id 4)": 1.0
+   }
+  },
+  "Jun": {
+   "rows": 20232,
+   "family_mean_availability": {
+    "mark-index basis (ids 2,3,114)": 1.0,
+    "L50 order book (ids 44-55)": 1.0,
+    "aggressive burst proxy - NOT liquidation (ids 16,19)": 1.0,
+    "price-response efficiency (ids 26-34)": 1.0,
+    "aggressor flow / CVD / intensity (ids 12-25,35)": 0.989,
+    "funding (id 62)": 1.0,
+    "H1 structure (id 7,10)": 0.9999,
+    "holder ratio (id 113)": 1.0,
+    "lineage: candidate survival/invalidation/prior false attempts (ids 37,40-43)": 0.9915,
+    "open interest (ids 58,59,115)": 1.0,
+    "causal opposite swing anchor (ids 10,37)": 1.0,
+    "price/OI relationship (id 61)": 1.0,
+    "last-mark premium (ids 1,2)": 1.0,
+    "price structure / retrace (ids 1,4-11,36-39)": 1.0,
+    "quality / freshness / continuity masks (ids 56,60,79,80,116)": 1.0,
+    "market regime": 1.0,
+    "volatility (id 4)": 1.0
+   }
+  },
+  "Jul": {
+   "rows": 15643,
+   "family_mean_availability": {
+    "mark-index basis (ids 2,3,114)": 1.0,
+    "L50 order book (ids 44-55)": 0.9997,
+    "aggressive burst proxy - NOT liquidation (ids 16,19)": 1.0,
+    "price-response efficiency (ids 26-34)": 1.0,
+    "aggressor flow / CVD / intensity (ids 12-25,35)": 0.9882,
+    "funding (id 62)": 1.0,
+    "H1 structure (id 7,10)": 1.0,
+    "holder ratio (id 113)": 1.0,
+    "lineage: candidate survival/invalidation/prior false attempts (ids 37,40-43)": 0.9886,
+    "open interest (ids 58,59,115)": 1.0,
+    "causal opposite swing anchor (ids 10,37)": 1.0,
+    "price/OI relationship (id 61)": 1.0,
+    "last-mark premium (ids 1,2)": 1.0,
+    "price structure / retrace (ids 1,4-11,36-39)": 1.0,
+    "quality / freshness / continuity masks (ids 56,60,79,80,116)": 1.0,
+    "market regime": 1.0,
+    "volatility (id 4)": 1.0
+   }
+  },
+  "Aug": {
+   "rows": 15846,
+   "family_mean_availability": {
+    "mark-index basis (ids 2,3,114)": 1.0,
+    "L50 order book (ids 44-55)": 0.9997,
+    "aggressive burst proxy - NOT liquidation (ids 16,19)": 1.0,
+    "price-response efficiency (ids 26-34)": 1.0,
+    "aggressor flow / CVD / intensity (ids 12-25,35)": 0.9897,
+    "funding (id 62)": 1.0,
+    "H1 structure (id 7,10)": 0.9999,
+    "holder ratio (id 113)": 1.0,
+    "lineage: candidate survival/invalidation/prior false attempts (ids 37,40-43)": 0.9845,
+    "open interest (ids 58,59,115)": 1.0,
+    "causal opposite swing anchor (ids 10,37)": 1.0,
+    "price/OI relationship (id 61)": 1.0,
+    "last-mark premium (ids 1,2)": 1.0,
+    "price structure / retrace (ids 1,4-11,36-39)": 1.0,
+    "quality / freshness / continuity masks (ids 56,60,79,80,116)": 1.0,
+    "market regime": 1.0,
+    "volatility (id 4)": 1.0
+   }
+  },
+  "Sep": {
+   "rows": 15959,
+   "family_mean_availability": {
+    "mark-index basis (ids 2,3,114)": 1.0,
+    "L50 order book (ids 44-55)": 1.0,
+    "aggressive burst proxy - NOT liquidation (ids 16,19)": 1.0,
+    "price-response efficiency (ids 26-34)": 1.0,
+    "aggressor flow / CVD / intensity (ids 12-25,35)": 0.9894,
+    "funding (id 62)": 1.0,
+    "H1 structure (id 7,10)": 0.9999,
+    "holder ratio (id 113)": 1.0,
+    "lineage: candidate survival/invalidation/prior false attempts (ids 37,40-43)": 0.9868,
+    "open interest (ids 58,59,115)": 1.0,
+    "causal opposite swing anchor (ids 10,37)": 1.0,
+    "price/OI relationship (id 61)": 1.0,
+    "last-mark premium (ids 1,2)": 1.0,
+    "price structure / retrace (ids 1,4-11,36-39)": 1.0,
+    "quality / freshness / continuity masks (ids 56,60,79,80,116)": 1.0,
+    "market regime": 1.0,
+    "volatility (id 4)": 1.0
+   }
+  },
+  "Oct": {
+   "rows": 20088,
+   "family_mean_availability": {
+    "mark-index basis (ids 2,3,114)": 1.0,
+    "L50 order book (ids 44-55)": 1.0,
+    "aggressive burst proxy - NOT liquidation (ids 16,19)": 1.0,
+    "price-response efficiency (ids 26-34)": 1.0,
+    "aggressor flow / CVD / intensity (ids 12-25,35)": 0.9869,
+    "funding (id 62)": 1.0,
+    "H1 structure (id 7,10)": 1.0,
+    "holder ratio (id 113)": 1.0,
+    "lineage: candidate survival/invalidation/prior false attempts (ids 37,40-43)": 0.9861,
+    "open interest (ids 58,59,115)": 1.0,
+    "causal opposite swing anchor (ids 10,37)": 1.0,
+    "price/OI relationship (id 61)": 1.0,
+    "last-mark premium (ids 1,2)": 1.0,
+    "price structure / retrace (ids 1,4-11,36-39)": 1.0,
+    "quality / freshness / continuity masks (ids 56,60,79,80,116)": 1.0,
+    "market regime": 1.0,
+    "volatility (id 4)": 1.0
+   }
+  },
+  "Nov4-11 forward": {
+   "rows": 4602,
+   "family_mean_availability": {
+    "mark-index basis (ids 2,3,114)": 1.0,
+    "L50 order book (ids 44-55)": 1.0,
+    "aggressive burst proxy - NOT liquidation (ids 16,19)": 1.0,
+    "price-response efficiency (ids 26-34)": 1.0,
+    "aggressor flow / CVD / intensity (ids 12-25,35)": 0.9861,
+    "funding (id 62)": 1.0,
+    "H1 structure (id 7,10)": 0.9999,
+    "holder ratio (id 113)": 1.0,
+    "lineage: candidate survival/invalidation/prior false attempts (ids 37,40-43)": 0.9977,
+    "open interest (ids 58,59,115)": 1.0,
+    "causal opposite swing anchor (ids 10,37)": 1.0,
+    "price/OI relationship (id 61)": 1.0,
+    "last-mark premium (ids 1,2)": 1.0,
+    "price structure / retrace (ids 1,4-11,36-39)": 1.0,
+    "quality / freshness / continuity masks (ids 56,60,79,80,116)": 1.0,
+    "market regime": 1.0,
+    "volatility (id 4)": 1.0
+   }
+  }
+ }
+}

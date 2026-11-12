@@ -1,0 +1,12 @@
+{
+ "artifact_rows": 6261,
+ "rebuilt_rows_same_period": 6261,
+ "common_keys": 6261,
+ "only_artifact": 0,
+ "only_rebuilt": 0,
+ "feature_rel_diff_p50": 0.0,
+ "feature_rel_diff_p99": 0.0,
+ "frac_features_exact_1e-6": 1.0,
+ "strict_true_mismatch": 7,
+ "forward_rows_after_artifact_end": 1924
+}
