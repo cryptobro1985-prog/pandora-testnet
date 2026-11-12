@@ -20,6 +20,49 @@ Start by reading:
 9. `research/hype_quant/learner.py`
 10. `research/hype_local_only/cortex_daemon.py`
 
+
+
+## IMPORTANT: WHERE THE DATA ACTUALLY LIVES
+
+Do not assume every dataset is a normal Git tree file.
+
+There are TWO storage classes:
+
+A) NORMAL REPOSITORY FILES — directly readable in the branch:
+- research/hype_all_in_one/**
+- research/hype_quant/**
+- research/hype_local_only/**
+- research/hype_terminal_local_strategy/**
+- research/hype_full_micro_202605/**
+- research/hype_full_micro_202606/**
+- research/hype_full_micro_202607/**
+- research/hype_full_micro_202608_late/**
+- research/hype_full_micro_202609/**
+- research/hype_historical_master/**
+
+B) LARGE DATA / MODEL BINARIES — stored as GitHub Actions artifacts, NOT as ordinary files:
+- local116-HYPE
+- HYPE-LOCAL-HISTORICAL-GAPS
+- HYPE-HISTORY-20260712-20261103-MASTER
+- HYPE-LOCAL-ONLY-CHECKPOINT
+- HYPE-LOCAL-ENSEMBLE-30D-*
+- HYPE-UNIFIED-LOCAL-INTELLIGENCE-V2-*
+- HYPE-LOCAL-RAW-*
+- HYPE-RICH-STRONG-*
+- HYPE-7LAYER-*
+
+If your GitHub tool cannot read Actions artifacts, DO NOT report that the files are missing and stop.
+Instead:
+1. Rebuild May from research/hype_full_micro_202605/build_base_may.py
+2. Rebuild June from research/hype_full_micro_202606/build_base_june.py
+3. Use the preserved code/manifests in research/hype_historical_master/ to reconstruct or identify Jul-Nov sources.
+4. Use existing committed reports and code to continue analysis.
+5. Explicitly list which artifact-only datasets your tool cannot access.
+6. Never invent their contents.
+
+The all-in-one workflow is an assembly convenience, not a prerequisite for understanding the project.
+
+
 ## Mission
 
 Build the earliest possible CAUSAL detector of REAL terminal H1 Local Low / Local High for HYPE.
