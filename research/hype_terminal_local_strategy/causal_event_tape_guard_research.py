@@ -20,7 +20,11 @@ def replay(side, signal_available_ms, fill_ms, entry, stop, events):
         raise ValueError("invalid entry/stop")
     if any(a.ts_ms > b.ts_ms for a, b in zip(events, events[1:])):
         raise ValueError("unsorted events")
-    active = [e for e in events if e.ts_ms >= fill_ms]
+    # Same-millisecond market events cannot be ordered against the actual fill.
+    # Fail closed rather than assuming the position existed before the print.
+    if any(e.ts_ms == fill_ms for e in events):
+        return "UNRESOLVED_FILL_TIMESTAMP_ORDER"
+    active = [e for e in events if e.ts_ms > fill_ms]
     for i, event in enumerate(active):
         if event.kind not in ("TRADE", "OPPOSITE_AVAILABLE"):
             raise ValueError("invalid event type")
@@ -52,7 +56,11 @@ def self_test():
         raise AssertionError("unsorted tape accepted")
     except ValueError:
         pass
-    return 8
+    assert replay("LONG",10,20,100,99,[E(20,"TRADE",98),E(21,"TRADE",100)]) == "UNRESOLVED_FILL_TIMESTAMP_ORDER"
+    assert replay("SHORT",10,20,100,101,[E(20,"TRADE",102),E(21,"TRADE",100)]) == "UNRESOLVED_FILL_TIMESTAMP_ORDER"
+    assert replay("LONG",10,20,100,99,[E(19,"TRADE",98),E(21,"TRADE",100)]) == "HOLD"
+    assert replay("LONG",10,20,100,99,[E(21,"TRADE",98)]) == "STOP_TRIGGER_FILL_UNVERIFIED"
+    return 12
 
 if __name__ == "__main__":
     print("PASS", self_test(), "synthetic event-order tests")
