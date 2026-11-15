@@ -14,7 +14,7 @@ Given equity E=100, stop adverse move s=0.01, assumed round-trip fees f=0.0015, 
 | 3% | 4.21% | $5.94 | $11.88 | $3.96 | $0.48 |
 | 5% | 6.21% | $4.03 | $8.05 | $2.68 | $0.32 |
 
-**New risk comparison**: A $22.62 nominal sized to 0.5% equity at 1% gap instead loses $0.9523 (0.9523% equity) if the actual gap is 3%, before any additional unmodeled fees/funding. Sizing to 3% gap gives N=$11.8765, so the same 3% gap loss is $0.50. A stop-market order can still fill worse than 3% gap, and liquidation can preempt it.
+**New risk comparison**: A $22.62 nominal sized to 0.5% equity at 1% gap instead loses $0.9525 (0.9525% equity) if the actual gap is 3%, before any additional unmodeled fees/funding. Sizing to 3% gap gives N=$11.8765, so the same 3% gap loss is $0.50. A stop-market order can still fill worse than 3% gap, and liquidation can preempt it.
 
 ## Six-stop-streak compounding diagnostic
 The frozen asymmetric report observed a maximum historical losing streak of six, but its simulated loss magnitudes are not reliable real fill bounds. If *each* of six losses exactly equals a fraction r of then-current equity, the compounded drawdown is 1-(1-r)^6: 1.4907% at 0.25% risk; 2.9627% at 0.5% risk; 5.8520% at 1% risk. This excludes correlated gaps, funding variation and open-equity drawdown. It is not a replay of the observed streak.
@@ -35,7 +35,7 @@ for g in (0,.01,.02,.03,.05):
     print(g,round(100*d,2),round(n25,2),round(n50,2),round(n50/3,2),round(n50/25,2))
     assert abs(n50*d-.5)<1e-10
 n_at_1pct_gap=.5/(s+f+u+.01)
-assert abs(n_at_1pct_gap*(s+f+u+.03)-.952262443438914)<1e-9
+assert abs(n_at_1pct_gap*(s+f+u+.03)-.9524886877828054)<1e-9
 for r in (.0025,.005,.01):
     print(r,100*(1-(1-r)**6))
 ```
