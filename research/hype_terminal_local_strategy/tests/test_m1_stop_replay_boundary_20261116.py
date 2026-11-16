@@ -14,8 +14,8 @@ def episode(**kw):
     d.update(kw);return d
 # Pre-entry minute's low must NOT be used as a post-entry stop.
 r=m.replay(episode(entry_ts_ms=30000,bars=[bar(0,lo=98),bar(60000)]))
-assert r["status"]=="UNKNOWN_COVERAGE",r
-print("REPRODUCED: entry inside first M1 bar rejected by start-time coverage check")
+assert r["status"]=="NO_STOP_TOUCH_IN_M1",r
+print("REPRODUCED: entry inside first M1 bar silently accepted despite unknown post-entry path")
 # Coverage from entry to exit must include all minutes; current module can accept an incomplete tail.
 r=m.replay(episode(exit_ts_ms=180000,bars=[bar(0),bar(60000)]))
 assert r["status"]=="NO_STOP_TOUCH_IN_M1",r
