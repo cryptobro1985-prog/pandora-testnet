@@ -33,3 +33,11 @@ assert r["status"]=="STOP_TOUCHED_FILL_UNKNOWN",r
 assert r["mfe_upper_bound"] is None,r
 assert r["pre_stop_bar_favorable_upper_bound"]>=0.1-1e-9,r
 print("PASS: stop-bar favorable extreme not misrepresented as realized MFE")
+
+# Stop-bar low/high must not contaminate completed pre-stop MAE/MFE.
+r=m.replay(episode(bars=[bar(0,lo=99.5,hi=102),bar(60000,lo=90,hi=120)]))
+assert r["status"]=="STOP_TOUCHED_FILL_UNKNOWN",r
+assert abs(r["completed_pre_stop_m1_mfe_envelope"]-0.02)<1e-10,r
+assert abs(r["completed_pre_stop_m1_mae_envelope"]-0.005)<1e-10,r
+assert r["mae_upper_bound"] is None,r
+print("PASS: stop-bar extremes excluded from completed pre-stop envelopes")
