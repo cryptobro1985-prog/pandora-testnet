@@ -21,12 +21,11 @@ def replay(e):
     prev=None; hit=None; mfe=0.; mae=0.
     for b in bars:
         t=int(b["ts_ms"])
+        if t<t0 or t>=t1: continue
         if prev is not None and t-prev!=60000: return {"id":e["id"],"status":"UNKNOWN_GAP"}
         prev=t
         o,h,l,c=[float(b[k]) for k in ("open","high","low","close")]
         if not (0<l<=min(o,c)<=max(o,c)<=h): return {"id":e["id"],"status":"INVALID_OHLC"}
-        if t<t0: continue
-        if t>=t1: break
         # If entry is inside a bar, pre-entry high/low cannot be attributed to the position.
         if t==t0 and t0%60000: return {"id":e["id"],"status":"UNKNOWN_ENTRY_INTRABAR"}
         favorable=(h-entry if side=="LONG" else entry-l)/entry
@@ -39,8 +38,9 @@ def replay(e):
                  "fill_status":"UNKNOWN_NO_BID_ASK_OR_TRADE_TAPE"}
             break
     return {"id":e["id"],"status":"STOP_TOUCHED_FILL_UNKNOWN" if hit else "NO_STOP_TOUCH_IN_M1",
-            "stop":hit,"mfe_upper_bound":mfe,"mae_upper_bound":mae,
-            "note":"M1 high/low is not a verified tradable fill; exit may be intrabar"}
+            "stop":hit,"mfe_upper_bound":None if hit else mfe,"mae_upper_bound":mae,
+            "pre_stop_bar_favorable_upper_bound":mfe if hit else None,
+            "note":"Stop bar favorable extreme is not verified to occur before stop; pre_stop_bar_favorable_upper_bound is NOT captured MFE. M1 is not a verified fill."}
 def self_test():
     base={"id":"synthetic","side":"LONG","entry_ts_ms":0,"entry_price":100,
           "stop_price":99,"exit_ts_ms":120000,"exit_price":102,
