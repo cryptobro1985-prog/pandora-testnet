@@ -1,6 +1,6 @@
 """Regression checks for M1 replay coverage and intrabar entry, research only.
 Run: python research/hype_terminal_local_strategy/tests/test_m1_stop_replay_boundary_20261116.py
-Expected on current module: two known defects reproduced; no real fills inferred.
+Expected: boundary defects blocked; no real fills inferred.
 """
 import importlib.util
 from pathlib import Path
@@ -14,11 +14,11 @@ def episode(**kw):
     d.update(kw);return d
 # Pre-entry minute's low must NOT be used as a post-entry stop.
 r=m.replay(episode(entry_ts_ms=30000,bars=[bar(0,lo=98),bar(60000)]))
-assert r["status"]=="NO_STOP_TOUCH_IN_M1",r
-print("REPRODUCED: entry inside first M1 bar silently accepted despite unknown post-entry path")
+assert r["status"]=="UNKNOWN_ENTRY_INTRABAR",r
+print("PASS: entry inside first M1 bar fails closed")
 # Coverage from entry to exit must include all minutes; current module can accept an incomplete tail.
 r=m.replay(episode(exit_ts_ms=180000,bars=[bar(0),bar(60000)]))
-assert r["status"]=="NO_STOP_TOUCH_IN_M1",r
-print("REPRODUCED: missing final minute incorrectly accepted as no stop touch")
+assert r["status"]=="UNKNOWN_COVERAGE",r
+print("PASS: missing final minute fails closed")
 # No real execution/fill proof in this test.
-print("PASS: two known boundary defects reproduced; not an execution replay")
+print("PASS: boundary cases blocked; not an execution replay")
