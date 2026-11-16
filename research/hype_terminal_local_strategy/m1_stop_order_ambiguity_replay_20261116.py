@@ -4,10 +4,12 @@ exit_price,bars:[{ts_ms,open,high,low,close}...]}. Timestamp is bar START.
 All prices are hypothetical executable proxies, not verified bid/ask or mark fills.
 """
 import json,sys
+import math
 def replay(e):
     side=e["side"]; assert side in ("LONG","SHORT")
     entry=float(e["entry_price"]); stop=float(e["stop_price"])
     assert entry>0 and stop>0 and ((stop<entry) if side=="LONG" else (stop>entry))
+    if not (math.isfinite(entry) and math.isfinite(stop)): return {"id":e["id"],"status":"INVALID_PRICE"}
     t0=int(e["entry_ts_ms"]); t1=int(e["exit_ts_ms"]); assert t1>t0
     bars=sorted(e["bars"],key=lambda x:x["ts_ms"])
     if not bars or bars[0]["ts_ms"]>t0 or bars[-1]["ts_ms"]+60000<t1:
@@ -18,7 +20,7 @@ def replay(e):
     expected=list(range(t0,t1,60000))
     relevant=[int(b["ts_ms"]) for b in bars if t0<=int(b["ts_ms"])<t1]
     if relevant!=expected: return {"id":e["id"],"status":"UNKNOWN_GAP_OR_BOUNDARY"}
-    prev=None; hit=None; mfe=0.; mae=0.
+    prev=None; hit=None; mfe=0.; mae=0.; completed_mfe=0.; completed_mae=0.
     for b in bars:
         t=int(b["ts_ms"])
         if t<t0 or t>=t1: continue
@@ -37,10 +39,14 @@ def replay(e):
             hit={"ts_ms":t,"stop_touched":True,"open_beyond_stop":gap,
                  "fill_status":"UNKNOWN_NO_BID_ASK_OR_TRADE_TAPE"}
             break
+        completed_mfe=max(completed_mfe,favorable)
+        completed_mae=max(completed_mae,adverse)
     return {"id":e["id"],"status":"STOP_TOUCHED_FILL_UNKNOWN" if hit else "NO_STOP_TOUCH_IN_M1",
-            "stop":hit,"mfe_upper_bound":None if hit else mfe,"mae_upper_bound":mae,
+            "stop":hit,"mfe_upper_bound":None if hit else mfe,"mae_upper_bound":None if hit else mae,
+            "completed_pre_stop_m1_mfe_envelope":completed_mfe,
+            "completed_pre_stop_m1_mae_envelope":completed_mae,
             "pre_stop_bar_favorable_upper_bound":mfe if hit else None,
-            "note":"Stop bar favorable extreme is not verified to occur before stop; pre_stop_bar_favorable_upper_bound is NOT captured MFE. M1 is not a verified fill."}
+            "note":"Completed pre-stop M1 candle extremes are observed envelopes, not executable fills. Stop-bar MAE/MFE are excluded from completed envelopes. Stop bar favorable extreme is not verified to occur before stop; pre_stop_bar_favorable_upper_bound is NOT captured MFE. M1 is not a verified fill."}
 def self_test():
     base={"id":"synthetic","side":"LONG","entry_ts_ms":0,"entry_price":100,
           "stop_price":99,"exit_ts_ms":120000,"exit_price":102,
