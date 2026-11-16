@@ -22,3 +22,14 @@ assert r["status"]=="UNKNOWN_COVERAGE",r
 print("PASS: missing final minute fails closed")
 # No real execution/fill proof in this test.
 print("PASS: boundary cases blocked; not an execution replay")
+
+# Discontinuity outside the actual holding window must not invalidate a complete interval.
+r=m.replay(episode(bars=[bar(-180000),bar(0),bar(60000),bar(240000)]))
+assert r["status"]=="NO_STOP_TOUCH_IN_M1",r
+print("PASS: out-of-window archival gaps ignored")
+# In a stop-touch candle, favorable high can occur after the stop: not captured MFE.
+r=m.replay(episode(bars=[bar(0,lo=98,hi=110),bar(60000)]))
+assert r["status"]=="STOP_TOUCHED_FILL_UNKNOWN",r
+assert r["mfe_upper_bound"] is None,r
+assert r["pre_stop_bar_favorable_upper_bound"]>=0.1-1e-9,r
+print("PASS: stop-bar favorable extreme not misrepresented as realized MFE")
