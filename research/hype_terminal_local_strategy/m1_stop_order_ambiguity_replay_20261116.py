@@ -51,7 +51,7 @@ def self_test():
     g=dict(base,bars=[dict(base["bars"][0],open=98,low=97,high=103,close=102),base["bars"][1]])
     assert replay(g)["stop"]["open_beyond_stop"] is True
     gap=dict(base,bars=[base["bars"][0],dict(base["bars"][1],ts_ms=180000)],exit_ts_ms=240000)
-    assert replay(gap)["status"]=="UNKNOWN_GAP"
+    assert replay(gap)["status"]=="UNKNOWN_GAP_OR_BOUNDARY"
     clean=dict(base,bars=[dict(base["bars"][0],low=99.2),base["bars"][1]])
     assert replay(clean)["status"]=="NO_STOP_TOUCH_IN_M1"
     print("PASS 4 synthetic cases; no real execution verified")
