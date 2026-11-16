@@ -10,8 +10,14 @@ def replay(e):
     assert entry>0 and stop>0 and ((stop<entry) if side=="LONG" else (stop>entry))
     t0=int(e["entry_ts_ms"]); t1=int(e["exit_ts_ms"]); assert t1>t0
     bars=sorted(e["bars"],key=lambda x:x["ts_ms"])
-    if not bars or bars[0]["ts_ms"]>t0 or bars[-1]["ts_ms"]>=t1:
+    if not bars or bars[0]["ts_ms"]>t0 or bars[-1]["ts_ms"]+60000<t1:
         return {"id":e["id"],"status":"UNKNOWN_COVERAGE"}
+    # M1 cannot resolve price path after an entry/exit inside a candle.
+    if t0%60000: return {"id":e["id"],"status":"UNKNOWN_ENTRY_INTRABAR"}
+    if t1%60000: return {"id":e["id"],"status":"UNKNOWN_EXIT_INTRABAR"}
+    expected=list(range(t0,t1,60000))
+    relevant=[int(b["ts_ms"]) for b in bars if t0<=int(b["ts_ms"])<t1]
+    if relevant!=expected: return {"id":e["id"],"status":"UNKNOWN_GAP_OR_BOUNDARY"}
     prev=None; hit=None; mfe=0.; mae=0.
     for b in bars:
         t=int(b["ts_ms"])
