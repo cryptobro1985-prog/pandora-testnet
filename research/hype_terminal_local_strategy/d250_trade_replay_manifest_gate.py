@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 REQUIRED = ("trade_id","side","local_kind","local_extreme_utc","h1_confirmed_utc",
             "d250_signal_utc","entry_utc","entry_price","rev_atr","trade_ratio5",
             "flow15","rev_atr_asof_utc","trade_ratio5_asof_utc","flow15_asof_utc",
-            "opposite_confirmed_utc","exit_utc","exit_price","m1_coverage",
+            "opposite_confirmed_utc","exit_utc","exit_price","exit_reason","m1_coverage",
             "public_trades_coverage","mark_coverage")
 THRESHOLDS = (2.0840049433824706, 0.2727842248141979, 0.4504731635235635)
 def stamp(v):
@@ -26,7 +26,9 @@ def audit(row):
             reasons.append("D250_TOO_EARLY")
         if ts["opposite_confirmed_utc"]<ts["d250_signal_utc"]:
             reasons.append("OPPOSITE_PRECEDES_SIGNAL")
-        if ts["exit_utc"]<ts["opposite_confirmed_utc"]:
+        if row["exit_reason"] not in ("STOP","OPPOSITE_CONFIRMED"):
+            reasons.append("UNKNOWN_EXIT_REASON")
+        if row["exit_reason"]=="OPPOSITE_CONFIRMED" and ts["exit_utc"]<ts["opposite_confirmed_utc"]:
             reasons.append("EXIT_BEFORE_OPPOSITE_CONFIRMATION")
         for name in ("rev_atr","trade_ratio5","flow15"):
             if ts[name+"_asof_utc"]>ts["d250_signal_utc"]:
@@ -63,6 +65,7 @@ def main():
             "blocked":sum(x["status"]=="BLOCKED" for x in findings),"findings":findings,
             "limitations":["Coverage COMPLETE is a manifest assertion, not independently verified exchange evidence",
                            "Does not validate same-side invalidation, book fills, funding, stop gaps, liquidation, or overlapping capital",
+                           "STOP exits may precede opposite confirmation; opposite_confirmed_utc still required for this manifest schema",
                            "Requires independent matched event tape before reporting PnL or liquidation count"]}
     with open(a.out,"w",encoding="utf-8") as f: json.dump(result,f,indent=2)
     print(json.dumps({"count":result["count"],"eligible":result["eligible"],"blocked":result["blocked"]}))
