@@ -29,11 +29,11 @@ def audit(row):
                 reasons.append("MISSING_OPPOSITE_CONFIRMATION")
             else:
                 ts["opposite_confirmed_utc"]=stamp(row["opposite_confirmed_utc"])
-                if ts["opposite_confirmed_utc"]<ts["entry_utc"]:
+                if ts["opposite_confirmed_utc"]<=ts["entry_utc"]:
                     reasons.append("OPPOSITE_PRECEDES_SIGNAL")
         if row["exit_reason"] not in ("STOP","OPPOSITE_CONFIRMED"):
             reasons.append("UNKNOWN_EXIT_REASON")
-        if row["exit_reason"]=="OPPOSITE_CONFIRMED" and "opposite_confirmed_utc" in ts and ts["exit_utc"]<ts["opposite_confirmed_utc"]:
+        if row["exit_reason"]=="OPPOSITE_CONFIRMED" and "opposite_confirmed_utc" in ts and ts["exit_utc"]<=ts["opposite_confirmed_utc"]:
             reasons.append("EXIT_BEFORE_OPPOSITE_CONFIRMATION")
         for name in ("rev_atr","trade_ratio5","flow15"):
             if ts[name+"_asof_utc"]>ts["d250_signal_utc"]:
