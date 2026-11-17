@@ -29,7 +29,7 @@ def audit(row):
                 reasons.append("MISSING_OPPOSITE_CONFIRMATION")
             else:
                 ts["opposite_confirmed_utc"]=stamp(row["opposite_confirmed_utc"])
-                if ts["opposite_confirmed_utc"]<ts["d250_signal_utc"]:
+                if ts["opposite_confirmed_utc"]<ts["entry_utc"]:
                     reasons.append("OPPOSITE_PRECEDES_SIGNAL")
         if row["exit_reason"] not in ("STOP","OPPOSITE_CONFIRMED"):
             reasons.append("UNKNOWN_EXIT_REASON")
