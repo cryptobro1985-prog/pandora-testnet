@@ -15,7 +15,10 @@ def row(reason="STOP",opposite=""):
         rev_atr="2.2",trade_ratio5="0.3",flow15="0.4",
         rev_atr_asof_utc=iso(250),trade_ratio5_asof_utc=iso(250),
         flow15_asof_utc=iso(250),m1_coverage="COMPLETE",
-        public_trades_coverage="COMPLETE",mark_coverage="COMPLETE")
+        public_trades_coverage="COMPLETE",mark_coverage="COMPLETE",
+        opposite_ledger_coverage="COMPLETE",
+        opposite_ledger_first_utc=opposite if opposite else "NONE",
+        opposite_ledger_start_utc=iso(249),opposite_ledger_end_utc=iso(501))
 class GateTests(unittest.TestCase):
     def test_stop_no_future_opposite(self):
         self.assertEqual(audit(row()),[])
@@ -41,12 +44,15 @@ class GateTests(unittest.TestCase):
         self.assertEqual(audit(r),[])
     def test_stop_after_known_opposite_is_invalid(self):
         r=row(opposite=iso(300))
-        self.assertIn("STOP_AFTER_OPPOSITE_CONFIRMATION",audit(r))
+        self.assertIn("STOP_NOT_PROVEN_BEFORE_OPPOSITE_CONFIRMATION",audit(r))
     def test_stop_with_opposite_before_entry_is_invalid(self):
         r=row(opposite=iso(250))
         self.assertIn("OPPOSITE_PRECEDES_SIGNAL",audit(r))
     def test_stop_before_opposite_is_valid(self):
         self.assertEqual(audit(row(opposite=iso(500))),[])
+    def test_stop_same_timestamp_as_opposite_is_blocked(self):
+        r=row(opposite=iso(310))
+        self.assertIn("STOP_NOT_PROVEN_BEFORE_LEDGER_OPPOSITE",audit(r))
     def test_stop_before_entry(self):
         r=row();r["exit_utc"]=iso(249)
         self.assertIn("NONCAUSAL_SEQUENCE",audit(r))
