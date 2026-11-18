@@ -24,13 +24,14 @@ def audit(row):
             reasons.append("NONCAUSAL_SEQUENCE")
         if (ts["d250_signal_utc"]-ts["local_extreme_utc"]).total_seconds()<250*60:
             reasons.append("D250_TOO_EARLY")
-        if row["exit_reason"]=="OPPOSITE_CONFIRMED":
-            if not row.get("opposite_confirmed_utc","").strip():
-                reasons.append("MISSING_OPPOSITE_CONFIRMATION")
-            else:
-                ts["opposite_confirmed_utc"]=stamp(row["opposite_confirmed_utc"])
-                if ts["opposite_confirmed_utc"]<=ts["entry_utc"]:
-                    reasons.append("OPPOSITE_PRECEDES_SIGNAL")
+        if row["exit_reason"]=="OPPOSITE_CONFIRMED" and not row.get("opposite_confirmed_utc","").strip():
+            reasons.append("MISSING_OPPOSITE_CONFIRMATION")
+        if row.get("opposite_confirmed_utc","").strip():
+            ts["opposite_confirmed_utc"]=stamp(row["opposite_confirmed_utc"])
+            if ts["opposite_confirmed_utc"]<=ts["entry_utc"]:
+                reasons.append("OPPOSITE_PRECEDES_SIGNAL")
+            if row["exit_reason"]=="STOP" and ts["opposite_confirmed_utc"]<ts["exit_utc"]:
+                reasons.append("STOP_AFTER_OPPOSITE_CONFIRMATION")
         if row["exit_reason"] not in ("STOP","OPPOSITE_CONFIRMED"):
             reasons.append("UNKNOWN_EXIT_REASON")
         if row["exit_reason"]=="OPPOSITE_CONFIRMED" and "opposite_confirmed_utc" in ts and ts["exit_utc"]<=ts["opposite_confirmed_utc"]:
