@@ -39,6 +39,14 @@ class GateTests(unittest.TestCase):
     def test_opposite_exit_after_confirmation_is_valid(self):
         r=row("OPPOSITE_CONFIRMED",iso(309))
         self.assertEqual(audit(r),[])
+    def test_stop_after_known_opposite_is_invalid(self):
+        r=row(opposite=iso(300))
+        self.assertIn("STOP_AFTER_OPPOSITE_CONFIRMATION",audit(r))
+    def test_stop_with_opposite_before_entry_is_invalid(self):
+        r=row(opposite=iso(250))
+        self.assertIn("OPPOSITE_PRECEDES_SIGNAL",audit(r))
+    def test_stop_before_opposite_is_valid(self):
+        self.assertEqual(audit(row(opposite=iso(500))),[])
     def test_stop_before_entry(self):
         r=row();r["exit_utc"]=iso(249)
         self.assertIn("NONCAUSAL_SEQUENCE",audit(r))
