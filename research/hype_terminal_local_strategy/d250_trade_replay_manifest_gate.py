@@ -8,7 +8,8 @@ REQUIRED = ("trade_id","side","local_kind","local_extreme_utc","h1_confirmed_utc
             "d250_signal_utc","entry_utc","entry_price","rev_atr","trade_ratio5",
             "flow15","rev_atr_asof_utc","trade_ratio5_asof_utc","flow15_asof_utc",
             "exit_utc","exit_price","exit_reason","m1_coverage",
-            "public_trades_coverage","mark_coverage", "opposite_ledger_coverage", "opposite_ledger_first_utc")
+            "public_trades_coverage","mark_coverage", "opposite_ledger_coverage", "opposite_ledger_first_utc",
+            "opposite_ledger_start_utc", "opposite_ledger_end_utc")
 THRESHOLDS = (2.0840049433824706, 0.2727842248141979, 0.4504731635235635)
 def stamp(v):
     t=datetime.fromisoformat(v.replace("Z","+00:00"))
@@ -28,11 +29,19 @@ def audit(row):
         # Ledger must be independently reconstructed across the full entry-to-exit window.
         if row.get("opposite_ledger_coverage")!="COMPLETE":
             reasons.append("UNVERIFIED_OPPOSITE_EVENT_COVERAGE")
+        # A COMPLETE label is insufficient if the purported ledger does not span
+        # the full position lifetime. Never infer absence from partial coverage.
+        ledger_start=stamp(row["opposite_ledger_start_utc"])
+        ledger_end=stamp(row["opposite_ledger_end_utc"])
+        if ledger_start>ts["entry_utc"] or ledger_end<ts["exit_utc"] or ledger_start>ledger_end:
+            reasons.append("OPPOSITE_LEDGER_WINDOW_INCOMPLETE")
         first=row.get("opposite_ledger_first_utc","").strip()
         if not first:
             reasons.append("MISSING_OPPOSITE_LEDGER_RESULT")
         elif first!="NONE":
             ts["opposite_ledger_first_utc"]=stamp(first)
+            if not (ledger_start<=ts["opposite_ledger_first_utc"]<=ledger_end):
+                reasons.append("OPPOSITE_LEDGER_EVENT_OUTSIDE_WINDOW")
             if ts["opposite_ledger_first_utc"]<=ts["entry_utc"]:
                 reasons.append("OPPOSITE_LEDGER_PRECEDES_ENTRY")
             if ts["opposite_ledger_first_utc"]<=ts["exit_utc"] and row["exit_reason"]=="STOP":
