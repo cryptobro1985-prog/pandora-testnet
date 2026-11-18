@@ -17,15 +17,15 @@ def check(r,e,root):
    if utc(r[k+"_asof_utc"])>s: errors.append("FUTURE_"+k)
   if not(float(r["rev_atr"])>2.0840049433824706 and float(r["trade_ratio5"])>0.2727842248141979 and float(r["flow15"])<0.4504731635235635): errors.append("FROZEN_RULE_FAIL")
   if e["trade_id"]!=r["trade_id"]: errors.append("ID_MISMATCH")
-  if utc(e["event_scan_start_utc"])>x or utc(e["event_scan_end_utc"])<n or not e.get("scan_includes_both_endpoints"): errors.append("SCAN_INCOMPLETE")
+  if utc(e["event_scan_start_utc"])>x or utc(e["event_scan_end_utc"])<n or e.get("scan_includes_both_endpoints") is not True: errors.append("SCAN_INCOMPLETE")
   if e.get("same_side_new_extreme_utc") and x<utc(e["same_side_new_extreme_utc"])<=n: errors.append("SAME_SIDE_INVALIDATED")
   if e.get("opposite_confirmed_utc") and utc(e["opposite_confirmed_utc"])<=n: errors.append("OPPOSITE_ALREADY_CONFIRMED")
   for name in ("m1","public_trades","mark"):
    item=e["sources"][name];p=(root/item["path"]).resolve()
    if not p.is_relative_to(root.resolve()) or not p.is_file(): errors.append("SOURCE_MISSING_"+name);continue
    if hashlib.sha256(p.read_bytes()).hexdigest()!=item["sha256"]: errors.append("HASH_MISMATCH_"+name)
-   if utc(item["first_utc"])>x or utc(item["last_utc"])<n or not item.get("continuous"): errors.append("COVERAGE_UNPROVEN_"+name)
-  if not e.get("independent_event_extractor_version") or not e.get("raw_tape_validated"): errors.append("PROVENANCE_UNPROVEN")
+   if utc(item["first_utc"])>x or utc(item["last_utc"])<n or item.get("continuous") is not True: errors.append("COVERAGE_UNPROVEN_"+name)
+  if not e.get("independent_event_extractor_version") or e.get("raw_tape_validated") is not True: errors.append("PROVENANCE_UNPROVEN")
  except (KeyError,ValueError,TypeError,OverflowError) as exc: errors.append("BAD_EVIDENCE_"+type(exc).__name__)
  return sorted(set(errors))
 def main():
