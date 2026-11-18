@@ -9,9 +9,9 @@ Previous conservative notional cap used price stop 1%, round-trip execution fees
 | Cumulative adverse funding / notional | Modeled loss / notional | Max notional/equity at 0.25% risk | Max notional/equity at 0.50% risk | Loss at historical 5x exposure |
 |---:|---:|---:|---:|---:|
 | 0.00% | 1.65% | 0.1515x | 0.3030x | 8.25% |
-| 1.00% | 2.65% | 0.0943x | 0.1887x | 13.25% |
-| 3.00% | 4.65% | 0.0538x | 0.1075x | 23.25% |
-| 9.00% | 10.65% | 0.0235x | 0.0469x | 53.25% |
+| 0.01% | 1.66% | 0.1506x | 0.3012x | 8.30% |
+| 0.03% | 1.68% | 0.1488x | 0.2976x | 8.40% |
+| 0.09% | 1.74% | 0.1437x | 0.2874x | 8.70% |
 
 The 1% stop is a price-level exit assumption; market gaps can exceed the 0.50% reserve, so even this funded sizing does **not** guarantee the 0.25%-0.50% loss ceiling. A stop-market order may fill beyond trigger; liquidation must be tested with venue-specific maintenance tiers, mark-price path and margin mode. No actual liquidation count is inferred.
 
