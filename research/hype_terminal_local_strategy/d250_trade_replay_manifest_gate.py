@@ -55,6 +55,11 @@ def audit(row):
             reasons.append("MISSING_OPPOSITE_CONFIRMATION")
         if row.get("opposite_confirmed_utc","").strip():
             ts["opposite_confirmed_utc"]=stamp(row["opposite_confirmed_utc"])
+            # Optional opposite confirmation must agree with the declared first ledger event.
+            if first=="NONE" or (first and first!="NONE" and ts["opposite_confirmed_utc"]!=ts["opposite_ledger_first_utc"]):
+                reasons.append("OPPOSITE_CONFIRMATION_LEDGER_MISMATCH")
+            if not (ledger_start<=ts["opposite_confirmed_utc"]<=ledger_end):
+                reasons.append("OPPOSITE_CONFIRMATION_OUTSIDE_LEDGER_WINDOW")
             if ts["opposite_confirmed_utc"]<=ts["entry_utc"]:
                 reasons.append("OPPOSITE_PRECEDES_SIGNAL")
             if row["exit_reason"]=="STOP" and ts["opposite_confirmed_utc"]<=ts["exit_utc"]:
