@@ -8,7 +8,7 @@ REQUIRED = ("trade_id","side","local_kind","local_extreme_utc","h1_confirmed_utc
             "d250_signal_utc","entry_utc","entry_price","rev_atr","trade_ratio5",
             "flow15","rev_atr_asof_utc","trade_ratio5_asof_utc","flow15_asof_utc",
             "exit_utc","exit_price","exit_reason","m1_coverage",
-            "public_trades_coverage","mark_coverage")
+            "public_trades_coverage","mark_coverage", "opposite_ledger_coverage", "opposite_ledger_first_utc")
 THRESHOLDS = (2.0840049433824706, 0.2727842248141979, 0.4504731635235635)
 def stamp(v):
     t=datetime.fromisoformat(v.replace("Z","+00:00"))
@@ -24,6 +24,24 @@ def audit(row):
             reasons.append("NONCAUSAL_SEQUENCE")
         if (ts["d250_signal_utc"]-ts["local_extreme_utc"]).total_seconds()<250*60:
             reasons.append("D250_TOO_EARLY")
+        # A manifest cannot establish absence of an opposite local by omitting its timestamp.
+        # Ledger must be independently reconstructed across the full entry-to-exit window.
+        if row.get("opposite_ledger_coverage")!="COMPLETE":
+            reasons.append("UNVERIFIED_OPPOSITE_EVENT_COVERAGE")
+        first=row.get("opposite_ledger_first_utc","").strip()
+        if not first:
+            reasons.append("MISSING_OPPOSITE_LEDGER_RESULT")
+        elif first!="NONE":
+            ts["opposite_ledger_first_utc"]=stamp(first)
+            if ts["opposite_ledger_first_utc"]<=ts["entry_utc"]:
+                reasons.append("OPPOSITE_LEDGER_PRECEDES_ENTRY")
+            if ts["opposite_ledger_first_utc"]<=ts["exit_utc"] and row["exit_reason"]=="STOP":
+                reasons.append("STOP_NOT_PROVEN_BEFORE_LEDGER_OPPOSITE")
+            if row["exit_reason"]=="OPPOSITE_CONFIRMED":
+                if not row.get("opposite_confirmed_utc","").strip() or stamp(row["opposite_confirmed_utc"])!=ts["opposite_ledger_first_utc"]:
+                    reasons.append("OPPOSITE_EXIT_LEDGER_MISMATCH")
+        elif row["exit_reason"]=="OPPOSITE_CONFIRMED":
+            reasons.append("OPPOSITE_EXIT_WITHOUT_LEDGER_EVENT")
         if row["exit_reason"]=="OPPOSITE_CONFIRMED" and not row.get("opposite_confirmed_utc","").strip():
             reasons.append("MISSING_OPPOSITE_CONFIRMATION")
         if row.get("opposite_confirmed_utc","").strip():
@@ -71,7 +89,7 @@ def main():
             "blocked":sum(x["status"]=="BLOCKED" for x in findings),"findings":findings,
             "limitations":["Coverage COMPLETE is a manifest assertion, not independently verified exchange evidence",
                            "Does not validate same-side invalidation, book fills, funding, stop gaps, liquidation, or overlapping capital",
-                           "STOP exits may precede opposite confirmation; opposite_confirmed_utc optional for STOP and required for OPPOSITE_CONFIRMED",
+                           "Opposite event ledger COMPLETE and first event UTC/NONE are required; these are still assertions until externally verified",
                            "Requires independent matched event tape before reporting PnL or liquidation count"]}
     with open(a.out,"w",encoding="utf-8") as f: json.dump(result,f,indent=2)
     print(json.dumps({"count":result["count"],"eligible":result["eligible"],"blocked":result["blocked"]}))
