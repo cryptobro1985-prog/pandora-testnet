@@ -17,8 +17,12 @@ def replay(side, entry_ts_ms, entry_vwap, events, stop_pct=0.01,
            risk_fraction=0.005, equity=100.0, roundtrip_cost_fraction=0.0015):
     if side not in ("LONG", "SHORT") or not (0 < stop_pct < 1):
         raise ValueError("invalid side/stop")
+    if not all(isfinite(v) for v in (risk_fraction, equity, entry_vwap, roundtrip_cost_fraction)):
+        raise ValueError("nonfinite risk, equity, entry or cost")
     if not (0 < risk_fraction <= 0.005) or equity <= 0 or entry_vwap <= 0:
         raise ValueError("invalid risk or entry")
+    if not (0 <= roundtrip_cost_fraction < 1):
+        raise ValueError("invalid roundtrip cost")
     if not events:
         raise ValueError("missing quote events")
     direction = 1 if side == "LONG" else -1
@@ -69,6 +73,14 @@ def _self_test():
         raise AssertionError("crossed quote accepted")
     except ValueError:
         pass
-    print("4 deterministic assertions passed; NOT a historical replay")
+    for kw in ({"entry_vwap":float("nan")}, {"equity":float("inf")},
+               {"risk_fraction":float("nan")}, {"roundtrip_cost_fraction":-0.02},
+               {"roundtrip_cost_fraction":float("nan")}, {"roundtrip_cost_fraction":1.0}):
+        try:
+            replay("LONG",0,100,[Event(1,99,99.2,99.1)],**kw)
+            raise AssertionError("invalid numeric input accepted: "+str(kw))
+        except ValueError:
+            pass
+    print("10 deterministic assertions passed; NOT a historical replay")
 if __name__=="__main__":
     _self_test()
