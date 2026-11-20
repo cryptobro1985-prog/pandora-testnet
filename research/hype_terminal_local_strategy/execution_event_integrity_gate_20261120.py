@@ -114,7 +114,7 @@ def _tests():
     assert "LOOKAHEAD_ENTRY" in validate(replace(t,local_confirmed_ts_ms=16000000),q)["failures"]
     assert "STOP_NOT_BEFORE_LIQUIDATION" in validate(replace(t,liquidation_mark=99.5),q)["failures"]
     assert "NONFINITE_entry_vwap" in validate(replace(t,entry_vwap=float("nan")),q)["failures"]
-    assert "LOOKAHEAD_EXIT" in validate(replace(t,opposite_confirmed_ts_ms=17000000),q)["failures"] if False else True
+    assert "LOOKAHEAD_EXIT" in validate(replace(t,opposite_confirmed_ts_ms=14000000),q)["failures"]
     assert "MISSING_QUOTES" in validate(t,[])["failures"]
     # Dense 1-minute synthetic quotes, proving only schema logic, not real fills.
     dense=[Quote(x,100,100.1,100,2,2,"synthetic")
@@ -122,6 +122,9 @@ def _tests():
     dense.append(Quote(21600000,100,100.1,100,2,2,"synthetic"))
     # Explicitly check no pass if coverage starts after fill.
     assert "INSUFFICIENT_WINDOW" in validate(t,dense[1:])["failures"]
+    good=validate(t,dense)
+    assert good["status"]=="QUOTE_PROVENANCE_ONLY" and not good["fill_verified"]
+    assert abs(good["notional_cap"]-(.5/.0315))<1e-8
     print("Integrity checks passed; no historical trades replayed")
 if __name__=="__main__":
     _tests()
