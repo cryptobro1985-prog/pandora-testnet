@@ -30,23 +30,44 @@ def audit(trade,bars):
         p=finite(trade["local_extreme_price"])
         if not t0<=tc<=ts<=te: reasons.append("NONCAUSAL_ORDER")
         if ts<t0+timedelta(minutes=250): reasons.append("BEFORE_D250")
-        # Closed M1 bars only: do not inspect a candle whose close is after entry.
-        relevant=[b for b in bars if t0<dt(b["utc"])<te]
-        expected=t0+timedelta(minutes=1)
-        for b in relevant:
-            start=dt(b["utc"]); close=dt(b["closed_utc"])
-            if close!=start+timedelta(minutes=1): reasons.append("BAD_BAR_INTERVAL")
-            if close>te: reasons.append("UNCLOSED_BAR_AT_ENTRY")
-            if start!=expected: reasons.append("M1_GAP_OR_DUPLICATE")
+        # Normalize UTC chronology. Require full closed-minute coverage from anchor minute
+        # through the last minute before entry; never use future candle data.
+        if te.second or te.microsecond:
+            reasons.append("INTRAMINUTE_ENTRY_NEEDS_TICKS")
+        anchor_minute=t0.replace(second=0,microsecond=0)
+        entry_minute=te.replace(second=0,microsecond=0)
+        indexed=[]
+        for bar in bars:
+            start=dt(bar["utc"])
+            if anchor_minute<=start<te:
+                indexed.append((start,bar))
+        indexed.sort(key=lambda item:item[0])
+        expected=anchor_minute
+        for start,bar in indexed:
+            close=dt(bar["closed_utc"])
+            if close!=start+timedelta(minutes=1):
+                reasons.append("BAD_BAR_INTERVAL")
+            if close>te:
+                reasons.append("UNCLOSED_BAR_AT_ENTRY")
+            if start!=expected:
+                reasons.append("M1_GAP_OR_DUPLICATE")
             expected=start+timedelta(minutes=1)
-            hi=finite(b["high"]); lo=finite(b["low"])
+            hi=finite(bar["high"]);lo=finite(bar["low"])
             if lo>hi: reasons.append("BAD_OHLC")
-            if side=="LONG" and lo<p: reasons.append("LOW_EXTENDED_BEFORE_ENTRY")
-            if side=="SHORT" and hi>p: reasons.append("HIGH_EXTENDED_BEFORE_ENTRY")
-        if expected<te: reasons.append("M1_GAP_OR_PARTIAL_ENTRY")
-        if not relevant: reasons.append("NO_M1_COVERAGE")
-        if t0.second or t0.microsecond: reasons.append("ANCHOR_NOT_MINUTE_ALIGNED")
-        if te.second or te.microsecond: reasons.append("INTRAMINUTE_ENTRY_NEEDS_TICKS")
+            extended=(side=="LONG" and lo<p) or (side=="SHORT" and hi>p)
+            if extended:
+                if start==anchor_minute:
+                    # OHLC cannot determine whether the extension preceded or
+                    # followed the exact local print. Never classify as PASS.
+                    reasons.append("INDETERMINATE_ANCHOR_TICK_ORDER")
+                else:
+                    reasons.append("LOW_EXTENDED_BEFORE_ENTRY" if side=="LONG" else "HIGH_EXTENDED_BEFORE_ENTRY")
+        if expected!=entry_minute:
+            reasons.append("M1_GAP_OR_PARTIAL_ENTRY")
+        if not indexed:
+            reasons.append("NO_M1_COVERAGE")
+        # M1 can establish absence of a same-side price extension in fully
+        # covered minutes, but cannot prove tick-level fill or stop execution.
         # Even full M1 cannot establish actual fill, exchange mark or liquidity.
     except (KeyError,ValueError,TypeError,AssertionError,OverflowError):
         reasons.append("INVALID_INPUT")
