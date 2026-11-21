@@ -14,7 +14,7 @@ def case(side,local_type):
            "entry_utc":iso(T+timedelta(minutes=251))}
     bars=[{"utc":iso(T+timedelta(minutes=i)),
            "closed_utc":iso(T+timedelta(minutes=i+1)),
-           "high":"101","low":"99"} for i in range(1,251)]
+           "high":"100","low":"100"} for i in range(1,251)]
     return audit(trade,bars)
 class DirectionBinding(unittest.TestCase):
     def test_long_low(self): self.assertEqual(case("LONG","LOW"),[])
