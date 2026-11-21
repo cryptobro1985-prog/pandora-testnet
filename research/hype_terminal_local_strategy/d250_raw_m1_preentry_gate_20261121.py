@@ -2,7 +2,7 @@
 """Fail-closed raw M1 price-extreme audit for frozen D250 trade manifests.
 Research only. Not an execution replay or detector. Input M1 CSV must have
 utc,high,low,closed_utc; each row is a completed one-minute candle.
-Manifest columns: trade_id,side,local_extreme_utc,local_extreme_price,
+Manifest columns: trade_id,side,local_type,local_extreme_utc,local_extreme_price,
 h1_confirmed_utc,d250_signal_utc,entry_utc.
 Uses only M1 candles CLOSED by the entry timestamp; an intra-minute entry
 without tick tape is INDETERMINATE, not PASS.
@@ -21,6 +21,10 @@ def audit(trade,bars):
     reasons=[]
     try:
         side=trade["side"]; assert side in ("LONG","SHORT")
+        local_type=trade["local_type"].upper()
+        if local_type not in ("LOW","HIGH"): reasons.append("INVALID_LOCAL_TYPE")
+        elif (side=="LONG" and local_type!="LOW") or (side=="SHORT" and local_type!="HIGH"):
+            reasons.append("LOCAL_SIDE_MISMATCH")
         t0=dt(trade["local_extreme_utc"]); tc=dt(trade["h1_confirmed_utc"])
         ts=dt(trade["d250_signal_utc"]); te=dt(trade["entry_utc"])
         p=finite(trade["local_extreme_price"])
