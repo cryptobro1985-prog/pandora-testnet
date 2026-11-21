@@ -27,7 +27,7 @@ def audit(trade,bars):
         if not t0<=tc<=ts<=te: reasons.append("NONCAUSAL_ORDER")
         if ts<t0+timedelta(minutes=250): reasons.append("BEFORE_D250")
         # Closed M1 bars only: do not inspect a candle whose close is after entry.
-        relevant=[b for b in bars if t0<dt(b["utc"])<=te]
+        relevant=[b for b in bars if t0<dt(b["utc"])<te]
         expected=t0+timedelta(minutes=1)
         for b in relevant:
             start=dt(b["utc"]); close=dt(b["closed_utc"])
