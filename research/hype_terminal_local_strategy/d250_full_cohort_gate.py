@@ -40,7 +40,7 @@ def audit(r):
         if t["entry_utc"]<earliest: issues.append("ENTRY_BEFORE_CAUSAL_AVAILABILITY")
         if status=="UNKNOWN_DATA": issues.append("UNKNOWN_DATA_NOT_EXECUTION_ELIGIBLE")
         if t["feature_available_utc"]>t["d250_signal_utc"]: issues.append("FEATURE_NOT_AVAILABLE_AT_SIGNAL")
-        if t["opposite_ledger_start_utc"]>t["entry_utc"]: issues.append("OPPOSITE_LEDGER_STARTS_AFTER_ENTRY")
+        if t["opposite_ledger_start_utc"]>t["local_extreme_utc"]: issues.append("OPPOSITE_LEDGER_STARTS_AFTER_EXTREME")
         if t["d250_signal_utc"]<t["local_extreme_utc"]+timedelta(minutes=250):
             issues.append("D250_TOO_EARLY")
         if t["local_extreme_utc"]>t["h1_confirmed_utc"]: issues.append("LOCAL_TIME_INVERSION")
@@ -55,7 +55,7 @@ def audit(r):
             issues.append("MISSING_SOURCE_HASH")
         for k in ("same_side_ledger_coverage","opposite_ledger_coverage"):
             if r[k]!="COMPLETE": issues.append("UNVERIFIED_"+k.upper())
-        if t["opposite_ledger_start_utc"]>t["entry_utc"] or t["opposite_ledger_end_utc"]<t["observation_cutoff_utc"]:
+        if t["opposite_ledger_start_utc"]>t["local_extreme_utc"] or t["opposite_ledger_end_utc"]<t["observation_cutoff_utc"]:
             issues.append("INCOMPLETE_OPPOSITE_LEDGER_WINDOW")
         first=r["opposite_ledger_first_utc"].strip()
         if not first: issues.append("MISSING_OPPOSITE_LEDGER_RESULT")
@@ -123,7 +123,7 @@ def selftest():
       entry_utc=fmt(base+timedelta(minutes=251)),observation_cutoff_utc=fmt(base+timedelta(hours=10)),
       rev_atr="2.2",trade_ratio5="0.3",flow15="0.2",entry_price="100",
       source_sha256="a"*64,status="OPEN_AT_CUTOFF",opposite_ledger_first_utc="NONE",
-      opposite_ledger_start_utc=fmt(base+timedelta(minutes=250)),
+      opposite_ledger_start_utc=fmt(base),
       opposite_ledger_end_utc=fmt(base+timedelta(hours=10)),
       same_side_ledger_coverage="COMPLETE",opposite_ledger_coverage="COMPLETE",
       quote_coverage="COMPLETE",mark_coverage="COMPLETE",last_bid="102",
@@ -145,7 +145,11 @@ def selftest():
     assert "FEATURE_NOT_AVAILABLE_AT_SIGNAL" in audit(r)
     r=dict(row,opposite_ledger_first_utc=fmt(base+timedelta(hours=11)))
     assert "OPPOSITE_EVENT_AFTER_CUTOFF" in audit(r)
-    print("PASS: 7 deterministic schema/causality checks (synthetic only)")
+    r=dict(row,opposite_ledger_start_utc=fmt(base+timedelta(minutes=250)))
+    assert "OPPOSITE_LEDGER_STARTS_AFTER_EXTREME" in audit(r)
+    r=dict(row,opposite_ledger_first_utc=fmt(base+timedelta(minutes=200)))
+    assert "OPPOSITE_KNOWN_BEFORE_ENTRY" in audit(r)
+    print("PASS: 9 deterministic schema/causality checks (synthetic only)")
 def main():
     p=argparse.ArgumentParser();p.add_argument("csv",nargs="?");p.add_argument("--out");p.add_argument("--self-test",action="store_true")
     a=p.parse_args()
