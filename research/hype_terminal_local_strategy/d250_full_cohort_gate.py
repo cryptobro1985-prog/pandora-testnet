@@ -15,7 +15,7 @@ REQUIRED={"signal_id","side","local_kind","local_extreme_utc","h1_confirmed_utc"
 "flow15","rev_atr_asof_utc","trade_ratio5_asof_utc","flow15_asof_utc",
 "status","observation_cutoff_utc","source_sha256","same_side_ledger_coverage",
 "opposite_ledger_coverage","opposite_ledger_start_utc","opposite_ledger_end_utc",
-"opposite_ledger_first_utc","entry_price","exit_utc","exit_price","exit_reason",
+"opposite_ledger_first_utc","opposite_k2_available_utc","entry_price","exit_utc","exit_price","exit_reason",
 "quote_coverage","mark_coverage","last_bid_utc","last_ask_utc","last_mark_utc",
 "last_bid","last_ask","last_mark"}
 def dt(v):
@@ -76,6 +76,20 @@ def audit(r):
                 issues.append("EXIT_REASON_MISMATCH")
             if status=="CLOSED_OPPOSITE" and first=="NONE":
                 issues.append("OPPOSITE_EXIT_WITHOUT_EVENT")
+            if status=="CLOSED_OPPOSITE":
+                k2=r["opposite_k2_available_utc"].strip()
+                if not k2:
+                    issues.append("MISSING_OPPOSITE_K2_AVAILABILITY")
+                else:
+                    kt=dt(k2)
+                    if first not in ("","NONE") and kt<dt(first):
+                        issues.append("OPPOSITE_K2_BEFORE_EVENT")
+                    if kt>t["observation_cutoff_utc"]:
+                        issues.append("OPPOSITE_K2_AFTER_CUTOFF")
+                    if r["exit_utc"] and dt(r["exit_utc"])<kt:
+                        issues.append("EXIT_BEFORE_OPPOSITE_K2")
+            elif r["opposite_k2_available_utc"].strip() and status=="OPEN_AT_CUTOFF":
+                issues.append("OPEN_WITH_OPPOSITE_K2")
             if status=="CLOSED_OPPOSITE" and first not in ("","NONE") and r["exit_utc"]:
                 if dt(r["exit_utc"])<=dt(first): issues.append("EXIT_BEFORE_OPPOSITE_AVAILABLE")
             if status=="CLOSED_STOP" and first not in ("","NONE") and r["exit_utc"]:
@@ -149,7 +163,14 @@ def selftest():
     assert "OPPOSITE_LEDGER_STARTS_AFTER_EXTREME" in audit(r)
     r=dict(row,opposite_ledger_first_utc=fmt(base+timedelta(minutes=200)))
     assert "OPPOSITE_KNOWN_BEFORE_ENTRY" in audit(r)
-    print("PASS: 9 deterministic schema/causality checks (synthetic only)")
+    r=dict(row,status="CLOSED_OPPOSITE",opposite_ledger_first_utc=fmt(base+timedelta(hours=6)),
+      exit_utc=fmt(base+timedelta(hours=7)),exit_price="103",exit_reason="OPPOSITE_CONFIRMED")
+    assert "MISSING_OPPOSITE_K2_AVAILABILITY" in audit(r)
+    r["opposite_k2_available_utc"]=fmt(base+timedelta(hours=8))
+    assert "EXIT_BEFORE_OPPOSITE_K2" in audit(r)
+    r["opposite_k2_available_utc"]=fmt(base+timedelta(hours=6,minutes=30))
+    assert not audit(r),audit(r)
+    print("PASS: 12 deterministic schema/causality checks (synthetic only)")
 def main():
     p=argparse.ArgumentParser();p.add_argument("csv",nargs="?");p.add_argument("--out");p.add_argument("--self-test",action="store_true")
     a=p.parse_args()
