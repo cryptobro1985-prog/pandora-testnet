@@ -38,6 +38,9 @@ def audit(r):
           "flow15_asof_utc","opposite_ledger_start_utc","opposite_ledger_end_utc")}
         earliest=max(t["h1_confirmed_utc"],t["d250_signal_utc"],t["feature_available_utc"])
         if t["entry_utc"]<earliest: issues.append("ENTRY_BEFORE_CAUSAL_AVAILABILITY")
+        if status=="UNKNOWN_DATA": issues.append("UNKNOWN_DATA_NOT_EXECUTION_ELIGIBLE")
+        if t["feature_available_utc"]>t["d250_signal_utc"]: issues.append("FEATURE_NOT_AVAILABLE_AT_SIGNAL")
+        if t["opposite_ledger_start_utc"]>t["entry_utc"]: issues.append("OPPOSITE_LEDGER_STARTS_AFTER_ENTRY")
         if t["d250_signal_utc"]<t["local_extreme_utc"]+timedelta(minutes=250):
             issues.append("D250_TOO_EARLY")
         if t["local_extreme_utc"]>t["h1_confirmed_utc"]: issues.append("LOCAL_TIME_INVERSION")
@@ -59,6 +62,7 @@ def audit(r):
         elif first!="NONE":
             f=dt(first)
             if f<=t["entry_utc"]: issues.append("OPPOSITE_KNOWN_BEFORE_ENTRY")
+            if f>t["observation_cutoff_utc"]: issues.append("OPPOSITE_EVENT_AFTER_CUTOFF")
             if not t["opposite_ledger_start_utc"]<=f<=t["opposite_ledger_end_utc"]:
                 issues.append("OPPOSITE_OUTSIDE_LEDGER")
         closed=status.startswith("CLOSED_")
@@ -135,7 +139,13 @@ def selftest():
     assert "ENTRY_BEFORE_CAUSAL_AVAILABILITY" in audit(r)
     r=dict(row,side="SHORT")
     assert "SIDE_LOCAL_MISMATCH" in audit(r)
-    print("PASS: 4 deterministic schema/causality checks (synthetic only)")
+    r=dict(row,status="UNKNOWN_DATA")
+    assert "UNKNOWN_DATA_NOT_EXECUTION_ELIGIBLE" in audit(r)
+    r=dict(row,feature_available_utc=fmt(base+timedelta(minutes=251)))
+    assert "FEATURE_NOT_AVAILABLE_AT_SIGNAL" in audit(r)
+    r=dict(row,opposite_ledger_first_utc=fmt(base+timedelta(hours=11)))
+    assert "OPPOSITE_EVENT_AFTER_CUTOFF" in audit(r)
+    print("PASS: 7 deterministic schema/causality checks (synthetic only)")
 def main():
     p=argparse.ArgumentParser();p.add_argument("csv",nargs="?");p.add_argument("--out");p.add_argument("--self-test",action="store_true")
     a=p.parse_args()
