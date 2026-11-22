@@ -13,9 +13,9 @@ Let `L = exposure_x * (0.01 + 0.0015 + gap)` be the equity loss per stopped trad
 | Exposure / risk setting | Extra gap | Per-stop equity loss | Equity after 6 stops from $100 | Six-stop DD |
 |---|---:|---:|---:|---:|
 | Historical 3x exposure | 0% | 3.45% | $81.00 | 19.00% |
-| Historical 5x exposure | 0% | 5.75% | $70.06 | 29.94% |
-| Historical 3x exposure | 2% | 9.45% | $55.10 | 44.90% |
-| Historical 5x exposure | 2% | 15.75% | $35.73 | 64.27% |
+| Historical 5x exposure | 0% | 5.75% | $70.10 | 29.90% |
+| Historical 3x exposure | 2% | 9.45% | $55.12 | 44.88% |
+| Historical 5x exposure | 2% | 15.75% | $35.76 | 64.24% |
 | Risk-sized 0.25% per stop | Assumed gap already budgeted | 0.25% | $98.51 | 1.49% |
 | Risk-sized 0.50% per stop | Assumed gap already budgeted | 0.50% | $97.04 | 2.96% |
 
