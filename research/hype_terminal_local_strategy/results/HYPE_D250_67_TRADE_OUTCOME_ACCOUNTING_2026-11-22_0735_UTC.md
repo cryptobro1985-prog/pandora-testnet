@@ -12,7 +12,7 @@ Research only; source arithmetic audit, **not** historical fill replay or new fo
 - Therefore **34 nonpositive closed trades**.
 - **22 fixed adverse-cut exits** = 22/67 = 32.8358% of all completed trades. If each was a losing trade as the loss-cut wording implies, **at least 12 of 34 nonpositive trades were NOT fixed-cut exits** (34 - 22 = 12). This is a conditional classification, because the report lacks per-trade exit reason and fees.
 - 22/34 = 64.7059% of nonpositive trades at most attributable to fixed-cut exits under this assumption. A stop alone does not eliminate the remaining nonpositive opposite-local outcomes.
-- Independent arithmetic cross-check of reported 5x profit factor: (33 * 14.16) / (34 * 4.37) = **3.1442**, consistent with rounded PF 3.14. This verifies internal summary consistency, NOT event-level validity.
+- Independent arithmetic cross-check of reported 5x profit factor: (33 * 14.16) / (34 * 4.37) = **3.1450**, consistent with rounded PF 3.14. This verifies internal summary consistency, NOT event-level validity.
 - **Four accepted D250 episodes are outside the 67 finalized-pair sample**. Their ultimate outcome and exposure are unknown, not zero-return or automatically excluded from a prospective portfolio.
 - 67 completed outcomes are not 67 independent entry validations; 71 accepted signals are not 71 tradable fills.
 
@@ -33,7 +33,7 @@ cuts=22
 print(wins,nonpositive,nonpositive-cuts)
 print(cuts/n, cuts/nonpositive)
 print((wins*14.16)/(nonpositive*4.37))
-# expected: 33 34 12; 0.3283582089552239 0.6470588235294118; ~3.1442
+# expected: 33 34 12; 0.3283582089552239 0.6470588235294118; ~3.1450
 ```
 No source trades or synthetic fills were generated.
 
