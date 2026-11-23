@@ -61,7 +61,11 @@ def audit(r):
         if not first: issues.append("MISSING_OPPOSITE_LEDGER_RESULT")
         elif first!="NONE":
             f=dt(first)
-            if f<=t["entry_utc"]: issues.append("OPPOSITE_KNOWN_BEFORE_ENTRY")
+            k2_pre=r["opposite_k2_available_utc"].strip()
+            if k2_pre and dt(k2_pre)<=t["entry_utc"]:
+                issues.append("OPPOSITE_CONFIRMED_BEFORE_ENTRY")
+            elif not k2_pre:
+                issues.append("OPPOSITE_K2_UNVERIFIED")
             if f>t["observation_cutoff_utc"]: issues.append("OPPOSITE_EVENT_AFTER_CUTOFF")
             if not t["opposite_ledger_start_utc"]<=f<=t["opposite_ledger_end_utc"]:
                 issues.append("OPPOSITE_OUTSIDE_LEDGER")
@@ -91,13 +95,15 @@ def audit(r):
             if status=="CLOSED_OPPOSITE" and first not in ("","NONE") and r["exit_utc"]:
                 if dt(r["exit_utc"])<=dt(first): issues.append("EXIT_BEFORE_OPPOSITE_AVAILABLE")
             if status=="CLOSED_STOP" and first not in ("","NONE") and r["exit_utc"]:
-                if dt(first)<=dt(r["exit_utc"]): issues.append("STOP_ORDER_UNPROVEN")
+                k2_stop=r["opposite_k2_available_utc"].strip()
+                if k2_stop and dt(k2_stop)<=dt(r["exit_utc"]):
+                    issues.append("STOP_ORDER_UNPROVEN")
         else:
             if any(r[k].strip() for k in ("exit_utc","exit_price","exit_reason")):
                 issues.append("CENSORED_HAS_FABRICATED_EXIT")
-            if status=="OPEN_AT_CUTOFF" and first!="NONE":
-                issues.append("OPEN_WITH_KNOWN_OPPOSITE")
-            if status=="OPEN_AT_CUTOFF" and r["opposite_k2_available_utc"].strip():
+            if status=="OPEN_AT_CUTOFF" and first not in ("","NONE") and not r["opposite_k2_available_utc"].strip():
+                issues.append("OPPOSITE_K2_UNVERIFIED")
+            if status=="OPEN_AT_CUTOFF" and r["opposite_k2_available_utc"].strip() and dt(r["opposite_k2_available_utc"])<=t["observation_cutoff_utc"]:
                 issues.append("OPEN_WITH_OPPOSITE_K2")
         for k in ("quote_coverage","mark_coverage"):
             if r[k]!="COMPLETE": issues.append("UNKNOWN_"+k.upper())
@@ -162,7 +168,11 @@ def selftest():
     r=dict(row,opposite_ledger_start_utc=fmt(base+timedelta(minutes=250)))
     assert "OPPOSITE_LEDGER_STARTS_AFTER_EXTREME" in audit(r)
     r=dict(row,opposite_ledger_first_utc=fmt(base+timedelta(minutes=200)))
-    assert "OPPOSITE_KNOWN_BEFORE_ENTRY" in audit(r)
+    assert "OPPOSITE_K2_UNVERIFIED" in audit(r)
+    r["opposite_k2_available_utc"]=fmt(base+timedelta(minutes=310))
+    assert "OPPOSITE_CONFIRMED_BEFORE_ENTRY" not in audit(r)
+    r["opposite_k2_available_utc"]=fmt(base+timedelta(minutes=205))
+    assert "OPPOSITE_CONFIRMED_BEFORE_ENTRY" in audit(r)
     r=dict(row,status="CLOSED_OPPOSITE",opposite_ledger_first_utc=fmt(base+timedelta(hours=6)),
       exit_utc=fmt(base+timedelta(hours=7)),exit_price="103",exit_reason="OPPOSITE_CONFIRMED")
     assert "MISSING_OPPOSITE_K2_AVAILABILITY" in audit(r)
@@ -172,7 +182,9 @@ def selftest():
     assert not audit(r),audit(r)
     r=dict(row,opposite_k2_available_utc=fmt(base+timedelta(hours=8)))
     assert "OPEN_WITH_OPPOSITE_K2" in audit(r)
-    print("PASS: 13 deterministic schema/causality checks (synthetic only)")
+    r["opposite_k2_available_utc"]=fmt(base+timedelta(hours=11))
+    assert "OPEN_WITH_OPPOSITE_K2" not in audit(r)
+    print("PASS: synthetic schema/causality checks (not exchange replay)")
 def main():
     p=argparse.ArgumentParser();p.add_argument("csv",nargs="?");p.add_argument("--out");p.add_argument("--self-test",action="store_true")
     a=p.parse_args()
