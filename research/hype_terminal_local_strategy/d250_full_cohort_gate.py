@@ -88,8 +88,6 @@ def audit(r):
                         issues.append("OPPOSITE_K2_AFTER_CUTOFF")
                     if r["exit_utc"] and dt(r["exit_utc"])<kt:
                         issues.append("EXIT_BEFORE_OPPOSITE_K2")
-            elif r["opposite_k2_available_utc"].strip() and status=="OPEN_AT_CUTOFF":
-                issues.append("OPEN_WITH_OPPOSITE_K2")
             if status=="CLOSED_OPPOSITE" and first not in ("","NONE") and r["exit_utc"]:
                 if dt(r["exit_utc"])<=dt(first): issues.append("EXIT_BEFORE_OPPOSITE_AVAILABLE")
             if status=="CLOSED_STOP" and first not in ("","NONE") and r["exit_utc"]:
@@ -99,6 +97,8 @@ def audit(r):
                 issues.append("CENSORED_HAS_FABRICATED_EXIT")
             if status=="OPEN_AT_CUTOFF" and first!="NONE":
                 issues.append("OPEN_WITH_KNOWN_OPPOSITE")
+            if status=="OPEN_AT_CUTOFF" and r["opposite_k2_available_utc"].strip():
+                issues.append("OPEN_WITH_OPPOSITE_K2")
         for k in ("quote_coverage","mark_coverage"):
             if r[k]!="COMPLETE": issues.append("UNKNOWN_"+k.upper())
         if status=="OPEN_AT_CUTOFF":
@@ -170,7 +170,9 @@ def selftest():
     assert "EXIT_BEFORE_OPPOSITE_K2" in audit(r)
     r["opposite_k2_available_utc"]=fmt(base+timedelta(hours=6,minutes=30))
     assert not audit(r),audit(r)
-    print("PASS: 12 deterministic schema/causality checks (synthetic only)")
+    r=dict(row,opposite_k2_available_utc=fmt(base+timedelta(hours=8)))
+    assert "OPEN_WITH_OPPOSITE_K2" in audit(r)
+    print("PASS: 13 deterministic schema/causality checks (synthetic only)")
 def main():
     p=argparse.ArgumentParser();p.add_argument("csv",nargs="?");p.add_argument("--out");p.add_argument("--self-test",action="store_true")
     a=p.parse_args()
