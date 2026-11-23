@@ -24,14 +24,15 @@ def size_exact(equity, risk_fraction, entry, stop, side, fee_entry, fee_exit,
     if qty_loss<=0: raise ValueError("nonpositive modeled loss")
     loss_per_entry_notional=qty_loss/actual_entry
     budget=equity*min(risk_fraction,total_risk_cap-existing_stop_risk)
-    notional=min(budget/loss_per_entry_notional,free_margin*leverage)
+    notional=min(budget/loss_per_entry_notional,free_margin/(1/leverage+fee_entry))
     if notional<=0: raise ValueError("no margin")
     return dict(side=side,notional=notional,quantity=notional/actual_entry,
                 actual_entry=actual_entry,adverse_exit=actual_exit,
                 modeled_loss=notional*loss_per_entry_notional,
                 loss_per_entry_notional=loss_per_entry_notional,
                 risk_fraction=notional*loss_per_entry_notional/equity,
-                initial_margin=notional/leverage,
+                initial_margin=notional/leverage,entry_fee_reserved=notional*fee_entry,
+                total_entry_cash_required=notional*(1/leverage+fee_entry),
                 liquidation_status="UNVERIFIED: require exchange mark-price/tier liquidation model",
                 note="Gap/slippage assumptions are scenario inputs, not guaranteed bounds.")
 
@@ -49,6 +50,9 @@ def selftest():
         try: size_exact(**dict(base,side="LONG",stop=99,**change))
         except ValueError: pass
         else: raise AssertionError("invalid scenario accepted")
-    print("PASS 6 direction-exact sizing assertions; no real execution replay")
+    d=size_exact(**dict(base,free_margin=1),side="LONG",stop=99)
+    assert d["total_entry_cash_required"]<=1+1e-12
+    assert d["notional"]<5
+    print("PASS 8 direction-exact sizing assertions including fee-funded margin; no real execution replay")
 if __name__=="__main__":
     selftest()
