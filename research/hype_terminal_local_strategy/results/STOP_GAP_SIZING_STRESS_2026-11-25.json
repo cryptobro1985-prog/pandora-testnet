@@ -1,0 +1,84 @@
+{
+  "type": "analytical_stress_not_replay",
+  "source_blob": "be76b9a61c86ec59c94b885eea4b15ee97cc1c05",
+  "assumptions": {
+    "stop": 0.01,
+    "round_trip_cost": 0.0015,
+    "gap": "hypothetical adverse execution buffer, not measured",
+    "leverage": 25
+  },
+  "rows": [
+    {
+      "risk": 0.0025,
+      "gap": 0,
+      "exposure": 0.2173913043478261,
+      "margin25x": 0.008695652173913044,
+      "loss_if_gap_double": 0.0025,
+      "six_loss_dd": 0.014906561914647898,
+      "baseline_unbuffered_loss": 0.0025
+    },
+    {
+      "risk": 0.0025,
+      "gap": 0.0025,
+      "exposure": 0.17857142857142858,
+      "margin25x": 0.007142857142857143,
+      "loss_if_gap_double": 0.0029464285714285716,
+      "six_loss_dd": 0.014906561914647898,
+      "baseline_unbuffered_loss": 0.0020535714285714285
+    },
+    {
+      "risk": 0.0025,
+      "gap": 0.005,
+      "exposure": 0.15151515151515152,
+      "margin25x": 0.006060606060606061,
+      "loss_if_gap_double": 0.0032575757575757573,
+      "six_loss_dd": 0.014906561914647898,
+      "baseline_unbuffered_loss": 0.0017424242424242424
+    },
+    {
+      "risk": 0.0025,
+      "gap": 0.01,
+      "exposure": 0.11627906976744187,
+      "margin25x": 0.004651162790697675,
+      "loss_if_gap_double": 0.003662790697674419,
+      "six_loss_dd": 0.014906561914647898,
+      "baseline_unbuffered_loss": 0.0013372093023255815
+    },
+    {
+      "risk": 0.005,
+      "gap": 0,
+      "exposure": 0.4347826086956522,
+      "margin25x": 0.017391304347826087,
+      "loss_if_gap_double": 0.005,
+      "six_loss_dd": 0.029627490643734378,
+      "baseline_unbuffered_loss": 0.005
+    },
+    {
+      "risk": 0.005,
+      "gap": 0.0025,
+      "exposure": 0.35714285714285715,
+      "margin25x": 0.014285714285714285,
+      "loss_if_gap_double": 0.005892857142857143,
+      "six_loss_dd": 0.029627490643734378,
+      "baseline_unbuffered_loss": 0.004107142857142857
+    },
+    {
+      "risk": 0.005,
+      "gap": 0.005,
+      "exposure": 0.30303030303030304,
+      "margin25x": 0.012121212121212121,
+      "loss_if_gap_double": 0.006515151515151515,
+      "six_loss_dd": 0.029627490643734378,
+      "baseline_unbuffered_loss": 0.0034848484848484847
+    },
+    {
+      "risk": 0.005,
+      "gap": 0.01,
+      "exposure": 0.23255813953488375,
+      "margin25x": 0.00930232558139535,
+      "loss_if_gap_double": 0.007325581395348838,
+      "six_loss_dd": 0.029627490643734378,
+      "baseline_unbuffered_loss": 0.002674418604651163
+    }
+  ]
+}
