@@ -1,0 +1,54 @@
+{
+  "source_blob": "be76b9a61c86ec59c94b885eea4b15ee97cc1c05",
+  "method": "For identical fills and proportional costs, x_i is original 5x net equity return, a=exposure/5. Concavity log(1+a*x_i)>=a*log(1+x_i) gives lower terminal bound from original compound. Jensen separately on 33 wins and 34 nonpositive trades gives upper bound using outward-rounded reported group means. Gap budget changes sizing only; stress_all_22 is a conservative multiplier if all 22 fixed-cut exits incur additional gap g, using original worst modeled trade as denominator bound. Not replay, not independent validation, no mark-to-market or liquidation inference. Assumes reported counts and means consistent, no minimum order constraints.",
+  "rows": [
+    {
+      "risk": 0.0025,
+      "gap_budget": 0,
+      "exposure": 0.2173913043478261,
+      "lower": 111.8305790676164,
+      "upper": 114.80057226943947,
+      "stress_all_22": 1
+    },
+    {
+      "risk": 0.0025,
+      "gap_budget": 0.0025,
+      "exposure": 0.17857142857142858,
+      "lower": 109.61980942068182,
+      "upper": 112.0168199714093,
+      "stress_all_22": 0.9902044509618186
+    },
+    {
+      "risk": 0.0025,
+      "gap_budget": 0.005,
+      "exposure": 0.15151515151515152,
+      "lower": 108.10486738298819,
+      "upper": 110.11381859663868,
+      "stress_all_22": 0.9834366105474903
+    },
+    {
+      "risk": 0.005,
+      "gap_budget": 0,
+      "exposure": 0.4347826086956522,
+      "lower": 125.060784145984,
+      "upper": 131.6126849354296,
+      "stress_all_22": 1
+    },
+    {
+      "risk": 0.005,
+      "gap_budget": 0.0025,
+      "exposure": 0.35714285714285715,
+      "lower": 120.165026174266,
+      "upper": 125.36242130757708,
+      "stress_all_22": 0.9804607029052872
+    },
+    {
+      "risk": 0.005,
+      "gap_budget": 0.005,
+      "exposure": 0.30303030303030304,
+      "lower": 116.86662351893465,
+      "upper": 121.1702303514652,
+      "stress_all_22": 0.9670787432120729
+    }
+  ]
+}
